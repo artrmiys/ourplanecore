@@ -527,9 +527,11 @@ public partial class MainWindow : Window
 
             if (row.Measurement == null || row.Takeoff == null)
             {
-                menu.Items.Add(new MenuItem { Header = "Select a section row", IsEnabled = false });
+                menu.Items.Add(new MenuItem { Header = "Select a measurement row", IsEnabled = false });
                 return;
             }
+
+            string entryTitle = MeasurementEntryTitle(row.Takeoff);
 
             var goToPage = new MenuItem { Header = "Go to Page" };
             goToPage.Click += (_, _) => SelectPageByFolder(row.Measurement.PageFolder);
@@ -539,11 +541,11 @@ public partial class MainWindow : Window
             selectOnCanvas.Click += (_, _) => SelectSectionOnCanvas(row.Measurement);
             menu.Items.Add(selectOnCanvas);
 
-            var rename = new MenuItem { Header = "Rename Section" };
+            var rename = new MenuItem { Header = $"Rename {entryTitle}" };
             rename.Click += (_, _) => RenameSection(row.Takeoff, row.Measurement);
             menu.Items.Add(rename);
 
-            var delete = new MenuItem { Header = "Delete Section" };
+            var delete = new MenuItem { Header = $"Delete {entryTitle}" };
             delete.Click += (_, _) => DeleteSection(row.Takeoff, row.Measurement);
             menu.Items.Add(delete);
         };
@@ -623,7 +625,7 @@ public partial class MainWindow : Window
         SmartTakeoffsJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
-        TxtStatus.Text = $"Renamed section: {measurement.Name}";
+        TxtStatus.Text = $"Renamed {MeasurementEntryTitle(item).ToLowerInvariant()}: {measurement.Name}";
     }
 
     private void OnRecordToggled(bool on)
@@ -2052,7 +2054,7 @@ public partial class MainWindow : Window
         rename.Click += (_, _) => RenameItem(tvi, item);
         menu.Items.Add(rename);
 
-        var newSection = new MenuItem { Header = "New Section" };
+        var newSection = new MenuItem { Header = item.MeasurementType == "point" ? "Add Count" : "New Section" };
         newSection.Click += (_, _) => StartNewSection(tvi, item);
         menu.Items.Add(newSection);
 
@@ -2083,7 +2085,11 @@ public partial class MainWindow : Window
     {
         if (_currentPage == null)
         {
-            MessageBox.Show("Select a page before starting a new section.", "New Section",
+            MessageBox.Show(
+                item.MeasurementType == "point"
+                    ? "Select a page before adding a count."
+                    : "Select a page before starting a new section.",
+                item.MeasurementType == "point" ? "Add Count" : "New Section",
                             MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -2094,7 +2100,9 @@ public partial class MainWindow : Window
         _viewport.ActiveTakeoffFolder = item.FolderPath;
         SetTool(item.MeasurementType);
         if (_activeTool == item.MeasurementType)
-            TxtStatus.Text = $"New {MeasurementTypeTitle(item.MeasurementType)} section for {item.Name}.";
+            TxtStatus.Text = item.MeasurementType == "point"
+                ? $"Add counts for {item.Name}."
+                : $"New {MeasurementTypeTitle(item.MeasurementType)} section for {item.Name}.";
     }
 
     private void SetUnitPrice(TakeoffItem item)
@@ -2373,7 +2381,7 @@ public partial class MainWindow : Window
         if (!TryResolveTakeoffItemForMeasurement(m, out TakeoffItem item))
         {
             _viewport.DeleteMeasurements([m]);
-            TxtStatus.Text = $"No {m.MType} takeoff item is active. Select {MeasurementTypeTitle(m.MType)} again to create one.";
+            TxtStatus.Text = $"No {MeasurementTypeTitle(m.MType)} takeoff item is active. Select {MeasurementTypeTitle(m.MType)} again to create one.";
             return;
         }
 
@@ -2832,9 +2840,10 @@ public partial class MainWindow : Window
 
     private void DeleteSection(TakeoffItem item, Measurement measurement)
     {
+        string entryTitle = MeasurementEntryTitle(item);
         if (MessageBox.Show(
-                $"Delete this section from {item.Name}?",
-                "Delete Section",
+                $"Delete this {entryTitle.ToLowerInvariant()} from {item.Name}?",
+                $"Delete {entryTitle}",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question) != MessageBoxResult.Yes)
         {
@@ -2848,7 +2857,7 @@ public partial class MainWindow : Window
         RefreshPagesTakeoffIndicators();
         ApplyTakeoffPageHighlights();
         UpdateTotalDisplay();
-        TxtStatus.Text = $"Deleted section from {item.Name}.";
+        TxtStatus.Text = $"Deleted {entryTitle.ToLowerInvariant()} from {item.Name}.";
     }
 
     private static string SectionDisplayName(TakeoffItem item, Measurement measurement, int index) =>
@@ -2862,9 +2871,10 @@ public partial class MainWindow : Window
     private static string DefaultSectionName(TakeoffItem item, Measurement measurement, int index)
     {
         string page = SectionPageName(measurement);
+        string entry = item.MeasurementType == "point" ? "Count" : "Section";
         return string.IsNullOrWhiteSpace(page)
-            ? $"Section {index + 1}"
-            : $"Section {index + 1} - {page}";
+            ? $"{entry} {index + 1}"
+            : $"{entry} {index + 1} - {page}";
     }
 
     private static string SectionPageName(Measurement measurement) =>
@@ -2873,7 +2883,12 @@ public partial class MainWindow : Window
             : SmartTakeoffsJobStore.DisplayName(measurement.PageFolder);
 
     private static string SectionCountLabel(TakeoffItem item) =>
-        item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
+        item.MeasurementType == "point"
+            ? item.Measurements.Count == 1 ? "1 count" : $"{item.Measurements.Count} counts"
+            : item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
+
+    private static string MeasurementEntryTitle(TakeoffItem item) =>
+        item.MeasurementType == "point" ? "Count Mark" : "Section";
 
     private static string SectionTooltip(TakeoffItem item)
     {
@@ -2884,8 +2899,13 @@ public partial class MainWindow : Window
             string page = string.IsNullOrWhiteSpace(m.PageFolder)
                 ? "unknown page"
                 : SmartTakeoffsJobStore.DisplayName(m.PageFolder);
-            string name = string.IsNullOrWhiteSpace(m.Name) ? $"Section {i + 1}" : m.Name;
-            lines.Add($"{name}: {page}, {m.Points.Count} point(s)");
+            string name = string.IsNullOrWhiteSpace(m.Name)
+                ? (item.MeasurementType == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
+                : m.Name;
+            string detail = item.MeasurementType == "point"
+                ? "1 count"
+                : $"{m.Points.Count} point(s)";
+            lines.Add($"{name}: {page}, {detail}");
         }
         return string.Join(Environment.NewLine, lines);
     }

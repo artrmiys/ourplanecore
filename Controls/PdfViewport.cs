@@ -546,7 +546,7 @@ public sealed class PdfViewport : SKElement
                 if (ReferenceEquals(_selectedMeasurement, m))
                     ClearSelection();
                 RequestRepaint();
-                PostStatus($"Undo: removed {m.MType}");
+                PostStatus($"Undo: removed {ToolTitle(m.MType)}.");
                 MeasurementRemoved?.Invoke(m);
                 return;
             }
@@ -581,7 +581,7 @@ public sealed class PdfViewport : SKElement
         SelectMeasurement(measurement, -1);
         CenterOnMeasurement(measurement);
         RequestRepaint();
-        PostStatus($"Selected {ToolTitle(measurement.MType)} section. Delete removes it; drag blue handles to edit.");
+        PostStatus($"Selected {EntryTitle(measurement.MType)}. Delete removes it; drag blue handles to edit.");
     }
 
     public void SetMeasurements(IEnumerable<Measurement> measurements)
@@ -1197,7 +1197,7 @@ public sealed class PdfViewport : SKElement
         _drawPts.Clear();
         _rubberEnd = null;
         RequestRepaint();
-        PostStatus($"Added {ToolTitle(m.MType)} section  {m.Label(ScaleMetersPerPt, UnitMode)}");
+        PostStatus($"Added {EntryTitle(m.MType)}  {m.Label(ScaleMetersPerPt, UnitMode)}");
         MeasurementAdded?.Invoke(m);
         PostRecordPrompt();
     }
@@ -1261,6 +1261,9 @@ public sealed class PdfViewport : SKElement
             _ => type,
         };
 
+    private static string EntryTitle(string type) =>
+        type == "point" ? "Count mark" : $"{ToolTitle(type)} section";
+
     private void CancelDrawing()
     {
         _drawPts.Clear();
@@ -1282,14 +1285,14 @@ public sealed class PdfViewport : SKElement
         {
             SelectMeasurement(vertexMeasurement, vertexIndex);
             _draggingVertex = true;
-            PostStatus($"Editing {vertexMeasurement.MType} vertex {vertexIndex + 1}. Drag to move.");
+            PostStatus($"Editing {ToolTitle(vertexMeasurement.MType)} vertex {vertexIndex + 1}. Drag to move.");
             return true;
         }
 
         if (TryHitMeasurement(pdf, out Measurement measurement))
         {
             SelectMeasurement(measurement, -1);
-            PostStatus($"Selected {measurement.MType}. Drag a blue handle to edit, Delete to remove.");
+            PostStatus($"Selected {EntryTitle(measurement.MType)}. Drag a blue handle to edit, Delete to remove.");
             return true;
         }
 
