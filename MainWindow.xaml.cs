@@ -536,6 +536,10 @@ public partial class MainWindow : Window
             selectOnCanvas.Click += (_, _) => SelectSectionOnCanvas(row.Measurement);
             menu.Items.Add(selectOnCanvas);
 
+            var rename = new MenuItem { Header = "Rename Section" };
+            rename.Click += (_, _) => RenameSection(row.Takeoff, row.Measurement);
+            menu.Items.Add(rename);
+
             var delete = new MenuItem { Header = "Delete Section" };
             delete.Click += (_, _) => DeleteSection(row.Takeoff, row.Measurement);
             menu.Items.Add(delete);
@@ -553,6 +557,22 @@ public partial class MainWindow : Window
         }
 
         Dispatcher.InvokeAsync(() => _viewport.FocusMeasurement(measurement));
+    }
+
+    private void RenameSection(TakeoffItem item, Measurement measurement)
+    {
+        string current = string.IsNullOrWhiteSpace(measurement.Name)
+            ? DefaultSectionName(item, measurement)
+            : measurement.Name;
+        string? name = ShowInputDialog("Section name:", current, "Rename Section");
+        if (name == null)
+            return;
+
+        measurement.Name = name.Trim();
+        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        RefreshTreeItem(item);
+        RefreshEstimateTable();
+        TxtStatus.Text = $"Renamed section: {measurement.Name}";
     }
 
     private void OnRecordToggled(bool on)
@@ -2720,7 +2740,7 @@ public partial class MainWindow : Window
             {
                 Measurement measurement = item.Measurements[i];
                 _estimateList.Items.Add(new EstimateDisplayRow(
-                    $"  Section {i + 1}",
+                    $"  {SectionDisplayName(item, measurement, i)}",
                     SectionPageName(measurement),
                     "",
                     QuantityText(measurement),
@@ -2754,6 +2774,22 @@ public partial class MainWindow : Window
         TxtStatus.Text = $"Deleted section from {item.Name}.";
     }
 
+    private static string SectionDisplayName(TakeoffItem item, Measurement measurement, int index) =>
+        string.IsNullOrWhiteSpace(measurement.Name)
+            ? DefaultSectionName(item, measurement, index)
+            : measurement.Name;
+
+    private static string DefaultSectionName(TakeoffItem item, Measurement measurement) =>
+        DefaultSectionName(item, measurement, Math.Max(0, item.Measurements.IndexOf(measurement)));
+
+    private static string DefaultSectionName(TakeoffItem item, Measurement measurement, int index)
+    {
+        string page = SectionPageName(measurement);
+        return string.IsNullOrWhiteSpace(page)
+            ? $"Section {index + 1}"
+            : $"Section {index + 1} - {page}";
+    }
+
     private static string SectionPageName(Measurement measurement) =>
         string.IsNullOrWhiteSpace(measurement.PageFolder)
             ? ""
@@ -2771,7 +2807,8 @@ public partial class MainWindow : Window
             string page = string.IsNullOrWhiteSpace(m.PageFolder)
                 ? "unknown page"
                 : SmartTakeoffsJobStore.DisplayName(m.PageFolder);
-            lines.Add($"Section {i + 1}: {page}, {m.Points.Count} point(s)");
+            string name = string.IsNullOrWhiteSpace(m.Name) ? $"Section {i + 1}" : m.Name;
+            lines.Add($"{name}: {page}, {m.Points.Count} point(s)");
         }
         return string.Join(Environment.NewLine, lines);
     }

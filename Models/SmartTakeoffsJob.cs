@@ -82,6 +82,9 @@ internal sealed class MeasurementDto
     [JsonPropertyName("mtype")]
     public string MType { get; set; } = "line";
 
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
     [JsonPropertyName("points_pdf")]
     public List<PointDto> PointsPdf { get; set; } = [];
 
@@ -362,6 +365,7 @@ public static class SmartTakeoffsJobStore
                 return new Measurement
                 {
                     Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
+                    Name = dto.Name ?? "",
                     MType = NormalizeMeasurementType(dto.MType),
                     Color = dto.Color,
                     PageFolder = dto.PageFolder,
@@ -383,6 +387,7 @@ public static class SmartTakeoffsJobStore
         var dtos = measurements.Select(m => new MeasurementDto
         {
             Id = m.Id,
+            Name = m.Name,
             MType = NormalizeMeasurementType(m.MType),
             Color = m.Color,
             PageFolder = m.PageFolder,
