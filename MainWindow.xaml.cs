@@ -541,6 +541,10 @@ public partial class MainWindow : Window
             selectOnCanvas.Click += (_, _) => SelectSectionOnCanvas(row.Measurement);
             menu.Items.Add(selectOnCanvas);
 
+            var properties = new MenuItem { Header = $"{entryTitle} Properties..." };
+            properties.Click += (_, _) => EditSectionProperties(row.Takeoff, row.Measurement);
+            menu.Items.Add(properties);
+
             var rename = new MenuItem { Header = $"Rename {entryTitle}" };
             rename.Click += (_, _) => RenameSection(row.Takeoff, row.Measurement);
             menu.Items.Add(rename);
@@ -626,6 +630,83 @@ public partial class MainWindow : Window
         RefreshTreeItem(item);
         RefreshEstimateTable();
         TxtStatus.Text = $"Renamed {MeasurementEntryTitle(item).ToLowerInvariant()}: {measurement.Name}";
+    }
+
+    private void EditSectionProperties(TakeoffItem item, Measurement measurement)
+    {
+        string currentName = string.IsNullOrWhiteSpace(measurement.Name)
+            ? DefaultSectionName(item, measurement)
+            : measurement.Name;
+
+        if (!ShowSectionPropertiesDialog(item, currentName, measurement.Notes, out string name, out string notes))
+            return;
+
+        measurement.Name = name.Trim();
+        measurement.Notes = notes.Trim();
+        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        RefreshTreeItem(item);
+        RefreshEstimateTable();
+        TxtStatus.Text = $"Updated {MeasurementEntryTitle(item).ToLowerInvariant()} properties.";
+    }
+
+    private bool ShowSectionPropertiesDialog(
+        TakeoffItem item,
+        string currentName,
+        string currentNotes,
+        out string name,
+        out string notes)
+    {
+        name = currentName;
+        notes = currentNotes;
+
+        var dialog = new Window
+        {
+            Title = $"{MeasurementEntryTitle(item)} Properties",
+            Owner = this,
+            Width = 360,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+        };
+
+        var panel = new StackPanel { Margin = new Thickness(12) };
+        panel.Children.Add(new TextBlock { Text = "Name:", Margin = new Thickness(0, 0, 0, 4) });
+        var nameBox = new TextBox { Text = currentName };
+        panel.Children.Add(nameBox);
+
+        panel.Children.Add(new TextBlock { Text = "Notes:", Margin = new Thickness(0, 10, 0, 4) });
+        var notesBox = new TextBox
+        {
+            Text = currentNotes,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            Height = 90,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        panel.Children.Add(notesBox);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        var ok = new Button { Content = "OK", Width = 70, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
+        var cancel = new Button { Content = "Cancel", Width = 70, IsCancel = true };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        panel.Children.Add(buttons);
+        dialog.Content = panel;
+
+        ok.Click += (_, _) => dialog.DialogResult = true;
+        dialog.Loaded += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };
+
+        if (dialog.ShowDialog() != true)
+            return false;
+
+        name = string.IsNullOrWhiteSpace(nameBox.Text) ? currentName : nameBox.Text.Trim();
+        notes = notesBox.Text.Trim();
+        return true;
     }
 
     private void OnRecordToggled(bool on)
@@ -1932,7 +2013,7 @@ public partial class MainWindow : Window
     private string BuildTakeoffCsv()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("RowType,Item,MeasurementType,Total,MeasurementCount,UnitPrice,Cost,MeasurementId,SectionName,SectionIndex,MeasurementValue,MeasurementLabel,ScaleMetersPerPt,PageFolder,TakeoffFolder");
+        sb.AppendLine("RowType,Item,MeasurementType,Total,MeasurementCount,UnitPrice,Cost,MeasurementId,SectionName,SectionNotes,SectionIndex,MeasurementValue,MeasurementLabel,ScaleMetersPerPt,PageFolder,TakeoffFolder");
 
         foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
         {
@@ -1945,6 +2026,9 @@ public partial class MainWindow : Window
                 item.Measurements.Count.ToString(),
                 item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture),
                 CostText(item),
+                "",
+                "",
+                "",
                 "",
                 "",
                 "",
@@ -1965,6 +2049,7 @@ public partial class MainWindow : Window
                     "",
                     measurement.Id,
                     SectionDisplayName(item, measurement, i),
+                    measurement.Notes,
                     (i + 1).ToString(CultureInfo.InvariantCulture),
                     measurement.Value(_viewport.ScaleMetersPerPt).ToString("G17", CultureInfo.InvariantCulture),
                     measurement.Label(_viewport.ScaleMetersPerPt, _viewport.UnitMode),
@@ -2906,6 +2991,8 @@ public partial class MainWindow : Window
                 ? "1 count"
                 : $"{m.Points.Count} point(s)";
             lines.Add($"{name}: {page}, {detail}");
+            if (!string.IsNullOrWhiteSpace(m.Notes))
+                lines.Add($"  Notes: {m.Notes}");
         }
         return string.Join(Environment.NewLine, lines);
     }

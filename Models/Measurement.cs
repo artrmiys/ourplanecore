@@ -9,6 +9,7 @@ public sealed class Measurement
 {
     public string         Id         { get; init; } = Guid.NewGuid().ToString();
     public string         Name       { get; set; } = "";
+    public string         Notes      { get; set; } = "";
     public string         MType      { get; set; }  = "line";   // point | line | area
     public List<SKPoint>  Points     { get; set; }  = [];
     public string         Color      { get; set; }  = "#FF4444";
