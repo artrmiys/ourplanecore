@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Button> _toolBtns;
     private ToggleButton? _recordButton;
     private ListView? _estimateList;
+    private bool _syncingEstimateSelection;
     private bool _updatingRecordButton;
     private string _lastDrawingTool = "point";
     private bool _inboxExpanded = true;
@@ -95,6 +96,7 @@ public partial class MainWindow : Window
         _viewport.MeasurementAdded   += OnMeasurementAdded;
         _viewport.MeasurementRemoved += OnMeasurementRemoved;
         _viewport.MeasurementChanged += OnMeasurementChanged;
+        _viewport.MeasurementSelectionChanged += OnViewportMeasurementSelectionChanged;
         _viewport.ContextRequested   += OnViewportContextRequested;
         ViewportHost.Children.Add(_viewport);
 
@@ -502,6 +504,7 @@ public partial class MainWindow : Window
                 },
             },
         };
+        _estimateList.SelectionChanged += OnEstimateSelectionChanged;
         _estimateList.ContextMenu = BuildEstimateContextMenu();
         Grid.SetRow(_estimateList, 2);
         grid.Children.Add(_estimateList);
@@ -557,6 +560,54 @@ public partial class MainWindow : Window
         }
 
         Dispatcher.InvokeAsync(() => _viewport.FocusMeasurement(measurement));
+    }
+
+    private void OnEstimateSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingEstimateSelection || _estimateList?.SelectedItem is not EstimateDisplayRow row)
+            return;
+
+        if (row.Measurement == null)
+            return;
+
+        _syncingEstimateSelection = true;
+        try
+        {
+            SelectSectionOnCanvas(row.Measurement);
+        }
+        finally
+        {
+            _syncingEstimateSelection = false;
+        }
+    }
+
+    private void OnViewportMeasurementSelectionChanged(Measurement? measurement)
+    {
+        if (_syncingEstimateSelection || _estimateList == null)
+            return;
+
+        _syncingEstimateSelection = true;
+        try
+        {
+            if (measurement == null)
+            {
+                _estimateList.SelectedItem = null;
+                return;
+            }
+
+            EstimateDisplayRow? row = _estimateList.Items
+                .OfType<EstimateDisplayRow>()
+                .FirstOrDefault(r => ReferenceEquals(r.Measurement, measurement));
+            if (row == null)
+                return;
+
+            _estimateList.SelectedItem = row;
+            _estimateList.ScrollIntoView(row);
+        }
+        finally
+        {
+            _syncingEstimateSelection = false;
+        }
     }
 
     private void RenameSection(TakeoffItem item, Measurement measurement)
@@ -2730,33 +2781,52 @@ public partial class MainWindow : Window
         if (_estimateList == null)
             return;
 
-        _estimateList.Items.Clear();
-        foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
+        Measurement? selectedMeasurement = (_estimateList.SelectedItem as EstimateDisplayRow)?.Measurement;
+        _syncingEstimateSelection = true;
+        try
         {
-            _estimateList.Items.Add(new EstimateDisplayRow(
-                item.Name,
-                MeasurementTypeTitle(item.MeasurementType),
-                item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
-                QuantityText(item),
-                UnitText(item.MeasurementType),
-                UnitPriceText(item),
-                CostText(item),
-                item,
-                null));
-            for (int i = 0; i < item.Measurements.Count; i++)
+            _estimateList.Items.Clear();
+            EstimateDisplayRow? selectedRow = null;
+            foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
             {
-                Measurement measurement = item.Measurements[i];
                 _estimateList.Items.Add(new EstimateDisplayRow(
-                    $"  {SectionDisplayName(item, measurement, i)}",
-                    SectionPageName(measurement),
-                    "",
-                    QuantityText(measurement),
-                    UnitText(measurement.MType),
-                    "",
-                    "",
+                    item.Name,
+                    MeasurementTypeTitle(item.MeasurementType),
+                    item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
+                    QuantityText(item),
+                    UnitText(item.MeasurementType),
+                    UnitPriceText(item),
+                    CostText(item),
                     item,
-                    measurement));
+                    null));
+                for (int i = 0; i < item.Measurements.Count; i++)
+                {
+                    Measurement measurement = item.Measurements[i];
+                    var row = new EstimateDisplayRow(
+                        $"  {SectionDisplayName(item, measurement, i)}",
+                        SectionPageName(measurement),
+                        "",
+                        QuantityText(measurement),
+                        UnitText(measurement.MType),
+                        "",
+                        "",
+                        item,
+                        measurement);
+                    _estimateList.Items.Add(row);
+                    if (selectedMeasurement != null && ReferenceEquals(selectedMeasurement, measurement))
+                        selectedRow = row;
+                }
             }
+
+            if (selectedRow != null)
+            {
+                _estimateList.SelectedItem = selectedRow;
+                _estimateList.ScrollIntoView(selectedRow);
+            }
+        }
+        finally
+        {
+            _syncingEstimateSelection = false;
         }
     }
 

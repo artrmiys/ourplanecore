@@ -119,6 +119,7 @@ public sealed class PdfViewport : SKElement
     public event Action<Measurement>?                     MeasurementAdded;
     public event Action<Measurement>?                     MeasurementRemoved;
     public event Action<Measurement>?                     MeasurementChanged;
+    public event Action<Measurement?>?                    MeasurementSelectionChanged;
     public event Action<ViewportContextRequest>?          ContextRequested;
 
     // ── Constants ─────────────────────────────────────────────────────────────
@@ -1365,8 +1366,11 @@ public sealed class PdfViewport : SKElement
 
     private void SelectMeasurement(Measurement measurement, int vertexIndex)
     {
+        bool changed = !ReferenceEquals(_selectedMeasurement, measurement);
         _selectedMeasurement = measurement;
         _selectedVertexIndex = vertexIndex;
+        if (changed)
+            MeasurementSelectionChanged?.Invoke(measurement);
         RequestRepaint();
     }
 
@@ -1400,9 +1404,12 @@ public sealed class PdfViewport : SKElement
 
     private void ClearSelection()
     {
+        bool changed = _selectedMeasurement != null;
         _selectedMeasurement = null;
         _selectedVertexIndex = -1;
         _draggingVertex = false;
+        if (changed)
+            MeasurementSelectionChanged?.Invoke(null);
     }
 
     private void DeleteSelectedMeasurement()
