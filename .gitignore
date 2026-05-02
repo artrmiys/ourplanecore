@@ -20,3 +20,4 @@ reference/**/build/
 reference/**/dist/
 reference/**/*.pkg
 reference/**/*.pyz
+reference/
