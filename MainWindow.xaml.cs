@@ -815,6 +815,18 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         });
 
+        if (page.ScaleMetersPerPt <= 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "  unscaled",
+                Foreground = Brushes.Firebrick,
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
         var takeoffs = TakeoffsForPage(page.FolderPath).ToList();
         if (takeoffs.Count > 0)
         {
@@ -2903,6 +2915,7 @@ public partial class MainWindow : Window
         ApplyScaleToCurrentPageMeasurements(scale);
         SaveCurrentPageScale();
         UpdateScaleUi(scale);
+        RefreshPagesTakeoffIndicators();
         RefreshAllTotals();
     }
 
