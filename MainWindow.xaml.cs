@@ -492,8 +492,8 @@ public partial class MainWindow : Window
             {
                 Columns =
                 {
-                    new GridViewColumn { Header = "Item", Width = 72, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
-                    new GridViewColumn { Header = "Type", Width = 42, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Type)) },
+                    new GridViewColumn { Header = "Item / Section", Width = 82, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
+                    new GridViewColumn { Header = "Type/Page", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Page)) },
                     new GridViewColumn { Header = "Sec", Width = 34, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Sections)) },
                     new GridViewColumn { Header = "Qty", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
                     new GridViewColumn { Header = "Unit", Width = 32, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Unit)) },
@@ -1914,6 +1914,12 @@ public partial class MainWindow : Window
         rename.Click += (_, _) => RenameItem(tvi, item);
         menu.Items.Add(rename);
 
+        var newSection = new MenuItem { Header = "New Section" };
+        newSection.Click += (_, _) => StartNewSection(tvi, item);
+        menu.Items.Add(newSection);
+
+        menu.Items.Add(new Separator());
+
         var moveUp = new MenuItem { Header = "Move Up" };
         moveUp.Click += (_, _) => MoveTakeoffNode(item.FolderPath, -1);
         menu.Items.Add(moveUp);
@@ -1929,6 +1935,24 @@ public partial class MainWindow : Window
         menu.Items.Add(delete);
 
         tvi.ContextMenu = menu;
+    }
+
+    private void StartNewSection(TreeViewItem tvi, TakeoffItem item)
+    {
+        if (_currentPage == null)
+        {
+            MessageBox.Show("Select a page before starting a new section.", "New Section",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        tvi.IsSelected = true;
+        _activeItem = item;
+        _viewport.ActiveColor = item.Color;
+        _viewport.ActiveTakeoffFolder = item.FolderPath;
+        SetTool(item.MeasurementType);
+        if (_activeTool == item.MeasurementType)
+            TxtStatus.Text = $"New {MeasurementTypeTitle(item.MeasurementType)} section for {item.Name}.";
     }
 
     private void AttachFolderContextMenu(TreeViewItem tvi, TakeoffFolderNode folder)
@@ -2600,8 +2624,23 @@ public partial class MainWindow : Window
                 item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
                 QuantityText(item),
                 UnitText(item.MeasurementType)));
+            for (int i = 0; i < item.Measurements.Count; i++)
+            {
+                Measurement measurement = item.Measurements[i];
+                _estimateList.Items.Add(new EstimateDisplayRow(
+                    $"  Section {i + 1}",
+                    SectionPageName(measurement),
+                    "",
+                    QuantityText(measurement),
+                    UnitText(measurement.MType)));
+            }
         }
     }
+
+    private static string SectionPageName(Measurement measurement) =>
+        string.IsNullOrWhiteSpace(measurement.PageFolder)
+            ? ""
+            : SmartTakeoffsJobStore.DisplayName(measurement.PageFolder);
 
     private static string SectionCountLabel(TakeoffItem item) =>
         item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
@@ -2624,6 +2663,18 @@ public partial class MainWindow : Window
     {
         string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
+        return QuantityText(mt, value);
+    }
+
+    private string QuantityText(Measurement measurement)
+    {
+        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType);
+        double value = measurement.Value(_viewport.ScaleMetersPerPt);
+        return QuantityText(mt, value);
+    }
+
+    private string QuantityText(string mt, double value)
+    {
         return mt switch
         {
             "line" => _viewport.UnitMode == UnitMode.Imperial
@@ -3396,7 +3447,7 @@ public partial class MainWindow : Window
 
     private sealed record EstimateDisplayRow(
         string Item,
-        string Type,
+        string Page,
         string Sections,
         string Quantity,
         string Unit);

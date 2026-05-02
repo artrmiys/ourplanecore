@@ -242,6 +242,7 @@ public sealed class PdfViewport : SKElement
         };
         CancelDrawing();
         UpdateCursor();
+        PostRecordPrompt();
     }
 
     public void ZoomFit()
@@ -528,9 +529,10 @@ public sealed class PdfViewport : SKElement
             _drawPts.RemoveAt(_drawPts.Count - 1);
             _rubberEnd = _drawPts.Count > 0 ? _rubberEnd : null;
             RequestRepaint();
-            PostStatus(_drawPts.Count > 0
-                ? $"Undo: {_drawPts.Count} point(s) remain."
-                : "Undo: drawing cleared.");
+            if (_drawPts.Count > 0)
+                PostRecordPrompt();
+            else
+                PostStatus("Undo: drawing cleared.");
             return;
         }
 
@@ -1126,6 +1128,7 @@ public sealed class PdfViewport : SKElement
             case ViewerTool.Area:
                 _drawPts.Add(pdf);
                 RequestRepaint();
+                PostRecordPrompt();
                 break;
         }
     }
@@ -1159,6 +1162,7 @@ public sealed class PdfViewport : SKElement
         else
         {
             RequestRepaint();
+            PostStatus("Scale: click the second point of a known distance.");
         }
     }
 
@@ -1181,8 +1185,9 @@ public sealed class PdfViewport : SKElement
         _drawPts.Clear();
         _rubberEnd = null;
         RequestRepaint();
-        PostStatus($"Added {m.MType}  {m.Label(ScaleMetersPerPt, UnitMode)}");
+        PostStatus($"Added {ToolTitle(m.MType)} section  {m.Label(ScaleMetersPerPt, UnitMode)}");
         MeasurementAdded?.Invoke(m);
+        PostRecordPrompt();
     }
 
     private void CompleteOrCancelDrawing()
@@ -1202,6 +1207,47 @@ public sealed class PdfViewport : SKElement
         CancelDrawing();
         PostStatus("Cancelled.");
     }
+
+    private void PostRecordPrompt()
+    {
+        switch (_tool)
+        {
+            case ViewerTool.Point:
+                PostStatus("Count Record: click each item to add a count. Turn Record off for Pan.");
+                break;
+            case ViewerTool.Line:
+                PostStatus(_drawPts.Count switch
+                {
+                    0 => "Line Record: click the first point.",
+                    1 => "Line Record: click the next point. Backspace/Ctrl+Z undo.",
+                    _ => "Line Record: click next point, or right-click / Esc / C / double-click to finish.",
+                });
+                break;
+            case ViewerTool.Area:
+                PostStatus(_drawPts.Count switch
+                {
+                    0 => "Area Record: click the first corner.",
+                    1 => "Area Record: click the next corner. Backspace/Ctrl+Z undo.",
+                    2 => "Area Record: click at least one more corner, then finish.",
+                    _ => "Area Record: click next corner, or right-click / Esc / C / double-click to finish.",
+                });
+                break;
+            case ViewerTool.Scale:
+                PostStatus(_scalePts.Count == 0
+                    ? "Scale: click the first point of a known distance."
+                    : "Scale: click the second point of a known distance.");
+                break;
+        }
+    }
+
+    private static string ToolTitle(string type) =>
+        type switch
+        {
+            "point" => "Count",
+            "line" => "Line",
+            "area" => "Area",
+            _ => type,
+        };
 
     private void CancelDrawing()
     {
