@@ -492,10 +492,11 @@ public partial class MainWindow : Window
             {
                 Columns =
                 {
-                    new GridViewColumn { Header = "Item", Width = 92, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
-                    new GridViewColumn { Header = "Type", Width = 52, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Type)) },
-                    new GridViewColumn { Header = "Qty", Width = 72, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
-                    new GridViewColumn { Header = "Unit", Width = 40, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Unit)) },
+                    new GridViewColumn { Header = "Item", Width = 72, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
+                    new GridViewColumn { Header = "Type", Width = 42, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Type)) },
+                    new GridViewColumn { Header = "Sec", Width = 34, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Sections)) },
+                    new GridViewColumn { Header = "Qty", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
+                    new GridViewColumn { Header = "Unit", Width = 32, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Unit)) },
                 },
             },
         };
@@ -2381,6 +2382,17 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         });
 
+        if (item.Measurements.Count > 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text              = $"  {SectionCountLabel(item)}",
+                Foreground        = Brushes.Gray,
+                FontSize          = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
         string total = item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode);
         panel.Children.Add(new TextBlock
         {
@@ -2391,6 +2403,9 @@ public partial class MainWindow : Window
         });
 
         tvi.Header = panel;
+        tvi.ToolTip = item.Measurements.Count == 0
+            ? null
+            : SectionTooltip(item);
     }
 
     private static void SetFolderTreeItemHeader(TreeViewItem tvi, TakeoffFolderNode folder)
@@ -2582,9 +2597,27 @@ public partial class MainWindow : Window
             _estimateList.Items.Add(new EstimateDisplayRow(
                 item.Name,
                 MeasurementTypeTitle(item.MeasurementType),
+                item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
                 QuantityText(item),
                 UnitText(item.MeasurementType)));
         }
+    }
+
+    private static string SectionCountLabel(TakeoffItem item) =>
+        item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
+
+    private static string SectionTooltip(TakeoffItem item)
+    {
+        var lines = new List<string> { SectionCountLabel(item) };
+        for (int i = 0; i < item.Measurements.Count; i++)
+        {
+            Measurement m = item.Measurements[i];
+            string page = string.IsNullOrWhiteSpace(m.PageFolder)
+                ? "unknown page"
+                : SmartTakeoffsJobStore.DisplayName(m.PageFolder);
+            lines.Add($"Section {i + 1}: {page}, {m.Points.Count} point(s)");
+        }
+        return string.Join(Environment.NewLine, lines);
     }
 
     private string QuantityText(TakeoffItem item)
@@ -3364,6 +3397,7 @@ public partial class MainWindow : Window
     private sealed record EstimateDisplayRow(
         string Item,
         string Type,
+        string Sections,
         string Quantity,
         string Unit);
 }
