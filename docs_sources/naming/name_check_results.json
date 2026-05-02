@@ -1,0 +1,242 @@
+﻿[
+    {
+        "Name":  "DraftMind",
+        "Domain":  "draftmind.com",
+        "DotCom":  "registered",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "QuantNest",
+        "Domain":  "quantnest.com",
+        "DotCom":  "registered",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "TakeoffDesk",
+        "Domain":  "takeoffdesk.com",
+        "DotCom":  "registered",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "TakeoffPilot",
+        "Domain":  "takeoffpilot.com",
+        "DotCom":  "registered",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "QuantBase",
+        "Domain":  "quantbase.com",
+        "DotCom":  "registered",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "QuantLine",
+        "Domain":  "quantline.com",
+        "DotCom":  "registered",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "BaseTakeoffs",
+        "Domain":  "basetakeoffs.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "CountMindQTO",
+        "Domain":  "countmindqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "DraftQTO",
+        "Domain":  "draftqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "LineCoreQTO",
+        "Domain":  "linecoreqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "LineDeskQTO",
+        "Domain":  "linedeskqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "LinePilotQTO",
+        "Domain":  "linepilotqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "MeasureDeskQTO",
+        "Domain":  "measuredeskqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "MeasureNestQTO",
+        "Domain":  "measurenestqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "MindTakeoff",
+        "Domain":  "mindtakeoff.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "PlanMindQTO",
+        "Domain":  "planmindqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "PlanTraceQTO",
+        "Domain":  "plantraceqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "QtoPilot",
+        "Domain":  "qtopilot.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "TakeoffCoreQTO",
+        "Domain":  "takeoffcoreqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  -1
+    },
+    {
+        "Name":  "BidLineQTO",
+        "Domain":  "bidlineqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "EasyLineTakeoff",
+        "Domain":  "easylinetakeoff.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "FrameTakeoffMind",
+        "Domain":  "frametakeoffmind.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "JustTakeoffs",
+        "Domain":  "justtakeoffs.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "LineBaseTakeoff",
+        "Domain":  "linebasetakeoff.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "LineTakeoffIQ",
+        "Domain":  "linetakeoffiq.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "MeasureMinderQTO",
+        "Domain":  "measureminderqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "MeasureMindQTO",
+        "Domain":  "measuremindqto.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "PlanLineMind",
+        "Domain":  "planlinemind.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "PlanMeasureMind",
+        "Domain":  "planmeasuremind.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "PlanQtoBase",
+        "Domain":  "planqtobase.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "QtoBase",
+        "Domain":  "qtobase.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "QtoDesk",
+        "Domain":  "qtodesk.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "QtoForge",
+        "Domain":  "qtoforge.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "QtoMind",
+        "Domain":  "qtomind.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "TakeoffForge",
+        "Domain":  "takeoffforge.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "TakeoffMind",
+        "Domain":  "takeoffmind.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "TakeoffMinder",
+        "Domain":  "takeoffminder.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "TakeoffNest",
+        "Domain":  "takeoffnest.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "TakeoffTrace",
+        "Domain":  "takeofftrace.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    },
+    {
+        "Name":  "TraceTakeoffs",
+        "Domain":  "tracetakeoffs.com",
+        "DotCom":  "curl_56",
+        "ExactTmHits":  0
+    }
+]
