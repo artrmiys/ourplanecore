@@ -572,6 +572,16 @@ public sealed class PdfViewport : SKElement
         SetMeasurements(measurements);
     }
 
+    public void FocusMeasurement(Measurement measurement)
+    {
+        if (!_measurements.Contains(measurement))
+            return;
+
+        SelectMeasurement(measurement, -1);
+        RequestRepaint();
+        PostStatus($"Selected {ToolTitle(measurement.MType)} section. Delete removes it; drag blue handles to edit.");
+    }
+
     public void SetMeasurements(IEnumerable<Measurement> measurements)
     {
         _measurements.Clear();

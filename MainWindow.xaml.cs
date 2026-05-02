@@ -532,11 +532,27 @@ public partial class MainWindow : Window
             goToPage.Click += (_, _) => SelectPageByFolder(row.Measurement.PageFolder);
             menu.Items.Add(goToPage);
 
+            var selectOnCanvas = new MenuItem { Header = "Select on Canvas" };
+            selectOnCanvas.Click += (_, _) => SelectSectionOnCanvas(row.Measurement);
+            menu.Items.Add(selectOnCanvas);
+
             var delete = new MenuItem { Header = "Delete Section" };
             delete.Click += (_, _) => DeleteSection(row.Takeoff, row.Measurement);
             menu.Items.Add(delete);
         };
         return menu;
+    }
+
+    private void SelectSectionOnCanvas(Measurement measurement)
+    {
+        if (!string.IsNullOrWhiteSpace(measurement.PageFolder) &&
+            (_currentPage == null ||
+             !string.Equals(_currentPage.FolderPath, measurement.PageFolder, StringComparison.OrdinalIgnoreCase)))
+        {
+            SelectPageByFolder(measurement.PageFolder);
+        }
+
+        Dispatcher.InvokeAsync(() => _viewport.FocusMeasurement(measurement));
     }
 
     private void OnRecordToggled(bool on)
