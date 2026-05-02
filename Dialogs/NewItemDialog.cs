@@ -24,6 +24,15 @@ public sealed class NewItemDialog : Window
         ("Pink",   "#E91E63"),
     ];
 
+    private sealed record TypeOption(string Label, string Value);
+
+    private static readonly TypeOption[] TypeOptions =
+    [
+        new("Line", "line"),
+        new("Area", "area"),
+        new("Count", "point"),
+    ];
+
     public NewItemDialog(string defaultType = "line", string defaultName = "New Item", bool lockType = false, string defaultColor = "#FF4444")
     {
         Title                 = "New Takeoff Item";
@@ -41,8 +50,10 @@ public sealed class NewItemDialog : Window
         panel.Children.Add(new TextBlock { Text = "Measurement type:", Margin = new Thickness(0, 10, 0, 4) });
         var typeBox = new ComboBox
         {
-            ItemsSource = new[] { "line", "area", "point" },
-            SelectedItem = NormalizeType(defaultType),
+            ItemsSource = TypeOptions,
+            DisplayMemberPath = nameof(TypeOption.Label),
+            SelectedValuePath = nameof(TypeOption.Value),
+            SelectedValue = NormalizeType(defaultType),
             IsEnabled = !lockType,
         };
         panel.Children.Add(typeBox);
@@ -105,7 +116,7 @@ public sealed class NewItemDialog : Window
         {
             ItemName     = string.IsNullOrWhiteSpace(nameBox.Text) ? "New Item" : nameBox.Text.Trim();
             ItemColor    = selectedHex;
-            ItemType     = typeBox.SelectedItem?.ToString() ?? "line";
+            ItemType     = typeBox.SelectedValue?.ToString() ?? "line";
             DialogResult = true;
         };
 
@@ -113,7 +124,7 @@ public sealed class NewItemDialog : Window
     }
 
     private static string NormalizeType(string value) =>
-        value is "area" or "point" ? value : "line";
+        value is "area" or "point" or "count" ? (value == "count" ? "point" : value) : "line";
 
     private static string NormalizeColor(string value)
     {
