@@ -1879,7 +1879,7 @@ public partial class MainWindow : Window
     private string BuildTakeoffCsv()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("RowType,Item,MeasurementType,Total,MeasurementCount,MeasurementId,MeasurementValue,MeasurementLabel,ScaleMetersPerPt,PageFolder,TakeoffFolder");
+        sb.AppendLine("RowType,Item,MeasurementType,Total,MeasurementCount,UnitPrice,Cost,MeasurementId,SectionName,SectionIndex,MeasurementValue,MeasurementLabel,ScaleMetersPerPt,PageFolder,TakeoffFolder");
 
         foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
         {
@@ -1890,6 +1890,8 @@ public partial class MainWindow : Window
                 itemTypes,
                 item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode),
                 item.Measurements.Count.ToString(),
+                item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture),
+                CostText(item),
                 "",
                 "",
                 "",
@@ -1897,15 +1899,20 @@ public partial class MainWindow : Window
                 "",
                 item.FolderPath);
 
-            foreach (var measurement in item.Measurements)
+            for (int i = 0; i < item.Measurements.Count; i++)
             {
+                Measurement measurement = item.Measurements[i];
                 AppendCsvRow(sb,
                     "Measurement",
                     item.Name,
                     measurement.MType,
                     "",
                     "",
+                    "",
+                    "",
                     measurement.Id,
+                    SectionDisplayName(item, measurement, i),
+                    (i + 1).ToString(CultureInfo.InvariantCulture),
                     measurement.Value(_viewport.ScaleMetersPerPt).ToString("G17", CultureInfo.InvariantCulture),
                     measurement.Label(_viewport.ScaleMetersPerPt, _viewport.UnitMode),
                     measurement.ScaleMetersPerPt.ToString("G17", CultureInfo.InvariantCulture),
