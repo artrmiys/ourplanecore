@@ -502,11 +502,41 @@ public partial class MainWindow : Window
                 },
             },
         };
+        _estimateList.ContextMenu = BuildEstimateContextMenu();
         Grid.SetRow(_estimateList, 2);
         grid.Children.Add(_estimateList);
 
         TakeoffsPanel.Children.Add(grid);
         RefreshEstimateTable();
+    }
+
+    private ContextMenu BuildEstimateContextMenu()
+    {
+        var menu = new ContextMenu();
+        menu.Opened += (_, _) =>
+        {
+            menu.Items.Clear();
+            if (_estimateList?.SelectedItem is not EstimateDisplayRow row)
+            {
+                menu.Items.Add(new MenuItem { Header = "No section selected", IsEnabled = false });
+                return;
+            }
+
+            if (row.Measurement == null || row.Takeoff == null)
+            {
+                menu.Items.Add(new MenuItem { Header = "Select a section row", IsEnabled = false });
+                return;
+            }
+
+            var goToPage = new MenuItem { Header = "Go to Page" };
+            goToPage.Click += (_, _) => SelectPageByFolder(row.Measurement.PageFolder);
+            menu.Items.Add(goToPage);
+
+            var delete = new MenuItem { Header = "Delete Section" };
+            delete.Click += (_, _) => DeleteSection(row.Takeoff, row.Measurement);
+            menu.Items.Add(delete);
+        };
+        return menu;
     }
 
     private void OnRecordToggled(bool on)
@@ -2655,7 +2685,9 @@ public partial class MainWindow : Window
                 QuantityText(item),
                 UnitText(item.MeasurementType),
                 UnitPriceText(item),
-                CostText(item)));
+                CostText(item),
+                item,
+                null));
             for (int i = 0; i < item.Measurements.Count; i++)
             {
                 Measurement measurement = item.Measurements[i];
@@ -2666,9 +2698,32 @@ public partial class MainWindow : Window
                     QuantityText(measurement),
                     UnitText(measurement.MType),
                     "",
-                    ""));
+                    "",
+                    item,
+                    measurement));
             }
         }
+    }
+
+    private void DeleteSection(TakeoffItem item, Measurement measurement)
+    {
+        if (MessageBox.Show(
+                $"Delete this section from {item.Name}?",
+                "Delete Section",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        item.Measurements.Remove(measurement);
+        _viewport.DeleteMeasurements([measurement]);
+        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        RefreshTreeItem(item);
+        RefreshPagesTakeoffIndicators();
+        ApplyTakeoffPageHighlights();
+        UpdateTotalDisplay();
+        TxtStatus.Text = $"Deleted section from {item.Name}.";
     }
 
     private static string SectionPageName(Measurement measurement) =>
@@ -3510,5 +3565,7 @@ public partial class MainWindow : Window
         string Quantity,
         string Unit,
         string UnitPrice,
-        string Cost);
+        string Cost,
+        TakeoffItem? Takeoff,
+        Measurement? Measurement);
 }
