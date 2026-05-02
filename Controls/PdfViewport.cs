@@ -578,6 +578,7 @@ public sealed class PdfViewport : SKElement
             return;
 
         SelectMeasurement(measurement, -1);
+        CenterOnMeasurement(measurement);
         RequestRepaint();
         PostStatus($"Selected {ToolTitle(measurement.MType)} section. Delete removes it; drag blue handles to edit.");
     }
@@ -1367,6 +1368,34 @@ public sealed class PdfViewport : SKElement
         _selectedMeasurement = measurement;
         _selectedVertexIndex = vertexIndex;
         RequestRepaint();
+    }
+
+    private void CenterOnMeasurement(Measurement measurement)
+    {
+        if (measurement.Points.Count == 0 || ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
+            return;
+
+        SKRect bounds = MeasurementBounds(measurement);
+        float centerX = (bounds.Left + bounds.Right) / 2f;
+        float centerY = (bounds.Top + bounds.Bottom) / 2f;
+        float visibleW = (float)ActualWidth / _zoom;
+        float visibleH = (float)ActualHeight / _zoom;
+
+        _panX = centerX - visibleW / 2f;
+        _panY = centerY - visibleH / 2f;
+        ClampPanToPage();
+        ScheduleRerenderForZoom(force: false);
+    }
+
+    private void ClampPanToPage()
+    {
+        if (_pdfW <= 0 || _pdfH <= 0 || ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
+            return;
+
+        float visibleW = (float)ActualWidth / _zoom;
+        float visibleH = (float)ActualHeight / _zoom;
+        _panX = Math.Clamp(_panX, 0, Math.Max(0, _pdfW - visibleW));
+        _panY = Math.Clamp(_panY, 0, Math.Max(0, _pdfH - visibleH));
     }
 
     private void ClearSelection()
