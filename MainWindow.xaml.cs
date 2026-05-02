@@ -468,27 +468,9 @@ public partial class MainWindow : Window
     {
         TakeoffsPanel.Children.Remove(TakeoffsTree);
 
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 120 });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(4) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(150), MinHeight = 80 });
-
-        Grid.SetRow(TakeoffsTree, 0);
-        grid.Children.Add(TakeoffsTree);
-
-        var splitter = new GridSplitter
-        {
-            Height = 4,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Background = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
-            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
-        };
-        Grid.SetRow(splitter, 1);
-        grid.Children.Add(splitter);
-
         _estimateList = new ListView
         {
-            Margin = new Thickness(2),
+            Margin = new Thickness(0),
             MinHeight = 80,
             View = new GridView
             {
@@ -506,10 +488,24 @@ public partial class MainWindow : Window
         };
         _estimateList.SelectionChanged += OnEstimateSelectionChanged;
         _estimateList.ContextMenu = BuildEstimateContextMenu();
-        Grid.SetRow(_estimateList, 2);
-        grid.Children.Add(_estimateList);
 
-        TakeoffsPanel.Children.Add(grid);
+        var tabs = new TabControl
+        {
+            Margin = new Thickness(2),
+        };
+        tabs.Items.Add(new TabItem
+        {
+            Header = "Takeoffs",
+            Content = TakeoffsTree,
+        });
+        tabs.Items.Add(new TabItem
+        {
+            Header = "Estimating",
+            Content = _estimateList,
+        });
+        tabs.SelectedIndex = 0;
+
+        TakeoffsPanel.Children.Add(tabs);
         RefreshEstimateTable();
     }
 
