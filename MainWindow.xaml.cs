@@ -477,13 +477,14 @@ public partial class MainWindow : Window
             {
                 Columns =
                 {
-                    new GridViewColumn { Header = "Item / Section", Width = 82, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
-                    new GridViewColumn { Header = "Type/Page", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Page)) },
+                    new GridViewColumn { Header = "Item / Section", Width = 118, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
+                    new GridViewColumn { Header = "Type/Page", Width = 72, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Page)) },
                     new GridViewColumn { Header = "Sec", Width = 34, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Sections)) },
-                    new GridViewColumn { Header = "Qty", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
+                    new GridViewColumn { Header = "Qty", Width = 62, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
                     new GridViewColumn { Header = "Unit", Width = 32, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Unit)) },
                     new GridViewColumn { Header = "Price", Width = 48, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.UnitPrice)) },
                     new GridViewColumn { Header = "Cost", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Cost)) },
+                    new GridViewColumn { Header = "Notes", Width = 140, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Notes)) },
                 },
             },
         };
@@ -2908,6 +2909,7 @@ public partial class MainWindow : Window
                     UnitText(item.MeasurementType),
                     UnitPriceText(item),
                     CostText(item),
+                    "",
                     item,
                     null));
                 for (int i = 0; i < item.Measurements.Count; i++)
@@ -2924,6 +2926,7 @@ public partial class MainWindow : Window
                         UnitText(measurement.MType),
                         "",
                         "",
+                        measurement.Notes,
                         item,
                         measurement);
                     _estimateList.Items.Add(row);
@@ -3861,6 +3864,7 @@ public partial class MainWindow : Window
         string Unit,
         string UnitPrice,
         string Cost,
+        string Notes,
         TakeoffItem? Takeoff,
         Measurement? Measurement);
 }
