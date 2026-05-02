@@ -497,6 +497,8 @@ public partial class MainWindow : Window
                     new GridViewColumn { Header = "Sec", Width = 34, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Sections)) },
                     new GridViewColumn { Header = "Qty", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
                     new GridViewColumn { Header = "Unit", Width = 32, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Unit)) },
+                    new GridViewColumn { Header = "Price", Width = 48, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.UnitPrice)) },
+                    new GridViewColumn { Header = "Cost", Width = 54, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Cost)) },
                 },
             },
         };
@@ -1918,6 +1920,10 @@ public partial class MainWindow : Window
         newSection.Click += (_, _) => StartNewSection(tvi, item);
         menu.Items.Add(newSection);
 
+        var unitPrice = new MenuItem { Header = "Set Unit Price" };
+        unitPrice.Click += (_, _) => SetUnitPrice(item);
+        menu.Items.Add(unitPrice);
+
         menu.Items.Add(new Separator());
 
         var moveUp = new MenuItem { Header = "Move Up" };
@@ -1953,6 +1959,30 @@ public partial class MainWindow : Window
         SetTool(item.MeasurementType);
         if (_activeTool == item.MeasurementType)
             TxtStatus.Text = $"New {MeasurementTypeTitle(item.MeasurementType)} section for {item.Name}.";
+    }
+
+    private void SetUnitPrice(TakeoffItem item)
+    {
+        string? raw = ShowInputDialog(
+            $"Unit price per {UnitText(item.MeasurementType)}:",
+            item.UnitPrice > 0 ? item.UnitPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
+            "Set Unit Price");
+        if (raw == null)
+            return;
+
+        if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double price) ||
+            price < 0)
+        {
+            MessageBox.Show("Enter a valid non-negative unit price.", "Set Unit Price",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        item.UnitPrice = price;
+        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        RefreshTreeItem(item);
+        RefreshEstimateTable();
+        TxtStatus.Text = $"Unit price set for {item.Name}: {price:G}";
     }
 
     private void AttachFolderContextMenu(TreeViewItem tvi, TakeoffFolderNode folder)
@@ -2623,7 +2653,9 @@ public partial class MainWindow : Window
                 MeasurementTypeTitle(item.MeasurementType),
                 item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
                 QuantityText(item),
-                UnitText(item.MeasurementType)));
+                UnitText(item.MeasurementType),
+                UnitPriceText(item),
+                CostText(item)));
             for (int i = 0; i < item.Measurements.Count; i++)
             {
                 Measurement measurement = item.Measurements[i];
@@ -2632,7 +2664,9 @@ public partial class MainWindow : Window
                     SectionPageName(measurement),
                     "",
                     QuantityText(measurement),
-                    UnitText(measurement.MType)));
+                    UnitText(measurement.MType),
+                    "",
+                    ""));
             }
         }
     }
@@ -2697,6 +2731,30 @@ public partial class MainWindow : Window
             "area" => _viewport.UnitMode == UnitMode.Imperial ? "sf" : "m2",
             "point" => "ea",
             _ => "",
+        };
+    }
+
+    private static string UnitPriceText(TakeoffItem item) =>
+        item.UnitPrice > 0 ? item.UnitPrice.ToString("F2", CultureInfo.InvariantCulture) : "";
+
+    private string CostText(TakeoffItem item)
+    {
+        if (item.UnitPrice <= 0 || item.Measurements.Count == 0)
+            return "";
+
+        double quantity = EstimateQuantity(item);
+        return (quantity * item.UnitPrice).ToString("F2", CultureInfo.InvariantCulture);
+    }
+
+    private double EstimateQuantity(TakeoffItem item)
+    {
+        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        double value = item.Total(_viewport.ScaleMetersPerPt);
+        return mt switch
+        {
+            "line" when _viewport.UnitMode == UnitMode.Imperial => value / 0.3048,
+            "area" when _viewport.UnitMode == UnitMode.Imperial => value / 0.0929030,
+            _ => value,
         };
     }
 
@@ -3450,5 +3508,7 @@ public partial class MainWindow : Window
         string Page,
         string Sections,
         string Quantity,
-        string Unit);
+        string Unit,
+        string UnitPrice,
+        string Cost);
 }

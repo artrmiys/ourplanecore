@@ -10,6 +10,7 @@ public sealed class TakeoffItem
     public string Color { get; set; }  = "#FF4444";
     public string FolderPath { get; set; } = "";
     public string MeasurementType { get; set; } = "line";
+    public double UnitPrice { get; set; }
 
     public List<Measurement> Measurements { get; } = [];
 

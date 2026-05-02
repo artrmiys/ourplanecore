@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -318,6 +319,7 @@ public static class SmartTakeoffsJobStore
             Color = ReadProperty(folder, "Color") ?? "#FF4444",
             FolderPath = folder,
             MeasurementType = measurementType,
+            UnitPrice = ParseDouble(ReadProperty(folder, "UnitPrice")),
         };
         item.Measurements.AddRange(measurements);
         return item;
@@ -332,6 +334,7 @@ public static class SmartTakeoffsJobStore
         SetProperty(item.FolderPath, "SmartNodeKind", "item");
         SetProperty(item.FolderPath, "Color", item.Color);
         SetProperty(item.FolderPath, "MeasurementType", NormalizeMeasurementType(item.MeasurementType));
+        SetProperty(item.FolderPath, "UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture));
         SetProperty(item.FolderPath, "MeasurementCount", item.Measurements.Count.ToString());
         SetProperty(item.FolderPath, "MeasuredPageCount", item.Measurements
             .Select(m => m.PageFolder)
@@ -739,6 +742,13 @@ public static class SmartTakeoffsJobStore
             .FirstOrDefault(p => p.Attribute("Name")?.Value == propertyName)?
             .Attribute("Value")?
             .Value;
+    }
+
+    private static double ParseDouble(string? value)
+    {
+        return double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out double parsed)
+            ? parsed
+            : 0;
     }
 
     private static XElement? ReadDataRoot(string folder)
