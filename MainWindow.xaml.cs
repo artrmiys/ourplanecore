@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Button> _toolBtns;
     private ToggleButton? _recordButton;
     private ListView? _estimateList;
+    private TextBox? _estimateFilterBox;
     private bool _syncingEstimateSelection;
     private bool _updatingRecordButton;
     private string _lastDrawingTool = "point";
@@ -489,6 +490,19 @@ public partial class MainWindow : Window
         _estimateList.SelectionChanged += OnEstimateSelectionChanged;
         _estimateList.ContextMenu = BuildEstimateContextMenu();
 
+        _estimateFilterBox = new TextBox
+        {
+            Margin = new Thickness(0, 0, 0, 4),
+            MinHeight = 24,
+            ToolTip = "Filter estimating rows by item, section, page, or notes",
+        };
+        _estimateFilterBox.TextChanged += (_, _) => RefreshEstimateTable();
+
+        var estimatePanel = new DockPanel { Margin = new Thickness(2) };
+        DockPanel.SetDock(_estimateFilterBox, Dock.Top);
+        estimatePanel.Children.Add(_estimateFilterBox);
+        estimatePanel.Children.Add(_estimateList);
+
         var tabs = new TabControl
         {
             Margin = new Thickness(2),
@@ -501,7 +515,7 @@ public partial class MainWindow : Window
         tabs.Items.Add(new TabItem
         {
             Header = "Estimating",
-            Content = _estimateList,
+            Content = estimatePanel,
         });
         tabs.SelectedIndex = 0;
 
@@ -2874,10 +2888,18 @@ public partial class MainWindow : Window
         _syncingEstimateSelection = true;
         try
         {
+            string filter = _estimateFilterBox?.Text.Trim() ?? "";
             _estimateList.Items.Clear();
             EstimateDisplayRow? selectedRow = null;
             foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
             {
+                bool itemMatches = EstimateItemMatchesFilter(item, filter);
+                var visibleMeasurements = item.Measurements
+                    .Where(m => itemMatches || EstimateMeasurementMatchesFilter(item, m, filter))
+                    .ToList();
+                if (!itemMatches && visibleMeasurements.Count == 0)
+                    continue;
+
                 _estimateList.Items.Add(new EstimateDisplayRow(
                     item.Name,
                     MeasurementTypeTitle(item.MeasurementType),
@@ -2891,6 +2913,9 @@ public partial class MainWindow : Window
                 for (int i = 0; i < item.Measurements.Count; i++)
                 {
                     Measurement measurement = item.Measurements[i];
+                    if (!visibleMeasurements.Contains(measurement))
+                        continue;
+
                     var row = new EstimateDisplayRow(
                         $"  {SectionDisplayName(item, measurement, i)}",
                         SectionPageName(measurement),
@@ -2918,6 +2943,30 @@ public partial class MainWindow : Window
             _syncingEstimateSelection = false;
         }
     }
+
+    private static bool EstimateItemMatchesFilter(TakeoffItem item, string filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+            return true;
+
+        return TextContains(item.Name, filter) ||
+               TextContains(MeasurementTypeTitle(item.MeasurementType), filter);
+    }
+
+    private static bool EstimateMeasurementMatchesFilter(TakeoffItem item, Measurement measurement, string filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+            return true;
+
+        return TextContains(item.Name, filter) ||
+               TextContains(MeasurementTypeTitle(measurement.MType), filter) ||
+               TextContains(SectionDisplayName(item, measurement, item.Measurements.IndexOf(measurement)), filter) ||
+               TextContains(SectionPageName(measurement), filter) ||
+               TextContains(measurement.Notes, filter);
+    }
+
+    private static bool TextContains(string value, string filter) =>
+        value.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
 
     private void DeleteSection(TakeoffItem item, Measurement measurement)
     {
