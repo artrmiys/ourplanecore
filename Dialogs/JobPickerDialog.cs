@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -26,9 +27,12 @@ public sealed record JobPickerItem(
     string ThumbnailPath,
     string LastOpened,
     string Source,
-    bool Exists)
+    bool Exists,
+    bool IsPinned,
+    bool IsRecent)
 {
     public string Status => Exists ? "Ready" : "Missing";
+    public string PinStatus => IsPinned ? "Pinned" : "";
     public ImageSource? ThumbnailImage => LoadThumbnail(ThumbnailPath);
 
     private static ImageSource? LoadThumbnail(string path)
@@ -56,7 +60,10 @@ public sealed record JobPickerItem(
 
 public sealed class JobPickerDialog : Window
 {
-    private readonly IReadOnlyList<JobPickerItem> _items;
+    private readonly List<JobPickerItem> _items;
+    private readonly Action<string, string, bool>? _pinChanged;
+    private readonly Action<string>? _removeRecent;
+    private readonly string _jobsRootPath;
     private readonly TextBox _searchBox;
     private readonly ListView _list;
     private readonly TextBlock _details;
@@ -65,9 +72,16 @@ public sealed class JobPickerDialog : Window
     public JobPickerAction SelectedAction { get; private set; } = JobPickerAction.None;
     public string SelectedJobPath { get; private set; } = "";
 
-    public JobPickerDialog(IEnumerable<JobPickerItem> items, string jobsRootPath)
+    public JobPickerDialog(
+        IEnumerable<JobPickerItem> items,
+        string jobsRootPath,
+        Action<string, string, bool>? pinChanged = null,
+        Action<string>? removeRecent = null)
     {
         _items = items.ToList();
+        _pinChanged = pinChanged;
+        _removeRecent = removeRecent;
+        _jobsRootPath = jobsRootPath;
 
         Title = "Open Job";
         Width = 760;
@@ -140,6 +154,7 @@ public sealed class JobPickerDialog : Window
                 Columns =
                 {
                     new GridViewColumn { Header = "Preview", Width = 110, CellTemplate = CreateThumbnailTemplate() },
+                    new GridViewColumn { Header = "Pin", Width = 65, DisplayMemberBinding = new Binding(nameof(JobPickerItem.PinStatus)) },
                     new GridViewColumn { Header = "Job", Width = 180, DisplayMemberBinding = new Binding(nameof(JobPickerItem.Name)) },
                     new GridViewColumn { Header = "Last Opened", Width = 135, DisplayMemberBinding = new Binding(nameof(JobPickerItem.LastOpened)) },
                     new GridViewColumn { Header = "Source", Width = 110, DisplayMemberBinding = new Binding(nameof(JobPickerItem.Source)) },
@@ -152,8 +167,10 @@ public sealed class JobPickerDialog : Window
 
         _searchBox.TextChanged += (_, _) => ApplyFilter();
         _searchBox.PreviewKeyDown += SearchBox_PreviewKeyDown;
+        _list.PreviewMouseRightButtonDown += List_PreviewMouseRightButtonDown;
         _list.SelectionChanged += (_, _) => UpdateDetails();
         _list.MouseDoubleClick += (_, _) => AcceptOpen();
+        _list.ContextMenu = BuildContextMenu();
         _openButton.Click += (_, _) => AcceptOpen();
         browseJobButton.Click += (_, _) => AcceptAction(JobPickerAction.BrowseJob);
         browseRootButton.Click += (_, _) => AcceptAction(JobPickerAction.BrowseJobsFolder);
@@ -164,6 +181,52 @@ public sealed class JobPickerDialog : Window
             ApplyFilter();
             _searchBox.Focus();
         };
+    }
+
+    private ContextMenu BuildContextMenu()
+    {
+        var menu = new ContextMenu();
+        menu.Opened += (_, _) =>
+        {
+            menu.Items.Clear();
+            if (_list.SelectedItem is not JobPickerItem item)
+                return;
+
+            var pinItem = new MenuItem
+            {
+                Header = item.IsPinned ? "Unpin from Recent" : "Pin to Recent",
+            };
+            pinItem.Click += (_, _) => SetPinned(item, !item.IsPinned);
+            menu.Items.Add(pinItem);
+
+            var openFolder = new MenuItem
+            {
+                Header = "Open Folder in Explorer",
+                IsEnabled = Directory.Exists(item.Path),
+            };
+            openFolder.Click += (_, _) => OpenFolderInExplorer(item.Path);
+            menu.Items.Add(openFolder);
+
+            menu.Items.Add(new Separator());
+            var remove = new MenuItem
+            {
+                Header = "Remove from Recent",
+                IsEnabled = item.IsRecent,
+            };
+            remove.Click += (_, _) => RemoveFromRecent(item);
+            menu.Items.Add(remove);
+        };
+        return menu;
+    }
+
+    private void List_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        DependencyObject? current = e.OriginalSource as DependencyObject;
+        while (current != null && current is not ListViewItem)
+            current = VisualTreeHelper.GetParent(current);
+
+        if (current is ListViewItem item)
+            item.IsSelected = true;
     }
 
     private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -218,7 +281,7 @@ public sealed class JobPickerDialog : Window
     {
         string query = _searchBox.Text.Trim();
         var visible = string.IsNullOrWhiteSpace(query)
-            ? _items
+            ? _items.ToList()
             : _items
                 .Where(item =>
                     item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
@@ -241,7 +304,7 @@ public sealed class JobPickerDialog : Window
         }
 
         _details.Text = item.Exists
-            ? item.Path
+            ? $"{item.Path}  |  Right-click to pin or remove from Recent."
             : $"Missing: {item.Path}";
         _openButton.IsEnabled = item.Exists;
     }
@@ -260,5 +323,83 @@ public sealed class JobPickerDialog : Window
     {
         SelectedAction = action;
         DialogResult = true;
+    }
+
+    private void SetPinned(JobPickerItem item, bool pinned)
+    {
+        _pinChanged?.Invoke(item.Path, item.Name, pinned);
+        ReplaceItem(item, item with
+        {
+            IsPinned = pinned,
+            IsRecent = true,
+            Source = item.Source == "Jobs Folder" ? "Recent" : item.Source,
+        });
+    }
+
+    private void RemoveFromRecent(JobPickerItem item)
+    {
+        _removeRecent?.Invoke(item.Path);
+        if (item.Exists && IsUnderJobsRoot(item.Path))
+        {
+            ReplaceItem(item, item with
+            {
+                IsPinned = false,
+                IsRecent = false,
+                Source = "Jobs Folder",
+            });
+            return;
+        }
+
+        _items.Remove(item);
+        ApplyFilter();
+    }
+
+    private void ReplaceItem(JobPickerItem oldItem, JobPickerItem newItem)
+    {
+        int index = _items.IndexOf(oldItem);
+        if (index >= 0)
+            _items[index] = newItem;
+        ApplyFilter();
+        _list.SelectedItem = newItem;
+        _list.ScrollIntoView(newItem);
+    }
+
+    private void OpenFolderInExplorer(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Cannot open folder:\n{ex.Message}", "Open Folder",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private bool IsUnderJobsRoot(string path)
+    {
+        if (string.IsNullOrWhiteSpace(_jobsRootPath) || !Directory.Exists(_jobsRootPath))
+            return false;
+
+        string root = NormalizePath(_jobsRootPath) + Path.DirectorySeparatorChar;
+        string candidate = NormalizePath(path);
+        return candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
     }
 }

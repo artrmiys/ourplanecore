@@ -25,6 +25,7 @@ public sealed class RecentJobInfo
     public string Path { get; set; } = "";
     public string LastOpenedUtc { get; set; } = "";
     public string ThumbnailPath { get; set; } = "";
+    public bool IsPinned { get; set; }
 }
 
 public sealed class OpenAiKeyStatus
@@ -128,9 +129,63 @@ public static class AppSettingsStore
             Path = fullPath,
             LastOpenedUtc = DateTime.UtcNow.ToString("O"),
             ThumbnailPath = existingMatch?.ThumbnailPath ?? "",
+            IsPinned = existingMatch?.IsPinned ?? false,
         });
 
-        settings.RecentJobs = existing.Take(MaxRecentJobs).ToList();
+        settings.RecentJobs = TrimRecentJobsPreservingPinned(existing);
+    }
+
+    public static void SetRecentJobPinned(AppSettings settings, string jobPath, string jobName, bool pinned)
+    {
+        if (string.IsNullOrWhiteSpace(jobPath))
+            return;
+
+        string key = NormalizePath(jobPath);
+        var list = (settings.RecentJobs ?? [])
+            .Where(j => !string.IsNullOrWhiteSpace(j.Path))
+            .ToList();
+        RecentJobInfo? existing = list.FirstOrDefault(j =>
+            string.Equals(NormalizePath(j.Path), key, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            existing = new RecentJobInfo
+            {
+                Name = string.IsNullOrWhiteSpace(jobName) ? Path.GetFileName(jobPath) : jobName.Trim(),
+                Path = jobPath.Trim(),
+                LastOpenedUtc = DateTime.UtcNow.ToString("O"),
+            };
+        }
+        else
+        {
+            list.Remove(existing);
+        }
+
+        existing.IsPinned = pinned;
+        if (string.IsNullOrWhiteSpace(existing.Name))
+            existing.Name = string.IsNullOrWhiteSpace(jobName) ? Path.GetFileName(jobPath) : jobName.Trim();
+
+        if (pinned)
+        {
+            list.Insert(0, existing);
+        }
+        else
+        {
+            int insertAt = list.FindLastIndex(j => j.IsPinned) + 1;
+            list.Insert(Math.Max(0, insertAt), existing);
+        }
+
+        settings.RecentJobs = TrimRecentJobsPreservingPinned(list);
+    }
+
+    public static void RemoveRecentJob(AppSettings settings, string jobPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobPath))
+            return;
+
+        string key = NormalizePath(jobPath);
+        settings.RecentJobs = (settings.RecentJobs ?? [])
+            .Where(j => !string.Equals(NormalizePath(j.Path), key, StringComparison.OrdinalIgnoreCase))
+            .ToList();
     }
 
     public static void UpdateRecentJobThumbnail(AppSettings settings, string jobPath, string thumbnailPath)
@@ -168,10 +223,19 @@ public static class AppSettingsStore
                 Path = job.Path.Trim(),
                 LastOpenedUtc = job.LastOpenedUtc ?? "",
                 ThumbnailPath = job.ThumbnailPath ?? "",
+                IsPinned = job.IsPinned,
             });
         }
 
-        settings.RecentJobs = unique.Take(MaxRecentJobs).ToList();
+        settings.RecentJobs = TrimRecentJobsPreservingPinned(unique);
+    }
+
+    private static List<RecentJobInfo> TrimRecentJobsPreservingPinned(IReadOnlyList<RecentJobInfo> recentJobs)
+    {
+        var pinned = recentJobs.Where(j => j.IsPinned).ToList();
+        int remaining = Math.Max(0, MaxRecentJobs - pinned.Count);
+        pinned.AddRange(recentJobs.Where(j => !j.IsPinned).Take(remaining));
+        return pinned;
     }
 
     private static string NormalizePath(string path)

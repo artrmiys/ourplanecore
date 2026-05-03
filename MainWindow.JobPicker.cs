@@ -17,7 +17,11 @@ public partial class MainWindow
 
     private void ShowRecentJobPicker()
     {
-        var dialog = new JobPickerDialog(BuildJobPickerItems(), _settings.JobsRootPath)
+        var dialog = new JobPickerDialog(
+            BuildJobPickerItems(),
+            _settings.JobsRootPath,
+            SetRecentJobPinned,
+            RemoveRecentJob)
         {
             Owner = this,
         };
@@ -56,7 +60,9 @@ public partial class MainWindow
                     ? recent.ThumbnailPath
                     : JobThumbnailService.ExistingThumbnailPath(path),
                 lastOpened: FormatRecentJobTime(recent.LastOpenedUtc),
-                source: "Recent");
+                source: "Recent",
+                isPinned: recent.IsPinned,
+                isRecent: true);
         }
 
         if (Directory.Exists(_settings.JobsRootPath))
@@ -72,7 +78,9 @@ public partial class MainWindow
                     path: folder,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
                     lastOpened: "",
-                    source: "Jobs Folder");
+                    source: "Jobs Folder",
+                    isPinned: false,
+                    isRecent: false);
             }
         }
 
@@ -86,7 +94,9 @@ public partial class MainWindow
         string path,
         string thumbnailPath,
         string lastOpened,
-        string source)
+        string source,
+        bool isPinned,
+        bool isRecent)
     {
         string key = NormalizeJobPath(path);
         if (!seen.Add(key))
@@ -99,7 +109,9 @@ public partial class MainWindow
             thumbnailPath,
             lastOpened,
             source,
-            exists));
+            exists,
+            isPinned,
+            isRecent));
     }
 
     private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath)
@@ -151,7 +163,9 @@ public partial class MainWindow
                 JobThumbnailService.ExistingThumbnailPath(folder),
                 "",
                 "Jobs Folder",
-                true))
+                true,
+                false,
+                false))
             .ToList();
         if (jobs.Count == 0)
         {
@@ -160,7 +174,7 @@ public partial class MainWindow
             return;
         }
 
-        var dialog = new JobPickerDialog(jobs, root)
+        var dialog = new JobPickerDialog(jobs, root, SetRecentJobPinned, RemoveRecentJob)
         {
             Owner = this,
         };
@@ -229,6 +243,18 @@ public partial class MainWindow
             AppSettingsStore.UpdateRecentJobThumbnail(_settings, jobRoot, thumbnailPath);
             SaveAppSettings();
         }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private void SetRecentJobPinned(string jobPath, string jobName, bool pinned)
+    {
+        AppSettingsStore.SetRecentJobPinned(_settings, jobPath, jobName, pinned);
+        SaveAppSettings();
+    }
+
+    private void RemoveRecentJob(string jobPath)
+    {
+        AppSettingsStore.RemoveRecentJob(_settings, jobPath);
+        SaveAppSettings();
     }
 
     private static string FormatRecentJobTime(string value)
