@@ -19,6 +19,7 @@ public enum JobPickerAction
     BrowseJob,
     BrowseJobsFolder,
     NewJob,
+    CreateSample,
 }
 
 public sealed record JobPickerItem(
@@ -131,11 +132,13 @@ public sealed class JobPickerDialog : Window
         var browseJobButton = new Button { Content = "Browse Job...", MinWidth = 104, Margin = new Thickness(0, 0, 6, 0) };
         var browseRootButton = new Button { Content = "Jobs Folder...", MinWidth = 112, Margin = new Thickness(0, 0, 6, 0) };
         var newJobButton = new Button { Content = "New Job...", MinWidth = 92, Margin = new Thickness(0, 0, 6, 0) };
+        var sampleJobButton = new Button { Content = "Sample Job", MinWidth = 94, Margin = new Thickness(0, 0, 6, 0) };
         var cancelButton = new Button { Content = "Cancel", MinWidth = 78, IsCancel = true };
         buttons.Children.Add(_openButton);
         buttons.Children.Add(browseJobButton);
         buttons.Children.Add(browseRootButton);
         buttons.Children.Add(newJobButton);
+        buttons.Children.Add(sampleJobButton);
         buttons.Children.Add(cancelButton);
 
         _details = new TextBlock
@@ -175,6 +178,7 @@ public sealed class JobPickerDialog : Window
         browseJobButton.Click += (_, _) => AcceptAction(JobPickerAction.BrowseJob);
         browseRootButton.Click += (_, _) => AcceptAction(JobPickerAction.BrowseJobsFolder);
         newJobButton.Click += (_, _) => AcceptAction(JobPickerAction.NewJob);
+        sampleJobButton.Click += (_, _) => AcceptAction(JobPickerAction.CreateSample);
 
         Loaded += (_, _) =>
         {
@@ -298,7 +302,7 @@ public sealed class JobPickerDialog : Window
     {
         if (_list.SelectedItem is not JobPickerItem item)
         {
-            _details.Text = "No jobs found. Use Browse Job, Jobs Folder, or New Job.";
+            _details.Text = "No jobs found. Create a Sample Job, create a New Job, or browse for an existing job.";
             _openButton.IsEnabled = false;
             return;
         }

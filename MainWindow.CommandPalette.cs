@@ -47,6 +47,7 @@ public partial class MainWindow
         Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
         Add("file.newJob", "New Job", "File", "", "Create a new SmartTakeoffs job folder.");
+        Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a small local sample job.");
         Add("file.importPdf", "Import PDF", "File", "", "Import PDF pages into the current job.", hasJob, "Open or create a job first.");
         Add("file.save", "Save", "File", "Ctrl+S", "Save current takeoff data.", hasJob, "Open or create a job first.");
         Add("file.exportCsv", "Export CSV", "File", "", "Export takeoff rows to CSV.", hasJob, "Open or create a job first.");
@@ -115,6 +116,7 @@ public partial class MainWindow
             case "file.openRecent": ShowRecentJobPicker(); break;
             case "file.openJobsFolder": BtnOpenJobsFolder_Click(this, new RoutedEventArgs()); break;
             case "file.newJob": BtnNewJob_Click(this, new RoutedEventArgs()); break;
+            case "file.sampleJob": CreateSampleJob(); break;
             case "file.importPdf": BtnImport_Click(this, new RoutedEventArgs()); break;
             case "file.save": BtnSave_Click(this, new RoutedEventArgs()); break;
             case "file.exportCsv": BtnExportCsv_Click(this, new RoutedEventArgs()); break;

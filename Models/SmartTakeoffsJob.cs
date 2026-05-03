@@ -245,6 +245,37 @@ public static class SmartTakeoffsJobStore
         return created;
     }
 
+    public static PageInfo CreatePageFromPdf(
+        SmartTakeoffsJob job,
+        string pdfSourcePath,
+        string displayName,
+        string destinationFolder,
+        int pdfPage = 0,
+        double scaleMetersPerPt = 0)
+    {
+        string sourcesDir = EnsureFolder(job.RootPath, "sources");
+        string pdfDest = UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
+        if (!File.Exists(pdfDest))
+            File.Copy(pdfSourcePath, pdfDest);
+
+        string cleanName = string.IsNullOrWhiteSpace(displayName)
+            ? $"Page {pdfPage + 1}"
+            : displayName.Trim();
+        string pageFolder = UniqueDirectoryPath(Path.Combine(destinationFolder, SanitizeName(cleanName, 120)));
+        Directory.CreateDirectory(pageFolder);
+
+        WriteItemDataXml(pageFolder, "Page", cleanName, GetNextOrderIndex(destinationFolder));
+        WriteSource(pageFolder, pdfDest, pdfPage, scaleMetersPerPt);
+        return new PageInfo
+        {
+            Name = cleanName,
+            FolderPath = pageFolder,
+            PdfPath = pdfDest,
+            PdfPage = pdfPage,
+            ScaleMetersPerPt = scaleMetersPerPt,
+        };
+    }
+
     public static SourceInfo? ReadSource(string pageFolder)
     {
         string path = Path.Combine(pageFolder, "source.json");

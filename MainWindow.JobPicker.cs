@@ -34,7 +34,7 @@ public partial class MainWindow
 
     private void ShowStartupJobPickerIfUseful()
     {
-        if (_currentJob != null || BuildJobPickerItems().Count == 0)
+        if (_currentJob != null)
             return;
 
         ShowRecentJobPicker();
@@ -130,6 +130,9 @@ public partial class MainWindow
             case JobPickerAction.NewJob:
                 CreateJobFromDialog();
                 break;
+            case JobPickerAction.CreateSample:
+                CreateSampleJob();
+                break;
         }
     }
 
@@ -204,6 +207,28 @@ public partial class MainWindow
         catch (Exception ex)
         {
             MessageBox.Show($"Cannot create job:\n{ex.Message}", "New Job",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void CreateSampleJob()
+    {
+        string parent = Directory.Exists(_settings.JobsRootPath)
+            ? _settings.JobsRootPath
+            : SampleJobService.DefaultJobsRoot;
+
+        try
+        {
+            Directory.CreateDirectory(parent);
+            _settings.JobsRootPath = parent;
+            SaveAppSettings();
+            SmartTakeoffsJob job = SampleJobService.CreateSampleJob(parent);
+            OpenJob(job.RootPath);
+            TxtStatus.Text = $"Sample job created: {job.Name}.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Cannot create sample job:\n{ex.Message}", "Sample Job",
                             MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
