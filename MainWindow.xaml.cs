@@ -257,6 +257,8 @@ public partial class MainWindow : Window
 
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (_, _) => BtnOpen_Click(null!, null!)));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Open, Key.O, ModifierKeys.Control));
+        CommandBindings.Add(new CommandBinding(OpenRecentJobsCommand, (_, _) => ShowRecentJobPicker()));
+        InputBindings.Add(new KeyBinding(OpenRecentJobsCommand, Key.O, ModifierKeys.Control | ModifierKeys.Shift));
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (_, _) => BtnSave_Click(null!, null!)));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
         CommandBindings.Add(new CommandBinding(OpenCommandPaletteCommand, (_, _) => ShowCommandPalette()));
@@ -336,76 +338,17 @@ public partial class MainWindow : Window
 
     private void BtnOpen_Click(object sender, RoutedEventArgs e)
     {
-        string? folder = SelectFolder("Select SmartTakeoffs job folder");
-        if (folder == null) return;
-
-        try
-        {
-            OpenJob(folder);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Cannot open job:\n{ex.Message}", "Open Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        OpenJobFromFolderDialog();
     }
 
     private void BtnOpenJobsFolder_Click(object sender, RoutedEventArgs e)
     {
-        string initial = Directory.Exists(_settings.JobsRootPath)
-            ? _settings.JobsRootPath
-            : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string? root = SelectFolder("Select folder with SmartTakeoffs jobs", initial);
-        if (root == null) return;
-
-        _settings.JobsRootPath = root;
-        SaveAppSettings();
-
-        var jobs = Directory.EnumerateDirectories(root)
-            .Where(IsJobFolder)
-            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (jobs.Count == 0)
-        {
-            MessageBox.Show("No SmartTakeoffs jobs found in that folder.", "Open Jobs Folder",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        string? selected = ShowJobPickerDialog(root, jobs);
-        if (selected == null) return;
-
-        try
-        {
-            OpenJob(selected);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Cannot open job:\n{ex.Message}", "Open Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        OpenJobFromJobsRootDialog();
     }
 
     private void BtnNewJob_Click(object sender, RoutedEventArgs e)
     {
-        string? parent = SelectFolder("Choose parent folder for the new job");
-        if (parent == null) return;
-
-        string? name = ShowInputDialog("Job name:", "New Job", "New Job");
-        if (string.IsNullOrWhiteSpace(name)) return;
-
-        try
-        {
-            _settings.JobsRootPath = parent;
-            SaveAppSettings();
-            var job = SmartTakeoffsJobStore.CreateJob(parent, name);
-            OpenJob(job.RootPath);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Cannot create job:\n{ex.Message}", "New Job",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        CreateJobFromDialog();
     }
 
     private void OpenJob(string rootPath, string? initialPageFolder = null)
@@ -434,6 +377,7 @@ public partial class MainWindow : Window
         LoadTakeoffsForJob();
         _settings.LastJobPath = _currentJob.RootPath;
         _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
+        AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
         SaveAppSettings();
         LoadPersistedMarkerVisibility();
         if (ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
@@ -7491,7 +7435,10 @@ public partial class MainWindow : Window
     private void TryOpenLastJobFromSettings()
     {
         if (string.IsNullOrWhiteSpace(_settings.LastJobPath) || !Directory.Exists(_settings.LastJobPath))
+        {
+            ShowStartupJobPickerIfUseful();
             return;
+        }
 
         try
         {
@@ -7501,6 +7448,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             TxtStatus.Text = $"Last job could not be opened: {ex.Message}";
+            ShowStartupJobPickerIfUseful();
         }
     }
 
@@ -7744,63 +7692,6 @@ public partial class MainWindow : Window
         string? result = null;
         ok.Click += (_, _) => { result = tb.Text; win.DialogResult = true; };
         win.Loaded += (_, _) => { tb.Focus(); tb.SelectAll(); };
-        return win.ShowDialog() == true ? result : null;
-    }
-
-    private string? ShowJobPickerDialog(string root, IReadOnlyList<string> jobs)
-    {
-        var win = new Window
-        {
-            Title = "Open Job",
-            Width = 520,
-            Height = 420,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ResizeMode = ResizeMode.CanResize,
-            Owner = this,
-        };
-
-        var panel = new DockPanel { Margin = new Thickness(10) };
-        var title = new TextBlock
-        {
-            Text = root,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 8),
-        };
-        DockPanel.SetDock(title, Dock.Top);
-        panel.Children.Add(title);
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
-        var open = new Button { Content = "Open", Width = 80, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
-        var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
-        buttons.Children.Add(open);
-        buttons.Children.Add(cancel);
-        DockPanel.SetDock(buttons, Dock.Bottom);
-        panel.Children.Add(buttons);
-
-        var list = new ListBox
-        {
-            ItemsSource = jobs.Select(Path.GetFileName).ToList(),
-        };
-        if (list.Items.Count > 0)
-            list.SelectedIndex = 0;
-        panel.Children.Add(list);
-        win.Content = panel;
-
-        string? result = null;
-        void Accept()
-        {
-            if (list.SelectedIndex < 0) return;
-            result = jobs[list.SelectedIndex];
-            win.DialogResult = true;
-        }
-
-        open.Click += (_, _) => Accept();
-        list.MouseDoubleClick += (_, _) => Accept();
         return win.ShowDialog() == true ? result : null;
     }
 

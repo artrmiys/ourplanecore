@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 
 namespace SmartTakeoffs;
@@ -14,6 +16,14 @@ public sealed class AppSettings
     public string ViewportBackground { get; set; } = "#FFFFFF";
     public string OpenAiModel { get; set; } = OpenAiRequestRunner.DefaultModel;
     public string FolderTemplateMode { get; set; } = "AUTO";
+    public List<RecentJobInfo> RecentJobs { get; set; } = [];
+}
+
+public sealed class RecentJobInfo
+{
+    public string Name { get; set; } = "";
+    public string Path { get; set; } = "";
+    public string LastOpenedUtc { get; set; } = "";
 }
 
 public sealed class OpenAiKeyStatus
@@ -41,6 +51,8 @@ public static class AppSettingsStore
         "gpt-4o-mini",
     ];
 
+    private const int MaxRecentJobs = 16;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -62,8 +74,10 @@ public static class AppSettingsStore
             if (!File.Exists(SettingsPath))
                 return new AppSettings();
 
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
+            var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
                 ?? new AppSettings();
+            NormalizeRecentJobs(settings);
+            return settings;
         }
         catch
         {
@@ -78,6 +92,76 @@ public static class AppSettingsStore
             Directory.CreateDirectory(dir);
 
         File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    public static void AddRecentJob(AppSettings settings, string jobPath, string jobName)
+    {
+        if (string.IsNullOrWhiteSpace(jobPath))
+            return;
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(jobPath.Trim());
+        }
+        catch
+        {
+            fullPath = jobPath.Trim();
+        }
+
+        string cleanName = string.IsNullOrWhiteSpace(jobName)
+            ? Path.GetFileName(fullPath)
+            : jobName.Trim();
+
+        var existing = (settings.RecentJobs ?? [])
+            .Where(j => !string.IsNullOrWhiteSpace(j.Path))
+            .Where(j => !string.Equals(NormalizePath(j.Path), NormalizePath(fullPath), StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        existing.Insert(0, new RecentJobInfo
+        {
+            Name = cleanName,
+            Path = fullPath,
+            LastOpenedUtc = DateTime.UtcNow.ToString("O"),
+        });
+
+        settings.RecentJobs = existing.Take(MaxRecentJobs).ToList();
+    }
+
+    public static void NormalizeRecentJobs(AppSettings settings)
+    {
+        var unique = new List<RecentJobInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var job in settings.RecentJobs ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(job.Path))
+                continue;
+
+            string key = NormalizePath(job.Path);
+            if (!seen.Add(key))
+                continue;
+
+            unique.Add(new RecentJobInfo
+            {
+                Name = string.IsNullOrWhiteSpace(job.Name) ? Path.GetFileName(job.Path) : job.Name.Trim(),
+                Path = job.Path.Trim(),
+                LastOpenedUtc = job.LastOpenedUtc ?? "",
+            });
+        }
+
+        settings.RecentJobs = unique.Take(MaxRecentJobs).ToList();
+    }
+
+    private static string NormalizePath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
     }
 
     public static OpenAiKeyStatus GetOpenAiKeyStatus()

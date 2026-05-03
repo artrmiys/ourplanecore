@@ -64,15 +64,6 @@ public sealed class CommandPaletteDialog : Window
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
 
-        _details = new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 12, 0),
-        };
-        _details.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryForegroundBrush");
-        footer.Children.Add(_details);
-
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -96,6 +87,15 @@ public sealed class CommandPaletteDialog : Window
         };
         buttons.Children.Add(_runButton);
         buttons.Children.Add(cancelButton);
+
+        _details = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+        _details.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryForegroundBrush");
+        footer.Children.Add(_details);
 
         _list = new ListBox
         {

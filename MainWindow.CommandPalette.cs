@@ -44,6 +44,7 @@ public partial class MainWindow
             items.Add(new CommandPaletteItem(id, title, group, shortcut, description, canExecute, disabledReason));
 
         Add("file.open", "Open Job", "File", "Ctrl+O", "Open an existing SmartTakeoffs job folder.");
+        Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
         Add("file.newJob", "New Job", "File", "", "Create a new SmartTakeoffs job folder.");
         Add("file.importPdf", "Import PDF", "File", "", "Import PDF pages into the current job.", hasJob, "Open or create a job first.");
@@ -111,6 +112,7 @@ public partial class MainWindow
         switch (id)
         {
             case "file.open": BtnOpen_Click(this, new RoutedEventArgs()); break;
+            case "file.openRecent": ShowRecentJobPicker(); break;
             case "file.openJobsFolder": BtnOpenJobsFolder_Click(this, new RoutedEventArgs()); break;
             case "file.newJob": BtnNewJob_Click(this, new RoutedEventArgs()); break;
             case "file.importPdf": BtnImport_Click(this, new RoutedEventArgs()); break;
