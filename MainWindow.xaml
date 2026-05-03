@@ -33,7 +33,7 @@
                     ToolTip="Box select measurements (E). Ctrl+C copy, Ctrl+V paste" Style="{StaticResource ToolBtnActive}"/>
             <Button x:Name="BtnScale" Content="Scale 📐" Click="BtnTool_Click" Tag="scale"
                     ToolTip="Set scale (S)" Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnPoint" Content="Point ●"  Click="BtnTool_Click" Tag="point"
+            <Button x:Name="BtnPoint" Content="Count"  Click="BtnTool_Click" Tag="point"
                     ToolTip="Count point (P)" Style="{StaticResource ToolBtn}"/>
             <Button x:Name="BtnLine"  Content="Line ╱"   Click="BtnTool_Click" Tag="line"
                     ToolTip="Measure line (L)" Style="{StaticResource ToolBtn}"/>
@@ -130,8 +130,8 @@
 
                 <!-- Left panel: Pages -->
                 <DockPanel x:Name="PagesPanel" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}">
-                    <Border DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1" Padding="6,5">
-                        <TextBlock Text="Pages" FontWeight="Bold" FontSize="12"/>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
+                        <TextBlock Text="Pages" Style="{StaticResource PanelHeader}"/>
                     </Border>
                     <ScrollViewer DockPanel.Dock="Top"
                                   VerticalScrollBarVisibility="Auto"
@@ -225,7 +225,7 @@
                             </Expander>
 
                             <Expander Header="PDF Layers"
-                                      IsExpanded="True"
+                                      IsExpanded="False"
                                       Foreground="{DynamicResource ControlForegroundBrush}"
                                       Background="{DynamicResource ControlBackgroundBrush}"
                                       BorderBrush="{DynamicResource ControlBorderBrush}"
@@ -288,8 +288,8 @@
 
                 <!-- Right panel: Takeoffs -->
                 <DockPanel x:Name="TakeoffsPanel" Grid.Column="4" Background="{DynamicResource PanelBackgroundBrush}">
-                    <Border DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1" Padding="6,5">
-                        <TextBlock Text="Takeoffs" FontWeight="Bold" FontSize="12"/>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
+                        <TextBlock Text="Takeoffs" Style="{StaticResource PanelHeader}"/>
                     </Border>
                     <StackPanel DockPanel.Dock="Bottom" Margin="4,4">
                         <TextBlock x:Name="TxtTotal" Text="Total: —"
