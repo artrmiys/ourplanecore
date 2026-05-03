@@ -236,6 +236,41 @@ public static class PdfLayerRenderService
         }
     }
 
+    internal static bool TryInvokeHelper<TRequest, TResponse>(
+        string action,
+        TRequest request,
+        out TResponse? response,
+        out string error)
+    {
+        response = default;
+        error = "";
+
+        string tempDir = Path.Combine(Path.GetTempPath(), "SmartTakeoffs", Guid.NewGuid().ToString("N"));
+        string inputPath = Path.Combine(tempDir, "input.json");
+        string outputPath = Path.Combine(tempDir, "output.json");
+
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            return TryInvokeWorker(action, request, out response, out error) ||
+                   TryRunFileCommand(action, request, inputPath, outputPath, out response, out error);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch { }
+        }
+    }
+
     private static bool TryInvokeWorker<TRequest, TResponse>(
         string action,
         TRequest request,
@@ -356,6 +391,14 @@ public static class PdfLayerRenderService
         WorkerInput = null;
         WorkerOutput = null;
         WorkerProcess = null;
+    }
+
+    public static void StopWorker()
+    {
+        lock (WorkerLock)
+        {
+            ResetWorker();
+        }
     }
 
     private static bool TryRunFileCommand<TRequest, TResponse>(

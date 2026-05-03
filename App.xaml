@@ -6,6 +6,11 @@
         <!-- Scrollbar colors — updated by ApplyTheme -->
         <SolidColorBrush x:Key="ScrollBarTrackBrush"  Color="#E0E0E0"/>
         <SolidColorBrush x:Key="ScrollBarThumbBrush"  Color="#A0A0A0"/>
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F0F0F0"/>
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#F5F5F5"/>
+        <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="SplitterBrush" Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#666666"/>
 
         <!-- Slim scrollbar ControlTemplate (no arrow buttons) -->
         <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
@@ -87,6 +92,25 @@
         <SolidColorBrush x:Key="ControlActiveBackgroundBrush" Color="#CCE5FF"/>
         <SolidColorBrush x:Key="ControlActiveForegroundBrush" Color="#111111"/>
 
+        <Style TargetType="Window">
+            <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+
+        <Style TargetType="ToolBar">
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+
+        <Style TargetType="StatusBar">
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+
         <!-- Tool button: highlighted when active -->
         <Style x:Key="ToolBtn" TargetType="Button">
             <Setter Property="Padding"   Value="6,3"/>
@@ -117,8 +141,15 @@
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ControlForegroundBrush}"/>
         </Style>
         <Style x:Key="{x:Static ToolBar.TextBoxStyleKey}" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+        <Style TargetType="ComboBox">
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
@@ -153,12 +184,107 @@
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding"    Value="0,1"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- ListView control itself -->
         <Style TargetType="ListView">
-            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Background"      Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="Foreground"      Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+        </Style>
+
+        <Style TargetType="TreeView">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+        </Style>
+
+        <Style TargetType="TreeViewItem">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="1"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="Padding" Value="8,3"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+        </Style>
+
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+        </Style>
+
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="GridLinesVisibility" Value="All"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="RowBackground" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="AlternatingRowBackground" Value="{DynamicResource PanelBackgroundBrush}"/>
+        </Style>
+
+        <Style TargetType="DataGridRow">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
         </Style>
     </Application.Resources>
 </Application>

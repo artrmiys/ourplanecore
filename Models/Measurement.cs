@@ -7,7 +7,7 @@ namespace SmartTakeoffs;
 
 public sealed class Measurement
 {
-    public string         Id         { get; init; } = Guid.NewGuid().ToString();
+    public string         Id         { get; set; } = Guid.NewGuid().ToString();
     public string         Name       { get; set; } = "";
     public string         Notes      { get; set; } = "";
     public string         MType      { get; set; }  = "line";   // point | line | area

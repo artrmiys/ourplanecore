@@ -74,6 +74,27 @@ public sealed class PdfLayerInfo
     public bool IsOn { get; set; } = true;
 }
 
+public sealed class PageLayerManifest
+{
+    [JsonPropertyName("source_pdf")]
+    public string SourcePdf { get; set; } = "";
+
+    [JsonPropertyName("page")]
+    public int Page { get; set; }
+
+    [JsonPropertyName("page_number")]
+    public int PageNumber { get; set; }
+
+    [JsonPropertyName("generated_at_utc")]
+    public string GeneratedAtUtc { get; set; } = "";
+
+    [JsonPropertyName("layer_count")]
+    public int LayerCount { get; set; }
+
+    [JsonPropertyName("layers")]
+    public List<PdfLayerInfo> Layers { get; set; } = [];
+}
+
 internal sealed class MeasurementDto
 {
     [JsonPropertyName("id")]
@@ -326,6 +347,7 @@ public static class SmartTakeoffsJobStore
             FolderPath = folder,
             MeasurementType = measurementType,
             UnitPrice = ParseDouble(ReadProperty(folder, "UnitPrice")),
+            Notes = ReadProperty(folder, "Notes") ?? "",
         };
         item.Measurements.AddRange(measurements);
         return item;
@@ -341,6 +363,7 @@ public static class SmartTakeoffsJobStore
         SetProperty(item.FolderPath, "Color", item.Color);
         SetProperty(item.FolderPath, "MeasurementType", NormalizeMeasurementType(item.MeasurementType));
         SetProperty(item.FolderPath, "UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture));
+        SetProperty(item.FolderPath, "Notes", item.Notes);
         SetProperty(item.FolderPath, "MeasurementCount", item.Measurements.Count.ToString());
         SetProperty(item.FolderPath, "MeasuredPageCount", item.Measurements
             .Select(m => m.PageFolder)
@@ -400,9 +423,16 @@ public static class SmartTakeoffsJobStore
             PointsPdf = m.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
         }).ToList();
 
-        File.WriteAllText(
-            MeasurementsJsonPath(takeoffFolder),
-            JsonSerializer.Serialize(dtos, JsonOptions));
+        try
+        {
+            File.WriteAllText(
+                MeasurementsJsonPath(takeoffFolder),
+                JsonSerializer.Serialize(dtos, JsonOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(MeasurementsJsonPath(takeoffFolder))}': {ex.Message}", ex);
+        }
     }
 
     public static bool IsPageFolder(string folder) =>
@@ -473,6 +503,7 @@ public static class SmartTakeoffsJobStore
         CopyDirectory(sourcePath, destPath);
         RewritePageSources(destPath, pageSources);
         RegenerateGuidsRecursively(destPath);
+        RegenerateMeasurementIdsRecursively(destPath);
         UpdateItemName(destPath, copyName);
         SetOrderIndex(destPath, GetNextOrderIndex(targetFolder));
         return destPath;
@@ -577,6 +608,57 @@ public static class SmartTakeoffsJobStore
         WriteSource(pageFolder, pdfAbs, src.Page, src.ScaleMetersPerPt, pdfLayers, pdfLayersCached: true);
     }
 
+    public static string PageLayersJsonPath(string pageFolder) =>
+        Path.Combine(pageFolder, "layers.json");
+
+    public static string SourcePdfMetadataPath(string pageFolder) =>
+        Path.Combine(pageFolder, "source_pdf.json");
+
+    public static PdfSheetMetadata? ReadSourcePdfMetadata(string pageFolder)
+    {
+        string path = SourcePdfMetadataPath(pageFolder);
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<PdfSheetMetadata>(File.ReadAllText(path));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static void WriteSourcePdfMetadata(string pageFolder, PdfSheetMetadata metadata)
+    {
+        Directory.CreateDirectory(pageFolder);
+        try
+        {
+            File.WriteAllText(
+                SourcePdfMetadataPath(pageFolder),
+                JsonSerializer.Serialize(metadata, JsonOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(SourcePdfMetadataPath(pageFolder))}': {ex.Message}", ex);
+        }
+    }
+
+    public static PageLayerManifest? ReadPageLayerManifest(string pageFolder)
+    {
+        string path = PageLayersJsonPath(pageFolder);
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<PageLayerManifest>(File.ReadAllText(path));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static void WriteSource(
         string pageFolder,
         string pdfAbsPath,
@@ -593,9 +675,55 @@ public static class SmartTakeoffsJobStore
             PdfLayersCached = pdfLayersCached,
             PdfLayers = pdfLayers?.ToList() ?? [],
         };
-        File.WriteAllText(
-            Path.Combine(pageFolder, "source.json"),
-            JsonSerializer.Serialize(src, JsonOptions));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(pageFolder, "source.json"),
+                JsonSerializer.Serialize(src, JsonOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(Path.Combine(pageFolder, "source.json"))}': {ex.Message}", ex);
+        }
+        WritePageLayerManifest(pageFolder, src);
+    }
+
+    private static void WritePageLayerManifest(string pageFolder, SourceInfo src)
+    {
+        string path = PageLayersJsonPath(pageFolder);
+        if (src.PdfLayers.Count == 0)
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+            return;
+        }
+
+        var manifest = new PageLayerManifest
+        {
+            SourcePdf = src.Pdf,
+            Page = src.Page,
+            PageNumber = src.Page + 1,
+            GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            LayerCount = src.PdfLayers.Count,
+            Layers = src.PdfLayers
+                .OrderBy(layer => layer.Number)
+                .Select(layer => new PdfLayerInfo
+                {
+                    Number = layer.Number,
+                    Name = layer.Name,
+                    IsOn = layer.IsOn,
+                })
+                .ToList(),
+        };
+
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(manifest, JsonOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(path)}': {ex.Message}", ex);
+        }
     }
 
     private static void RewritePageSources(string newRoot, IReadOnlyList<PageSourceSnapshot> snapshots)
@@ -696,6 +824,27 @@ public static class SmartTakeoffsJobStore
     {
         foreach (string dir in EnumerateSelfAndDescendants(folder))
             RegenerateDataXmlGuid(dir);
+    }
+
+    private static void RegenerateMeasurementIdsRecursively(string folder)
+    {
+        foreach (string dir in EnumerateSelfAndDescendants(folder))
+        {
+            string path = MeasurementsJsonPath(dir);
+            if (!File.Exists(path)) continue;
+
+            try
+            {
+                var measurements = LoadMeasurements(dir);
+                foreach (var measurement in measurements)
+                    measurement.Id = Guid.NewGuid().ToString();
+                SaveMeasurements(dir, measurements);
+            }
+            catch
+            {
+                // Leave the copied file readable even if legacy measurement JSON is malformed.
+            }
+        }
     }
 
     private static void RegenerateDataXmlGuid(string folder)

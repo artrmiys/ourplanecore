@@ -27,7 +27,7 @@ public sealed record ViewportContextRequest(
 
 // ── Tool enum ────────────────────────────────────────────────────────────────
 
-public enum ViewerTool { Pan, Scale, Point, Line, Area }
+public enum ViewerTool { Pan, Select, Scale, Point, Line, Area }
 
 // ── Main control ─────────────────────────────────────────────────────────────
 
@@ -57,25 +57,71 @@ public sealed class PdfViewport : SKElement
     private bool _rightClickMoved;
 
     // ── Drawing tools ─────────────────────────────────────────────────────────
-    private ViewerTool              _tool       = ViewerTool.Pan;
+    private ViewerTool              _tool       = ViewerTool.Select;
     private readonly List<SKPoint>  _drawPts    = [];   // in-progress PDF-space points
-    private readonly List<int>      _tempIds    = [];   // canvas items to clear (not used in Skia, kept for parity)
     private SKPoint?                _rubberEnd;          // rubber-band endpoint
+    private SKPoint?                _snapPreview;
+    private SKPoint?                _lastPointerPdf;
+    private bool                    _boxSelecting;
+    private SKPoint                 _boxSelectStartPdf;
+    private SKPoint                 _boxSelectEndPdf;
+    private bool                    _boxSelectAdditive;
 
     // Scale calibration
     private readonly List<SKPoint> _scalePts = [];
+    private SmartAiActionDraft? _aiActionDraftPreview;
+    private string _aiActionDraftPreviewPage = "";
+    private readonly List<SmartAiMarker> _aiMarkers = [];
     public  double   ScaleMetersPerPt { get; set; } = 0.0;
     public  string   ActiveColor      { get; set; } = "#FF4444";
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;
     public  string   ViewBackgroundColor { get; set; } = "#FFFFFF";
 
+    private bool _snapEnabled;
+    public bool SnapEnabled
+    {
+        get => _snapEnabled;
+        set
+        {
+            if (_snapEnabled == value)
+                return;
+
+            _snapEnabled = value;
+            SetSnapPreview(null);
+            SnapChanged?.Invoke(_snapEnabled);
+            PostRecordPrompt();
+        }
+    }
+
+    private bool _orthoEnabled;
+    public bool OrthoEnabled
+    {
+        get => _orthoEnabled;
+        set
+        {
+            if (_orthoEnabled == value)
+                return;
+
+            _orthoEnabled = value;
+            OrthoChanged?.Invoke(_orthoEnabled);
+            PostRecordPrompt();
+        }
+    }
+
     // ── Measurements ──────────────────────────────────────────────────────────
     private readonly List<Measurement> _measurements = [];
     private string _pageFolder = "";
     private Measurement? _selectedMeasurement;
+    private readonly HashSet<Measurement> _selectedMeasurements = [];
     private int _selectedVertexIndex = -1;
     private bool _draggingVertex;
+    private bool _draggingMeasurement;
+    private bool _dragMeasurementChanged;
+    private Point _dragScreenStart;
+    private SKPoint _dragVertexOriginalPoint;
+    private List<SKPoint> _dragMeasurementOriginalPoints = [];
+    private readonly Dictionary<Measurement, List<SKPoint>> _dragSelectionOriginalPoints = [];
     private readonly Dictionary<int, bool> _layerStates = [];
     private readonly HashSet<int> _highlightedLayers = [];
     private List<PdfLayer> _layers = [];
@@ -114,18 +160,30 @@ public sealed class PdfViewport : SKElement
     public event Action<string>?                          StatusChanged;
     public event Action<double>?                          ScaleChanged;
     public event Action<string>?                          ToolChanged;
+    public event Action<bool>?                            SnapChanged;
+    public event Action<bool>?                            OrthoChanged;
     public event Action<IReadOnlyList<PdfLayer>>?         LayersChanged;
     public event Action<IReadOnlyList<PdfLayerInfo>>?     PdfLayersDiscovered;
     public event Action<Measurement>?                     MeasurementAdded;
     public event Action<Measurement>?                     MeasurementRemoved;
     public event Action<Measurement>?                     MeasurementChanged;
     public event Action<Measurement?>?                    MeasurementSelectionChanged;
+    public event Action<IReadOnlyList<Measurement>>?      MeasurementsSelectionChanged;
+    public event Action<IReadOnlyList<Measurement>>?      CopyMeasurementsRequested;
+    public event Action<SKPoint?>?                        PasteMeasurementsRequested;
     public event Action<ViewportContextRequest>?          ContextRequested;
 
     // ── Constants ─────────────────────────────────────────────────────────────
     private const float ZoomMin    = 0.05f;
     private const float ZoomMax    = 16.0f;
     private const float RenderDpi  = 144f;           // initial render quality (2 px/pt)
+    private const double PdfPointMeters = 25.4 / 72.0 / 1000.0;
+    private const float SnapToleranceScreenPx = 14f;
+    private const float SnapMarkerScreenPx = 8f;
+    private const float VertexHitToleranceScreenPx = 24f;
+    private const float MeasurementHitToleranceScreenPx = 20f;
+    private const float SelectedVertexHitToleranceScreenPx = 32f;
+    private const float SelectedMeasurementHitToleranceScreenPx = 28f;
     private static readonly float[] RenderScaleSteps = [0.75f, 1.00f, 1.50f, 2.25f, 3.00f, 4.00f];
 
     private static readonly SKColor TempColor = new(0xFF, 0xD7, 0x00);   // yellow
@@ -136,6 +194,7 @@ public sealed class PdfViewport : SKElement
     {
         Focusable     = true;
         ClipToBounds  = true;
+        IgnorePixelScaling = true;
         // Suppress WPF context menu so right-button is free for pan
         ContextMenu   = null;
         _zoomRerenderTimer = new System.Windows.Threading.DispatcherTimer
@@ -169,11 +228,26 @@ public sealed class PdfViewport : SKElement
     // Public API
     // ═════════════════════════════════════════════════════════════════════════
 
+    public readonly record struct ViewState(float Zoom, float PanX, float PanY);
+
+    public ViewState CaptureViewState() => new(_zoom, _panX, _panY);
+
+    public void RestoreViewState(ViewState state)
+    {
+        _zoom = Math.Clamp(state.Zoom, ZoomMin, ZoomMax);
+        _panX = state.PanX;
+        _panY = state.PanY;
+        ClampPanToPage();
+        ScheduleRerenderForZoom(force: false);
+        RequestRepaint();
+    }
+
     public void LoadPage(
         string pdfPath,
         int pageIndex = 0,
         string pageFolder = "",
-        IReadOnlyList<PdfLayerInfo>? cachedLayers = null)
+        IReadOnlyList<PdfLayerInfo>? cachedLayers = null,
+        ViewState? restoreView = null)
     {
         _pdfPath    = pdfPath;
         _pdfIndex   = pageIndex;
@@ -185,6 +259,10 @@ public sealed class PdfViewport : SKElement
         _drawPts.Clear();
         _scalePts.Clear();
         _rubberEnd = null;
+        _boxSelecting = false;
+        SetSnapPreview(null);
+        _aiMarkers.Clear();
+        ClearAiActionDraftPreview();
         ClearSelection();
         _layerStates.Clear();
         _highlightedLayers.Clear();
@@ -209,7 +287,10 @@ public sealed class PdfViewport : SKElement
         {
             Dispatcher.InvokeAsync(() =>
             {
-                ZoomFit();
+                if (restoreView.HasValue)
+                    RestoreViewState(restoreView.Value);
+                else
+                    ZoomFit();
                 QueueLayerRender(
                     resetLayerStates: true,
                     renderScale: CurrentRenderScale(),
@@ -219,6 +300,8 @@ public sealed class PdfViewport : SKElement
         }
         else
         {
+            if (restoreView.HasValue)
+                RestoreViewState(restoreView.Value);
             QueueLayerRender(
                 resetLayerStates: true,
                 renderScale: CurrentRenderScale(),
@@ -235,6 +318,7 @@ public sealed class PdfViewport : SKElement
     {
         _tool = name.ToLower() switch
         {
+            "select" => ViewerTool.Select,
             "scale" => ViewerTool.Scale,
             "point" => ViewerTool.Point,
             "line"  => ViewerTool.Line,
@@ -242,9 +326,15 @@ public sealed class PdfViewport : SKElement
             _       => ViewerTool.Pan,
         };
         CancelDrawing();
+        SetSnapPreview(null);
         UpdateCursor();
         PostRecordPrompt();
     }
+
+    public IReadOnlyList<Measurement> GetSelectedMeasurements() =>
+        _selectedMeasurements
+            .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
+            .ToList();
 
     public void ZoomFit()
     {
@@ -257,6 +347,67 @@ public sealed class PdfViewport : SKElement
 
     public void ZoomIn()  => ApplyZoom(1.25f, (float)(ActualWidth  / 2), (float)(ActualHeight / 2));
     public void ZoomOut() => ApplyZoom(0.80f, (float)(ActualWidth  / 2), (float)(ActualHeight / 2));
+
+    private bool TrySavePdfCrop(SKRect requestedPdfRect, string outputPath, out SKRect cropPdfRect, out string error)
+    {
+        cropPdfRect = SKRect.Empty;
+        error = "";
+
+        if (_pageBitmap == null || _bitmapScale <= 0 || _pdfW <= 0 || _pdfH <= 0)
+        {
+            error = "No rendered PDF page is available.";
+            return false;
+        }
+
+        float left = Math.Clamp(Math.Min(requestedPdfRect.Left, requestedPdfRect.Right), 0, _pdfW);
+        float top = Math.Clamp(Math.Min(requestedPdfRect.Top, requestedPdfRect.Bottom), 0, _pdfH);
+        float right = Math.Clamp(Math.Max(requestedPdfRect.Left, requestedPdfRect.Right), 0, _pdfW);
+        float bottom = Math.Clamp(Math.Max(requestedPdfRect.Top, requestedPdfRect.Bottom), 0, _pdfH);
+
+        if (right - left < 1 || bottom - top < 1)
+        {
+            error = "Requested crop is outside the PDF page.";
+            return false;
+        }
+
+        int srcLeft = Math.Clamp((int)Math.Floor(left * _bitmapScale), 0, _pageBitmap.Width - 1);
+        int srcTop = Math.Clamp((int)Math.Floor(top * _bitmapScale), 0, _pageBitmap.Height - 1);
+        int srcRight = Math.Clamp((int)Math.Ceiling(right * _bitmapScale), srcLeft + 1, _pageBitmap.Width);
+        int srcBottom = Math.Clamp((int)Math.Ceiling(bottom * _bitmapScale), srcTop + 1, _pageBitmap.Height);
+        int cropWidth = srcRight - srcLeft;
+        int cropHeight = srcBottom - srcTop;
+        if (cropWidth <= 0 || cropHeight <= 0)
+        {
+            error = "Requested crop is too small.";
+            return false;
+        }
+
+        string? directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        using var crop = new SKBitmap(cropWidth, cropHeight);
+        using (var canvas = new SKCanvas(crop))
+        {
+            canvas.Clear(SKColors.White);
+            canvas.DrawBitmap(
+                _pageBitmap,
+                new SKRectI(srcLeft, srcTop, srcRight, srcBottom),
+                new SKRect(0, 0, cropWidth, cropHeight));
+        }
+
+        using var image = SKImage.FromBitmap(crop);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 92);
+        using var stream = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+        data.SaveTo(stream);
+
+        cropPdfRect = new SKRect(
+            srcLeft / _bitmapScale,
+            srcTop / _bitmapScale,
+            srcRight / _bitmapScale,
+            srcBottom / _bitmapScale);
+        return true;
+    }
 
     // ── Layer API ─────────────────────────────────────────────────────────────
 
@@ -539,7 +690,7 @@ public sealed class PdfViewport : SKElement
 
         for (int i = _measurements.Count - 1; i >= 0; i--)
         {
-            if (_measurements[i].PageFolder == _pageFolder)
+            if (IsMeasurementOnActivePage(_measurements[i]))
             {
                 var m = _measurements[i];
                 _measurements.RemoveAt(i);
@@ -561,9 +712,14 @@ public sealed class PdfViewport : SKElement
         foreach (var m in toRemove.ToList())
         {
             _measurements.Remove(m);
+            _selectedMeasurements.Remove(m);
             if (ReferenceEquals(_selectedMeasurement, m))
-                ClearSelection();
+                _selectedMeasurement = null;
         }
+        if (_selectedMeasurement == null && _selectedMeasurements.Count > 0)
+            _selectedMeasurement = _selectedMeasurements.LastOrDefault();
+        if (_selectedMeasurement == null)
+            _selectedVertexIndex = -1;
         RequestRepaint();
     }
 
@@ -581,7 +737,151 @@ public sealed class PdfViewport : SKElement
         SelectMeasurement(measurement, -1);
         CenterOnMeasurement(measurement);
         RequestRepaint();
-        PostStatus($"Selected {EntryTitle(measurement.MType)}. Delete removes it; drag blue handles to edit.");
+        PostStatus($"Selected {EntryTitle(measurement.MType)}. Drag the body to move; drag blue handles to reshape.");
+    }
+
+    public void SelectMeasurements(IEnumerable<Measurement> measurements)
+    {
+        var selected = measurements
+            .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
+            .Distinct()
+            .ToList();
+        SetSelectedMeasurements(selected, selected.LastOrDefault(), -1);
+        if (selected.Count > 0)
+            PostStatus($"Selected {selected.Count} measurement(s). Ctrl+C copies, Ctrl+V pastes to the active sheet.");
+    }
+
+    public void FocusPdfPoint(float pdfX, float pdfY)
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
+            return;
+
+        float visibleW = (float)ActualWidth / _zoom;
+        float visibleH = (float)ActualHeight / _zoom;
+        _panX = pdfX - visibleW / 2f;
+        _panY = pdfY - visibleH / 2f;
+        ClampPanToPage();
+        ScheduleRerenderForZoom(force: false);
+        RequestRepaint();
+        Focus();
+    }
+
+    public bool InsertMeasurementVertex(Measurement measurement, float pdfX, float pdfY)
+    {
+        if (!_measurements.Contains(measurement) ||
+            !IsMeasurementOnActivePage(measurement) ||
+            measurement.MType is not ("line" or "area"))
+        {
+            return false;
+        }
+
+        var point = new SKPoint(pdfX, pdfY);
+        int insertIndex = measurement.Points.Count;
+
+        if (measurement.Points.Count >= 2)
+        {
+            float bestDistance = float.PositiveInfinity;
+            for (int i = 1; i < measurement.Points.Count; i++)
+            {
+                float distance = DistanceToSegment(point, measurement.Points[i - 1], measurement.Points[i]);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    insertIndex = i;
+                }
+            }
+
+            if (measurement.MType == "area" && measurement.Points.Count > 2)
+            {
+                float closingDistance = DistanceToSegment(point, measurement.Points[^1], measurement.Points[0]);
+                if (closingDistance < bestDistance)
+                    insertIndex = measurement.Points.Count;
+            }
+        }
+
+        measurement.Points.Insert(insertIndex, point);
+        SelectMeasurement(measurement, insertIndex);
+        MeasurementChanged?.Invoke(measurement);
+        RequestRepaint();
+        PostStatus($"Inserted {ToolTitle(measurement.MType)} vertex {insertIndex + 1}.");
+        return true;
+    }
+
+    public bool RemoveNearestMeasurementVertex(Measurement measurement, float pdfX, float pdfY)
+    {
+        if (!_measurements.Contains(measurement) ||
+            !IsMeasurementOnActivePage(measurement) ||
+            measurement.MType is not ("line" or "area") ||
+            measurement.Points.Count == 0)
+        {
+            return false;
+        }
+
+        int minimumPoints = measurement.MType == "area" ? 3 : 2;
+        if (measurement.Points.Count <= minimumPoints)
+        {
+            PostStatus($"{ToolTitle(measurement.MType)} needs at least {minimumPoints} points.");
+            return false;
+        }
+
+        var point = new SKPoint(pdfX, pdfY);
+        int removeIndex = 0;
+        float bestDistance = float.PositiveInfinity;
+        for (int i = 0; i < measurement.Points.Count; i++)
+        {
+            float distance = DistanceSquared(point, measurement.Points[i]);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                removeIndex = i;
+            }
+        }
+
+        measurement.Points.RemoveAt(removeIndex);
+        SelectMeasurement(measurement, Math.Min(removeIndex, measurement.Points.Count - 1));
+        MeasurementChanged?.Invoke(measurement);
+        RequestRepaint();
+        PostStatus($"Removed {ToolTitle(measurement.MType)} vertex {removeIndex + 1}.");
+        return true;
+    }
+
+    public bool TrySaveContextCrop(
+        float pdfX,
+        float pdfY,
+        float radiusPt,
+        string outputPath,
+        out SKRect cropPdfRect,
+        out string error)
+    {
+        radiusPt = Math.Max(24f, radiusPt);
+        var requested = SKRect.Create(pdfX - radiusPt, pdfY - radiusPt, radiusPt * 2, radiusPt * 2);
+        return TrySavePdfCrop(requested, outputPath, out cropPdfRect, out error);
+    }
+
+    public bool TrySaveMeasurementCrop(
+        Measurement measurement,
+        float paddingPt,
+        string outputPath,
+        out SKRect cropPdfRect,
+        out string error)
+    {
+        cropPdfRect = SKRect.Empty;
+        if (!_measurements.Contains(measurement) || measurement.Points.Count == 0)
+        {
+            error = "Measurement is not loaded in the current viewport.";
+            return false;
+        }
+
+        SKRect bounds = MeasurementBounds(measurement);
+        paddingPt = Math.Max(24f, paddingPt);
+
+        float width = Math.Max(bounds.Width + paddingPt * 2, 240f);
+        float height = Math.Max(bounds.Height + paddingPt * 2, 240f);
+        float centerX = (bounds.Left + bounds.Right) / 2f;
+        float centerY = (bounds.Top + bounds.Bottom) / 2f;
+        var requested = SKRect.Create(centerX - width / 2f, centerY - height / 2f, width, height);
+
+        return TrySavePdfCrop(requested, outputPath, out cropPdfRect, out error);
     }
 
     public void SetMeasurements(IEnumerable<Measurement> measurements)
@@ -589,6 +889,33 @@ public sealed class PdfViewport : SKElement
         _measurements.Clear();
         _measurements.AddRange(measurements);
         ClearSelection();
+        RequestRepaint();
+    }
+
+    public void ShowAiActionDraftPreview(SmartAiActionDraft draft, string pageName)
+    {
+        _aiActionDraftPreview = draft;
+        _aiActionDraftPreviewPage = pageName;
+        RequestRepaint();
+    }
+
+    public void ClearAiActionDraftPreview()
+    {
+        _aiActionDraftPreview = null;
+        _aiActionDraftPreviewPage = "";
+        RequestRepaint();
+    }
+
+    public void SetAiMarkers(IEnumerable<SmartAiMarker> markers)
+    {
+        _aiMarkers.Clear();
+        _aiMarkers.AddRange(markers);
+        RequestRepaint();
+    }
+
+    public void ClearAiMarkers()
+    {
+        _aiMarkers.Clear();
         RequestRepaint();
     }
 
@@ -609,6 +936,10 @@ public sealed class PdfViewport : SKElement
         _drawPts.Clear();
         _scalePts.Clear();
         _rubberEnd = null;
+        _boxSelecting = false;
+        _aiActionDraftPreview = null;
+        _aiActionDraftPreviewPage = "";
+        _aiMarkers.Clear();
         ClearSelection();
         RequestRepaint();
         FireLayersChanged();
@@ -675,8 +1006,149 @@ public sealed class PdfViewport : SKElement
             using var saved = new SKAutoCanvasRestore(canvas, true);
             canvas.SetMatrix(measMtx);
             DrawMeasurements(canvas, visiblePdf);
+            DrawAiActionDraftPreview(canvas, visiblePdf);
+            DrawAiMarkers(canvas, visiblePdf);
             DrawInProgress(canvas);
         }
+
+        DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
+    }
+
+    private void DrawSheetHeaderOverlay(SKCanvas canvas, float canvasWidth, float canvasHeight)
+    {
+        if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || canvasWidth <= 0 || canvasHeight <= 0)
+            return;
+
+        float pageLeft = -_panX * _zoom;
+        float pageTop = -_panY * _zoom;
+        float pageRight = (_pdfW - _panX) * _zoom;
+        float pageBottom = (_pdfH - _panY) * _zoom;
+        float visibleLeft = Math.Max(0, pageLeft);
+        float visibleTop = Math.Max(0, pageTop);
+        float visibleRight = Math.Min(canvasWidth, pageRight);
+        float visibleBottom = Math.Min(canvasHeight, pageBottom);
+
+        if (visibleRight - visibleLeft < 48 || visibleBottom - visibleTop < 20)
+            return;
+
+        const float fontSize = 13f;
+        const float padX = 7f;
+        const float padY = 4f;
+        const float margin = 8f;
+
+        string scaleText = FormatSheetScale();
+        string sheetSizeText = FormatSheetSize();
+
+        using var textPaint = new SKPaint
+        {
+            Color = SKColors.Black,
+            TextSize = fontSize,
+            IsAntialias = true,
+            Typeface = SKTypeface.FromFamilyName("Consolas"),
+        };
+        using var bgPaint = new SKPaint
+        {
+            Color = SKColors.White.WithAlpha(225),
+            Style = SKPaintStyle.Fill,
+        };
+        using var borderPaint = new SKPaint
+        {
+            Color = new SKColor(0x40, 0x40, 0x40, 210),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1f,
+        };
+
+        float lineHeight = textPaint.FontMetrics.Descent - textPaint.FontMetrics.Ascent;
+        float boxHeight = lineHeight + padY * 2;
+        float y = Math.Max(visibleTop + margin, pageTop + margin);
+        y = Math.Min(y, visibleBottom - boxHeight - margin);
+        if (y < visibleTop)
+            return;
+
+        float leftX = Math.Max(visibleLeft + margin, pageLeft + margin);
+        float scaleWidth = textPaint.MeasureText(scaleText);
+        float sizeWidth = textPaint.MeasureText(sheetSizeText);
+        float availableWidth = visibleRight - visibleLeft - margin * 2;
+
+        if (scaleWidth + sizeWidth + padX * 4 + 28f <= availableWidth)
+        {
+            DrawHeaderBox(canvas, leftX, y, scaleText, textPaint, bgPaint, borderPaint, padX, padY, lineHeight);
+
+            float rightX = Math.Min(visibleRight - margin - sizeWidth - padX * 2, pageRight - margin - sizeWidth - padX * 2);
+            if (rightX > leftX + scaleWidth + padX * 2 + 18f)
+                DrawHeaderBox(canvas, rightX, y, sheetSizeText, textPaint, bgPaint, borderPaint, padX, padY, lineHeight);
+        }
+        else if (scaleWidth + padX * 2 <= availableWidth)
+        {
+            DrawHeaderBox(canvas, leftX, y, scaleText, textPaint, bgPaint, borderPaint, padX, padY, lineHeight);
+        }
+    }
+
+    private static void DrawHeaderBox(
+        SKCanvas canvas,
+        float x,
+        float y,
+        string text,
+        SKPaint textPaint,
+        SKPaint bgPaint,
+        SKPaint borderPaint,
+        float padX,
+        float padY,
+        float lineHeight)
+    {
+        float textWidth = textPaint.MeasureText(text);
+        var rect = new SKRect(x, y, x + textWidth + padX * 2, y + lineHeight + padY * 2);
+        canvas.DrawRect(rect, bgPaint);
+        canvas.DrawRect(rect, borderPaint);
+        canvas.DrawText(text, x + padX, y + padY - textPaint.FontMetrics.Ascent, textPaint);
+    }
+
+    private string FormatSheetScale()
+    {
+        if (ScaleMetersPerPt <= 0)
+            return "Scale: not set";
+
+        double ratio = ScaleMetersPerPt / PdfPointMeters;
+        string architectural = FormatArchitecturalScale(ratio);
+        return string.IsNullOrWhiteSpace(architectural)
+            ? $"Scale: 1:{ratio:F0}"
+            : $"Scale: {architectural}";
+    }
+
+    private string FormatSheetSize()
+    {
+        double widthIn = _pdfW / 72.0;
+        double heightIn = _pdfH / 72.0;
+        return $"{widthIn:F2} x {heightIn:F2}";
+    }
+
+    private static string FormatArchitecturalScale(double ratio)
+    {
+        if (ratio <= 0)
+            return "";
+
+        (double Ratio, string Label)[] presets =
+        [
+            (4,   "3\" = 1' 0\""),
+            (8,   "1-1/2\" = 1' 0\""),
+            (12,  "1\" = 1' 0\""),
+            (16,  "3/4\" = 1' 0\""),
+            (24,  "1/2\" = 1' 0\""),
+            (32,  "3/8\" = 1' 0\""),
+            (48,  "1/4\" = 1' 0\""),
+            (64,  "3/16\" = 1' 0\""),
+            (96,  "1/8\" = 1' 0\""),
+            (128, "3/32\" = 1' 0\""),
+            (192, "1/16\" = 1' 0\""),
+        ];
+
+        foreach (var preset in presets)
+        {
+            if (Math.Abs(ratio - preset.Ratio) <= 0.25)
+                return preset.Label;
+        }
+
+        return "";
     }
 
     // ── Draw finalized measurements ───────────────────────────────────────────
@@ -685,22 +1157,25 @@ public sealed class PdfViewport : SKElement
     {
         foreach (var m in _measurements)
         {
-            if (m.PageFolder != _pageFolder) continue;
-            if (!ReferenceEquals(m, _selectedMeasurement) && !IsMeasurementVisible(m, visiblePdf))
+            if (!IsMeasurementOnActivePage(m)) continue;
+            bool selected = IsMeasurementSelected(m);
+            if (!selected && !IsMeasurementVisible(m, visiblePdf))
                 continue;
-            DrawMeasurement(canvas, m);
+            DrawMeasurement(canvas, m, selected);
+            if (selected && !ReferenceEquals(m, _selectedMeasurement))
+                DrawSelectionBounds(canvas, m);
             if (ReferenceEquals(m, _selectedMeasurement))
                 DrawSelectionHandles(canvas, m);
         }
     }
 
-    private void DrawMeasurement(SKCanvas canvas, Measurement m)
+    private void DrawMeasurement(SKCanvas canvas, Measurement m, bool selected)
     {
         SKColor color = GetCachedColor(m.Color, SKColors.Red);
         using var stroke = new SKPaint
         {
             Color       = color,
-            StrokeWidth = (ReferenceEquals(m, _selectedMeasurement) ? 3f : 2f) / _zoom,       // constant screen width regardless of zoom
+            StrokeWidth = (selected ? 3f : 2f) / _zoom,       // constant screen width regardless of zoom
             IsAntialias = true,
             Style       = SKPaintStyle.Stroke,
         };
@@ -751,6 +1226,23 @@ public sealed class PdfViewport : SKElement
                 DrawLabel(canvas, cen, m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
         }
+    }
+
+    private void DrawSelectionBounds(SKCanvas canvas, Measurement m)
+    {
+        if (m.Points.Count == 0) return;
+
+        SKRect bounds = RawMeasurementBounds(m);
+        bounds.Inflate(6f / Math.Max(_zoom, 0.001f), 6f / Math.Max(_zoom, 0.001f));
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.DodgerBlue,
+            StrokeWidth = 1.5f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            PathEffect = SKPathEffect.CreateDash([6f / _zoom, 4f / _zoom], 0),
+        };
+        canvas.DrawRect(bounds, stroke);
     }
 
     private void DrawSelectionHandles(SKCanvas canvas, Measurement m)
@@ -821,6 +1313,266 @@ public sealed class PdfViewport : SKElement
         canvas.DrawText(text, pos.X + pad * 1.5f, pos.Y - pad, textPaint);
     }
 
+    private void DrawAiActionDraftPreview(SKCanvas canvas, SKRect visiblePdf)
+    {
+        if (_aiActionDraftPreview == null || _aiActionDraftPreview.Actions.Count == 0)
+            return;
+
+        using var stroke = new SKPaint
+        {
+            Color = new SKColor(0x00, 0xBC, 0xD4, 230),
+            StrokeWidth = 2.5f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            PathEffect = SKPathEffect.CreateDash([10f / _zoom, 5f / _zoom], 0),
+        };
+        using var fill = new SKPaint
+        {
+            Color = new SKColor(0x00, 0xBC, 0xD4, 42),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var dotFill = new SKPaint
+        {
+            Color = new SKColor(0x00, 0xBC, 0xD4, 235),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var dotStroke = new SKPaint
+        {
+            Color = SKColors.White,
+            StrokeWidth = 1.5f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+
+        foreach (SmartAiAction action in _aiActionDraftPreview.Actions)
+        {
+            if (!ActionMatchesPreviewPage(action))
+                continue;
+
+            var points = new List<SKPoint>();
+            foreach (SmartAiActionPoint point in action.Points)
+                points.Add(new SKPoint(point.X, point.Y));
+
+            if (points.Count == 0 || !PointsVisible(points, visiblePdf))
+                continue;
+
+            bool isArea = action.MeasurementType.Equals("area", StringComparison.OrdinalIgnoreCase) ||
+                          action.Type.Contains("area", StringComparison.OrdinalIgnoreCase);
+            bool isPoint = action.MeasurementType.Equals("point", StringComparison.OrdinalIgnoreCase) ||
+                           action.Type.Contains("point", StringComparison.OrdinalIgnoreCase);
+
+            if (isArea && points.Count >= 3)
+            {
+                using var path = new SKPath();
+                path.MoveTo(points[0]);
+                for (int i = 1; i < points.Count; i++)
+                    path.LineTo(points[i]);
+                path.Close();
+                canvas.DrawPath(path, fill);
+                canvas.DrawPath(path, stroke);
+                DrawAiActionDots(canvas, points, dotFill, dotStroke);
+                DrawLabel(canvas, Centroid(points), AiActionLabel(action), "#00BCD4");
+            }
+            else if (!isPoint && points.Count >= 2)
+            {
+                using var path = new SKPath();
+                path.MoveTo(points[0]);
+                for (int i = 1; i < points.Count; i++)
+                    path.LineTo(points[i]);
+                canvas.DrawPath(path, stroke);
+                DrawAiActionDots(canvas, points, dotFill, dotStroke);
+                DrawLabel(canvas, points[^1], AiActionLabel(action), "#00BCD4");
+            }
+            else
+            {
+                DrawAiActionDots(canvas, points, dotFill, dotStroke);
+                DrawLabel(canvas, points[0], AiActionLabel(action), "#00BCD4");
+            }
+        }
+    }
+
+    private bool ActionMatchesPreviewPage(SmartAiAction action)
+    {
+        if (string.IsNullOrWhiteSpace(action.Page) || string.IsNullOrWhiteSpace(_aiActionDraftPreviewPage))
+            return true;
+
+        return string.Equals(action.Page, _aiActionDraftPreviewPage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void DrawAiActionDots(SKCanvas canvas, IReadOnlyList<SKPoint> points, SKPaint fill, SKPaint stroke)
+    {
+        float radius = 4.5f / _zoom;
+        foreach (SKPoint point in points)
+        {
+            canvas.DrawCircle(point, radius, fill);
+            canvas.DrawCircle(point, radius, stroke);
+        }
+    }
+
+    private static string AiActionLabel(SmartAiAction action)
+    {
+        string label = string.IsNullOrWhiteSpace(action.Label) ? action.Type : action.Label;
+        if (action.Confidence > 0)
+            label += $" ({action.Confidence:P0})";
+        return $"AI: {label}";
+    }
+
+    private void DrawAiMarkers(SKCanvas canvas, SKRect visiblePdf)
+    {
+        if (_aiMarkers.Count == 0)
+            return;
+
+        using var fill = new SKPaint
+        {
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.White.WithAlpha(245),
+            StrokeWidth = 1.8f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+        using var accent = new SKPaint
+        {
+            StrokeWidth = 2.2f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+
+        foreach (SmartAiMarker marker in _aiMarkers)
+        {
+            SKPoint point = new(marker.PdfPoint.X, marker.PdfPoint.Y);
+            if (!PointVisible(point, visiblePdf))
+                continue;
+
+            SKColor color = AiMarkerColor(marker);
+            fill.Color = color.WithAlpha(220);
+            accent.Color = color.WithAlpha(245);
+
+            float size = 7f / _zoom;
+            using var markerPath = new SKPath();
+            markerPath.MoveTo(point.X, point.Y - size);
+            markerPath.LineTo(point.X + size, point.Y);
+            markerPath.LineTo(point.X, point.Y + size);
+            markerPath.LineTo(point.X - size, point.Y);
+            markerPath.Close();
+
+            canvas.DrawPath(markerPath, fill);
+            canvas.DrawPath(markerPath, stroke);
+
+            if (marker.SampleKind.Equals("negative", StringComparison.OrdinalIgnoreCase) ||
+                marker.SampleKind.Equals("ignore", StringComparison.OrdinalIgnoreCase))
+            {
+                float cross = size * 0.72f;
+                canvas.DrawLine(point.X - cross, point.Y - cross, point.X + cross, point.Y + cross, accent);
+                canvas.DrawLine(point.X + cross, point.Y - cross, point.X - cross, point.Y + cross, accent);
+            }
+            else
+            {
+                canvas.DrawCircle(point, 2.2f / _zoom, stroke);
+            }
+
+            DrawLabel(
+                canvas,
+                new SKPoint(point.X + size * 1.6f, point.Y - size * 1.6f),
+                AiMarkerLabel(marker),
+                ColorHex(color));
+        }
+    }
+
+    private bool PointVisible(SKPoint point, SKRect visiblePdf)
+    {
+        float margin = 24f / Math.Max(_zoom, 0.001f);
+        return point.X >= visiblePdf.Left - margin &&
+               point.X <= visiblePdf.Right + margin &&
+               point.Y >= visiblePdf.Top - margin &&
+               point.Y <= visiblePdf.Bottom + margin;
+    }
+
+    private static SKColor AiMarkerColor(SmartAiMarker marker)
+    {
+        if (marker.SampleKind.Equals("ignore", StringComparison.OrdinalIgnoreCase))
+            return new SKColor(0xEF, 0x6C, 0x00);
+        if (marker.SampleKind.Equals("negative", StringComparison.OrdinalIgnoreCase))
+            return new SKColor(0xD3, 0x2F, 0x2F);
+
+        string type = marker.Type ?? "";
+        if (type.Contains("height", StringComparison.OrdinalIgnoreCase))
+            return new SKColor(0x7B, 0x1F, 0xA2);
+        if (type.Contains("window", StringComparison.OrdinalIgnoreCase) ||
+            type.Contains("door", StringComparison.OrdinalIgnoreCase) ||
+            type.Contains("opening", StringComparison.OrdinalIgnoreCase))
+            return new SKColor(0x19, 0x76, 0xD2);
+        if (type.Contains("roof", StringComparison.OrdinalIgnoreCase))
+            return new SKColor(0x2E, 0x7D, 0x32);
+        if (type.Contains("corner", StringComparison.OrdinalIgnoreCase))
+            return new SKColor(0x00, 0x96, 0x88);
+
+        return new SKColor(0x00, 0xBC, 0xD4);
+    }
+
+    private static string AiMarkerLabel(SmartAiMarker marker)
+    {
+        string label = marker.Type switch
+        {
+            "exterior_corner" => "ext corner",
+            "interior_corner" => "int corner",
+            "wall_height_sample" => "height",
+            "window_sample" => "window",
+            "door_sample" => "door",
+            "opening_sample" => "opening",
+            "roof_note" => "roof note",
+            "roof_edge_sample" => "roof edge",
+            "dimension_text_sample" => "dimension",
+            "ignore_area" => "ignore",
+            _ => string.IsNullOrWhiteSpace(marker.Type) ? "marker" : marker.Type.Replace('_', ' '),
+        };
+
+        if (marker.SampleKind.Equals("negative", StringComparison.OrdinalIgnoreCase))
+            label = $"not {label}";
+        else if (marker.SampleKind.Equals("ignore", StringComparison.OrdinalIgnoreCase))
+            label = "ignore";
+
+        return $"M: {label}";
+    }
+
+    private static string ColorHex(SKColor color) =>
+        $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
+
+    private static bool PointsVisible(IReadOnlyList<SKPoint> points, SKRect visiblePdf)
+    {
+        SKRect bounds = PointsBounds(points);
+        return bounds.Left <= visiblePdf.Right &&
+               bounds.Right >= visiblePdf.Left &&
+               bounds.Top <= visiblePdf.Bottom &&
+               bounds.Bottom >= visiblePdf.Top;
+    }
+
+    private static SKRect PointsBounds(IReadOnlyList<SKPoint> points)
+    {
+        if (points.Count == 0)
+            return SKRect.Empty;
+
+        float left = points[0].X;
+        float right = points[0].X;
+        float top = points[0].Y;
+        float bottom = points[0].Y;
+        for (int i = 1; i < points.Count; i++)
+        {
+            SKPoint point = points[i];
+            left = Math.Min(left, point.X);
+            right = Math.Max(right, point.X);
+            top = Math.Min(top, point.Y);
+            bottom = Math.Max(bottom, point.Y);
+        }
+
+        return new SKRect(left, top, right, bottom);
+    }
+
     // ── Draw in-progress line / area ──────────────────────────────────────────
 
     private void DrawInProgress(SKCanvas canvas)
@@ -886,6 +1638,53 @@ public sealed class PdfViewport : SKElement
             if (_scalePts.Count == 2)
                 canvas.DrawLine(_scalePts[0], _scalePts[1], scPaint);
         }
+
+        if (_snapPreview.HasValue)
+        {
+            float half = SnapMarkerScreenPx / Math.Max(_zoom, 0.001f);
+            var rect = new SKRect(
+                _snapPreview.Value.X - half,
+                _snapPreview.Value.Y - half,
+                _snapPreview.Value.X + half,
+                _snapPreview.Value.Y + half);
+            using var snapFill = new SKPaint
+            {
+                Color = new SKColor(0xE5, 0x39, 0x35, 80),
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill,
+            };
+            using var snapStroke = new SKPaint
+            {
+                Color = new SKColor(0xE5, 0x39, 0x35),
+                StrokeWidth = 2f / Math.Max(_zoom, 0.001f),
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+            };
+            canvas.DrawRect(rect, snapFill);
+            canvas.DrawRect(rect, snapStroke);
+        }
+
+        if (_boxSelecting)
+        {
+            float safeZoom = Math.Max(_zoom, 0.001f);
+            SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
+            using var fill = new SKPaint
+            {
+                Color = new SKColor(0x1E, 0x88, 0xE5, 32),
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill,
+            };
+            using var stroke = new SKPaint
+            {
+                Color = new SKColor(0x1E, 0x88, 0xE5),
+                StrokeWidth = 1.5f / safeZoom,
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                PathEffect = SKPathEffect.CreateDash([8f / safeZoom, 4f / safeZoom], 0),
+            };
+            canvas.DrawRect(rect, fill);
+            canvas.DrawRect(rect, stroke);
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -906,18 +1705,10 @@ public sealed class PdfViewport : SKElement
         Focus();
         var pos = e.GetPosition(this);
 
-        if (e.ChangedButton == MouseButton.Right &&
-            _drawPts.Count > 0 &&
-            _tool is ViewerTool.Line or ViewerTool.Area)
-        {
-            CompleteOrCancelDrawing();
-            e.Handled = true;
-            return;
-        }
-
         if (e.RightButton == MouseButtonState.Pressed && _pageBitmap != null)
         {
             var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
+            _lastPointerPdf = pdf;
             _rightClickStart = pos;
             _rightClickPdf = pdf;
             _rightClickMoved = false;
@@ -925,19 +1716,38 @@ public sealed class PdfViewport : SKElement
             if (TryHitMeasurement(pdf, out Measurement measurement))
             {
                 _rightClickMeasurement = measurement;
-                SelectMeasurement(measurement, -1);
+                if (_selectedMeasurements.Contains(measurement))
+                    SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
+                else
+                    SelectMeasurement(measurement, -1);
             }
         }
 
         if (e.LeftButton == MouseButtonState.Pressed &&
-            _tool == ViewerTool.Pan &&
             _pageBitmap != null)
         {
             var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
-            if (TryBeginMeasurementEdit(pdf))
+            _lastPointerPdf = pdf;
+            bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
+            if (_tool == ViewerTool.Select && IsSelectionModifierActive() && TryHitMeasurement(pdf, out Measurement toggled))
             {
-                if (_draggingVertex)
+                ToggleMeasurementSelection(toggled);
+                e.Handled = true;
+                return;
+            }
+
+            bool preserveSelectionForAdd = _tool == ViewerTool.Select && IsSelectionModifierActive();
+            if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
+            {
+                if (_draggingVertex || _draggingMeasurement)
                     CaptureMouse();
+                e.Handled = true;
+                return;
+            }
+
+            if (_tool == ViewerTool.Select)
+            {
+                BeginBoxSelection(pdf, additive: IsSelectionModifierActive());
                 e.Handled = true;
                 return;
             }
@@ -960,7 +1770,13 @@ public sealed class PdfViewport : SKElement
 
         if (e.LeftButton == MouseButtonState.Pressed && _pageBitmap != null)
         {
-            var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
+            if (!EnsureScaleForLinearArea())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            var pdf = ResolveDigitizerPoint(ScreenToPdf((float)pos.X, (float)pos.Y), updatePreview: true);
             ClearSelection();
 
             // Double-click (ClickCount==2) finishes a line/area without adding an extra point.
@@ -980,7 +1796,6 @@ public sealed class PdfViewport : SKElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var pos = e.GetPosition(this);
-
         if (_rightClickStart.HasValue &&
             DistanceSquared(_rightClickStart.Value, pos) > 16)
         {
@@ -989,14 +1804,72 @@ public sealed class PdfViewport : SKElement
 
         if (_draggingVertex &&
             _selectedMeasurement != null &&
-            _selectedVertexIndex >= 0 &&
-            e.LeftButton == MouseButtonState.Pressed)
+            _selectedVertexIndex >= 0)
         {
-            _selectedMeasurement.Points[_selectedVertexIndex] = ScreenToPdf((float)pos.X, (float)pos.Y);
-            MeasurementChanged?.Invoke(_selectedMeasurement);
+            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            _selectedMeasurement.Points[_selectedVertexIndex] = new SKPoint(
+                _dragVertexOriginalPoint.X + delta.X,
+                _dragVertexOriginalPoint.Y + delta.Y);
+            _dragMeasurementChanged = true;
+            PostDragStatus("Dragging vertex", delta);
             RequestRepaint();
             e.Handled = true;
             return;
+        }
+
+        if (_draggingMeasurement &&
+            _selectedMeasurement != null)
+        {
+            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            if (_dragSelectionOriginalPoints.Count > 0)
+            {
+                foreach (var (measurement, originalPoints) in _dragSelectionOriginalPoints)
+                {
+                    for (int i = 0; i < measurement.Points.Count && i < originalPoints.Count; i++)
+                    {
+                        SKPoint original = originalPoints[i];
+                        measurement.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _selectedMeasurement.Points.Count && i < _dragMeasurementOriginalPoints.Count; i++)
+                {
+                    SKPoint original = _dragMeasurementOriginalPoints[i];
+                    _selectedMeasurement.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                }
+            }
+
+            _dragMeasurementChanged = true;
+            PostDragStatus("Dragging measurement", delta);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
+        if (_boxSelecting)
+        {
+            _boxSelectEndPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
+            _lastPointerPdf = _boxSelectEndPdf;
+            PostBoxSelectionStatus();
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
+        var pointerPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
+        _lastPointerPdf = pointerPdf;
+        if (_pageBitmap != null &&
+            _tool is ViewerTool.Scale or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area &&
+            !IsMissingScaleForLinearArea())
+        {
+            pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
+            _lastPointerPdf = pointerPdf;
+        }
+        else
+        {
+            SetSnapPreview(null);
         }
 
         // Pan drag
@@ -1013,11 +1886,14 @@ public sealed class PdfViewport : SKElement
         // Rubber-band
         if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area)
         {
-            _rubberEnd = ScreenToPdf((float)pos.X, (float)pos.Y);
+            _rubberEnd = pointerPdf;
             RequestRepaint();
         }
 
-        PostPointerStatus(ScreenToPdf((float)pos.X, (float)pos.Y));
+        if (IsMissingScaleForLinearArea())
+            PostScaleRequiredStatus();
+        else
+            PostPointerStatus(pointerPdf);
 
         e.Handled = true;
     }
@@ -1033,12 +1909,16 @@ public sealed class PdfViewport : SKElement
         SKPoint contextPdf = _rightClickPdf ?? ScreenToPdf((float)contextScreen.X, (float)contextScreen.Y);
         Measurement? contextMeasurement = _rightClickMeasurement;
 
-        if (_draggingVertex)
+        if (_draggingVertex || _draggingMeasurement)
         {
-            _draggingVertex = false;
-            if (IsMouseCaptured)
-                ReleaseMouseCapture();
-            RequestRepaint();
+            FinishMeasurementDrag();
+            e.Handled = true;
+            return;
+        }
+
+        if (_boxSelecting && e.ChangedButton == MouseButton.Left)
+        {
+            FinishBoxSelection();
             e.Handled = true;
             return;
         }
@@ -1075,6 +1955,14 @@ public sealed class PdfViewport : SKElement
         e.Handled = true;
     }
 
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        FinishMeasurementDrag();
+        if (_boxSelecting && Mouse.LeftButton != MouseButtonState.Pressed)
+            CancelBoxSelection();
+        base.OnLostMouseCapture(e);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         switch (e.Key)
@@ -1084,11 +1972,20 @@ public sealed class PdfViewport : SKElement
                 e.Handled = true;
                 break;
             case Key.C:
-                if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area)
+                if (Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    CopyMeasurementsRequested?.Invoke(GetSelectedMeasurements());
+                    e.Handled = true;
+                }
+                else if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area)
                 {
                     CompleteOrCancelDrawing();
                     e.Handled = true;
                 }
+                break;
+            case Key.V when Keyboard.Modifiers == ModifierKeys.Control:
+                PasteMeasurementsRequested?.Invoke(_lastPointerPdf);
+                e.Handled = true;
                 break;
             case Key.Delete:
                 DeleteSelectedMeasurement();
@@ -1096,6 +1993,14 @@ public sealed class PdfViewport : SKElement
                 break;
             case Key.F:
                 ZoomFit();
+                e.Handled = true;
+                break;
+            case Key.F3:
+                SnapEnabled = !SnapEnabled;
+                e.Handled = true;
+                break;
+            case Key.F8:
+                OrthoEnabled = !OrthoEnabled;
                 e.Handled = true;
                 break;
             case Key.Add when Keyboard.Modifiers == ModifierKeys.Control:
@@ -1109,11 +2014,16 @@ public sealed class PdfViewport : SKElement
             case Key.Z when Keyboard.Modifiers == ModifierKeys.Control:
                 UndoLast(); e.Handled = true;
                 break;
+            case Key.A when Keyboard.Modifiers == ModifierKeys.Control:
+                SelectAllActivePageMeasurements();
+                e.Handled = true;
+                break;
             case Key.Back:
                 UndoLast(); e.Handled = true;
                 break;
             // Tool hotkeys
             case Key.V: ToolChanged?.Invoke("pan");   e.Handled = true; break;
+            case Key.E: ToolChanged?.Invoke("select"); e.Handled = true; break;
             case Key.S: ToolChanged?.Invoke("scale"); e.Handled = true; break;
             case Key.P: ToolChanged?.Invoke("point"); e.Handled = true; break;
             case Key.L: ToolChanged?.Invoke("line");  e.Handled = true; break;
@@ -1127,6 +2037,9 @@ public sealed class PdfViewport : SKElement
 
     private void HandleLeftClick(SKPoint pdf)
     {
+        if (!EnsureScaleForLinearArea())
+            return;
+
         switch (_tool)
         {
             case ViewerTool.Scale:
@@ -1181,6 +2094,9 @@ public sealed class PdfViewport : SKElement
     private void FinalizeDrawing()
     {
         if (_drawPts.Count == 0) return;
+        if (!EnsureScaleForLinearArea())
+            return;
+
         if (_tool == ViewerTool.Line  && _drawPts.Count < 2) { CancelDrawing(); return; }
         if (_tool == ViewerTool.Area  && _drawPts.Count < 3) { CancelDrawing(); return; }
 
@@ -1196,6 +2112,7 @@ public sealed class PdfViewport : SKElement
         _measurements.Add(m);
         _drawPts.Clear();
         _rubberEnd = null;
+        SetSnapPreview(null);
         RequestRepaint();
         PostStatus($"Added {EntryTitle(m.MType)}  {m.Label(ScaleMetersPerPt, UnitMode)}");
         MeasurementAdded?.Invoke(m);
@@ -1204,6 +2121,12 @@ public sealed class PdfViewport : SKElement
 
     private void CompleteOrCancelDrawing()
     {
+        if (IsMissingScaleForLinearArea())
+        {
+            EnsureScaleForLinearArea();
+            return;
+        }
+
         if (_tool == ViewerTool.Line && _drawPts.Count >= 2)
         {
             FinalizeDrawing();
@@ -1220,36 +2143,88 @@ public sealed class PdfViewport : SKElement
         PostStatus("Cancelled.");
     }
 
+    private bool EnsureScaleForLinearArea()
+    {
+        if (!IsMissingScaleForLinearArea())
+            return true;
+
+        if (_drawPts.Count > 0 || _rubberEnd.HasValue || _snapPreview.HasValue)
+        {
+            _drawPts.Clear();
+            _rubberEnd = null;
+            SetSnapPreview(null);
+            RequestRepaint();
+        }
+
+        PostScaleRequiredStatus();
+        return false;
+    }
+
+    private bool IsMissingScaleForLinearArea() =>
+        _tool is ViewerTool.Line or ViewerTool.Area && ScaleMetersPerPt <= 0;
+
+    private void PostScaleRequiredStatus()
+    {
+        string tool = _tool == ViewerTool.Area ? "Area" : "Line";
+        PostStatus($"{tool} Record blocked: set sheet scale first with Scale or PDF Auto Scale. Count can be recorded without scale.");
+    }
+
     private void PostRecordPrompt()
     {
+        string modes = DigitizerModeSuffix();
         switch (_tool)
         {
             case ViewerTool.Point:
-                PostStatus("Count Record: click each item to add a count. Turn Record off for Pan.");
+                PostStatus($"Count Record: click each item to add a count. Turn Record off for Pan.{modes}");
                 break;
             case ViewerTool.Line:
+                if (IsMissingScaleForLinearArea())
+                {
+                    PostScaleRequiredStatus();
+                    break;
+                }
+
                 PostStatus(_drawPts.Count switch
                 {
-                    0 => "Line Record: click the first point.",
-                    1 => "Line Record: click the next point. Backspace/Ctrl+Z undo.",
-                    _ => "Line Record: click next point, or right-click / Esc / C / double-click to finish.",
+                    0 => $"Line Record: click the first point.{modes}",
+                    1 => $"Line Record: click the next point. Backspace/Ctrl+Z undo.{modes}",
+                    _ => $"Line Record: click next point, or Esc / C / double-click to finish.{modes}",
                 });
                 break;
             case ViewerTool.Area:
+                if (IsMissingScaleForLinearArea())
+                {
+                    PostScaleRequiredStatus();
+                    break;
+                }
+
                 PostStatus(_drawPts.Count switch
                 {
-                    0 => "Area Record: click the first corner.",
-                    1 => "Area Record: click the next corner. Backspace/Ctrl+Z undo.",
-                    2 => "Area Record: click at least one more corner, then finish.",
-                    _ => "Area Record: click next corner, or right-click / Esc / C / double-click to finish.",
+                    0 => $"Area Record: click the first corner.{modes}",
+                    1 => $"Area Record: click the next corner. Backspace/Ctrl+Z undo.{modes}",
+                    2 => $"Area Record: click at least one more corner, then finish.{modes}",
+                    _ => $"Area Record: click next corner, or Esc / C / double-click to finish.{modes}",
                 });
                 break;
             case ViewerTool.Scale:
                 PostStatus(_scalePts.Count == 0
-                    ? "Scale: click the first point of a known distance."
-                    : "Scale: click the second point of a known distance.");
+                    ? $"Scale: click the first point of a known distance.{modes}"
+                    : $"Scale: click the second point of a known distance.{modes}");
+                break;
+            case ViewerTool.Select:
+                PostStatus("Select: left-drag a box to select measurements. Ctrl+click toggles, Ctrl+C copies, Ctrl+V pastes.");
                 break;
         }
+    }
+
+    private string DigitizerModeSuffix()
+    {
+        var modes = new List<string>();
+        if (SnapEnabled)
+            modes.Add("Snap F3");
+        if (OrthoEnabled)
+            modes.Add("Ortho F8");
+        return modes.Count == 0 ? "" : $" [{string.Join(", ", modes)}]";
     }
 
     private static string ToolTitle(string type) =>
@@ -1258,6 +2233,7 @@ public sealed class PdfViewport : SKElement
             "point" => "Count",
             "line" => "Line",
             "area" => "Area",
+            "select" => "Select",
             _ => type,
         };
 
@@ -1269,6 +2245,8 @@ public sealed class PdfViewport : SKElement
         _drawPts.Clear();
         _scalePts.Clear();
         _rubberEnd = null;
+        _boxSelecting = false;
+        SetSnapPreview(null);
         if (_draggingVertex && IsMouseCaptured)
             ReleaseMouseCapture();
         ClearSelection();
@@ -1279,46 +2257,353 @@ public sealed class PdfViewport : SKElement
     // Helpers
     // ═════════════════════════════════════════════════════════════════════════
 
-    private bool TryBeginMeasurementEdit(SKPoint pdf)
+    private SKPoint ResolveDigitizerPoint(SKPoint rawPdf, bool updatePreview)
     {
-        if (TryHitVertex(pdf, out Measurement vertexMeasurement, out int vertexIndex))
+        if (SnapEnabled && TryFindSnapPoint(rawPdf, out SKPoint snapped))
         {
-            SelectMeasurement(vertexMeasurement, vertexIndex);
-            _draggingVertex = true;
-            PostStatus($"Editing {ToolTitle(vertexMeasurement.MType)} vertex {vertexIndex + 1}. Drag to move.");
+            if (updatePreview)
+                SetSnapPreview(snapped);
+            return snapped;
+        }
+
+        if (updatePreview)
+            SetSnapPreview(null);
+
+        return TryGetOrthoAnchor(out SKPoint anchor) && IsOrthoActive()
+            ? ApplyOrtho(anchor, rawPdf)
+            : rawPdf;
+    }
+
+    private bool IsOrthoActive()
+    {
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        return OrthoEnabled ^ shift;
+    }
+
+    private static bool IsSelectionModifierActive() =>
+        (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None;
+
+    private bool TryGetOrthoAnchor(out SKPoint anchor)
+    {
+        if (_tool is ViewerTool.Line or ViewerTool.Area && _drawPts.Count > 0)
+        {
+            anchor = _drawPts[^1];
             return true;
         }
 
-        if (TryHitMeasurement(pdf, out Measurement measurement))
+        if (_tool == ViewerTool.Scale && _scalePts.Count > 0)
         {
+            anchor = _scalePts[^1];
+            return true;
+        }
+
+        anchor = default;
+        return false;
+    }
+
+    private static SKPoint ApplyOrtho(SKPoint anchor, SKPoint point)
+    {
+        float dx = point.X - anchor.X;
+        float dy = point.Y - anchor.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= 0.001f)
+            return point;
+
+        float angle = MathF.Atan2(dy, dx);
+        float step = MathF.PI / 4f;
+        float snappedAngle = MathF.Round(angle / step) * step;
+        return new SKPoint(
+            anchor.X + MathF.Cos(snappedAngle) * length,
+            anchor.Y + MathF.Sin(snappedAngle) * length);
+    }
+
+    private bool TryFindSnapPoint(SKPoint rawPdf, out SKPoint snapped)
+    {
+        float tolerance = SnapToleranceScreenPx / Math.Max(_zoom, 0.001f);
+        float best = tolerance * tolerance;
+        SKPoint bestPoint = default;
+        bool found = false;
+
+        void Consider(SKPoint candidate)
+        {
+            float distance = DistanceSquared(rawPdf, candidate);
+            if (distance >= best)
+                return;
+
+            best = distance;
+            bestPoint = candidate;
+            found = true;
+        }
+
+        for (int i = 0; i < _drawPts.Count; i++)
+        {
+            if (i == _drawPts.Count - 1 && _tool is ViewerTool.Line or ViewerTool.Area)
+                continue;
+
+            Consider(_drawPts[i]);
+        }
+
+        foreach (SKPoint point in _scalePts)
+            Consider(point);
+
+        foreach (Measurement measurement in _measurements)
+        {
+            if (!IsMeasurementOnActivePage(measurement))
+                continue;
+
+            foreach (SKPoint point in measurement.Points)
+                Consider(point);
+        }
+
+        snapped = bestPoint;
+        return found;
+    }
+
+    private void SetSnapPreview(SKPoint? point)
+    {
+        bool changed = (_snapPreview.HasValue != point.HasValue) ||
+                       (_snapPreview.HasValue && point.HasValue &&
+                        DistanceSquared(_snapPreview.Value, point.Value) > 0.001f);
+        _snapPreview = point;
+        if (changed)
+            RequestRepaint();
+    }
+
+    private bool TryBeginMeasurementEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
+    {
+        if (_selectedMeasurements.Count > 1 &&
+            TryHitSelectedMeasurement(pdf, out Measurement groupMeasurement))
+        {
+            BeginMeasurementMove(groupMeasurement, screen);
+            return true;
+        }
+
+        if (TryHitSelectedVertex(pdf, out Measurement selectedVertexMeasurement, out int selectedVertexIndex) ||
+            TryHitVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex))
+        {
+            BeginVertexEdit(selectedVertexMeasurement, selectedVertexIndex, screen);
+            return true;
+        }
+
+        if (TryHitSelectedMeasurement(pdf, out Measurement selectedMeasurement) ||
+            TryHitMeasurement(pdf, out selectedMeasurement))
+        {
+            BeginMeasurementMove(selectedMeasurement, screen);
+            return true;
+        }
+
+        if (clearSelectionOnMiss)
+        {
+            ClearSelection();
+            RequestRepaint();
+        }
+
+        return false;
+    }
+
+    private void BeginVertexEdit(Measurement measurement, int vertexIndex, Point screen)
+    {
+        ClearInProgressInputForEdit();
+        _draggingVertex = true;
+        _draggingMeasurement = false;
+        _dragMeasurementChanged = false;
+        _dragScreenStart = screen;
+        _dragVertexOriginalPoint = measurement.Points[vertexIndex];
+        _dragSelectionOriginalPoints.Clear();
+        CaptureMouse();
+        SelectMeasurement(measurement, vertexIndex);
+        PostStatus($"Editing {ToolTitle(measurement.MType)} vertex {vertexIndex + 1}. Drag to move.");
+    }
+
+    private void BeginMeasurementMove(Measurement measurement, Point screen)
+    {
+        ClearInProgressInputForEdit();
+        _draggingVertex = false;
+        _draggingMeasurement = true;
+        _dragMeasurementChanged = false;
+        _dragScreenStart = screen;
+        CaptureMouse();
+        if (_selectedMeasurements.Contains(measurement))
+            SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
+        else
             SelectMeasurement(measurement, -1);
-            PostStatus($"Selected {EntryTitle(measurement.MType)}. Drag a blue handle to edit, Delete to remove.");
+
+        _dragMeasurementOriginalPoints = measurement.Points.ToList();
+        _dragSelectionOriginalPoints.Clear();
+        var selected = GetSelectedMeasurements();
+        if (selected.Count > 1 && selected.Contains(measurement))
+        {
+            foreach (Measurement selectedMeasurement in selected)
+                _dragSelectionOriginalPoints[selectedMeasurement] = selectedMeasurement.Points.ToList();
+        }
+
+        PostStatus(selected.Count > 1
+            ? $"Moving {selected.Count} selected measurements."
+            : $"Moving {EntryTitle(measurement.MType)}. Drag the body to move; drag blue handles to reshape.");
+    }
+
+    private void FinishMeasurementDrag()
+    {
+        if (!_draggingVertex && !_draggingMeasurement)
+            return;
+
+        if (_dragMeasurementChanged && _dragSelectionOriginalPoints.Count > 0)
+        {
+            foreach (Measurement measurement in _dragSelectionOriginalPoints.Keys.ToList())
+                MeasurementChanged?.Invoke(measurement);
+        }
+        else if (_dragMeasurementChanged && _selectedMeasurement != null)
+        {
+            MeasurementChanged?.Invoke(_selectedMeasurement);
+        }
+
+        _draggingVertex = false;
+        _draggingMeasurement = false;
+        _dragMeasurementChanged = false;
+        _dragMeasurementOriginalPoints.Clear();
+        _dragSelectionOriginalPoints.Clear();
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+        RequestRepaint();
+    }
+
+    private void ClearInProgressInputForEdit()
+    {
+        if (_drawPts.Count == 0 && _scalePts.Count == 0 && !_rubberEnd.HasValue && !_snapPreview.HasValue)
+            return;
+
+        _drawPts.Clear();
+        _scalePts.Clear();
+        _rubberEnd = null;
+        SetSnapPreview(null);
+    }
+
+    private SKPoint ScreenDragDeltaToPdf(Point screen)
+    {
+        float safeZoom = Math.Max(_zoom, 0.001f);
+        return new SKPoint(
+            (float)((screen.X - _dragScreenStart.X) / safeZoom),
+            (float)((screen.Y - _dragScreenStart.Y) / safeZoom));
+    }
+
+    private void PostDragStatus(string label, SKPoint delta)
+    {
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastPointerStatusAt).TotalMilliseconds < 120)
+            return;
+
+        _lastPointerStatusAt = now;
+        float screenDx = delta.X * _zoom;
+        float screenDy = delta.Y * _zoom;
+        PostStatus($"{label}: dx={screenDx:F0}px dy={screenDy:F0}px.");
+    }
+
+    private void BeginBoxSelection(SKPoint pdf, bool additive)
+    {
+        ClearInProgressInputForEdit();
+        _boxSelecting = true;
+        _boxSelectStartPdf = pdf;
+        _boxSelectEndPdf = pdf;
+        _boxSelectAdditive = additive;
+        CaptureMouse();
+        PostStatus(additive
+            ? "Select: drag box to add measurements to the current selection."
+            : "Select: drag box around measurements.");
+        RequestRepaint();
+    }
+
+    private void FinishBoxSelection()
+    {
+        if (!_boxSelecting)
+            return;
+
+        SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
+        bool tiny = rect.Width * Math.Max(_zoom, 0.001f) < 4f &&
+                    rect.Height * Math.Max(_zoom, 0.001f) < 4f;
+        _boxSelecting = false;
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+
+        if (tiny)
+        {
+            if (!_boxSelectAdditive)
+                ClearSelection();
+            RequestRepaint();
+            PostStatus("Select: no box drawn.");
+            return;
+        }
+
+        var hits = _measurements
+            .Where(m => IsMeasurementOnActivePage(m) && MeasurementIntersectsRect(m, rect))
+            .ToList();
+
+        if (_boxSelectAdditive)
+        {
+            var combined = GetSelectedMeasurements().ToList();
+            foreach (Measurement hit in hits)
+            {
+                if (!combined.Contains(hit))
+                    combined.Add(hit);
+            }
+            SetSelectedMeasurements(combined, hits.LastOrDefault() ?? combined.LastOrDefault(), -1);
+        }
+        else
+        {
+            SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
+        }
+
+        RequestRepaint();
+        PostStatus(hits.Count == 0
+            ? "Select: no measurements inside box."
+            : $"Selected {GetSelectedMeasurements().Count} measurement(s). Ctrl+C copies, Ctrl+V pastes.");
+    }
+
+    private void CancelBoxSelection()
+    {
+        if (!_boxSelecting)
+            return;
+
+        _boxSelecting = false;
+        RequestRepaint();
+    }
+
+    private void PostBoxSelectionStatus()
+    {
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastPointerStatusAt).TotalMilliseconds < 120)
+            return;
+
+        _lastPointerStatusAt = now;
+        SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
+        PostStatus($"Select box: {rect.Width * _zoom:F0}px x {rect.Height * _zoom:F0}px.");
+    }
+
+    private bool TryHitSelectedVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
+    {
+        if (_selectedMeasurement != null &&
+            IsMeasurementOnActivePage(_selectedMeasurement) &&
+            TryHitVertexOnMeasurement(_selectedMeasurement, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+        {
+            measurement = _selectedMeasurement;
             return true;
         }
 
-        ClearSelection();
-        RequestRepaint();
+        measurement = null!;
+        vertexIndex = -1;
         return false;
     }
 
     private bool TryHitVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
     {
-        float tol = 8f / Math.Max(_zoom, 0.01f);
-        float tolSq = tol * tol;
-
         for (int i = _measurements.Count - 1; i >= 0; i--)
         {
             Measurement m = _measurements[i];
-            if (m.PageFolder != _pageFolder) continue;
+            if (!IsMeasurementOnActivePage(m)) continue;
 
-            for (int p = m.Points.Count - 1; p >= 0; p--)
+            if (TryHitVertexOnMeasurement(m, pdf, VertexHitToleranceScreenPx, out vertexIndex))
             {
-                if (DistanceSquared(pdf, m.Points[p]) <= tolSq)
-                {
-                    measurement = m;
-                    vertexIndex = p;
-                    return true;
-                }
+                measurement = m;
+                return true;
             }
         }
 
@@ -1327,36 +2612,33 @@ public sealed class PdfViewport : SKElement
         return false;
     }
 
-    private bool TryHitMeasurement(SKPoint pdf, out Measurement measurement)
+    private bool TryHitVertexOnMeasurement(Measurement measurement, SKPoint pdf, float screenTolerancePx, out int vertexIndex)
     {
-        float tol = 6f / Math.Max(_zoom, 0.01f);
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        float tolSq = tol * tol;
 
+        for (int p = measurement.Points.Count - 1; p >= 0; p--)
+        {
+            if (DistanceSquared(pdf, measurement.Points[p]) <= tolSq)
+            {
+                vertexIndex = p;
+                return true;
+            }
+        }
+
+        vertexIndex = -1;
+        return false;
+    }
+
+    private bool TryHitSelectedMeasurement(SKPoint pdf, out Measurement measurement)
+    {
         for (int i = _measurements.Count - 1; i >= 0; i--)
         {
             Measurement m = _measurements[i];
-            if (m.PageFolder != _pageFolder) continue;
-
-            if (m.MType == "point")
-            {
-                if (m.Points.Any(p => DistanceSquared(pdf, p) <= tol * tol))
-                {
-                    measurement = m;
-                    return true;
-                }
+            if (!_selectedMeasurements.Contains(m) || !IsMeasurementOnActivePage(m))
                 continue;
-            }
 
-            for (int p = 1; p < m.Points.Count; p++)
-            {
-                if (DistanceToSegment(pdf, m.Points[p - 1], m.Points[p]) <= tol)
-                {
-                    measurement = m;
-                    return true;
-                }
-            }
-
-            if (m.MType == "area" && m.Points.Count > 2 &&
-                DistanceToSegment(pdf, m.Points[^1], m.Points[0]) <= tol)
+            if (IsMeasurementHit(m, pdf, SelectedMeasurementHitToleranceScreenPx))
             {
                 measurement = m;
                 return true;
@@ -1367,14 +2649,104 @@ public sealed class PdfViewport : SKElement
         return false;
     }
 
+    private bool TryHitMeasurement(SKPoint pdf, out Measurement measurement)
+    {
+        for (int i = _measurements.Count - 1; i >= 0; i--)
+        {
+            Measurement m = _measurements[i];
+            if (!IsMeasurementOnActivePage(m)) continue;
+
+            if (IsMeasurementHit(m, pdf, MeasurementHitToleranceScreenPx))
+            {
+                measurement = m;
+                return true;
+            }
+        }
+
+        measurement = null!;
+        return false;
+    }
+
+    private bool IsMeasurementHit(Measurement measurement, SKPoint pdf, float screenTolerancePx)
+    {
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+
+        if (measurement.MType == "point")
+            return measurement.Points.Any(p => DistanceSquared(pdf, p) <= tol * tol);
+
+        for (int p = 1; p < measurement.Points.Count; p++)
+        {
+            if (DistanceToSegment(pdf, measurement.Points[p - 1], measurement.Points[p]) <= tol)
+                return true;
+        }
+
+        return measurement.MType == "area" &&
+               measurement.Points.Count > 2 &&
+               DistanceToSegment(pdf, measurement.Points[^1], measurement.Points[0]) <= tol;
+    }
+
     private void SelectMeasurement(Measurement measurement, int vertexIndex)
     {
-        bool changed = !ReferenceEquals(_selectedMeasurement, measurement);
-        _selectedMeasurement = measurement;
-        _selectedVertexIndex = vertexIndex;
-        if (changed)
-            MeasurementSelectionChanged?.Invoke(measurement);
-        RequestRepaint();
+        SetSelectedMeasurements([measurement], measurement, vertexIndex);
+    }
+
+    private void SetSelectedMeasurements(IReadOnlyList<Measurement> measurements, Measurement? primary, int vertexIndex)
+    {
+        var next = measurements
+            .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
+            .Distinct()
+            .ToList();
+
+        Measurement? nextPrimary = primary != null && next.Contains(primary)
+            ? primary
+            : next.LastOrDefault();
+
+        bool setChanged = _selectedMeasurements.Count != next.Count ||
+                          next.Any(m => !_selectedMeasurements.Contains(m));
+        bool primaryChanged = !ReferenceEquals(_selectedMeasurement, nextPrimary);
+        bool vertexChanged = _selectedVertexIndex != vertexIndex;
+
+        _selectedMeasurements.Clear();
+        foreach (Measurement measurement in next)
+            _selectedMeasurements.Add(measurement);
+
+        _selectedMeasurement = nextPrimary;
+        _selectedVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+
+        if (primaryChanged)
+            MeasurementSelectionChanged?.Invoke(nextPrimary);
+        if (setChanged)
+            MeasurementsSelectionChanged?.Invoke(next);
+        if (primaryChanged || setChanged || vertexChanged)
+            RequestRepaint();
+    }
+
+    private void ToggleMeasurementSelection(Measurement measurement)
+    {
+        if (!_measurements.Contains(measurement) || !IsMeasurementOnActivePage(measurement))
+            return;
+
+        var selected = GetSelectedMeasurements().ToList();
+        if (selected.Contains(measurement))
+            selected.Remove(measurement);
+        else
+            selected.Add(measurement);
+
+        SetSelectedMeasurements(selected, selected.Contains(measurement) ? measurement : selected.LastOrDefault(), -1);
+        PostStatus(selected.Count == 0
+            ? "Selection cleared."
+            : $"Selected {selected.Count} measurement(s). Ctrl+C copies, Ctrl+V pastes.");
+    }
+
+    private void SelectAllActivePageMeasurements()
+    {
+        var selected = _measurements
+            .Where(IsMeasurementOnActivePage)
+            .ToList();
+        SetSelectedMeasurements(selected, selected.LastOrDefault(), -1);
+        PostStatus(selected.Count == 0
+            ? "No measurements on this sheet."
+            : $"Selected all {selected.Count} measurement(s) on this sheet.");
     }
 
     private void CenterOnMeasurement(Measurement measurement)
@@ -1407,25 +2779,67 @@ public sealed class PdfViewport : SKElement
 
     private void ClearSelection()
     {
-        bool changed = _selectedMeasurement != null;
+        bool changed = _selectedMeasurement != null || _selectedMeasurements.Count > 0;
         _selectedMeasurement = null;
+        _selectedMeasurements.Clear();
         _selectedVertexIndex = -1;
         _draggingVertex = false;
+        _draggingMeasurement = false;
+        _dragMeasurementChanged = false;
+        _dragMeasurementOriginalPoints.Clear();
+        _dragSelectionOriginalPoints.Clear();
         if (changed)
+        {
             MeasurementSelectionChanged?.Invoke(null);
+            MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
+        }
     }
 
     private void DeleteSelectedMeasurement()
     {
-        if (_selectedMeasurement == null)
+        var selected = GetSelectedMeasurements();
+        if (selected.Count == 0)
             return;
 
-        Measurement removed = _selectedMeasurement;
-        _measurements.Remove(removed);
+        foreach (Measurement removed in selected)
+            _measurements.Remove(removed);
         ClearSelection();
         RequestRepaint();
-        PostStatus($"Deleted {removed.MType}.");
-        MeasurementRemoved?.Invoke(removed);
+        PostStatus(selected.Count == 1
+            ? $"Deleted {selected[0].MType}."
+            : $"Deleted {selected.Count} selected measurements.");
+        foreach (Measurement removed in selected)
+            MeasurementRemoved?.Invoke(removed);
+    }
+
+    private bool IsMeasurementOnActivePage(Measurement measurement) =>
+        IsSamePageFolder(measurement.PageFolder, _pageFolder);
+
+    private bool IsMeasurementSelected(Measurement measurement) =>
+        _selectedMeasurements.Contains(measurement);
+
+    private static bool IsSamePageFolder(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(NormalizePageFolderForCompare(left), NormalizePageFolderForCompare(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePageFolderForCompare(string path)
+    {
+        string trimmed = path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (trimmed.Length == 0)
+            return "";
+
+        try
+        {
+            return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return trimmed;
+        }
     }
 
     private static float DistanceSquared(SKPoint a, SKPoint b)
@@ -1454,6 +2868,86 @@ public sealed class PdfViewport : SKElement
         t = Math.Clamp(t, 0f, 1f);
         var projection = new SKPoint(a.X + t * vx, a.Y + t * vy);
         return MathF.Sqrt(DistanceSquared(p, projection));
+    }
+
+    private static SKRect NormalizeRect(SKPoint a, SKPoint b) =>
+        new(
+            Math.Min(a.X, b.X),
+            Math.Min(a.Y, b.Y),
+            Math.Max(a.X, b.X),
+            Math.Max(a.Y, b.Y));
+
+    private static bool RectContains(SKRect rect, SKPoint point) =>
+        point.X >= rect.Left &&
+        point.X <= rect.Right &&
+        point.Y >= rect.Top &&
+        point.Y <= rect.Bottom;
+
+    private static bool RectsIntersect(SKRect a, SKRect b) =>
+        a.Left <= b.Right &&
+        a.Right >= b.Left &&
+        a.Top <= b.Bottom &&
+        a.Bottom >= b.Top;
+
+    private static bool SegmentIntersectsRect(SKPoint a, SKPoint b, SKRect rect)
+    {
+        if (RectContains(rect, a) || RectContains(rect, b))
+            return true;
+
+        var topLeft = new SKPoint(rect.Left, rect.Top);
+        var topRight = new SKPoint(rect.Right, rect.Top);
+        var bottomRight = new SKPoint(rect.Right, rect.Bottom);
+        var bottomLeft = new SKPoint(rect.Left, rect.Bottom);
+        return SegmentsIntersect(a, b, topLeft, topRight) ||
+               SegmentsIntersect(a, b, topRight, bottomRight) ||
+               SegmentsIntersect(a, b, bottomRight, bottomLeft) ||
+               SegmentsIntersect(a, b, bottomLeft, topLeft);
+    }
+
+    private static bool SegmentsIntersect(SKPoint a, SKPoint b, SKPoint c, SKPoint d)
+    {
+        float d1 = Cross(a, b, c);
+        float d2 = Cross(a, b, d);
+        float d3 = Cross(c, d, a);
+        float d4 = Cross(c, d, b);
+
+        if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+            ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)))
+        {
+            return true;
+        }
+
+        const float eps = 0.0001f;
+        return Math.Abs(d1) <= eps && PointOnSegment(c, a, b) ||
+               Math.Abs(d2) <= eps && PointOnSegment(d, a, b) ||
+               Math.Abs(d3) <= eps && PointOnSegment(a, c, d) ||
+               Math.Abs(d4) <= eps && PointOnSegment(b, c, d);
+    }
+
+    private static float Cross(SKPoint a, SKPoint b, SKPoint c) =>
+        (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+
+    private static bool PointOnSegment(SKPoint p, SKPoint a, SKPoint b) =>
+        p.X >= Math.Min(a.X, b.X) - 0.0001f &&
+        p.X <= Math.Max(a.X, b.X) + 0.0001f &&
+        p.Y >= Math.Min(a.Y, b.Y) - 0.0001f &&
+        p.Y <= Math.Max(a.Y, b.Y) + 0.0001f;
+
+    private static bool PointInPolygon(SKPoint point, IReadOnlyList<SKPoint> polygon)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+        {
+            SKPoint pi = polygon[i];
+            SKPoint pj = polygon[j];
+            float denom = Math.Abs(pj.Y - pi.Y) < 0.000001f ? 0.000001f : pj.Y - pi.Y;
+            bool crosses = (pi.Y > point.Y) != (pj.Y > point.Y) &&
+                           point.X < (pj.X - pi.X) * (point.Y - pi.Y) / denom + pi.X;
+            if (crosses)
+                inside = !inside;
+        }
+
+        return inside;
     }
 
     private void ApplyZoom(float factor, float screenX, float screenY)
@@ -1574,6 +3068,42 @@ public sealed class PdfViewport : SKElement
                bounds.Bottom >= visiblePdf.Top;
     }
 
+    private static bool MeasurementIntersectsRect(Measurement measurement, SKRect rect)
+    {
+        if (measurement.Points.Count == 0)
+            return false;
+
+        SKRect bounds = RawMeasurementBounds(measurement);
+        if (!RectsIntersect(bounds, rect))
+            return false;
+
+        if (measurement.Points.Any(point => RectContains(rect, point)))
+            return true;
+
+        if (measurement.MType == "point")
+            return false;
+
+        for (int i = 1; i < measurement.Points.Count; i++)
+        {
+            if (SegmentIntersectsRect(measurement.Points[i - 1], measurement.Points[i], rect))
+                return true;
+        }
+
+        if (measurement.MType == "area" && measurement.Points.Count > 2)
+        {
+            if (SegmentIntersectsRect(measurement.Points[^1], measurement.Points[0], rect))
+                return true;
+
+            var center = new SKPoint((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
+            return PointInPolygon(center, measurement.Points);
+        }
+
+        return false;
+    }
+
+    private static SKRect RawMeasurementBounds(Measurement measurement) =>
+        PointsBounds(measurement.Points);
+
     private static SKRect MeasurementBounds(Measurement measurement)
     {
         float left = float.PositiveInfinity;
@@ -1627,6 +3157,7 @@ public sealed class PdfViewport : SKElement
         Cursor = _tool switch
         {
             ViewerTool.Pan => Cursors.Hand,
+            ViewerTool.Select => Cursors.Arrow,
             _              => Cursors.Cross,
         };
     }

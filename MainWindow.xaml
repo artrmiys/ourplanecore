@@ -3,11 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SmartTakeoffs" Height="780" Width="1280"
         MinHeight="600" MinWidth="900"
-        Background="#2B2B2B">
+        Background="{DynamicResource WindowBackgroundBrush}">
     <DockPanel x:Name="RootDock">
 
         <!-- ── Toolbar ─────────────────────────────────────────────────────── -->
-        <ToolBar x:Name="MainToolBar" DockPanel.Dock="Top" Background="#F0F0F0">
+        <ToolBar x:Name="MainToolBar" DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}">
 
             <Button x:Name="BtnOpen" Content="📂 Open Job"
                     ToolTip="Open a SmartTakeoffs job folder (Ctrl+O)"
@@ -28,7 +28,9 @@
 
             <!-- Drawing tools -->
             <Button x:Name="BtnPan"   Content="Pan ✋"  Click="BtnTool_Click" Tag="pan"
-                    ToolTip="Pan (V)"   Style="{StaticResource ToolBtnActive}"/>
+                    ToolTip="Pan (V)"   Style="{StaticResource ToolBtn}"/>
+            <Button x:Name="BtnSelect" Content="Select" Click="BtnTool_Click" Tag="select"
+                    ToolTip="Box select measurements (E). Ctrl+C copy, Ctrl+V paste" Style="{StaticResource ToolBtnActive}"/>
             <Button x:Name="BtnScale" Content="Scale 📐" Click="BtnTool_Click" Tag="scale"
                     ToolTip="Set scale (S)" Style="{StaticResource ToolBtn}"/>
             <Button x:Name="BtnPoint" Content="Point ●"  Click="BtnTool_Click" Tag="point"
@@ -37,6 +39,14 @@
                     ToolTip="Measure line (L)" Style="{StaticResource ToolBtn}"/>
             <Button x:Name="BtnArea"  Content="Area ▭"   Click="BtnTool_Click" Tag="area"
                     ToolTip="Measure area (A)" Style="{StaticResource ToolBtn}"/>
+            <ToggleButton x:Name="BtnSnap" Content="Snap"
+                          ToolTip="Snap to existing takeoff points (F3)"
+                          Checked="BtnSnap_Checked" Unchecked="BtnSnap_Unchecked"
+                          Padding="6,2" MinWidth="48"/>
+            <ToggleButton x:Name="BtnOrtho" Content="Ortho"
+                          ToolTip="Lock Line/Area to 90/45 degrees (F8, Shift temporarily toggles)"
+                          Checked="BtnOrtho_Checked" Unchecked="BtnOrtho_Unchecked"
+                          Padding="6,2" MinWidth="52"/>
 
             <Separator/>
 
@@ -60,7 +70,7 @@
             <Button Content="▾ Presets" Click="BtnScalePresets_Click"
                     ToolTip="Common scale presets" Style="{StaticResource ToolBtn}"/>
             <TextBlock x:Name="TxtScaleInfo" VerticalAlignment="Center"
-                       Foreground="#0055CC" FontSize="11" Margin="4,0"/>
+                       FontSize="11" Margin="4,0"/>
 
             <Separator/>
             <ToggleButton x:Name="BtnImperial" Content="ft"
@@ -73,6 +83,10 @@
                           ToolTip="Toggle dark/light UI"
                           Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
                           Padding="6,2" MinWidth="48"/>
+            <Button x:Name="BtnOpenAiSettings" Content="AI Settings"
+                    ToolTip="OpenAI key status and model settings"
+                    Click="BtnOpenAiSettings_Click"
+                    Style="{StaticResource ToolBtn}"/>
 
             <Separator/>
             <TextBlock x:Name="TxtTool" VerticalAlignment="Center"
@@ -115,50 +129,165 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Left panel: Pages -->
-                <DockPanel x:Name="PagesPanel" Grid.Column="0" Background="#F5F5F5">
+                <DockPanel x:Name="PagesPanel" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}">
                     <Border DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1" Padding="6,5">
                         <TextBlock Text="Pages" FontWeight="Bold" FontSize="12"/>
                     </Border>
-                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="4">
-                        <Button Content="Import PDF" Click="BtnImport_Click"
-                                Padding="5,3" ToolTip="Add PDF pages to current job"/>
-                    </StackPanel>
-                    <!-- PDF Layers sub-panel -->
-                    <DockPanel DockPanel.Dock="Bottom">
-                        <Border DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1" Padding="6,3">
-                            <TextBlock Text="PDF Layers" FontWeight="Bold" FontSize="11"/>
-                        </Border>
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,2">
-                            <Button x:Name="BtnLayersOn"      Content="All On"
-                                    Click="BtnLayersOn_Click"
-                                    Padding="3,1" Margin="0,0,4,0" FontSize="10"/>
-                            <Button x:Name="BtnLayersOff"     Content="All Off"
-                                    Click="BtnLayersOff_Click"
-                                    Padding="3,1" FontSize="10"/>
-                            <Button x:Name="BtnLayersClearHi" Content="Clear Hi"
-                                    Click="BtnLayersClearHi_Click"
-                                    Padding="3,1" Margin="4,0,0,0" FontSize="10"/>
+                    <ScrollViewer DockPanel.Dock="Top"
+                                  VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="320">
+                        <StackPanel Margin="4">
+                            <Button Content="Import PDF"
+                                    Click="BtnImport_Click"
+                                    Padding="5,3"
+                                    Margin="0,0,0,4"
+                                    ToolTip="Add PDF pages to current job"/>
+                            <UniformGrid Columns="2" Margin="0,0,0,4">
+                                <Button x:Name="BtnSortPagesArchStruct"
+                                        Content="Sort A/S"
+                                        Click="BtnSortPagesArchStruct_Click"
+                                        Padding="4,3"
+                                        Margin="0,0,3,0"
+                                        FontSize="11"
+                                        ToolTip="Move imported A sheets to Arch, S sheets to Struct, and trailing '-' sheets to others"/>
+                                <Button x:Name="BtnRepairMeasurementPageLinks"
+                                        Content="Repair Links"
+                                        Click="BtnRepairMeasurementPageLinks_Click"
+                                        Padding="4,3"
+                                        FontSize="11"
+                                        ToolTip="Reconnect saved measurements to the current page folders"/>
+                            </UniformGrid>
+
+                            <Expander Header="Page Setup"
+                                      IsExpanded="True"
+                                      Foreground="{DynamicResource ControlForegroundBrush}"
+                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                      BorderBrush="{DynamicResource ControlBorderBrush}"
+                                      BorderThickness="1"
+                                      Padding="4"
+                                      Margin="0,0,0,4">
+                                <StackPanel>
+                                    <ComboBox x:Name="ComboFolderTemplateMode"
+                                              SelectionChanged="ComboFolderTemplateMode_SelectionChanged"
+                                              FontSize="11"
+                                              Margin="0,0,0,3"
+                                              ToolTip="Folder template mode for Pages and Takeoffs">
+                                        <ComboBoxItem Content="Auto"/>
+                                        <ComboBoxItem Content="COM"/>
+                                        <ComboBoxItem Content="EWP"/>
+                                    </ComboBox>
+                                    <Button x:Name="BtnAutoPageFolders"
+                                            Content="Auto Folders"
+                                            Click="BtnAutoPageFolders_Click"
+                                            Padding="4,2"
+                                            FontSize="11"
+                                            ToolTip="Create standard PlanSwift page folders under selected Pages folder"/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="PDF Auto"
+                                      IsExpanded="False"
+                                      Foreground="{DynamicResource ControlForegroundBrush}"
+                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                      BorderBrush="{DynamicResource ControlBorderBrush}"
+                                      BorderThickness="1"
+                                      Padding="4"
+                                      Margin="0,0,0,4">
+                                <UniformGrid Columns="2" Rows="2">
+                                    <Button x:Name="BtnAutoRenamePdf"
+                                            Content="Auto Name"
+                                            Click="BtnAutoRenamePdf_Click"
+                                            Padding="4,2"
+                                            Margin="0,0,3,3"
+                                            FontSize="11"
+                                            ToolTip="Preview and apply PDF sheet names for selected page/folder"/>
+                                    <Button x:Name="BtnAutoScalePdf"
+                                            Content="Auto Scale"
+                                            Click="BtnAutoScalePdf_Click"
+                                            Padding="4,2"
+                                            Margin="0,0,0,3"
+                                            FontSize="11"
+                                            ToolTip="Preview and apply PDF sheet scale for selected page/folder"/>
+                                    <Button x:Name="BtnAutoRenameScalePdf"
+                                            Content="Name+Scale"
+                                            Click="BtnAutoRenameScalePdf_Click"
+                                            Padding="4,2"
+                                            Margin="0,0,3,0"
+                                            FontSize="11"
+                                            ToolTip="Preview and apply PDF sheet names and scale"/>
+                                    <Button x:Name="BtnQueuePdfMetadataFallback"
+                                            Content="AI Fill"
+                                            Click="BtnQueuePdfMetadataFallback_Click"
+                                            Padding="4,2"
+                                            FontSize="11"
+                                            ToolTip="Queue GPT fallback for missing PDF sheet metadata"/>
+                                </UniformGrid>
+                            </Expander>
+
+                            <Expander Header="PDF Layers"
+                                      IsExpanded="True"
+                                      Foreground="{DynamicResource ControlForegroundBrush}"
+                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                      BorderBrush="{DynamicResource ControlBorderBrush}"
+                                      BorderThickness="1"
+                                      Padding="4">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+                                        <Button x:Name="BtnLayersOn"
+                                                Content="All On"
+                                                Click="BtnLayersOn_Click"
+                                                Padding="3,1"
+                                                Margin="0,0,4,0"
+                                                FontSize="10"/>
+                                        <Button x:Name="BtnLayersOff"
+                                                Content="All Off"
+                                                Click="BtnLayersOff_Click"
+                                                Padding="3,1"
+                                                FontSize="10"/>
+                                        <Button x:Name="BtnLayersClearHi"
+                                                Content="Clear Hi"
+                                                Click="BtnLayersClearHi_Click"
+                                                Padding="3,1"
+                                                Margin="4,0,0,0"
+                                                FontSize="10"/>
+                                    </StackPanel>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="150">
+                                        <StackPanel x:Name="LayersPanel" Margin="0"/>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Expander>
                         </StackPanel>
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="130">
-                            <StackPanel x:Name="LayersPanel" Margin="4,0"/>
-                        </ScrollViewer>
-                    </DockPanel>
+                    </ScrollViewer>
                     <TreeView x:Name="PagesTree"
                               SelectedItemChanged="PagesTree_SelectedItemChanged"
                               Margin="2"/>
                 </DockPanel>
 
                 <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                              Background="#CCC" ResizeBehavior="PreviousAndNext"/>
+                              Background="{DynamicResource SplitterBrush}" ResizeBehavior="PreviousAndNext"/>
 
-                <!-- Centre: PDF viewport -->
-                <Grid x:Name="ViewportHost" Grid.Column="2" Background="#FFFFFF"/>
+                <!-- Centre: page tabs + PDF viewport -->
+                <Grid x:Name="ViewportHost" Grid.Column="2" Background="#FFFFFF">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TabControl x:Name="PageTabs"
+                                Grid.Row="0"
+                                Visibility="Collapsed"
+                                MinHeight="28"
+                                SelectionChanged="PageTabs_SelectionChanged"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                Foreground="{DynamicResource ControlForegroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"/>
+                    <Grid x:Name="ViewportSurfaceHost" Grid.Row="1"/>
+                </Grid>
 
                 <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
-                              Background="#CCC" ResizeBehavior="PreviousAndNext"/>
+                              Background="{DynamicResource SplitterBrush}" ResizeBehavior="PreviousAndNext"/>
 
                 <!-- Right panel: Takeoffs -->
-                <DockPanel x:Name="TakeoffsPanel" Grid.Column="4" Background="#F5F5F5">
+                <DockPanel x:Name="TakeoffsPanel" Grid.Column="4" Background="{DynamicResource PanelBackgroundBrush}">
                     <Border DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1" Padding="6,5">
                         <TextBlock Text="Takeoffs" FontWeight="Bold" FontSize="12"/>
                     </Border>
@@ -177,6 +306,18 @@
                             <Button Content="New Item"   Click="BtnNewItem_Click"
                                     Padding="5,3"/>
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button x:Name="BtnAutoTakeoffTree"
+                                    Content="Auto Tree"
+                                    Click="BtnAutoTakeoffTree_Click"
+                                    Padding="5,3" Margin="0,0,4,0"
+                                    ToolTip="Create the standard PlanSwift takeoff folder tree under the selected folder"/>
+                            <Button x:Name="BtnAutoTakeoffFromPages"
+                                    Content="From Pages"
+                                    Click="BtnAutoTakeoffFromPages_Click"
+                                    Padding="5,3"
+                                    ToolTip="Create takeoff top folders from CAPS page/folder names, then add the standard tree"/>
+                        </StackPanel>
                     </StackPanel>
                     <TreeView x:Name="TakeoffsTree"
                               SelectedItemChanged="TakeoffsTree_SelectedItemChanged"
@@ -186,11 +327,11 @@
 
             <!-- ── Row 1: Inbox splitter ─────────────────────────────────── -->
             <GridSplitter x:Name="InboxSplitter" Grid.Row="1" Height="4"
-                          HorizontalAlignment="Stretch" Background="#AAAAAA"
+                          HorizontalAlignment="Stretch" Background="{DynamicResource SplitterBrush}"
                           ResizeBehavior="PreviousAndNext"/>
 
             <!-- ── Row 2: AI Inbox ────────────────────────────────────────── -->
-            <Grid x:Name="InboxPanel" Grid.Row="2" Background="White">
+            <Grid x:Name="InboxPanel" Grid.Row="2" Background="{DynamicResource SurfaceBackgroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="*"/>
@@ -215,6 +356,55 @@
                                 Style="{StaticResource ToolBtn}"
                                 Padding="7,2" Margin="4,3" FontSize="11"
                                 VerticalAlignment="Center"/>
+                        <!-- Run selected/next AI request -->
+                        <Button x:Name="BtnRunAi" Content="Run AI"
+                                DockPanel.Dock="Right"
+                                Click="BtnRunAi_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                VerticalAlignment="Center"/>
+                        <Button x:Name="BtnRunNewBookmarks" Content="Run New"
+                                DockPanel.Dock="Right"
+                                Click="BtnRunNewBookmarks_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                ToolTip="Send only new crop bookmarks to OpenAI"
+                                VerticalAlignment="Center"/>
+                        <Button x:Name="BtnRetryFailedBookmarks" Content="Retry Failed"
+                                DockPanel.Dock="Right"
+                                Click="BtnRetryFailedBookmarks_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                ToolTip="Retry failed crop bookmarks without rerunning done bookmarks"
+                                VerticalAlignment="Center"/>
+                        <Button x:Name="BtnCreateMarkerSet" Content="Set"
+                                DockPanel.Dock="Right"
+                                Click="BtnCreateMarkerSet_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                ToolTip="Create marker set from current marker filters"
+                                VerticalAlignment="Center"/>
+                        <Button x:Name="BtnManageMarkerSets" Content="Sets..."
+                                DockPanel.Dock="Right"
+                                Click="BtnManageMarkerSets_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                ToolTip="Apply, rename, delete, or open saved marker sets"
+                                VerticalAlignment="Center"/>
+                        <Button x:Name="BtnExportMarkers" Content="Export"
+                                DockPanel.Dock="Right"
+                                Click="BtnExportMarkers_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                ToolTip="Export current active markers into AI_Context/exports/markers_context.json"
+                                VerticalAlignment="Center"/>
+                        <Button x:Name="BtnBuildMassingDraft" Content="Build 3D"
+                                DockPanel.Dock="Right"
+                                Click="BtnBuildMassingDraft_Click"
+                                Style="{StaticResource ToolBtn}"
+                                Padding="7,2" Margin="4,3" FontSize="11"
+                                ToolTip="Build AI_Context/3d_massing/model.json from reviewed AI markers"
+                                VerticalAlignment="Center"/>
                         <!-- Title -->
                         <TextBlock x:Name="TxtInboxTitle" Text="AI Inbox"
                                    FontWeight="Bold" VerticalAlignment="Center"
@@ -228,12 +418,22 @@
                                        Foreground="{DynamicResource ControlActiveForegroundBrush}"
                                        FontSize="10" FontWeight="Bold"/>
                         </Border>
+                        <ComboBox x:Name="ComboMarkerTypeFilter"
+                                  Width="132" Height="22" Margin="10,3,0,3"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="MarkerFilter_SelectionChanged"
+                                  ToolTip="Filter AI markers by type"/>
+                        <ComboBox x:Name="ComboMarkerSampleFilter"
+                                  Width="96" Height="22" Margin="6,3,0,3"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="MarkerFilter_SelectionChanged"
+                                  ToolTip="Filter AI markers by sample kind"/>
                     </DockPanel>
                 </Border>
 
                 <!-- Observations list -->
                 <ListView x:Name="ObservationsListView" Grid.Row="1"
-                          Background="White" BorderThickness="0" FontSize="11"
+                          Background="{DynamicResource SurfaceBackgroundBrush}" BorderThickness="0" FontSize="11"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           VirtualizingPanel.IsVirtualizing="True">
                     <ListView.View>
