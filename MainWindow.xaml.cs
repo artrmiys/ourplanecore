@@ -379,6 +379,7 @@ public partial class MainWindow : Window
         _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
         AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
         SaveAppSettings();
+        QueueRecentJobThumbnailGeneration(_currentJob);
         LoadPersistedMarkerVisibility();
         if (ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);

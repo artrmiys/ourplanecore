@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace SmartTakeoffs.Controls;
 
@@ -19,11 +23,35 @@ public enum JobPickerAction
 public sealed record JobPickerItem(
     string Name,
     string Path,
+    string ThumbnailPath,
     string LastOpened,
     string Source,
     bool Exists)
 {
     public string Status => Exists ? "Ready" : "Missing";
+    public ImageSource? ThumbnailImage => LoadThumbnail(ThumbnailPath);
+
+    private static ImageSource? LoadThumbnail(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return null;
+
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            image.UriSource = new Uri(path, UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
 
 public sealed class JobPickerDialog : Window
@@ -111,11 +139,12 @@ public sealed class JobPickerDialog : Window
             {
                 Columns =
                 {
-                    new GridViewColumn { Header = "Job", Width = 180, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(JobPickerItem.Name)) },
-                    new GridViewColumn { Header = "Last Opened", Width = 135, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(JobPickerItem.LastOpened)) },
-                    new GridViewColumn { Header = "Source", Width = 110, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(JobPickerItem.Source)) },
-                    new GridViewColumn { Header = "Status", Width = 70, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(JobPickerItem.Status)) },
-                    new GridViewColumn { Header = "Path", Width = 420, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(JobPickerItem.Path)) },
+                    new GridViewColumn { Header = "Preview", Width = 110, CellTemplate = CreateThumbnailTemplate() },
+                    new GridViewColumn { Header = "Job", Width = 180, DisplayMemberBinding = new Binding(nameof(JobPickerItem.Name)) },
+                    new GridViewColumn { Header = "Last Opened", Width = 135, DisplayMemberBinding = new Binding(nameof(JobPickerItem.LastOpened)) },
+                    new GridViewColumn { Header = "Source", Width = 110, DisplayMemberBinding = new Binding(nameof(JobPickerItem.Source)) },
+                    new GridViewColumn { Header = "Status", Width = 70, DisplayMemberBinding = new Binding(nameof(JobPickerItem.Status)) },
+                    new GridViewColumn { Header = "Path", Width = 360, DisplayMemberBinding = new Binding(nameof(JobPickerItem.Path)) },
                 },
             },
         };
@@ -163,6 +192,26 @@ public sealed class JobPickerDialog : Window
         _list.SelectedIndex = next;
         _list.ScrollIntoView(_list.SelectedItem);
         e.Handled = true;
+    }
+
+    private static DataTemplate CreateThumbnailTemplate()
+    {
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(FrameworkElement.WidthProperty, 96.0);
+        border.SetValue(FrameworkElement.HeightProperty, 64.0);
+        border.SetValue(FrameworkElement.MarginProperty, new Thickness(2));
+        border.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+        border.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
+        border.SetResourceReference(Border.BackgroundProperty, "SurfaceBackgroundBrush");
+
+        var image = new FrameworkElementFactory(typeof(Image));
+        image.SetValue(Image.StretchProperty, Stretch.Uniform);
+        image.SetValue(FrameworkElement.MarginProperty, new Thickness(3));
+        image.SetBinding(Image.SourceProperty, new Binding(nameof(JobPickerItem.ThumbnailImage)));
+        border.AppendChild(image);
+
+        return new DataTemplate { VisualTree = border };
     }
 
     private void ApplyFilter()

@@ -24,6 +24,7 @@ public sealed class RecentJobInfo
     public string Name { get; set; } = "";
     public string Path { get; set; } = "";
     public string LastOpenedUtc { get; set; } = "";
+    public string ThumbnailPath { get; set; } = "";
 }
 
 public sealed class OpenAiKeyStatus
@@ -113,9 +114,12 @@ public static class AppSettingsStore
             ? Path.GetFileName(fullPath)
             : jobName.Trim();
 
+        string normalizedFullPath = NormalizePath(fullPath);
+        var existingMatch = (settings.RecentJobs ?? [])
+            .FirstOrDefault(j => string.Equals(NormalizePath(j.Path), normalizedFullPath, StringComparison.OrdinalIgnoreCase));
         var existing = (settings.RecentJobs ?? [])
             .Where(j => !string.IsNullOrWhiteSpace(j.Path))
-            .Where(j => !string.Equals(NormalizePath(j.Path), NormalizePath(fullPath), StringComparison.OrdinalIgnoreCase))
+            .Where(j => !string.Equals(NormalizePath(j.Path), normalizedFullPath, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         existing.Insert(0, new RecentJobInfo
@@ -123,9 +127,26 @@ public static class AppSettingsStore
             Name = cleanName,
             Path = fullPath,
             LastOpenedUtc = DateTime.UtcNow.ToString("O"),
+            ThumbnailPath = existingMatch?.ThumbnailPath ?? "",
         });
 
         settings.RecentJobs = existing.Take(MaxRecentJobs).ToList();
+    }
+
+    public static void UpdateRecentJobThumbnail(AppSettings settings, string jobPath, string thumbnailPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobPath) || string.IsNullOrWhiteSpace(thumbnailPath))
+            return;
+
+        string key = NormalizePath(jobPath);
+        foreach (var recent in settings.RecentJobs ?? [])
+        {
+            if (!string.Equals(NormalizePath(recent.Path), key, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            recent.ThumbnailPath = thumbnailPath.Trim();
+            return;
+        }
     }
 
     public static void NormalizeRecentJobs(AppSettings settings)
@@ -146,6 +167,7 @@ public static class AppSettingsStore
                 Name = string.IsNullOrWhiteSpace(job.Name) ? Path.GetFileName(job.Path) : job.Name.Trim(),
                 Path = job.Path.Trim(),
                 LastOpenedUtc = job.LastOpenedUtc ?? "",
+                ThumbnailPath = job.ThumbnailPath ?? "",
             });
         }
 

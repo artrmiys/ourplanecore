@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using SmartTakeoffs.Controls;
@@ -51,6 +52,9 @@ public partial class MainWindow
                 seen,
                 name: string.IsNullOrWhiteSpace(recent.Name) ? Path.GetFileName(path) : recent.Name.Trim(),
                 path,
+                thumbnailPath: File.Exists(recent.ThumbnailPath)
+                    ? recent.ThumbnailPath
+                    : JobThumbnailService.ExistingThumbnailPath(path),
                 lastOpened: FormatRecentJobTime(recent.LastOpenedUtc),
                 source: "Recent");
         }
@@ -66,6 +70,7 @@ public partial class MainWindow
                     seen,
                     name: Path.GetFileName(folder),
                     path: folder,
+                    thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
                     lastOpened: "",
                     source: "Jobs Folder");
             }
@@ -79,6 +84,7 @@ public partial class MainWindow
         HashSet<string> seen,
         string name,
         string path,
+        string thumbnailPath,
         string lastOpened,
         string source)
     {
@@ -90,6 +96,7 @@ public partial class MainWindow
         items.Add(new JobPickerItem(
             string.IsNullOrWhiteSpace(name) ? Path.GetFileName(path) : name,
             path,
+            thumbnailPath,
             lastOpened,
             source,
             exists));
@@ -141,6 +148,7 @@ public partial class MainWindow
             .Select(folder => new JobPickerItem(
                 Path.GetFileName(folder),
                 folder,
+                JobThumbnailService.ExistingThumbnailPath(folder),
                 "",
                 "Jobs Folder",
                 true))
@@ -200,6 +208,27 @@ public partial class MainWindow
             MessageBox.Show($"Cannot open job:\n{ex.Message}", "Open Job",
                             MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void QueueRecentJobThumbnailGeneration(SmartTakeoffsJob job)
+    {
+        string jobRoot = job.RootPath;
+        Task.Run(() =>
+        {
+            bool ok = JobThumbnailService.TryCreateThumbnail(job, out string thumbnailPath, out string error);
+            return (ok, thumbnailPath, error);
+        }).ContinueWith(task =>
+        {
+            if (task.IsFaulted)
+                return;
+
+            var (ok, thumbnailPath, error) = task.Result;
+            if (!ok)
+                return;
+
+            AppSettingsStore.UpdateRecentJobThumbnail(_settings, jobRoot, thumbnailPath);
+            SaveAppSettings();
+        }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     private static string FormatRecentJobTime(string value)
