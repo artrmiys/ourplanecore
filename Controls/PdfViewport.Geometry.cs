@@ -193,6 +193,35 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private static bool AnnotationIntersectsRect(PageAnnotation annotation, SKRect rect)
+    {
+        IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);
+        if (points.Count == 0)
+            return false;
+
+        SKRect bounds = PointsBounds(points);
+        if (!RectsIntersect(bounds, rect))
+            return false;
+
+        if (points.Any(point => RectContains(rect, point)))
+            return true;
+
+        for (int i = 1; i < points.Count; i++)
+            if (SegmentIntersectsRect(points[i - 1], points[i], rect))
+                return true;
+
+        if (points.Count > 2)
+        {
+            if (SegmentIntersectsRect(points[^1], points[0], rect))
+                return true;
+
+            var center = new SKPoint((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
+            return PointInPolygon(center, points);
+        }
+
+        return false;
+    }
+
     private static SKRect RawMeasurementBounds(Measurement measurement) =>
         PointsBounds(measurement.Points);
 

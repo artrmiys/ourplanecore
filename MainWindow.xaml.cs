@@ -28,6 +28,9 @@ public partial class MainWindow : Window
     private readonly AppSettings _settings = AppSettingsStore.Load();
     private bool _isApplyingSettings;
     private bool _isRunningAiRequest;
+    private bool _updatingTransformSliders;
+    private double _lastTransformRotateSliderValue;
+    private double _lastTransformScaleSliderValue = 1.0;
 
     private OurPlaneCoreJob? _currentJob;
     private PageInfo? _currentPage;
@@ -246,6 +249,7 @@ public partial class MainWindow : Window
         _viewport.PageAnnotationAdded += OnPageAnnotationChanged;
         _viewport.PageAnnotationRemoved += OnPageAnnotationChanged;
         _viewport.PageAnnotationChanged += OnPageAnnotationChanged;
+        _viewport.TransformSelectionChanged += OnViewportTransformSelectionChanged;
         _viewport.CopyMeasurementsRequested += CopyMeasurementsToClipboard;
         _viewport.PasteMeasurementsRequested += PasteMeasurementsFromClipboard;
         _viewport.ContextRequested   += OnViewportContextRequested;
@@ -270,6 +274,7 @@ public partial class MainWindow : Window
         SetupRecordButton();
         SetupEstimateTable();
         ApplyToolSelection("select");
+        UpdateTransformEditControls();
 
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (_, _) => BtnOpen_Click(null!, null!)));
         InputBindings.Add(new KeyBinding(ApplicationCommands.Open, Key.O, ModifierKeys.Control));

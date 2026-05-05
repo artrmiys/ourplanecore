@@ -253,6 +253,11 @@ public sealed partial class PdfViewport
         var hits = _measurements
             .Where(m => IsMeasurementOnActivePage(m) && MeasurementIntersectsRect(m, rect))
             .ToList();
+        PageAnnotation? annotationHit = hits.Count == 0
+            ? _annotations.LastOrDefault(annotation =>
+                IsAnnotationOnActivePage(annotation) &&
+                AnnotationIntersectsRect(annotation, rect))
+            : null;
 
         if (_boxSelectAdditive)
         {
@@ -266,11 +271,16 @@ public sealed partial class PdfViewport
         }
         else
         {
-            SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
+            if (annotationHit != null)
+                SelectAnnotation(annotationHit, -1);
+            else
+                SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
         }
 
         RequestRepaint();
-        PostStatus(hits.Count == 0
+        PostStatus(annotationHit != null
+            ? $"Selected {ToolTitle(annotationHit.Kind)} markup."
+            : hits.Count == 0
             ? "Select: no measurements inside box."
             : $"Selected {GetSelectedMeasurements().Count} measurement(s). Ctrl+C copies, Ctrl+V pastes.");
     }
@@ -499,15 +509,24 @@ public sealed partial class PdfViewport
         string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         if (kind == "rectangle")
         {
-            SKRect rect = NormalizeRect(start, end);
-            SKRect expanded = rect;
-            expanded.Inflate(tol, tol);
-            return RectContains(expanded, pdf) &&
-                   (RectContains(rect, pdf) ||
-                    DistanceToSegment(pdf, new SKPoint(rect.Left, rect.Top), new SKPoint(rect.Right, rect.Top)) <= tol ||
-                    DistanceToSegment(pdf, new SKPoint(rect.Right, rect.Top), new SKPoint(rect.Right, rect.Bottom)) <= tol ||
-                    DistanceToSegment(pdf, new SKPoint(rect.Right, rect.Bottom), new SKPoint(rect.Left, rect.Bottom)) <= tol ||
-                    DistanceToSegment(pdf, new SKPoint(rect.Left, rect.Bottom), new SKPoint(rect.Left, rect.Top)) <= tol);
+            IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);
+            if (points.Count < 2)
+                return false;
+
+            if (points.Count == 2)
+            {
+                SKRect rect = NormalizeRect(points[0], points[1]);
+                SKRect expanded = rect;
+                expanded.Inflate(tol, tol);
+                return RectContains(expanded, pdf) && RectContains(rect, pdf);
+            }
+
+            for (int i = 1; i < points.Count; i++)
+                if (DistanceToSegment(pdf, points[i - 1], points[i]) <= tol)
+                    return true;
+
+            return DistanceToSegment(pdf, points[^1], points[0]) <= tol ||
+                   PointInPolygon(pdf, points);
         }
 
         return DistanceToSegment(pdf, start, end) <= tol;
@@ -549,6 +568,7 @@ public sealed partial class PdfViewport
             MeasurementsSelectionChanged?.Invoke(next);
         if (primaryChanged || setChanged || vertexChanged)
             RequestRepaint();
+        PublishTransformSelectionChanged();
     }
 
     private void ToggleMeasurementSelection(Measurement measurement)
@@ -599,6 +619,7 @@ public sealed partial class PdfViewport
         _selectedAnnotationVertexIndex = vertexIndex;
         if (changed)
             RequestRepaint();
+        PublishTransformSelectionChanged();
     }
 
     private void CenterOnMeasurement(Measurement measurement)
@@ -642,16 +663,21 @@ public sealed partial class PdfViewport
         _draggingMeasurement = false;
         _draggingAnnotationVertex = false;
         _draggingAnnotation = false;
+        _draggingTransformScale = false;
+        _draggingTransformRotate = false;
         _dragMeasurementChanged = false;
         _dragAnnotationChanged = false;
         _dragMeasurementOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
         _dragAnnotationOriginalPoints.Clear();
+        _transformMeasurementOriginalPoints.Clear();
+        _transformAnnotationOriginalPoints.Clear();
         if (changed)
         {
             MeasurementSelectionChanged?.Invoke(null);
             MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
         }
+        PublishTransformSelectionChanged();
     }
 
     private void ClearAnnotationSelection()

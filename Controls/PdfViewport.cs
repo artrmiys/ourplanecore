@@ -149,6 +149,8 @@ public sealed partial class PdfViewport : SKElement
     private bool _draggingMeasurement;
     private bool _draggingAnnotationVertex;
     private bool _draggingAnnotation;
+    private bool _draggingTransformScale;
+    private bool _draggingTransformRotate;
     private bool _dragMeasurementChanged;
     private bool _dragAnnotationChanged;
     private Point _dragScreenStart;
@@ -157,6 +159,11 @@ public sealed partial class PdfViewport : SKElement
     private List<SKPoint> _dragMeasurementOriginalPoints = [];
     private List<SKPoint> _dragAnnotationOriginalPoints = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _dragSelectionOriginalPoints = [];
+    private readonly Dictionary<Measurement, List<SKPoint>> _transformMeasurementOriginalPoints = [];
+    private readonly Dictionary<PageAnnotation, List<SKPoint>> _transformAnnotationOriginalPoints = [];
+    private SKPoint _transformCenter;
+    private float _transformStartDistance;
+    private float _transformStartAngle;
     private readonly Dictionary<int, bool> _layerStates = [];
     private readonly HashSet<int> _highlightedLayers = [];
     private List<PdfLayer> _layers = [];
@@ -222,6 +229,7 @@ public sealed partial class PdfViewport : SKElement
     public event Action<PageAnnotation>?                   PageAnnotationAdded;
     public event Action<PageAnnotation>?                   PageAnnotationRemoved;
     public event Action<PageAnnotation>?                   PageAnnotationChanged;
+    public event Action<bool>?                             TransformSelectionChanged;
     public event Action<Measurement?>?                    MeasurementSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      MeasurementsSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      CopyMeasurementsRequested;
@@ -572,6 +580,7 @@ public sealed partial class PdfViewport : SKElement
         if (ReferenceEquals(_selectedAnnotation, annotation))
             ClearAnnotationSelection();
         RequestRepaint();
+        PublishTransformSelectionChanged();
         PostStatus($"Deleted {ToolTitle(annotation.Kind)} markup.");
         PageAnnotationRemoved?.Invoke(annotation);
         return true;
@@ -756,6 +765,7 @@ public sealed partial class PdfViewport : SKElement
         _annotations.Clear();
         _annotations.AddRange(annotations);
         ClearAnnotationSelection();
+        PublishTransformSelectionChanged();
         RequestRepaint();
     }
 
@@ -824,6 +834,7 @@ public sealed partial class PdfViewport : SKElement
         _sheetLegendEntries.Clear();
         CancelJoistDirectionCapture();
         ClearSelection();
+        PublishTransformSelectionChanged();
         RequestRepaint();
         FireLayersChanged();
         PublishPdfLayerTraceState();

@@ -68,6 +68,7 @@ public sealed partial class PdfViewport
                 _zoom, _zoom, -_panX * _zoom, -_panY * _zoom);
             using var saved = new SKAutoCanvasRestore(canvas, true);
             canvas.SetMatrix(measMtx);
+            DrawTransformOverlay(canvas);
             DrawMeasurements(canvas, visiblePdf);
             DrawPageAnnotations(canvas, visiblePdf);
             DrawAiActionDraftPreview(canvas, visiblePdf);

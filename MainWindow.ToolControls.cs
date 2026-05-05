@@ -275,6 +275,153 @@ public partial class MainWindow
             MessageBoxImage.Question) == MessageBoxResult.Yes;
     }
 
+    private void BtnMirrorHorizontal_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewport == null)
+            return;
+
+        if (_viewport.MirrorSelectedHorizontal())
+            ResetTransformEditSliders();
+        UpdateTransformEditControls();
+    }
+
+    private void BtnMirrorVertical_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewport == null)
+            return;
+
+        if (_viewport.MirrorSelectedVertical())
+            ResetTransformEditSliders();
+        UpdateTransformEditControls();
+    }
+
+    private void SliderRotateSelection_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingTransformSliders || _viewport == null)
+            return;
+
+        double delta = e.NewValue - _lastTransformRotateSliderValue;
+        if (Math.Abs(delta) < 0.001)
+            return;
+
+        if (_viewport.RotateSelectedBy(delta))
+        {
+            _lastTransformRotateSliderValue = e.NewValue;
+        }
+        else
+        {
+            ResetTransformEditSliders();
+        }
+
+        UpdateTransformEditControls();
+    }
+
+    private void SliderScaleSelection_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingTransformSliders || _viewport == null)
+            return;
+
+        double previous = Math.Max(0.05, _lastTransformScaleSliderValue);
+        double factor = e.NewValue / previous;
+        if (Math.Abs(factor - 1.0) < 0.0001)
+            return;
+
+        if (_viewport.ScaleSelectedBy(factor))
+        {
+            _lastTransformScaleSliderValue = e.NewValue;
+        }
+        else
+        {
+            ResetTransformEditSliders();
+        }
+
+        UpdateTransformEditControls();
+    }
+
+    private void BtnResetRotateSelection_Click(object sender, RoutedEventArgs e)
+    {
+        SetTransformRotateSlider(0);
+        UpdateTransformEditControls();
+    }
+
+    private void BtnResetScaleSelection_Click(object sender, RoutedEventArgs e)
+    {
+        SetTransformScaleSlider(1);
+        UpdateTransformEditControls();
+    }
+
+    private void OnViewportTransformSelectionChanged(bool hasSelection) =>
+        UpdateTransformEditControls(hasSelection);
+
+    private void UpdateTransformEditControls(bool? hasSelection = null)
+    {
+        if (_viewport == null)
+            return;
+
+        bool enabled = hasSelection ?? _viewport.HasTransformSelection;
+        BtnMirrorHorizontal.IsEnabled = enabled;
+        BtnMirrorVertical.IsEnabled = enabled;
+        SliderRotateSelection.IsEnabled = enabled;
+        SliderScaleSelection.IsEnabled = enabled;
+        BtnResetRotateSelection.IsEnabled = enabled;
+        BtnResetScaleSelection.IsEnabled = enabled;
+
+        if (!enabled)
+            ResetTransformEditSliders();
+    }
+
+    private void ResetTransformEditSliders()
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            SetTransformRotateSliderCore(0);
+            SetTransformScaleSliderCore(1);
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void SetTransformRotateSlider(double value)
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            SetTransformRotateSliderCore(value);
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void SetTransformScaleSlider(double value)
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            SetTransformScaleSliderCore(value);
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+    }
+
+    private void SetTransformRotateSliderCore(double value)
+    {
+        SliderRotateSelection.Value = value;
+        _lastTransformRotateSliderValue = value;
+    }
+
+    private void SetTransformScaleSliderCore(double value)
+    {
+        SliderScaleSelection.Value = value;
+        _lastTransformScaleSliderValue = value;
+    }
+
     private void BtnFit_Click(object sender, RoutedEventArgs e)    => _viewport.ZoomFit();
     private void BtnZoomIn_Click(object sender, RoutedEventArgs e)  => _viewport.ZoomIn();
     private void BtnZoomOut_Click(object sender, RoutedEventArgs e) => _viewport.ZoomOut();

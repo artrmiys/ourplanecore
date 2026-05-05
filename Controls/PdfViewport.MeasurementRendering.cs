@@ -140,7 +140,19 @@ public sealed partial class PdfViewport
         SKPoint end = annotation.Points[1];
         if (kind == "rectangle")
         {
-            canvas.DrawRect(NormalizeRect(start, end), stroke);
+            if (annotation.Points.Count >= 4)
+            {
+                using var path = new SKPath();
+                path.MoveTo(annotation.Points[0]);
+                for (int i = 1; i < annotation.Points.Count; i++)
+                    path.LineTo(annotation.Points[i]);
+                path.Close();
+                canvas.DrawPath(path, stroke);
+            }
+            else
+            {
+                canvas.DrawRect(NormalizeRect(start, end), stroke);
+            }
             return;
         }
 
@@ -164,6 +176,63 @@ public sealed partial class PdfViewport
                 MeasurementLabelFontScreenPx,
                 MeasurementLabelPaddingScreenPx,
                 centered: true);
+        }
+    }
+
+    private void DrawTransformOverlay(SKCanvas canvas)
+    {
+        if (!TryGetTransformBounds(out SKRect selectedBounds))
+            return;
+
+        SKRect outer = TransformHandleBounds(selectedBounds);
+        float safeZoom = Math.Max(_zoom, 0.001f);
+        SKColor orange = new(0xF4, 0x9B, 0x24);
+        using var fill = new SKPaint
+        {
+            Color = orange.WithAlpha(24),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var stroke = new SKPaint
+        {
+            Color = orange.WithAlpha(190),
+            StrokeWidth = 1.4f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            PathEffect = SKPathEffect.CreateDash([7f / safeZoom, 5f / safeZoom], 0),
+        };
+        using var handleFill = new SKPaint
+        {
+            Color = orange.WithAlpha(150),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var handleStroke = new SKPaint
+        {
+            Color = orange.WithAlpha(235),
+            StrokeWidth = 1.2f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+
+        canvas.DrawRect(outer, fill);
+        canvas.DrawRect(outer, stroke);
+
+        float handle = 8f / safeZoom;
+        foreach ((TransformHandleKind kind, SKPoint point) in TransformHandlePoints(outer))
+        {
+            if (kind == TransformHandleKind.Rotate)
+            {
+                SKPoint topMid = new((outer.Left + outer.Right) / 2f, outer.Top);
+                canvas.DrawLine(topMid, point, handleStroke);
+                canvas.DrawCircle(point, handle * 0.68f, handleFill);
+                canvas.DrawCircle(point, handle * 0.68f, handleStroke);
+                continue;
+            }
+
+            var rect = SKRect.Create(point.X - handle / 2f, point.Y - handle / 2f, handle, handle);
+            canvas.DrawRoundRect(rect, 1.5f / safeZoom, 1.5f / safeZoom, handleFill);
+            canvas.DrawRoundRect(rect, 1.5f / safeZoom, 1.5f / safeZoom, handleStroke);
         }
     }
 

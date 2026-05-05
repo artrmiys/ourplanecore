@@ -89,6 +89,12 @@ public sealed partial class PdfViewport
                 }
 
                 bool preserveSelectionForAdd = IsSelectionModifierActive();
+                if (TryBeginTransformHandleEdit(pdf, pos))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
                 {
                     if (_draggingVertex || _draggingMeasurement)
@@ -158,6 +164,13 @@ public sealed partial class PdfViewport
             DistanceSquared(_rightClickStart.Value, pos) > 16)
         {
             _rightClickMoved = true;
+        }
+
+        if (_draggingTransformScale || _draggingTransformRotate)
+        {
+            UpdateTransformDrag(ScreenToPdf((float)pos.X, (float)pos.Y));
+            e.Handled = true;
+            return;
         }
 
         if (_draggingVertex &&
@@ -325,6 +338,13 @@ public sealed partial class PdfViewport
         Measurement? contextMeasurement = _rightClickMeasurement;
         PageAnnotation? contextAnnotation = _rightClickAnnotation;
 
+        if (_draggingTransformScale || _draggingTransformRotate)
+        {
+            FinishTransformDrag();
+            e.Handled = true;
+            return;
+        }
+
         if (_draggingVertex || _draggingMeasurement)
         {
             FinishMeasurementDrag();
@@ -394,6 +414,7 @@ public sealed partial class PdfViewport
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
+        FinishTransformDrag();
         FinishMeasurementDrag();
         FinishAnnotationDrag();
         if (_boxSelecting && Mouse.LeftButton != MouseButtonState.Pressed)

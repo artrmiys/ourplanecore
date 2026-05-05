@@ -536,6 +536,9 @@ public sealed partial class PdfViewport
         if (kind != "rectangle")
             return annotation.Points.Take(2).ToList();
 
+        if (annotation.Points.Count >= 4)
+            return annotation.Points.Append(annotation.Points[0]).ToList();
+
         SKRect rect = NormalizeRect(annotation.Points[0], annotation.Points[1]);
         return
         [
