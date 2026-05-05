@@ -115,6 +115,75 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    private bool TryBeginAnnotationEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
+    {
+        if (TryHitSelectedAnnotationVertex(pdf, out PageAnnotation selectedVertexAnnotation, out int selectedVertexIndex) ||
+            TryHitAnnotationVertex(pdf, out selectedVertexAnnotation, out selectedVertexIndex))
+        {
+            BeginAnnotationVertexEdit(selectedVertexAnnotation, selectedVertexIndex, screen);
+            return true;
+        }
+
+        if (TryHitSelectedAnnotation(pdf, out PageAnnotation selectedAnnotation) ||
+            TryHitAnnotation(pdf, out selectedAnnotation))
+        {
+            BeginAnnotationMove(selectedAnnotation, screen);
+            return true;
+        }
+
+        if (clearSelectionOnMiss)
+        {
+            ClearSelection();
+            RequestRepaint();
+        }
+
+        return false;
+    }
+
+    private void BeginAnnotationVertexEdit(PageAnnotation annotation, int vertexIndex, Point screen)
+    {
+        ClearInProgressInputForEdit();
+        _draggingAnnotationVertex = true;
+        _draggingAnnotation = false;
+        _dragAnnotationChanged = false;
+        _dragScreenStart = screen;
+        _dragAnnotationVertexOriginalPoint = annotation.Points[vertexIndex];
+        _dragAnnotationOriginalPoints.Clear();
+        CaptureMouse();
+        SelectAnnotation(annotation, vertexIndex);
+        PostStatus($"Editing {ToolTitle(annotation.Kind)} markup point {vertexIndex + 1}. Drag to move.");
+    }
+
+    private void BeginAnnotationMove(PageAnnotation annotation, Point screen)
+    {
+        ClearInProgressInputForEdit();
+        _draggingAnnotationVertex = false;
+        _draggingAnnotation = true;
+        _dragAnnotationChanged = false;
+        _dragScreenStart = screen;
+        _dragAnnotationOriginalPoints = annotation.Points.ToList();
+        CaptureMouse();
+        SelectAnnotation(annotation, -1);
+        PostStatus($"Moving {ToolTitle(annotation.Kind)} markup. Drag body to move; drag blue handles to reshape.");
+    }
+
+    private void FinishAnnotationDrag()
+    {
+        if (!_draggingAnnotationVertex && !_draggingAnnotation)
+            return;
+
+        PageAnnotation? changed = _dragAnnotationChanged ? _selectedAnnotation : null;
+        _draggingAnnotationVertex = false;
+        _draggingAnnotation = false;
+        _dragAnnotationChanged = false;
+        _dragAnnotationOriginalPoints.Clear();
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+        if (changed != null)
+            PageAnnotationChanged?.Invoke(changed);
+        RequestRepaint();
+    }
+
     private void ClearInProgressInputForEdit()
     {
         if (_drawPts.Count == 0 && _scalePts.Count == 0 && !_rubberEnd.HasValue && !_snapPreview.HasValue)
@@ -278,6 +347,59 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private bool TryHitSelectedAnnotationVertex(SKPoint pdf, out PageAnnotation annotation, out int vertexIndex)
+    {
+        if (_selectedAnnotation != null &&
+            IsAnnotationOnActivePage(_selectedAnnotation) &&
+            TryHitVertexOnAnnotation(_selectedAnnotation, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+        {
+            annotation = _selectedAnnotation;
+            return true;
+        }
+
+        annotation = null!;
+        vertexIndex = -1;
+        return false;
+    }
+
+    private bool TryHitAnnotationVertex(SKPoint pdf, out PageAnnotation annotation, out int vertexIndex)
+    {
+        for (int i = _annotations.Count - 1; i >= 0; i--)
+        {
+            PageAnnotation candidate = _annotations[i];
+            if (!IsAnnotationOnActivePage(candidate))
+                continue;
+
+            if (TryHitVertexOnAnnotation(candidate, pdf, VertexHitToleranceScreenPx, out vertexIndex))
+            {
+                annotation = candidate;
+                return true;
+            }
+        }
+
+        annotation = null!;
+        vertexIndex = -1;
+        return false;
+    }
+
+    private bool TryHitVertexOnAnnotation(PageAnnotation annotation, SKPoint pdf, float screenTolerancePx, out int vertexIndex)
+    {
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        float tolSq = tol * tol;
+
+        for (int p = annotation.Points.Count - 1; p >= 0; p--)
+        {
+            if (DistanceSquared(pdf, annotation.Points[p]) <= tolSq)
+            {
+                vertexIndex = p;
+                return true;
+            }
+        }
+
+        vertexIndex = -1;
+        return false;
+    }
+
     private bool TryHitSelectedMeasurement(SKPoint pdf, out Measurement measurement)
     {
         for (int i = _measurements.Count - 1; i >= 0; i--)
@@ -315,6 +437,39 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private bool TryHitSelectedAnnotation(SKPoint pdf, out PageAnnotation annotation)
+    {
+        if (_selectedAnnotation != null &&
+            IsAnnotationOnActivePage(_selectedAnnotation) &&
+            IsAnnotationHit(_selectedAnnotation, pdf, SelectedMeasurementHitToleranceScreenPx))
+        {
+            annotation = _selectedAnnotation;
+            return true;
+        }
+
+        annotation = null!;
+        return false;
+    }
+
+    private bool TryHitAnnotation(SKPoint pdf, out PageAnnotation annotation)
+    {
+        for (int i = _annotations.Count - 1; i >= 0; i--)
+        {
+            PageAnnotation candidate = _annotations[i];
+            if (!IsAnnotationOnActivePage(candidate))
+                continue;
+
+            if (IsAnnotationHit(candidate, pdf, MeasurementHitToleranceScreenPx))
+            {
+                annotation = candidate;
+                return true;
+            }
+        }
+
+        annotation = null!;
+        return false;
+    }
+
     private bool IsMeasurementHit(Measurement measurement, SKPoint pdf, float screenTolerancePx)
     {
         float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
@@ -331,6 +486,31 @@ public sealed partial class PdfViewport
         return measurement.MType == "area" &&
                measurement.Points.Count > 2 &&
                DistanceToSegment(pdf, measurement.Points[^1], measurement.Points[0]) <= tol;
+    }
+
+    private bool IsAnnotationHit(PageAnnotation annotation, SKPoint pdf, float screenTolerancePx)
+    {
+        if (annotation.Points.Count < 2)
+            return false;
+
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        SKPoint start = annotation.Points[0];
+        SKPoint end = annotation.Points[1];
+        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        if (kind == "rectangle")
+        {
+            SKRect rect = NormalizeRect(start, end);
+            SKRect expanded = rect;
+            expanded.Inflate(tol, tol);
+            return RectContains(expanded, pdf) &&
+                   (RectContains(rect, pdf) ||
+                    DistanceToSegment(pdf, new SKPoint(rect.Left, rect.Top), new SKPoint(rect.Right, rect.Top)) <= tol ||
+                    DistanceToSegment(pdf, new SKPoint(rect.Right, rect.Top), new SKPoint(rect.Right, rect.Bottom)) <= tol ||
+                    DistanceToSegment(pdf, new SKPoint(rect.Right, rect.Bottom), new SKPoint(rect.Left, rect.Bottom)) <= tol ||
+                    DistanceToSegment(pdf, new SKPoint(rect.Left, rect.Bottom), new SKPoint(rect.Left, rect.Top)) <= tol);
+        }
+
+        return DistanceToSegment(pdf, start, end) <= tol;
     }
 
     private void SelectMeasurement(Measurement measurement, int vertexIndex)
@@ -360,6 +540,8 @@ public sealed partial class PdfViewport
 
         _selectedMeasurement = nextPrimary;
         _selectedVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+        if (next.Count > 0)
+            ClearAnnotationSelection();
 
         if (primaryChanged)
             MeasurementSelectionChanged?.Invoke(nextPrimary);
@@ -397,6 +579,28 @@ public sealed partial class PdfViewport
             : $"Selected all {selected.Count} measurement(s) on this sheet.");
     }
 
+    private void SelectAnnotation(PageAnnotation annotation, int vertexIndex)
+    {
+        if (!_annotations.Contains(annotation) || !IsAnnotationOnActivePage(annotation))
+            return;
+
+        if (_selectedMeasurements.Count > 0 || _selectedMeasurement != null)
+        {
+            _selectedMeasurements.Clear();
+            _selectedMeasurement = null;
+            _selectedVertexIndex = -1;
+            MeasurementSelectionChanged?.Invoke(null);
+            MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
+        }
+
+        bool changed = !ReferenceEquals(_selectedAnnotation, annotation) ||
+                       _selectedAnnotationVertexIndex != vertexIndex;
+        _selectedAnnotation = annotation;
+        _selectedAnnotationVertexIndex = vertexIndex;
+        if (changed)
+            RequestRepaint();
+    }
+
     private void CenterOnMeasurement(Measurement measurement)
     {
         if (measurement.Points.Count == 0 || ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
@@ -427,20 +631,44 @@ public sealed partial class PdfViewport
 
     private void ClearSelection()
     {
-        bool changed = _selectedMeasurement != null || _selectedMeasurements.Count > 0;
+        bool changed = _selectedMeasurement != null ||
+                       _selectedMeasurements.Count > 0 ||
+                       _selectedAnnotation != null;
         _selectedMeasurement = null;
         _selectedMeasurements.Clear();
         _selectedVertexIndex = -1;
+        ClearAnnotationSelection();
         _draggingVertex = false;
         _draggingMeasurement = false;
+        _draggingAnnotationVertex = false;
+        _draggingAnnotation = false;
         _dragMeasurementChanged = false;
+        _dragAnnotationChanged = false;
         _dragMeasurementOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
+        _dragAnnotationOriginalPoints.Clear();
         if (changed)
         {
             MeasurementSelectionChanged?.Invoke(null);
             MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
         }
+    }
+
+    private void ClearAnnotationSelection()
+    {
+        _selectedAnnotation = null;
+        _selectedAnnotationVertexIndex = -1;
+    }
+
+    private void DeleteSelectedOverlay()
+    {
+        if (GetSelectedMeasurements().Count > 0)
+        {
+            DeleteSelectedMeasurement();
+            return;
+        }
+
+        DeleteSelectedAnnotation();
     }
 
     private void DeleteSelectedMeasurement()
@@ -460,6 +688,15 @@ public sealed partial class PdfViewport
             MeasurementRemoved?.Invoke(removed);
     }
 
+    private void DeleteSelectedAnnotation()
+    {
+        if (_selectedAnnotation == null)
+            return;
+
+        PageAnnotation annotation = _selectedAnnotation;
+        DeletePageAnnotation(annotation);
+    }
+
     private bool IsMeasurementOnActivePage(Measurement measurement) =>
         IsSamePageFolder(measurement.PageFolder, _pageFolder);
 
@@ -468,6 +705,9 @@ public sealed partial class PdfViewport
 
     private bool IsMeasurementSelected(Measurement measurement) =>
         _selectedMeasurements.Contains(measurement);
+
+    private bool IsAnnotationSelected(PageAnnotation annotation) =>
+        ReferenceEquals(_selectedAnnotation, annotation);
 
     private static bool IsSamePageFolder(string? left, string? right)
     {

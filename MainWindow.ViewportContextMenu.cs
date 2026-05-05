@@ -127,6 +127,32 @@ public partial class MainWindow
             () => DeleteSection(item, measurement)));
     }
 
+    private void AddAnnotationEditMenuItems(ContextMenu menu, ViewportContextRequest request)
+    {
+        PageAnnotation annotation = request.Annotation!;
+        string title = MarkupTitle(annotation);
+        menu.Items.Add(MakeMenuItem(
+            $"Delete {title}",
+            true,
+            () =>
+            {
+                _viewport.DeletePageAnnotation(annotation);
+                SaveCurrentPageAnnotations();
+            }));
+    }
+
+    private static string MarkupTitle(PageAnnotation annotation)
+    {
+        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        return kind switch
+        {
+            "dimension" => "Dimension Markup",
+            "arrow" => "Arrow Markup",
+            "rectangle" => "Box Markup",
+            _ => "Drawing Markup",
+        };
+    }
+
     private void AddMeasurementAiMenuItems(ContextMenu menu, ViewportContextRequest request)
     {
         Measurement measurement = request.Measurement!;

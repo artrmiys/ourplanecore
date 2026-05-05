@@ -104,24 +104,32 @@ public sealed partial class PdfViewport
         foreach (PageAnnotation annotation in _annotations)
         {
             if (!IsAnnotationOnActivePage(annotation) ||
-                annotation.Points.Count < 2 ||
-                !PointsVisible(annotation.Points, visiblePdf))
+                annotation.Points.Count < 2)
             {
                 continue;
             }
 
-            DrawPageAnnotation(canvas, annotation);
+            bool selected = IsAnnotationSelected(annotation);
+            if (!selected && !PointsVisible(annotation.Points, visiblePdf))
+                continue;
+
+            DrawPageAnnotation(canvas, annotation, selected);
+            if (selected)
+            {
+                DrawAnnotationSelectionBounds(canvas, annotation);
+                DrawAnnotationSelectionHandles(canvas, annotation);
+            }
         }
     }
 
-    private void DrawPageAnnotation(SKCanvas canvas, PageAnnotation annotation)
+    private void DrawPageAnnotation(SKCanvas canvas, PageAnnotation annotation, bool selected)
     {
         string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         SKColor color = GetCachedColor(annotation.Color, new SKColor(0x15, 0x65, 0xC0));
         using var stroke = new SKPaint
         {
             Color = color,
-            StrokeWidth = 1.8f / _zoom,
+            StrokeWidth = (selected ? 2.7f : 1.8f) / _zoom,
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
             StrokeCap = SKStrokeCap.Round,
@@ -156,6 +164,59 @@ public sealed partial class PdfViewport
                 MeasurementLabelFontScreenPx,
                 MeasurementLabelPaddingScreenPx,
                 centered: true);
+        }
+    }
+
+    private void DrawAnnotationSelectionBounds(SKCanvas canvas, PageAnnotation annotation)
+    {
+        if (annotation.Points.Count == 0)
+            return;
+
+        SKRect bounds = PointsBounds(annotation.Points);
+        bounds.Inflate(6f / Math.Max(_zoom, 0.001f), 6f / Math.Max(_zoom, 0.001f));
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.DodgerBlue,
+            StrokeWidth = 1.3f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            PathEffect = SKPathEffect.CreateDash([5f / _zoom, 4f / _zoom], 0),
+        };
+        canvas.DrawRect(bounds, stroke);
+    }
+
+    private void DrawAnnotationSelectionHandles(SKCanvas canvas, PageAnnotation annotation)
+    {
+        if (annotation.Points.Count == 0)
+            return;
+
+        float radius = 5f / _zoom;
+        using var fill = new SKPaint
+        {
+            Color = SKColors.White,
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var activeFill = new SKPaint
+        {
+            Color = TempColor,
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.DodgerBlue,
+            StrokeWidth = 1.5f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+
+        for (int i = 0; i < annotation.Points.Count; i++)
+        {
+            SKPoint point = annotation.Points[i];
+            var rect = SKRect.Create(point.X - radius, point.Y - radius, radius * 2, radius * 2);
+            canvas.DrawRect(rect, i == _selectedAnnotationVertexIndex ? activeFill : fill);
+            canvas.DrawRect(rect, stroke);
         }
     }
 
@@ -796,7 +857,14 @@ public sealed partial class PdfViewport
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
             };
-            if (string.Equals(_snapPreviewKind, "midpoint", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(_snapPreviewKind, "intersection", StringComparison.OrdinalIgnoreCase))
+            {
+                canvas.DrawCircle(point, half, snapFill);
+                canvas.DrawCircle(point, half, snapStroke);
+                canvas.DrawLine(point.X - half, point.Y, point.X + half, point.Y, snapStroke);
+                canvas.DrawLine(point.X, point.Y - half, point.X, point.Y + half, snapStroke);
+            }
+            else if (string.Equals(_snapPreviewKind, "midpoint", StringComparison.OrdinalIgnoreCase))
             {
                 using var diamond = new SKPath();
                 diamond.MoveTo(point.X, point.Y - half);
@@ -813,9 +881,12 @@ public sealed partial class PdfViewport
                 canvas.DrawRect(rect, snapStroke);
             }
 
-            string labelKind = string.Equals(_snapPreviewKind, "midpoint", StringComparison.OrdinalIgnoreCase)
-                ? "mid"
-                : "end";
+            string labelKind = _snapPreviewKind.ToLowerInvariant() switch
+            {
+                "midpoint" => "mid",
+                "intersection" => "int",
+                _ => "end",
+            };
             string label = $"{labelKind} {point.X:F0},{point.Y:F0}";
             float textSize = 10f / Math.Max(_zoom, 0.001f);
             using var snapText = new SKPaint

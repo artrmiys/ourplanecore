@@ -245,6 +245,7 @@ public partial class MainWindow : Window
         _viewport.MeasurementsSelectionChanged += OnViewportMeasurementsSelectionChanged;
         _viewport.PageAnnotationAdded += OnPageAnnotationChanged;
         _viewport.PageAnnotationRemoved += OnPageAnnotationChanged;
+        _viewport.PageAnnotationChanged += OnPageAnnotationChanged;
         _viewport.CopyMeasurementsRequested += CopyMeasurementsToClipboard;
         _viewport.PasteMeasurementsRequested += PasteMeasurementsFromClipboard;
         _viewport.ContextRequested   += OnViewportContextRequested;

@@ -99,6 +99,29 @@ public sealed partial class PdfViewport
                Math.Abs(d4) <= eps && PointOnSegment(b, c, d);
     }
 
+    private static bool TrySegmentIntersectionPoint(SKPoint a, SKPoint b, SKPoint c, SKPoint d, out SKPoint point)
+    {
+        point = default;
+        float rx = b.X - a.X;
+        float ry = b.Y - a.Y;
+        float sx = d.X - c.X;
+        float sy = d.Y - c.Y;
+        float denom = rx * sy - ry * sx;
+        if (Math.Abs(denom) <= 0.0001f)
+            return false;
+
+        float qpx = c.X - a.X;
+        float qpy = c.Y - a.Y;
+        float t = (qpx * sy - qpy * sx) / denom;
+        float u = (qpx * ry - qpy * rx) / denom;
+        const float eps = 0.0001f;
+        if (t < -eps || t > 1f + eps || u < -eps || u > 1f + eps)
+            return false;
+
+        point = new SKPoint(a.X + t * rx, a.Y + t * ry);
+        return true;
+    }
+
     private static float Cross(SKPoint a, SKPoint b, SKPoint c) =>
         (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
 

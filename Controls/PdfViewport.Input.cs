@@ -43,6 +43,7 @@ public sealed partial class PdfViewport
             _rightClickPdf = pdf;
             _rightClickMoved = false;
             _rightClickMeasurement = null;
+            _rightClickAnnotation = null;
             if (TryHitMeasurement(pdf, out Measurement measurement))
             {
                 _rightClickMeasurement = measurement;
@@ -50,6 +51,11 @@ public sealed partial class PdfViewport
                     SetSelectedMeasurements(GetSelectedMeasurements(), measurement, -1);
                 else
                     SelectMeasurement(measurement, -1);
+            }
+            else if (TryHitAnnotation(pdf, out PageAnnotation annotation))
+            {
+                _rightClickAnnotation = annotation;
+                SelectAnnotation(annotation, -1);
             }
         }
 
@@ -86,6 +92,14 @@ public sealed partial class PdfViewport
                 if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
                 {
                     if (_draggingVertex || _draggingMeasurement)
+                        CaptureMouse();
+                    e.Handled = true;
+                    return;
+                }
+
+                if (TryBeginAnnotationEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
+                {
+                    if (_draggingAnnotationVertex || _draggingAnnotation)
                         CaptureMouse();
                     e.Handled = true;
                     return;
@@ -192,6 +206,38 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (_draggingAnnotationVertex &&
+            _selectedAnnotation != null &&
+            _selectedAnnotationVertexIndex >= 0)
+        {
+            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            _selectedAnnotation.Points[_selectedAnnotationVertexIndex] = new SKPoint(
+                _dragAnnotationVertexOriginalPoint.X + delta.X,
+                _dragAnnotationVertexOriginalPoint.Y + delta.Y);
+            _dragAnnotationChanged = true;
+            PostDragStatus("Dragging markup point", delta);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingAnnotation &&
+            _selectedAnnotation != null)
+        {
+            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            for (int i = 0; i < _selectedAnnotation.Points.Count && i < _dragAnnotationOriginalPoints.Count; i++)
+            {
+                SKPoint original = _dragAnnotationOriginalPoints[i];
+                _selectedAnnotation.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+            }
+
+            _dragAnnotationChanged = true;
+            PostDragStatus("Dragging markup", delta);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
         if (_boxSelecting)
         {
             _boxSelectEndPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
@@ -277,10 +323,18 @@ public sealed partial class PdfViewport
         Point contextScreen = _rightClickStart ?? e.GetPosition(this);
         SKPoint contextPdf = _rightClickPdf ?? ScreenToPdf((float)contextScreen.X, (float)contextScreen.Y);
         Measurement? contextMeasurement = _rightClickMeasurement;
+        PageAnnotation? contextAnnotation = _rightClickAnnotation;
 
         if (_draggingVertex || _draggingMeasurement)
         {
             FinishMeasurementDrag();
+            e.Handled = true;
+            return;
+        }
+
+        if (_draggingAnnotationVertex || _draggingAnnotation)
+        {
+            FinishAnnotationDrag();
             e.Handled = true;
             return;
         }
@@ -308,6 +362,7 @@ public sealed partial class PdfViewport
             _rightClickStart = null;
             _rightClickPdf = null;
             _rightClickMeasurement = null;
+            _rightClickAnnotation = null;
             _rightClickMoved = false;
         }
 
@@ -319,7 +374,8 @@ public sealed partial class PdfViewport
                 contextPdf.X,
                 contextPdf.Y,
                 _pageFolder,
-                contextMeasurement));
+                contextMeasurement,
+                contextAnnotation));
         }
         e.Handled = true;
     }
@@ -339,6 +395,7 @@ public sealed partial class PdfViewport
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         FinishMeasurementDrag();
+        FinishAnnotationDrag();
         if (_boxSelecting && Mouse.LeftButton != MouseButtonState.Pressed)
             CancelBoxSelection();
         base.OnLostMouseCapture(e);
@@ -419,7 +476,7 @@ public sealed partial class PdfViewport
                 e.Handled = true;
                 break;
             case Key.Delete:
-                DeleteSelectedMeasurement();
+                DeleteSelectedOverlay();
                 e.Handled = true;
                 break;
             case Key.F:

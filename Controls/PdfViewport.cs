@@ -31,7 +31,8 @@ public sealed record ViewportContextRequest(
     float PdfX,
     float PdfY,
     string PageFolder,
-    Measurement? Measurement);
+    Measurement? Measurement,
+    PageAnnotation? Annotation = null);
 
 // ── Tool enum ────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ public sealed partial class PdfViewport : SKElement
     private Point? _rightClickStart;
     private SKPoint? _rightClickPdf;
     private Measurement? _rightClickMeasurement;
+    private PageAnnotation? _rightClickAnnotation;
     private bool _rightClickMoved;
 
     // ── Drawing tools ─────────────────────────────────────────────────────────
@@ -137,16 +139,23 @@ public sealed partial class PdfViewport : SKElement
     private string _pageFolder = "";
     private Measurement? _selectedMeasurement;
     private readonly HashSet<Measurement> _selectedMeasurements = [];
+    private PageAnnotation? _selectedAnnotation;
+    private int _selectedAnnotationVertexIndex = -1;
     private Measurement? _joistDirectionMeasurement;
     private readonly List<SKPoint> _joistDirectionPts = [];
     private SKPoint? _joistDirectionRubberEnd;
     private int _selectedVertexIndex = -1;
     private bool _draggingVertex;
     private bool _draggingMeasurement;
+    private bool _draggingAnnotationVertex;
+    private bool _draggingAnnotation;
     private bool _dragMeasurementChanged;
+    private bool _dragAnnotationChanged;
     private Point _dragScreenStart;
     private SKPoint _dragVertexOriginalPoint;
+    private SKPoint _dragAnnotationVertexOriginalPoint;
     private List<SKPoint> _dragMeasurementOriginalPoints = [];
+    private List<SKPoint> _dragAnnotationOriginalPoints = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _dragSelectionOriginalPoints = [];
     private readonly Dictionary<int, bool> _layerStates = [];
     private readonly HashSet<int> _highlightedLayers = [];
@@ -212,6 +221,7 @@ public sealed partial class PdfViewport : SKElement
     public event Action<Measurement>?                     MeasurementChanged;
     public event Action<PageAnnotation>?                   PageAnnotationAdded;
     public event Action<PageAnnotation>?                   PageAnnotationRemoved;
+    public event Action<PageAnnotation>?                   PageAnnotationChanged;
     public event Action<Measurement?>?                    MeasurementSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      MeasurementsSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      CopyMeasurementsRequested;
@@ -554,6 +564,19 @@ public sealed partial class PdfViewport : SKElement
         RequestRepaint();
     }
 
+    public bool DeletePageAnnotation(PageAnnotation annotation)
+    {
+        if (!_annotations.Remove(annotation))
+            return false;
+
+        if (ReferenceEquals(_selectedAnnotation, annotation))
+            ClearAnnotationSelection();
+        RequestRepaint();
+        PostStatus($"Deleted {ToolTitle(annotation.Kind)} markup.");
+        PageAnnotationRemoved?.Invoke(annotation);
+        return true;
+    }
+
     // Bulk-load measurements restored from a saved file
     public void LoadMeasurements(IEnumerable<Measurement> measurements)
     {
@@ -732,6 +755,7 @@ public sealed partial class PdfViewport : SKElement
     {
         _annotations.Clear();
         _annotations.AddRange(annotations);
+        ClearAnnotationSelection();
         RequestRepaint();
     }
 

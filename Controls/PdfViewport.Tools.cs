@@ -426,6 +426,7 @@ public sealed partial class PdfViewport
         SKPoint bestPoint = default;
         string bestKind = "";
         bool found = false;
+        var segments = new List<SnapSegment>();
 
         void Consider(SKPoint candidate, string kind)
         {
@@ -439,12 +440,25 @@ public sealed partial class PdfViewport
             found = true;
         }
 
-        void ConsiderSegmentMidpoints(IReadOnlyList<SKPoint> points, bool closed)
+        void ConsiderPolyline(IReadOnlyList<SKPoint> points, bool closed, bool includeEndpoints)
         {
+            if (includeEndpoints)
+            {
+                foreach (SKPoint point in points)
+                    Consider(point, "endpoint");
+            }
+
             for (int i = 1; i < points.Count; i++)
+            {
                 Consider(Midpoint(points[i - 1], points[i]), "midpoint");
+                segments.Add(new SnapSegment(points[i - 1], points[i]));
+            }
+
             if (closed && points.Count > 2)
+            {
                 Consider(Midpoint(points[^1], points[0]), "midpoint");
+                segments.Add(new SnapSegment(points[^1], points[0]));
+            }
         }
 
         for (int i = 0; i < _drawPts.Count; i++)
@@ -454,7 +468,7 @@ public sealed partial class PdfViewport
 
             Consider(_drawPts[i], "endpoint");
         }
-        ConsiderSegmentMidpoints(_drawPts, _tool == ViewerTool.Area);
+        ConsiderPolyline(_drawPts, _tool == ViewerTool.Area, includeEndpoints: false);
 
         foreach (SKPoint point in _scalePts)
             Consider(point, "endpoint");
@@ -464,10 +478,33 @@ public sealed partial class PdfViewport
             if (!IsMeasurementOnActivePage(measurement))
                 continue;
 
-            foreach (SKPoint point in measurement.Points)
-                Consider(point, "endpoint");
             if (measurement.MType is "line" or "area")
-                ConsiderSegmentMidpoints(measurement.Points, measurement.MType == "area");
+                ConsiderPolyline(measurement.Points, measurement.MType == "area", includeEndpoints: true);
+            else
+                foreach (SKPoint point in measurement.Points)
+                    Consider(point, "endpoint");
+        }
+
+        foreach (PageAnnotation annotation in _annotations)
+        {
+            if (!IsAnnotationOnActivePage(annotation) || annotation.Points.Count < 2)
+                continue;
+
+            ConsiderPolyline(AnnotationSnapPoints(annotation), closed: false, includeEndpoints: true);
+        }
+
+        for (int i = 0; i < segments.Count; i++)
+        {
+            for (int j = i + 1; j < segments.Count; j++)
+            {
+                SnapSegment a = segments[i];
+                SnapSegment b = segments[j];
+                if (SharesEndpoint(a, b))
+                    continue;
+
+                if (TrySegmentIntersectionPoint(a.Start, a.End, b.Start, b.End, out SKPoint intersection))
+                    Consider(intersection, "intersection");
+            }
         }
 
         snapped = bestPoint;
@@ -489,5 +526,33 @@ public sealed partial class PdfViewport
 
     private static SKPoint Midpoint(SKPoint a, SKPoint b) =>
         new((a.X + b.X) / 2f, (a.Y + b.Y) / 2f);
+
+    private static IReadOnlyList<SKPoint> AnnotationSnapPoints(PageAnnotation annotation)
+    {
+        if (annotation.Points.Count < 2)
+            return annotation.Points;
+
+        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        if (kind != "rectangle")
+            return annotation.Points.Take(2).ToList();
+
+        SKRect rect = NormalizeRect(annotation.Points[0], annotation.Points[1]);
+        return
+        [
+            new SKPoint(rect.Left, rect.Top),
+            new SKPoint(rect.Right, rect.Top),
+            new SKPoint(rect.Right, rect.Bottom),
+            new SKPoint(rect.Left, rect.Bottom),
+            new SKPoint(rect.Left, rect.Top),
+        ];
+    }
+
+    private static bool SharesEndpoint(SnapSegment left, SnapSegment right) =>
+        DistanceSquared(left.Start, right.Start) <= 0.0001f ||
+        DistanceSquared(left.Start, right.End) <= 0.0001f ||
+        DistanceSquared(left.End, right.Start) <= 0.0001f ||
+        DistanceSquared(left.End, right.End) <= 0.0001f;
+
+    private sealed record SnapSegment(SKPoint Start, SKPoint End);
 
 }

@@ -59,9 +59,11 @@ public partial class MainWindow
         string point = $"PDF {request.PdfX:F0}, {request.PdfY:F0}";
         menu.Items.Add(new MenuItem
         {
-            Header = request.Measurement == null
-                ? $"AI Assist - {_currentPage.Name} @ {point}"
-                : $"Measurement AI - {request.Measurement.MType} @ {point}",
+            Header = request.Measurement != null
+                ? $"Measurement AI - {request.Measurement.MType} @ {point}"
+                : request.Annotation != null
+                    ? $"Markup - {MarkupTitle(request.Annotation)} @ {point}"
+                    : $"AI Assist - {_currentPage.Name} @ {point}",
             IsEnabled = false,
         });
         menu.Items.Add(new Separator());
@@ -72,15 +74,21 @@ public partial class MainWindow
         AddMeasurementClipboardMenuItems(menu, request);
         menu.Items.Add(new Separator());
 
-        if (request.Measurement == null)
-        {
-            AddPdfAiMenuItems(menu, request);
-        }
-        else
+        if (request.Measurement != null)
         {
             AddMeasurementEditMenuItems(menu, request);
             menu.Items.Add(new Separator());
             AddMeasurementAiMenuItems(menu, request);
+        }
+        else if (request.Annotation != null)
+        {
+            AddAnnotationEditMenuItems(menu, request);
+            menu.Items.Add(new Separator());
+            AddPdfAiMenuItems(menu, request);
+        }
+        else
+        {
+            AddPdfAiMenuItems(menu, request);
         }
 
         menu.Items.Add(new Separator());
