@@ -15,6 +15,7 @@ publish/
 *.bak
 desktop.ini
 .folder_icon.ico
+*.md
 
 __pycache__/
 *.pyc
