@@ -37,6 +37,9 @@ public partial class MainWindow
                 },
             },
         };
+        VirtualizingPanel.SetIsVirtualizing(_estimateList, true);
+        VirtualizingPanel.SetVirtualizationMode(_estimateList, VirtualizationMode.Recycling);
+        ScrollViewer.SetCanContentScroll(_estimateList, true);
         ScrollViewer.SetHorizontalScrollBarVisibility(_estimateList, ScrollBarVisibility.Auto);
         ScrollViewer.SetVerticalScrollBarVisibility(_estimateList, ScrollBarVisibility.Auto);
         _estimateList.SelectionChanged += OnEstimateSelectionChanged;
@@ -81,10 +84,21 @@ public partial class MainWindow
         estimateToolbar.Children.Add(estimateActions);
         estimateToolbar.Children.Add(_estimateFilterBox);
 
+        _estimateSummaryText = new TextBlock
+        {
+            Text = "Estimate: no measured rows",
+            Margin = new Thickness(2, 4, 2, 0),
+            FontSize = 11,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        _estimateSummaryText.SetResourceReference(Control.ForegroundProperty, "SecondaryForegroundBrush");
+
         var estimatePanel = new DockPanel { Margin = new Thickness(2) };
         estimatePanel.SetResourceReference(Panel.BackgroundProperty, "PanelBackgroundBrush");
         DockPanel.SetDock(estimateToolbar, Dock.Top);
+        DockPanel.SetDock(_estimateSummaryText, Dock.Bottom);
         estimatePanel.Children.Add(estimateToolbar);
+        estimatePanel.Children.Add(_estimateSummaryText);
         estimatePanel.Children.Add(_estimateList);
 
         var massingPanel = BuildMassingDraftPanel();
@@ -134,6 +148,21 @@ public partial class MainWindow
         };
         button.Click += (_, _) => action();
         return button;
+    }
+
+    private void UpdateEstimateSummaryText(int itemRows, int detailRows, double visibleCost, bool currentSheetOnly, string filter)
+    {
+        if (_estimateSummaryText == null)
+            return;
+
+        string scope = currentSheetOnly ? "Sheet estimate" : "Estimate";
+        string filterText = string.IsNullOrWhiteSpace(filter) ? "" : " filtered";
+        string costText = visibleCost > 0
+            ? $", cost {visibleCost.ToString("F2", CultureInfo.InvariantCulture)}"
+            : "";
+        _estimateSummaryText.Text = itemRows == 0
+            ? $"{scope}: no measured rows{filterText}"
+            : $"{scope}: {itemRows} item(s), {detailRows} section/count row(s){costText}{filterText}";
     }
 
     private void OpenEstimatingWindow()

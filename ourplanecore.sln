@@ -4,6 +4,8 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ourplanecore", "ourplanecore.csproj", "{148ACBC1-F40C-9D16-330C-F257BF90FCED}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OurPlaneCore.Tests", "Tests\OurPlaneCore.Tests.csproj", "{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{148ACBC1-F40C-9D16-330C-F257BF90FCED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{148ACBC1-F40C-9D16-330C-F257BF90FCED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{148ACBC1-F40C-9D16-330C-F257BF90FCED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

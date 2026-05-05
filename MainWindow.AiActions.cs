@@ -1426,9 +1426,9 @@ public partial class MainWindow
     private static string AiActionGeometryStatus(string measurementType, int pointCount) =>
         measurementType switch
         {
-            "point" => "Needs at least 1 point",
-            "area" => $"Needs 3+ points; has {pointCount}",
-            _ => $"Needs 2+ points; has {pointCount}",
+            "point" => "Needs at least 1 count mark",
+            "area" => $"Needs 3+ vertices; has {pointCount}",
+            _ => $"Needs 2+ vertices; has {pointCount}",
         };
 
     private static string AiActionPageLabel(

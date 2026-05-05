@@ -427,6 +427,7 @@ public static class OurPlaneCoreJobStore
             JoistType = ReadProperty(folder, "JoistType") ?? "",
             JoistSpacingInches = ParsePositiveDouble(ReadProperty(folder, "JoistSpacingInches"), 16),
             JoistDirectionDegrees = ParseDouble(ReadProperty(folder, "JoistDirectionDegrees")),
+            JoistPitch = JoistTakeoffCalculator.NormalizePitch(ReadProperty(folder, "JoistPitch")),
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(ReadProperty(folder, "JoistLengthRounding")),
             JoistShowLabels = ParseBool(ReadProperty(folder, "JoistShowLabels")),
         };
@@ -450,6 +451,7 @@ public static class OurPlaneCoreJobStore
         SetProperty(item.FolderPath, "JoistType", item.JoistType ?? "");
         SetProperty(item.FolderPath, "JoistSpacingInches", Math.Max(0.001, item.JoistSpacingInches).ToString("G17", CultureInfo.InvariantCulture));
         SetProperty(item.FolderPath, "JoistDirectionDegrees", item.JoistDirectionDegrees.ToString("G17", CultureInfo.InvariantCulture));
+        SetProperty(item.FolderPath, "JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch));
         SetProperty(item.FolderPath, "JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding));
         SetProperty(item.FolderPath, "JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture));
         SetProperty(item.FolderPath, "MeasurementCount", item.Measurements.Count.ToString());
@@ -476,6 +478,7 @@ public static class OurPlaneCoreJobStore
             measurement.JoistSpacingInches = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
             if (!measurement.JoistDirectionLocked)
                 measurement.JoistDirectionDegrees = item.JoistDirectionDegrees;
+            measurement.JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch);
             measurement.JoistLengthRounding = rounding;
             measurement.JoistShowLabels = item.JoistShowLabels;
         }

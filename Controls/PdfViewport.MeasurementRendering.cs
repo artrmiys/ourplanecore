@@ -776,12 +776,13 @@ public sealed partial class PdfViewport
 
         if (_snapPreview.HasValue)
         {
+            SKPoint point = _snapPreview.Value;
             float half = SnapMarkerScreenPx / Math.Max(_zoom, 0.001f);
             var rect = new SKRect(
-                _snapPreview.Value.X - half,
-                _snapPreview.Value.Y - half,
-                _snapPreview.Value.X + half,
-                _snapPreview.Value.Y + half);
+                point.X - half,
+                point.Y - half,
+                point.X + half,
+                point.Y + half);
             using var snapFill = new SKPaint
             {
                 Color = new SKColor(0xE5, 0x39, 0x35, 80),
@@ -795,8 +796,35 @@ public sealed partial class PdfViewport
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
             };
-            canvas.DrawRect(rect, snapFill);
-            canvas.DrawRect(rect, snapStroke);
+            if (string.Equals(_snapPreviewKind, "midpoint", StringComparison.OrdinalIgnoreCase))
+            {
+                using var diamond = new SKPath();
+                diamond.MoveTo(point.X, point.Y - half);
+                diamond.LineTo(point.X + half, point.Y);
+                diamond.LineTo(point.X, point.Y + half);
+                diamond.LineTo(point.X - half, point.Y);
+                diamond.Close();
+                canvas.DrawPath(diamond, snapFill);
+                canvas.DrawPath(diamond, snapStroke);
+            }
+            else
+            {
+                canvas.DrawRect(rect, snapFill);
+                canvas.DrawRect(rect, snapStroke);
+            }
+
+            string labelKind = string.Equals(_snapPreviewKind, "midpoint", StringComparison.OrdinalIgnoreCase)
+                ? "mid"
+                : "end";
+            string label = $"{labelKind} {point.X:F0},{point.Y:F0}";
+            float textSize = 10f / Math.Max(_zoom, 0.001f);
+            using var snapText = new SKPaint
+            {
+                Color = new SKColor(0xE5, 0x39, 0x35),
+                IsAntialias = true,
+                TextSize = textSize,
+            };
+            canvas.DrawText(label, point.X + half * 1.6f, point.Y - half * 1.2f, snapText);
         }
 
         if (_boxSelecting)

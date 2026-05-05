@@ -115,7 +115,7 @@ public partial class MainWindow
 
     private void OpenJob(string rootPath, string? initialPageFolder = null)
     {
-        SaveCurrentPageScale();
+        PrepareCurrentJobForSwitch();
         _currentJob = OurPlaneCoreJobStore.LoadJob(rootPath);
         _currentPage = null;
         _currentPdfPath = "";
@@ -150,6 +150,7 @@ public partial class MainWindow
         AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
         AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
         SaveAppSettings();
+        HandleOpenedJobRecovery();
         QueueRecentJobThumbnailGeneration(_currentJob);
         LoadPersistedMarkerVisibility();
         if (ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)

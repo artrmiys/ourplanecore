@@ -516,7 +516,42 @@ public partial class MainWindow
             }
         }
 
+        AppendOpeningProjectionFeedbackToPrompt(sb);
+
         return sb.ToString();
+    }
+
+    private void AppendOpeningProjectionFeedbackToPrompt(StringBuilder sb)
+    {
+        if (_currentJob == null)
+            return;
+
+        IReadOnlyList<SmartMarkerFeedbackRecord> feedback = SmartLearningStore.LoadProjectMarkerFeedback(_currentJob)
+            .Where(record => string.Equals(record.EventType, "3d_opening_projection_review", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(record => record.CreatedAtUtc)
+            .Take(12)
+            .ToList();
+        if (feedback.Count == 0)
+            return;
+
+        sb.AppendLine();
+        sb.AppendLine("Recent reviewed opening projection feedback:");
+        foreach (SmartMarkerFeedbackRecord record in feedback)
+        {
+            string outcome = string.IsNullOrWhiteSpace(record.Outcome) ? "reviewed" : record.Outcome.Trim();
+            string markerType = string.IsNullOrWhiteSpace(record.SourceMarkerType) ? "opening_sample" : record.SourceMarkerType.Trim();
+            string page = string.IsNullOrWhiteSpace(record.Page) ? "-" : record.Page.Trim();
+            string notes = string.IsNullOrWhiteSpace(record.Notes) ? "-" : record.Notes.Trim();
+            sb.AppendLine(string.Format(
+                CultureInfo.InvariantCulture,
+                "- {0}: {1} on {2}; marker={3}; confidence={4:P0}; notes={5}",
+                outcome,
+                record.Label,
+                page,
+                markerType,
+                record.Confidence,
+                notes));
+        }
     }
 
     private static bool IsRoofRecognitionSourceMarker(SmartAiMarker marker) =>

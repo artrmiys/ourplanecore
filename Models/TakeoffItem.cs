@@ -16,6 +16,7 @@ public sealed class TakeoffItem
     public string JoistType { get; set; } = "";
     public double JoistSpacingInches { get; set; } = 16;
     public double JoistDirectionDegrees { get; set; }
+    public string JoistPitch { get; set; } = "";
     public string JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool JoistShowLabels { get; set; }
 

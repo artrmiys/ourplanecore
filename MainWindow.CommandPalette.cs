@@ -74,7 +74,7 @@ public partial class MainWindow
         Add("tool.select", "Select Tool", "Tools", "E", "Use box selection and measurement editing.");
         Add("tool.pan", "Pan Tool", "Tools", "V", "Use left-button panning; right-button pan still works.");
         Add("tool.scale", "Scale Tool", "Tools", "S", "Draw a calibration line for sheet scale.");
-        Add("tool.count", "Count Tool", "Tools", "P", "Record count points into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
+        Add("tool.count", "Count Tool", "Tools", "P", "Record count marks into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.line", "Line Tool", "Tools", "L", "Record line measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.area", "Area Tool", "Tools", "A", "Record area measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.toggleRecord", "Toggle Record", "Tools", "R", "Toggle digitizer record mode for the current drawing tool.", hasJob && hasPage, "Open a job and select a page first.");

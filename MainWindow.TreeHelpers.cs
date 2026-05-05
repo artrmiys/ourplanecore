@@ -1019,6 +1019,9 @@ public partial class MainWindow
             bool currentSheetOnly = _estimateCurrentSheetOnlyBox?.IsChecked == true && _currentPage != null;
             _estimateList.Items.Clear();
             EstimateDisplayRow? selectedRow = null;
+            int itemRows = 0;
+            int detailRows = 0;
+            double visibleCost = 0;
             foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
             {
                 var scopedMeasurements = currentSheetOnly
@@ -1036,6 +1039,10 @@ public partial class MainWindow
                 if (!itemMatches && visibleMeasurements.Count == 0)
                     continue;
 
+                string costText = currentSheetOnly ? CostText(item, scopedMeasurements) : CostText(item);
+                if (double.TryParse(costText, NumberStyles.Float, CultureInfo.InvariantCulture, out double cost))
+                    visibleCost += cost;
+
                 _estimateList.Items.Add(new EstimateDisplayRow(
                     item.Name,
                     currentSheetOnly ? $"{TakeoffTypeDisplay(item)} / {_currentPage?.Name}" : TakeoffTypeDisplay(item),
@@ -1043,10 +1050,11 @@ public partial class MainWindow
                     currentSheetOnly ? SheetLegendQuantityText(item, scopedMeasurements) : QuantityText(item),
                     TakeoffUnitText(item),
                     UnitPriceText(item),
-                    currentSheetOnly ? CostText(item, scopedMeasurements) : CostText(item),
+                    costText,
                     "",
                     item,
                     null));
+                itemRows++;
                 for (int i = 0; i < item.Measurements.Count; i++)
                 {
                     Measurement measurement = item.Measurements[i];
@@ -1065,10 +1073,13 @@ public partial class MainWindow
                         item,
                         measurement);
                     _estimateList.Items.Add(row);
+                    detailRows++;
                     if (selectedMeasurement != null && ReferenceEquals(selectedMeasurement, measurement))
                         selectedRow = row;
                 }
             }
+
+            UpdateEstimateSummaryText(itemRows, detailRows, visibleCost, currentSheetOnly, filter);
 
             if (selectedRow != null)
             {
@@ -1220,7 +1231,7 @@ public partial class MainWindow
                 : m.Name;
             string detail = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
                 ? "1 count"
-                : $"{m.Points.Count} point(s)";
+                : $"{m.Points.Count} vertices";
             lines.Add($"{name}: {page}, {detail}");
             if (!string.IsNullOrWhiteSpace(m.Notes))
                 lines.Add($"  Notes: {m.Notes}");

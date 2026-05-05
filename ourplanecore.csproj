@@ -28,5 +28,10 @@
     <None Include="Tools\pdf_layers_helper.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+    <None Remove="Tests\**\*" />
+  </ItemGroup>
+
 </Project>
 

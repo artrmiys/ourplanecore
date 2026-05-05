@@ -72,6 +72,7 @@ public partial class MainWindow : Window
     private Button? _estimateGoToPageButton;
     private Button? _estimatePropertiesButton;
     private Button? _estimateOpenWindowButton;
+    private TextBlock? _estimateSummaryText;
     private EstimatingWindow? _estimatingWindow;
     private IReadOnlyList<PdfMetadataPageResult> _sheetManagerMetadataResults = [];
     private TextBox? _massingDraftTextBox;
@@ -351,6 +352,7 @@ public partial class MainWindow : Window
         SaveCurrentPageAnnotations();
         base.OnClosed(e);
         FlushTakeoffAutosaves();
+        ClearJobRecoveryLock();
         PdfLayerRenderService.StopWorker();
     }
 }

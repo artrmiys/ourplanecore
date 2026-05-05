@@ -299,7 +299,11 @@ public partial class MainWindow
             if (!string.IsNullOrEmpty(_currentPdfPath))
                 ProjectFile.Save(_currentPdfPath, _viewport.ScaleMetersPerPt, _viewport.UnitMode, _takeoffItems);
 
-            TxtStatus.Text = $"Saved takeoffs -> {_currentJob.TakeoffsRoot}";
+            string? snapshotPath = SaveJobRecoverySnapshot("manual_save");
+            string snapshotText = string.IsNullOrWhiteSpace(snapshotPath)
+                ? ""
+                : $" Snapshot: {Path.GetRelativePath(_currentJob.RootPath, snapshotPath)}";
+            TxtStatus.Text = $"Saved takeoffs -> {_currentJob.TakeoffsRoot}.{snapshotText}";
         }
         catch (Exception ex)
         {
@@ -1200,6 +1204,10 @@ public partial class MainWindow
                 Math.Abs(item.JoistSpacingInches - joistEdit.SpacingInches) > 0.0001 ||
                 Math.Abs(item.JoistDirectionDegrees - joistEdit.DirectionDegrees) > 0.0001 ||
                 !string.Equals(
+                    JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
+                    JoistTakeoffCalculator.NormalizePitch(joistEdit.Pitch),
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(
                     JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                     JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding),
                     StringComparison.OrdinalIgnoreCase) ||
@@ -1209,6 +1217,7 @@ public partial class MainWindow
             item.JoistType = joistEdit.JoistType.Trim();
             item.JoistSpacingInches = joistEdit.SpacingInches > 0 ? joistEdit.SpacingInches : 16;
             item.JoistDirectionDegrees = joistEdit.DirectionDegrees;
+            item.JoistPitch = JoistTakeoffCalculator.NormalizePitch(joistEdit.Pitch);
             item.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding);
             item.JoistShowLabels = joistEdit.ShowLabels;
             OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
@@ -1669,6 +1678,7 @@ public partial class MainWindow
             item.JoistType,
             item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16,
             item.JoistDirectionDegrees,
+            JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
             JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
             item.JoistShowLabels);
 
@@ -1710,7 +1720,7 @@ public partial class MainWindow
         };
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 6; i++)
             joistPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         AddLabeledTextBox(joistPanel, 0, "Joist type:", out TextBox joistTypeBox, item.JoistType);
@@ -1720,13 +1730,20 @@ public partial class MainWindow
             "O.C. spacing (in):",
             out TextBox joistSpacingBox,
             (item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16).ToString("G", CultureInfo.InvariantCulture));
+        AddLabeledTextBox(
+            joistPanel,
+            2,
+            "Pitch (rise:run):",
+            out TextBox joistPitchBox,
+            JoistTakeoffCalculator.NormalizePitch(item.JoistPitch));
+        joistPitchBox.ToolTip = "Roof pitch as rise:run, e.g. 3:12. Blank or 0:12 is flat.";
         var directionLabel = new TextBlock
         {
             Text = "Joist direction:",
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 3, 8, 3),
         };
-        Grid.SetRow(directionLabel, 2);
+        Grid.SetRow(directionLabel, 3);
         Grid.SetColumn(directionLabel, 0);
         joistPanel.Children.Add(directionLabel);
         var joistDirectionBox = new TextBox
@@ -1736,7 +1753,7 @@ public partial class MainWindow
             Width = 78,
             ToolTip = "Direction is set by drawing a two-point line parallel to the joists after selecting or drawing an Area.",
         };
-        Grid.SetRow(joistDirectionBox, 2);
+        Grid.SetRow(joistDirectionBox, 3);
         Grid.SetColumn(joistDirectionBox, 1);
         joistPanel.Children.Add(joistDirectionBox);
 
@@ -1746,7 +1763,7 @@ public partial class MainWindow
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 3, 8, 3),
         };
-        Grid.SetRow(roundingLabel, 3);
+        Grid.SetRow(roundingLabel, 4);
         Grid.SetColumn(roundingLabel, 0);
         joistPanel.Children.Add(roundingLabel);
         var roundingBox = new ComboBox
@@ -1781,7 +1798,7 @@ public partial class MainWindow
         }
         if (roundingBox.SelectedIndex < 0)
             roundingBox.SelectedIndex = 0;
-        Grid.SetRow(roundingBox, 3);
+        Grid.SetRow(roundingBox, 4);
         Grid.SetColumn(roundingBox, 1);
         joistPanel.Children.Add(roundingBox);
 
@@ -1792,7 +1809,7 @@ public partial class MainWindow
             Margin = new Thickness(0, 3, 0, 3),
             ToolTip = "When off, the area label still shows count / length.",
         };
-        Grid.SetRow(joistLabelsBox, 4);
+        Grid.SetRow(joistLabelsBox, 5);
         Grid.SetColumn(joistLabelsBox, 1);
         joistPanel.Children.Add(joistLabelsBox);
 
@@ -1909,6 +1926,7 @@ public partial class MainWindow
             bool joistEnabled = isAreaTakeoff && joistEnabledBox.IsChecked == true;
             double joistSpacing = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
             double joistDirection = item.JoistDirectionDegrees;
+            string joistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch);
             string joistRounding = JoistTakeoffCalculator.RoundingNone;
             if (roundingBox.SelectedItem is ComboBoxItem selectedRoundingItem &&
                 selectedRoundingItem.Tag is string selectedRoundingValue)
@@ -1932,6 +1950,14 @@ public partial class MainWindow
                                     MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
+
+                if (!JoistTakeoffCalculator.TryNormalizePitch(joistPitchBox.Text, out joistPitch))
+                {
+                    MessageBox.Show("Enter roof pitch as rise:run, e.g. 3:12. Leave blank for flat.",
+                                    "Takeoff Item Properties",
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
             }
 
             resultName = nameBox.Text.Trim();
@@ -1943,6 +1969,7 @@ public partial class MainWindow
                 joistTypeBox.Text.Trim(),
                 joistSpacing,
                 joistDirection,
+                joistPitch,
                 joistRounding,
                 joistLabelsBox.IsChecked == true);
             dialog.DialogResult = true;

@@ -70,6 +70,7 @@ public sealed partial class PdfViewport : SKElement
     private readonly List<SKPoint>  _drawPts    = [];   // in-progress PDF-space points
     private SKPoint?                _rubberEnd;          // rubber-band endpoint
     private SKPoint?                _snapPreview;
+    private string                  _snapPreviewKind = "";
     private SKPoint?                _lastPointerPdf;
     private bool                    _boxSelecting;
     private SKPoint                 _boxSelectStartPdf;
@@ -650,7 +651,7 @@ public sealed partial class PdfViewport : SKElement
         int minimumPoints = measurement.MType == "area" ? 3 : 2;
         if (measurement.Points.Count <= minimumPoints)
         {
-            PostStatus($"{ToolTitle(measurement.MType)} needs at least {minimumPoints} points.");
+            PostStatus($"{ToolTitle(measurement.MType)} needs at least {minimumPoints} vertices.");
             return false;
         }
 

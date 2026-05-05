@@ -360,10 +360,10 @@ public sealed partial class PdfViewport
 
     private SKPoint ResolveDigitizerPoint(SKPoint rawPdf, bool updatePreview)
     {
-        if (SnapEnabled && TryFindSnapPoint(rawPdf, out SKPoint snapped))
+        if (SnapEnabled && TryFindSnapPoint(rawPdf, out SKPoint snapped, out string snapKind))
         {
             if (updatePreview)
-                SetSnapPreview(snapped);
+                SetSnapPreview(snapped, snapKind);
             return snapped;
         }
 
@@ -419,14 +419,15 @@ public sealed partial class PdfViewport
             anchor.Y + MathF.Sin(snappedAngle) * length);
     }
 
-    private bool TryFindSnapPoint(SKPoint rawPdf, out SKPoint snapped)
+    private bool TryFindSnapPoint(SKPoint rawPdf, out SKPoint snapped, out string snapKind)
     {
         float tolerance = SnapToleranceScreenPx / Math.Max(_zoom, 0.001f);
         float best = tolerance * tolerance;
         SKPoint bestPoint = default;
+        string bestKind = "";
         bool found = false;
 
-        void Consider(SKPoint candidate)
+        void Consider(SKPoint candidate, string kind)
         {
             float distance = DistanceSquared(rawPdf, candidate);
             if (distance >= best)
@@ -434,7 +435,16 @@ public sealed partial class PdfViewport
 
             best = distance;
             bestPoint = candidate;
+            bestKind = kind;
             found = true;
+        }
+
+        void ConsiderSegmentMidpoints(IReadOnlyList<SKPoint> points, bool closed)
+        {
+            for (int i = 1; i < points.Count; i++)
+                Consider(Midpoint(points[i - 1], points[i]), "midpoint");
+            if (closed && points.Count > 2)
+                Consider(Midpoint(points[^1], points[0]), "midpoint");
         }
 
         for (int i = 0; i < _drawPts.Count; i++)
@@ -442,11 +452,12 @@ public sealed partial class PdfViewport
             if (i == _drawPts.Count - 1 && _tool is ViewerTool.Line or ViewerTool.Area)
                 continue;
 
-            Consider(_drawPts[i]);
+            Consider(_drawPts[i], "endpoint");
         }
+        ConsiderSegmentMidpoints(_drawPts, _tool == ViewerTool.Area);
 
         foreach (SKPoint point in _scalePts)
-            Consider(point);
+            Consider(point, "endpoint");
 
         foreach (Measurement measurement in _measurements)
         {
@@ -454,21 +465,29 @@ public sealed partial class PdfViewport
                 continue;
 
             foreach (SKPoint point in measurement.Points)
-                Consider(point);
+                Consider(point, "endpoint");
+            if (measurement.MType is "line" or "area")
+                ConsiderSegmentMidpoints(measurement.Points, measurement.MType == "area");
         }
 
         snapped = bestPoint;
+        snapKind = bestKind;
         return found;
     }
 
-    private void SetSnapPreview(SKPoint? point)
+    private void SetSnapPreview(SKPoint? point, string kind = "")
     {
         bool changed = (_snapPreview.HasValue != point.HasValue) ||
                        (_snapPreview.HasValue && point.HasValue &&
-                        DistanceSquared(_snapPreview.Value, point.Value) > 0.001f);
+                        DistanceSquared(_snapPreview.Value, point.Value) > 0.001f) ||
+                       !string.Equals(_snapPreviewKind, kind, StringComparison.OrdinalIgnoreCase);
         _snapPreview = point;
+        _snapPreviewKind = point.HasValue ? kind : "";
         if (changed)
             RequestRepaint();
     }
+
+    private static SKPoint Midpoint(SKPoint a, SKPoint b) =>
+        new((a.X + b.X) / 2f, (a.Y + b.Y) / 2f);
 
 }

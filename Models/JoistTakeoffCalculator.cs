@@ -12,6 +12,7 @@ public static class JoistTakeoffCalculator
     public const string RoundingNearestFoot = "NearestFoot";
     public const string RoundingNearestEvenFoot = "NearestEvenFoot";
     public const string RoundingNearestTwoFeet = "NearestTwoFeet";
+    private const double DefaultPitchRun = 12.0;
 
     private const double MetersPerFoot = 0.3048;
     private const double MetersPerInch = 0.0254;
@@ -33,7 +34,8 @@ public static class JoistTakeoffCalculator
             scale,
             measurement.JoistSpacingInches,
             measurement.JoistDirectionDegrees,
-            measurement.JoistLengthRounding);
+            measurement.JoistLengthRounding,
+            measurement.JoistPitch);
     }
 
     public static JoistLayoutResult Calculate(
@@ -41,10 +43,15 @@ public static class JoistTakeoffCalculator
         double scaleMetersPerPt,
         double spacingInches,
         double directionDegrees,
-        string lengthRounding)
+        string lengthRounding,
+        string pitch = "")
     {
         if (polygon.Count < 3 || scaleMetersPerPt <= 0 || spacingInches <= 0)
             return Empty;
+
+        if (!TryParsePitchFactor(pitch, out double pitchFactor))
+            pitchFactor = 1;
+        string normalizedPitch = NormalizePitch(pitch);
 
         double spacingPt = spacingInches * MetersPerInch / scaleMetersPerPt;
         if (spacingPt <= ProjectionEpsilon)
@@ -85,7 +92,7 @@ public static class JoistTakeoffCalculator
                 if (lengthPt <= ProjectionEpsilon)
                     continue;
 
-                double rawMeters = lengthPt * scaleMetersPerPt;
+                double rawMeters = lengthPt * scaleMetersPerPt * pitchFactor;
                 double rawFeet = rawMeters / MetersPerFoot;
                 double orderFeet = RoundLengthFeet(rawFeet, normalizedRounding);
                 segments.Add(new JoistSegment(
@@ -111,7 +118,9 @@ public static class JoistTakeoffCalculator
             spacingSpanMeters,
             spacingMeters,
             offsets.Count,
-            NormalizeDirectionDegrees(directionDegrees));
+            NormalizeDirectionDegrees(directionDegrees),
+            normalizedPitch,
+            pitchFactor);
     }
 
     private static IReadOnlyList<double> JoistOffsets(double min, double max, double spacingPt)
@@ -173,6 +182,9 @@ public static class JoistTakeoffCalculator
         {
             $"{name} {FormatLegendLength(layout.TotalLengthMeters, unitMode)} ({layout.Count} pcs)",
         };
+        if (!string.IsNullOrWhiteSpace(layout.Pitch))
+            lines.Add($"Pitch {layout.Pitch}");
+
         var allGroups = LengthGroups(layout, unitMode).ToList();
         // Show every distinct length group on the canvas label. Previously the
         // list was hard-capped at 4 entries via Take(5), so a layout with five
@@ -230,7 +242,10 @@ public static class JoistTakeoffCalculator
         string spacing = unitMode == UnitMode.Imperial
             ? $"{(layout.SpacingMeters / MetersPerInch).ToString("0.##", CultureInfo.InvariantCulture)} in"
             : $"{layout.SpacingMeters.ToString("0.###", CultureInfo.InvariantCulture)} m";
-        return $"joists {layout.Count} pcs, spacing span {span}, spacing {spacing} o.c., candidate lines {layout.CandidateLineCount}";
+        string pitch = string.IsNullOrWhiteSpace(layout.Pitch)
+            ? ""
+            : $", pitch {layout.Pitch}, slope factor {layout.PitchFactor.ToString("0.###", CultureInfo.InvariantCulture)}";
+        return $"joists {layout.Count} pcs, spacing span {span}, spacing {spacing} o.c., candidate lines {layout.CandidateLineCount}{pitch}";
     }
 
     public static string FormatCompactLength(double meters, UnitMode unitMode)
@@ -356,6 +371,41 @@ public static class JoistTakeoffCalculator
             _ => "None",
         };
 
+    public static string NormalizePitch(string? value) =>
+        TryNormalizePitch(value, out string normalized) ? normalized : "";
+
+    public static bool TryNormalizePitch(string? value, out string normalized)
+    {
+        normalized = "";
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (!TryParsePitchParts(value, out double rise, out double run))
+            return false;
+
+        if (rise <= 0)
+            return true;
+
+        normalized = $"{FormatPitchPart(rise)}:{FormatPitchPart(run)}";
+        return true;
+    }
+
+    public static bool TryParsePitchFactor(string? value, out double factor)
+    {
+        factor = 1;
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (!TryParsePitchParts(value, out double rise, out double run))
+            return false;
+
+        if (rise <= 0)
+            return true;
+
+        factor = Math.Sqrt(rise * rise + run * run) / run;
+        return double.IsFinite(factor) && factor > 0;
+    }
+
     private static double RoundLengthFeet(double feet, string lengthRounding)
     {
         if (feet <= 0)
@@ -464,6 +514,63 @@ public static class JoistTakeoffCalculator
         return $"{feet.ToString("0.##", CultureInfo.InvariantCulture)} ft";
     }
 
+    private static bool TryParsePitchParts(string? value, out double rise, out double run)
+    {
+        rise = 0;
+        run = DefaultPitchRun;
+        string text = (value ?? "")
+            .Trim()
+            .ToLowerInvariant()
+            .Replace(",", ".", StringComparison.Ordinal)
+            .Replace("\"", "", StringComparison.Ordinal)
+            .Replace("'", "", StringComparison.Ordinal)
+            .Replace("pitch", "", StringComparison.Ordinal)
+            .Replace("slope", "", StringComparison.Ordinal)
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+
+        text = text
+            .Replace(" in ", ":", StringComparison.Ordinal)
+            .Replace(" on ", ":", StringComparison.Ordinal);
+
+        char separator = text.Contains(':', StringComparison.Ordinal)
+            ? ':'
+            : text.Contains('/', StringComparison.Ordinal)
+                ? '/'
+                : '\0';
+
+        if (separator == '\0')
+        {
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out rise))
+                return false;
+            run = DefaultPitchRun;
+            return IsValidPitchParts(rise, run);
+        }
+
+        string[] parts = text.Split(separator, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+            return false;
+
+        if (!double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out rise) ||
+            !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out run))
+        {
+            return false;
+        }
+
+        return IsValidPitchParts(rise, run);
+    }
+
+    private static bool IsValidPitchParts(double rise, double run) =>
+        double.IsFinite(rise) &&
+        double.IsFinite(run) &&
+        rise >= 0 &&
+        run > 0;
+
+    private static string FormatPitchPart(double value) =>
+        value.ToString("0.###", CultureInfo.InvariantCulture);
+
     private static double PolygonAreaPt(IReadOnlyList<SKPoint> points)
     {
         double area = 0;
@@ -489,7 +596,9 @@ public sealed record JoistLayoutResult(
     double SpacingSpanMeters = 0,
     double SpacingMeters = 0,
     int CandidateLineCount = 0,
-    double DirectionDegrees = 0)
+    double DirectionDegrees = 0,
+    string Pitch = "",
+    double PitchFactor = 1)
 {
     public int Count => Segments.Count;
 }

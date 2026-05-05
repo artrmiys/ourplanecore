@@ -27,6 +27,7 @@ public partial class MainWindow
         string JoistType,
         double SpacingInches,
         double DirectionDegrees,
+        string Pitch,
         string LengthRounding,
         bool ShowLabels);
     private enum MeasurementPasteMode { SameTakeoffs, NewTakeoffs }

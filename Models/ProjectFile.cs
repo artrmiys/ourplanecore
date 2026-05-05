@@ -22,6 +22,7 @@ internal sealed class ProjectFile
         public string          JoistType { get; set; } = "";
         public double          JoistSpacingInches { get; set; } = 16;
         public double          JoistDirectionDegrees { get; set; }
+        public string          JoistPitch { get; set; } = "";
         public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
         public bool            JoistShowLabels { get; set; }
         public List<MeasDto>   Measurements { get; set; } = [];
@@ -66,6 +67,7 @@ internal sealed class ProjectFile
                 JoistType = item.JoistType,
                 JoistSpacingInches = item.JoistSpacingInches,
                 JoistDirectionDegrees = item.JoistDirectionDegrees,
+                JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                 JoistShowLabels = item.JoistShowLabels,
             };
@@ -120,6 +122,7 @@ internal sealed class ProjectFile
                 JoistType = dto.JoistType,
                 JoistSpacingInches = dto.JoistSpacingInches > 0 ? dto.JoistSpacingInches : 16,
                 JoistDirectionDegrees = dto.JoistDirectionDegrees,
+                JoistPitch = JoistTakeoffCalculator.NormalizePitch(dto.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(dto.JoistLengthRounding),
                 JoistShowLabels = dto.JoistShowLabels,
             };
