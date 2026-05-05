@@ -16,10 +16,22 @@ public sealed class Measurement
     public string         PageFolder { get; set; }  = "";
     public string         TakeoffFolder { get; set; } = "";
     public double         ScaleMetersPerPt { get; set; }
+    public bool           JoistEnabled { get; set; }
+    public string         JoistType { get; set; } = "";
+    public double         JoistSpacingInches { get; set; } = 16;
+    public double         JoistDirectionDegrees { get; set; }
+    public bool           JoistDirectionLocked { get; set; }
+    public string         JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
+    public bool           JoistShowLabels { get; set; }
 
     public double Value(double scaleMetersPerPt)
     {
         double effectiveScale = ScaleMetersPerPt > 0 ? ScaleMetersPerPt : scaleMetersPerPt;
+        if (MType == "area" && JoistEnabled && !JoistDirectionLocked)
+            return 0;
+        if (MType == "area" && JoistEnabled)
+            return JoistTakeoffCalculator.Calculate(this, effectiveScale).TotalLengthMeters;
+
         return MType switch
         {
             "point" => Points.Count,
@@ -29,9 +41,26 @@ public sealed class Measurement
         };
     }
 
+    public double AreaValue(double scaleMetersPerPt)
+    {
+        if (MType != "area")
+            return 0;
+
+        double effectiveScale = ScaleMetersPerPt > 0 ? ScaleMetersPerPt : scaleMetersPerPt;
+        return effectiveScale > 0 ? PolygonAreaPt() * effectiveScale * effectiveScale : 0;
+    }
+
     public string Label(double scaleMetersPerPt, UnitMode unit = UnitMode.Metric)
     {
         double effectiveScale = ScaleMetersPerPt > 0 ? ScaleMetersPerPt : scaleMetersPerPt;
+        if (MType == "area" && JoistEnabled && !JoistDirectionLocked)
+            return "joists: set direction";
+        if (MType == "area" && JoistEnabled)
+            return JoistTakeoffCalculator.FormatMeasurementLabel(
+                JoistTakeoffCalculator.Calculate(this, effectiveScale),
+                unit,
+                JoistType);
+
         if (effectiveScale <= 0)
             return MType switch
             {

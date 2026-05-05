@@ -9,11 +9,28 @@ namespace SmartTakeoffs;
 public sealed class AppSettings
 {
     public string JobsRootPath { get; set; } = "";
+    public List<string> JobsRootPaths { get; set; } = [];
     public string LastJobPath { get; set; } = "";
     public string LastPageFolder { get; set; } = "";
     public string UnitMode { get; set; } = "Imperial";
     public string Theme { get; set; } = "Light";
     public string ViewportBackground { get; set; } = "#FFFFFF";
+    public bool ShowMeasurementLabels { get; set; } = true;
+    public bool ShowLineLabels { get; set; } = true;
+    public bool ShowAreaLabels { get; set; } = true;
+    public bool ShowCountLabels { get; set; }
+    public double MeasurementLabelScale { get; set; } = 1.0;
+    public bool ShowSheetLegend { get; set; } = true;
+    public string SheetLegendAnchor { get; set; } = "BottomLeft";
+    public double SheetLegendScale { get; set; } = 1.0;
+    public double SheetHeaderScale { get; set; } = 1.0;
+    public bool ScaleSheetOverlaysWithPage { get; set; } = false;
+    public bool ScaleMeasurementLabelsWithPage { get; set; } = false;
+    public bool ScaleSheetHeaderWithPage { get; set; } = false;
+    public double MassingFloorAssemblyFeet { get; set; } = SmartMassingDraftService.DefaultFloorAssemblyFeet;
+    public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
+    public double LeftPanelWidth { get; set; } = 200.0;
+    public double RightPanelWidth { get; set; } = 220.0;
     public string OpenAiModel { get; set; } = OpenAiRequestRunner.DefaultModel;
     public string FolderTemplateMode { get; set; } = "AUTO";
     public List<RecentJobInfo> RecentJobs { get; set; } = [];
@@ -78,6 +95,7 @@ public static class AppSettingsStore
 
             var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
                 ?? new AppSettings();
+            NormalizeJobsRoots(settings);
             NormalizeRecentJobs(settings);
             return settings;
         }
@@ -89,11 +107,44 @@ public static class AppSettingsStore
 
     public static void Save(AppSettings settings)
     {
+        NormalizeJobsRoots(settings);
         string? dir = Path.GetDirectoryName(SettingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
 
         File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    public static IReadOnlyList<string> CurrentJobsRootPaths(AppSettings settings)
+    {
+        NormalizeJobsRoots(settings);
+        return settings.JobsRootPaths.ToList();
+    }
+
+    public static void AddJobsRoot(AppSettings settings, string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return;
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(rootPath.Trim());
+        }
+        catch
+        {
+            fullPath = rootPath.Trim();
+        }
+
+        string key = NormalizePath(fullPath);
+        var roots = (settings.JobsRootPaths ?? [])
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Where(path => !string.Equals(NormalizePath(path), key, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        roots.Insert(0, fullPath);
+        settings.JobsRootPaths = roots;
+        settings.JobsRootPath = fullPath;
+        NormalizeJobsRoots(settings);
     }
 
     public static void AddRecentJob(AppSettings settings, string jobPath, string jobName)
@@ -228,6 +279,39 @@ public static class AppSettingsStore
         }
 
         settings.RecentJobs = TrimRecentJobsPreservingPinned(unique);
+    }
+
+    public static void NormalizeJobsRoots(AppSettings settings)
+    {
+        var roots = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddRoot(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                return;
+
+            string clean;
+            try
+            {
+                clean = Path.GetFullPath(root.Trim());
+            }
+            catch
+            {
+                clean = root.Trim();
+            }
+
+            string key = NormalizePath(clean);
+            if (seen.Add(key))
+                roots.Add(clean);
+        }
+
+        AddRoot(settings.JobsRootPath);
+        foreach (string root in settings.JobsRootPaths ?? [])
+            AddRoot(root);
+
+        settings.JobsRootPaths = roots;
+        settings.JobsRootPath = roots.FirstOrDefault() ?? "";
     }
 
     private static List<RecentJobInfo> TrimRecentJobsPreservingPinned(IReadOnlyList<RecentJobInfo> recentJobs)

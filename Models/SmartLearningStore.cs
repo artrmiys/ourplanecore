@@ -579,7 +579,16 @@ public static class SmartLearningStore
 
     public static void ApplyLearnedRules(PdfSheetMetadata metadata)
     {
-        SmartLearnedRuleSet? rules = LoadJson<SmartLearnedRuleSet>(GlobalLearnedRulesPath);
+        ApplyLearnedRules(metadata, LoadJson<SmartLearnedRuleSet>(GlobalLearnedRulesPath), "global");
+    }
+
+    public static void ApplyProjectLearnedRules(SmartTakeoffsJob job, PdfSheetMetadata metadata)
+    {
+        ApplyLearnedRules(metadata, LoadProjectLearnedRules(job), "project");
+    }
+
+    private static void ApplyLearnedRules(PdfSheetMetadata metadata, SmartLearnedRuleSet? rules, string scope)
+    {
         if (rules == null || rules.Rules.Count == 0 || string.IsNullOrWhiteSpace(metadata.SheetTitle))
             return;
 
@@ -611,7 +620,7 @@ public static class SmartLearningStore
         if (applied)
         {
             metadata.Warnings.Add(
-                $"learned rule applied: token '{rule.TitleToken}', suffix '{rule.Suffix}', support {rule.Support}");
+                $"{scope} learned rule applied: token '{rule.TitleToken}', suffix '{rule.Suffix}', support {rule.Support}");
         }
     }
 

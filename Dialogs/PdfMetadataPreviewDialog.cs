@@ -18,6 +18,7 @@ public sealed class PdfMetadataPreviewRow
     public string ProposedScale { get; init; } = "";
     public string Source { get; init; } = "";
     public string Confidence { get; init; } = "";
+    public string Reason { get; init; } = "";
     public string Warnings { get; init; } = "";
     public bool ApplyRename { get; set; }
     public bool ApplyScale { get; set; }
@@ -32,7 +33,7 @@ public sealed class PdfMetadataPreviewDialog : Window
         Rows = new ObservableCollection<PdfMetadataPreviewRow>(rows);
 
         Title = title;
-        Width = 1120;
+        Width = 1280;
         Height = 560;
         MinWidth = 860;
         MinHeight = 420;
@@ -89,6 +90,7 @@ public sealed class PdfMetadataPreviewDialog : Window
         grid.Columns.Add(TextColumn("Title", nameof(PdfMetadataPreviewRow.SheetTitle), 230));
         grid.Columns.Add(TextColumn("Source", nameof(PdfMetadataPreviewRow.Source), 90));
         grid.Columns.Add(TextColumn("Confidence", nameof(PdfMetadataPreviewRow.Confidence), 110));
+        grid.Columns.Add(TextColumn("Why", nameof(PdfMetadataPreviewRow.Reason), 320));
         grid.Columns.Add(TextColumn("Warnings", nameof(PdfMetadataPreviewRow.Warnings), 260));
         root.Children.Add(grid);
 

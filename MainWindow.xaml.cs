@@ -37,26 +37,43 @@ public partial class MainWindow : Window
     private TakeoffItem? _activeItem;
     private string _activeTakeoffParentFolder = "";
     private string _activeTool = "select";
+    private bool _updatingLayerTraceUi;
     private PagesClipboard? _pagesClipboard;
     private MeasurementClipboard? _measurementClipboard;
     private readonly HashSet<string> _pagesMultiSelection = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _pageTakeoffMultiSelection = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _takeoffsMultiSelection = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _takeoffSectionMultiSelection = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _expandedPageTreePaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _expandedTakeoffTreePaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _hiddenAiMarkerTypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<GeometryModel3D, Massing3DObjectInfo> _massing3DObjectInfo = [];
     private readonly List<PageTabState> _pageTabs = [];
     private int _lastMeasurementPageFolderRepairCount;
     private int _lastMeasurementPageFolderUnresolvedCount;
     private Point? _pagesDragStart;
+    private string? _pagesRangeAnchorPath;
+    private string? _pageTakeoffRangeAnchorKey;
+    private string? _takeoffsRangeAnchorPath;
+    private string? _takeoffSectionRangeAnchorKey;
+    private TreeViewItem? _takeoffsDragItem;
     private readonly HashSet<TakeoffItem> _pendingTakeoffAutosaves = [];
     private readonly System.Windows.Threading.DispatcherTimer _takeoffAutosaveTimer = new()
     {
         Interval = TimeSpan.FromMilliseconds(500),
     };
 
-    private readonly Dictionary<string, Button> _toolBtns;
+    private readonly Dictionary<string, RadioButton> _toolBtns;
     private ToggleButton? _recordButton;
     private ListView? _estimateList;
     private TextBox? _estimateFilterBox;
+    private CheckBox? _estimateCurrentSheetOnlyBox;
+    private Button? _estimateSelectButton;
+    private Button? _estimateGoToPageButton;
+    private Button? _estimatePropertiesButton;
+    private Button? _estimateOpenWindowButton;
+    private EstimatingWindow? _estimatingWindow;
+    private IReadOnlyList<PdfMetadataPageResult> _sheetManagerMetadataResults = [];
     private TextBox? _massingDraftTextBox;
     private ListView? _massingMarkerList;
     private Canvas? _massingPreviewCanvas;
@@ -85,13 +102,26 @@ public partial class MainWindow : Window
     private double _massing3DYaw = -38;
     private double _massing3DPitch = 28;
     private bool _syncingEstimateSelection;
+    private bool _syncingViewportSelectionFromTakeoffItem;
     private bool _updatingRecordButton;
     private bool _updatingConstraintButtons;
     private bool _updatingPageTabs;
     private bool _syncingPageTreeSelection;
     private bool _syncingTakeoffTreeSelection;
+    private bool _suppressCanvasFocusFromTakeoffSelection;
+    private bool _suppressTakeoffSelectionFromViewport;
+    private bool _suppressTreeExpansionTracking;
+    private TreeViewItem? _pageTakeoffLegendDropTarget;
+    private bool _pageTakeoffLegendDropAfter;
+    private TreeViewItem? _takeoffSectionDropTarget;
+    private bool _takeoffSectionDropAllowed;
+    private string _takeoffSectionDropStatus = "";
+    private TreeViewItem? _takeoffPositionDropTarget;
+    private bool _takeoffPositionDropAfter;
+    private bool _takeoffPositionDropAllowed;
+    private string _takeoffPositionDropStatus = "";
     private string _lastDrawingTool = "point";
-    private bool _inboxExpanded = true;
+    private bool _inboxExpanded = false;
     private double _inboxExpandedHeight = 170.0;
     private enum PagesClipboardMode { Copy, Cut }
     private sealed record PagesClipboardEntry(string SourcePath, bool IsPage);
@@ -100,6 +130,20 @@ public partial class MainWindow : Window
     private sealed record TakeoffsClipboardEntry(string SourcePath, bool IsItem);
     private sealed record TakeoffsClipboard(IReadOnlyList<TakeoffsClipboardEntry> Entries, TakeoffsClipboardMode Mode);
     private TakeoffsClipboard? _takeoffsClipboard;
+    private sealed record BulkTakeoffPropertiesEdit(
+        bool ApplyColor,
+        string Color,
+        bool ApplyUnitPrice,
+        double UnitPrice,
+        bool ApplyNotes,
+        string Notes);
+    private sealed record JoistTakeoffEdit(
+        bool Enabled,
+        string JoistType,
+        double SpacingInches,
+        double DirectionDegrees,
+        string LengthRounding,
+        bool ShowLabels);
     private enum MeasurementPasteMode { SameTakeoffs, NewTakeoffs }
     private sealed record MeasurementClipboardEntry(
         string MeasurementType,
@@ -118,9 +162,14 @@ public partial class MainWindow : Window
     private Point? _takeoffsDragStart;
     private PageTabState? _activePageTab;
     private sealed record TakeoffMeasurementNode(TakeoffItem Item, Measurement Measurement);
+    private sealed record TakeoffSectionDrag(IReadOnlyList<TakeoffMeasurementNode> Nodes);
+    private sealed record PageTakeoffNode(PageInfo Page, TakeoffItem Takeoff);
+    private sealed record PageTakeoffLegendDrag(string PageFolder, IReadOnlyList<string> TakeoffFolders);
     private sealed record AiMarkerInput(string MarkerType, string SampleKind, string Value, string Note);
     private sealed record MarkerSetInput(string Name, string Description);
     private sealed record PdfMetadataPageResult(PageInfo Page, bool Ok, PdfSheetMetadata? Metadata, string Error);
+    private static readonly string[] PageSuffixTopOrder = ["v", "wt", "ft", "sv", "sw"];
+    private static readonly string[] PageSuffixDetectionOrder = ["sec", "wt", "ft", "sv", "sw", "u", "d", "v"];
 
     private sealed class PageTabState(string pageFolder, string pageName)
     {
@@ -231,25 +280,34 @@ public partial class MainWindow : Window
         _viewport.OrthoChanged       += OnViewportOrthoChanged;
         _viewport.LayersChanged      += OnLayersChanged;
         _viewport.PdfLayersDiscovered += OnPdfLayersDiscovered;
+        _viewport.PdfLayerTraceStateChanged += RefreshPdfLayerTraceControls;
         _viewport.MeasurementAdded   += OnMeasurementAdded;
         _viewport.MeasurementRemoved += OnMeasurementRemoved;
         _viewport.MeasurementChanged += OnMeasurementChanged;
         _viewport.MeasurementSelectionChanged += OnViewportMeasurementSelectionChanged;
+        _viewport.MeasurementsSelectionChanged += OnViewportMeasurementsSelectionChanged;
+        _viewport.PageAnnotationAdded += OnPageAnnotationChanged;
+        _viewport.PageAnnotationRemoved += OnPageAnnotationChanged;
         _viewport.CopyMeasurementsRequested += CopyMeasurementsToClipboard;
         _viewport.PasteMeasurementsRequested += PasteMeasurementsFromClipboard;
         _viewport.ContextRequested   += OnViewportContextRequested;
+        _viewport.JoistDirectionCaptured += OnJoistDirectionCaptured;
         ViewportSurfaceHost.Children.Add(_viewport);
 
-        _toolBtns = new Dictionary<string, Button>
+        _toolBtns = new Dictionary<string, RadioButton>
         {
             ["pan"]   = BtnPan,
             ["select"] = BtnSelect,
             ["scale"] = BtnScale,
+            ["ruler"] = BtnRuler,
+            ["drawline"] = BtnDrawLine,
+            ["drawarrow"] = BtnDrawArrow,
+            ["drawrect"] = BtnDrawRect,
             ["point"] = BtnPoint,
             ["line"]  = BtnLine,
             ["area"]  = BtnArea,
         };
-        BtnPoint.Content = "Count";
+        SetupToolButtonContent();
         BtnPoint.ToolTip = "Count item (P)";
         SetupRecordButton();
         SetupEstimateTable();
@@ -267,16 +325,24 @@ public partial class MainWindow : Window
         PagesTree.PreviewMouseLeftButtonDown += PagesTree_PreviewMouseLeftButtonDown;
         PagesTree.MouseMove += PagesTree_MouseMove;
         PagesTree.DragOver += PagesTree_DragOver;
+        PagesTree.DragLeave += PagesTree_DragLeave;
         PagesTree.Drop += PagesTree_Drop;
         PagesTree.KeyDown += PagesTree_KeyDown;
+        PagesTree.RequestBringIntoView += TreeView_RequestBringIntoViewKeepLeft;
+        PagesTree.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(PagesTreeItem_Expanded));
+        PagesTree.AddHandler(TreeViewItem.CollapsedEvent, new RoutedEventHandler(PagesTreeItem_Collapsed));
         PagesTree.AllowDrop = true;
         TakeoffsTree.PreviewMouseRightButtonDown += TakeoffsTree_PreviewMouseRightButtonDown;
         TakeoffsTree.PreviewMouseLeftButtonDown += TakeoffsTree_PreviewMouseLeftButtonDown;
         TakeoffsTree.MouseMove += TakeoffsTree_MouseMove;
         TakeoffsTree.DragOver += TakeoffsTree_DragOver;
+        TakeoffsTree.DragLeave += TakeoffsTree_DragLeave;
         TakeoffsTree.Drop += TakeoffsTree_Drop;
         TakeoffsTree.KeyDown += TakeoffsTree_KeyDown;
         TakeoffsTree.ContextMenuOpening += TakeoffsTree_ContextMenuOpening;
+        TakeoffsTree.RequestBringIntoView += TreeView_RequestBringIntoViewKeepLeft;
+        TakeoffsTree.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TakeoffsTreeItem_Expanded));
+        TakeoffsTree.AddHandler(TreeViewItem.CollapsedEvent, new RoutedEventHandler(TakeoffsTreeItem_Collapsed));
         TakeoffsTree.AllowDrop = true;
         ObservationsListView.MouseDoubleClick += (_, _) => OpenSelectedInboxObservation();
         ObservationsListView.KeyDown += ObservationsListView_KeyDown;
@@ -287,6 +353,11 @@ public partial class MainWindow : Window
         BtnLayersOn.IsEnabled = false;
         BtnLayersOff.IsEnabled = false;
         BtnLayersClearHi.IsEnabled = false;
+        BtnLayerTraceMode.IsEnabled = false;
+        BtnLayerTraceCycle.IsEnabled = false;
+        BtnLayerTraceApply.IsEnabled = false;
+        BtnViewportLayerTraceToggle.IsEnabled = false;
+        BtnViewportLayerTraceCycle.IsEnabled = false;
 
         ApplyPersistedSettings();
         Loaded += (_, _) => Dispatcher.InvokeAsync(
@@ -295,6 +366,46 @@ public partial class MainWindow : Window
     }
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
+
+    private void SetupToolButtonContent()
+    {
+        Brush glyphBrush = Application.Current.Resources["ControlForegroundBrush"] as Brush
+            ?? Brushes.Black;
+
+        BtnPan.Content = "Pan";
+        BtnSelect.Content = "Select";
+        BtnScale.Content = "Scale";
+        BtnRuler.Content = "Ruler";
+        BtnDrawLine.Content = "Draw";
+        BtnDrawArrow.Content = "Arrow";
+        BtnDrawRect.Content = "Box";
+        BtnPoint.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Count", glyphBrush);
+        BtnLine.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Line, "Line", glyphBrush);
+        BtnArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Area, "Area", glyphBrush);
+    }
+
+    private static FrameworkElement CreateToolGlyphLabel(
+        MeasurementGlyphKind kind,
+        string label,
+        Brush glyphBrush)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(Controls.MeasurementGlyph.CreateWpf(
+            kind,
+            glyphBrush,
+            14,
+            new Thickness(0, 0, 4, 0)));
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return row;
+    }
 
     private void InitializeMarkerFilterControls()
     {
@@ -338,7 +449,7 @@ public partial class MainWindow : Window
 
     private void BtnOpen_Click(object sender, RoutedEventArgs e)
     {
-        OpenJobFromFolderDialog();
+        ShowRecentJobPicker();
     }
 
     private void BtnOpenJobsFolder_Click(object sender, RoutedEventArgs e)
@@ -361,7 +472,15 @@ public partial class MainWindow : Window
         _takeoffsClipboard = null;
         _measurementClipboard = null;
         _pagesMultiSelection.Clear();
+        _pageTakeoffMultiSelection.Clear();
         _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        _pagesRangeAnchorPath = null;
+        _pageTakeoffRangeAnchorKey = null;
+        _takeoffsRangeAnchorPath = null;
+        _takeoffSectionRangeAnchorKey = null;
+        _expandedPageTreePaths.Clear();
+        _expandedTakeoffTreePaths.Clear();
         _hiddenAiMarkerTypes.Clear();
         _pageTabs.Clear();
         _activePageTab = null;
@@ -377,6 +496,7 @@ public partial class MainWindow : Window
         LoadTakeoffsForJob();
         _settings.LastJobPath = _currentJob.RootPath;
         _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
+        AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
         AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
         SaveAppSettings();
         QueueRecentJobThumbnailGeneration(_currentJob);
@@ -390,6 +510,9 @@ public partial class MainWindow : Window
         TxtStatus.Text = BuildMeasurementRepairStatus($"Loaded job: {_currentJob.Name}");
         LoadObservationsInbox();
         RefreshMassingDraftPanel();
+        Dispatcher.BeginInvoke(
+            new Action(CollapseProjectTreeDisplays),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
     private string BuildMeasurementRepairStatus(string prefix)
@@ -487,6 +610,9 @@ public partial class MainWindow : Window
     {
         _takeoffItems.Clear();
         TakeoffsTree.Items.Clear();
+        _takeoffsRangeAnchorPath = null;
+        _takeoffSectionMultiSelection.Clear();
+        _takeoffSectionRangeAnchorKey = null;
         _activeItem = null;
         _activeTakeoffParentFolder = _currentJob?.TakeoffsRoot ?? "";
 
@@ -494,6 +620,7 @@ public partial class MainWindow : Window
         {
             _lastMeasurementPageFolderRepairCount = 0;
             _lastMeasurementPageFolderUnresolvedCount = 0;
+            _expandedTakeoffTreePaths.Clear();
             _viewport.SetMeasurements([]);
             UpdateTotalDisplay();
             return;
@@ -501,6 +628,7 @@ public partial class MainWindow : Window
 
         LoadTakeoffChildren(_currentJob.TakeoffsRoot, TakeoffsTree);
         _lastMeasurementPageFolderRepairCount = RepairMeasurementPageFolderReferences();
+        RestoreExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
 
         _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));
 
@@ -515,6 +643,7 @@ public partial class MainWindow : Window
         }
 
         PruneTakeoffsMultiSelection();
+        PruneTakeoffSectionMultiSelection();
         ApplyTakeoffPageHighlights();
         RefreshAllTotals();
     }
@@ -722,10 +851,13 @@ public partial class MainWindow : Window
             Dictionary<int, IReadOnlyList<PdfLayerInfo>> pdfLayerCache = await Task.Run(
                 () => BuildPdfLayerCache(dlg.FileName, pageCount, progress));
 
+            bool hadUserPageExpansion = _expandedPageTreePaths.Count > 0;
             var created = SmartTakeoffsJobStore.ImportPdf(_currentJob, dlg.FileName, names, destFolder, pdfLayerCache);
             ReloadPagesTree();
             if (created.Count > 0)
                 SelectPageByFolder(created[0].FolderPath);
+            if (!hadUserPageExpansion)
+                CollapseTreeAndExpansionState(PagesTree, _expandedPageTreePaths);
             int cachedCount = pdfLayerCache.Count;
             TxtStatus.Text = $"Imported {created.Count} page(s), cached PDF layers for {cachedCount} page(s).";
         }
@@ -758,10 +890,733 @@ public partial class MainWindow : Window
         return cache;
     }
 
+    private async void BtnExportPdf_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open or create a job before PDF export.";
+            return;
+        }
+
+        var allPages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
+        if (allPages.Count == 0)
+        {
+            TxtStatus.Text = "No PDF sheets to export.";
+            return;
+        }
+
+        var initiallySelected = InitialPdfExportSelection(allPages);
+        var dialog = new PdfExportDialog(
+            allPages,
+            initiallySelected,
+            includeMeasurements: true,
+            includeLegend: _settings.ShowSheetLegend)
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var selectedFolders = dialog.Rows
+            .Where(row => row.IsSelected)
+            .Select(row => NormalizePathForCompare(row.PageFolder))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var pages = allPages
+            .Where(page => selectedFolders.Contains(NormalizePathForCompare(page.FolderPath)))
+            .ToList();
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "No sheets selected for PDF export.";
+            return;
+        }
+
+        var save = new SaveFileDialog
+        {
+            Title = "Export PDF",
+            Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
+            FileName = $"{SafeFileName(_currentJob.Name)}_sheets.pdf",
+            InitialDirectory = _currentJob.RootPath,
+            AddExtension = true,
+            DefaultExt = ".pdf",
+        };
+        if (save.ShowDialog(this) != true)
+            return;
+
+        Button? button = sender as Button;
+        try
+        {
+            if (button != null) button.IsEnabled = false;
+            SaveCurrentPageScale();
+            SaveCurrentPageAnnotations();
+            TxtStatus.Text = $"Exporting {pages.Count} sheet(s) to PDF...";
+            var options = new PdfSheetExportOptions(dialog.IncludeMeasurements, dialog.IncludeAnnotations, dialog.IncludeLegend, _viewport.UnitMode, _settings.SheetLegendAnchor);
+            string outputPath = save.FileName;
+            (bool ok, string error) = await Task.Run(() => TryExportPdfSheets(pages, outputPath, options));
+            if (!ok)
+            {
+                MessageBox.Show(error, "Export PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+                TxtStatus.Text = "PDF export failed.";
+                return;
+            }
+
+            TxtStatus.Text = $"Exported PDF ({pages.Count} sheet(s)) -> {outputPath}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"PDF export failed:\n{ex.Message}", "Export PDF",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+            TxtStatus.Text = "PDF export failed.";
+        }
+        finally
+        {
+            if (button != null) button.IsEnabled = true;
+        }
+    }
+
+    private ISet<string> InitialPdfExportSelection(IReadOnlyList<PageInfo> allPages)
+    {
+        var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (PagesTree.SelectedItem is TreeViewItem selectedItem)
+        {
+            foreach (PageInfo page in GetPagesForMetadata(selectedItem))
+                selected.Add(page.FolderPath);
+        }
+
+        if (selected.Count == 0 && _currentPage != null)
+            selected.Add(_currentPage.FolderPath);
+
+        selected.RemoveWhere(path => allPages.All(page => !IsSamePageFolder(path, page.FolderPath)));
+        return selected;
+    }
+
+    private sealed record PdfSheetExportOptions(
+        bool IncludeMeasurements,
+        bool IncludeAnnotations,
+        bool IncludeLegend,
+        UnitMode UnitMode,
+        string LegendAnchor);
+
+    private (bool Ok, string Error) TryExportPdfSheets(
+        IReadOnlyList<PageInfo> pages,
+        string outputPath,
+        PdfSheetExportOptions options)
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            using var stream = File.Create(outputPath);
+            using var document = SKDocument.CreatePdf(stream);
+            if (document == null)
+                return (false, "Could not create PDF document.");
+
+            foreach (PageInfo page in pages)
+            {
+                if (!File.Exists(page.PdfPath))
+                    return (false, $"Source PDF not found for sheet '{page.Name}': {page.PdfPath}");
+
+                var layerStates = page.PdfLayers
+                    .GroupBy(layer => layer.Number)
+                    .ToDictionary(group => group.Key, group => group.First().IsOn);
+                if (!PdfLayerRenderService.TryRender(
+                        page.PdfPath,
+                        page.PdfPage,
+                        renderScale: 2.0,
+                        layerStates,
+                        highlightedLayers: [],
+                        page.PdfLayersCached ? page.PdfLayers : null,
+                        out PdfLayerRenderResult render,
+                        out string renderError))
+                {
+                    return (false, $"Could not render sheet '{page.Name}': {renderError}");
+                }
+
+                using SKBitmap? bitmap = SKBitmap.Decode(render.ImageBytes);
+                if (bitmap == null)
+                    return (false, $"Could not decode rendered sheet '{page.Name}'.");
+
+                SKCanvas canvas = document.BeginPage(render.WidthPt, render.HeightPt);
+                canvas.Clear(SKColors.White);
+                canvas.DrawBitmap(bitmap, new SKRect(0, 0, render.WidthPt, render.HeightPt));
+
+                var pageItems = OrderedTakeoffsForPage(page).ToList();
+                if (options.IncludeMeasurements)
+                    DrawPdfExportMeasurements(canvas, pageItems, page, options.UnitMode);
+                if (options.IncludeAnnotations)
+                    DrawPdfExportAnnotations(canvas, SmartTakeoffsJobStore.LoadPageAnnotations(page.FolderPath), page.ScaleMetersPerPt, options.UnitMode);
+                if (options.IncludeLegend)
+                    DrawPdfExportLegend(canvas, render.WidthPt, render.HeightPt, pageItems, page, options);
+
+                document.EndPage();
+            }
+
+            document.Close();
+            return (true, "");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private void DrawPdfExportMeasurements(
+        SKCanvas canvas,
+        IReadOnlyList<TakeoffItem> pageItems,
+        PageInfo page,
+        UnitMode unitMode)
+    {
+        foreach (TakeoffItem item in pageItems)
+        {
+            SKColor color = ParseSkColor(item.Color, SKColors.Red);
+            foreach (Measurement measurement in MeasurementsForTakeoffOnPage(item, page.FolderPath))
+                DrawPdfExportMeasurement(canvas, measurement, color, page.ScaleMetersPerPt, unitMode);
+        }
+    }
+
+    private static void DrawPdfExportAnnotations(
+        SKCanvas canvas,
+        IReadOnlyList<PageAnnotation> annotations,
+        double pageScaleMetersPerPt,
+        UnitMode unitMode)
+    {
+        foreach (PageAnnotation annotation in annotations)
+        {
+            string kind = SmartTakeoffsJobStore.NormalizePageAnnotationKind(annotation.Kind);
+            if (annotation.Points.Count < 2)
+                continue;
+
+            SKColor color = ParseSkColor(annotation.Color, new SKColor(0x15, 0x65, 0xC0));
+            using var stroke = new SKPaint
+            {
+                IsAntialias = true,
+                Color = color,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 1.35f,
+                StrokeCap = SKStrokeCap.Round,
+                StrokeJoin = SKStrokeJoin.Round,
+            };
+
+            SKPoint start = annotation.Points[0];
+            SKPoint end = annotation.Points[1];
+            if (kind == "rectangle")
+            {
+                SKRect rect = NormalizeSkRect(start, end);
+                canvas.DrawRect(rect, stroke);
+                continue;
+            }
+
+            canvas.DrawLine(start, end, stroke);
+            if (kind == "arrow")
+            {
+                DrawPdfExportArrowHead(canvas, start, end, stroke);
+                continue;
+            }
+
+            if (kind == "dimension")
+            {
+                DrawPdfExportDimensionTicks(canvas, start, end, stroke);
+                double scale = annotation.ScaleMetersPerPt > 0
+                    ? annotation.ScaleMetersPerPt
+                    : pageScaleMetersPerPt;
+                string label = string.IsNullOrWhiteSpace(annotation.Text)
+                    ? FormatAnnotationLength(start, end, scale, unitMode)
+                    : annotation.Text;
+                DrawPdfExportMeasurementLabel(
+                    canvas,
+                    new SKPoint((start.X + end.X) / 2f, (start.Y + end.Y) / 2f),
+                    label,
+                    color,
+                    centered: true);
+            }
+        }
+    }
+
+    private static void DrawPdfExportArrowHead(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint stroke)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= 0.001f)
+            return;
+
+        float ux = dx / length;
+        float uy = dy / length;
+        float px = -uy;
+        float py = ux;
+        const float arrow = 8.0f;
+        SKPoint left = new(end.X - ux * arrow + px * arrow * 0.45f, end.Y - uy * arrow + py * arrow * 0.45f);
+        SKPoint right = new(end.X - ux * arrow - px * arrow * 0.45f, end.Y - uy * arrow - py * arrow * 0.45f);
+        canvas.DrawLine(end, left, stroke);
+        canvas.DrawLine(end, right, stroke);
+    }
+
+    private static void DrawPdfExportDimensionTicks(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint stroke)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= 0.001f)
+            return;
+
+        float px = -dy / length;
+        float py = dx / length;
+        const float tick = 5.5f;
+        canvas.DrawLine(start.X - px * tick, start.Y - py * tick, start.X + px * tick, start.Y + py * tick, stroke);
+        canvas.DrawLine(end.X - px * tick, end.Y - py * tick, end.X + px * tick, end.Y + py * tick, stroke);
+    }
+
+    private static SKRect NormalizeSkRect(SKPoint a, SKPoint b) =>
+        new(
+            Math.Min(a.X, b.X),
+            Math.Min(a.Y, b.Y),
+            Math.Max(a.X, b.X),
+            Math.Max(a.Y, b.Y));
+
+    private static string FormatAnnotationLength(SKPoint start, SKPoint end, double scaleMetersPerPt, UnitMode unitMode)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        double lengthPt = Math.Sqrt(dx * dx + dy * dy);
+        return scaleMetersPerPt > 0
+            ? Units.FormatLength(lengthPt * scaleMetersPerPt, unitMode)
+            : $"{lengthPt:F1} pt";
+    }
+
+    private static void DrawPdfExportMeasurement(
+        SKCanvas canvas,
+        Measurement measurement,
+        SKColor color,
+        double pageScaleMetersPerPt,
+        UnitMode unitMode)
+    {
+        string type = SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType);
+        if (measurement.Points.Count == 0)
+            return;
+
+        using var stroke = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.4f,
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        };
+
+        if (type == "area" && measurement.Points.Count >= 3)
+        {
+            using var path = new SKPath();
+            path.MoveTo(measurement.Points[0]);
+            for (int i = 1; i < measurement.Points.Count; i++)
+                path.LineTo(measurement.Points[i]);
+            path.Close();
+
+            using var fill = new SKPaint
+            {
+                IsAntialias = true,
+                Color = color.WithAlpha(38),
+                Style = SKPaintStyle.Fill,
+            };
+            canvas.DrawPath(path, fill);
+            canvas.DrawPath(path, stroke);
+            DrawPdfExportJoistLayout(canvas, measurement, color);
+            DrawPdfExportMeasurementLabel(canvas, MeasurementLabelPoint(measurement), measurement.Label(pageScaleMetersPerPt, unitMode), color, centered: true);
+            return;
+        }
+
+        if (type == "line" && measurement.Points.Count >= 2)
+        {
+            for (int i = 1; i < measurement.Points.Count; i++)
+                canvas.DrawLine(measurement.Points[i - 1], measurement.Points[i], stroke);
+            DrawPdfExportMeasurementLabel(canvas, measurement.Points[^1], measurement.Label(pageScaleMetersPerPt, unitMode), color, centered: false);
+            return;
+        }
+
+        using var pointFill = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color,
+            Style = SKPaintStyle.Fill,
+        };
+        using var pointStroke = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.White,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 0.9f,
+        };
+        foreach (SKPoint point in measurement.Points)
+        {
+            canvas.DrawCircle(point, 3.8f, pointFill);
+            canvas.DrawCircle(point, 3.8f, pointStroke);
+        }
+    }
+
+    private static SKPoint MeasurementLabelPoint(Measurement measurement)
+    {
+        if (measurement.Points.Count == 0)
+            return default;
+
+        if (measurement.Points.Count < 3)
+            return measurement.Points[^1];
+
+        double area = 0;
+        double x = 0;
+        double y = 0;
+        for (int i = 0; i < measurement.Points.Count; i++)
+        {
+            SKPoint a = measurement.Points[i];
+            SKPoint b = measurement.Points[(i + 1) % measurement.Points.Count];
+            double cross = a.X * b.Y - b.X * a.Y;
+            area += cross;
+            x += (a.X + b.X) * cross;
+            y += (a.Y + b.Y) * cross;
+        }
+
+        if (Math.Abs(area) < 0.001)
+        {
+            float avgX = measurement.Points.Average(point => point.X);
+            float avgY = measurement.Points.Average(point => point.Y);
+            return new SKPoint(avgX, avgY);
+        }
+
+        double factor = 1.0 / (3.0 * area);
+        return new SKPoint((float)(x * factor), (float)(y * factor));
+    }
+
+    private static void DrawPdfExportMeasurementLabel(
+        SKCanvas canvas,
+        SKPoint point,
+        string label,
+        SKColor color,
+        bool centered)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+            return;
+
+        string[] lines = label
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length == 0)
+            return;
+
+        const float textSize = 7.5f;
+        const float padX = 2.8f;
+        const float padY = 1.8f;
+        using var textPaint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.White,
+            TextSize = textSize,
+            Typeface = SKTypeface.FromFamilyName("Consolas") ?? SKTypeface.Default,
+        };
+        float width = 0;
+        foreach (string line in lines)
+            width = Math.Max(width, textPaint.MeasureText(line));
+
+        float lineHeight = textSize * 1.22f;
+        float height = lineHeight * lines.Length;
+        float left = centered ? point.X - width / 2f - padX : point.X + 4f;
+        float top = centered ? point.Y - height / 2f - padY : point.Y + 4f;
+        var box = new SKRect(left, top, left + width + padX * 2, top + height + padY * 2);
+
+        using var background = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.Black.WithAlpha(180),
+            Style = SKPaintStyle.Fill,
+        };
+        using var border = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color.WithAlpha(230),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 0.7f,
+        };
+        canvas.DrawRoundRect(box, 2.2f, 2.2f, background);
+        canvas.DrawRoundRect(box, 2.2f, 2.2f, border);
+
+        float baseline = top + padY - textPaint.FontMetrics.Ascent;
+        foreach (string line in lines)
+        {
+            canvas.DrawText(line, left + padX, baseline, textPaint);
+            baseline += lineHeight;
+        }
+    }
+
+    private static void DrawPdfExportJoistLayout(SKCanvas canvas, Measurement measurement, SKColor color)
+    {
+        if (!measurement.JoistEnabled)
+            return;
+
+        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, measurement.ScaleMetersPerPt);
+        if (!layout.HasScale || layout.Count == 0)
+            return;
+
+        using var joistStroke = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color.WithAlpha(225),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 0.85f,
+            StrokeCap = SKStrokeCap.Round,
+        };
+        foreach (JoistSegment segment in layout.Segments)
+            canvas.DrawLine(segment.Start, segment.End, joistStroke);
+
+        if (!measurement.JoistShowLabels || layout.Count > 180)
+            return;
+
+        using var labelPaint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.Black.WithAlpha(220),
+            TextSize = 5.2f,
+            Typeface = SKTypeface.FromFamilyName("Consolas"),
+        };
+        using var labelBg = new SKPaint
+        {
+            Color = SKColors.White.WithAlpha(190),
+            Style = SKPaintStyle.Fill,
+        };
+        foreach (JoistSegment segment in layout.Segments)
+        {
+            string label = JoistTakeoffCalculator.FormatSegmentLength(segment, UnitMode.Imperial);
+            SKPoint mid = new(
+                (segment.Start.X + segment.End.X) / 2f,
+                (segment.Start.Y + segment.End.Y) / 2f);
+            var bounds = new SKRect();
+            labelPaint.MeasureText(label, ref bounds);
+            var bg = new SKRect(
+                mid.X - bounds.Width / 2f - 1.2f,
+                mid.Y - bounds.Height / 2f - 1.2f,
+                mid.X + bounds.Width / 2f + 1.2f,
+                mid.Y + bounds.Height / 2f + 1.2f);
+            canvas.DrawRect(bg, labelBg);
+            canvas.DrawText(label, bg.Left + 1.2f, bg.Bottom - 1.2f, labelPaint);
+        }
+    }
+
+    private void DrawPdfExportLegend(
+        SKCanvas canvas,
+        float width,
+        float height,
+        IReadOnlyList<TakeoffItem> pageItems,
+        PageInfo page,
+        PdfSheetExportOptions options)
+    {
+        var entries = pageItems
+            .Select(item =>
+            {
+                var measurements = MeasurementsForTakeoffOnPage(item, page.FolderPath).ToList();
+                return measurements.Count == 0
+                    ? null
+                    : new SheetLegendEntry(
+                        item.Color,
+                        item.Name,
+                        SheetLegendQuantityTextForPage(item, measurements, page, options.UnitMode),
+                        SheetLegendTypeTitle(item),
+                        SheetLegendTypeSign(item),
+                        []);
+            })
+            .Where(entry => entry != null)
+            .Cast<SheetLegendEntry>()
+            .ToList();
+        if (entries.Count == 0)
+            return;
+
+        float scale = (float)Math.Clamp(_settings.SheetLegendScale, 0.65, 2.0) * 2f;
+        float textSize = 7.5f * scale;
+        int maxDetailLines = Math.Max(0, entries.Max(entry => entry.Details?.Count ?? 0));
+        float rowHeight = 11.0f * scale * (1 + Math.Min(maxDetailLines, 6) * 0.82f);
+        float titleHeight = 13.0f * scale;
+        float padding = 6.0f * scale;
+        float swatch = 6.5f * scale;
+        float maxBoxWidth = Math.Min(width * 0.58f, 310.0f * scale);
+        float columnWidth = Math.Max(120.0f * scale, Math.Min(maxBoxWidth, 190.0f * scale));
+        int columns = Math.Max(1, Math.Min(entries.Count, (int)Math.Floor(maxBoxWidth / columnWidth)));
+        int rowsPerColumn = Math.Max(1, (int)Math.Ceiling(entries.Count / (double)columns));
+        float boxWidth = padding * 2 + columns * columnWidth;
+        float boxHeight = padding * 2 + titleHeight + rowsPerColumn * rowHeight;
+        (float x, float y) = LegendBoxOrigin(width, height, boxWidth, boxHeight, options.LegendAnchor);
+
+        using var background = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.White.WithAlpha(226),
+            Style = SKPaintStyle.Fill,
+        };
+        using var border = new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(30, 41, 59, 185),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 0.8f,
+        };
+        canvas.DrawRoundRect(new SKRect(x, y, x + boxWidth, y + boxHeight), 3, 3, background);
+        canvas.DrawRoundRect(new SKRect(x, y, x + boxWidth, y + boxHeight), 3, 3, border);
+
+        using var titlePaint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(15, 23, 42),
+            TextSize = textSize,
+        };
+        using var textPaint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(15, 23, 42),
+            TextSize = textSize,
+        };
+        canvas.DrawText(entries.Count > 1 ? $"Legend ({entries.Count})" : "Legend", x + padding, y + padding + textSize, titlePaint);
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            int column = i / rowsPerColumn;
+            int row = i % rowsPerColumn;
+            SheetLegendEntry entry = entries[i];
+            float rowX = x + padding + column * columnWidth;
+            float rowY = y + padding + titleHeight + row * rowHeight;
+            using var swatchPaint = new SKPaint
+            {
+                IsAntialias = true,
+                Color = ParseSkColor(entry.Color, SKColors.Red),
+                Style = SKPaintStyle.Fill,
+            };
+            canvas.DrawRect(new SKRect(rowX, rowY + 2, rowX + swatch, rowY + 2 + swatch), swatchPaint);
+            float sign = 7.5f * scale;
+            float signX = rowX + swatch + 4 * scale;
+            DrawPdfLegendSignIcon(canvas, entry.Sign, new SKRect(signX, rowY + 1.8f * scale, signX + sign, rowY + 1.8f * scale + sign), textPaint.Color);
+            string text = $"{entry.Name}  {entry.Quantity}";
+            canvas.DrawText(TrimLegendText(text, columnWidth - sign - 7 * scale, textPaint), signX + sign + 4 * scale, rowY + textSize, textPaint);
+            if (entry.Details is { Count: > 0 } details)
+            {
+                float detailY = rowY + textSize * 2.05f;
+                foreach (string detail in details.Take(6))
+                {
+                    canvas.DrawText(
+                        TrimLegendText(detail, columnWidth - swatch - 4 * scale, textPaint),
+                        signX + sign + 4 * scale,
+                        detailY,
+                        textPaint);
+                    detailY += textSize * 1.15f;
+                }
+            }
+        }
+    }
+
+    private static void DrawPdfLegendSignIcon(SKCanvas canvas, string sign, SKRect box, SKColor color)
+    {
+        using var stroke = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = Math.Max(0.7f, box.Width / 7f),
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        };
+
+        if (sign.Contains("○", StringComparison.Ordinal))
+            canvas.DrawOval(box, stroke);
+        if (sign.Contains("□", StringComparison.Ordinal))
+            canvas.DrawRect(box, stroke);
+        if (sign.Contains("╱", StringComparison.Ordinal))
+            canvas.DrawLine(box.Left, box.Bottom, box.Right, box.Top, stroke);
+    }
+
+    private static string SheetLegendQuantityTextForPage(
+        TakeoffItem item,
+        IReadOnlyList<Measurement> measurements,
+        PageInfo page,
+        UnitMode unitMode)
+    {
+        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        double fallbackScale = page.ScaleMetersPerPt;
+
+        if (measurementType == "point")
+            return Units.FormatCount(measurements.Sum(measurement => measurement.Points.Count));
+
+        bool hasScale = fallbackScale > 0 || measurements.Any(measurement => measurement.ScaleMetersPerPt > 0);
+        if (item.IsJoistArea)
+        {
+            return hasScale
+                ? Units.FormatArea(measurements.Sum(measurement => measurement.AreaValue(fallbackScale)), unitMode)
+                : $"{measurements.Sum(measurement => measurement.Points.Count)} pts";
+        }
+
+        if (!hasScale)
+        {
+            if (measurementType == "line")
+                return $"{measurements.Sum(measurement => Math.Max(0, measurement.Points.Count - 1))} seg";
+            if (measurementType == "area")
+                return $"{measurements.Sum(measurement => measurement.Points.Count)} pts";
+        }
+
+        double total = measurements.Sum(measurement => measurement.Value(fallbackScale));
+        return measurementType switch
+        {
+            "line" => Units.FormatLength(total, unitMode),
+            "area" => Units.FormatArea(total, unitMode),
+            _ => Units.FormatCount(total),
+        };
+    }
+
+    private static (float X, float Y) LegendBoxOrigin(float pageWidth, float pageHeight, float boxWidth, float boxHeight, string anchor)
+    {
+        const float margin = 18.0f;
+        string normalized = NormalizeSheetLegendAnchor(anchor);
+        float x = normalized switch
+        {
+            "TopCenter" or "Center" or "BottomCenter" => (pageWidth - boxWidth) / 2,
+            "TopRight" or "RightCenter" or "BottomRight" => pageWidth - boxWidth - margin,
+            _ => margin,
+        };
+        float y = normalized switch
+        {
+            "TopLeft" or "TopCenter" or "TopRight" => margin,
+            "LeftCenter" or "Center" or "RightCenter" => (pageHeight - boxHeight) / 2,
+            _ => pageHeight - boxHeight - margin,
+        };
+        return (Math.Clamp(x, margin, Math.Max(margin, pageWidth - boxWidth - margin)),
+                Math.Clamp(y, margin, Math.Max(margin, pageHeight - boxHeight - margin)));
+    }
+
+    private static string TrimLegendText(string text, float maxWidth, SKPaint paint)
+    {
+        if (paint.MeasureText(text) <= maxWidth)
+            return text;
+
+        const string ellipsis = "...";
+        string clean = text.Trim();
+        while (clean.Length > 0 && paint.MeasureText(clean + ellipsis) > maxWidth)
+            clean = clean[..^1].TrimEnd();
+        return clean.Length == 0 ? ellipsis : clean + ellipsis;
+    }
+
+    private static SKColor ParseSkColor(string value, SKColor fallback)
+    {
+        try
+        {
+            return SKColor.Parse(NormalizeTakeoffColor(value));
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
     private void BtnTool_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is string tool)
-            SetTool(tool);
+        if (sender is FrameworkElement btn && btn.Tag is string tool)
+        {
+            bool forceNewTakeoff = tool is "point" or "line" or "area" &&
+                                   (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            SetTool(tool, forceNewTakeoff);
+        }
     }
 
     private void SetupRecordButton()
@@ -769,11 +1624,11 @@ public partial class MainWindow : Window
         _recordButton = new ToggleButton
         {
             Content = "Record",
-            ToolTip = "Toggle digitizer record mode",
+            ToolTip = "Start recording into the active takeoff target",
             Padding = new Thickness(8, 2, 8, 2),
             MinWidth = 68,
             Margin = new Thickness(4, 0, 1, 0),
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
         };
         _recordButton.Checked += (_, _) => OnRecordToggled(on: true);
         _recordButton.Unchecked += (_, _) => OnRecordToggled(on: false);
@@ -790,12 +1645,13 @@ public partial class MainWindow : Window
         {
             Margin = new Thickness(0),
             MinHeight = 80,
+            SelectionMode = SelectionMode.Extended,
             View = new GridView
             {
                 Columns =
                 {
-                    new GridViewColumn { Header = "Item / Section", Width = 118, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
-                    new GridViewColumn { Header = "Type/Page", Width = 72, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Page)) },
+                    new GridViewColumn { Header = "Item / Section", Width = 110, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Item)) },
+                    new GridViewColumn { Header = "Type/Page", Width = 82, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Page)) },
                     new GridViewColumn { Header = "Sec", Width = 34, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Sections)) },
                     new GridViewColumn { Header = "Qty", Width = 62, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Quantity)) },
                     new GridViewColumn { Header = "Unit", Width = 32, DisplayMemberBinding = new Binding(nameof(EstimateDisplayRow.Unit)) },
@@ -805,7 +1661,10 @@ public partial class MainWindow : Window
                 },
             },
         };
+        ScrollViewer.SetHorizontalScrollBarVisibility(_estimateList, ScrollBarVisibility.Auto);
+        ScrollViewer.SetVerticalScrollBarVisibility(_estimateList, ScrollBarVisibility.Auto);
         _estimateList.SelectionChanged += OnEstimateSelectionChanged;
+        _estimateList.SelectionChanged += (_, _) => UpdateEstimateActionButtons();
         _estimateList.ContextMenu = BuildEstimateContextMenu();
 
         _estimateFilterBox = new TextBox
@@ -816,10 +1675,40 @@ public partial class MainWindow : Window
         };
         _estimateFilterBox.TextChanged += (_, _) => RefreshEstimateTable();
 
+        _estimateCurrentSheetOnlyBox = new CheckBox
+        {
+            Content = "Sheet",
+            Margin = new Thickness(0, 0, 6, 4),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Show only measurements on the active sheet",
+        };
+        _estimateCurrentSheetOnlyBox.Checked += (_, _) => RefreshEstimateTable();
+        _estimateCurrentSheetOnlyBox.Unchecked += (_, _) => RefreshEstimateTable();
+
+        _estimateSelectButton = EstimateActionButton("Select", "Select estimate rows on the canvas", EstimateSelectSelectedOnCanvas);
+        _estimateGoToPageButton = EstimateActionButton("Page", "Open the first selected estimate row's sheet", EstimateGoToSelectedPage);
+        _estimatePropertiesButton = EstimateActionButton("Props", "Edit the selected estimate row", EstimateOpenSelectedProperties);
+        _estimateOpenWindowButton = EstimateActionButton("Open", "Open Estimating in a full window", OpenEstimatingWindow);
+
+        var estimateToolbar = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var estimateActions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        estimateActions.Children.Add(_estimateCurrentSheetOnlyBox);
+        estimateActions.Children.Add(_estimateOpenWindowButton);
+        estimateActions.Children.Add(_estimateSelectButton);
+        estimateActions.Children.Add(_estimateGoToPageButton);
+        estimateActions.Children.Add(_estimatePropertiesButton);
+        DockPanel.SetDock(estimateActions, Dock.Right);
+        estimateToolbar.Children.Add(estimateActions);
+        estimateToolbar.Children.Add(_estimateFilterBox);
+
         var estimatePanel = new DockPanel { Margin = new Thickness(2) };
         estimatePanel.SetResourceReference(Panel.BackgroundProperty, "PanelBackgroundBrush");
-        DockPanel.SetDock(_estimateFilterBox, Dock.Top);
-        estimatePanel.Children.Add(_estimateFilterBox);
+        DockPanel.SetDock(estimateToolbar, Dock.Top);
+        estimatePanel.Children.Add(estimateToolbar);
         estimatePanel.Children.Add(_estimateList);
 
         var massingPanel = BuildMassingDraftPanel();
@@ -852,7 +1741,130 @@ public partial class MainWindow : Window
 
         TakeoffsPanel.Children.Add(tabs);
         RefreshEstimateTable();
+        UpdateEstimateActionButtons();
         RefreshMassingDraftPanel();
+    }
+
+    private static Button EstimateActionButton(string text, string tooltip, Action action)
+    {
+        var button = new Button
+        {
+            Content = text,
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 4, 0),
+            MinWidth = 44,
+            FontSize = 11,
+            ToolTip = tooltip,
+        };
+        button.Click += (_, _) => action();
+        return button;
+    }
+
+    private void OpenEstimatingWindow()
+    {
+        if (_estimatingWindow != null)
+        {
+            _estimatingWindow.RefreshRows();
+            _estimatingWindow.Activate();
+            return;
+        }
+
+        _estimatingWindow = new EstimatingWindow(
+            BuildEstimatingWindowRows,
+            SelectEstimatingWindowRowsOnCanvas,
+            GoToEstimatingWindowRowPage,
+            OpenEstimatingWindowRowProperties)
+        {
+            Owner = this,
+        };
+        _estimatingWindow.Closed += (_, _) => _estimatingWindow = null;
+        _estimatingWindow.Show();
+    }
+
+    private IReadOnlyList<EstimatingWindowRow> BuildEstimatingWindowRows(string filter, bool currentSheetOnly)
+    {
+        bool sheetOnly = currentSheetOnly && _currentPage != null;
+        return BuildEstimateDisplayRows(filter, sheetOnly)
+            .Select(row => new EstimatingWindowRow
+            {
+                Item = row.Item,
+                Page = row.Page,
+                Sections = row.Sections,
+                Quantity = row.Quantity,
+                Unit = row.Unit,
+                UnitPrice = row.UnitPrice,
+                Cost = row.Cost,
+                Notes = row.Notes,
+                Takeoff = row.Takeoff,
+                Measurement = row.Measurement,
+            })
+            .ToList();
+    }
+
+    private List<TakeoffMeasurementNode> EstimatingWindowMeasurementNodes(IEnumerable<EstimatingWindowRow> rows)
+    {
+        var nodes = new List<TakeoffMeasurementNode>();
+        foreach (EstimatingWindowRow row in rows)
+        {
+            if (row.Takeoff == null)
+                continue;
+
+            if (row.Measurement != null)
+            {
+                nodes.Add(new TakeoffMeasurementNode(row.Takeoff, row.Measurement));
+                continue;
+            }
+
+            nodes.AddRange(row.Takeoff.Measurements.Select(measurement => new TakeoffMeasurementNode(row.Takeoff, measurement)));
+        }
+
+        return nodes
+            .GroupBy(node => node.Measurement.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private void SelectEstimatingWindowRowsOnCanvas(IReadOnlyList<EstimatingWindowRow> rows)
+    {
+        List<TakeoffMeasurementNode> nodes = EstimatingWindowMeasurementNodes(rows);
+        if (nodes.Count == 0)
+        {
+            TxtStatus.Text = "Selected estimate rows do not have measurements.";
+            return;
+        }
+
+        SelectTakeoffSectionNodesSilently(nodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(nodes);
+    }
+
+    private void GoToEstimatingWindowRowPage(EstimatingWindowRow row)
+    {
+        List<TakeoffMeasurementNode> nodes = EstimatingWindowMeasurementNodes([row]);
+        TakeoffMeasurementNode? target = nodes.FirstOrDefault(node => !string.IsNullOrWhiteSpace(node.Measurement.PageFolder));
+        if (target == null)
+        {
+            TxtStatus.Text = "Selected estimate row does not have a source page.";
+            return;
+        }
+
+        GoToMeasurementPage(target.Measurement);
+        SelectTakeoffSectionNodesSilently(nodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(nodes);
+    }
+
+    private void OpenEstimatingWindowRowProperties(EstimatingWindowRow row)
+    {
+        if (row.Takeoff == null)
+            return;
+
+        if (row.Measurement != null)
+        {
+            EditSectionProperties(row.Takeoff, row.Measurement);
+            return;
+        }
+
+        if (FindTakeoffTreeItem(row.Takeoff) is { } tvi)
+            EditTakeoffItemProperties(tvi, row.Takeoff);
     }
 
     private DockPanel BuildMassingDraftPanel()
@@ -860,10 +1872,10 @@ public partial class MainWindow : Window
         var panel = new DockPanel { Margin = new Thickness(2) };
         panel.SetResourceReference(Panel.BackgroundProperty, "PanelBackgroundBrush");
 
-        var buttons = new StackPanel
+        var buttons = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 4),
+            Margin = new Thickness(0, 0, 0, 2),
         };
         DockPanel.SetDock(buttons, Dock.Top);
 
@@ -871,17 +1883,37 @@ public partial class MainWindow : Window
         {
             Content = "Build 3D Draft",
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 4),
             ToolTip = "Build AI_Context/3d_massing/model.json from current AI markers",
         };
         build.Click += BtnBuildMassingDraft_Click;
         buttons.Children.Add(build);
 
+        var buildFromWalls = new Button
+        {
+            Content = "3D From Takeoffs",
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 6, 4),
+            ToolTip = "Build 3D draft from Walls/Areas/Sqft level Line/Area measurements",
+        };
+        buildFromWalls.Click += (_, _) => BuildMassingDraftFromWallTakeoffs();
+        buttons.Children.Add(buildFromWalls);
+
+        var open3DWindow = new Button
+        {
+            Content = "3D Window",
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 6, 4),
+            ToolTip = "Open a separate orbitable 3D viewport with saved marker points",
+        };
+        open3DWindow.Click += (_, _) => OpenMassing3DWindow();
+        buttons.Children.Add(open3DWindow);
+
         var detectRoof = new Button
         {
             Content = "Auto Roof",
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 4),
             ToolTip = "Queue reviewable AI roof marker candidates from the active sheet",
         };
         detectRoof.Click += BtnDetectRoof_Click;
@@ -891,7 +1923,7 @@ public partial class MainWindow : Window
         {
             Content = "Review Roof",
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 4),
             IsEnabled = false,
             ToolTip = "Review and save roof type, pitch, notes, and guide points before accepting roof geometry",
         };
@@ -902,7 +1934,7 @@ public partial class MainWindow : Window
         {
             Content = "Review Openings",
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 4),
             IsEnabled = false,
             ToolTip = "Review projected door/window/opening markers before accepting the 3D draft",
         };
@@ -913,7 +1945,7 @@ public partial class MainWindow : Window
         {
             Content = "Accept 3D",
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 4),
             IsEnabled = false,
             ToolTip = "Mark the current 3D massing draft as reviewed project context",
         };
@@ -924,6 +1956,7 @@ public partial class MainWindow : Window
         {
             Content = "Open JSON",
             Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 6, 4),
             IsEnabled = false,
             ToolTip = "Open AI_Context/3d_massing/model.json",
         };
@@ -1007,7 +2040,7 @@ public partial class MainWindow : Window
         var markerLabel = new TextBlock
         {
             Text = "Source markers",
-            FontWeight = FontWeights.SemiBold,
+            FontWeight = FontWeights.Normal,
             FontSize = 11,
             Margin = new Thickness(0, 0, 0, 3),
         };
@@ -1124,11 +2157,380 @@ public partial class MainWindow : Window
         {
             Content = text,
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 4),
             ToolTip = tooltip,
         };
         button.Click += (_, _) => action();
         return button;
+    }
+
+    private void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, WorkspaceTabs))
+            return;
+
+        RefreshActiveWorkspaceTab();
+    }
+
+    private void RefreshActiveWorkspaceTab()
+    {
+        if (WorkspaceTabs.SelectedItem is not TabItem tab)
+            return;
+
+        switch (tab.Tag?.ToString())
+        {
+            case "SheetManager":
+                RefreshSheetManager();
+                break;
+            case "TakeoffManager":
+                RefreshTakeoffManager();
+                break;
+            case "AiManager":
+                RefreshAiManager();
+                break;
+            case "3DManager":
+                Refresh3dManagerSummary();
+                break;
+        }
+    }
+
+    private void BtnSheetManagerRefresh_Click(object sender, RoutedEventArgs e) => RefreshSheetManager();
+    private async void BtnSheetManagerAnalyze_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: false);
+    private async void BtnSheetManagerAutoName_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: false);
+    private async void BtnSheetManagerAutoScale_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: true);
+    private async void BtnSheetManagerAutoNameScale_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: true);
+
+    private void RefreshSheetManager()
+    {
+        if (_currentJob == null)
+        {
+            _sheetManagerMetadataResults = [];
+            SheetManagerGrid.ItemsSource = Array.Empty<PdfMetadataPreviewRow>();
+            return;
+        }
+
+        var results = new List<PdfMetadataPageResult>();
+        var rows = new List<PdfMetadataPreviewRow>();
+        foreach (PageInfo page in CollectPagesUnder(_currentJob.PagesRoot))
+        {
+            PdfSheetMetadata? metadata = SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath);
+            if (metadata != null)
+            {
+                var result = new PdfMetadataPageResult(page, true, metadata, "");
+                results.Add(result);
+                rows.AddRange(BuildPdfMetadataPreviewRows([result], defaultRename: false, defaultScale: false));
+                continue;
+            }
+
+            rows.Add(new PdfMetadataPreviewRow
+            {
+                PageFolder = page.FolderPath,
+                CurrentPageName = page.Name,
+                ProposedScale = SheetManagerScaleText(page.ScaleMetersPerPt),
+                Reason = "No saved PDF metadata. Click Analyze / Auto Name / Auto Scale.",
+                Confidence = page.ScaleMetersPerPt > 0 ? "scale-set" : "",
+            });
+        }
+
+        _sheetManagerMetadataResults = results;
+        SheetManagerGrid.ItemsSource = rows;
+        TxtStatus.Text = $"Sheet Manager: {rows.Count} sheet(s).";
+    }
+
+    private async Task AnalyzeSheetManagerAsync(bool defaultRename, bool defaultScale)
+    {
+        if (_currentJob == null)
+            return;
+
+        IReadOnlyList<PageInfo> pages = SelectedSheetManagerPages();
+        if (pages.Count == 0)
+            pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
+        if (pages.Count == 0)
+        {
+            MessageBox.Show("No PDF pages found.", "Sheet Manager", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        SaveCurrentPageScale();
+        TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
+
+        SmartTakeoffsJob job = _currentJob;
+        List<PdfMetadataPageResult> results = await Task.Run(() =>
+        {
+            var analyzed = new List<PdfMetadataPageResult>();
+            foreach (PageInfo page in pages)
+            {
+                if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
+                    analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
+                else
+                    analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
+            }
+
+            return analyzed;
+        });
+
+        _sheetManagerMetadataResults = results;
+        var rows = BuildPdfMetadataPreviewRows(results, defaultRename, defaultScale).ToList();
+        rows.AddRange(results
+            .Where(result => !result.Ok)
+            .Select(result => new PdfMetadataPreviewRow
+            {
+                PageFolder = result.Page.FolderPath,
+                CurrentPageName = result.Page.Name,
+                Reason = result.Error,
+                Warnings = result.Error,
+            }));
+
+        SheetManagerGrid.ItemsSource = rows;
+        TxtStatus.Text = $"Sheet Manager analyzed: {results.Count(result => result.Ok)} OK, {results.Count(result => !result.Ok)} failed.";
+    }
+
+    private IReadOnlyList<PageInfo> SelectedSheetManagerPages()
+    {
+        var pages = new List<PageInfo>();
+        foreach (PdfMetadataPreviewRow row in SheetManagerGrid.SelectedItems.OfType<PdfMetadataPreviewRow>())
+        {
+            if (SmartTakeoffsJobStore.TryReadPage(row.PageFolder) is { } page)
+                pages.Add(page);
+        }
+
+        return pages;
+    }
+
+    private List<PdfMetadataPreviewRow> SheetManagerRows() =>
+        SheetManagerGrid.ItemsSource?.OfType<PdfMetadataPreviewRow>().ToList() ?? [];
+
+    private void BtnSheetManagerApplyChecked_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentJob == null)
+            return;
+
+        SheetManagerGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+        SheetManagerGrid.CommitEdit(DataGridEditingUnit.Row, true);
+        List<PdfMetadataPreviewRow> rows = SheetManagerRows();
+        if (!rows.Any(row => row.ApplyRename || row.ApplyScale))
+        {
+            TxtStatus.Text = "Sheet Manager: no Rename/Scale rows are checked.";
+            return;
+        }
+
+        ApplyPdfMetadataResults(_currentJob, _sheetManagerMetadataResults, rows);
+        RefreshSheetManager();
+    }
+
+    private void BtnSheetManagerOpenSheet_Click(object sender, RoutedEventArgs e)
+    {
+        if (SheetManagerGrid.SelectedItem is not PdfMetadataPreviewRow row)
+            return;
+
+        SelectPageByFolder(row.PageFolder);
+        WorkspaceTabs.SelectedIndex = 0;
+    }
+
+    private void BtnSheetManagerOpenJson_Click(object sender, RoutedEventArgs e)
+    {
+        if (SheetManagerGrid.SelectedItem is PdfMetadataPreviewRow row)
+            OpenSourcePdfMetadata(row.PageFolder);
+    }
+
+    private static string SheetManagerScaleText(double scaleMetersPerPt)
+    {
+        const double ptM = 25.4 / 72.0 / 1000.0;
+        return scaleMetersPerPt > 0 ? $"1:{scaleMetersPerPt / ptM:F0}" : "";
+    }
+
+    private void BtnTakeoffManagerRefresh_Click(object sender, RoutedEventArgs e) => RefreshTakeoffManager();
+
+    private void RefreshTakeoffManager()
+    {
+        TakeoffManagerGrid.ItemsSource = _takeoffItems
+            .Select(item => new TakeoffManagerRow(
+                item.Name,
+                TakeoffTypeDisplay(item),
+                item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
+                item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode),
+                TakeoffUnitText(item),
+                UnitPriceText(item),
+                CostText(item),
+                item.Notes,
+                _currentJob == null ? item.FolderPath : Path.GetRelativePath(_currentJob.RootPath, item.FolderPath),
+                item))
+            .ToList();
+        TxtStatus.Text = $"Takeoff Manager: {_takeoffItems.Count} item(s).";
+    }
+
+    private TakeoffManagerRow? SelectedTakeoffManagerRow() =>
+        TakeoffManagerGrid.SelectedItem as TakeoffManagerRow;
+
+    private void BtnTakeoffManagerSetActive_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedTakeoffManagerRow() is not { Item: { } item })
+            return;
+
+        SetActiveTakeoffTarget(FindTakeoffTreeItem(item), item);
+        WorkspaceTabs.SelectedIndex = 0;
+    }
+
+    private void BtnTakeoffManagerProperties_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedTakeoffManagerRow() is not { Item: { } item } ||
+            FindTakeoffTreeItem(item) is not { } tvi)
+            return;
+
+        EditTakeoffItemProperties(tvi, item);
+        RefreshTakeoffManager();
+    }
+
+    private void BtnTakeoffManagerOpenEstimating_Click(object sender, RoutedEventArgs e) => OpenEstimatingWindow();
+
+    private void BtnAiManagerRefresh_Click(object sender, RoutedEventArgs e) => RefreshAiManager();
+
+    private void RefreshAiManager()
+    {
+        LoadObservationsInbox();
+        AiManagerGrid.ItemsSource = ObservationsListView.Items.OfType<ObservationDisplayItem>().ToList();
+        TxtStatus.Text = $"AI Manager: {AiManagerGrid.Items.Count} item(s).";
+    }
+
+    private ObservationDisplayItem? SelectedAiManagerItem() =>
+        AiManagerGrid.SelectedItem as ObservationDisplayItem;
+
+    private void BtnAiManagerOpenDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedAiManagerItem() is { } item)
+            ShowObservationDetailsDialog(item.Observation);
+    }
+
+    private void BtnAiManagerGoToPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedAiManagerItem() is { } item && CanGoToObservationPage(item))
+        {
+            GoToObservationPage(item);
+            WorkspaceTabs.SelectedIndex = 0;
+        }
+    }
+
+    private async void BtnAiManagerRunAi_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedAiManagerItem() is { } item && CanRunAiRequest(item))
+            await RunAiRequestAsync(item);
+    }
+
+    private void Btn3dManagerBuildFromTakeoffs_Click(object sender, RoutedEventArgs e)
+    {
+        BuildMassingDraftFromWallTakeoffs();
+        Refresh3dManagerSummary();
+    }
+
+    private void Btn3dManagerOpenWindow_Click(object sender, RoutedEventArgs e) => OpenMassing3DWindow();
+    private void Btn3dManagerOpenJson_Click(object sender, RoutedEventArgs e) => OpenMassingDraftJson();
+
+    private void Refresh3dManagerSummary()
+    {
+        if (_currentJob == null)
+        {
+            Txt3dManagerSummary.Text = "Open a job to use the 3D manager.";
+            return;
+        }
+
+        try
+        {
+            string path = SmartMassingDraftService.ModelPath(_currentJob);
+            SmartMassingDraft? draft = _currentMassingDraft;
+            if (draft == null && File.Exists(path))
+                draft = SmartMassingDraftService.LoadDraft(_currentJob);
+            Txt3dManagerSummary.Text = draft == null
+                ? $"No 3D draft found at {Path.GetRelativePath(_currentJob.RootPath, path)}."
+                : BuildMassingDraftSummary(draft, path);
+        }
+        catch (Exception ex)
+        {
+            Txt3dManagerSummary.Text = ex.Message;
+        }
+    }
+
+    private List<EstimateDisplayRow> SelectedEstimateRows() =>
+        _estimateList?.SelectedItems
+            .OfType<EstimateDisplayRow>()
+            .ToList() ?? [];
+
+    private List<TakeoffMeasurementNode> SelectedEstimateMeasurementNodes()
+    {
+        var nodes = new List<TakeoffMeasurementNode>();
+        foreach (EstimateDisplayRow row in SelectedEstimateRows())
+        {
+            if (row.Takeoff == null)
+                continue;
+
+            if (row.Measurement != null)
+            {
+                nodes.Add(new TakeoffMeasurementNode(row.Takeoff, row.Measurement));
+                continue;
+            }
+
+            nodes.AddRange(row.Takeoff.Measurements.Select(measurement => new TakeoffMeasurementNode(row.Takeoff, measurement)));
+        }
+
+        return nodes
+            .GroupBy(node => node.Measurement.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private void UpdateEstimateActionButtons()
+    {
+        var selectedRows = SelectedEstimateRows();
+        var selectedNodes = SelectedEstimateMeasurementNodes();
+        bool hasMeasurements = selectedNodes.Count > 0;
+        if (_estimateSelectButton != null)
+            _estimateSelectButton.IsEnabled = hasMeasurements;
+        if (_estimateGoToPageButton != null)
+            _estimateGoToPageButton.IsEnabled = selectedNodes.Any(node => !string.IsNullOrWhiteSpace(node.Measurement.PageFolder));
+        if (_estimatePropertiesButton != null)
+            _estimatePropertiesButton.IsEnabled = selectedRows.Count == 1 && selectedRows[0].Takeoff != null;
+    }
+
+    private void EstimateSelectSelectedOnCanvas()
+    {
+        var nodes = SelectedEstimateMeasurementNodes();
+        if (nodes.Count == 0)
+        {
+            TxtStatus.Text = "Select estimate measurement rows first.";
+            return;
+        }
+
+        SelectTakeoffSectionNodesSilently(nodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(nodes);
+    }
+
+    private void EstimateGoToSelectedPage()
+    {
+        var nodes = SelectedEstimateMeasurementNodes();
+        TakeoffMeasurementNode? target = nodes.FirstOrDefault(node => !string.IsNullOrWhiteSpace(node.Measurement.PageFolder));
+        if (target == null)
+        {
+            TxtStatus.Text = "Selected estimate rows do not have a source page.";
+            return;
+        }
+
+        GoToMeasurementPage(target.Measurement);
+        SelectTakeoffSectionNodesSilently(nodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(nodes);
+    }
+
+    private void EstimateOpenSelectedProperties()
+    {
+        if (SelectedEstimateRows() is not [EstimateDisplayRow row] || row.Takeoff == null)
+            return;
+
+        if (row.Measurement != null)
+        {
+            EditSectionProperties(row.Takeoff, row.Measurement);
+            return;
+        }
+
+        if (FindTakeoffTreeItem(row.Takeoff) is { } tvi)
+            EditTakeoffItemProperties(tvi, row.Takeoff);
     }
 
     private ContextMenu BuildEstimateContextMenu()
@@ -1137,44 +2539,58 @@ public partial class MainWindow : Window
         menu.Opened += (_, _) =>
         {
             menu.Items.Clear();
-            if (_estimateList?.SelectedItem is not EstimateDisplayRow row)
+            var selectedRows = SelectedEstimateRows();
+            var selectedNodes = SelectedEstimateMeasurementNodes();
+            if (selectedRows.Count == 0)
             {
-                menu.Items.Add(new MenuItem { Header = "No section selected", IsEnabled = false });
+                menu.Items.Add(new MenuItem { Header = "No estimate row selected", IsEnabled = false });
                 return;
             }
 
-            if (row.Measurement == null || row.Takeoff == null)
+            if (selectedNodes.Count == 0)
             {
-                menu.Items.Add(new MenuItem { Header = "Select a measurement row", IsEnabled = false });
+                menu.Items.Add(new MenuItem { Header = "Selected rows have no measurements", IsEnabled = false });
                 return;
             }
 
-            string entryTitle = MeasurementEntryTitle(row.Takeoff);
+            EstimateDisplayRow? row = selectedRows.Count == 1 ? selectedRows[0] : null;
+            string entryTitle = row?.Takeoff != null ? MeasurementEntryTitle(row.Takeoff) : "Measurement";
 
-            var goToPage = new MenuItem { Header = "Go to Page" };
-            goToPage.Click += (_, _) => SelectPageByFolder(row.Measurement.PageFolder);
+            var goToPage = new MenuItem { Header = selectedNodes.Count > 1 ? "Go to First Page" : "Go to Page" };
+            goToPage.Click += (_, _) => EstimateGoToSelectedPage();
             menu.Items.Add(goToPage);
 
-            var selectOnCanvas = new MenuItem { Header = "Select on Canvas" };
-            selectOnCanvas.Click += (_, _) => SelectSectionOnCanvas(row.Measurement);
+            var selectOnCanvas = new MenuItem { Header = selectedNodes.Count > 1 ? $"Select {selectedNodes.Count} on Canvas" : "Select on Canvas" };
+            selectOnCanvas.Click += (_, _) => EstimateSelectSelectedOnCanvas();
             menu.Items.Add(selectOnCanvas);
 
             var properties = new MenuItem { Header = $"{entryTitle} Properties..." };
-            properties.Click += (_, _) => EditSectionProperties(row.Takeoff, row.Measurement);
+            properties.IsEnabled = row is { Takeoff: not null };
+            properties.Click += (_, _) => EstimateOpenSelectedProperties();
             menu.Items.Add(properties);
 
             var rename = new MenuItem { Header = $"Rename {entryTitle}" };
-            rename.Click += (_, _) => RenameSection(row.Takeoff, row.Measurement);
+            rename.IsEnabled = row is { Takeoff: not null, Measurement: not null };
+            rename.Click += (_, _) =>
+            {
+                if (row is { Takeoff: not null, Measurement: not null })
+                    RenameSection(row.Takeoff, row.Measurement);
+            };
             menu.Items.Add(rename);
 
             var delete = new MenuItem { Header = $"Delete {entryTitle}" };
-            delete.Click += (_, _) => DeleteSection(row.Takeoff, row.Measurement);
+            delete.IsEnabled = row is { Takeoff: not null, Measurement: not null };
+            delete.Click += (_, _) =>
+            {
+                if (row is { Takeoff: not null, Measurement: not null })
+                    DeleteSection(row.Takeoff, row.Measurement);
+            };
             menu.Items.Add(delete);
         };
         return menu;
     }
 
-    private void SelectSectionOnCanvas(Measurement measurement)
+    private void SelectSectionOnCanvas(Measurement measurement, bool suppressTakeoffSync = false)
     {
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder) &&
             (_currentPage == null ||
@@ -1183,7 +2599,56 @@ public partial class MainWindow : Window
             SelectPageByFolder(measurement.PageFolder);
         }
 
-        Dispatcher.InvokeAsync(() => _viewport.FocusMeasurement(measurement));
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (suppressTakeoffSync)
+                _suppressTakeoffSelectionFromViewport = true;
+            try
+            {
+                _viewport.FocusMeasurement(measurement);
+            }
+            finally
+            {
+                if (suppressTakeoffSync)
+                    _suppressTakeoffSelectionFromViewport = false;
+            }
+        });
+    }
+
+    private void SelectTakeoffSectionMeasurementsOnCanvas(IReadOnlyList<TakeoffMeasurementNode> nodes)
+    {
+        var measurements = nodes
+            .Select(node => node.Measurement)
+            .Distinct()
+            .ToList();
+        if (measurements.Count == 0)
+            return;
+
+        Measurement target = measurements.FirstOrDefault(measurement =>
+            _currentPage != null && IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath)) ?? measurements[0];
+
+        if (!string.IsNullOrWhiteSpace(target.PageFolder) &&
+            (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, target.PageFolder)))
+        {
+            SelectPageByFolder(target.PageFolder);
+        }
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            _syncingViewportSelectionFromTakeoffItem = true;
+            try
+            {
+                _viewport.SelectMeasurements(measurements);
+            }
+            finally
+            {
+                _syncingViewportSelectionFromTakeoffItem = false;
+            }
+        });
+
+        TxtStatus.Text = measurements.Count == 1
+            ? $"Selected {MeasurementEntryTitle(nodes[0].Item).ToLowerInvariant()} on canvas."
+            : $"Selected {measurements.Count} {MeasurementEntryTitlePlural(nodes)} on canvas.";
     }
 
     private void GoToMeasurementPage(Measurement measurement)
@@ -1196,26 +2661,45 @@ public partial class MainWindow : Window
 
     private void OnEstimateSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_syncingEstimateSelection || _estimateList?.SelectedItem is not EstimateDisplayRow row)
+        if (_syncingEstimateSelection || _estimateList == null)
             return;
 
-        if (row.Measurement == null)
+        var selectedRows = SelectedEstimateRows();
+        if (selectedRows.Count == 0)
             return;
 
         _syncingEstimateSelection = true;
         try
         {
-            SelectSectionOnCanvas(row.Measurement);
+            if (selectedRows.Count > 1)
+            {
+                EstimateSelectSelectedOnCanvas();
+                return;
+            }
+
+            EstimateDisplayRow row = selectedRows[0];
+            if (row.Measurement != null)
+            {
+                SelectSectionOnCanvas(row.Measurement);
+                return;
+            }
+
+            if (row.Takeoff != null)
+            {
+                SelectTakeoffItem(row.Takeoff);
+                SelectCurrentPageTakeoffMeasurementsOnCanvas(row.Takeoff);
+            }
         }
         finally
         {
             _syncingEstimateSelection = false;
+            UpdateEstimateActionButtons();
         }
     }
 
     private void OnViewportMeasurementSelectionChanged(Measurement? measurement)
     {
-        if (_syncingEstimateSelection || _estimateList == null)
+        if (_syncingEstimateSelection || _syncingViewportSelectionFromTakeoffItem || _estimateList == null)
             return;
 
         if (Mouse.LeftButton == MouseButtonState.Pressed)
@@ -1238,12 +2722,172 @@ public partial class MainWindow : Window
 
             _estimateList.SelectedItem = row;
             _estimateList.ScrollIntoView(row);
-            SelectTakeoffSectionNode(measurement);
+            ActivateTakeoffForMeasurement(measurement);
+            SelectPageTakeoffNodeForMeasurement(measurement);
         }
         finally
         {
             _syncingEstimateSelection = false;
         }
+        UpdateEstimateActionButtons();
+        _estimatingWindow?.RefreshRows();
+    }
+
+    private void OnViewportMeasurementsSelectionChanged(IReadOnlyList<Measurement> measurements)
+    {
+        if (_syncingViewportSelectionFromTakeoffItem || _suppressTakeoffSelectionFromViewport)
+            return;
+
+        SelectTakeoffItemsForViewportMeasurements(measurements);
+    }
+
+    private void SelectTakeoffItemsForViewportMeasurements(IReadOnlyList<Measurement> measurements)
+    {
+        var selectedItems = measurements
+            .Select(FindTakeoffItemForMeasurement)
+            .Where(item => item != null)
+            .Select(item => item!)
+            .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        if (selectedItems.Count == 0)
+        {
+            _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
+            ApplyTakeoffPageHighlights();
+            RevealPagesForTakeoffItems([]);
+            return;
+        }
+
+        _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        foreach (TakeoffItem item in selectedItems)
+            _takeoffsMultiSelection.Add(item.FolderPath);
+
+        Measurement? activeMeasurement = measurements.FirstOrDefault(measurement => FindTakeoffItemForMeasurement(measurement) != null);
+        if ((_activeItem == null || !selectedItems.Any(IsActiveTakeoffItem)) &&
+            activeMeasurement != null)
+        {
+            ActivateTakeoffForMeasurement(activeMeasurement);
+        }
+        else
+        {
+            ApplyTakeoffPageHighlights();
+            RefreshActiveTakeoffVisuals();
+        }
+
+        SelectFirstTakeoffItemSilently(selectedItems);
+        RevealPagesForTakeoffItems(selectedItems, _currentPage?.FolderPath);
+
+        string? joistStatus = JoistSelectionStatus(measurements);
+        if (joistStatus != null)
+        {
+            TxtStatus.Text = joistStatus;
+            return;
+        }
+
+        TxtStatus.Text = selectedItems.Count == 1
+            ? $"Selected takeoff from sheet: {selectedItems[0].Name}."
+            : $"Selected {selectedItems.Count} takeoffs from sheet selection.";
+    }
+
+    private string? JoistSelectionStatus(IReadOnlyList<Measurement> measurements)
+    {
+        var joistAreas = measurements
+            .Where(measurement =>
+                measurement.JoistEnabled &&
+                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .ToList();
+        if (joistAreas.Count == 0)
+            return null;
+
+        if (joistAreas.Count == 1)
+        {
+            Measurement area = joistAreas[0];
+            TakeoffItem? item = FindTakeoffItemForMeasurement(area);
+            string name = item?.Name ?? "selected area";
+            if (!area.JoistDirectionLocked)
+                return $"Selected joist area {name}: set joist direction.";
+
+            JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(area, _viewport.ScaleMetersPerPt);
+            return $"Selected joist area {name}: {JoistTakeoffCalculator.FormatDiagnostics(layout, _viewport.UnitMode)}{FormatJoistScaleSuffix(area)}.";
+        }
+
+        var layouts = joistAreas
+            .Where(area => area.JoistDirectionLocked)
+            .Select(area => JoistTakeoffCalculator.Calculate(area, _viewport.ScaleMetersPerPt))
+            .Where(layout => layout.HasScale)
+            .ToList();
+        int pending = joistAreas.Count(area => !area.JoistDirectionLocked);
+        int joistCount = layouts.Sum(layout => layout.Count);
+        int candidateCount = layouts.Sum(layout => layout.CandidateLineCount);
+        string pendingText = pending > 0 ? $", {pending} need direction" : "";
+        return $"Selected {joistAreas.Count} joist areas: joists {joistCount} pcs, candidate lines {candidateCount}{pendingText}.";
+    }
+
+    private string FormatJoistScaleSuffix(Measurement area)
+    {
+        double scale = area.ScaleMetersPerPt > 0 ? area.ScaleMetersPerPt : _viewport.ScaleMetersPerPt;
+        if (scale <= 0)
+            return "";
+
+        double feetPerPt = scale / 0.3048;
+        return $", scale {feetPerPt.ToString("0.####", CultureInfo.InvariantCulture)} ft/pt";
+    }
+
+    private TakeoffItem? ActivateTakeoffForMeasurement(Measurement measurement)
+    {
+        TakeoffItem? item = FindTakeoffItemForMeasurement(measurement);
+        if (item == null)
+            return null;
+
+        item.MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        _activeItem = item;
+        _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
+        _viewport.ActiveColor = item.Color;
+        _viewport.ActiveTakeoffFolder = item.FolderPath;
+        if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
+            ApplyToolSelection(item.MeasurementType);
+        else
+            UpdateToolStatus();
+        RefreshPagesTakeoffIndicators();
+        RefreshActiveTakeoffVisuals();
+        UpdateTotalDisplay();
+        return item;
+    }
+
+    private void SelectPageTakeoffNodeForMeasurement(Measurement measurement)
+    {
+        if (FindTakeoffItemForMeasurement(measurement) is not { } item)
+            return;
+
+        string pageFolder = !string.IsNullOrWhiteSpace(measurement.PageFolder)
+            ? measurement.PageFolder
+            : _currentPage?.FolderPath ?? "";
+        if (string.IsNullOrWhiteSpace(pageFolder))
+            return;
+
+        SelectPageTakeoffNodeSilently(pageFolder, item.FolderPath);
+    }
+
+    private void SelectCurrentPageTakeoffNodeSilently(TakeoffItem item)
+    {
+        if (_currentPage == null ||
+            !item.Measurements.Any(measurement => IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath)))
+        {
+            return;
+        }
+
+        SelectPageTakeoffNodeSilently(_currentPage.FolderPath, item.FolderPath);
+    }
+
+    private void SelectCurrentPageTakeoffMeasurementsOnCanvas(TakeoffItem item)
+    {
+        if (_currentPage == null)
+            return;
+
+        SelectTakeoffMeasurementsOnCanvas(item, _currentPage.FolderPath, _currentPage.Name);
     }
 
     private void RenameSection(TakeoffItem item, Measurement measurement)
@@ -1259,6 +2903,7 @@ public partial class MainWindow : Window
         SmartTakeoffsJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
+        RefreshSheetLegend();
         TxtStatus.Text = $"Renamed {MeasurementEntryTitle(item).ToLowerInvariant()}: {measurement.Name}";
     }
 
@@ -1276,7 +2921,61 @@ public partial class MainWindow : Window
         SmartTakeoffsJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
+        RefreshSheetLegend();
         TxtStatus.Text = $"Updated {MeasurementEntryTitle(item).ToLowerInvariant()} properties.";
+    }
+
+    private void EditTakeoffSectionNotes(TakeoffMeasurementNode anchor)
+    {
+        var selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
+        if (selectedNodes.Count == 0)
+            return;
+
+        var selectedMeasurements = selectedNodes
+            .Select(node => node.Measurement)
+            .Distinct()
+            .ToList();
+        string firstNotes = selectedMeasurements[0].Notes;
+        string initialNotes = selectedMeasurements.All(measurement =>
+            string.Equals(measurement.Notes, firstNotes, StringComparison.Ordinal))
+            ? firstNotes
+            : "";
+
+        string? notes = ShowMultilineInputDialog(
+            selectedMeasurements.Count == 1 ? "Notes:" : $"Notes for {selectedMeasurements.Count} selected section/count rows:",
+            initialNotes,
+            selectedMeasurements.Count == 1 ? "Set Notes" : "Set Section/Count Notes");
+        if (notes == null)
+            return;
+
+        foreach (var group in selectedNodes.GroupBy(node => node.Item))
+        {
+            foreach (Measurement measurement in group.Select(node => node.Measurement).Distinct())
+                measurement.Notes = notes.Trim();
+
+            SmartTakeoffsJobStore.SaveTakeoffItem(group.Key);
+            RefreshTreeItem(group.Key);
+        }
+
+        SelectTakeoffSectionNodesSilently(selectedNodes);
+        RefreshEstimateTable();
+        RefreshSheetLegend();
+        TxtStatus.Text = selectedMeasurements.Count == 1
+            ? $"Updated notes for {MeasurementEntryTitle(anchor.Item).ToLowerInvariant()}."
+            : $"Updated notes for {selectedMeasurements.Count} selected {MeasurementEntryTitlePlural(selectedNodes)}.";
+    }
+
+    private void GoToTakeoffSectionsPage(TakeoffMeasurementNode anchor)
+    {
+        var selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
+        TakeoffMeasurementNode? targetNode = selectedNodes.FirstOrDefault(node =>
+            !string.IsNullOrWhiteSpace(node.Measurement.PageFolder));
+        if (targetNode == null)
+            return;
+
+        GoToMeasurementPage(targetNode.Measurement);
+        SelectTakeoffSectionNodesSilently(selectedNodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(selectedNodes);
     }
 
     private bool ShowSectionPropertiesDialog(
@@ -1359,10 +3058,13 @@ public partial class MainWindow : Window
             SetTool("select");
     }
 
-    private void SetTool(string tool)
+    private void SetTool(string tool, bool forceNewTakeoff = false)
     {
-        if (tool is "point" or "line" or "area" && !EnsureDrawingTakeoff(tool))
+        if (tool is "point" or "line" or "area" && !EnsureDrawingTakeoff(tool, forceNewTakeoff))
+        {
+            SyncToolButtonsToActiveTool();
             return;
+        }
 
         ApplyToolSelection(tool);
     }
@@ -1374,9 +3076,15 @@ public partial class MainWindow : Window
             _lastDrawingTool = tool;
         _viewport.SetTool(tool);
         foreach (var (t, btn) in _toolBtns)
-            btn.Style = t == tool
-                ? (Style)FindResource("ToolBtnActive")
-                : (Style)FindResource("ToolBtn");
+            btn.IsChecked = t == tool;
+        UpdateRecordButton();
+        UpdateToolStatus();
+    }
+
+    private void SyncToolButtonsToActiveTool()
+    {
+        foreach (var (t, btn) in _toolBtns)
+            btn.IsChecked = t == _activeTool;
         UpdateRecordButton();
         UpdateToolStatus();
     }
@@ -1387,9 +3095,15 @@ public partial class MainWindow : Window
             return;
 
         bool recording = _activeTool is "point" or "line" or "area";
+        string recordType = recording ? MeasurementTypeTitle(_activeTool) : "";
         _updatingRecordButton = true;
         _recordButton.IsChecked = recording;
-        _recordButton.Content = recording ? "Record On" : "Record";
+        _recordButton.Content = recording ? $"Rec {recordType}" : "Record";
+        _recordButton.ToolTip = recording
+            ? _activeItem == null
+                ? $"Recording {recordType}; no active takeoff target is selected."
+                : $"Recording {recordType} into {_activeItem.Name}. Click to stop."
+            : "Start recording into the active takeoff target.";
         _recordButton.Background = recording
             ? new SolidColorBrush(Color.FromRgb(196, 32, 32))
             : (Brush)FindResource("ControlBackgroundBrush");
@@ -1462,7 +3176,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool EnsureDrawingTakeoff(string tool)
+    private bool EnsureDrawingTakeoff(string tool, bool forceNewTakeoff = false)
     {
         if (_currentJob == null)
         {
@@ -1489,20 +3203,26 @@ public partial class MainWindow : Window
             return false;
         }
 
-        if (_activeItem != null && _activeItem.MeasurementType == mtype)
+        if (!forceNewTakeoff &&
+            _activeItem != null &&
+            SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == mtype)
         {
+            _activeItem.MeasurementType = mtype;
             _viewport.ActiveColor = _activeItem.Color;
             _viewport.ActiveTakeoffFolder = _activeItem.FolderPath;
             return true;
         }
 
-        string parentFolder = CurrentTakeoffParentFolder();
+        if (!forceNewTakeoff && !ConfirmCreateDrawingTakeoffTarget(mtype))
+            return false;
+
+        string parentFolder = NewTakeoffItemParentFolder();
         string defaultColor = ResolveTakeoffFolderDefaultColor(
             parentFolder,
             _activeItem?.Color ?? _viewport.ActiveColor);
         var dlg = new NewItemDialog(
             mtype,
-            DefaultTakeoffName(mtype),
+            DefaultTakeoffNameForFolder(mtype, parentFolder),
             lockType: true,
             defaultColor: defaultColor)
         {
@@ -1512,15 +3232,36 @@ public partial class MainWindow : Window
             return false;
 
         var newItem = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, mtype, parentFolder);
+        ApplyTakeoffFolderDefaultsToNewItem(newItem, parentFolder);
         _takeoffItems.Add(newItem);
         var treeParent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
         var tvi = AddTakeoffTreeItem(newItem, treeParent);
         if (treeParent is TreeViewItem parentTvi)
             parentTvi.IsExpanded = true;
 
+        _activeItem = newItem;
+        _activeTakeoffParentFolder = parentFolder;
+        _viewport.ActiveColor = newItem.Color;
+        _viewport.ActiveTakeoffFolder = newItem.FolderPath;
         tvi.IsSelected = true;
+        UpdateToolStatus();
+        RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
         return true;
+    }
+
+    private bool ConfirmCreateDrawingTakeoffTarget(string measurementType)
+    {
+        string targetType = MeasurementTypeTitle(measurementType);
+        string message = _activeItem == null
+            ? $"No active takeoff target is selected.\n\nCreate a {targetType} takeoff item before recording?"
+            : $"Active target is {_activeItem.Name} ({MeasurementTypeTitle(_activeItem.MeasurementType)}).\n\n{targetType} recording needs a {targetType} takeoff item. Create a separate target?";
+
+        return MessageBox.Show(
+            message,
+            "Create Takeoff Target",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
     }
 
     private void BtnFit_Click(object sender, RoutedEventArgs e)    => _viewport.ZoomFit();
@@ -1620,15 +3361,29 @@ public partial class MainWindow : Window
     }
 
     private void BtnDarkTheme_Checked(object sender, RoutedEventArgs e) =>
-        ApplyTheme(dark: true, persist: true);
+        ApplyThemeFromToggle(dark: true);
 
     private void BtnDarkTheme_Unchecked(object sender, RoutedEventArgs e) =>
-        ApplyTheme(dark: false, persist: true);
+        ApplyThemeFromToggle(dark: false);
+
+    private void ApplyThemeFromToggle(bool dark)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        ApplyTheme(dark, persist: true);
+    }
 
     private void ReloadPagesTree(string? selectPath = null)
     {
         PagesTree.Items.Clear();
-        if (_currentJob == null) return;
+        _pageTakeoffMultiSelection.Clear();
+        _pageTakeoffRangeAnchorKey = null;
+        if (_currentJob == null)
+        {
+            _expandedPageTreePaths.Clear();
+            return;
+        }
 
         var rootNode = new PageFolderNode
         {
@@ -1640,11 +3395,12 @@ public partial class MainWindow : Window
         {
             Header = "📁 Pages",
             Tag = rootNode,
-            IsExpanded = true,
+            IsExpanded = false,
         };
         PagesTree.Items.Add(rootItem);
         FillPagesTree(rootItem.Items, _currentJob.PagesRoot);
         RefreshPagesTakeoffIndicators();
+        RestoreExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
 
         if (!string.IsNullOrWhiteSpace(selectPath))
             SelectNodeByFolder(selectPath);
@@ -1663,11 +3419,14 @@ public partial class MainWindow : Window
             PageInfo? page = SmartTakeoffsJobStore.TryReadPage(dir);
             if (page != null)
             {
-                items.Add(new TreeViewItem
+                var pageItem = new TreeViewItem
                 {
                     Header = BuildPageHeader(page),
                     Tag = page,
-                });
+                    IsExpanded = false,
+                };
+                RebuildPageTakeoffNodes(pageItem, page);
+                items.Add(pageItem);
                 continue;
             }
 
@@ -1677,12 +3436,184 @@ public partial class MainWindow : Window
             {
                 Header = $"📁 {name}",
                 Tag = folderNode,
-                IsExpanded = true,
+                IsExpanded = false,
             };
             items.Add(tvi);
             FillPagesTree(tvi.Items, dir);
         }
     }
+
+    private void BtnCollapsePagesTree_Click(object sender, RoutedEventArgs e) =>
+        SetProjectTreeExpanded(PagesTree, false, "Pages tree collapsed.");
+
+    private void BtnExpandPagesTree_Click(object sender, RoutedEventArgs e) =>
+        SetProjectTreeExpanded(PagesTree, true, "Pages tree expanded.");
+
+    private void BtnCollapseTakeoffsTree_Click(object sender, RoutedEventArgs e) =>
+        SetProjectTreeExpanded(TakeoffsTree, false, "Takeoffs tree collapsed.");
+
+    private void BtnExpandTakeoffsTree_Click(object sender, RoutedEventArgs e) =>
+        SetProjectTreeExpanded(TakeoffsTree, true, "Takeoffs tree expanded.");
+
+    private void SetProjectTreeExpanded(ItemsControl tree, bool isExpanded, string statusText)
+    {
+        SetTreeItemsExpanded(tree, isExpanded);
+        if (ReferenceEquals(tree, PagesTree))
+            CaptureExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
+        else if (ReferenceEquals(tree, TakeoffsTree))
+            CaptureExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
+        TxtStatus.Text = statusText;
+    }
+
+    private void CollapseProjectTreeDisplays()
+    {
+        CollapseTreeAndExpansionState(PagesTree, _expandedPageTreePaths);
+        CollapseTreeAndExpansionState(TakeoffsTree, _expandedTakeoffTreePaths);
+    }
+
+    private static void SetTreeItemsExpanded(ItemsControl parent, bool isExpanded)
+    {
+        foreach (TreeViewItem item in parent.Items.OfType<TreeViewItem>())
+        {
+            item.IsExpanded = isExpanded;
+            SetTreeItemsExpanded(item, isExpanded);
+        }
+    }
+
+    private void CollapseTreeAndExpansionState(ItemsControl tree, HashSet<string> expandedPaths)
+    {
+        SetTreeItemsExpanded(tree, false);
+        expandedPaths.Clear();
+    }
+
+    private static void RebaseExpandedTreePaths(HashSet<string> expandedPaths, string oldPath, string newPath)
+    {
+        string? oldKey = ExpansionPathKey(oldPath);
+        string? newKey = ExpansionPathKey(newPath);
+        if (oldKey == null ||
+            newKey == null ||
+            string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase) ||
+            expandedPaths.Count == 0)
+        {
+            return;
+        }
+
+        var rebased = new List<(string OldKey, string NewKey)>();
+        foreach (string expandedPath in expandedPaths)
+        {
+            if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldKey, expandedPath))
+                continue;
+
+            rebased.Add((expandedPath, ExpansionPathKey(RebaseDescendantPath(oldKey, newKey, expandedPath))!));
+        }
+
+        foreach (var (oldExpandedKey, newExpandedKey) in rebased)
+        {
+            expandedPaths.Remove(oldExpandedKey);
+            expandedPaths.Add(newExpandedKey);
+        }
+    }
+
+    private void RestoreExpandedTreeState(
+        ItemsControl tree,
+        HashSet<string> expandedPaths,
+        Func<TreeViewItem, string?> getPath)
+    {
+        WithTreeExpansionTrackingSuppressed(() =>
+            RestoreExpandedTreeStateCore(tree, expandedPaths, getPath));
+    }
+
+    private static void RestoreExpandedTreeStateCore(
+        ItemsControl parent,
+        HashSet<string> expandedPaths,
+        Func<TreeViewItem, string?> getPath)
+    {
+        foreach (TreeViewItem item in parent.Items.OfType<TreeViewItem>())
+        {
+            string? key = ExpansionPathKey(getPath(item));
+            if (key != null && expandedPaths.Contains(key))
+                item.IsExpanded = true;
+
+            RestoreExpandedTreeStateCore(item, expandedPaths, getPath);
+        }
+    }
+
+    private static void CaptureExpandedTreeState(
+        ItemsControl tree,
+        HashSet<string> expandedPaths,
+        Func<TreeViewItem, string?> getPath)
+    {
+        expandedPaths.Clear();
+        CaptureExpandedTreeStateCore(tree, expandedPaths, getPath);
+    }
+
+    private static void CaptureExpandedTreeStateCore(
+        ItemsControl parent,
+        HashSet<string> expandedPaths,
+        Func<TreeViewItem, string?> getPath)
+    {
+        foreach (TreeViewItem item in parent.Items.OfType<TreeViewItem>())
+        {
+            if (item.IsExpanded && ExpansionPathKey(getPath(item)) is { } key)
+                expandedPaths.Add(key);
+
+            CaptureExpandedTreeStateCore(item, expandedPaths, getPath);
+        }
+    }
+
+    private void PagesTreeItem_Expanded(object sender, RoutedEventArgs e) =>
+        TrackTreeExpansion(e, _expandedPageTreePaths, GetPagesNodePath, expanded: true);
+
+    private void PagesTreeItem_Collapsed(object sender, RoutedEventArgs e) =>
+        TrackTreeExpansion(e, _expandedPageTreePaths, GetPagesNodePath, expanded: false);
+
+    private void TakeoffsTreeItem_Expanded(object sender, RoutedEventArgs e) =>
+        TrackTreeExpansion(e, _expandedTakeoffTreePaths, GetTakeoffNodePath, expanded: true);
+
+    private void TakeoffsTreeItem_Collapsed(object sender, RoutedEventArgs e) =>
+        TrackTreeExpansion(e, _expandedTakeoffTreePaths, GetTakeoffNodePath, expanded: false);
+
+    private void TrackTreeExpansion(
+        RoutedEventArgs e,
+        HashSet<string> expandedPaths,
+        Func<TreeViewItem, string?> getPath,
+        bool expanded)
+    {
+        if (_suppressTreeExpansionTracking || e.OriginalSource is not TreeViewItem item)
+            return;
+
+        string? key = ExpansionPathKey(getPath(item));
+        if (key == null)
+            return;
+
+        if (expanded)
+            expandedPaths.Add(key);
+        else
+            expandedPaths.Remove(key);
+    }
+
+    private void WithTreeExpansionTrackingSuppressed(Action action)
+    {
+        bool previous = _suppressTreeExpansionTracking;
+        _suppressTreeExpansionTracking = true;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            _suppressTreeExpansionTracking = previous;
+        }
+    }
+
+    private void ExpandTreeItemAndAncestorsWithoutTracking(TreeViewItem item)
+    {
+        WithTreeExpansionTrackingSuppressed(() =>
+            ExpandTreeItemAndAncestors(item));
+    }
+
+    private static string? ExpansionPathKey(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? null : NormalizePathForCompare(path);
 
     private StackPanel BuildPageHeader(PageInfo page)
     {
@@ -1700,7 +3631,7 @@ public partial class MainWindow : Window
                 Text = "  unscaled",
                 Foreground = Brushes.Firebrick,
                 FontSize = 10,
-                FontWeight = FontWeights.SemiBold,
+                FontWeight = FontWeights.Normal,
                 VerticalAlignment = VerticalAlignment.Center,
             });
         }
@@ -1721,9 +3652,211 @@ public partial class MainWindow : Window
         return panel;
     }
 
+    private void RebuildPageTakeoffNodes(TreeViewItem pageItem, PageInfo page)
+    {
+        pageItem.Items.Clear();
+        IReadOnlyList<TakeoffItem> orderedTakeoffs = OrderedTakeoffsForPage(page);
+        for (int index = 0; index < orderedTakeoffs.Count; index++)
+        {
+            TakeoffItem takeoff = orderedTakeoffs[index];
+            var node = new PageTakeoffNode(page, takeoff);
+            var child = new TreeViewItem
+            {
+                Header = BuildPageTakeoffHeader(page, takeoff, index),
+                Tag = node,
+            };
+            child.ContextMenu = BuildPageTakeoffContextMenu(node);
+            pageItem.Items.Add(child);
+        }
+    }
+
+    private FrameworkElement BuildPageTakeoffHeader(PageInfo page, TakeoffItem takeoff, int legendIndex)
+    {
+        bool isActive = IsActivePageTakeoff(page, takeoff);
+        var secondaryBrush = (Brush)Application.Current.Resources["SecondaryForegroundBrush"]
+            ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
+        Brush swatchBrush = BrushFromHex(takeoff.Color, Brushes.Gray);
+
+        var dock = new DockPanel { LastChildFill = true };
+
+        var pageMeasurements = MeasurementsForTakeoffOnPage(takeoff, page.FolderPath).ToList();
+        if (pageMeasurements.Count > 0)
+        {
+            var qty = new TextBlock
+            {
+                Text              = SheetLegendQuantityText(takeoff, pageMeasurements),
+                Foreground        = secondaryBrush,
+                FontSize          = 10,
+                FontFamily        = new FontFamily("Consolas, Cascadia Mono, Segoe UI"),
+                Margin            = new Thickness(8, 0, 4, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment     = TextAlignment.Right,
+                MinWidth          = 56,
+            };
+            DockPanel.SetDock(qty, Dock.Right);
+            dock.Children.Add(qty);
+        }
+
+        var indexText = new TextBlock
+        {
+            Text              = $"{legendIndex + 1}.",
+            Width             = 22,
+            TextAlignment     = TextAlignment.Right,
+            Foreground        = secondaryBrush,
+            FontSize          = 10,
+            Margin            = new Thickness(2, 0, 6, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var swatchHost = BuildTakeoffSwatchGlyph(takeoff, swatchBrush, isActive ? 16 : 14);
+        swatchHost.Margin = new Thickness(0, 0, 6, 0);
+
+        var nameRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        nameRow.Children.Add(indexText);
+        nameRow.Children.Add(swatchHost);
+        nameRow.Children.Add(new TextBlock
+        {
+            Text              = takeoff.Name,
+            FontWeight        = FontWeights.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming      = TextTrimming.CharacterEllipsis,
+        });
+        dock.Children.Add(nameRow);
+
+        dock.ToolTip =
+            $"Legend position: {legendIndex + 1}" + Environment.NewLine +
+            "Linked to the real Takeoffs item. Use Move Up/Down here only to change this sheet's legend order.";
+        return dock;
+    }
+
     private IEnumerable<TakeoffItem> TakeoffsForPage(string pageFolder) =>
         _takeoffItems.Where(item => item.Measurements.Any(m =>
             IsSamePageFolder(m.PageFolder, pageFolder)));
+
+    private IEnumerable<Measurement> MeasurementsForTakeoffOnPage(TakeoffItem item, string pageFolder) =>
+        item.Measurements.Where(measurement => IsSamePageFolder(measurement.PageFolder, pageFolder));
+
+    private IReadOnlyList<TakeoffItem> OrderedTakeoffsForPage(PageInfo page)
+    {
+        var takeoffs = TakeoffsForPage(page.FolderPath).ToList();
+        if (takeoffs.Count <= 1)
+            return takeoffs;
+
+        var byKey = takeoffs
+            .GroupBy(TakeoffLegendOrderKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<TakeoffItem>();
+
+        foreach (string storedKey in page.LegendTakeoffOrder.Select(NormalizeTakeoffLegendOrderKey))
+        {
+            if (string.IsNullOrWhiteSpace(storedKey) || !byKey.TryGetValue(storedKey, out TakeoffItem? takeoff))
+                continue;
+            if (!used.Add(storedKey))
+                continue;
+
+            ordered.Add(takeoff);
+        }
+
+        ordered.AddRange(takeoffs
+            .Where(takeoff => !used.Contains(TakeoffLegendOrderKey(takeoff)))
+            .OrderBy(takeoff => MeasurementTypeTitle(takeoff.MeasurementType), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(takeoff => takeoff.Name, StringComparer.OrdinalIgnoreCase));
+
+        return ordered;
+    }
+
+    private string TakeoffLegendOrderKey(TakeoffItem item) =>
+        NormalizeTakeoffLegendOrderKey(item.FolderPath);
+
+    private string NormalizeTakeoffLegendOrderKey(string value)
+    {
+        string clean = (value ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(clean))
+            return "";
+
+        if (_currentJob != null && Path.IsPathFullyQualified(clean))
+        {
+            string full = NormalizePath(clean);
+            if (SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, full))
+                clean = Path.GetRelativePath(_currentJob.TakeoffsRoot, full);
+        }
+
+        return clean.Replace('\\', '/').Trim('/');
+    }
+
+    private void SavePageLegendOrder(PageInfo page, IReadOnlyList<TakeoffItem> orderedTakeoffs)
+    {
+        var order = orderedTakeoffs
+            .Select(TakeoffLegendOrderKey)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        page.LegendTakeoffOrder = order;
+        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            _currentPage.LegendTakeoffOrder = order.ToList();
+        SmartTakeoffsJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order);
+    }
+
+    private void RebasePageLegendTakeoffOrderReferences(string oldPath, string newPath)
+    {
+        RebaseExpandedTreePaths(_expandedTakeoffTreePaths, oldPath, newPath);
+
+        if (_currentJob == null)
+            return;
+
+        string oldKey = NormalizeTakeoffLegendOrderKey(oldPath);
+        string newKey = NormalizeTakeoffLegendOrderKey(newPath);
+        if (string.IsNullOrWhiteSpace(oldKey) ||
+            string.IsNullOrWhiteSpace(newKey) ||
+            string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        foreach (PageInfo page in CollectPagesUnder(_currentJob.PagesRoot))
+        {
+            if (page.LegendTakeoffOrder.Count == 0)
+                continue;
+
+            var updated = page.LegendTakeoffOrder
+                .Select(key => RebaseTakeoffLegendOrderKey(key, oldKey, newKey))
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            bool changed = updated.Count != page.LegendTakeoffOrder.Count ||
+                           updated.Where((key, index) => !string.Equals(
+                               key,
+                               NormalizeTakeoffLegendOrderKey(page.LegendTakeoffOrder[index]),
+                               StringComparison.OrdinalIgnoreCase)).Any();
+            if (!changed)
+                continue;
+
+            page.LegendTakeoffOrder = updated;
+            SmartTakeoffsJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated);
+            if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+                _currentPage.LegendTakeoffOrder = updated.ToList();
+        }
+    }
+
+    private string RebaseTakeoffLegendOrderKey(string key, string oldPrefix, string newPrefix)
+    {
+        string clean = NormalizeTakeoffLegendOrderKey(key);
+        if (string.Equals(clean, oldPrefix, StringComparison.OrdinalIgnoreCase))
+            return newPrefix;
+
+        string prefix = oldPrefix.TrimEnd('/') + "/";
+        if (clean.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return newPrefix.TrimEnd('/') + clean[(prefix.Length - 1)..];
+
+        return clean;
+    }
 
     private void PageTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -1828,6 +3961,7 @@ public partial class MainWindow : Window
             page.FolderPath,
             page.PdfLayersCached ? page.PdfLayers : null,
             restoreView);
+        _viewport.SetPageAnnotations(SmartTakeoffsJobStore.LoadPageAnnotations(page.FolderPath));
         RefreshAiMarkersOverlay();
         SelectPageTreeNodeSilently(page.FolderPath);
         _settings.LastPageFolder = page.FolderPath;
@@ -1989,6 +4123,7 @@ public partial class MainWindow : Window
     {
         string oldFull = NormalizePath(oldPath);
         string newFull = NormalizePath(newPath);
+        RebaseExpandedTreePaths(_expandedPageTreePaths, oldFull, newFull);
         bool activeAffected = _currentPage != null &&
                               SmartTakeoffsJobStore.IsSameOrDescendant(oldFull, _currentPage.FolderPath);
         bool tabsChanged = false;
@@ -2099,12 +4234,26 @@ public partial class MainWindow : Window
         _activeItem.Measurements.Any(m =>
             IsSamePageFolder(m.PageFolder, page.FolderPath));
 
+    private bool IsActivePageTakeoffNode(TreeViewItem item) =>
+        item.Tag is PageTakeoffNode node &&
+        IsActivePageTakeoff(node.Page, node.Takeoff);
+
+    private bool IsActivePageTakeoff(PageInfo page, TakeoffItem takeoff) =>
+        _activeItem != null &&
+        string.Equals(_activeItem.FolderPath, takeoff.FolderPath, StringComparison.OrdinalIgnoreCase) &&
+        takeoff.Measurements.Any(measurement => IsSamePageFolder(measurement.PageFolder, page.FolderPath));
+
     private void RefreshPagesTakeoffIndicators()
     {
         foreach (TreeViewItem item in EnumeratePageTreeItems())
         {
             if (item.Tag is PageInfo page)
+            {
+                bool wasExpanded = item.IsExpanded;
                 item.Header = BuildPageHeader(page);
+                RebuildPageTakeoffNodes(item, page);
+                item.IsExpanded = wasExpanded;
+            }
         }
         ApplyPagesMultiSelectionVisuals();
     }
@@ -2114,8 +4263,14 @@ public partial class MainWindow : Window
         if (_syncingPageTreeSelection)
             return;
 
-        if (e.NewValue is not TreeViewItem { Tag: PageInfo page }) return;
-        OpenPageInActiveTab(page);
+        if (e.NewValue is TreeViewItem { Tag: PageInfo page })
+        {
+            OpenPageInActiveTab(page);
+        }
+        else if (e.NewValue is TreeViewItem { Tag: PageTakeoffNode node })
+        {
+            SelectLinkedPageTakeoff(node);
+        }
     }
 
     private string GetSelectedImportFolder()
@@ -2136,18 +4291,21 @@ public partial class MainWindow : Window
 
     private void SelectNodeByFolder(string folderPath)
     {
-        foreach (TreeViewItem item in PagesTree.Items)
+        WithTreeExpansionTrackingSuppressed(() =>
         {
-            if (SelectNodeByFolder(item, folderPath))
-                return;
-        }
+            foreach (TreeViewItem item in PagesTree.Items)
+            {
+                if (SelectNodeByFolder(item, folderPath))
+                    return;
+            }
+        });
     }
 
     private static bool SelectNodeByFolder(TreeViewItem item, string folderPath)
     {
         string? itemPath = GetPagesNodePath(item);
         if (itemPath != null &&
-            string.Equals(itemPath, folderPath, StringComparison.OrdinalIgnoreCase))
+            IsSamePageFolder(itemPath, folderPath))
         {
             item.IsSelected = true;
             item.BringIntoView();
@@ -2168,17 +4326,20 @@ public partial class MainWindow : Window
 
     private void SelectPageByFolder(string folderPath)
     {
-        foreach (TreeViewItem item in PagesTree.Items)
+        WithTreeExpansionTrackingSuppressed(() =>
         {
-            if (SelectPageByFolder(item, folderPath))
-                return;
-        }
+            foreach (TreeViewItem item in PagesTree.Items)
+            {
+                if (SelectPageByFolder(item, folderPath))
+                    return;
+            }
+        });
     }
 
     private static bool SelectPageByFolder(TreeViewItem item, string folderPath)
     {
         if (item.Tag is PageInfo page &&
-            string.Equals(page.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+            IsSamePageFolder(page.FolderPath, folderPath))
         {
             item.IsSelected = true;
             item.BringIntoView();
@@ -2202,12 +4363,39 @@ public partial class MainWindow : Window
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
             return;
 
+        if (item.Tag is PageTakeoffNode pageTakeoff)
+        {
+            string key = PageTakeoffSelectionKey(pageTakeoff);
+            if (!_pageTakeoffMultiSelection.Contains(key))
+            {
+                _pageTakeoffMultiSelection.Clear();
+                _pageTakeoffMultiSelection.Add(key);
+                _pageTakeoffRangeAnchorKey = key;
+                _pagesMultiSelection.Clear();
+                ApplyPagesMultiSelectionVisuals();
+            }
+
+            item.Focus();
+            item.IsSelected = true;
+            item.ContextMenu = BuildPageTakeoffContextMenu(pageTakeoff);
+            e.Handled = true;
+            return;
+        }
+
         string? path = GetPagesNodePath(item);
-        if (path != null && !_pagesMultiSelection.Contains(path))
+        if (path == null)
         {
             _pagesMultiSelection.Clear();
+            _pageTakeoffMultiSelection.Clear();
+            ApplyPagesMultiSelectionVisuals();
+        }
+        else if (!_pagesMultiSelection.Contains(path))
+        {
+            _pagesMultiSelection.Clear();
+            _pageTakeoffMultiSelection.Clear();
             if (!IsRootPagesNode(item))
                 _pagesMultiSelection.Add(path);
+            _pagesRangeAnchorPath = path;
             ApplyPagesMultiSelectionVisuals();
         }
 
@@ -2222,26 +4410,106 @@ public partial class MainWindow : Window
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
             return;
 
-        string? path = GetPagesNodePath(item);
-        if (path == null) return;
-
-        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && !IsRootPagesNode(item))
+        if (item.Tag is PageTakeoffNode pageTakeoff)
         {
-            if (!_pagesMultiSelection.Add(path))
-                _pagesMultiSelection.Remove(path);
+            HandlePageTakeoffNodeMultiSelect(item, pageTakeoff, e);
+            return;
+        }
+
+        string? path = GetPagesNodePath(item);
+        if (path == null)
+        {
+            _pagesMultiSelection.Clear();
+            _pageTakeoffMultiSelection.Clear();
+            ApplyPagesMultiSelectionVisuals();
+            return;
+        }
+
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        if (modifiers == ModifierKeys.None &&
+            _pagesMultiSelection.Count > 1 &&
+            _pagesMultiSelection.Contains(path))
+        {
+            item.IsSelected = true;
+            ApplyPagesMultiSelectionVisuals();
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Shift) == ModifierKeys.Shift && !IsRootPagesNode(item))
+        {
+            bool additive = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            SelectPagesRange(_pagesRangeAnchorPath, path, additive);
+            _pagesRangeAnchorPath = path;
+            _pageTakeoffMultiSelection.Clear();
             item.IsSelected = true;
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;
         }
 
-        if (!_pagesMultiSelection.SetEquals([path]))
+        if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control && !IsRootPagesNode(item))
         {
-            _pagesMultiSelection.Clear();
-            if (!IsRootPagesNode(item))
-                _pagesMultiSelection.Add(path);
+            if (!_pagesMultiSelection.Add(path))
+                _pagesMultiSelection.Remove(path);
+            _pagesRangeAnchorPath = path;
+            _pageTakeoffMultiSelection.Clear();
+            item.IsSelected = true;
             ApplyPagesMultiSelectionVisuals();
+            e.Handled = true;
+            return;
         }
+
+        _pagesMultiSelection.Clear();
+        if (!IsRootPagesNode(item))
+            _pagesMultiSelection.Add(path);
+        _pagesRangeAnchorPath = path;
+        _pageTakeoffMultiSelection.Clear();
+        ApplyPagesMultiSelectionVisuals();
+    }
+
+    private void HandlePageTakeoffNodeMultiSelect(TreeViewItem item, PageTakeoffNode node, MouseButtonEventArgs e)
+    {
+        string key = PageTakeoffSelectionKey(node);
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        _pagesMultiSelection.Clear();
+
+        if (modifiers == ModifierKeys.None &&
+            _pageTakeoffMultiSelection.Count > 1 &&
+            _pageTakeoffMultiSelection.Contains(key))
+        {
+            item.IsSelected = true;
+            ApplyPagesMultiSelectionVisuals();
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+        {
+            bool additive = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            SelectPageTakeoffRange(_pageTakeoffRangeAnchorKey, key, node.Page.FolderPath, additive);
+            _pageTakeoffRangeAnchorKey = key;
+            item.IsSelected = true;
+            ApplyPagesMultiSelectionVisuals();
+            Dispatcher.InvokeAsync(() => SelectSelectedPageTakeoffMeasurementsOnCanvas(node));
+            e.Handled = true;
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (!_pageTakeoffMultiSelection.Add(key))
+                _pageTakeoffMultiSelection.Remove(key);
+            _pageTakeoffRangeAnchorKey = key;
+            item.IsSelected = true;
+            ApplyPagesMultiSelectionVisuals();
+            Dispatcher.InvokeAsync(() => SelectSelectedPageTakeoffMeasurementsOnCanvas(node));
+            e.Handled = true;
+            return;
+        }
+
+        _pageTakeoffMultiSelection.Clear();
+        _pageTakeoffMultiSelection.Add(key);
+        _pageTakeoffRangeAnchorKey = key;
+        ApplyPagesMultiSelectionVisuals();
     }
 
     private void PagesTree_MouseMove(object sender, MouseEventArgs e)
@@ -2260,6 +4528,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (item.Tag is PageTakeoffNode pageTakeoff)
+        {
+            var takeoffFolders = SelectedPageTakeoffNodes(pageTakeoff, fallbackToAnchor: true)
+                .Select(node => node.Takeoff.FolderPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (takeoffFolders.Count == 0)
+                return;
+
+            var legendPayload = new PageTakeoffLegendDrag(pageTakeoff.Page.FolderPath, takeoffFolders);
+            DragDrop.DoDragDrop(PagesTree, legendPayload, DragDropEffects.Move);
+            _pagesDragStart = null;
+            return;
+        }
+
         var entries = GetSelectedPageEntries(item);
         if (entries.Count == 0)
             return;
@@ -2272,6 +4556,23 @@ public partial class MainWindow : Window
     private void PagesTree_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
+        if (e.Data.GetData(typeof(PageTakeoffLegendDrag)) is PageTakeoffLegendDrag legendDrag)
+        {
+            TreeViewItem? legendTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            if (CanDropPageTakeoffLegend(legendDrag, legendTargetItem))
+            {
+                e.Effects = DragDropEffects.Move;
+                UpdatePageTakeoffLegendDropCue(legendDrag, legendTargetItem!, e.GetPosition(legendTargetItem));
+            }
+            else
+            {
+                ClearPageTakeoffLegendDropCue();
+            }
+            e.Handled = true;
+            return;
+        }
+
+        ClearPageTakeoffLegendDropCue();
         if (e.Data.GetData(typeof(PagesClipboard)) is not PagesClipboard payload)
         {
             e.Handled = true;
@@ -2289,6 +4590,16 @@ public partial class MainWindow : Window
 
     private void PagesTree_Drop(object sender, DragEventArgs e)
     {
+        if (e.Data.GetData(typeof(PageTakeoffLegendDrag)) is PageTakeoffLegendDrag legendDrag)
+        {
+            TreeViewItem? legendTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            if (legendTargetItem != null)
+                DropPageTakeoffLegend(legendDrag, legendTargetItem, e.GetPosition(legendTargetItem));
+            ClearPageTakeoffLegendDropCue();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Data.GetData(typeof(PagesClipboard)) is not PagesClipboard payload)
             return;
 
@@ -2304,9 +4615,30 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void PagesTree_DragLeave(object sender, DragEventArgs e)
+    {
+        if (!PagesTree.IsMouseOver)
+            ClearPageTakeoffLegendDropCue();
+    }
+
     private void PagesTree_KeyDown(object sender, KeyEventArgs e)
     {
         if (PagesTree.SelectedItem is not TreeViewItem item) return;
+
+        if (item.Tag is PageTakeoffNode node)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Up)
+            {
+                MovePageTakeoffLegendNodes(node, -1);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Down)
+            {
+                MovePageTakeoffLegendNodes(node, 1);
+                e.Handled = true;
+            }
+            return;
+        }
 
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.C)
         {
@@ -2328,6 +4660,16 @@ public partial class MainWindow : Window
             DuplicatePageNode(item);
             e.Handled = true;
         }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Up)
+        {
+            MovePagesNodes(item, -1);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Down)
+        {
+            MovePagesNodes(item, 1);
+            e.Handled = true;
+        }
         else if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Delete)
         {
             DeletePagesNode(item);
@@ -2346,77 +4688,616 @@ public partial class MainWindow : Window
 
         if (item.Tag is PageFolderNode folder)
         {
+            int selectedCount = PageSelectionCount(item);
             bool isRoot = folder.IsRoot;
             bool canPaste = CanPasteInto(folder.FolderPath);
             bool hasChildren = Directory.Exists(folder.FolderPath) &&
                                Directory.EnumerateDirectories(folder.FolderPath).Any();
 
             menu.Items.Add(MakeMenuItem("New Folder", true, () => NewPageFolder(item)));
-            menu.Items.Add(MakeMenuItem("Auto Create Folders", true, () => AutoCreatePageFolders(folder.FolderPath)));
+            menu.Items.Add(MakeMenuItem("Rename Folder", !isRoot && selectedCount <= 1, () => RenamePagesNode(item)));
+            menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Folder", !isRoot || selectedCount > 1, () => DeletePagesNode(item)));
             menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Rename Folder", !isRoot, () => RenamePagesNode(item)));
-            menu.Items.Add(MakeMenuItem("Delete Folder", !isRoot, () => DeletePagesNode(item)));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Copy Folder", !isRoot, () => CopyCutPagesNode(item, PagesClipboardMode.Copy)));
-            menu.Items.Add(MakeMenuItem("Cut Folder", !isRoot, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)));
-            menu.Items.Add(MakeMenuItem("Paste Into Folder", canPaste, () => PasteIntoSelectedTarget(item)));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Move Up", !isRoot && CanMoveSibling(folder.FolderPath, -1), () => MovePagesNode(item, -1)));
-            menu.Items.Add(MakeMenuItem("Move Down", !isRoot && CanMoveSibling(folder.FolderPath, 1), () => MovePagesNode(item, 1)));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Sort Children A-Z", hasChildren, () => SortFolderChildren(item, descending: false)));
-            menu.Items.Add(MakeMenuItem("Sort Children Z-A", hasChildren, () => SortFolderChildren(item, descending: true)));
-            menu.Items.Add(MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct));
-            menu.Items.Add(MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)));
-            menu.Items.Add(MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)));
-            menu.Items.Add(MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)));
-            menu.Items.Add(MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
-            menu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
-            menu.Items.Add(MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)));
-            menu.Items.Add(MakeMenuItem("Review Learned Rules...", true, ReviewLearnedRules));
+            menu.Items.Add(MakeSubmenu(
+                "Clipboard",
+                MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Folder", !isRoot || selectedCount > 1, () => CopyCutPagesNode(item, PagesClipboardMode.Copy)),
+                MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Folder", !isRoot || selectedCount > 1, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)),
+                MakeMenuItem("Paste Into Folder", canPaste, () => PasteIntoSelectedTarget(item))));
+            menu.Items.Add(MakeSubmenu(
+                "Organize",
+                MakeMenuItem("Auto Create Folders", true, () => AutoCreatePageFolders(folder.FolderPath)),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
+                MakeMenuItem("Sort Children A-Z", hasChildren, () => SortFolderChildren(item, descending: false)),
+                MakeMenuItem("Sort Children Z-A", hasChildren, () => SortFolderChildren(item, descending: true)),
+                MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct),
+                MakeMenuItem("Sort D/Sec/WT by Suffix", true, SortPagesBySuffix),
+                MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
+            menu.Items.Add(MakeSubmenu(
+                "PDF Metadata",
+                MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
+                MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
+                MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
+                MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)),
+                MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item))));
+            menu.Items.Add(MakeSubmenu(
+                "Learning",
+                MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
+                MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
+                MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open in Explorer", true, () => OpenFolderInExplorer(folder.FolderPath)));
         }
         else if (item.Tag is PageInfo page)
         {
+            int selectedCount = PageSelectionCount(item);
             string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
             menu.Items.Add(MakeMenuItem("Open in New Tab", true, () => OpenPageInNewTab(page)));
             menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Rename Page", true, () => RenamePagesNode(item)));
-            menu.Items.Add(MakeMenuItem("Delete Page", true, () => DeletePagesNode(item)));
+            menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
+            menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", true, () => DeletePagesNode(item)));
+            menu.Items.Add(MakeMenuItem("Duplicate Page", selectedCount <= 1, () => DuplicatePageNode(item)));
             menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Copy Page", true, () => CopyCutPagesNode(item, PagesClipboardMode.Copy)));
-            menu.Items.Add(MakeMenuItem("Cut Page", true, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)));
-            menu.Items.Add(MakeMenuItem("Paste Into Parent Folder", CanPasteInto(parent), () => PasteIntoSelectedTarget(item)));
-            menu.Items.Add(MakeMenuItem("Duplicate Page", true, () => DuplicatePageNode(item)));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Move Up", CanMoveSibling(page.FolderPath, -1), () => MovePagesNode(item, -1)));
-            menu.Items.Add(MakeMenuItem("Move Down", CanMoveSibling(page.FolderPath, 1), () => MovePagesNode(item, 1)));
-            menu.Items.Add(MakeMenuItem("Move to Folder...", true, () => MovePageToFolder(item)));
-            menu.Items.Add(MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct));
-            menu.Items.Add(MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)));
-            menu.Items.Add(MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)));
-            menu.Items.Add(MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)));
-            menu.Items.Add(MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
-            menu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
-            menu.Items.Add(MakeMenuItem("Open source_pdf.json", File.Exists(SmartTakeoffsJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath)));
-            menu.Items.Add(MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)));
-            menu.Items.Add(MakeMenuItem("Review Learned Rules...", true, ReviewLearnedRules));
+            menu.Items.Add(MakeSubmenu(
+                "Clipboard",
+                MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Page", true, () => CopyCutPagesNode(item, PagesClipboardMode.Copy)),
+                MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Page", true, () => CopyCutPagesNode(item, PagesClipboardMode.Cut)),
+                MakeMenuItem("Paste Into Parent Folder", CanPasteInto(parent), () => PasteIntoSelectedTarget(item))));
+            menu.Items.Add(MakeSubmenu(
+                "Organize",
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
+                MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
+                MakeMenuItem("Move to Folder...", selectedCount <= 1, () => MovePageToFolder(item)),
+                MakeMenuItem("Sort Sheet Legend A-Z", CanSortPageLegend(page), () => SortPageLegendByName(page)),
+                MakeMenuItem("Reset Sheet Legend Order", HasCustomPageLegendOrder(page), () => ResetPageLegendOrder(page)),
+                MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct),
+                MakeMenuItem("Sort D/Sec/WT by Suffix", true, SortPagesBySuffix),
+                MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
+            menu.Items.Add(MakeSubmenu(
+                "PDF Metadata",
+                MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
+                MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
+                MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
+                MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)),
+                MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)),
+                MakeMenuItem("Open source_pdf.json", File.Exists(SmartTakeoffsJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath))));
+            menu.Items.Add(MakeSubmenu(
+                "Learning",
+                MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
+                MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
+                MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open Page Folder in Explorer", true, () => OpenFolderInExplorer(page.FolderPath)));
         }
+        else if (item.Tag is PageTakeoffNode node)
+        {
+            menu = BuildPageTakeoffContextMenu(node);
+        }
 
         return menu;
+    }
+
+    private ContextMenu BuildPageTakeoffContextMenu(PageTakeoffNode node)
+    {
+        var menu = new ContextMenu();
+        int selectedCount = SelectedPageTakeoffContextCount(node);
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Select {selectedCount} Linked Takeoffs" : "Select Linked Takeoff",
+            true,
+            () => SelectLinkedPageTakeoff(node)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Move {selectedCount} Up in Legend" : "Move Up in Legend",
+            CanMovePageTakeoffLegendNodes(node, -1),
+            () => MovePageTakeoffLegendNodes(node, -1)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Move {selectedCount} Down in Legend" : "Move Down in Legend",
+            CanMovePageTakeoffLegendNodes(node, 1),
+            () => MovePageTakeoffLegendNodes(node, 1)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Sort Sheet Legend A-Z", CanSortPageLegend(node.Page), () => SortPageLegendByName(node.Page, node.Takeoff.FolderPath)));
+        menu.Items.Add(MakeMenuItem("Reset Sheet Legend Order", HasCustomPageLegendOrder(node.Page), () => ResetPageLegendOrder(node.Page, node.Takeoff.FolderPath)));
+        return menu;
+    }
+
+    private int SelectedPageTakeoffContextCount(PageTakeoffNode anchor) =>
+        SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true).Count;
+
+    private void SelectLinkedPageTakeoff(PageTakeoffNode node)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath))
+            OpenPageInActiveTab(node.Page);
+
+        var selectedNodes = SelectedPageTakeoffNodes(node, fallbackToAnchor: true);
+        SelectTakeoffItem(node.Takeoff);
+        SelectPageTakeoffNodeSilently(node.Page.FolderPath, node.Takeoff.FolderPath);
+        Dispatcher.InvokeAsync(() => SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, node.Page));
+        if (selectedNodes.Count <= 1)
+            TxtStatus.Text = $"Linked takeoff selected for {node.Page.Name}: {node.Takeoff.Name}.";
+    }
+
+    private void SelectPageTakeoffMeasurementsOnCanvas(PageTakeoffNode node)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath))
+            return;
+
+        SelectTakeoffMeasurementsOnCanvas(node.Takeoff, node.Page.FolderPath, node.Page.Name);
+    }
+
+    private void SelectSelectedPageTakeoffMeasurementsOnCanvas(PageTakeoffNode anchor)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, anchor.Page.FolderPath))
+            OpenPageInActiveTab(anchor.Page);
+
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: false);
+        SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, anchor.Page);
+    }
+
+    private List<PageTakeoffNode> SelectedPageTakeoffNodes(PageTakeoffNode anchor, bool fallbackToAnchor)
+    {
+        string anchorKey = PageTakeoffSelectionKey(anchor);
+        IEnumerable<string> keys = _pageTakeoffMultiSelection.Contains(anchorKey)
+            ? _pageTakeoffMultiSelection
+            : fallbackToAnchor
+                ? [anchorKey]
+                : Enumerable.Empty<string>();
+
+        var keySet = new HashSet<string>(keys, StringComparer.OrdinalIgnoreCase);
+        if (keySet.Count == 0)
+            return [];
+
+        return EnumeratePageTreeItems()
+            .Select(item => item.Tag as PageTakeoffNode)
+            .Where(node => node != null &&
+                           IsSamePageFolder(node.Page.FolderPath, anchor.Page.FolderPath) &&
+                           keySet.Contains(PageTakeoffSelectionKey(node)))
+            .Select(node => node!)
+            .ToList();
+    }
+
+    private void SelectPageTakeoffMeasurementsOnCanvas(IReadOnlyList<PageTakeoffNode> nodes, PageInfo page)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            return;
+
+        var measurements = nodes
+            .SelectMany(node => MeasurementsForTakeoffOnPage(node.Takeoff, page.FolderPath))
+            .Distinct()
+            .ToList();
+
+        _syncingViewportSelectionFromTakeoffItem = true;
+        try
+        {
+            _viewport.SelectMeasurements(measurements);
+        }
+        finally
+        {
+            _syncingViewportSelectionFromTakeoffItem = false;
+        }
+
+        if (measurements.Count == 0)
+            TxtStatus.Text = $"No selected takeoff measurements on {page.Name}.";
+        else if (nodes.Count <= 1)
+            TxtStatus.Text = measurements.Count == 1
+                ? $"Selected {nodes[0].Takeoff.Name} measurement on {page.Name}."
+                : $"Selected {measurements.Count} {nodes[0].Takeoff.Name} measurements on {page.Name}.";
+        else
+            TxtStatus.Text = $"Selected {measurements.Count} measurements from {nodes.Count} linked takeoffs on {page.Name}.";
+    }
+
+    private void SelectTakeoffMeasurementsOnCanvas(TakeoffItem item, string pageFolder, string pageName)
+    {
+        var pageMeasurements = MeasurementsForTakeoffOnPage(item, pageFolder).ToList();
+        if (pageMeasurements.Count == 0)
+            return;
+
+        _syncingViewportSelectionFromTakeoffItem = true;
+        try
+        {
+            _viewport.SelectMeasurements(pageMeasurements);
+        }
+        finally
+        {
+            _syncingViewportSelectionFromTakeoffItem = false;
+        }
+
+        TxtStatus.Text = pageMeasurements.Count == 1
+            ? $"Selected {item.Name} measurement on {pageName}."
+            : $"Selected {pageMeasurements.Count} {item.Name} measurements on {pageName}.";
+    }
+
+    private void SelectTakeoffSelectionMeasurementsOnCurrentPage(TreeViewItem? anchor)
+    {
+        if (_currentPage == null || anchor == null || anchor.Tag is TakeoffMeasurementNode)
+            return;
+
+        var selectedItems = TakeoffItemsForSelection(anchor);
+        if (selectedItems.Count == 0)
+            return;
+
+        var pageMeasurements = selectedItems
+            .SelectMany(item => MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath))
+            .Distinct()
+            .ToList();
+
+        _syncingViewportSelectionFromTakeoffItem = true;
+        try
+        {
+            _viewport.SelectMeasurements(pageMeasurements);
+        }
+        finally
+        {
+            _syncingViewportSelectionFromTakeoffItem = false;
+        }
+
+        if (pageMeasurements.Count == 0)
+        {
+            TxtStatus.Text = $"No selected takeoff measurements on {_currentPage.Name}.";
+        }
+        else if (selectedItems.Count == 1)
+        {
+            TxtStatus.Text = pageMeasurements.Count == 1
+                ? $"Selected {selectedItems[0].Name} measurement on {_currentPage.Name}."
+                : $"Selected {pageMeasurements.Count} {selectedItems[0].Name} measurements on {_currentPage.Name}.";
+        }
+        else
+        {
+            TxtStatus.Text = $"Selected {pageMeasurements.Count} measurements from {selectedItems.Count} takeoffs on {_currentPage.Name}.";
+        }
+    }
+
+    private bool CanMovePageTakeoffLegendNode(PageTakeoffNode node, int offset)
+    {
+        IReadOnlyList<TakeoffItem> ordered = OrderedTakeoffsForPage(node.Page);
+        int index = IndexOfTakeoff(ordered, node.Takeoff);
+        int target = index + offset;
+        return index >= 0 && target >= 0 && target < ordered.Count;
+    }
+
+    private bool CanMovePageTakeoffLegendNodes(PageTakeoffNode anchor, int offset)
+    {
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true);
+        return CanMovePageTakeoffLegendNodes(selectedNodes, anchor.Page, offset);
+    }
+
+    private bool CanMovePageTakeoffLegendNodes(IReadOnlyList<PageTakeoffNode> selectedNodes, PageInfo page, int offset)
+    {
+        if (offset == 0 || selectedNodes.Count == 0)
+            return false;
+
+        var ordered = OrderedTakeoffsForPage(page).ToList();
+        if (ordered.Count <= 1)
+            return false;
+
+        var selectedKeys = selectedNodes
+            .Select(node => TakeoffLegendOrderKey(node.Takeoff))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedKeys.Count == 0 || selectedKeys.Count >= ordered.Count)
+            return false;
+
+        if (offset < 0)
+        {
+            for (int i = 1; i < ordered.Count; i++)
+            {
+                if (selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i])) &&
+                    !selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i - 1])))
+                    return true;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < ordered.Count - 1; i++)
+            {
+                if (selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i])) &&
+                    !selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i + 1])))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void MovePageTakeoffLegendNode(PageTakeoffNode node, int offset)
+    {
+        var ordered = OrderedTakeoffsForPage(node.Page).ToList();
+        int index = IndexOfTakeoff(ordered, node.Takeoff);
+        int target = index + offset;
+        if (index < 0 || target < 0 || target >= ordered.Count)
+            return;
+
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        SavePageLegendOrder(node.Page, ordered);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        SelectPageTakeoffNodeSilently(node.Page.FolderPath, node.Takeoff.FolderPath);
+        TxtStatus.Text = offset < 0
+            ? $"Moved {node.Takeoff.Name} up in {node.Page.Name} legend."
+            : $"Moved {node.Takeoff.Name} down in {node.Page.Name} legend.";
+    }
+
+    private void MovePageTakeoffLegendNodes(PageTakeoffNode anchor, int offset)
+    {
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true);
+        if (selectedNodes.Count <= 1)
+        {
+            MovePageTakeoffLegendNode(anchor, offset);
+            return;
+        }
+
+        if (!CanMovePageTakeoffLegendNodes(selectedNodes, anchor.Page, offset))
+            return;
+
+        var ordered = OrderedTakeoffsForPage(anchor.Page).ToList();
+        var selectedKeys = selectedNodes
+            .Select(node => TakeoffLegendOrderKey(node.Takeoff))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (offset < 0)
+        {
+            for (int i = 1; i < ordered.Count; i++)
+            {
+                string currentKey = TakeoffLegendOrderKey(ordered[i]);
+                string previousKey = TakeoffLegendOrderKey(ordered[i - 1]);
+                if (selectedKeys.Contains(currentKey) && !selectedKeys.Contains(previousKey))
+                    (ordered[i - 1], ordered[i]) = (ordered[i], ordered[i - 1]);
+            }
+        }
+        else
+        {
+            for (int i = ordered.Count - 2; i >= 0; i--)
+            {
+                string currentKey = TakeoffLegendOrderKey(ordered[i]);
+                string nextKey = TakeoffLegendOrderKey(ordered[i + 1]);
+                if (selectedKeys.Contains(currentKey) && !selectedKeys.Contains(nextKey))
+                    (ordered[i], ordered[i + 1]) = (ordered[i + 1], ordered[i]);
+            }
+        }
+
+        SavePageLegendOrder(anchor.Page, ordered);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        SelectPageTakeoffNodeSilently(anchor.Page.FolderPath, anchor.Takeoff.FolderPath);
+        ApplyPagesMultiSelectionVisuals();
+        TxtStatus.Text = offset < 0
+            ? $"Moved {selectedNodes.Count} linked takeoffs up in {anchor.Page.Name} legend."
+            : $"Moved {selectedNodes.Count} linked takeoffs down in {anchor.Page.Name} legend.";
+    }
+
+    private bool CanSortPageLegend(PageInfo page) =>
+        TakeoffsForPage(page.FolderPath).Skip(1).Any();
+
+    private static bool HasCustomPageLegendOrder(PageInfo page) =>
+        page.LegendTakeoffOrder.Count > 0;
+
+    private void SortPageLegendByName(PageInfo page, string? selectTakeoffFolder = null)
+    {
+        var ordered = TakeoffsForPage(page.FolderPath)
+            .OrderBy(takeoff => takeoff.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(takeoff => MeasurementTypeTitle(takeoff.MeasurementType), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (ordered.Count <= 1)
+            return;
+
+        SavePageLegendOrder(page, ordered);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        SelectLegendOrderResult(page, selectTakeoffFolder);
+        TxtStatus.Text = $"Sorted {page.Name} legend A-Z.";
+    }
+
+    private void ResetPageLegendOrder(PageInfo page, string? selectTakeoffFolder = null)
+    {
+        page.LegendTakeoffOrder = [];
+        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            _currentPage.LegendTakeoffOrder = [];
+        SmartTakeoffsJobStore.SavePageLegendTakeoffOrder(page.FolderPath, []);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        SelectLegendOrderResult(page, selectTakeoffFolder);
+        TxtStatus.Text = $"Reset {page.Name} legend order.";
+    }
+
+    private void SelectLegendOrderResult(PageInfo page, string? selectTakeoffFolder)
+    {
+        if (string.IsNullOrWhiteSpace(selectTakeoffFolder))
+            return;
+
+        SelectPageTakeoffNodeSilently(page.FolderPath, selectTakeoffFolder);
+    }
+
+    private bool CanDropPageTakeoffLegend(PageTakeoffLegendDrag drag, TreeViewItem? targetItem)
+    {
+        if (targetItem?.Tag is not PageTakeoffNode targetNode)
+            return false;
+        if (!IsSamePageFolder(drag.PageFolder, targetNode.Page.FolderPath))
+            return false;
+
+        var draggedFolders = drag.TakeoffFolders
+            .Where(folder => !string.IsNullOrWhiteSpace(folder))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (draggedFolders.Count == 0)
+            return false;
+        if (draggedFolders.Contains(targetNode.Takeoff.FolderPath, StringComparer.OrdinalIgnoreCase))
+            return false;
+
+        IReadOnlyList<TakeoffItem> ordered = OrderedTakeoffsForPage(targetNode.Page);
+        return draggedFolders.All(folder => IndexOfTakeoffByFolder(ordered, folder) >= 0) &&
+               IndexOfTakeoff(ordered, targetNode.Takeoff) >= 0;
+    }
+
+    private void UpdatePageTakeoffLegendDropCue(PageTakeoffLegendDrag drag, TreeViewItem targetItem, Point targetPosition)
+    {
+        bool dropAfter = IsPageTakeoffLegendDropAfter(targetItem, targetPosition);
+        if (ReferenceEquals(_pageTakeoffLegendDropTarget, targetItem) &&
+            _pageTakeoffLegendDropAfter == dropAfter)
+        {
+            return;
+        }
+
+        _pageTakeoffLegendDropTarget = targetItem;
+        _pageTakeoffLegendDropAfter = dropAfter;
+        ApplyPagesMultiSelectionVisuals();
+        if (targetItem.Tag is PageTakeoffNode node)
+        {
+            IReadOnlyList<TakeoffItem> ordered = OrderedTakeoffsForPage(node.Page);
+            int targetIndex = IndexOfTakeoff(ordered, node.Takeoff);
+            int insertPosition = Math.Clamp(targetIndex + (dropAfter ? 2 : 1), 1, Math.Max(1, ordered.Count));
+            string countText = drag.TakeoffFolders.Count == 1 ? "1 linked takeoff" : $"{drag.TakeoffFolders.Count} linked takeoffs";
+            TxtStatus.Text = $"Drop {countText} {(dropAfter ? "below" : "above")} {node.Takeoff.Name} | {node.Page.Name} legend position {insertPosition}.";
+        }
+    }
+
+    private void ClearPageTakeoffLegendDropCue()
+    {
+        if (_pageTakeoffLegendDropTarget == null)
+            return;
+
+        _pageTakeoffLegendDropTarget = null;
+        ApplyPagesMultiSelectionVisuals();
+    }
+
+    private static bool IsPageTakeoffLegendDropAfter(TreeViewItem targetItem, Point targetPosition) =>
+        targetPosition.Y > Math.Max(1.0, targetItem.ActualHeight) / 2.0;
+
+    private void DropPageTakeoffLegend(PageTakeoffLegendDrag drag, TreeViewItem targetItem, Point targetPosition)
+    {
+        if (!CanDropPageTakeoffLegend(drag, targetItem) ||
+            targetItem.Tag is not PageTakeoffNode targetNode)
+        {
+            return;
+        }
+
+        var draggedKeys = drag.TakeoffFolders
+            .Select(NormalizeTakeoffLegendOrderKey)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (draggedKeys.Count == 0)
+            return;
+
+        var ordered = OrderedTakeoffsForPage(targetNode.Page).ToList();
+        var moved = ordered
+            .Where(takeoff => draggedKeys.Contains(TakeoffLegendOrderKey(takeoff)))
+            .ToList();
+        if (moved.Count == 0)
+            return;
+
+        ordered.RemoveAll(takeoff => draggedKeys.Contains(TakeoffLegendOrderKey(takeoff)));
+        int targetIndex = IndexOfTakeoff(ordered, targetNode.Takeoff);
+        if (targetIndex < 0)
+            return;
+
+        bool insertAfter = IsPageTakeoffLegendDropAfter(targetItem, targetPosition);
+        int insertIndex = targetIndex + (insertAfter ? 1 : 0);
+        insertIndex = Math.Clamp(insertIndex, 0, ordered.Count);
+        ordered.InsertRange(insertIndex, moved);
+
+        SavePageLegendOrder(targetNode.Page, ordered);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        SelectPageTakeoffNodeSilently(targetNode.Page.FolderPath, moved[0].FolderPath);
+        ApplyPagesMultiSelectionVisuals();
+        int firstPosition = insertIndex + 1;
+        TxtStatus.Text = moved.Count == 1
+            ? $"Moved {moved[0].Name} to {targetNode.Page.Name} legend position {firstPosition}."
+            : $"Moved {moved.Count} linked takeoffs to {targetNode.Page.Name} legend positions {firstPosition}-{firstPosition + moved.Count - 1}.";
+    }
+
+    private static int IndexOfTakeoff(IReadOnlyList<TakeoffItem> takeoffs, TakeoffItem target)
+    {
+        for (int i = 0; i < takeoffs.Count; i++)
+        {
+            if (string.Equals(takeoffs[i].FolderPath, target.FolderPath, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static int IndexOfTakeoffByFolder(IReadOnlyList<TakeoffItem> takeoffs, string folderPath)
+    {
+        for (int i = 0; i < takeoffs.Count; i++)
+        {
+            if (string.Equals(takeoffs[i].FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private void SelectPageTakeoffNodeSilently(string pageFolder, string takeoffFolder)
+    {
+        if (FindPageTakeoffTreeItem(pageFolder, takeoffFolder) is not { } item)
+            return;
+
+        _syncingPageTreeSelection = true;
+        try
+        {
+            ExpandTreeItemAndAncestorsWithoutTracking(item);
+            item.IsSelected = true;
+            item.BringIntoView();
+        }
+        finally
+        {
+            _syncingPageTreeSelection = false;
+        }
+    }
+
+    private TreeViewItem? FindPageTakeoffTreeItem(string pageFolder, string takeoffFolder)
+    {
+        foreach (TreeViewItem item in EnumeratePageTreeItems())
+        {
+            if (item.Tag is not PageTakeoffNode node)
+                continue;
+
+            if (IsSamePageFolder(node.Page.FolderPath, pageFolder) &&
+                string.Equals(node.Takeoff.FolderPath, takeoffFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    private static void ExpandTreeItemAndAncestors(TreeViewItem item)
+    {
+        item.IsExpanded = true;
+        ItemsControl? parent = ItemsControl.ItemsControlFromItemContainer(item);
+        while (parent is TreeViewItem parentItem)
+        {
+            parentItem.IsExpanded = true;
+            parent = ItemsControl.ItemsControlFromItemContainer(parentItem);
+        }
+    }
+
+    private void TreeView_RequestBringIntoViewKeepLeft(object sender, RequestBringIntoViewEventArgs e)
+    {
+        if (sender is not TreeView tree)
+            return;
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            foreach (ScrollViewer scrollViewer in FindVisualChildren<ScrollViewer>(tree))
+                scrollViewer.ScrollToHorizontalOffset(0);
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private static MenuItem MakeMenuItem(string header, bool isEnabled, Action action)
     {
         var item = new MenuItem { Header = header, IsEnabled = isEnabled };
         item.Click += (_, _) => action();
+        return item;
+    }
+
+    private static MenuItem MakeSubmenu(string header, params object[] children)
+    {
+        var item = new MenuItem { Header = header };
+        foreach (object child in children)
+            item.Items.Add(child);
         return item;
     }
 
@@ -2619,16 +5500,40 @@ public partial class MainWindow : Window
 
     private void MovePagesNode(TreeViewItem item, int offset)
     {
+        MovePagesNodes(item, offset);
+    }
+
+    private bool CanMovePagesNodes(TreeViewItem item, int offset)
+    {
+        var paths = GetSelectedPageEntries(item)
+            .Select(entry => entry.SourcePath)
+            .ToList();
+        return SmartTakeoffsJobStore.CanMoveSiblings(paths, offset);
+    }
+
+    private void MovePagesNodes(TreeViewItem item, int offset)
+    {
         if (IsRootPagesNode(item)) return;
         string? path = GetPagesNodePath(item);
         if (path == null || !IsPathInsidePagesRoot(path, allowRoot: false)) return;
 
+        var entries = GetSelectedPageEntries(item);
+        var paths = entries.Select(entry => entry.SourcePath).ToList();
+        if (paths.Count == 0)
+            return;
+
         try
         {
-            if (SmartTakeoffsJobStore.MoveSibling(path, offset))
+            if (SmartTakeoffsJobStore.MoveSiblings(paths, offset))
             {
-                ReloadPagesTree(path);
-                TxtStatus.Text = offset < 0 ? "Moved up." : "Moved down.";
+                _pagesMultiSelection.Clear();
+                foreach (string selectedPath in paths)
+                    _pagesMultiSelection.Add(selectedPath);
+
+                ReloadPagesTree(paths[0]);
+                TxtStatus.Text = paths.Count == 1
+                    ? (offset < 0 ? "Moved up." : "Moved down.")
+                    : (offset < 0 ? $"Moved {paths.Count} page/folder items up." : $"Moved {paths.Count} page/folder items down.");
             }
         }
         catch (Exception ex)
@@ -2734,6 +5639,11 @@ public partial class MainWindow : Window
     private void BtnSortPagesArchStruct_Click(object sender, RoutedEventArgs e)
     {
         SortPagesIntoArchStruct();
+    }
+
+    private void BtnSortPagesSuffix_Click(object sender, RoutedEventArgs e)
+    {
+        SortPagesBySuffix();
     }
 
     private void BtnRepairMeasurementPageLinks_Click(object sender, RoutedEventArgs e)
@@ -2849,6 +5759,215 @@ public partial class MainWindow : Window
             return struc;
         if (sourceName.Contains("arch", StringComparison.OrdinalIgnoreCase))
             return arch;
+
+        return "";
+    }
+
+    private void SortPagesBySuffix()
+    {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "Sort D/Sec/WT Pages",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            string detailsStruct = EnsurePagesRootFolder("details struct");
+            string detailsArch = EnsurePagesRootFolder("details arch");
+            string units = EnsurePagesRootFolder("units");
+            string sections = EnsurePagesRootFolder("sections");
+
+            IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot)
+                .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+
+            int movedTop = 0;
+            int movedDetailsStruct = 0;
+            int movedDetailsArch = 0;
+            int movedUnits = 0;
+            int movedSections = 0;
+            int skipped = 0;
+            bool reloadActiveTab = false;
+            string? selectAfter = null;
+
+            foreach (PageInfo page in pages)
+            {
+                string target = ClassifySuffixPageTarget(page, detailsStruct, detailsArch, units, sections);
+                if (string.IsNullOrWhiteSpace(target))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
+                if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string oldPath = page.FolderPath;
+                string movedPath = SmartTakeoffsJobStore.MoveNode(oldPath, target);
+                reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
+                selectAfter ??= movedPath;
+
+                if (string.Equals(target, _currentJob.PagesRoot, StringComparison.OrdinalIgnoreCase))
+                    movedTop++;
+                else if (string.Equals(target, detailsStruct, StringComparison.OrdinalIgnoreCase))
+                    movedDetailsStruct++;
+                else if (string.Equals(target, detailsArch, StringComparison.OrdinalIgnoreCase))
+                    movedDetailsArch++;
+                else if (string.Equals(target, units, StringComparison.OrdinalIgnoreCase))
+                    movedUnits++;
+                else if (string.Equals(target, sections, StringComparison.OrdinalIgnoreCase))
+                    movedSections++;
+            }
+
+            SmartTakeoffsJobStore.SortChildren(detailsStruct, descending: false);
+            SmartTakeoffsJobStore.SortChildren(detailsArch, descending: false);
+            SmartTakeoffsJobStore.SortChildren(units, descending: false);
+            SmartTakeoffsJobStore.SortChildren(sections, descending: false);
+            int reorderedTop = ReorderRootSuffixPagesToTop(_currentJob.PagesRoot);
+
+            ReloadPagesTree(selectAfter ?? _currentJob.PagesRoot);
+            ReloadActivePageTabAfterPathChange(reloadActiveTab);
+            TxtStatus.Text =
+                $"Sort D/Sec/WT: top {movedTop}, details struct {movedDetailsStruct}, details arch {movedDetailsArch}, " +
+                $"units {movedUnits}, sections {movedSections}, reordered {reorderedTop}, skipped {skipped}.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Sort D/Sec/WT Pages", ex);
+        }
+    }
+
+    private string EnsurePagesRootFolder(string displayName)
+    {
+        if (_currentJob == null)
+            return "";
+
+        foreach (string child in SmartTakeoffsJobStore.GetOrderedChildDirectories(_currentJob.PagesRoot))
+        {
+            if (!SmartTakeoffsJobStore.IsPageFolder(child) &&
+                string.Equals(SmartTakeoffsJobStore.DisplayName(child), displayName, StringComparison.OrdinalIgnoreCase))
+            {
+                return child;
+            }
+        }
+
+        return SmartTakeoffsJobStore.EnsureFolder(_currentJob.PagesRoot, displayName);
+    }
+
+    private string ClassifySuffixPageTarget(
+        PageInfo page,
+        string detailsStruct,
+        string detailsArch,
+        string units,
+        string sections)
+    {
+        if (_currentJob == null)
+            return "";
+
+        (string suffix, char first) = DetectPageSuffixSortInfo(page);
+        if (PageSuffixTopOrder.Contains(suffix, StringComparer.OrdinalIgnoreCase))
+            return _currentJob.PagesRoot;
+        if (string.Equals(suffix, "d", StringComparison.OrdinalIgnoreCase) && first == 's')
+            return detailsStruct;
+        if (string.Equals(suffix, "d", StringComparison.OrdinalIgnoreCase) && first == 'a')
+            return detailsArch;
+        if (string.Equals(suffix, "u", StringComparison.OrdinalIgnoreCase))
+            return units;
+        if (string.Equals(suffix, "sec", StringComparison.OrdinalIgnoreCase))
+            return sections;
+        return "";
+    }
+
+    private static (string Suffix, char First) DetectPageSuffixSortInfo(PageInfo page)
+    {
+        string suffix = AutoSortSuffixFromName(page.Name);
+        char first = AutoSortFirstLetter(page.Name);
+        PdfSheetMetadata? metadata = null;
+
+        if (string.IsNullOrWhiteSpace(suffix) || first is not ('a' or 's'))
+        {
+            metadata = SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath);
+        }
+
+        if (string.IsNullOrWhiteSpace(suffix) && !string.IsNullOrWhiteSpace(metadata?.Suffix))
+            suffix = metadata.Suffix.Trim().ToLowerInvariant();
+
+        if (first is not ('a' or 's') && metadata != null)
+        {
+            string metadataName = $"{metadata.SheetLabel} {metadata.EffectiveSheetKey}";
+            first = AutoSortFirstLetter(metadataName);
+        }
+
+        return (suffix, first);
+    }
+
+    private int ReorderRootSuffixPagesToTop(string pagesRoot)
+    {
+        var children = SmartTakeoffsJobStore.GetOrderedChildDirectories(pagesRoot).ToList();
+        var topPages = new List<string>();
+        foreach (string suffix in PageSuffixTopOrder)
+        {
+            topPages.AddRange(children.Where(child =>
+                SmartTakeoffsJobStore.TryReadPage(child) is { } childPage &&
+                string.Equals(DetectPageSuffixSortInfo(childPage).Suffix, suffix, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (topPages.Count == 0)
+            return 0;
+
+        var topSet = topPages
+            .Select(NormalizePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ordered = topPages
+            .Concat(children.Where(child => !topSet.Contains(NormalizePath(child))))
+            .ToList();
+
+        for (int i = 0; i < ordered.Count; i++)
+            SmartTakeoffsJobStore.SetOrderIndex(ordered[i], i);
+        return topPages.Count;
+    }
+
+    private static char AutoSortFirstLetter(string name)
+    {
+        foreach (char ch in (name ?? "").Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(ch))
+                return ch;
+        }
+        return '\0';
+    }
+
+    private static string AutoSortSuffixFromName(string name)
+    {
+        string raw = (name ?? "").Trim().ToLowerInvariant().TrimEnd(' ', '.', '_', '-');
+        if (string.IsNullOrWhiteSpace(raw))
+            return "";
+
+        string tokenText = Regex.Replace(raw, @"[\s._-]+", " ").Trim();
+        foreach (string suffix in PageSuffixDetectionOrder)
+        {
+            if (Regex.IsMatch(tokenText, $@"(?:^| ){Regex.Escape(suffix)}$"))
+                return suffix;
+        }
+
+        string compact = Regex.Replace(raw, @"[\s._-]+", "");
+        foreach (string suffix in PageSuffixDetectionOrder)
+        {
+            if (!compact.EndsWith(suffix, StringComparison.Ordinal))
+                continue;
+
+            int previousIndex = compact.Length - suffix.Length - 1;
+            char previous = previousIndex >= 0 ? compact[previousIndex] : '\0';
+            if (previous == '\0' || char.IsDigit(previous))
+                return suffix;
+        }
 
         return "";
     }
@@ -3125,11 +6244,51 @@ public partial class MainWindow : Window
                 ProposedScale = canScale ? metadata.EffectiveScaleText : metadata.SkipScale ? "skip" : "",
                 Source = metadata.Source,
                 Confidence = learning.Confidence,
+                Reason = PdfMetadataDecisionReason(metadata, learning, canRename, canScale, nameConflict, learnedConflict),
                 Warnings = string.Join("; ", warnings),
                 ApplyRename = defaultRename && canRename && !nameConflict && !learnedConflict,
                 ApplyScale = defaultScale && canScale && !learnedConflict,
             };
         }
+    }
+
+    private static string PdfMetadataDecisionReason(
+        PdfSheetMetadata metadata,
+        SmartSheetLearningSignal learning,
+        bool canRename,
+        bool canScale,
+        bool nameConflict,
+        bool learnedConflict)
+    {
+        var parts = new List<string>();
+        string key = metadata.EffectiveSheetKey;
+        if (canRename)
+        {
+            string suffix = string.IsNullOrWhiteSpace(metadata.Suffix) ? "no suffix" : $"suffix {metadata.Suffix}";
+            parts.Add($"name from {metadata.Source}: {metadata.SheetLabel} / {key} / {suffix}");
+        }
+        else if (nameConflict)
+        {
+            parts.Add("rename blocked: proposed name already exists");
+        }
+        else
+        {
+            parts.Add("rename unchanged");
+        }
+
+        if (metadata.SkipScale)
+            parts.Add("scale skipped by metadata");
+        else if (canScale)
+            parts.Add($"scale from '{metadata.EffectiveScaleText}'");
+        else
+            parts.Add("no usable scale detected");
+
+        if (learnedConflict)
+            parts.Add("learned-rule conflict blocks auto apply");
+        else if (learning.SupportingRecords > 0)
+            parts.Add($"learning support {learning.SupportingRecords}, conflicts {learning.ConflictingRecords}");
+
+        return string.Join(" | ", parts);
     }
 
     private static bool HasPageNameConflict(string pageFolder, string proposedName)
@@ -3172,10 +6331,19 @@ public partial class MainWindow : Window
             string warnings = metadata.Warnings.Count > 0
                 ? $" [{string.Join("; ", metadata.Warnings.Take(2))}]"
                 : "";
+            SmartSheetLearningSignal learning = SmartLearningStore.BuildSheetMetadataSignal(metadata);
+            string reason = PdfMetadataDecisionReason(
+                metadata,
+                learning,
+                canRename: !string.IsNullOrWhiteSpace(proposed) &&
+                           !string.Equals(proposed, result.Page.Name, StringComparison.OrdinalIgnoreCase),
+                canScale: metadata.CanApplyScale(),
+                nameConflict: HasPageNameConflict(result.Page.FolderPath, proposed),
+                learnedConflict: string.Equals(learning.Confidence, "learned-conflict", StringComparison.OrdinalIgnoreCase));
 
             sb.AppendLine(includeApplyPreview
-                ? $"- {result.Page.Name} -> {proposed}; {scale}{warnings}"
-                : $"- {result.Page.Name}: {metadata.SheetLabel} {metadata.SheetTitle}; {proposed}; {scale}{warnings}");
+                ? $"- {result.Page.Name} -> {proposed}; {scale}; {reason}{warnings}"
+                : $"- {result.Page.Name}: {metadata.SheetLabel} {metadata.SheetTitle}; {proposed}; {scale}; {reason}{warnings}");
         }
 
         if (results.Count > 30)
@@ -3291,6 +6459,35 @@ public partial class MainWindow : Window
         SmartLearningStore.SaveGlobalLearnedRules(dialog.RuleSet);
         int enabled = dialog.RuleSet.Rules.Count(rule => rule.Enabled);
         TxtStatus.Text = $"Saved learned rules: {enabled} enabled, {dialog.RuleSet.Rules.Count - enabled} disabled.";
+    }
+
+    private void ReviewProjectLearnedRules()
+    {
+        if (_currentJob == null)
+            return;
+
+        SmartLearningStore.EnsureLearningStore(_currentJob);
+        SmartLearnedRuleSet rules = SmartLearningStore.LoadProjectLearnedRules(_currentJob);
+        if (rules.Rules.Count == 0)
+        {
+            MessageBox.Show(
+                "No project learned rules yet. Capture a final learning snapshot for this project to generate rules.",
+                "Review Project Learned Rules",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new LearnedRulesDialog(rules, "Review Project Learned Rules")
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        SmartLearningStore.SaveProjectLearnedRules(_currentJob, dialog.RuleSet);
+        int enabled = dialog.RuleSet.Rules.Count(rule => rule.Enabled);
+        TxtStatus.Text = $"Saved project learned rules: {enabled} enabled, {dialog.RuleSet.Rules.Count - enabled} disabled.";
     }
 
     private void QueuePdfMetadataFallback(TreeViewItem item)
@@ -3490,15 +6687,6 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private bool CanMoveSibling(string path, int offset)
-    {
-        string parent = Path.GetDirectoryName(path) ?? "";
-        var siblings = SmartTakeoffsJobStore.GetOrderedChildDirectories(parent).ToList();
-        int index = siblings.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
-        int target = index + offset;
-        return index >= 0 && target >= 0 && target < siblings.Count;
-    }
-
     private string? GetPasteTargetFolder(TreeViewItem item)
     {
         return item.Tag switch
@@ -3519,6 +6707,74 @@ public partial class MainWindow : Window
         };
     }
 
+    private static string PageTakeoffSelectionKey(PageTakeoffNode node) =>
+        $"{NormalizePath(node.Page.FolderPath)}|{NormalizePath(node.Takeoff.FolderPath)}";
+
+    private static string? GetPageTakeoffSelectionKey(TreeViewItem item) =>
+        item.Tag is PageTakeoffNode node ? PageTakeoffSelectionKey(node) : null;
+
+    private void SelectPagesRange(string? anchorPath, string targetPath, bool additive)
+    {
+        var candidates = EnumerateVisibleTreeItems(PagesTree)
+            .Where(item => !IsRootPagesNode(item))
+            .Select(item => (Item: item, Key: GetPagesNodePath(item)))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .Select(entry => (entry.Item, Key: entry.Key!))
+            .ToList();
+
+        SelectRangeKeys(candidates, anchorPath, targetPath, _pagesMultiSelection, additive);
+    }
+
+    private void SelectPageTakeoffRange(string? anchorKey, string targetKey, string pageFolder, bool additive)
+    {
+        var candidates = EnumerateVisibleTreeItems(PagesTree)
+            .Where(item => item.Tag is PageTakeoffNode node &&
+                           IsSamePageFolder(node.Page.FolderPath, pageFolder))
+            .Select(item => (Item: item, Key: GetPageTakeoffSelectionKey(item)))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .Select(entry => (entry.Item, Key: entry.Key!))
+            .ToList();
+
+        SelectRangeKeys(candidates, anchorKey, targetKey, _pageTakeoffMultiSelection, additive);
+    }
+
+    private static void SelectRangeKeys(
+        IReadOnlyList<(TreeViewItem Item, string Key)> candidates,
+        string? anchorKey,
+        string targetKey,
+        HashSet<string> selection,
+        bool additive)
+    {
+        int targetIndex = FindRangeKeyIndex(candidates, targetKey);
+        if (targetIndex < 0)
+            return;
+
+        int anchorIndex = string.IsNullOrWhiteSpace(anchorKey)
+            ? -1
+            : FindRangeKeyIndex(candidates, anchorKey);
+        if (anchorIndex < 0)
+            anchorIndex = targetIndex;
+
+        if (!additive)
+            selection.Clear();
+
+        int start = Math.Min(anchorIndex, targetIndex);
+        int end = Math.Max(anchorIndex, targetIndex);
+        for (int i = start; i <= end; i++)
+            selection.Add(candidates[i].Key);
+    }
+
+    private static int FindRangeKeyIndex(IReadOnlyList<(TreeViewItem Item, string Key)> candidates, string key)
+    {
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            if (string.Equals(candidates[i].Key, key, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
     private IReadOnlyList<PagesClipboardEntry> GetSelectedPageEntries(TreeViewItem anchor)
     {
         string? anchorPath = GetPagesNodePath(anchor);
@@ -3537,6 +6793,9 @@ public partial class MainWindow : Window
 
         return NormalizeSelectedEntries(entries);
     }
+
+    private int PageSelectionCount(TreeViewItem anchor) =>
+        GetSelectedPageEntries(anchor).Count;
 
     private static IReadOnlyList<PagesClipboardEntry> NormalizeSelectedEntries(
         IReadOnlyList<PagesClipboardEntry> entries)
@@ -3570,20 +6829,44 @@ public partial class MainWindow : Window
         {
             string? path = GetPagesNodePath(item);
             bool selected = path != null && !IsRootPagesNode(item) && _pagesMultiSelection.Contains(path);
-            if (selected)
+            string? pageTakeoffKey = GetPageTakeoffSelectionKey(item);
+            bool linkedSelected = pageTakeoffKey != null && _pageTakeoffMultiSelection.Contains(pageTakeoffKey);
+            item.ClearValue(Control.BorderBrushProperty);
+            item.ClearValue(Control.BorderThicknessProperty);
+
+            if (ReferenceEquals(item, _pageTakeoffLegendDropTarget))
+            {
+                item.Background = new SolidColorBrush(Color.FromRgb(204, 245, 218));
+                item.Foreground = Brushes.Black;
+                item.FontWeight = FontWeights.Normal;
+                item.BorderBrush = Brushes.SeaGreen;
+                item.BorderThickness = _pageTakeoffLegendDropAfter
+                    ? new Thickness(0, 0, 0, 2)
+                    : new Thickness(0, 2, 0, 0);
+            }
+            else if (IsActivePageTakeoffNode(item))
+            {
+                item.Background = new SolidColorBrush(Color.FromRgb(176, 214, 255));
+                item.Foreground = Brushes.Black;
+                item.FontWeight = FontWeights.Normal;
+            }
+            else if (selected || linkedSelected)
             {
                 item.Background = new SolidColorBrush(Color.FromRgb(205, 226, 255));
                 item.Foreground = Brushes.Black;
+                item.ClearValue(Control.FontWeightProperty);
             }
             else if (IsPageMeasuredByActiveTakeoff(item))
             {
                 item.Background = new SolidColorBrush(Color.FromRgb(255, 242, 166));
                 item.Foreground = Brushes.Black;
+                item.ClearValue(Control.FontWeightProperty);
             }
             else
             {
                 item.ClearValue(Control.BackgroundProperty);
                 item.ClearValue(Control.ForegroundProperty);
+                item.ClearValue(Control.FontWeightProperty);
             }
         }
     }
@@ -3603,6 +6886,19 @@ public partial class MainWindow : Window
         foreach (TreeViewItem child in item.Items)
         {
             foreach (TreeViewItem nested in EnumeratePageTreeItems(child))
+                yield return nested;
+        }
+    }
+
+    private static IEnumerable<TreeViewItem> EnumerateVisibleTreeItems(ItemsControl parent)
+    {
+        foreach (TreeViewItem child in parent.Items.OfType<TreeViewItem>())
+        {
+            yield return child;
+            if (!child.IsExpanded)
+                continue;
+
+            foreach (TreeViewItem nested in EnumerateVisibleTreeItems(child))
                 yield return nested;
         }
     }
@@ -3722,12 +7018,14 @@ public partial class MainWindow : Window
             !_takeoffsMultiSelection.Contains(selectedPath))
         {
             _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
             _takeoffsMultiSelection.Add(selectedPath);
             ApplyTakeoffPageHighlights();
         }
 
         if (e.NewValue is TreeViewItem { Tag: TakeoffItem item })
         {
+            _takeoffSectionMultiSelection.Clear();
             item.MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
             _activeItem           = item;
             _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
@@ -3736,29 +7034,57 @@ public partial class MainWindow : Window
             if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
                 ApplyToolSelection(item.MeasurementType);
             else
-                UpdateToolStatus();
+            UpdateToolStatus();
             RefreshPagesTakeoffIndicators();
+            RefreshActiveTakeoffVisuals();
+            RevealPagesForTakeoffSelection(e.NewValue as TreeViewItem);
+            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
             UpdateTotalDisplay();
         }
         else if (e.NewValue is TreeViewItem { Tag: TakeoffFolderNode folder })
         {
+            _takeoffSectionMultiSelection.Clear();
             _activeItem = null;
             _activeTakeoffParentFolder = folder.FolderPath;
             _viewport.ActiveTakeoffFolder = "";
             TxtStatus.Text = TakeoffFolderStatusText(folder);
             UpdateToolStatus();
             RefreshPagesTakeoffIndicators();
+            RefreshActiveTakeoffVisuals();
+            RevealPagesForTakeoffSelection(e.NewValue as TreeViewItem);
+            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
             UpdateTotalDisplay();
         }
         else if (e.NewValue is TreeViewItem { Tag: TakeoffMeasurementNode node })
         {
+            string sectionKey = TakeoffSectionSelectionKey(node);
+            _takeoffsMultiSelection.Clear();
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control &&
+                !_takeoffSectionMultiSelection.Contains(sectionKey))
+            {
+                _takeoffSectionMultiSelection.Clear();
+                _takeoffSectionMultiSelection.Add(sectionKey);
+                _takeoffSectionRangeAnchorKey = sectionKey;
+                ApplyTakeoffPageHighlights();
+            }
+
             _activeItem = node.Item;
             _activeTakeoffParentFolder = Path.GetDirectoryName(node.Item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
             _viewport.ActiveColor = node.Item.Color;
             _viewport.ActiveTakeoffFolder = node.Item.FolderPath;
-            SelectSectionOnCanvas(node.Measurement);
+            if (_suppressCanvasFocusFromTakeoffSelection || Mouse.LeftButton == MouseButtonState.Pressed)
+            {
+                if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, node.Measurement.PageFolder))
+                    _viewport.SelectMeasurements([node.Measurement]);
+            }
+            else
+            {
+                SelectSectionOnCanvas(node.Measurement, suppressTakeoffSync: true);
+            }
             UpdateToolStatus();
             RefreshPagesTakeoffIndicators();
+            RefreshActiveTakeoffVisuals();
+            RevealPagesForTakeoffItems([node.Item], node.Measurement.PageFolder);
             UpdateTotalDisplay();
         }
     }
@@ -3772,14 +7098,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        string parentFolder = CurrentTakeoffParentFolder();
+        string parentFolder = NewTakeoffItemParentFolder();
         string measurementType = ResolveTakeoffFolderDefaultMeasurementType(
             parentFolder,
             CurrentToolMeasurementType());
         string defaultColor = ResolveTakeoffFolderDefaultColor(parentFolder, "#FF4444");
         var dlg = new NewItemDialog(
             measurementType,
-            DefaultTakeoffName(measurementType),
+            DefaultTakeoffNameForFolder(measurementType, parentFolder),
             defaultColor: defaultColor)
         {
             Owner = this,
@@ -3787,6 +7113,7 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() != true) return;
 
         var item = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, dlg.ItemType, parentFolder);
+        ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
         _takeoffItems.Add(item);
         var parent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
         var tvi = AddTakeoffTreeItem(item, parent);
@@ -3799,6 +7126,7 @@ public partial class MainWindow : Window
         _viewport.ActiveTakeoffFolder = item.FolderPath;
         tvi.IsSelected        = true;
         UpdateToolStatus();
+        RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
     }
 
@@ -3948,6 +7276,7 @@ public partial class MainWindow : Window
         {
             FlushTakeoffAutosaves();
             SaveCurrentPageScale();
+            SaveCurrentPageAnnotations();
             foreach (var item in _takeoffItems)
             {
                 EnsureTakeoffItemFolder(item);
@@ -4036,6 +7365,97 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BtnExportTxt_Click(object sender, RoutedEventArgs e)
+    {
+        ExportPlanSwiftTakeoffs("txt");
+    }
+
+    private void BtnExportExcel_Click(object sender, RoutedEventArgs e)
+    {
+        ExportPlanSwiftTakeoffs("xlsx");
+    }
+
+    private void ExportPlanSwiftTakeoffs(string format)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open or create a job before exporting.";
+            return;
+        }
+
+        var rows = BuildPlanSwiftExportRows();
+        if (rows.Count == 0)
+        {
+            TxtStatus.Text = "No measured takeoffs to export.";
+            return;
+        }
+
+        bool excel = string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase);
+        var dlg = new SaveFileDialog
+        {
+            Title = excel ? "Export Takeoffs Excel" : "Export Takeoffs TXT",
+            Filter = excel ? "Excel workbook (*.xlsx)|*.xlsx|All files (*.*)|*.*" : "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+            FileName = $"{SafeFileName(_currentJob.Name)}_takeoffs.{(excel ? "xlsx" : "txt")}",
+            InitialDirectory = _currentJob.RootPath,
+            AddExtension = true,
+            DefaultExt = excel ? ".xlsx" : ".txt",
+        };
+
+        if (dlg.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            SaveCurrentPageScale();
+            if (excel)
+            {
+                int written = PlanSwiftTakeoffExporter.WriteXlsx(dlg.FileName, rows);
+                TxtStatus.Text = $"Exported Excel ({written} row(s)) -> {dlg.FileName}";
+            }
+            else
+            {
+                PlanSwiftTakeoffExporter.WriteTxt(dlg.FileName, rows);
+                TxtStatus.Text = $"Exported TXT ({rows.Count} row(s)) -> {dlg.FileName}";
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Export failed:\n{ex.Message}", excel ? "Export Excel" : "Export TXT",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private IReadOnlyList<PlanSwiftExportRow> BuildPlanSwiftExportRows()
+    {
+        if (_currentJob == null)
+            return [];
+
+        IReadOnlyList<string> roots = SelectedTakeoffExportRoots();
+        return PlanSwiftTakeoffExporter.BuildRows(_currentJob, _takeoffItems, roots, _viewport.UnitMode);
+    }
+
+    private IReadOnlyList<string> SelectedTakeoffExportRoots()
+    {
+        if (_currentJob == null)
+            return [];
+
+        if (TakeoffsTree.SelectedItem is TreeViewItem anchor)
+        {
+            var entries = GetSelectedTakeoffEntries(anchor);
+            if (entries.Count > 0)
+                return entries.Select(entry => entry.SourcePath).ToList();
+
+            return anchor.Tag switch
+            {
+                TakeoffItem item when Directory.Exists(item.FolderPath) => [item.FolderPath],
+                TakeoffFolderNode folder when Directory.Exists(folder.FolderPath) => [folder.FolderPath],
+                _ => [_currentJob.TakeoffsRoot],
+            };
+        }
+
+        return [_currentJob.TakeoffsRoot];
+    }
+
     private string BuildTakeoffCsv()
     {
         var sb = new StringBuilder();
@@ -4043,7 +7463,9 @@ public partial class MainWindow : Window
 
         foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
         {
-            string itemTypes = string.Join("+", item.Measurements.Select(m => m.MType).Distinct(StringComparer.OrdinalIgnoreCase));
+            string itemTypes = item.IsJoistArea
+                ? "joist"
+                : string.Join("+", item.Measurements.Select(m => m.MType).Distinct(StringComparer.OrdinalIgnoreCase));
             AppendCsvRow(sb,
                 "ItemTotal",
                 item.Name,
@@ -4068,7 +7490,7 @@ public partial class MainWindow : Window
                 AppendCsvRow(sb,
                     "Measurement",
                     item.Name,
-                    measurement.MType,
+                    measurement.JoistEnabled ? "joist" : measurement.MType,
                     "",
                     "",
                     "",
@@ -4126,12 +7548,13 @@ public partial class MainWindow : Window
                 item.Name,
                 item.Color,
                 item.MeasurementType,
-                CurrentTakeoffParentFolder());
+                NewTakeoffItemParentFolder());
             item.FolderPath = stored.FolderPath;
         }
 
         foreach (var measurement in item.Measurements)
             measurement.TakeoffFolder = item.FolderPath;
+        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
     }
 
     private TakeoffItem CreateUniqueTakeoffItem(string name, string color, string measurementType = "line", string? parentFolder = null)
@@ -4163,12 +7586,32 @@ public partial class MainWindow : Window
         int selectedCount = TakeoffSelectionCount(tvi);
         bool singleSelection = selectedCount <= 1;
 
+        var activeTarget = new MenuItem { Header = IsActiveTakeoffItem(item) ? "Active Target" : "Set Active Target" };
+        activeTarget.Click += (_, _) => SetActiveTakeoffTarget(tvi, item);
+        activeTarget.IsEnabled = singleSelection;
+        menu.Items.Add(activeTarget);
+        menu.Items.Add(new Separator());
+
         var properties = new MenuItem { Header = "Properties..." };
         properties.Click += (_, _) => EditTakeoffItemProperties(tvi, item);
         properties.IsEnabled = singleSelection;
         menu.Items.Add(properties);
+        menu.Items.Add(MakeMenuItem(
+            item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
+            singleSelection && SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
+            () => EditTakeoffItemProperties(tvi, item)));
+        menu.Items.Add(MakeMenuItem(
+            "Generate Joists / Draw Direction",
+            singleSelection && SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
+            () => SetJoistDirectionFromSelectedLine(tvi, item)));
 
-        var rename = new MenuItem { Header = "Rename…" };
+        int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
+        menu.Items.Add(MakeMenuItem(
+            selectedItemsCount > 1 ? $"Bulk Properties ({selectedItemsCount} Items)..." : "Bulk Properties...",
+            selectedItemsCount > 1,
+            () => EditSelectedTakeoffProperties(tvi)));
+
+        var rename = new MenuItem { Header = "Rename..." };
         rename.Click += (_, _) => RenameItem(tvi, item);
         rename.IsEnabled = singleSelection;
         menu.Items.Add(rename);
@@ -4195,12 +7638,20 @@ public partial class MainWindow : Window
 
         menu.Items.Add(new Separator());
 
-        var moveUp = new MenuItem { Header = "Move Up", IsEnabled = singleSelection };
-        moveUp.Click += (_, _) => MoveTakeoffNode(item.FolderPath, -1);
+        var moveUp = new MenuItem
+        {
+            Header = selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
+            IsEnabled = CanMoveTakeoffNodes(tvi, -1),
+        };
+        moveUp.Click += (_, _) => MoveTakeoffNodes(tvi, -1);
         menu.Items.Add(moveUp);
 
-        var moveDown = new MenuItem { Header = "Move Down", IsEnabled = singleSelection };
-        moveDown.Click += (_, _) => MoveTakeoffNode(item.FolderPath, 1);
+        var moveDown = new MenuItem
+        {
+            Header = selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
+            IsEnabled = CanMoveTakeoffNodes(tvi, 1),
+        };
+        moveDown.Click += (_, _) => MoveTakeoffNodes(tvi, 1);
         menu.Items.Add(moveDown);
 
         menu.Items.Add(new Separator());
@@ -4232,37 +7683,62 @@ public partial class MainWindow : Window
                 sectionTvi.IsSelected = true;
         }
 
-        itemNode.IsExpanded = wasExpanded || item.Measurements.Count > 0;
+        itemNode.IsExpanded = wasExpanded;
     }
 
     private void AttachTakeoffSectionContextMenu(TreeViewItem tvi, TakeoffItem item, Measurement measurement)
     {
+        tvi.ContextMenu = BuildTakeoffSectionContextMenu(new TakeoffMeasurementNode(item, measurement));
+    }
+
+    private ContextMenu BuildTakeoffSectionContextMenu(TakeoffMeasurementNode anchor)
+    {
+        TakeoffItem item = anchor.Item;
+        Measurement measurement = anchor.Measurement;
         string title = MeasurementEntryTitle(item);
-        int index = item.Measurements.IndexOf(measurement);
+        int selectedCount = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true).Count;
+        bool singleSelection = selectedCount <= 1;
         var menu = new ContextMenu();
-        menu.Items.Add(MakeMenuItem($"{title} Properties...", true, () => EditSectionProperties(item, measurement)));
-        menu.Items.Add(MakeMenuItem($"Rename {title}", true, () => RenameSection(item, measurement)));
+        menu.Items.Add(MakeMenuItem($"{title} Properties...", singleSelection, () => EditSectionProperties(item, measurement)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Set Notes for {selectedCount} Rows..." : "Set Notes...",
+            true,
+            () => EditTakeoffSectionNotes(anchor)));
+        menu.Items.Add(MakeMenuItem($"Rename {title}", singleSelection, () => RenameSection(item, measurement)));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Go to Page", !string.IsNullOrWhiteSpace(measurement.PageFolder), () => GoToMeasurementPage(measurement)));
-        menu.Items.Add(MakeMenuItem("Select on Canvas", true, () => SelectSectionOnCanvas(measurement)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? "Go to First Page" : "Go to Page",
+            SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true).Any(node => !string.IsNullOrWhiteSpace(node.Measurement.PageFolder)),
+            () => GoToTakeoffSectionsPage(anchor)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Select {selectedCount} on Canvas" : "Select on Canvas",
+            true,
+            () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true))));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Move Up", index > 0, () => MoveSection(item, measurement, -1)));
-        menu.Items.Add(MakeMenuItem("Move Down", index >= 0 && index < item.Measurements.Count - 1, () => MoveSection(item, measurement, 1)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
+            CanMoveTakeoffSections(anchor, -1),
+            () => MoveTakeoffSections(anchor, -1)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
+            CanMoveTakeoffSections(anchor, 1),
+            () => MoveTakeoffSections(anchor, 1)));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem($"Delete {title}", true, () => DeleteSection(item, measurement)));
-        tvi.ContextMenu = menu;
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Delete {selectedCount} {title}s" : $"Delete {title}",
+            true,
+            () => DeleteTakeoffSections(anchor)));
+        return menu;
     }
 
     private void SetTakeoffSectionHeader(TreeViewItem tvi, TakeoffItem item, Measurement measurement, int index)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        panel.Children.Add(new TextBlock
-        {
-            Text = item.MeasurementType == "point" ? "*" : "-",
-            Foreground = Brushes.Gray,
-            Margin = new Thickness(0, 0, 5, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        });
+        panel.Children.Add(CreateMeasurementTypeIcon(
+            measurement.JoistEnabled ? "joist" : SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType),
+            BrushFromHex(measurement.Color, Brushes.Gray),
+            12,
+            new Thickness(0, 0, 7, 0)));
         panel.Children.Add(new TextBlock
         {
             Text = SectionDisplayName(item, measurement, index),
@@ -4300,17 +7776,96 @@ public partial class MainWindow : Window
 
     private void MoveSection(TakeoffItem item, Measurement measurement, int offset)
     {
-        int index = item.Measurements.IndexOf(measurement);
-        int target = index + offset;
-        if (index < 0 || target < 0 || target >= item.Measurements.Count)
+        MoveTakeoffSections(new TakeoffMeasurementNode(item, measurement), offset);
+    }
+
+    private bool CanMoveTakeoffSections(TakeoffMeasurementNode anchor, int offset)
+    {
+        var selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
+        return CanMoveTakeoffSections(selectedNodes, anchor.Item, offset);
+    }
+
+    private bool CanMoveTakeoffSections(IReadOnlyList<TakeoffMeasurementNode> selectedNodes, TakeoffItem item, int offset)
+    {
+        if (offset == 0 || selectedNodes.Count == 0 || item.Measurements.Count <= 1)
+            return false;
+
+        if (selectedNodes.Any(node => !ReferenceEquals(node.Item, item)))
+            return false;
+
+        var selectedIds = selectedNodes
+            .Select(node => node.Measurement.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedIds.Count == 0 || selectedIds.Count >= item.Measurements.Count)
+            return false;
+
+        if (offset < 0)
+        {
+            for (int i = 1; i < item.Measurements.Count; i++)
+            {
+                if (selectedIds.Contains(item.Measurements[i].Id) &&
+                    !selectedIds.Contains(item.Measurements[i - 1].Id))
+                    return true;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < item.Measurements.Count - 1; i++)
+            {
+                if (selectedIds.Contains(item.Measurements[i].Id) &&
+                    !selectedIds.Contains(item.Measurements[i + 1].Id))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void MoveTakeoffSections(TakeoffMeasurementNode anchor, int offset)
+    {
+        var selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
+        if (!CanMoveTakeoffSections(selectedNodes, anchor.Item, offset))
             return;
 
-        item.Measurements.RemoveAt(index);
-        item.Measurements.Insert(target, measurement);
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
-        RefreshTreeItem(item);
+        var selectedIds = selectedNodes
+            .Select(node => node.Measurement.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (offset < 0)
+        {
+            for (int i = 1; i < anchor.Item.Measurements.Count; i++)
+            {
+                if (selectedIds.Contains(anchor.Item.Measurements[i].Id) &&
+                    !selectedIds.Contains(anchor.Item.Measurements[i - 1].Id))
+                {
+                    (anchor.Item.Measurements[i - 1], anchor.Item.Measurements[i]) =
+                        (anchor.Item.Measurements[i], anchor.Item.Measurements[i - 1]);
+                }
+            }
+        }
+        else
+        {
+            for (int i = anchor.Item.Measurements.Count - 2; i >= 0; i--)
+            {
+                if (selectedIds.Contains(anchor.Item.Measurements[i].Id) &&
+                    !selectedIds.Contains(anchor.Item.Measurements[i + 1].Id))
+                {
+                    (anchor.Item.Measurements[i], anchor.Item.Measurements[i + 1]) =
+                        (anchor.Item.Measurements[i + 1], anchor.Item.Measurements[i]);
+                }
+            }
+        }
+
+        SmartTakeoffsJobStore.SaveTakeoffItem(anchor.Item);
+        RefreshTreeItem(anchor.Item);
         RefreshEstimateTable();
-        TxtStatus.Text = offset < 0 ? "Moved takeoff section up." : "Moved takeoff section down.";
+        RefreshSheetLegend();
+        SelectTakeoffSectionNodesSilently(selectedNodes);
+        TxtStatus.Text = selectedNodes.Count == 1
+            ? (offset < 0 ? $"Moved {MeasurementEntryTitle(anchor.Item).ToLowerInvariant()} up." : $"Moved {MeasurementEntryTitle(anchor.Item).ToLowerInvariant()} down.")
+            : (offset < 0 ? $"Moved {selectedNodes.Count} {MeasurementEntryTitlePlural(selectedNodes)} up." : $"Moved {selectedNodes.Count} {MeasurementEntryTitlePlural(selectedNodes)} down.");
     }
 
     private void StartNewSection(TreeViewItem tvi, TakeoffItem item)
@@ -4331,16 +7886,246 @@ public partial class MainWindow : Window
         _viewport.ActiveColor = item.Color;
         _viewport.ActiveTakeoffFolder = item.FolderPath;
         SetTool(item.MeasurementType);
+        RefreshActiveTakeoffVisuals();
         if (_activeTool == item.MeasurementType)
             TxtStatus.Text = item.MeasurementType == "point"
                 ? $"Add counts for {item.Name}."
                 : $"New {MeasurementTypeTitle(item.MeasurementType)} section for {item.Name}.";
     }
 
+    private void SetActiveTakeoffTarget(TreeViewItem? tvi, TakeoffItem item, bool selectCanvasMeasurements = true)
+    {
+        item.MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        _activeItem = item;
+        _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
+        _viewport.ActiveColor = item.Color;
+        _viewport.ActiveTakeoffFolder = item.FolderPath;
+
+        if (tvi != null)
+        {
+            _takeoffsMultiSelection.Clear();
+            if (!string.IsNullOrWhiteSpace(item.FolderPath))
+                _takeoffsMultiSelection.Add(item.FolderPath);
+            tvi.IsSelected = true;
+            tvi.BringIntoView();
+        }
+
+        if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
+            ApplyToolSelection(item.MeasurementType);
+        else
+            UpdateToolStatus();
+
+        RefreshPagesTakeoffIndicators();
+        RefreshActiveTakeoffVisuals();
+        RevealPagesForTakeoffItems([item], _currentPage?.FolderPath);
+        if (selectCanvasMeasurements)
+            Dispatcher.InvokeAsync(() => SelectCurrentPageTakeoffMeasurementsOnCanvas(item));
+        UpdateTotalDisplay();
+        TxtStatus.Text = $"Active takeoff target: {item.Name}.";
+    }
+
+    private void BtnActiveTakeoffRecord_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeItem == null)
+        {
+            TxtStatus.Text = "Select a takeoff item before recording.";
+            return;
+        }
+
+        if (FindTakeoffTreeItem(_activeItem) is { } tvi)
+        {
+            StartNewSection(tvi, _activeItem);
+            return;
+        }
+
+        if (_currentPage == null)
+        {
+            string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+            MessageBox.Show(
+                measurementType == "point"
+                    ? "Select a page before adding a count."
+                    : "Select a page before starting a new section.",
+                measurementType == "point" ? "Add Count" : "New Section",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        SetActiveTakeoffTarget(null, _activeItem, selectCanvasMeasurements: false);
+        SetTool(SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType));
+    }
+
+    private void BtnActiveTakeoffMore_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement target)
+            return;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = target,
+            Placement = PlacementMode.Bottom,
+        };
+
+        menu.Items.Add(MakeMenuItem("Properties...", BtnActiveTakeoffProperties.IsEnabled, () => BtnActiveTakeoffProperties_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Find in Tree", BtnActiveTakeoffFind.IsEnabled, () => BtnActiveTakeoffFind_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Sheet Targets...", BtnActiveTakeoffSheetNext.IsEnabled, () => ShowActiveSheetTakeoffTargetMenu(target)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Previous Target", BtnActiveTakeoffPrevious.IsEnabled, () => BtnActiveTakeoffPrevious_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Next Target", BtnActiveTakeoffNext.IsEnabled, () => BtnActiveTakeoffNext_Click(sender, new RoutedEventArgs())));
+
+        menu.IsOpen = true;
+    }
+
+    private void BtnActiveTakeoffFind_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeItem == null)
+        {
+            TxtStatus.Text = "Select a takeoff item first.";
+            return;
+        }
+
+        if (FindTakeoffTreeItem(_activeItem) is not { } tvi)
+        {
+            TxtStatus.Text = "Active takeoff item is not visible in the Takeoffs tree.";
+            return;
+        }
+
+        SelectTakeoffItem(_activeItem);
+        SetActiveTakeoffTarget(tvi, _activeItem, selectCanvasMeasurements: false);
+    }
+
+    private void BtnActiveTakeoffProperties_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeItem == null)
+        {
+            TxtStatus.Text = "Select a takeoff item first.";
+            return;
+        }
+
+        if (FindTakeoffTreeItem(_activeItem) is not { } tvi)
+        {
+            TxtStatus.Text = "Active takeoff item is not visible in the Takeoffs tree.";
+            return;
+        }
+
+        SetActiveTakeoffTarget(tvi, _activeItem, selectCanvasMeasurements: false);
+        EditTakeoffItemProperties(tvi, _activeItem);
+    }
+
+    private void BtnActiveTakeoffPrevious_Click(object sender, RoutedEventArgs e) =>
+        MoveActiveTakeoffTarget(-1);
+
+    private void BtnActiveTakeoffNext_Click(object sender, RoutedEventArgs e) =>
+        MoveActiveTakeoffTarget(1);
+
+    private void BtnActiveTakeoffSheetNext_Click(object sender, RoutedEventArgs e) =>
+        ShowActiveSheetTakeoffTargetMenu(BtnActiveTakeoffSheetNext);
+
+    private void MoveActiveTakeoffTarget(int offset)
+    {
+        var targets = ActiveTakeoffTargetCycleItems();
+        if (targets.Count == 0)
+        {
+            TxtStatus.Text = "No takeoff items are available.";
+            return;
+        }
+
+        int currentIndex = _activeItem == null
+            ? -1
+            : targets.FindIndex(IsActiveTakeoffItem);
+        int nextIndex = currentIndex < 0
+            ? (offset < 0 ? targets.Count - 1 : 0)
+            : (currentIndex + offset + targets.Count) % targets.Count;
+        TakeoffItem next = targets[nextIndex];
+        SetActiveTakeoffTarget(FindTakeoffTreeItem(next), next);
+        TxtStatus.Text = $"Active takeoff target {nextIndex + 1}/{targets.Count}: {next.Name}.";
+    }
+
+    private List<TakeoffItem> ActiveTakeoffTargetCycleItems() =>
+        _takeoffItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.FolderPath))
+            .ToList();
+
+    private void MoveActiveSheetTakeoffTarget(int offset)
+    {
+        var targets = ActiveSheetTakeoffTargetCycleItems();
+        if (targets.Count == 0)
+        {
+            TxtStatus.Text = _currentPage == null
+                ? "Select a sheet before cycling sheet takeoffs."
+                : $"No takeoff items are measured on {_currentPage.Name}.";
+            return;
+        }
+
+        int currentIndex = _activeItem == null
+            ? -1
+            : targets.FindIndex(IsActiveTakeoffItem);
+        int nextIndex = currentIndex < 0
+            ? (offset < 0 ? targets.Count - 1 : 0)
+            : (currentIndex + offset + targets.Count) % targets.Count;
+        TakeoffItem next = targets[nextIndex];
+        SetActiveTakeoffTarget(FindTakeoffTreeItem(next), next);
+        TxtStatus.Text = $"Sheet takeoff target {nextIndex + 1}/{targets.Count}: {next.Name}.";
+    }
+
+    private List<TakeoffItem> ActiveSheetTakeoffTargetCycleItems() =>
+        _currentPage == null
+            ? []
+            : OrderedTakeoffsForPage(_currentPage).ToList();
+
+    private void ShowActiveSheetTakeoffTargetMenu(UIElement? placementTarget = null)
+    {
+        var targets = ActiveSheetTakeoffTargetCycleItems();
+        if (targets.Count == 0)
+        {
+            TxtStatus.Text = _currentPage == null
+                ? "Select a sheet before choosing sheet takeoffs."
+                : $"No takeoff items are measured on {_currentPage.Name}.";
+            return;
+        }
+
+        var menu = new ContextMenu();
+        menu.Items.Add(MakeMenuItem("Next Sheet Target", targets.Count > 1, () => MoveActiveSheetTakeoffTarget(1)));
+        menu.Items.Add(new Separator());
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            TakeoffItem target = targets[i];
+            int index = i;
+            string activePrefix = IsActiveTakeoffItem(target) ? "* " : "";
+            string quantity = ActiveSheetTakeoffTargetQuantity(target);
+            menu.Items.Add(MakeMenuItem(
+                $"{activePrefix}{index + 1}. {target.Name} - {quantity}",
+                true,
+                () => SelectActiveSheetTakeoffTarget(target, index, targets.Count)));
+        }
+
+        menu.PlacementTarget = placementTarget ?? BtnActiveTakeoffSheetNext;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private void SelectActiveSheetTakeoffTarget(TakeoffItem target, int index, int count)
+    {
+        SetActiveTakeoffTarget(FindTakeoffTreeItem(target), target);
+        TxtStatus.Text = $"Sheet takeoff target {index + 1}/{count}: {target.Name}.";
+    }
+
+    private string ActiveSheetTakeoffTargetQuantity(TakeoffItem item)
+    {
+        if (_currentPage == null)
+            return "";
+
+        var measurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();
+        return measurements.Count == 0
+            ? "none on sheet"
+            : SheetLegendQuantityText(item, measurements);
+    }
+
     private void SetUnitPrice(TakeoffItem item)
     {
         string? raw = ShowInputDialog(
-            $"Unit price per {UnitText(item.MeasurementType)}:",
+            $"Unit price per {TakeoffUnitText(item)}:",
             item.UnitPrice > 0 ? item.UnitPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
             "Set Unit Price");
         if (raw == null)
@@ -4358,6 +8143,7 @@ public partial class MainWindow : Window
         SmartTakeoffsJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
+        RefreshSheetLegend();
         TxtStatus.Text = $"Unit price set for {item.Name}: {price:G}";
     }
 
@@ -4368,7 +8154,8 @@ public partial class MainWindow : Window
                 out string name,
                 out string color,
                 out double unitPrice,
-                out string notes))
+                out string notes,
+                out JoistTakeoffEdit joistEdit))
         {
             return;
         }
@@ -4379,7 +8166,9 @@ public partial class MainWindow : Window
             if (!string.IsNullOrWhiteSpace(item.FolderPath) && Directory.Exists(item.FolderPath) &&
                 !string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
             {
+                string oldPath = item.FolderPath;
                 item.FolderPath = SmartTakeoffsJobStore.RenameNode(item.FolderPath, name);
+                RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
                 item.Name = SmartTakeoffsJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
@@ -4392,12 +8181,31 @@ public partial class MainWindow : Window
             item.Color = color;
             item.UnitPrice = unitPrice;
             item.Notes = notes.Trim();
+            bool joistChanged =
+                item.IsJoistTakeoff != joistEdit.Enabled ||
+                !string.Equals(item.JoistType, joistEdit.JoistType, StringComparison.Ordinal) ||
+                Math.Abs(item.JoistSpacingInches - joistEdit.SpacingInches) > 0.0001 ||
+                Math.Abs(item.JoistDirectionDegrees - joistEdit.DirectionDegrees) > 0.0001 ||
+                !string.Equals(
+                    JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
+                    JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding),
+                    StringComparison.OrdinalIgnoreCase) ||
+                item.JoistShowLabels != joistEdit.ShowLabels;
+            bool wasJoistArea = item.IsJoistArea;
+            item.IsJoistTakeoff = joistEdit.Enabled && SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+            item.JoistType = joistEdit.JoistType.Trim();
+            item.JoistSpacingInches = joistEdit.SpacingInches > 0 ? joistEdit.SpacingInches : 16;
+            item.JoistDirectionDegrees = joistEdit.DirectionDegrees;
+            item.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding);
+            item.JoistShowLabels = joistEdit.ShowLabels;
+            SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             if (colorChanged)
             {
                 foreach (Measurement measurement in item.Measurements)
                     measurement.Color = color;
-                _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
             }
+            if (colorChanged || joistChanged)
+                _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
 
             SmartTakeoffsJobStore.SaveTakeoffItem(item);
             SetTreeItemHeader(tvi, item);
@@ -4405,7 +8213,10 @@ public partial class MainWindow : Window
             RefreshEstimateTable();
             RefreshPagesTakeoffIndicators();
             ApplyTakeoffPageHighlights();
+            RefreshSheetLegend();
             UpdateTotalDisplay();
+            if (item.IsJoistArea && (!wasJoistArea || item.HasPendingJoistDirections))
+                BeginNextPendingJoistDirectionCapture(item);
             TxtStatus.Text = $"Updated takeoff item properties: {item.Name}";
         }
         catch (Exception ex)
@@ -4414,23 +8225,445 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SetJoistDirectionFromSelectedLine(TreeViewItem tvi, TakeoffItem item)
+    {
+        if (SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        {
+            TxtStatus.Text = "Joist direction can only be set on Area takeoff items.";
+            return;
+        }
+
+        Measurement? area = SelectedJoistAreaMeasurement(item);
+        if (area == null)
+        {
+            string message = "Select one Area measurement on the sheet first, then run this joist direction command.";
+            TxtStatus.Text = message;
+            return;
+        }
+
+        item.IsJoistTakeoff = true;
+        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
+        BeginJoistDirectionCapture(item, area);
+    }
+
+    private Measurement? SelectedJoistAreaMeasurement(TakeoffItem item)
+    {
+        var selected = _viewport.GetSelectedMeasurements()
+            .Where(measurement =>
+                item.Measurements.Contains(measurement) &&
+                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .ToList();
+        if (selected.Count == 1)
+            return selected[0];
+
+        if (_currentPage != null)
+        {
+            var pageAreas = item.Measurements
+                .Where(measurement =>
+                    SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                    IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+                .ToList();
+            if (pageAreas.Count == 1)
+                return pageAreas[0];
+        }
+
+        return null;
+    }
+
+    private void BeginJoistDirectionCapture(TakeoffItem item, Measurement area)
+    {
+        item.IsJoistTakeoff = true;
+        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        area.JoistDirectionLocked = false;
+        _viewport.BeginJoistDirectionCapture(area);
+        TxtStatus.Text = $"Joist direction for {item.Name}: draw a two-point line parallel to the joists on the selected area.";
+    }
+
+    private void OnJoistDirectionCaptured(Measurement area, SKPoint start, SKPoint end)
+    {
+        TakeoffItem? item = FindTakeoffItemForMeasurement(area);
+        if (item == null)
+            return;
+
+        if (!TryDirectionFromPoints(start, end, out double directionDegrees))
+        {
+            TxtStatus.Text = "Joist direction line is too short.";
+            return;
+        }
+
+        item.IsJoistTakeoff = true;
+        area.JoistDirectionDegrees = directionDegrees;
+        area.JoistDirectionLocked = true;
+        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        _viewport.SelectMeasurements([area]);
+        RefreshTreeItem(item);
+        RefreshActiveTakeoffVisuals();
+        RefreshEstimateTable();
+        RefreshPagesTakeoffIndicators();
+        ApplyTakeoffPageHighlights();
+        RefreshSheetLegend();
+        UpdateTotalDisplay();
+        if (BeginNextPendingJoistDirectionCapture(item, area))
+            return;
+
+        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(area, _viewport.ScaleMetersPerPt);
+        TxtStatus.Text = $"Joists generated for {item.Name}: direction {directionDegrees:0.#} deg, {JoistTakeoffCalculator.FormatDiagnostics(layout, _viewport.UnitMode)}{FormatJoistScaleSuffix(area)}.";
+    }
+
+    private bool BeginNextPendingJoistDirectionCapture(TakeoffItem item, Measurement? skip = null)
+    {
+        if (_currentPage == null || !item.IsJoistArea)
+            return false;
+
+        Measurement? next = item.Measurements.FirstOrDefault(measurement =>
+            !ReferenceEquals(measurement, skip) &&
+            SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+            IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath) &&
+            !measurement.JoistDirectionLocked);
+        if (next == null)
+            return false;
+
+        _viewport.BeginJoistDirectionCapture(next);
+        TxtStatus.Text = $"Set joist direction for next area in {item.Name}: click two points parallel to the joists.";
+        return true;
+    }
+
+    private bool TryGetSelectedLineDirection(out double directionDegrees, out string message)
+    {
+        directionDegrees = 0;
+        Measurement? line = _viewport.GetSelectedMeasurements()
+            .FirstOrDefault(measurement =>
+                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+                measurement.Points.Count >= 2);
+        if (line == null)
+        {
+            message = "Select a Line measurement on the sheet first, then run this joist direction command.";
+            return false;
+        }
+
+        SKPoint start = line.Points[0];
+        SKPoint end = line.Points[^1];
+        if (!TryDirectionFromPoints(start, end, out directionDegrees))
+        {
+            message = "Selected line is too short to define joist direction.";
+            return false;
+        }
+
+        message = "";
+        return true;
+    }
+
+    private static bool TryDirectionFromPoints(SKPoint start, SKPoint end, out double directionDegrees)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        if (Math.Sqrt(dx * dx + dy * dy) < 0.001)
+        {
+            directionDegrees = 0;
+            return false;
+        }
+
+        directionDegrees = NormalizeJoistDirectionDegrees(Math.Atan2(dy, dx) * 180.0 / Math.PI);
+        return true;
+    }
+
+    private static double NormalizeJoistDirectionDegrees(double degrees)
+    {
+        double normalized = degrees % 180.0;
+        if (normalized < 0)
+            normalized += 180.0;
+        return Math.Abs(normalized - 180.0) < 0.0001 ? 0 : normalized;
+    }
+
+    private void EditSelectedTakeoffProperties(TreeViewItem anchor)
+    {
+        var selectedItems = TakeoffItemsForSelection(anchor)
+            .Where(item => !string.IsNullOrWhiteSpace(item.FolderPath) && Directory.Exists(item.FolderPath))
+            .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+        if (selectedItems.Count == 0)
+        {
+            TxtStatus.Text = "No takeoff items selected for bulk properties.";
+            return;
+        }
+
+        if (!ShowBulkTakeoffPropertiesDialog(selectedItems, out BulkTakeoffPropertiesEdit edit))
+            return;
+
+        try
+        {
+            foreach (TakeoffItem selectedItem in selectedItems)
+            {
+                if (edit.ApplyColor)
+                {
+                    selectedItem.Color = edit.Color;
+                    foreach (Measurement measurement in selectedItem.Measurements)
+                        measurement.Color = edit.Color;
+                }
+
+                if (edit.ApplyUnitPrice)
+                    selectedItem.UnitPrice = edit.UnitPrice;
+
+                if (edit.ApplyNotes)
+                    selectedItem.Notes = edit.Notes.Trim();
+
+                SmartTakeoffsJobStore.SaveTakeoffItem(selectedItem);
+                RefreshTreeItem(selectedItem);
+            }
+
+            if (edit.ApplyColor && _activeItem != null &&
+                selectedItems.Any(item => string.Equals(item.FolderPath, _activeItem.FolderPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                _viewport.ActiveColor = _activeItem.Color;
+            }
+
+            RefreshEstimateTable();
+            RefreshPagesTakeoffIndicators();
+            RefreshActiveTakeoffVisuals();
+            RefreshSheetLegend();
+            UpdateTotalDisplay();
+            SelectTakeoffSelectionMeasurementsOnCurrentPage(anchor);
+            TxtStatus.Text = $"Updated bulk properties for {selectedItems.Count} takeoff item(s).";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Bulk Takeoff Properties", ex);
+        }
+    }
+
+    private bool ShowBulkTakeoffPropertiesDialog(
+        IReadOnlyList<TakeoffItem> items,
+        out BulkTakeoffPropertiesEdit edit)
+    {
+        string firstColor = NormalizeTakeoffColor(items[0].Color);
+        bool sameColor = items.All(item =>
+            string.Equals(NormalizeTakeoffColor(item.Color), firstColor, StringComparison.OrdinalIgnoreCase));
+        double firstPrice = items[0].UnitPrice;
+        bool samePrice = items.All(item => Math.Abs(item.UnitPrice - firstPrice) < 0.0000001);
+        string firstNotes = items[0].Notes;
+        bool sameNotes = items.All(item => string.Equals(item.Notes, firstNotes, StringComparison.Ordinal));
+        var selectedTypes = items
+            .Select(item => SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        bool sameType = selectedTypes.Count == 1;
+        string typeText = sameType ? MeasurementTypeTitle(selectedTypes[0]) : "mixed Line/Area/Count";
+
+        edit = new BulkTakeoffPropertiesEdit(false, firstColor, false, firstPrice, false, firstNotes);
+
+        var dialog = new Window
+        {
+            Title = $"Bulk Takeoff Properties ({items.Count})",
+            Owner = this,
+            Width = 430,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+        };
+
+        var panel = new StackPanel { Margin = new Thickness(12) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Selected items: {items.Count} | Type: {typeText}",
+            Foreground = Brushes.Gray,
+            Margin = new Thickness(0, 0, 0, 8),
+        });
+
+        var applyColorBox = new CheckBox
+        {
+            Content = sameColor ? "Apply color" : "Apply color (currently mixed)",
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        panel.Children.Add(applyColorBox);
+
+        string selectedColor = firstColor;
+        var colorBox = new TextBox
+        {
+            Text = selectedColor,
+            Width = 90,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsEnabled = false,
+        };
+        var swatches = new List<Border>();
+        var colorPanel = new WrapPanel
+        {
+            Margin = new Thickness(0, 0, 0, 4),
+            IsEnabled = false,
+        };
+        foreach (var preset in TakeoffColorPresets)
+        {
+            var swatch = new Border
+            {
+                Width = 32,
+                Height = 22,
+                Margin = new Thickness(2),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(preset.Hex)),
+                BorderBrush = string.Equals(preset.Hex, selectedColor, StringComparison.OrdinalIgnoreCase)
+                    ? Brushes.White
+                    : Brushes.Transparent,
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(3),
+                ToolTip = preset.Label,
+                Cursor = Cursors.Hand,
+            };
+            swatch.MouseLeftButtonDown += (_, _) =>
+            {
+                selectedColor = preset.Hex;
+                colorBox.Text = selectedColor;
+                applyColorBox.IsChecked = true;
+                foreach (Border border in swatches)
+                    border.BorderBrush = Brushes.Transparent;
+                swatch.BorderBrush = Brushes.White;
+            };
+            swatches.Add(swatch);
+            colorPanel.Children.Add(swatch);
+        }
+        panel.Children.Add(colorPanel);
+        colorBox.TextChanged += (_, _) => applyColorBox.IsChecked = true;
+        panel.Children.Add(colorBox);
+
+        var applyPriceBox = new CheckBox
+        {
+            Content = sameType
+                ? $"Apply unit price per {UnitText(selectedTypes[0])}"
+                : "Unit price disabled for mixed Line/Area/Count selection",
+            IsEnabled = sameType,
+            Margin = new Thickness(0, 12, 0, 4),
+        };
+        panel.Children.Add(applyPriceBox);
+        var priceBox = new TextBox
+        {
+            Text = samePrice && firstPrice > 0 ? firstPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
+            IsEnabled = false,
+        };
+        if (sameType)
+            priceBox.TextChanged += (_, _) => applyPriceBox.IsChecked = true;
+        panel.Children.Add(priceBox);
+
+        var applyNotesBox = new CheckBox
+        {
+            Content = sameNotes ? "Replace notes" : "Replace notes (currently mixed)",
+            Margin = new Thickness(0, 12, 0, 4),
+        };
+        panel.Children.Add(applyNotesBox);
+        var notesBox = new TextBox
+        {
+            Text = sameNotes ? firstNotes : "",
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            Height = 90,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            IsEnabled = false,
+        };
+        notesBox.TextChanged += (_, _) => applyNotesBox.IsChecked = true;
+        panel.Children.Add(notesBox);
+
+        void RefreshEnabledFields()
+        {
+            bool applyColor = applyColorBox.IsChecked == true;
+            colorPanel.IsEnabled = applyColor;
+            colorBox.IsEnabled = applyColor;
+            priceBox.IsEnabled = sameType && applyPriceBox.IsChecked == true;
+            notesBox.IsEnabled = applyNotesBox.IsChecked == true;
+        }
+
+        applyColorBox.Checked += (_, _) => RefreshEnabledFields();
+        applyColorBox.Unchecked += (_, _) => RefreshEnabledFields();
+        applyPriceBox.Checked += (_, _) => RefreshEnabledFields();
+        applyPriceBox.Unchecked += (_, _) => RefreshEnabledFields();
+        applyNotesBox.Checked += (_, _) => RefreshEnabledFields();
+        applyNotesBox.Unchecked += (_, _) => RefreshEnabledFields();
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        var ok = new Button { Content = "OK", Width = 78, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
+        var cancel = new Button { Content = "Cancel", Width = 78, IsCancel = true };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        panel.Children.Add(buttons);
+        dialog.Content = panel;
+
+        BulkTakeoffPropertiesEdit result = edit;
+        ok.Click += (_, _) =>
+        {
+            bool applyColor = applyColorBox.IsChecked == true;
+            bool applyPrice = sameType && applyPriceBox.IsChecked == true;
+            bool applyNotes = applyNotesBox.IsChecked == true;
+            if (!applyColor && !applyPrice && !applyNotes)
+            {
+                MessageBox.Show("Choose at least one property to apply.", "Bulk Takeoff Properties",
+                                MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string cleanColor = NormalizeTakeoffColor(colorBox.Text);
+            if (applyColor && !IsValidWpfColor(cleanColor))
+            {
+                MessageBox.Show("Enter a valid color like #FF4444.", "Bulk Takeoff Properties",
+                                MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            double parsedPrice = firstPrice;
+            if (applyPrice &&
+                (!double.TryParse(priceBox.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out parsedPrice) ||
+                 parsedPrice < 0))
+            {
+                MessageBox.Show("Enter a valid non-negative unit price.", "Bulk Takeoff Properties",
+                                MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            result = new BulkTakeoffPropertiesEdit(
+                applyColor,
+                cleanColor,
+                applyPrice,
+                parsedPrice,
+                applyNotes,
+                notesBox.Text.Trim());
+            dialog.DialogResult = true;
+        };
+
+        bool accepted = dialog.ShowDialog() == true;
+        if (accepted)
+            edit = result;
+
+        return accepted;
+    }
+
     private bool ShowTakeoffItemPropertiesDialog(
         TakeoffItem item,
         out string name,
         out string color,
         out double unitPrice,
-        out string notes)
+        out string notes,
+        out JoistTakeoffEdit joistEdit)
     {
         name = item.Name;
         color = NormalizeTakeoffColor(item.Color);
         unitPrice = item.UnitPrice;
         notes = item.Notes;
+        joistEdit = new JoistTakeoffEdit(
+            item.IsJoistArea,
+            item.JoistType,
+            item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16,
+            item.JoistDirectionDegrees,
+            JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
+            item.JoistShowLabels);
 
         var dialog = new Window
         {
             Title = "Takeoff Item Properties",
             Owner = this,
-            Width = 420,
+            Width = 500,
             SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.NoResize,
@@ -4447,6 +8680,114 @@ public partial class MainWindow : Window
             Foreground = Brushes.Gray,
             Margin = new Thickness(0, 8, 0, 0),
         });
+        bool isAreaTakeoff = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        var joistEnabledBox = new CheckBox
+        {
+            Content = "Joist layout",
+            IsChecked = item.IsJoistArea,
+            IsEnabled = isAreaTakeoff,
+            Margin = new Thickness(0, 10, 0, 2),
+        };
+        panel.Children.Add(joistEnabledBox);
+
+        var joistPanel = new Grid
+        {
+            Margin = new Thickness(18, 0, 0, 6),
+            IsEnabled = isAreaTakeoff && joistEnabledBox.IsChecked == true,
+        };
+        joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
+        joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (int i = 0; i < 5; i++)
+            joistPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        AddLabeledTextBox(joistPanel, 0, "Joist type:", out TextBox joistTypeBox, item.JoistType);
+        AddLabeledTextBox(
+            joistPanel,
+            1,
+            "O.C. spacing (in):",
+            out TextBox joistSpacingBox,
+            (item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16).ToString("G", CultureInfo.InvariantCulture));
+        var directionLabel = new TextBlock
+        {
+            Text = "Joist direction:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 3, 8, 3),
+        };
+        Grid.SetRow(directionLabel, 2);
+        Grid.SetColumn(directionLabel, 0);
+        joistPanel.Children.Add(directionLabel);
+        var joistDirectionBox = new TextBox
+        {
+            Text = item.JoistDirectionDegrees.ToString("G", CultureInfo.InvariantCulture),
+            IsReadOnly = true,
+            Width = 78,
+            ToolTip = "Direction is set by drawing a two-point line parallel to the joists after selecting or drawing an Area.",
+        };
+        Grid.SetRow(joistDirectionBox, 2);
+        Grid.SetColumn(joistDirectionBox, 1);
+        joistPanel.Children.Add(joistDirectionBox);
+
+        var roundingLabel = new TextBlock
+        {
+            Text = "Length calc:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 3, 8, 3),
+        };
+        Grid.SetRow(roundingLabel, 3);
+        Grid.SetColumn(roundingLabel, 0);
+        joistPanel.Children.Add(roundingLabel);
+        var roundingBox = new ComboBox
+        {
+            MinWidth = 190,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 3, 0, 3),
+        };
+        foreach (string rounding in new[]
+                 {
+                     JoistTakeoffCalculator.RoundingNone,
+                     JoistTakeoffCalculator.RoundingNearestFoot,
+                     JoistTakeoffCalculator.RoundingNearestEvenFoot,
+                     JoistTakeoffCalculator.RoundingNearestTwoFeet,
+                 })
+        {
+            roundingBox.Items.Add(new ComboBoxItem
+            {
+                Content = JoistTakeoffCalculator.LengthRoundingTitle(rounding),
+                Tag = rounding,
+            });
+        }
+        string selectedRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
+        for (int i = 0; i < roundingBox.Items.Count; i++)
+        {
+            if (roundingBox.Items[i] is ComboBoxItem option &&
+                string.Equals((string?)option.Tag, selectedRounding, StringComparison.OrdinalIgnoreCase))
+            {
+                roundingBox.SelectedIndex = i;
+                break;
+            }
+        }
+        if (roundingBox.SelectedIndex < 0)
+            roundingBox.SelectedIndex = 0;
+        Grid.SetRow(roundingBox, 3);
+        Grid.SetColumn(roundingBox, 1);
+        joistPanel.Children.Add(roundingBox);
+
+        var joistLabelsBox = new CheckBox
+        {
+            Content = "Label each joist",
+            IsChecked = item.JoistShowLabels,
+            Margin = new Thickness(0, 3, 0, 3),
+            ToolTip = "When off, the area label still shows count / length.",
+        };
+        Grid.SetRow(joistLabelsBox, 4);
+        Grid.SetColumn(joistLabelsBox, 1);
+        joistPanel.Children.Add(joistLabelsBox);
+
+        joistEnabledBox.Checked += (_, _) => joistPanel.IsEnabled = isAreaTakeoff;
+        joistEnabledBox.Unchecked += (_, _) => joistPanel.IsEnabled = false;
+        if (!isAreaTakeoff)
+            joistEnabledBox.ToolTip = "Joist layout is available for Area takeoff items.";
+        panel.Children.Add(joistPanel);
 
         panel.Children.Add(new TextBlock { Text = "Color:", Margin = new Thickness(0, 10, 0, 4) });
         string selectedColor = NormalizeTakeoffColor(item.Color);
@@ -4483,11 +8824,14 @@ public partial class MainWindow : Window
         panel.Children.Add(colorPanel);
         panel.Children.Add(colorBox);
 
-        panel.Children.Add(new TextBlock
+        var unitPriceLabel = new TextBlock
         {
-            Text = $"Unit price per {UnitText(item.MeasurementType)}:",
+            Text = $"Unit price per {TakeoffUnitText(item)}:",
             Margin = new Thickness(0, 10, 0, 4),
-        });
+        };
+        panel.Children.Add(unitPriceLabel);
+        joistEnabledBox.Checked += (_, _) => unitPriceLabel.Text = $"Unit price per {UnitText("line")}:";
+        joistEnabledBox.Unchecked += (_, _) => unitPriceLabel.Text = $"Unit price per {UnitText(item.MeasurementType)}:";
         var priceBox = new TextBox
         {
             Text = item.UnitPrice > 0 ? item.UnitPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
@@ -4522,6 +8866,7 @@ public partial class MainWindow : Window
         string resultColor = selectedColor;
         double resultPrice = item.UnitPrice;
         string resultNotes = item.Notes;
+        JoistTakeoffEdit resultJoist = joistEdit;
 
         ok.Click += (_, _) =>
         {
@@ -4548,10 +8893,45 @@ public partial class MainWindow : Window
                 return;
             }
 
+            bool joistEnabled = isAreaTakeoff && joistEnabledBox.IsChecked == true;
+            double joistSpacing = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
+            double joistDirection = item.JoistDirectionDegrees;
+            string joistRounding = JoistTakeoffCalculator.RoundingNone;
+            if (roundingBox.SelectedItem is ComboBoxItem selectedRoundingItem &&
+                selectedRoundingItem.Tag is string selectedRoundingValue)
+            {
+                joistRounding = JoistTakeoffCalculator.NormalizeLengthRounding(selectedRoundingValue);
+            }
+
+            if (joistEnabled)
+            {
+                if (!double.TryParse(joistSpacingBox.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out joistSpacing) ||
+                    joistSpacing <= 0)
+                {
+                    MessageBox.Show("Enter a valid positive joist spacing.", "Takeoff Item Properties",
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                if (!double.TryParse(joistDirectionBox.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out joistDirection))
+                {
+                    MessageBox.Show("Enter a valid joist direction angle.", "Takeoff Item Properties",
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
+
             resultName = nameBox.Text.Trim();
             resultColor = cleanColor;
             resultPrice = parsedPrice;
             resultNotes = notesBox.Text.Trim();
+            resultJoist = new JoistTakeoffEdit(
+                joistEnabled,
+                joistTypeBox.Text.Trim(),
+                joistSpacing,
+                joistDirection,
+                joistRounding,
+                joistLabelsBox.IsChecked == true);
             dialog.DialogResult = true;
         };
         dialog.Loaded += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };
@@ -4563,9 +8943,33 @@ public partial class MainWindow : Window
             color = resultColor;
             unitPrice = resultPrice;
             notes = resultNotes;
+            joistEdit = resultJoist;
         }
 
         return accepted;
+    }
+
+    private static void AddLabeledTextBox(Grid grid, int row, string label, out TextBox textBox, string value)
+    {
+        var text = new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 3, 8, 3),
+        };
+        Grid.SetRow(text, row);
+        Grid.SetColumn(text, 0);
+        grid.Children.Add(text);
+
+        textBox = new TextBox
+        {
+            Text = value,
+            MinWidth = 190,
+            Margin = new Thickness(0, 3, 0, 3),
+        };
+        Grid.SetRow(textBox, row);
+        Grid.SetColumn(textBox, 1);
+        grid.Children.Add(textBox);
     }
 
     private static string NormalizeTakeoffColor(string value)
@@ -4586,6 +8990,18 @@ public partial class MainWindow : Window
         catch
         {
             return false;
+        }
+    }
+
+    private static Brush BrushFromHex(string value, Brush fallback)
+    {
+        try
+        {
+            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(NormalizeTakeoffColor(value)));
+        }
+        catch
+        {
+            return fallback;
         }
     }
 
@@ -4626,17 +9042,30 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
 
         menu.Items.Add(MakeMenuItem("Folder Properties...", canEditFolder, () => EditTakeoffFolderProperties(tvi, folder)));
+        int nestedTakeoffCount = TakeoffItemsForSelection(tvi).Count;
+        menu.Items.Add(MakeMenuItem(
+            nestedTakeoffCount > 1 ? $"Bulk Item Properties ({nestedTakeoffCount})..." : "Bulk Item Properties...",
+            nestedTakeoffCount > 0,
+            () => EditSelectedTakeoffProperties(tvi)));
 
         rename.Click += (_, _) => RenameTakeoffFolder(tvi, folder);
         rename.IsEnabled = canEditFolder;
         menu.Items.Add(rename);
 
-        var moveUp = new MenuItem { Header = "Move Up", IsEnabled = canEditFolder };
-        moveUp.Click += (_, _) => MoveTakeoffNode(folder.FolderPath, -1);
+        var moveUp = new MenuItem
+        {
+            Header = selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
+            IsEnabled = CanMoveTakeoffNodes(tvi, -1),
+        };
+        moveUp.Click += (_, _) => MoveTakeoffNodes(tvi, -1);
         menu.Items.Add(moveUp);
 
-        var moveDown = new MenuItem { Header = "Move Down", IsEnabled = canEditFolder };
-        moveDown.Click += (_, _) => MoveTakeoffNode(folder.FolderPath, 1);
+        var moveDown = new MenuItem
+        {
+            Header = selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
+            IsEnabled = CanMoveTakeoffNodes(tvi, 1),
+        };
+        moveDown.Click += (_, _) => MoveTakeoffNodes(tvi, 1);
         menu.Items.Add(moveDown);
 
         menu.Items.Add(new Separator());
@@ -4737,7 +9166,9 @@ public partial class MainWindow : Window
         {
             if (!string.IsNullOrWhiteSpace(item.FolderPath) && Directory.Exists(item.FolderPath))
             {
+                string oldPath = item.FolderPath;
                 item.FolderPath = SmartTakeoffsJobStore.RenameNode(item.FolderPath, name);
+                RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
                 item.Name = SmartTakeoffsJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
@@ -4749,6 +9180,8 @@ public partial class MainWindow : Window
             }
 
             SetTreeItemHeader(tvi, item);
+            RefreshPagesTakeoffIndicators();
+            RefreshSheetLegend();
             UpdateTotalDisplay();
         }
         catch (Exception ex)
@@ -4809,6 +9242,7 @@ public partial class MainWindow : Window
                 !string.Equals(requestedName, folder.Name, StringComparison.Ordinal))
             {
                 newPath = SmartTakeoffsJobStore.RenameNode(folder.FolderPath, requestedName);
+                RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
                 foreach (var item in _takeoffItems)
                 {
                     if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldPath, item.FolderPath))
@@ -4831,6 +9265,9 @@ public partial class MainWindow : Window
                 Notes = dialog.Notes,
                 DefaultColor = dialog.DefaultColor,
                 DefaultMeasurementType = dialog.DefaultMeasurementType,
+                DefaultUnitPrice = dialog.DefaultUnitPrice,
+                DefaultItemNotes = dialog.DefaultItemNotes,
+                DefaultNamePrefix = dialog.DefaultNamePrefix,
             };
             TakeoffFolderPropertiesStore.Save(newPath, updatedProperties);
 
@@ -4855,6 +9292,7 @@ public partial class MainWindow : Window
         {
             string oldPath = folder.FolderPath;
             string newPath = SmartTakeoffsJobStore.RenameNode(folder.FolderPath, name);
+            RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
             folder = new TakeoffFolderNode
             {
                 Name = SmartTakeoffsJobStore.DisplayName(newPath),
@@ -4975,6 +9413,12 @@ public partial class MainWindow : Window
 
     private void MoveTakeoffNode(string folderPath, int offset)
     {
+        if (FindTakeoffTreeItemByFolder(folderPath) is { } item)
+        {
+            MoveTakeoffNodes(item, offset);
+            return;
+        }
+
         try
         {
             if (!SmartTakeoffsJobStore.MoveSibling(folderPath, offset))
@@ -4984,6 +9428,39 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ShowOperationError("Move Takeoff Node", ex);
+        }
+    }
+
+    private bool CanMoveTakeoffNodes(TreeViewItem anchor, int offset)
+    {
+        var paths = GetSelectedTakeoffEntries(anchor)
+            .Select(entry => entry.SourcePath)
+            .ToList();
+        return SmartTakeoffsJobStore.CanMoveSiblings(paths, offset);
+    }
+
+    private void MoveTakeoffNodes(TreeViewItem anchor, int offset)
+    {
+        var entries = GetSelectedTakeoffEntries(anchor);
+        var paths = entries.Select(entry => entry.SourcePath).ToList();
+        if (paths.Count == 0)
+            return;
+
+        try
+        {
+            if (!SmartTakeoffsJobStore.MoveSiblings(paths, offset))
+                return;
+
+            LoadTakeoffsForJob();
+            SetTakeoffMultiSelection(paths);
+            SelectFirstTakeoffPath(paths);
+            TxtStatus.Text = paths.Count == 1
+                ? (offset < 0 ? "Moved takeoff node up." : "Moved takeoff node down.")
+                : (offset < 0 ? $"Moved {paths.Count} takeoff nodes up." : $"Moved {paths.Count} takeoff nodes down.");
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError(offset < 0 ? "Move Takeoff Nodes Up" : "Move Takeoff Nodes Down", ex);
         }
     }
 
@@ -5004,13 +9481,39 @@ public partial class MainWindow : Window
     {
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is { } item)
         {
+            if (item.Tag is TakeoffMeasurementNode sectionNode)
+            {
+                string key = TakeoffSectionSelectionKey(sectionNode);
+                _takeoffsMultiSelection.Clear();
+                if (!_takeoffSectionMultiSelection.Contains(key))
+                {
+                    _takeoffSectionMultiSelection.Clear();
+                    _takeoffSectionMultiSelection.Add(key);
+                    _takeoffSectionRangeAnchorKey = key;
+                    _takeoffsMultiSelection.Clear();
+                    ApplyTakeoffPageHighlights();
+                }
+
+                item.Focus();
+                item.IsSelected = true;
+                item.ContextMenu = BuildTakeoffSectionContextMenu(sectionNode);
+                e.Handled = true;
+                return;
+            }
+
             string? path = GetTakeoffNodePath(item);
+            if (path != null)
+                _takeoffSectionMultiSelection.Clear();
             if (path != null && !_takeoffsMultiSelection.Contains(path))
             {
                 _takeoffsMultiSelection.Clear();
+                _takeoffSectionMultiSelection.Clear();
                 _takeoffsMultiSelection.Add(path);
+                _takeoffsRangeAnchorPath = path;
                 ApplyTakeoffPageHighlights();
             }
+            if (path != null)
+                RevealPagesForTakeoffSelection(item);
 
             item.Focus();
             item.IsSelected = true;
@@ -5046,19 +9549,59 @@ public partial class MainWindow : Window
     private void TakeoffsTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _takeoffsDragStart = e.GetPosition(TakeoffsTree);
+        _takeoffsDragItem = null;
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
             return;
+
+        _takeoffsDragItem = item;
+
+        if (item.Tag is TakeoffMeasurementNode sectionNode)
+        {
+            HandleTakeoffSectionNodeMultiSelect(item, sectionNode, e);
+            return;
+        }
 
         string? path = GetTakeoffNodePath(item);
         if (path == null)
             return;
 
-        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        if (modifiers == ModifierKeys.None &&
+            _takeoffsMultiSelection.Count > 1 &&
+            _takeoffsMultiSelection.Contains(path))
+        {
+            _takeoffSectionMultiSelection.Clear();
+            item.IsSelected = true;
+            ApplyTakeoffPageHighlights();
+            RevealPagesForTakeoffSelection(item);
+            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+        {
+            bool additive = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            SelectTakeoffsRange(_takeoffsRangeAnchorPath, path, additive);
+            _takeoffsRangeAnchorPath = path;
+            _takeoffSectionMultiSelection.Clear();
+            item.IsSelected = true;
+            ApplyTakeoffPageHighlights();
+            RevealPagesForTakeoffSelection(item);
+            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+            e.Handled = true;
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control)
         {
             if (!_takeoffsMultiSelection.Add(path))
                 _takeoffsMultiSelection.Remove(path);
+            _takeoffsRangeAnchorPath = path;
+            _takeoffSectionMultiSelection.Clear();
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
+            RevealPagesForTakeoffSelection(item);
+            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
             e.Handled = true;
             return;
         }
@@ -5067,8 +9610,70 @@ public partial class MainWindow : Window
         {
             _takeoffsMultiSelection.Clear();
             _takeoffsMultiSelection.Add(path);
+            _takeoffSectionMultiSelection.Clear();
             ApplyTakeoffPageHighlights();
         }
+        _takeoffsRangeAnchorPath = path;
+        RevealPagesForTakeoffSelection(item);
+        Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+    }
+
+    private void HandleTakeoffSectionNodeMultiSelect(TreeViewItem item, TakeoffMeasurementNode node, MouseButtonEventArgs e)
+    {
+        string key = TakeoffSectionSelectionKey(node);
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        _takeoffsMultiSelection.Clear();
+
+        if (modifiers == ModifierKeys.None &&
+            _takeoffSectionMultiSelection.Count > 1 &&
+            _takeoffSectionMultiSelection.Contains(key))
+        {
+            item.IsSelected = true;
+            ApplyTakeoffPageHighlights();
+            Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+        {
+            bool additive = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            SelectTakeoffSectionRange(_takeoffSectionRangeAnchorKey, key, node.Item, additive);
+            _takeoffSectionRangeAnchorKey = key;
+            item.IsSelected = true;
+            ApplyTakeoffPageHighlights();
+            Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            e.Handled = true;
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (!_takeoffSectionMultiSelection.Add(key))
+                _takeoffSectionMultiSelection.Remove(key);
+            _takeoffSectionRangeAnchorKey = key;
+            item.IsSelected = true;
+            ApplyTakeoffPageHighlights();
+            Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            e.Handled = true;
+            return;
+        }
+
+        _takeoffSectionMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Add(key);
+        _takeoffSectionRangeAnchorKey = key;
+        ApplyTakeoffPageHighlights();
+        Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: true)));
+    }
+
+    private void SelectTakeoffsRange(string? anchorPath, string targetPath, bool additive)
+    {
+        var candidates = EnumerateVisibleTreeItems(TakeoffsTree)
+            .Select(item => (Item: item, Key: GetTakeoffNodePath(item)))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .Select(entry => (entry.Item, Key: entry.Key!))
+            .ToList();
+
+        SelectRangeKeys(candidates, anchorPath, targetPath, _takeoffsMultiSelection, additive);
     }
 
     private void TakeoffsTree_MouseMove(object sender, MouseEventArgs e)
@@ -5081,27 +9686,74 @@ public partial class MainWindow : Window
             Math.Abs(pos.Y - _takeoffsDragStart.Value.Y) < SystemParameters.MinimumVerticalDragDistance)
             return;
 
-        if (TakeoffsTree.SelectedItem is not TreeViewItem item)
+        if ((_takeoffsDragItem ?? TakeoffsTree.SelectedItem) is not TreeViewItem item)
             return;
+
+        if (item.Tag is TakeoffMeasurementNode sectionNode)
+        {
+            var nodes = SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true);
+            if (nodes.Count == 0)
+            {
+                _takeoffsDragStart = null;
+                _takeoffsDragItem = null;
+                return;
+            }
+
+            var sectionPayload = new TakeoffSectionDrag(nodes);
+            DragDrop.DoDragDrop(TakeoffsTree, sectionPayload, DragDropEffects.Move | DragDropEffects.Copy);
+            ClearTakeoffSectionDropCue();
+            ClearTakeoffPositionDropCue();
+            _takeoffsDragStart = null;
+            _takeoffsDragItem = null;
+            return;
+        }
 
         var entries = GetSelectedTakeoffEntries(item);
         if (entries.Count == 0)
+        {
+            _takeoffsDragStart = null;
+            _takeoffsDragItem = null;
             return;
+        }
 
         var payload = new TakeoffsClipboard(entries, TakeoffsClipboardMode.Cut);
         DragDrop.DoDragDrop(TakeoffsTree, payload, DragDropEffects.Move | DragDropEffects.Copy);
+        ClearTakeoffPositionDropCue();
         _takeoffsDragStart = null;
+        _takeoffsDragItem = null;
     }
 
     private void TakeoffsTree_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
+        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
+        if (e.Data.GetData(typeof(TakeoffSectionDrag)) is TakeoffSectionDrag sectionDrag)
+        {
+            ClearTakeoffPositionDropCue();
+            bool canDropSection = CanDropTakeoffSections(sectionDrag, targetItem, copy);
+            UpdateTakeoffSectionDropCue(sectionDrag, targetItem, copy, canDropSection);
+            if (canDropSection)
+                e.Effects = copy ? DragDropEffects.Copy : DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
+
+        ClearTakeoffSectionDropCue();
         if (e.Data.GetData(typeof(TakeoffsClipboard)) is not TakeoffsClipboard payload)
             return;
 
-        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (TryGetTakeoffPositionDropCue(payload, targetItem, copy, e, out bool after, out bool canDropPosition, out string positionStatus))
+        {
+            UpdateTakeoffPositionDropCue(targetItem, after, canDropPosition, positionStatus);
+            if (canDropPosition)
+                e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
+
+        ClearTakeoffPositionDropCue();
         string? targetFolder = targetItem == null ? _currentJob?.TakeoffsRoot : GetTakeoffPasteTargetFolder(targetItem);
-        bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
         if (CanDropTakeoffsInto(payload, targetFolder, copy ? TakeoffsClipboardMode.Copy : TakeoffsClipboardMode.Cut))
             e.Effects = copy ? DragDropEffects.Copy : DragDropEffects.Move;
         e.Handled = true;
@@ -5109,10 +9761,33 @@ public partial class MainWindow : Window
 
     private void TakeoffsTree_Drop(object sender, DragEventArgs e)
     {
+        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
+        if (e.Data.GetData(typeof(TakeoffSectionDrag)) is TakeoffSectionDrag sectionDrag)
+        {
+            ClearTakeoffPositionDropCue();
+            if (CanDropTakeoffSections(sectionDrag, targetItem, copy))
+                DropTakeoffSections(sectionDrag, targetItem!, copy);
+            ClearTakeoffSectionDropCue();
+            e.Handled = true;
+            return;
+        }
+
+        ClearTakeoffSectionDropCue();
         if (e.Data.GetData(typeof(TakeoffsClipboard)) is not TakeoffsClipboard payload)
             return;
 
-        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (TryGetTakeoffPositionDropCue(payload, targetItem, copy, e, out bool after, out bool canDropPosition, out _) &&
+            canDropPosition &&
+            targetItem != null)
+        {
+            DropTakeoffPosition(payload, targetItem, after);
+            ClearTakeoffPositionDropCue();
+            e.Handled = true;
+            return;
+        }
+
+        ClearTakeoffPositionDropCue();
         string? targetFolder = targetItem == null ? _currentJob?.TakeoffsRoot : GetTakeoffPasteTargetFolder(targetItem);
         TakeoffsClipboardMode mode = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey
             ? TakeoffsClipboardMode.Copy
@@ -5122,9 +9797,49 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void TakeoffsTree_DragLeave(object sender, DragEventArgs e)
+    {
+        if (!TakeoffsTree.IsMouseOver)
+        {
+            ClearTakeoffSectionDropCue();
+            ClearTakeoffPositionDropCue();
+        }
+    }
+
     private void TakeoffsTree_KeyDown(object sender, KeyEventArgs e)
     {
         if (TakeoffsTree.SelectedItem is not TreeViewItem item) return;
+        if (item.Tag is TakeoffMeasurementNode sectionNode)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Up)
+            {
+                MoveTakeoffSections(sectionNode, -1);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Down)
+            {
+                MoveTakeoffSections(sectionNode, 1);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Delete)
+            {
+                DeleteTakeoffSections(sectionNode);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.F2 &&
+                     SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true).Count <= 1)
+            {
+                RenameSection(sectionNode.Item, sectionNode.Measurement);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Enter)
+            {
+                SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true));
+                e.Handled = true;
+            }
+            return;
+        }
+
         if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.C)
         {
             CopyCutTakeoffNode(item, TakeoffsClipboardMode.Copy);
@@ -5143,6 +9858,16 @@ public partial class MainWindow : Window
         else if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.D)
         {
             DuplicateTakeoffNode(item);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Up)
+        {
+            MoveTakeoffNodes(item, -1);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Down)
+        {
+            MoveTakeoffNodes(item, 1);
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Delete)
@@ -5231,6 +9956,7 @@ public partial class MainWindow : Window
         {
             FlushTakeoffAutosaves();
             var changed = new List<string>();
+            var rebasedLegendPaths = new List<(string OldPath, string NewPath)>();
             foreach (var entry in payload.Entries)
             {
                 if (!CanDropTakeoffsInto(new TakeoffsClipboard([entry], mode), targetFolder, mode))
@@ -5240,6 +9966,8 @@ public partial class MainWindow : Window
                     ? SmartTakeoffsJobStore.MoveNode(entry.SourcePath, targetFolder)
                     : SmartTakeoffsJobStore.CopyNode(entry.SourcePath, targetFolder);
                 changed.Add(changedPath);
+                if (wasCut)
+                    rebasedLegendPaths.Add((entry.SourcePath, changedPath));
             }
 
             if (changed.Count == 0)
@@ -5247,6 +9975,9 @@ public partial class MainWindow : Window
 
             if (wasCut)
                 _takeoffsClipboard = null;
+
+            foreach (var (oldPath, newPath) in rebasedLegendPaths)
+                RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
 
             LoadTakeoffsForJob();
             SetTakeoffMultiSelection(changed);
@@ -5258,6 +9989,184 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ShowOperationError("Takeoff Paste", ex);
+        }
+    }
+
+    private bool TryGetTakeoffPositionDropCue(
+        TakeoffsClipboard payload,
+        TreeViewItem? targetItem,
+        bool copy,
+        DragEventArgs e,
+        out bool after,
+        out bool canDrop,
+        out string status)
+    {
+        after = false;
+        canDrop = false;
+        status = "";
+
+        if (copy || _currentJob == null || payload.Entries.Count == 0 || targetItem == null)
+            return false;
+
+        string? targetPath = GetTakeoffNodePath(targetItem);
+        if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
+            return false;
+
+        Point targetPoint = e.GetPosition(targetItem);
+        if (targetItem.Tag is TakeoffFolderNode && !IsTakeoffPositionEdgeDrop(targetItem, targetPoint))
+            return false;
+
+        after = IsTakeoffPositionDropAfter(targetItem, targetPoint);
+        var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
+        canDrop = CanDropTakeoffsToPosition(payload, targetPath, after);
+        string targetName = SmartTakeoffsJobStore.DisplayName(targetPath);
+        string position = after ? "after" : "before";
+        status = canDrop
+            ? $"Move {paths.Count} takeoff node(s) {position} {targetName}."
+            : $"Cannot reorder here. Drag onto another sibling position in the same folder.";
+        return true;
+    }
+
+    private bool CanDropTakeoffsToPosition(TakeoffsClipboard payload, string targetPath, bool after)
+    {
+        if (_currentJob == null || payload.Entries.Count == 0 || string.IsNullOrWhiteSpace(targetPath))
+            return false;
+
+        string targetParent = Path.GetDirectoryName(targetPath) ?? "";
+        if (string.IsNullOrWhiteSpace(targetParent) ||
+            !SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetParent) ||
+            !Directory.Exists(targetParent))
+        {
+            return false;
+        }
+
+        var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
+        if (paths.Any(path => string.Equals(path, targetPath, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
+            return SmartTakeoffsJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
+
+        return CanDropTakeoffsInto(payload, targetParent, TakeoffsClipboardMode.Cut);
+    }
+
+    private static bool IsTakeoffPositionDropAfter(TreeViewItem item, Point targetPoint) =>
+        targetPoint.Y >= TakeoffNodeHeaderDropHeight(item) / 2.0;
+
+    private static bool IsTakeoffPositionEdgeDrop(TreeViewItem item, Point targetPoint)
+    {
+        double height = TakeoffNodeHeaderDropHeight(item);
+        if (targetPoint.Y < 0 || targetPoint.Y > height)
+            return false;
+
+        double edge = Math.Min(8.0, Math.Max(5.0, height * 0.25));
+        return targetPoint.Y <= edge || targetPoint.Y >= height - edge;
+    }
+
+    private static double TakeoffNodeHeaderDropHeight(TreeViewItem item)
+    {
+        double itemHeight = Math.Max(1.0, item.ActualHeight);
+        if (item.Header is FrameworkElement header && header.ActualHeight > 0)
+            return Math.Min(itemHeight, Math.Max(18.0, header.ActualHeight + 6.0));
+
+        return Math.Min(itemHeight, 28.0);
+    }
+
+    private void UpdateTakeoffPositionDropCue(TreeViewItem? targetItem, bool after, bool canDrop, string status)
+    {
+        if (ReferenceEquals(_takeoffPositionDropTarget, targetItem) &&
+            _takeoffPositionDropAfter == after &&
+            _takeoffPositionDropAllowed == canDrop &&
+            string.Equals(_takeoffPositionDropStatus, status, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _takeoffPositionDropTarget = targetItem;
+        _takeoffPositionDropAfter = after;
+        _takeoffPositionDropAllowed = canDrop;
+        _takeoffPositionDropStatus = status;
+        ApplyTakeoffPageHighlights();
+        if (!string.IsNullOrWhiteSpace(status))
+            TxtStatus.Text = status;
+    }
+
+    private void ClearTakeoffPositionDropCue()
+    {
+        if (_takeoffPositionDropTarget == null && string.IsNullOrEmpty(_takeoffPositionDropStatus))
+            return;
+
+        _takeoffPositionDropTarget = null;
+        _takeoffPositionDropAfter = false;
+        _takeoffPositionDropAllowed = false;
+        _takeoffPositionDropStatus = "";
+        ApplyTakeoffPageHighlights();
+    }
+
+    private void DropTakeoffPosition(TakeoffsClipboard payload, TreeViewItem targetItem, bool after)
+    {
+        string? targetPath = GetTakeoffNodePath(targetItem);
+        if (string.IsNullOrWhiteSpace(targetPath))
+            return;
+
+        var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
+        if (paths.Count == 0)
+            return;
+
+        try
+        {
+            FlushTakeoffAutosaves();
+            string targetParent = Path.GetDirectoryName(targetPath) ?? "";
+            if (string.IsNullOrWhiteSpace(targetParent))
+                return;
+
+            var changed = new List<string>();
+            var rebasedLegendPaths = new List<(string OldPath, string NewPath)>();
+            if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!SmartTakeoffsJobStore.MoveSiblingsToPosition(paths, targetPath, after))
+                    return;
+                changed.AddRange(paths);
+            }
+            else
+            {
+                foreach (var entry in payload.Entries)
+                {
+                    if (string.Equals(Path.GetDirectoryName(entry.SourcePath) ?? "", targetParent, StringComparison.OrdinalIgnoreCase))
+                    {
+                        changed.Add(entry.SourcePath);
+                        continue;
+                    }
+
+                    if (!CanDropTakeoffsInto(new TakeoffsClipboard([entry], TakeoffsClipboardMode.Cut), targetParent, TakeoffsClipboardMode.Cut))
+                        continue;
+
+                    string changedPath = SmartTakeoffsJobStore.MoveNode(entry.SourcePath, targetParent);
+                    changed.Add(changedPath);
+                    rebasedLegendPaths.Add((entry.SourcePath, changedPath));
+                }
+
+                if (changed.Count == 0 ||
+                    !SmartTakeoffsJobStore.MoveSiblingsToPosition(changed, targetPath, after))
+                {
+                    return;
+                }
+
+                _takeoffsClipboard = null;
+                foreach (var (oldPath, newPath) in rebasedLegendPaths)
+                    RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
+            }
+
+            LoadTakeoffsForJob();
+            SetTakeoffMultiSelection(changed);
+            SelectFirstTakeoffPath(changed);
+            TxtStatus.Text = changed.Count == 1
+                ? $"Moved takeoff node {(after ? "after" : "before")} {SmartTakeoffsJobStore.DisplayName(targetPath)}."
+                : $"Moved {changed.Count} takeoff nodes {(after ? "after" : "before")} {SmartTakeoffsJobStore.DisplayName(targetPath)}.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Reorder Takeoffs", ex);
         }
     }
 
@@ -5300,6 +10209,175 @@ public partial class MainWindow : Window
         return mode == TakeoffsClipboardMode.Copy || hasMovableEntry;
     }
 
+    private bool CanDropTakeoffSections(TakeoffSectionDrag payload, TreeViewItem? targetItem, bool copy)
+    {
+        if (payload.Nodes.Count == 0 || GetTakeoffSectionDropTarget(targetItem) is not { } target)
+            return false;
+
+        string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(target.MeasurementType);
+        bool hasMovableNode = false;
+        foreach (TakeoffMeasurementNode node in payload.Nodes)
+        {
+            if (!node.Item.Measurements.Contains(node.Measurement))
+                return false;
+            if (SmartTakeoffsJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
+                SmartTakeoffsJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType)
+                return false;
+            if (!ReferenceEquals(node.Item, target))
+                hasMovableNode = true;
+        }
+
+        return copy || hasMovableNode;
+    }
+
+    private string TakeoffSectionDropStatus(TakeoffSectionDrag payload, TreeViewItem? targetItem, bool copy, bool canDrop)
+    {
+        if (payload.Nodes.Count == 0)
+            return "Select section/count rows before dragging.";
+        if (targetItem == null)
+            return "Drop section/count rows on a takeoff item.";
+        if (targetItem.Tag is TakeoffFolderNode)
+            return "Drop section/count rows on a takeoff item, not a folder.";
+        if (GetTakeoffSectionDropTarget(targetItem) is not { } target)
+            return "Drop section/count rows on a takeoff item.";
+
+        string action = copy ? "Copy" : "Move";
+        string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(target.MeasurementType);
+        TakeoffMeasurementNode? stale = payload.Nodes.FirstOrDefault(node => !node.Item.Measurements.Contains(node.Measurement));
+        if (stale != null)
+            return "Selected section/count row no longer exists.";
+
+        TakeoffMeasurementNode? mismatch = payload.Nodes.FirstOrDefault(node =>
+            SmartTakeoffsJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
+            SmartTakeoffsJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType);
+        if (mismatch != null)
+        {
+            string sourceType = MeasurementTypeTitle(SmartTakeoffsJobStore.NormalizeMeasurementType(mismatch.Measurement.MType));
+            string destinationType = MeasurementTypeTitle(targetType);
+            return $"{action} blocked: {sourceType} rows can only drop on {sourceType} takeoff items, not {destinationType}.";
+        }
+
+        if (!copy && payload.Nodes.All(node => ReferenceEquals(node.Item, target)))
+            return $"Already in {target.Name}. Hold Ctrl while dropping to copy.";
+
+        return canDrop
+            ? $"{action} {payload.Nodes.Count} section/count row(s) to {target.Name}."
+            : $"Cannot {(copy ? "copy" : "move")} selected section/count rows to {target.Name}.";
+    }
+
+    private void UpdateTakeoffSectionDropCue(TakeoffSectionDrag payload, TreeViewItem? targetItem, bool copy, bool canDrop)
+    {
+        string status = TakeoffSectionDropStatus(payload, targetItem, copy, canDrop);
+        if (ReferenceEquals(_takeoffSectionDropTarget, targetItem) &&
+            _takeoffSectionDropAllowed == canDrop &&
+            string.Equals(_takeoffSectionDropStatus, status, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _takeoffSectionDropTarget = targetItem;
+        _takeoffSectionDropAllowed = canDrop;
+        _takeoffSectionDropStatus = status;
+        ApplyTakeoffPageHighlights();
+        if (!string.IsNullOrWhiteSpace(status))
+            TxtStatus.Text = status;
+    }
+
+    private void ClearTakeoffSectionDropCue()
+    {
+        if (_takeoffSectionDropTarget == null && string.IsNullOrEmpty(_takeoffSectionDropStatus))
+            return;
+
+        _takeoffSectionDropTarget = null;
+        _takeoffSectionDropAllowed = false;
+        _takeoffSectionDropStatus = "";
+        ApplyTakeoffPageHighlights();
+    }
+
+    private void DropTakeoffSections(TakeoffSectionDrag payload, TreeViewItem targetItem, bool copy)
+    {
+        if (!CanDropTakeoffSections(payload, targetItem, copy) ||
+            GetTakeoffSectionDropTarget(targetItem) is not { } target)
+        {
+            return;
+        }
+
+        FlushTakeoffAutosaves();
+        string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(target.MeasurementType);
+        var changedItems = new HashSet<TakeoffItem>();
+        var resultingNodes = new List<TakeoffMeasurementNode>();
+
+        foreach (TakeoffMeasurementNode node in payload.Nodes
+                     .GroupBy(node => node.Measurement.Id, StringComparer.OrdinalIgnoreCase)
+                     .Select(group => group.First()))
+        {
+            if (copy)
+            {
+                Measurement copied = CloneMeasurementForTakeoff(node.Measurement, target, targetType);
+                target.Measurements.Add(copied);
+                changedItems.Add(target);
+                resultingNodes.Add(new TakeoffMeasurementNode(target, copied));
+                continue;
+            }
+
+            if (ReferenceEquals(node.Item, target))
+                continue;
+
+            if (!node.Item.Measurements.Remove(node.Measurement))
+                continue;
+
+            node.Measurement.TakeoffFolder = target.FolderPath;
+            node.Measurement.MType = targetType;
+            node.Measurement.Color = target.Color;
+            target.Measurements.Add(node.Measurement);
+            changedItems.Add(node.Item);
+            changedItems.Add(target);
+            resultingNodes.Add(new TakeoffMeasurementNode(target, node.Measurement));
+        }
+
+        if (resultingNodes.Count == 0)
+            return;
+
+        foreach (TakeoffItem changed in changedItems)
+        {
+            SmartTakeoffsJobStore.SaveTakeoffItem(changed);
+            RefreshTreeItem(changed);
+        }
+
+        _viewport.LoadMeasurements(_takeoffItems.SelectMany(item => item.Measurements));
+        SelectTakeoffSectionNodesSilently(resultingNodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(resultingNodes);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        RefreshEstimateTable();
+        UpdateTotalDisplay();
+        TxtStatus.Text = copy
+            ? $"Copied {resultingNodes.Count} section/count row(s) to {target.Name}."
+            : $"Moved {resultingNodes.Count} section/count row(s) to {target.Name}.";
+    }
+
+    private static Measurement CloneMeasurementForTakeoff(Measurement source, TakeoffItem target, string targetType) =>
+        new()
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = source.Name,
+            Notes = source.Notes,
+            MType = targetType,
+            Points = source.Points.ToList(),
+            Color = target.Color,
+            PageFolder = source.PageFolder,
+            TakeoffFolder = target.FolderPath,
+            ScaleMetersPerPt = source.ScaleMetersPerPt,
+        };
+
+    private static TakeoffItem? GetTakeoffSectionDropTarget(TreeViewItem? item) =>
+        item?.Tag switch
+        {
+            TakeoffItem target => target,
+            TakeoffMeasurementNode node => node.Item,
+            _ => null,
+        };
+
     private string? GetTakeoffPasteTargetFolder(TreeViewItem item)
     {
         return item.Tag switch
@@ -5341,6 +10419,72 @@ public partial class MainWindow : Window
             _ => null,
         };
 
+    private static string TakeoffSectionSelectionKey(TakeoffMeasurementNode node) =>
+        $"{NormalizePath(node.Item.FolderPath)}|{node.Measurement.Id}";
+
+    private static string? GetTakeoffSectionSelectionKey(TreeViewItem item) =>
+        item.Tag is TakeoffMeasurementNode node ? TakeoffSectionSelectionKey(node) : null;
+
+    private List<TakeoffMeasurementNode> SelectedTakeoffSectionNodes(TakeoffMeasurementNode anchor, bool fallbackToAnchor)
+    {
+        string anchorKey = TakeoffSectionSelectionKey(anchor);
+        IEnumerable<string> keys = _takeoffSectionMultiSelection.Contains(anchorKey)
+            ? _takeoffSectionMultiSelection
+            : fallbackToAnchor
+                ? [anchorKey]
+                : Enumerable.Empty<string>();
+
+        var keySet = new HashSet<string>(keys, StringComparer.OrdinalIgnoreCase);
+        if (keySet.Count == 0)
+            return [];
+
+        return EnumerateTakeoffTreeItems(TakeoffsTree)
+            .Select(item => item.Tag as TakeoffMeasurementNode)
+            .Where(node => node != null && keySet.Contains(TakeoffSectionSelectionKey(node)))
+            .Select(node => node!)
+            .ToList();
+    }
+
+    private void SelectTakeoffSectionRange(string? anchorKey, string targetKey, TakeoffItem item, bool additive)
+    {
+        var candidates = EnumerateVisibleTreeItems(TakeoffsTree)
+            .Where(treeItem => treeItem.Tag is TakeoffMeasurementNode node && ReferenceEquals(node.Item, item))
+            .Select(treeItem => (Item: treeItem, Key: GetTakeoffSectionSelectionKey(treeItem)))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .Select(entry => (entry.Item, Key: entry.Key!))
+            .ToList();
+
+        SelectRangeKeys(candidates, anchorKey, targetKey, _takeoffSectionMultiSelection, additive);
+    }
+
+    private void SelectTakeoffSectionNodesSilently(IReadOnlyList<TakeoffMeasurementNode> nodes)
+    {
+        _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        foreach (TakeoffMeasurementNode node in nodes)
+            _takeoffSectionMultiSelection.Add(TakeoffSectionSelectionKey(node));
+
+        TreeViewItem? first = nodes
+            .Select(node => FindTakeoffSectionTreeItem(TakeoffsTree, node.Measurement))
+            .FirstOrDefault(item => item != null);
+        if (first != null)
+        {
+            _syncingTakeoffTreeSelection = true;
+            try
+            {
+                ExpandTreeItemAndAncestorsWithoutTracking(first);
+                first.IsSelected = true;
+                first.BringIntoView();
+            }
+            finally
+            {
+                _syncingTakeoffTreeSelection = false;
+            }
+        }
+
+        ApplyTakeoffPageHighlights();
+    }
+
     private static IReadOnlyList<TakeoffsClipboardEntry> NormalizeSelectedTakeoffEntries(
         IReadOnlyList<TakeoffsClipboardEntry> entries)
     {
@@ -5367,6 +10511,7 @@ public partial class MainWindow : Window
     private void SetTakeoffMultiSelection(IEnumerable<string> paths)
     {
         _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
         foreach (string path in paths.Where(Directory.Exists))
             _takeoffsMultiSelection.Add(path);
         ApplyTakeoffPageHighlights();
@@ -5399,6 +10544,16 @@ public partial class MainWindow : Window
             string.Equals(path, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase));
     }
 
+    private void PruneTakeoffSectionMultiSelection()
+    {
+        var validKeys = _takeoffItems
+            .SelectMany(item => item.Measurements.Select(measurement => TakeoffSectionSelectionKey(new TakeoffMeasurementNode(item, measurement))))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _takeoffSectionMultiSelection.RemoveWhere(key => !validKeys.Contains(key));
+        if (_takeoffSectionRangeAnchorKey != null && !validKeys.Contains(_takeoffSectionRangeAnchorKey))
+            _takeoffSectionRangeAnchorKey = null;
+    }
+
     // ── Measurement callbacks ─────────────────────────────────────────────────
 
     private void OnMeasurementAdded(Measurement m)
@@ -5416,10 +10571,15 @@ public partial class MainWindow : Window
         if (m.ScaleMetersPerPt <= 0)
             m.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         item.Measurements.Add(m);
+        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         RefreshTreeItem(item);
+        RefreshActiveTakeoffVisuals();
         QueueTakeoffAutosave(item);
         RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
         UpdateTotalDisplay();
+        if (item.IsJoistArea && SmartTakeoffsJobStore.NormalizeMeasurementType(m.MType) == "area")
+            BeginJoistDirectionCapture(item, m);
     }
 
     private bool TryResolveTakeoffItemForMeasurement(Measurement m, out TakeoffItem item)
@@ -5429,17 +10589,20 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(m.TakeoffFolder))
         {
             var byFolder = _takeoffItems.FirstOrDefault(i =>
-                i.MeasurementType == measurementType &&
+                SmartTakeoffsJobStore.NormalizeMeasurementType(i.MeasurementType) == measurementType &&
                 string.Equals(i.FolderPath, m.TakeoffFolder, StringComparison.OrdinalIgnoreCase));
             if (byFolder != null)
             {
+                byFolder.MeasurementType = measurementType;
                 item = byFolder;
                 return true;
             }
         }
 
-        if (_activeItem != null && _activeItem.MeasurementType == measurementType)
+        if (_activeItem != null &&
+            SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
         {
+            _activeItem.MeasurementType = measurementType;
             item = _activeItem;
             return true;
         }
@@ -5459,6 +10622,7 @@ public partial class MainWindow : Window
             }
         }
         RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
         UpdateTotalDisplay();
     }
 
@@ -5472,12 +10636,45 @@ public partial class MainWindow : Window
                 m.TakeoffFolder = item.FolderPath;
             if (m.ScaleMetersPerPt <= 0)
                 m.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
-            RefreshTreeItem(item);
+            SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            bool previousSuppressFocus = _suppressCanvasFocusFromTakeoffSelection;
+            _suppressCanvasFocusFromTakeoffSelection = true;
+            try
+            {
+                RefreshTreeItem(item);
+            }
+            finally
+            {
+                _suppressCanvasFocusFromTakeoffSelection = previousSuppressFocus;
+            }
             QueueTakeoffAutosave(item);
             break;
         }
         RefreshEstimateTable();
+        RefreshSheetLegend();
         UpdateTotalDisplay();
+    }
+
+    private void OnPageAnnotationChanged(PageAnnotation annotation)
+    {
+        SaveCurrentPageAnnotations();
+    }
+
+    private void SaveCurrentPageAnnotations()
+    {
+        if (_currentPage == null)
+            return;
+
+        try
+        {
+            SmartTakeoffsJobStore.SavePageAnnotations(
+                _currentPage.FolderPath,
+                _viewport.GetPageAnnotations());
+        }
+        catch (Exception ex)
+        {
+            TxtStatus.Text = $"Annotation save skipped: {ex.Message}";
+        }
     }
 
     private void CopyMeasurementsToClipboard(IReadOnlyList<Measurement> measurements)
@@ -5529,13 +10726,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!ConfirmMeasurementPasteScale(_measurementClipboard))
+            return;
+
         MeasurementPasteMode? pasteMode = PromptMeasurementPasteMode(_measurementClipboard.Entries.Count);
         if (pasteMode == null)
             return;
 
         try
         {
+            PdfViewport.ViewState viewBeforePaste = _viewport.CaptureViewState();
             var pasted = new List<Measurement>();
+            var pastedNodes = new List<TakeoffMeasurementNode>();
             var changedItems = new HashSet<TakeoffItem>();
             var createdTargets = new Dictionary<string, TakeoffItem>(StringComparer.OrdinalIgnoreCase);
             SKPoint pasteOffset = CalculateMeasurementPasteOffset(_measurementClipboard.Entries, pasteAtPdf);
@@ -5548,20 +10750,33 @@ public partial class MainWindow : Window
                 Measurement measurement = CloneClipboardMeasurement(entry, target, pasteOffset);
                 target.Measurements.Add(measurement);
                 pasted.Add(measurement);
+                pastedNodes.Add(new TakeoffMeasurementNode(target, measurement));
                 changedItems.Add(target);
             }
 
-            foreach (TakeoffItem item in changedItems)
+            bool previousSuppressFocus = _suppressCanvasFocusFromTakeoffSelection;
+            _suppressCanvasFocusFromTakeoffSelection = true;
+            try
             {
-                SmartTakeoffsJobStore.SaveTakeoffItem(item);
-                RefreshTreeItem(item);
+                foreach (TakeoffItem item in changedItems)
+                {
+                    SmartTakeoffsJobStore.SaveTakeoffItem(item);
+                    RefreshTreeItem(item);
+                }
+            }
+            finally
+            {
+                _suppressCanvasFocusFromTakeoffSelection = previousSuppressFocus;
             }
 
             _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements));
-            _viewport.SelectMeasurements(pasted);
+            _viewport.RestoreViewState(viewBeforePaste);
+            SelectTakeoffSectionNodesSilently(pastedNodes);
+            SelectTakeoffSectionMeasurementsOnCanvas(pastedNodes);
             RefreshEstimateTable();
             RefreshPagesTakeoffIndicators();
             ApplyTakeoffPageHighlights();
+            RefreshSheetLegend();
             UpdateTotalDisplay();
 
             string modeLabel = pasteMode.Value == MeasurementPasteMode.SameTakeoffs
@@ -5577,6 +10792,37 @@ public partial class MainWindow : Window
 
     private void PasteMeasurementsFromClipboard() =>
         PasteMeasurementsFromClipboard(null);
+
+    private bool ConfirmMeasurementPasteScale(MeasurementClipboard clipboard)
+    {
+        var scaledEntries = clipboard.Entries
+            .Where(entry => MeasurementTypeRequiresScale(entry.MeasurementType))
+            .ToList();
+        if (scaledEntries.Count == 0 || _currentPage?.ScaleMetersPerPt > 0)
+            return true;
+
+        if (scaledEntries.Any(entry => entry.ScaleMetersPerPt <= 0))
+        {
+            MessageBox.Show(
+                "Set the active sheet scale before pasting Line or Area measurements. The copied measurements do not have a saved scale to reuse.",
+                "Paste Measurements",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        return MessageBox.Show(
+            "The active sheet has no scale. Pasted Line/Area measurements will keep the copied measurement scale.\n\nContinue?",
+            "Paste Measurements",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    }
+
+    private static bool MeasurementTypeRequiresScale(string measurementType)
+    {
+        string normalized = SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType);
+        return normalized is "line" or "area";
+    }
 
     private MeasurementPasteMode? PromptMeasurementPasteMode(int count)
     {
@@ -5622,7 +10868,7 @@ public partial class MainWindow : Window
         string color = IsValidWpfColor(entry.SourceTakeoffColor)
             ? entry.SourceTakeoffColor
             : entry.MeasurementColor;
-        var target = CreateUniqueTakeoffItem(baseName, color, measurementType, CurrentTakeoffParentFolder());
+        var target = CreateUniqueTakeoffItem(baseName, color, measurementType, NewTakeoffItemParentFolder());
         target.UnitPrice = entry.SourceTakeoffUnitPrice;
         target.Notes = entry.SourceTakeoffNotes;
         _takeoffItems.Add(target);
@@ -5788,12 +11034,89 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RefreshActiveTakeoffVisuals()
+    {
+        foreach (TreeViewItem tvi in EnumerateTakeoffTreeItems(TakeoffsTree))
+        {
+            if (tvi.Tag is TakeoffItem item)
+                SetTreeItemHeader(tvi, item);
+        }
+
+        UpdateActiveTakeoffTargetBar();
+        ApplyTakeoffPageHighlights();
+    }
+
     private void RefreshAllTotals()
     {
         RefreshTotalsRecursive(TakeoffsTree);
         RefreshPagesTakeoffIndicators();
         ApplyTakeoffPageHighlights();
+        RefreshSheetLegend();
         UpdateTotalDisplay();
+    }
+
+    private void RefreshSheetLegend()
+    {
+        if (_currentPage == null || !_settings.ShowSheetLegend)
+        {
+            _viewport.SetSheetLegend([]);
+            return;
+        }
+
+        var entries = OrderedTakeoffsForPage(_currentPage)
+            .Select(item =>
+            {
+                var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();
+                return pageMeasurements.Count == 0
+                    ? null
+                    : new SheetLegendEntry(
+                        item.Color,
+                        item.Name,
+                        SheetLegendQuantityText(item, pageMeasurements),
+                        SheetLegendTypeTitle(item),
+                        SheetLegendTypeSign(item),
+                        []);
+            })
+            .Where(entry => entry != null)
+            .Cast<SheetLegendEntry>()
+            .ToList();
+
+        _viewport.SetSheetLegend(entries);
+    }
+
+    private string SheetLegendQuantityText(TakeoffItem item, IReadOnlyList<Measurement> measurements)
+    {
+        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
+            ? _currentPage.ScaleMetersPerPt
+            : _viewport.ScaleMetersPerPt;
+
+        if (measurementType == "point")
+            return Units.FormatCount(measurements.Sum(measurement => measurement.Points.Count));
+
+        bool hasScale = fallbackScale > 0 || measurements.Any(measurement => measurement.ScaleMetersPerPt > 0);
+        if (item.IsJoistArea)
+        {
+            return hasScale
+                ? Units.FormatArea(measurements.Sum(measurement => measurement.AreaValue(fallbackScale)), _viewport.UnitMode)
+                : $"{measurements.Sum(measurement => measurement.Points.Count)} pts";
+        }
+
+        if (!hasScale)
+        {
+            if (measurementType == "line")
+                return $"{measurements.Sum(measurement => Math.Max(0, measurement.Points.Count - 1))} seg";
+            if (measurementType == "area")
+                return $"{measurements.Sum(measurement => measurement.Points.Count)} pts";
+        }
+
+        double total = measurements.Sum(measurement => measurement.Value(fallbackScale));
+        return measurementType switch
+        {
+            "line" => Units.FormatLength(total, _viewport.UnitMode),
+            "area" => Units.FormatArea(total, _viewport.UnitMode),
+            _ => Units.FormatCount(total),
+        };
     }
 
     private void RefreshTotalsRecursive(ItemsControl parent)
@@ -5814,23 +11137,69 @@ public partial class MainWindow : Window
 
     private void ApplyTakeoffPageHighlights()
     {
+        Brush? brushOrNull(string key) => Application.Current.Resources[key] as Brush;
+        Brush dropOk      = brushOrNull("RowDropOkBrush")      ?? new SolidColorBrush(Color.FromRgb(204, 245, 218));
+        Brush dropBad     = brushOrNull("RowDropBadBrush")     ?? new SolidColorBrush(Color.FromRgb(255, 214, 214));
+        Brush multiSel    = brushOrNull("RowMultiSelectBrush") ?? new SolidColorBrush(Color.FromRgb(205, 226, 255));
+        Brush onPageBg    = brushOrNull("RowOnPageBrush")      ?? new SolidColorBrush(Color.FromRgb(214, 245, 222));
+        Brush rowFg       = brushOrNull("RowFlagForegroundBrush") ?? Brushes.Black;
+        Brush activeAccent = brushOrNull("RowActiveAccentBrush")  ?? new SolidColorBrush(Color.FromRgb(31, 82, 166));
+
         foreach (TreeViewItem item in EnumerateTakeoffTreeItems(TakeoffsTree))
         {
+            item.ClearValue(Control.BorderBrushProperty);
+            item.ClearValue(Control.BorderThicknessProperty);
+            item.ClearValue(Control.FontWeightProperty);
+
             string? path = GetTakeoffNodePath(item);
-            if (path != null && _takeoffsMultiSelection.Contains(path))
+            string? sectionKey = GetTakeoffSectionSelectionKey(item);
+            bool sectionSelected = sectionKey != null && _takeoffSectionMultiSelection.Contains(sectionKey);
+            bool takeoffSelected = path != null && _takeoffsMultiSelection.Contains(path);
+            bool isActiveTakeoff = item.Tag is TakeoffItem activeTakeoff && IsActiveTakeoffItem(activeTakeoff);
+            bool isMeasuredOnPage = item.Tag is TakeoffItem takeoff && IsTakeoffMeasuredOnCurrentPage(takeoff);
+            if (ReferenceEquals(item, _takeoffSectionDropTarget))
             {
-                item.Background = new SolidColorBrush(Color.FromRgb(205, 226, 255));
-                item.Foreground = Brushes.Black;
+                item.Background = _takeoffSectionDropAllowed ? dropOk : dropBad;
+                item.Foreground = rowFg;
+                item.FontWeight = FontWeights.Normal;
+                item.BorderBrush = _takeoffSectionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+                item.BorderThickness = new Thickness(0, 0, 0, 2);
             }
-            else if (item.Tag is TakeoffItem takeoff && IsTakeoffMeasuredOnCurrentPage(takeoff))
+            else if (ReferenceEquals(item, _takeoffPositionDropTarget))
             {
-                item.Background = new SolidColorBrush(Color.FromRgb(214, 245, 222));
-                item.Foreground = Brushes.Black;
+                item.Background = _takeoffPositionDropAllowed ? dropOk : dropBad;
+                item.Foreground = rowFg;
+                item.FontWeight = FontWeights.Normal;
+                item.BorderBrush = _takeoffPositionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+                item.BorderThickness = _takeoffPositionDropAfter
+                    ? new Thickness(0, 0, 0, 2)
+                    : new Thickness(0, 2, 0, 0);
             }
             else
             {
-                item.ClearValue(Control.BackgroundProperty);
-                item.ClearValue(Control.ForegroundProperty);
+                if (sectionSelected || takeoffSelected)
+                {
+                    item.Background = multiSel;
+                    item.Foreground = rowFg;
+                }
+                else if (isMeasuredOnPage)
+                {
+                    item.Background = onPageBg;
+                    item.Foreground = rowFg;
+                }
+                else
+                {
+                    item.ClearValue(Control.BackgroundProperty);
+                    item.ClearValue(Control.ForegroundProperty);
+                }
+
+                if (isActiveTakeoff)
+                {
+                    item.Foreground = rowFg;
+                    item.FontWeight = FontWeights.Normal;
+                    item.BorderBrush = activeAccent;
+                    item.BorderThickness = new Thickness(3, 0, 0, 0);
+                }
             }
         }
     }
@@ -5850,55 +11219,93 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool IsActiveTakeoffItem(TakeoffItem item)
+    {
+        if (_activeItem == null)
+            return false;
+
+        if (ReferenceEquals(_activeItem, item))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(_activeItem.FolderPath) &&
+               !string.IsNullOrWhiteSpace(item.FolderPath) &&
+               string.Equals(_activeItem.FolderPath, item.FolderPath, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void SetTreeItemHeader(TreeViewItem tvi, TakeoffItem item)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        bool isActive = IsActiveTakeoffItem(item);
+        Brush swatchBrush = BrushFromHex(item.Color, Brushes.Gray);
+        var secondaryBrush = (Brush)Application.Current.Resources["SecondaryForegroundBrush"]
+            ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
 
-        panel.Children.Add(new Border
-        {
-            Width             = 12,
-            Height            = 12,
-            CornerRadius      = new CornerRadius(6),
-            Background        = new SolidColorBrush((Color)ColorConverter.ConvertFromString(item.Color)),
-            Margin            = new Thickness(0, 0, 5, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        panel.Children.Add(new TextBlock
-        {
-            Text              = item.Name,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
+        // Filled glyph in the takeoff color (no separate color square).
+        var swatchHost = BuildTakeoffSwatchGlyph(item, swatchBrush, isActive ? 18 : 16);
 
-        panel.Children.Add(new TextBlock
+        // Quantity goes to the right via DockPanel for ledger-style alignment.
+        var dock = new DockPanel { LastChildFill = true, HorizontalAlignment = HorizontalAlignment.Stretch };
+
+        string total = item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode);
+        var totalText = new TextBlock
         {
-            Text              = $"  [{MeasurementTypeTitle(item.MeasurementType)}]",
-            Foreground        = Brushes.Gray,
+            Text              = total,
+            Foreground        = secondaryBrush,
             FontSize          = 10,
+            FontFamily        = new FontFamily("Consolas, Cascadia Mono, Segoe UI"),
+            Margin            = new Thickness(8, 0, 4, 0),
             VerticalAlignment = VerticalAlignment.Center,
-        });
+            TextAlignment     = TextAlignment.Right,
+            MinWidth          = 56,
+        };
+        DockPanel.SetDock(totalText, Dock.Right);
+        dock.Children.Add(totalText);
 
         if (item.Measurements.Count > 0)
         {
-            panel.Children.Add(new TextBlock
+            var sectionsText = new TextBlock
             {
-                Text              = $"  {SectionCountLabel(item)}",
-                Foreground        = Brushes.Gray,
+                Text              = SectionCountLabel(item),
+                Foreground        = secondaryBrush,
                 FontSize          = 10,
+                Margin            = new Thickness(6, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-            });
+            };
+            DockPanel.SetDock(sectionsText, Dock.Right);
+            dock.Children.Add(sectionsText);
         }
 
-        string total = item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode);
-        panel.Children.Add(new TextBlock
+        var nameRow = new StackPanel
         {
-            Text              = $"  {total}",
-            Foreground        = Brushes.Gray,
-            FontSize          = 10,
+            Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
+        };
+        swatchHost.Margin = new Thickness(0, 0, 6, 0);
+        nameRow.Children.Add(swatchHost);
+        nameRow.Children.Add(new TextBlock
+        {
+            Text              = item.Name,
+            FontWeight        = FontWeights.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming      = TextTrimming.CharacterEllipsis,
         });
+        dock.Children.Add(nameRow);
 
-        tvi.Header = panel;
-        tvi.ToolTip = TakeoffItemTooltip(item);
+        tvi.Header = dock;
+        tvi.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        tvi.ToolTip = TakeoffItemTooltip(item, isActive);
+    }
+
+    private static FrameworkElement BuildTakeoffSwatchGlyph(TakeoffItem item, Brush swatchBrush, double size)
+    {
+        // Glyph drawn in the takeoff color with a darker stroke — no separate
+        // colored square, the glyph itself carries the color identity.
+        return Controls.MeasurementGlyph.CreateWpf(
+            Controls.MeasurementGlyph.Parse(
+                SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType),
+                joist: item.IsJoistArea),
+            swatchBrush,
+            size,
+            new Thickness(0));
     }
 
     private void SetFolderTreeItemHeader(TreeViewItem tvi, TakeoffFolderNode folder)
@@ -5908,7 +11315,7 @@ public partial class MainWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = folder.Name,
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
             VerticalAlignment = VerticalAlignment.Center,
         });
         panel.Children.Add(new TextBlock
@@ -5963,6 +11370,12 @@ public partial class MainWindow : Window
             parts.Add(MeasurementTypeTitle(properties.DefaultMeasurementType));
         if (!string.IsNullOrWhiteSpace(properties.DefaultColor))
             parts.Add(properties.DefaultColor);
+        if (properties.DefaultUnitPrice is >= 0)
+            parts.Add($"price {properties.DefaultUnitPrice.Value:G}");
+        if (!string.IsNullOrWhiteSpace(properties.DefaultNamePrefix))
+            parts.Add($"prefix {properties.DefaultNamePrefix}");
+        if (!string.IsNullOrWhiteSpace(properties.DefaultItemNotes))
+            parts.Add($"item notes: {OneLinePreview(properties.DefaultItemNotes, 32)}");
         return string.Join(", ", parts);
     }
 
@@ -5995,6 +11408,9 @@ public partial class MainWindow : Window
         return _currentJob.TakeoffsRoot;
     }
 
+    private string NewTakeoffItemParentFolder() =>
+        _currentJob?.TakeoffsRoot ?? "";
+
     private string ResolveTakeoffFolderDefaultMeasurementType(string folderPath, string fallback)
     {
         string fallbackType = SmartTakeoffsJobStore.NormalizeMeasurementType(fallback);
@@ -6019,6 +11435,59 @@ public partial class MainWindow : Window
         }
 
         return IsValidWpfColor(fallback) ? fallback : "#FF4444";
+    }
+
+    private double? ResolveTakeoffFolderDefaultUnitPrice(string folderPath)
+    {
+        foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
+        {
+            if (properties.DefaultUnitPrice is >= 0)
+                return properties.DefaultUnitPrice.Value;
+        }
+
+        return null;
+    }
+
+    private string ResolveTakeoffFolderDefaultItemNotes(string folderPath)
+    {
+        foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
+        {
+            if (!string.IsNullOrWhiteSpace(properties.DefaultItemNotes))
+                return properties.DefaultItemNotes;
+        }
+
+        return "";
+    }
+
+    private string ResolveTakeoffFolderDefaultNamePrefix(string folderPath)
+    {
+        foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
+        {
+            if (!string.IsNullOrWhiteSpace(properties.DefaultNamePrefix))
+                return properties.DefaultNamePrefix;
+        }
+
+        return "";
+    }
+
+    private void ApplyTakeoffFolderDefaultsToNewItem(TakeoffItem item, string parentFolder)
+    {
+        bool changed = false;
+        if (ResolveTakeoffFolderDefaultUnitPrice(parentFolder) is { } unitPrice)
+        {
+            item.UnitPrice = unitPrice;
+            changed = true;
+        }
+
+        string defaultNotes = ResolveTakeoffFolderDefaultItemNotes(parentFolder);
+        if (!string.IsNullOrWhiteSpace(defaultNotes))
+        {
+            item.Notes = defaultNotes;
+            changed = true;
+        }
+
+        if (changed)
+            SmartTakeoffsJobStore.SaveTakeoffItem(item);
     }
 
     private IEnumerable<TakeoffFolderProperties> EnumerateTakeoffFolderProperties(string folderPath)
@@ -6047,11 +11516,15 @@ public partial class MainWindow : Window
     {
         string title = _activeTool switch
         {
-            "point" => "Count",
-            "line" => "Line",
-            "area" => "Area",
+            "point" => MeasurementTypeDisplay("point"),
+            "line" => MeasurementTypeDisplay("line"),
+            "area" => MeasurementTypeDisplay("area"),
             "select" => "Select",
             "scale" => "Scale",
+            "ruler" => "Ruler",
+            "drawline" => "Draw Line",
+            "drawarrow" => "Arrow",
+            "drawrect" => "Box",
             _ => "Pan",
         };
         bool recording = _activeTool is "point" or "line" or "area";
@@ -6062,25 +11535,163 @@ public partial class MainWindow : Window
             $"  Tool: {title}  |  Record: {(recording ? "On" : "Off")}" +
             $"  |  Snap: {(_viewport.SnapEnabled ? "On" : "Off")}" +
             $"  |  Ortho: {(_viewport.OrthoEnabled ? "On" : "Off")}{item}";
+        UpdateActiveTakeoffTargetBar();
+    }
+
+    private void UpdateActiveTakeoffTargetBar()
+    {
+        if (ActiveTakeoffTargetBar == null)
+            return;
+
+        if (_activeItem == null)
+        {
+            ActiveTakeoffTargetBar.Visibility = Visibility.Collapsed;
+            TxtActiveTakeoffTarget.Text = "No active takeoff";
+            TxtActiveTakeoffTargetMeta.Text = "";
+            ActiveTakeoffTargetGlyphHost.Child = null;
+            BtnActiveTakeoffRecord.IsEnabled = false;
+            BtnActiveTakeoffMore.IsEnabled = false;
+            BtnActiveTakeoffFind.IsEnabled = false;
+            BtnActiveTakeoffProperties.IsEnabled = false;
+            BtnActiveTakeoffPrevious.IsEnabled = false;
+            BtnActiveTakeoffNext.IsEnabled = false;
+            BtnActiveTakeoffSheetNext.IsEnabled = false;
+            return;
+        }
+
+        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+        string typeTitle = TakeoffTypeDisplay(_activeItem);
+        string total = _activeItem.Measurements.Count == 0
+            ? "no measurements"
+            : _activeItem.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode);
+        string sheetTotal = ActiveTakeoffSheetTotalText(_activeItem);
+        bool recordingThis = _activeTool == measurementType;
+
+        ActiveTakeoffTargetBar.Visibility = Visibility.Visible;
+        TxtActiveTakeoffTarget.Text = _activeItem.Name;
+        TxtActiveTakeoffTargetMeta.Text = $"{TakeoffTypeTitle(_activeItem)} | total: {total}{sheetTotal}";
+        ActiveTakeoffTargetGlyphHost.Child = BuildTakeoffSwatchGlyph(
+            _activeItem, BrushFromHex(_activeItem.Color, Brushes.Gray), 18);
+        BtnActiveTakeoffRecord.Content = recordingThis ? $"Recording {typeTitle}" : $"Record {typeTitle}";
+        BtnActiveTakeoffRecord.IsEnabled = _currentPage != null;
+        BtnActiveTakeoffMore.IsEnabled = true;
+        BtnActiveTakeoffRecord.ToolTip = _currentPage == null
+            ? "Select a sheet before recording"
+            : recordingThis
+                ? $"Recording {typeTitle} into {_activeItem.Name}. Click the toolbar Record button to stop."
+                : $"Start recording {typeTitle} into {_activeItem.Name}";
+        bool hasTreeItem = FindTakeoffTreeItem(_activeItem) != null;
+        BtnActiveTakeoffFind.IsEnabled = hasTreeItem;
+        BtnActiveTakeoffProperties.IsEnabled = hasTreeItem;
+        bool canCycle = ActiveTakeoffTargetCycleItems().Count > 1;
+        BtnActiveTakeoffPrevious.IsEnabled = canCycle;
+        BtnActiveTakeoffNext.IsEnabled = canCycle;
+        int sheetTargetCount = ActiveSheetTakeoffTargetCycleItems().Count;
+        BtnActiveTakeoffSheetNext.IsEnabled = sheetTargetCount > 0;
+        BtnActiveTakeoffSheetNext.ToolTip = sheetTargetCount > 0
+            ? $"Switch through {sheetTargetCount} takeoff item(s) measured on this sheet"
+            : "No takeoff items are measured on this sheet yet";
+    }
+
+    private string ActiveTakeoffSheetTotalText(TakeoffItem item)
+    {
+        if (_currentPage == null)
+            return "";
+
+        var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();
+        string pageQuantity = pageMeasurements.Count == 0
+            ? "none on sheet"
+            : SheetLegendQuantityText(item, pageMeasurements);
+        return $" | sheet: {pageQuantity}";
     }
 
     private string DefaultTakeoffName(string measurementType)
     {
         string title = MeasurementTypeTitle(measurementType);
-        if (_activeItem != null && _activeItem.MeasurementType != measurementType)
+        if (_activeItem != null &&
+            SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != measurementType)
             return $"{_activeItem.Name} - {title}";
         if (_currentPage != null)
             return $"{_currentPage.Name} {title}";
         return $"{title} Item";
     }
 
+    private string DefaultTakeoffNameForFolder(string measurementType, string parentFolder)
+    {
+        string baseName = DefaultTakeoffName(measurementType);
+        string prefix = ResolveTakeoffFolderDefaultNamePrefix(parentFolder);
+        if (string.IsNullOrWhiteSpace(prefix) ||
+            baseName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return baseName;
+        }
+
+        return prefix.EndsWith(" ", StringComparison.Ordinal) ||
+               prefix.EndsWith("-", StringComparison.Ordinal) ||
+               prefix.EndsWith("_", StringComparison.Ordinal)
+            ? prefix + baseName
+            : $"{prefix} {baseName}";
+    }
+
     private static string MeasurementTypeTitle(string measurementType) =>
-        measurementType switch
+        SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "Count",
             "area" => "Area",
             _ => "Line",
         };
+
+    private static string TakeoffTypeTitle(TakeoffItem item) =>
+        item.IsJoistArea ? "Joist" : MeasurementTypeTitle(item.MeasurementType);
+
+    private static string MeasurementTypeSign(string measurementType) =>
+        SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType) switch
+        {
+            "point" => "○",
+            "area" => "□",
+            _ => "╱",
+        };
+
+    private static string TakeoffTypeSign(TakeoffItem item) =>
+        item.IsJoistArea ? "□╱" : MeasurementTypeSign(item.MeasurementType);
+
+    private static string MeasurementTypeDisplay(string measurementType) =>
+        $"{MeasurementTypeSign(measurementType)} {MeasurementTypeTitle(measurementType)}";
+
+    private static string TakeoffTypeDisplay(TakeoffItem item) =>
+        $"{TakeoffTypeSign(item)} {TakeoffTypeTitle(item)}";
+
+    private static string SheetLegendTypeTitle(TakeoffItem item) =>
+        item.IsJoistArea ? "Area" : TakeoffTypeTitle(item);
+
+    private static string SheetLegendTypeSign(TakeoffItem item) =>
+        item.IsJoistArea ? MeasurementTypeSign("area") : TakeoffTypeSign(item);
+
+    private static FrameworkElement CreateTakeoffTypeIcon(TakeoffItem item, double size, Thickness margin) =>
+        Controls.MeasurementGlyph.CreateWpf(
+            Controls.MeasurementGlyph.Parse(
+                SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType),
+                joist: item.IsJoistArea),
+            BrushFromHex(item.Color, Brushes.Gray),
+            size,
+            margin);
+
+    private static FrameworkElement CreateMeasurementTypeIcon(string kind, Brush brush, double size, Thickness margin) =>
+        Controls.MeasurementGlyph.CreateWpf(
+            Controls.MeasurementGlyph.Parse(SmartTakeoffsJobStore.NormalizeMeasurementType(kind),
+                joist: kind.Equals("joist", StringComparison.OrdinalIgnoreCase)),
+            brush,
+            size,
+            margin);
+
+    private string TakeoffUnitText(TakeoffItem item) =>
+        item.IsJoistArea ? UnitText("line") : UnitText(item.MeasurementType);
+
+    private string MeasurementUnitText(Measurement measurement) =>
+        measurement.JoistEnabled ? UnitText("line") : UnitText(measurement.MType);
+
+    private static string CsvMeasurementType(TakeoffItem item) =>
+        item.IsJoistArea ? "joist" : SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
 
     private TreeViewItem? FindFirstTakeoffTreeItem(ItemsControl parent)
     {
@@ -6103,6 +11714,7 @@ public partial class MainWindow : Window
             _activeItem = null;
             _viewport.ActiveColor = "#FF4444";
             _viewport.ActiveTakeoffFolder = "";
+            RefreshActiveTakeoffVisuals();
             return false;
         }
 
@@ -6116,11 +11728,138 @@ public partial class MainWindow : Window
         if (FindTakeoffTreeItem(item) is { } tvi)
         {
             _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
             if (!string.IsNullOrWhiteSpace(item.FolderPath))
                 _takeoffsMultiSelection.Add(item.FolderPath);
             ApplyTakeoffPageHighlights();
             tvi.IsSelected = true;
             tvi.BringIntoView();
+        }
+    }
+
+    private void SelectFirstTakeoffItemSilently(IReadOnlyList<TakeoffItem> items)
+    {
+        TreeViewItem? first = items
+            .Select(FindTakeoffTreeItem)
+            .FirstOrDefault(item => item != null);
+        if (first == null)
+            return;
+
+        _syncingTakeoffTreeSelection = true;
+        try
+        {
+            ExpandTreeItemAndAncestorsWithoutTracking(first);
+            first.IsSelected = true;
+            first.BringIntoView();
+        }
+        finally
+        {
+            _syncingTakeoffTreeSelection = false;
+        }
+    }
+
+    private IReadOnlyList<TakeoffItem> TakeoffItemsForSelection(TreeViewItem? anchor)
+    {
+        IReadOnlyList<TakeoffsClipboardEntry> entries = anchor == null
+            ? []
+            : GetSelectedTakeoffEntries(anchor);
+
+        if (entries.Count == 0)
+        {
+            return anchor?.Tag switch
+            {
+                TakeoffItem item => [item],
+                TakeoffMeasurementNode node => [node.Item],
+                TakeoffFolderNode folder => TakeoffItemsInsideFolder(folder.FolderPath),
+                _ => [],
+            };
+        }
+
+        return _takeoffItems
+            .Where(item => entries.Any(entry => SmartTakeoffsJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
+            .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private IReadOnlyList<TakeoffItem> TakeoffItemsInsideFolder(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+            return [];
+
+        return _takeoffItems
+            .Where(item => SmartTakeoffsJobStore.IsSameOrDescendant(folderPath, item.FolderPath))
+            .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private void RevealPagesForTakeoffSelection(TreeViewItem? anchor, string? preferredPageFolder = null)
+    {
+        RevealPagesForTakeoffItems(TakeoffItemsForSelection(anchor), preferredPageFolder ?? _currentPage?.FolderPath);
+    }
+
+    private void RevealPagesForTakeoffItems(IReadOnlyList<TakeoffItem> items, string? preferredPageFolder = null)
+    {
+        _pageTakeoffMultiSelection.Clear();
+        _pagesMultiSelection.Clear();
+
+        var selectedFolders = items
+            .Select(item => item.FolderPath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedFolders.Count == 0)
+        {
+            ApplyPagesMultiSelectionVisuals();
+            return;
+        }
+
+        TreeViewItem? preferredLinked = null;
+        foreach (TreeViewItem pageItem in EnumeratePageTreeItems())
+        {
+            if (pageItem.Tag is not PageInfo page)
+                continue;
+
+            var matchedTakeoffs = items
+                .Where(item => selectedFolders.Contains(item.FolderPath) &&
+                               item.Measurements.Any(measurement => IsSamePageFolder(measurement.PageFolder, page.FolderPath)))
+                .ToList();
+            if (matchedTakeoffs.Count == 0)
+                continue;
+
+            ExpandTreeItemAndAncestorsWithoutTracking(pageItem);
+            pageItem.IsExpanded = true;
+            bool isPreferredPage = !string.IsNullOrWhiteSpace(preferredPageFolder) &&
+                                   IsSamePageFolder(page.FolderPath, preferredPageFolder);
+
+            foreach (TakeoffItem takeoff in matchedTakeoffs)
+            {
+                _pageTakeoffMultiSelection.Add(PageTakeoffSelectionKey(new PageTakeoffNode(page, takeoff)));
+                TreeViewItem? linked = FindPageTakeoffTreeItem(page.FolderPath, takeoff.FolderPath);
+                if (isPreferredPage)
+                    preferredLinked ??= linked;
+            }
+        }
+
+        ApplyPagesMultiSelectionVisuals();
+
+        if (preferredLinked == null)
+        {
+            if (_currentPage != null)
+                SelectPageTreeNodeSilently(_currentPage.FolderPath);
+            return;
+        }
+
+        _syncingPageTreeSelection = true;
+        try
+        {
+            ExpandTreeItemAndAncestorsWithoutTracking(preferredLinked);
+            preferredLinked.IsSelected = true;
+            preferredLinked.BringIntoView();
+        }
+        finally
+        {
+            _syncingPageTreeSelection = false;
         }
     }
 
@@ -6132,8 +11871,7 @@ public partial class MainWindow : Window
         _syncingTakeoffTreeSelection = true;
         try
         {
-            if (ItemsControl.ItemsControlFromItemContainer(tvi) is TreeViewItem parent)
-                parent.IsExpanded = true;
+            ExpandTreeItemAndAncestorsWithoutTracking(tvi);
             tvi.IsSelected = true;
             tvi.BringIntoView();
         }
@@ -6222,12 +11960,67 @@ public partial class MainWindow : Window
     private void UpdateTotalDisplay()
     {
         RefreshEstimateTable();
+        UpdateActiveTakeoffTargetBar();
         if (_activeItem == null || _activeItem.Measurements.Count == 0)
         {
             TxtTotal.Text = "Total: —";
             return;
         }
         TxtTotal.Text = $"Total: {_activeItem.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode)}";
+    }
+
+    private List<EstimateDisplayRow> BuildEstimateDisplayRows(string filter, bool currentSheetOnly)
+    {
+        var rows = new List<EstimateDisplayRow>();
+        foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
+        {
+            var scopedMeasurements = currentSheetOnly
+                ? item.Measurements
+                    .Where(measurement => _currentPage != null && IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+                    .ToList()
+                : item.Measurements.ToList();
+            if (scopedMeasurements.Count == 0)
+                continue;
+
+            bool itemMatches = EstimateItemMatchesFilter(item, filter);
+            var visibleMeasurements = scopedMeasurements
+                .Where(m => itemMatches || EstimateMeasurementMatchesFilter(item, m, filter))
+                .ToList();
+            if (!itemMatches && visibleMeasurements.Count == 0)
+                continue;
+
+            rows.Add(new EstimateDisplayRow(
+                item.Name,
+                currentSheetOnly ? $"{TakeoffTypeDisplay(item)} / {_currentPage?.Name}" : TakeoffTypeDisplay(item),
+                scopedMeasurements.Count.ToString(CultureInfo.InvariantCulture),
+                currentSheetOnly ? SheetLegendQuantityText(item, scopedMeasurements) : QuantityText(item),
+                TakeoffUnitText(item),
+                UnitPriceText(item),
+                currentSheetOnly ? CostText(item, scopedMeasurements) : CostText(item),
+                "",
+                item,
+                null));
+            for (int i = 0; i < item.Measurements.Count; i++)
+            {
+                Measurement measurement = item.Measurements[i];
+                if (!scopedMeasurements.Contains(measurement) || !visibleMeasurements.Contains(measurement))
+                    continue;
+
+                rows.Add(new EstimateDisplayRow(
+                    $"  {SectionDisplayName(item, measurement, i)}",
+                    $"{(measurement.JoistEnabled ? "Joist" : MeasurementTypeSign(measurement.MType))} {SectionPageName(measurement)}".Trim(),
+                    "",
+                    QuantityText(measurement),
+                    MeasurementUnitText(measurement),
+                    "",
+                    "",
+                    measurement.Notes,
+                    item,
+                    measurement));
+            }
+        }
+
+        return rows;
     }
 
     private void RefreshEstimateTable()
@@ -6240,12 +12033,21 @@ public partial class MainWindow : Window
         try
         {
             string filter = _estimateFilterBox?.Text.Trim() ?? "";
+            bool currentSheetOnly = _estimateCurrentSheetOnlyBox?.IsChecked == true && _currentPage != null;
             _estimateList.Items.Clear();
             EstimateDisplayRow? selectedRow = null;
             foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
             {
+                var scopedMeasurements = currentSheetOnly
+                    ? item.Measurements
+                        .Where(measurement => _currentPage != null && IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+                        .ToList()
+                    : item.Measurements.ToList();
+                if (scopedMeasurements.Count == 0)
+                    continue;
+
                 bool itemMatches = EstimateItemMatchesFilter(item, filter);
-                var visibleMeasurements = item.Measurements
+                var visibleMeasurements = scopedMeasurements
                     .Where(m => itemMatches || EstimateMeasurementMatchesFilter(item, m, filter))
                     .ToList();
                 if (!itemMatches && visibleMeasurements.Count == 0)
@@ -6253,27 +12055,27 @@ public partial class MainWindow : Window
 
                 _estimateList.Items.Add(new EstimateDisplayRow(
                     item.Name,
-                    MeasurementTypeTitle(item.MeasurementType),
-                    item.Measurements.Count.ToString(CultureInfo.InvariantCulture),
-                    QuantityText(item),
-                    UnitText(item.MeasurementType),
+                    currentSheetOnly ? $"{TakeoffTypeDisplay(item)} / {_currentPage?.Name}" : TakeoffTypeDisplay(item),
+                    scopedMeasurements.Count.ToString(CultureInfo.InvariantCulture),
+                    currentSheetOnly ? SheetLegendQuantityText(item, scopedMeasurements) : QuantityText(item),
+                    TakeoffUnitText(item),
                     UnitPriceText(item),
-                    CostText(item),
+                    currentSheetOnly ? CostText(item, scopedMeasurements) : CostText(item),
                     "",
                     item,
                     null));
                 for (int i = 0; i < item.Measurements.Count; i++)
                 {
                     Measurement measurement = item.Measurements[i];
-                    if (!visibleMeasurements.Contains(measurement))
+                    if (!scopedMeasurements.Contains(measurement) || !visibleMeasurements.Contains(measurement))
                         continue;
 
                     var row = new EstimateDisplayRow(
                         $"  {SectionDisplayName(item, measurement, i)}",
-                        SectionPageName(measurement),
+                        $"{(measurement.JoistEnabled ? "□╱" : MeasurementTypeSign(measurement.MType))} {SectionPageName(measurement)}".Trim(),
                         "",
                         QuantityText(measurement),
-                        UnitText(measurement.MType),
+                        MeasurementUnitText(measurement),
                         "",
                         "",
                         measurement.Notes,
@@ -6303,7 +12105,7 @@ public partial class MainWindow : Window
             return true;
 
         return TextContains(item.Name, filter) ||
-               TextContains(MeasurementTypeTitle(item.MeasurementType), filter);
+               TextContains(TakeoffTypeTitle(item), filter);
     }
 
     private static bool EstimateMeasurementMatchesFilter(TakeoffItem item, Measurement measurement, string filter)
@@ -6323,24 +12125,53 @@ public partial class MainWindow : Window
 
     private void DeleteSection(TakeoffItem item, Measurement measurement)
     {
-        string entryTitle = MeasurementEntryTitle(item);
+        DeleteTakeoffSections(new TakeoffMeasurementNode(item, measurement));
+    }
+
+    private void DeleteTakeoffSections(TakeoffMeasurementNode anchor)
+    {
+        var selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
+        if (selectedNodes.Count == 0)
+            return;
+
+        string entryTitle = selectedNodes.Count == 1
+            ? MeasurementEntryTitle(anchor.Item)
+            : MeasurementEntryTitlePlural(selectedNodes);
         if (MessageBox.Show(
-                $"Delete this {entryTitle.ToLowerInvariant()} from {item.Name}?",
-                $"Delete {entryTitle}",
+                selectedNodes.Count == 1
+                    ? $"Delete this {entryTitle.ToLowerInvariant()} from {anchor.Item.Name}?"
+                    : $"Delete {selectedNodes.Count} selected {entryTitle}?",
+                selectedNodes.Count == 1 ? $"Delete {entryTitle}" : "Delete Takeoff Rows",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question) != MessageBoxResult.Yes)
         {
             return;
         }
 
-        item.Measurements.Remove(measurement);
-        _viewport.DeleteMeasurements([measurement]);
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
-        RefreshTreeItem(item);
+        var removedMeasurements = selectedNodes
+            .Select(node => node.Measurement)
+            .Distinct()
+            .ToList();
+        foreach (var group in selectedNodes.GroupBy(node => node.Item))
+        {
+            foreach (Measurement measurement in group.Select(node => node.Measurement).Distinct())
+                group.Key.Measurements.Remove(measurement);
+
+            SmartTakeoffsJobStore.SaveTakeoffItem(group.Key);
+            RefreshTreeItem(group.Key);
+        }
+
+        _takeoffSectionMultiSelection.Clear();
+        _takeoffSectionRangeAnchorKey = null;
+        _viewport.DeleteMeasurements(removedMeasurements);
         RefreshPagesTakeoffIndicators();
         ApplyTakeoffPageHighlights();
+        RefreshSheetLegend();
+        RefreshEstimateTable();
         UpdateTotalDisplay();
-        TxtStatus.Text = $"Deleted {entryTitle.ToLowerInvariant()} from {item.Name}.";
+        TxtStatus.Text = removedMeasurements.Count == 1
+            ? $"Deleted {entryTitle.ToLowerInvariant()} from {anchor.Item.Name}."
+            : $"Deleted {removedMeasurements.Count} selected {entryTitle}.";
     }
 
     private static string SectionDisplayName(TakeoffItem item, Measurement measurement, int index) =>
@@ -6354,7 +12185,7 @@ public partial class MainWindow : Window
     private static string DefaultSectionName(TakeoffItem item, Measurement measurement, int index)
     {
         string page = SectionPageName(measurement);
-        string entry = item.MeasurementType == "point" ? "Count" : "Section";
+        string entry = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
         return string.IsNullOrWhiteSpace(page)
             ? $"{entry} {index + 1}"
             : $"{entry} {index + 1} - {page}";
@@ -6366,12 +12197,23 @@ public partial class MainWindow : Window
             : SmartTakeoffsJobStore.DisplayName(measurement.PageFolder);
 
     private static string SectionCountLabel(TakeoffItem item) =>
-        item.MeasurementType == "point"
+        SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
             ? item.Measurements.Count == 1 ? "1 count" : $"{item.Measurements.Count} counts"
             : item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
 
     private static string MeasurementEntryTitle(TakeoffItem item) =>
-        item.MeasurementType == "point" ? "Count Mark" : "Section";
+        SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
+
+    private static string MeasurementEntryTitlePlural(IEnumerable<TakeoffMeasurementNode> nodes)
+    {
+        var types = nodes
+            .Select(node => SmartTakeoffsJobStore.NormalizeMeasurementType(node.Item.MeasurementType))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (types.Count == 1)
+            return types[0] == "point" ? "counts" : "sections";
+        return "section/count rows";
+    }
 
     private static bool CanRemoveMeasurementVertex(Measurement measurement) =>
         measurement.MType switch
@@ -6391,9 +12233,9 @@ public partial class MainWindow : Window
                 ? "unknown page"
                 : SmartTakeoffsJobStore.DisplayName(m.PageFolder);
             string name = string.IsNullOrWhiteSpace(m.Name)
-                ? (item.MeasurementType == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
+                ? (SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
                 : m.Name;
-            string detail = item.MeasurementType == "point"
+            string detail = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
                 ? "1 count"
                 : $"{m.Points.Count} point(s)";
             lines.Add($"{name}: {page}, {detail}");
@@ -6403,9 +12245,11 @@ public partial class MainWindow : Window
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string? TakeoffItemTooltip(TakeoffItem item)
+    private static string? TakeoffItemTooltip(TakeoffItem item, bool isActive)
     {
         var lines = new List<string>();
+        if (isActive)
+            lines.Add("Active takeoff target");
         if (!string.IsNullOrWhiteSpace(item.Notes))
             lines.Add($"Notes: {item.Notes}");
         if (item.Measurements.Count > 0)
@@ -6418,6 +12262,8 @@ public partial class MainWindow : Window
     {
         string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
+        if (item.IsJoistArea)
+            return QuantityText("line", value);
         return QuantityText(mt, value);
     }
 
@@ -6425,6 +12271,8 @@ public partial class MainWindow : Window
     {
         string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType);
         double value = measurement.Value(_viewport.ScaleMetersPerPt);
+        if (measurement.JoistEnabled)
+            return QuantityText("line", value);
         return QuantityText(mt, value);
     }
 
@@ -6467,221 +12315,45 @@ public partial class MainWindow : Window
         return (quantity * item.UnitPrice).ToString("F2", CultureInfo.InvariantCulture);
     }
 
+    private string CostText(TakeoffItem item, IReadOnlyList<Measurement> measurements)
+    {
+        if (item.UnitPrice <= 0 || measurements.Count == 0)
+            return "";
+
+        double quantity = EstimateQuantity(item, measurements);
+        return (quantity * item.UnitPrice).ToString("F2", CultureInfo.InvariantCulture);
+    }
+
     private double EstimateQuantity(TakeoffItem item)
     {
         string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
         return mt switch
         {
+            _ when item.IsJoistArea && _viewport.UnitMode == UnitMode.Imperial => value / 0.3048,
             "line" when _viewport.UnitMode == UnitMode.Imperial => value / 0.3048,
             "area" when _viewport.UnitMode == UnitMode.Imperial => value / 0.0929030,
             _ => value,
         };
     }
 
-    // ── Layers panel ──────────────────────────────────────────────────────────
-
-    private void OnLayersChanged(IReadOnlyList<PdfLayer> layers)
+    private double EstimateQuantity(TakeoffItem item, IReadOnlyList<Measurement> measurements)
     {
-        LayersPanel.Children.Clear();
-        BtnLayersOn.IsEnabled = layers.Count > 0;
-        BtnLayersOff.IsEnabled = layers.Count > 0;
-        BtnLayersClearHi.IsEnabled = layers.Count > 0;
-        if (layers.Count == 0)
+        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
+            ? _currentPage.ScaleMetersPerPt
+            : _viewport.ScaleMetersPerPt;
+        double value = measurements.Sum(measurement => measurement.Value(fallbackScale));
+        return mt switch
         {
-            LayersPanel.Children.Add(new TextBlock
-            {
-                Text       = "  No PDF layers detected.",
-                Foreground = Brushes.Gray,
-                FontSize   = 10,
-                Margin     = new Thickness(0, 2, 0, 2),
-            });
-            return;
-        }
-        foreach (var layer in layers)
-        {
-            var row = new DockPanel { Margin = new Thickness(2, 1, 2, 1) };
-            var hi = new CheckBox
-            {
-                Content = "Hi",
-                IsChecked = layer.IsHighlighted,
-                FontSize = 10,
-                Margin = new Thickness(0, 0, 6, 0),
-                ToolTip = "Highlight this layer",
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            DockPanel.SetDock(hi, Dock.Right);
-            row.Children.Add(hi);
-
-            var cb = new CheckBox
-            {
-                Content   = layer.Name,
-                IsChecked = layer.IsOn,
-                FontSize  = 10,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            cb.Checked   += (_, _) => _viewport.SetLayerVisible(layer.Number, true);
-            cb.Unchecked += (_, _) => _viewport.SetLayerVisible(layer.Number, false);
-            hi.Checked += (_, _) => _viewport.SetLayerHighlighted(layer.Number, true);
-            hi.Unchecked += (_, _) => _viewport.SetLayerHighlighted(layer.Number, false);
-            row.ContextMenu = BuildPdfLayerContextMenu(layer);
-            cb.ContextMenu = BuildPdfLayerContextMenu(layer);
-            hi.ContextMenu = BuildPdfLayerContextMenu(layer);
-            row.Children.Add(cb);
-            LayersPanel.Children.Add(row);
-        }
+            _ when measurements.Any(measurement => measurement.JoistEnabled) && _viewport.UnitMode == UnitMode.Imperial => value / 0.3048,
+            "line" when _viewport.UnitMode == UnitMode.Imperial => value / 0.3048,
+            "area" when _viewport.UnitMode == UnitMode.Imperial => value / 0.0929030,
+            _ => value,
+        };
     }
 
-    private ContextMenu BuildPdfLayerContextMenu(PdfLayer layer)
-    {
-        var menu = new ContextMenu();
-        menu.Items.Add(new MenuItem
-        {
-            Header = $"PDF Layer: {layer.Name}",
-            IsEnabled = false,
-        });
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Save Layer Info for AI", _currentJob != null && _currentPage != null, () =>
-            SavePdfLayerAiContext(layer, createRequest: false)));
-        menu.Items.Add(MakeMenuItem("Queue AI Request for This Layer", _currentJob != null && _currentPage != null, () =>
-            SavePdfLayerAiContext(layer, createRequest: true)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem(layer.IsOn ? "Hide Layer" : "Show Layer", true, () =>
-            _viewport.SetLayerVisible(layer.Number, !layer.IsOn)));
-        menu.Items.Add(MakeMenuItem(layer.IsHighlighted ? "Clear Highlight" : "Highlight Layer", true, () =>
-            _viewport.SetLayerHighlighted(layer.Number, !layer.IsHighlighted)));
-        return menu;
-    }
-
-    private void SavePdfLayerAiContext(PdfLayer layer, bool createRequest)
-    {
-        if (_currentJob == null || _currentPage == null)
-        {
-            TxtStatus.Text = "Open a job and page before saving PDF layer context.";
-            return;
-        }
-
-        try
-        {
-            string layerText = BuildPdfLayerAiContextText(layer);
-            SmartObservation observation = SmartContextStore.AddObservation(
-                _currentJob,
-                _currentPage,
-                createRequest ? "pdf_layer_ai_request" : "pdf_layer_context",
-                layerText);
-
-            if (createRequest)
-            {
-                SmartContextStore.AddAiRequest(
-                    _currentJob,
-                    _currentPage,
-                    observation,
-                    "pdf_layer_ai_request",
-                    BuildPdfLayerAiPrompt(layer),
-                    "",
-                    layerText);
-            }
-
-            LoadObservationsInbox();
-            TxtStatus.Text = createRequest
-                ? $"Queued AI layer request for '{layer.Name}'."
-                : $"Saved PDF layer context for '{layer.Name}' to AI Inbox.";
-        }
-        catch (Exception ex)
-        {
-            ShowOperationError("Save PDF Layer Context", ex);
-        }
-    }
-
-    private string BuildPdfLayerAiContextText(PdfLayer selectedLayer)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("PDF layer context saved for AI review.");
-        sb.AppendLine();
-        sb.AppendLine($"Page: {_currentPage?.Name}");
-        sb.AppendLine($"Selected layer: #{selectedLayer.Number} {selectedLayer.Name}");
-        sb.AppendLine($"Selected layer visible: {selectedLayer.IsOn}");
-        sb.AppendLine($"Selected layer highlighted: {selectedLayer.IsHighlighted}");
-        if (_currentJob != null && _currentPage != null)
-        {
-            string manifestPath = SmartTakeoffsJobStore.PageLayersJsonPath(_currentPage.FolderPath);
-            if (File.Exists(manifestPath))
-                sb.AppendLine($"Layer manifest: {Path.GetRelativePath(_currentJob.RootPath, manifestPath)}");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("All known layers on this page:");
-        IReadOnlyList<PdfLayerInfo> knownLayers = LoadCurrentPageLayerInfos();
-        if (knownLayers.Count == 0)
-        {
-            sb.AppendLine("- none cached yet");
-        }
-        else
-        {
-            foreach (PdfLayerInfo layer in knownLayers)
-                sb.AppendLine($"- #{layer.Number}: {layer.Name} (visible: {layer.IsOn})");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("Use this when a PDF layer name or layer visibility carries takeoff meaning, such as framing, dimensions, alternates, grid, tags, notes, or trade-specific hidden information.");
-        return sb.ToString().TrimEnd();
-    }
-
-    private string BuildPdfLayerAiPrompt(PdfLayer selectedLayer)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("Review this saved PDF layer context for takeoff-relevant information.");
-        sb.AppendLine("Focus on what the selected layer likely represents and what it may help detect or verify later.");
-        sb.AppendLine("Do not apply measurements automatically. Return reviewable notes/actions only.");
-        sb.AppendLine();
-        sb.AppendLine(BuildPdfLayerAiContextText(selectedLayer));
-        return sb.ToString().TrimEnd();
-    }
-
-    private IReadOnlyList<PdfLayerInfo> LoadCurrentPageLayerInfos()
-    {
-        if (_currentPage == null)
-            return [];
-
-        PageLayerManifest? manifest = SmartTakeoffsJobStore.ReadPageLayerManifest(_currentPage.FolderPath);
-        if (manifest?.Layers.Count > 0)
-            return manifest.Layers;
-
-        return _currentPage.PdfLayers;
-    }
-
-    private void OnPdfLayersDiscovered(IReadOnlyList<PdfLayerInfo> layers)
-    {
-        if (_currentPage == null || _currentPage.PdfLayersCached || layers.Count == 0)
-            return;
-
-        try
-        {
-            SmartTakeoffsJobStore.SavePageLayerCache(_currentPage.FolderPath, layers);
-            TxtStatus.Text = $"Cached {layers.Count} visible PDF layer(s) and wrote layers.json for this page.";
-        }
-        catch
-        {
-            // Layer cache is an optimization; rendering should never depend on saving it.
-        }
-    }
-
-    private void BtnLayersOn_Click(object sender, RoutedEventArgs e)
-    {
-        _viewport.SetAllLayers(true);
-    }
-
-    private void BtnLayersOff_Click(object sender, RoutedEventArgs e)
-    {
-        _viewport.SetAllLayers(false);
-    }
-
-    private void BtnLayersClearHi_Click(object sender, RoutedEventArgs e)
-    {
-        _viewport.ClearLayerHighlights();
-    }
-
-    // ── Callbacks from viewport ───────────────────────────────────────────────
+    // Viewport callbacks
 
     private void OnScaleChanged(double scale)
     {
@@ -6732,6 +12404,9 @@ public partial class MainWindow : Window
         });
         menu.Items.Add(new Separator());
 
+        AddSheetOverlayMenuItems(menu);
+        menu.Items.Add(new Separator());
+
         AddMeasurementClipboardMenuItems(menu, request);
         menu.Items.Add(new Separator());
 
@@ -6750,6 +12425,418 @@ public partial class MainWindow : Window
         menu.Items.Add(MakeMenuItem("Open Project Context", true, OpenProjectContextMarkdown));
         menu.IsOpen = true;
     }
+
+    private void AddSheetOverlayMenuItems(ContextMenu menu)
+    {
+        menu.Items.Add(BuildLegendMenuItem());
+        menu.Items.Add(BuildLegendPositionMenu());
+        menu.Items.Add(BuildOverlaySizeMenu("Legend Size", _settings.SheetLegendScale, SetSheetLegendScale));
+        menu.Items.Add(BuildOverlaySizeMenu("Scale / Sheet Size Label Size", _settings.SheetHeaderScale, SetSheetHeaderScale));
+
+        var scaleLegendWithSheet = new MenuItem
+        {
+            Header = "Scale Legend With Sheet",
+            IsCheckable = true,
+            IsChecked = _settings.ScaleSheetOverlaysWithPage,
+            ToolTip = "When enabled, the sheet legend grows and shrinks with page zoom.",
+        };
+        scaleLegendWithSheet.Click += (_, _) => SetSheetOverlaysScaleWithPage(scaleLegendWithSheet.IsChecked);
+        menu.Items.Add(scaleLegendWithSheet);
+
+        var scaleLabelsWithSheet = new MenuItem
+        {
+            Header = "Scale Measurement Labels With Sheet",
+            IsCheckable = true,
+            IsChecked = _settings.ScaleMeasurementLabelsWithPage,
+            ToolTip = "When enabled, measurement value labels grow and shrink with page zoom. Off by default — labels stay screen-sized.",
+        };
+        scaleLabelsWithSheet.Click += (_, _) => SetMeasurementLabelsScaleWithPage(scaleLabelsWithSheet.IsChecked);
+        menu.Items.Add(scaleLabelsWithSheet);
+
+        var scaleHeaderWithSheet = new MenuItem
+        {
+            Header = "Scale Sheet Header With Sheet",
+            IsCheckable = true,
+            IsChecked = _settings.ScaleSheetHeaderWithPage,
+            ToolTip = "When enabled, the top sheet scale/size header grows and shrinks with page zoom. Off by default — header stays screen-sized.",
+        };
+        scaleHeaderWithSheet.Click += (_, _) => SetSheetHeaderScaleWithPage(scaleHeaderWithSheet.IsChecked);
+        menu.Items.Add(scaleHeaderWithSheet);
+    }
+
+    private MenuItem BuildLegendMenuItem()
+    {
+        var item = new MenuItem
+        {
+            Header = "Legend",
+            IsCheckable = true,
+            IsChecked = _settings.ShowSheetLegend,
+            ToolTip = "Show or hide the active sheet legend overlay",
+        };
+        item.Click += (_, _) => SetSheetLegendVisible(item.IsChecked);
+        return item;
+    }
+
+    private MenuItem BuildLegendPositionMenu()
+    {
+        var menu = new MenuItem
+        {
+            Header = "Legend Position",
+            IsEnabled = _settings.ShowSheetLegend,
+        };
+
+        foreach (var (label, anchor) in LegendAnchorOptions())
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = string.Equals(NormalizeSheetLegendAnchor(_settings.SheetLegendAnchor), anchor, StringComparison.OrdinalIgnoreCase),
+            };
+            item.Click += (_, _) => SetSheetLegendAnchor(anchor);
+            menu.Items.Add(item);
+        }
+
+        return menu;
+    }
+
+    private static IReadOnlyList<(string Label, string Anchor)> LegendAnchorOptions() =>
+    [
+        ("Top Left", "TopLeft"),
+        ("Top Center", "TopCenter"),
+        ("Top Right", "TopRight"),
+        ("Middle Left", "MiddleLeft"),
+        ("Middle Right", "MiddleRight"),
+        ("Bottom Left", "BottomLeft"),
+        ("Bottom Center", "BottomCenter"),
+        ("Bottom Right", "BottomRight"),
+    ];
+
+    private MenuItem BuildOverlaySizeMenu(string header, double currentScale, Action<double> apply)
+    {
+        var menu = new MenuItem { Header = header };
+        foreach (var (label, scale) in OverlaySizeOptions())
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = Math.Abs(NormalizeOverlayScale(currentScale) - scale) < 0.001,
+            };
+            item.Click += (_, _) => apply(scale);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Custom...", true, () =>
+            PromptOverlaySize(header, currentScale, apply)));
+
+        return menu;
+    }
+
+    private void PromptOverlaySize(string title, double currentScale, Action<double> apply)
+    {
+        string? raw = ShowInputDialog(
+            "Scale multiplier (0.5 - 3.0):",
+            NormalizeOverlayScale(currentScale).ToString("0.##", CultureInfo.InvariantCulture),
+            title);
+        if (raw == null)
+            return;
+
+        if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.5 ||
+            scale > 3.0)
+        {
+            MessageBox.Show("Enter a value from 0.5 to 3.0.", title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        apply(scale);
+    }
+
+    private static IReadOnlyList<(string Label, double Scale)> OverlaySizeOptions() =>
+    [
+        ("Small", 0.75),
+        ("Normal", 1.00),
+        ("Large", 1.35),
+        ("XL", 1.75),
+        ("XXL", 2.25),
+    ];
+
+    private void DisplaySetting_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        _settings.ShowMeasurementLabels = ChkDisplayMeasurementLabels.IsChecked == true;
+        _settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true;
+        _settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true;
+        _settings.ShowCountLabels = ChkDisplayCountLabels.IsChecked == true;
+        _settings.ShowSheetLegend = ChkDisplayLegend.IsChecked == true;
+        _settings.ScaleSheetOverlaysWithPage = ChkDisplayLegendScaleWithPage.IsChecked == true;
+        _settings.ScaleMeasurementLabelsWithPage = ChkDisplayLabelsScaleWithPage.IsChecked == true;
+        _settings.ScaleSheetHeaderWithPage = ChkDisplayHeaderScaleWithPage.IsChecked == true;
+        _settings.UnitMode = ChkDisplayImperial.IsChecked == true
+            ? UnitMode.Imperial.ToString()
+            : UnitMode.Metric.ToString();
+
+        ApplyDisplaySettingsToViewport();
+        ApplySheetOverlaySettings();
+        SaveAppSettings();
+        RefreshAllTotals();
+        TxtStatus.Text = "Display settings saved.";
+    }
+
+    private void BtnMeasurementLabelSmall_Click(object sender, RoutedEventArgs e) =>
+        SetMeasurementLabelScale(0.75);
+
+    private void BtnMeasurementLabelNormal_Click(object sender, RoutedEventArgs e) =>
+        SetMeasurementLabelScale(1.00);
+
+    private void BtnMeasurementLabelLarge_Click(object sender, RoutedEventArgs e) =>
+        SetMeasurementLabelScale(1.35);
+
+    private void BtnMeasurementLabelApply_Click(object sender, RoutedEventArgs e) =>
+        ApplyMeasurementLabelScaleFromText();
+
+    private void TxtMeasurementLabelScale_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyMeasurementLabelScaleFromText();
+        e.Handled = true;
+    }
+
+    private void TxtMeasurementLabelScale_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyMeasurementLabelScaleFromText();
+
+    private void ApplyMeasurementLabelScaleFromText()
+    {
+        string raw = TxtMeasurementLabelScale.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.50 ||
+            scale > 3.00)
+        {
+            TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtStatus.Text = "Value label size must be 0.5 - 3.0.";
+            return;
+        }
+
+        SetMeasurementLabelScale(scale);
+    }
+
+    private void SetMeasurementLabelScale(double scale)
+    {
+        _settings.MeasurementLabelScale = NormalizeOverlayScale(scale);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"Viewport value label size: {_settings.MeasurementLabelScale:0.##}x.";
+    }
+
+    private void BtnLegendSizeMenu_Click(object sender, RoutedEventArgs e)
+    {
+        ShowOverlaySizePopup(sender, "Legend Size", _settings.SheetLegendScale, SetSheetLegendScale);
+    }
+
+    private void BtnScaleHeaderSizeMenu_Click(object sender, RoutedEventArgs e) =>
+        ShowOverlaySizePopup(sender, "Header Size", _settings.SheetHeaderScale, SetSheetHeaderScale);
+
+    private void BtnLabelSizePresets_Click(object sender, RoutedEventArgs e) =>
+        ShowOverlaySizePopup(sender, "Label Size", _settings.MeasurementLabelScale, SetMeasurementLabelScale);
+
+    private void ShowOverlaySizePopup(object sender, string title, double currentScale, Action<double> apply)
+    {
+        if (sender is not UIElement target)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        foreach (var (label, scale) in OverlaySizeOptions())
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = Math.Abs(NormalizeOverlayScale(currentScale) - scale) < 0.001,
+            };
+            item.Click += (_, _) => apply(scale);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Custom...", true, () =>
+            PromptOverlaySize(title, currentScale, apply)));
+        menu.IsOpen = true;
+    }
+
+    private void BtnLegendPositionMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement target)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        foreach (var (label, anchor) in LegendAnchorOptions())
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = string.Equals(NormalizeSheetLegendAnchor(_settings.SheetLegendAnchor), anchor, StringComparison.OrdinalIgnoreCase),
+            };
+            item.Click += (_, _) => SetSheetLegendAnchor(anchor);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+    }
+
+    private void SetSheetLegendVisible(bool visible)
+    {
+        _settings.ShowSheetLegend = visible;
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = visible ? "Sheet legend shown." : "Sheet legend hidden.";
+    }
+
+    private void SetSheetLegendAnchor(string anchor)
+    {
+        _settings.SheetLegendAnchor = NormalizeSheetLegendAnchor(anchor);
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = $"Sheet legend position: {LegendAnchorLabel(_settings.SheetLegendAnchor)}.";
+    }
+
+    private void SetSheetLegendScale(double scale)
+    {
+        _settings.SheetLegendScale = NormalizeOverlayScale(scale);
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = $"Sheet legend size: {_settings.SheetLegendScale:0.##}x.";
+    }
+
+    private void SetSheetHeaderScale(double scale)
+    {
+        _settings.SheetHeaderScale = NormalizeOverlayScale(scale);
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = $"Scale label size: {_settings.SheetHeaderScale:0.##}x.";
+    }
+
+    private void SetSheetOverlaysScaleWithPage(bool enabled)
+    {
+        _settings.ScaleSheetOverlaysWithPage = enabled;
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = enabled
+            ? "Sheet legend now scales with page zoom."
+            : "Sheet legend now stays screen-sized.";
+    }
+
+    private void SetMeasurementLabelsScaleWithPage(bool enabled)
+    {
+        _settings.ScaleMeasurementLabelsWithPage = enabled;
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = enabled
+            ? "Measurement value labels now scale with page zoom."
+            : "Measurement value labels now stay screen-sized.";
+    }
+
+    private void SetSheetHeaderScaleWithPage(bool enabled)
+    {
+        _settings.ScaleSheetHeaderWithPage = enabled;
+        ApplySheetOverlaySettings();
+        SyncDisplaySettingsControls();
+        SaveAppSettings();
+        TxtStatus.Text = enabled
+            ? "Sheet scale/size header now scales with page zoom."
+            : "Sheet scale/size header now stays screen-sized.";
+    }
+
+    private void ApplyDisplaySettingsToViewport()
+    {
+        _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
+        _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
+        _viewport.ShowLineLabels = _settings.ShowLineLabels;
+        _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
+        _viewport.ShowCountLabels = _settings.ShowCountLabels;
+        _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
+        _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
+        _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
+        _viewport.UnitMode = _settings.UnitMode == UnitMode.Metric.ToString()
+            ? UnitMode.Metric
+            : UnitMode.Imperial;
+        SyncDisplaySettingsControls();
+        _viewport.InvalidateVisual();
+    }
+
+    private void SyncDisplaySettingsControls()
+    {
+        bool wasApplying = _isApplyingSettings;
+        _isApplyingSettings = true;
+        try
+        {
+            ChkDisplayMeasurementLabels.IsChecked = _settings.ShowMeasurementLabels;
+            ChkDisplayLineLabels.IsChecked = _settings.ShowLineLabels;
+            ChkDisplayAreaLabels.IsChecked = _settings.ShowAreaLabels;
+            ChkDisplayCountLabels.IsChecked = _settings.ShowCountLabels;
+            ChkDisplayLegend.IsChecked = _settings.ShowSheetLegend;
+            ChkDisplayLegendScaleWithPage.IsChecked = _settings.ScaleSheetOverlaysWithPage;
+            ChkDisplayLabelsScaleWithPage.IsChecked = _settings.ScaleMeasurementLabelsWithPage;
+            ChkDisplayHeaderScaleWithPage.IsChecked = _settings.ScaleSheetHeaderWithPage;
+            ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
+            TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+        finally
+        {
+            _isApplyingSettings = wasApplying;
+        }
+    }
+
+    private void ApplySheetOverlaySettings()
+    {
+        _settings.SheetLegendAnchor = NormalizeSheetLegendAnchor(_settings.SheetLegendAnchor);
+        _settings.SheetLegendScale = NormalizeOverlayScale(_settings.SheetLegendScale);
+        _settings.SheetHeaderScale = NormalizeOverlayScale(_settings.SheetHeaderScale);
+        _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
+        _viewport.SheetLegendAnchor = _settings.SheetLegendAnchor;
+        _viewport.SheetLegendScale = _settings.SheetLegendScale;
+        _viewport.SheetHeaderScale = _settings.SheetHeaderScale;
+        _viewport.ScaleSheetOverlaysWithPage = _settings.ScaleSheetOverlaysWithPage;
+        _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
+        _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
+        _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
+        _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
+        _viewport.ShowLineLabels = _settings.ShowLineLabels;
+        _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
+        _viewport.ShowCountLabels = _settings.ShowCountLabels;
+        SyncDisplaySettingsControls();
+        RefreshSheetLegend();
+        _viewport.InvalidateVisual();
+    }
+
+    private static double NormalizeOverlayScale(double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+            return 1.0;
+
+        return Math.Clamp(scale, 0.50, 3.00);
+    }
+
+    private static string NormalizeSheetLegendAnchor(string? anchor)
+    {
+        string clean = (anchor ?? "").Trim();
+        return LegendAnchorOptions().Any(option => string.Equals(option.Anchor, clean, StringComparison.OrdinalIgnoreCase))
+            ? LegendAnchorOptions().First(option => string.Equals(option.Anchor, clean, StringComparison.OrdinalIgnoreCase)).Anchor
+            : "BottomLeft";
+    }
+
+    private static string LegendAnchorLabel(string anchor) =>
+        LegendAnchorOptions().FirstOrDefault(option => string.Equals(option.Anchor, anchor, StringComparison.OrdinalIgnoreCase)).Label ?? "Bottom Left";
 
     private void AddMeasurementClipboardMenuItems(ContextMenu menu, ViewportContextRequest request)
     {
@@ -7087,7 +13174,7 @@ public partial class MainWindow : Window
         {
             Text = contextText,
             Margin = new Thickness(0, 0, 0, 10),
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
         });
 
         string markerTypeText = string.IsNullOrWhiteSpace(markerTypeValue) ? AiMarkerTypes[0] : markerTypeValue.Trim();
@@ -7345,7 +13432,7 @@ public partial class MainWindow : Window
 
         try
         {
-            string parentFolder = CurrentTakeoffParentFolder();
+            string parentFolder = NewTakeoffItemParentFolder();
             var item = CreateUniqueTakeoffItem(name, "#2196F3", measurementType, parentFolder);
             _takeoffItems.Add(item);
             var parent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
@@ -7389,24 +13476,6 @@ public partial class MainWindow : Window
         });
     }
 
-    private void BtnImperial_Checked(object sender, RoutedEventArgs e)
-    {
-        _viewport.UnitMode = UnitMode.Imperial;
-        _settings.UnitMode = UnitMode.Imperial.ToString();
-        SaveAppSettings();
-        RefreshAllTotals();
-        _viewport.InvalidateVisual();
-    }
-
-    private void BtnImperial_Unchecked(object sender, RoutedEventArgs e)
-    {
-        _viewport.UnitMode = UnitMode.Metric;
-        _settings.UnitMode = UnitMode.Metric.ToString();
-        SaveAppSettings();
-        RefreshAllTotals();
-        _viewport.InvalidateVisual();
-    }
-
     // ── Utilities ─────────────────────────────────────────────────────────────
 
     private void ApplyPersistedSettings()
@@ -7417,7 +13486,6 @@ public partial class MainWindow : Window
             _viewport.UnitMode = _settings.UnitMode == UnitMode.Metric.ToString()
                 ? UnitMode.Metric
                 : UnitMode.Imperial;
-            BtnImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
             ComboFolderTemplateMode.SelectedIndex = NormalizeFolderTemplateMode(_settings.FolderTemplateMode) switch
             {
                 "COM" => 1,
@@ -7426,6 +13494,9 @@ public partial class MainWindow : Window
             };
             ApplyViewportBackground(_settings.ViewportBackground, persist: false);
             ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
+            ApplyDisplaySettingsToViewport();
+            ApplySheetOverlaySettings();
+            ApplySidePanelWidths();
         }
         finally
         {
@@ -7479,8 +13550,17 @@ public partial class MainWindow : Window
 
     private void ApplyTheme(bool dark, bool persist)
     {
-        BtnDarkTheme.IsChecked = dark;
-        BtnDarkTheme.Content = dark ? "Light" : "Dark";
+        bool wasApplying = _isApplyingSettings;
+        _isApplyingSettings = true;
+        try
+        {
+            BtnDisplayDarkTheme.IsChecked = dark;
+            BtnDisplayDarkTheme.Content = dark ? "Light" : "Dark";
+        }
+        finally
+        {
+            _isApplyingSettings = wasApplying;
+        }
 
         Color window = dark ? Color.FromRgb(30, 32, 35) : Color.FromRgb(240, 240, 240);
         Color toolbar = dark ? Color.FromRgb(43, 45, 49) : Color.FromRgb(240, 240, 240);
@@ -7503,6 +13583,27 @@ public partial class MainWindow : Window
         UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(86, 91, 98) : Color.FromRgb(208, 208, 208));
         UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
         UpdateAppBrush("ControlActiveForegroundBrush", dark ? Colors.White : Color.FromRgb(17, 17, 17));
+        UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(90, 160, 235) : Color.FromRgb(37, 99, 166));
+        UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(112, 178, 245) : Color.FromRgb(31, 85, 145));
+        UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(70, 135, 210) : Color.FromRgb(24, 68, 111));
+        UpdateAppBrush("AccentForegroundBrush", Colors.White);
+        UpdateAppBrush("ToolbarBandBrush", dark ? Color.FromRgb(45, 48, 54) : Color.FromRgb(236, 239, 243));
+        UpdateAppBrush("ManagerHeaderBrush", dark ? Color.FromRgb(50, 56, 66) : Color.FromRgb(232, 238, 246));
+        UpdateAppBrush("SubtleButtonBackgroundBrush", dark ? Color.FromRgb(50, 53, 58) : Color.FromRgb(243, 244, 246));
+        UpdateAppBrush("DataGridAltRowBrush", dark ? Color.FromRgb(34, 37, 42) : Color.FromRgb(247, 249, 252));
+        UpdateAppBrush("CommitBrush", dark ? Color.FromRgb(70, 150, 82) : Color.FromRgb(46, 125, 50));
+        UpdateAppBrush("CommitHoverBrush", dark ? Color.FromRgb(84, 168, 96) : Color.FromRgb(39, 109, 44));
+        UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(52, 122, 63) : Color.FromRgb(29, 84, 33));
+
+        // Tree row state — theme-aware (paired light/dark variants)
+        UpdateAppBrush("RowOnPageBrush",        dark ? Color.FromRgb(34, 64, 46)   : Color.FromRgb(214, 245, 222));
+        UpdateAppBrush("RowActiveBrush",        dark ? Color.FromRgb(82, 64, 24)   : Color.FromRgb(255, 236, 190));
+        UpdateAppBrush("RowMultiSelectBrush",   dark ? Color.FromRgb(38, 70, 110)  : Color.FromRgb(205, 226, 255));
+        UpdateAppBrush("RowDropOkBrush",        dark ? Color.FromRgb(40, 86, 58)   : Color.FromRgb(204, 245, 218));
+        UpdateAppBrush("RowDropBadBrush",       dark ? Color.FromRgb(110, 48, 48)  : Color.FromRgb(255, 214, 214));
+        UpdateAppBrush("RowFlagForegroundBrush",dark ? Colors.White                : Color.FromRgb(17, 17, 17));
+        UpdateAppBrush("RowActiveAccentBrush",  dark ? Color.FromRgb(120, 170, 255): Color.FromRgb(31, 82, 166));
+        SetupToolButtonContent();
 
         Background = new SolidColorBrush(window);
         RootDock.Background = new SolidColorBrush(window);
@@ -7561,6 +13662,48 @@ public partial class MainWindow : Window
             return;
 
         AppSettingsStore.Save(_settings);
+    }
+
+    private void ApplySidePanelWidths()
+    {
+        PagesColumn.Width = new GridLength(NormalizePanelWidth(_settings.LeftPanelWidth, 200.0));
+        TakeoffsColumn.Width = new GridLength(NormalizePanelWidth(_settings.RightPanelWidth, 220.0));
+    }
+
+    private void SidePanelSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        SaveSidePanelWidths();
+    }
+
+    private void SidePanel_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_isApplyingSettings || !IsLoaded || !e.WidthChanged)
+            return;
+
+        if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) >= 1.0)
+            SaveSidePanelWidths();
+    }
+
+    private void SaveSidePanelWidths()
+    {
+        double left = NormalizePanelWidth(PagesColumn.ActualWidth, 200.0);
+        double right = NormalizePanelWidth(TakeoffsColumn.ActualWidth, 220.0);
+        if (Math.Abs(_settings.LeftPanelWidth - left) < 0.5 &&
+            Math.Abs(_settings.RightPanelWidth - right) < 0.5)
+        {
+            return;
+        }
+
+        _settings.LeftPanelWidth = left;
+        _settings.RightPanelWidth = right;
+        SaveAppSettings();
+    }
+
+    private static double NormalizePanelWidth(double width, double fallback)
+    {
+        if (!double.IsFinite(width) || width < 120.0)
+            return fallback;
+        return Math.Clamp(width, 120.0, 640.0);
     }
 
     private static Color ParseWpfColor(string color, Color fallback)
@@ -7710,15 +13853,38 @@ public partial class MainWindow : Window
             _inboxExpandedHeight = InboxRow.ActualHeight > 30 ? InboxRow.ActualHeight : _inboxExpandedHeight;
             InboxRow.Height        = new GridLength(30);
             InboxSplitterRow.Height = new GridLength(0);
-            TxtInboxToggle.Text    = "▴";
+            TxtInboxToggle.Text    = "+";
         }
         else
         {
             InboxRow.Height        = new GridLength(_inboxExpandedHeight);
             InboxSplitterRow.Height = new GridLength(4);
-            TxtInboxToggle.Text    = "▾";
+            TxtInboxToggle.Text    = "-";
         }
         _inboxExpanded = !_inboxExpanded;
+    }
+
+    private void BtnInboxMore_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement target)
+            return;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = target,
+            Placement = PlacementMode.Bottom,
+        };
+
+        menu.Items.Add(MakeMenuItem("Run New Bookmarks", _currentJob != null, () => BtnRunNewBookmarks_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Retry Failed Bookmarks", _currentJob != null, () => BtnRetryFailedBookmarks_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Create Marker Set", _currentJob != null, () => BtnCreateMarkerSet_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Manage Marker Sets...", CanManageMarkerSets(), () => BtnManageMarkerSets_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Export Marker Context", _currentJob != null, () => BtnExportMarkers_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Build 3D Draft", _currentJob != null, () => BtnBuildMassingDraft_Click(sender, new RoutedEventArgs())));
+
+        menu.IsOpen = true;
     }
 
     private void LoadObservationsInbox()
@@ -7857,30 +14023,38 @@ public partial class MainWindow : Window
 
             menu.Items.Add(MakeMenuItem("Open Details", true, () => ShowObservationDetailsDialog(selected.Observation)));
             menu.Items.Add(MakeMenuItem("Go to Page", CanGoToObservationPage(selected), () => GoToObservationPage(selected)));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(MakeMenuItem("Open Crop", CanOpenObservationCrop(selected), () => OpenObservationCrop(selected)));
-            menu.Items.Add(MakeMenuItem("Open Crop Folder", CanOpenObservationCrop(selected), () => OpenObservationCropFolder(selected)));
-            menu.Items.Add(MakeMenuItem("Bookmark Crop For Batch AI", CanBookmarkObservationCrop(selected), () => BookmarkObservationCrop(selected)));
-            menu.Items.Add(MakeMenuItem("Open Bookmark JSON", CanOpenCropBookmarkFile(selected), () => OpenCropBookmarkFile(selected)));
-            menu.Items.Add(MakeMenuItem("Edit Marker", CanEditAiMarker(selected), () => EditAiMarker(selected)));
-            menu.Items.Add(MakeMenuItem("Delete Marker", CanEditAiMarker(selected), () => DeleteAiMarker(selected)));
-            menu.Items.Add(MakeMenuItem("Open Marker JSON", CanOpenAiMarkerFile(selected), () => OpenAiMarkerFile(selected)));
-            menu.Items.Add(MakeMenuItem("Find Similar From Marker", CanFindSimilarFromMarker(selected), () => QueueFindSimilarFromMarker(selected)));
-            menu.Items.Add(MakeMenuItem("Create Marker Set From Filter", _currentJob != null, CreateMarkerSetFromCurrentFilter));
-            menu.Items.Add(MakeMenuItem("Manage Marker Sets...", CanManageMarkerSets(), ManageMarkerSets));
-            menu.Items.Add(MakeMenuItem("Export Marker Context", _currentJob != null, () => ExportMarkersContext(openAfterExport: true)));
-            menu.Items.Add(MakeMenuItem("Hide This Marker Type", CanHideAiMarkerType(selected), () => HideAiMarkerType(selected)));
-            menu.Items.Add(MakeMenuItem("Show All Marker Types", _hiddenAiMarkerTypes.Count > 0, ShowAllMarkerTypes));
-            menu.Items.Add(MakeMenuItem("Open Request JSON", CanOpenAiRequestFile(selected), () => OpenAiRequestFile(selected)));
-            menu.Items.Add(MakeMenuItem("Open Layer JSON", CanOpenLayerManifest(selected), () => OpenLayerManifest(selected)));
             menu.Items.Add(MakeMenuItem("Run AI Request", CanRunAiRequest(selected), async () => await RunAiRequestAsync(selected)));
-            menu.Items.Add(MakeMenuItem("Add Manual AI Response", CanAddManualAiResponse(selected), () => AddManualAiResponse(selected)));
-            menu.Items.Add(MakeMenuItem("Open Response JSON", CanOpenAiResponseFile(selected), () => OpenAiResponseFile(selected)));
-            menu.Items.Add(MakeMenuItem("Open Action Draft JSON", CanOpenAiActionDraftFile(selected), () => OpenAiActionDraftFile(selected)));
-            menu.Items.Add(MakeMenuItem("Preview Action Draft", CanPreviewAiActionDraft(selected), () => PreviewAiActionDraft(selected)));
-            menu.Items.Add(MakeMenuItem("Review Action Draft", CanReviewAiActionDraft(selected), () => ReviewAiActionDraft(selected)));
-            menu.Items.Add(MakeMenuItem("Apply Sheet Metadata Response", CanApplySheetMetadataResponse(selected), () => ApplySheetMetadataResponse(selected)));
-            menu.Items.Add(MakeMenuItem("Clear Action Preview", _currentJob != null, ClearAiActionDraftPreview));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MakeSubmenu(
+                "Crop",
+                MakeMenuItem("Open Crop", CanOpenObservationCrop(selected), () => OpenObservationCrop(selected)),
+                MakeMenuItem("Open Crop Folder", CanOpenObservationCrop(selected), () => OpenObservationCropFolder(selected)),
+                MakeMenuItem("Bookmark Crop For Batch AI", CanBookmarkObservationCrop(selected), () => BookmarkObservationCrop(selected)),
+                MakeMenuItem("Open Bookmark JSON", CanOpenCropBookmarkFile(selected), () => OpenCropBookmarkFile(selected))));
+            menu.Items.Add(MakeSubmenu(
+                "Marker",
+                MakeMenuItem("Edit Marker", CanEditAiMarker(selected), () => EditAiMarker(selected)),
+                MakeMenuItem("Delete Marker", CanEditAiMarker(selected), () => DeleteAiMarker(selected)),
+                MakeMenuItem("Find Similar From Marker", CanFindSimilarFromMarker(selected), () => QueueFindSimilarFromMarker(selected)),
+                MakeMenuItem("Create Marker Set From Filter", _currentJob != null, CreateMarkerSetFromCurrentFilter),
+                MakeMenuItem("Manage Marker Sets...", CanManageMarkerSets(), ManageMarkerSets),
+                MakeMenuItem("Export Marker Context", _currentJob != null, () => ExportMarkersContext(openAfterExport: true)),
+                MakeMenuItem("Hide This Marker Type", CanHideAiMarkerType(selected), () => HideAiMarkerType(selected)),
+                MakeMenuItem("Show All Marker Types", _hiddenAiMarkerTypes.Count > 0, ShowAllMarkerTypes)));
+            menu.Items.Add(MakeSubmenu(
+                "AI Response",
+                MakeMenuItem("Add Manual AI Response", CanAddManualAiResponse(selected), () => AddManualAiResponse(selected)),
+                MakeMenuItem("Preview Action Draft", CanPreviewAiActionDraft(selected), () => PreviewAiActionDraft(selected)),
+                MakeMenuItem("Review Action Draft", CanReviewAiActionDraft(selected), () => ReviewAiActionDraft(selected)),
+                MakeMenuItem("Apply Sheet Metadata Response", CanApplySheetMetadataResponse(selected), () => ApplySheetMetadataResponse(selected)),
+                MakeMenuItem("Clear Action Preview", _currentJob != null, ClearAiActionDraftPreview)));
+            menu.Items.Add(MakeSubmenu(
+                "Files",
+                MakeMenuItem("Open Request JSON", CanOpenAiRequestFile(selected), () => OpenAiRequestFile(selected)),
+                MakeMenuItem("Open Layer JSON", CanOpenLayerManifest(selected), () => OpenLayerManifest(selected)),
+                MakeMenuItem("Open Response JSON", CanOpenAiResponseFile(selected), () => OpenAiResponseFile(selected)),
+                MakeMenuItem("Open Action Draft JSON", CanOpenAiActionDraftFile(selected), () => OpenAiActionDraftFile(selected)),
+                MakeMenuItem("Open Marker JSON", CanOpenAiMarkerFile(selected), () => OpenAiMarkerFile(selected))));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open Project Context", _currentJob != null, OpenProjectContextMarkdown));
             menu.Items.Add(MakeMenuItem("Refresh Inbox", true, LoadObservationsInbox));
@@ -9074,6 +15248,52 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BuildMassingDraftFromWallTakeoffs()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before building a 3D draft from takeoffs.";
+            return;
+        }
+
+        double currentLevelSpacing = _settings.MassingLevelSpacingFeet > 0
+            ? _settings.MassingLevelSpacingFeet
+            : SmartMassingDraftService.DefaultLevelSpacingFeet;
+        string? rawLevelSpacing = ShowInputDialog(
+            "Default level spacing and roof step, feet (1st=0, 2nd=+spacing, roof=last+spacing):",
+            currentLevelSpacing.ToString("G", CultureInfo.InvariantCulture),
+            "3D From Takeoffs");
+        if (rawLevelSpacing == null)
+            return;
+        if (!double.TryParse(rawLevelSpacing.Replace(",", "."), NumberStyles.Float, CultureInfo.InvariantCulture, out double levelSpacingFeet) ||
+            levelSpacingFeet <= 0 ||
+            levelSpacingFeet > 40)
+        {
+            MessageBox.Show("Enter a level spacing value between 1 and 40 feet.", "3D From Takeoffs", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            _settings.MassingLevelSpacingFeet = levelSpacingFeet;
+            SaveAppSettings();
+
+            SmartMassingDraft draft = SmartMassingDraftService.SaveDraftFromWallTakeoffs(_currentJob, levelSpacingFeet);
+            string path = SmartMassingDraftService.ModelPath(_currentJob);
+            RefreshMassingDraftPanel(draft, path);
+            if (_rightWorkspaceTabs != null && _massingTab != null)
+                _rightWorkspaceTabs.SelectedItem = _massingTab;
+
+            string summary = BuildMassingDraftSummary(draft, path);
+            TxtStatus.Text = $"Saved 3D draft from takeoffs -> {Path.GetRelativePath(_currentJob.RootPath, path)}";
+            MessageBox.Show(summary, "3D From Takeoffs", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("3D From Takeoffs", ex);
+        }
+    }
+
     private void OpenMassingDraftJson()
     {
         if (_currentJob == null)
@@ -9083,6 +15303,42 @@ public partial class MainWindow : Window
         }
 
         OpenJsonFile(SmartMassingDraftService.ModelPath(_currentJob), "3D massing draft JSON is missing.");
+    }
+
+    private void OpenMassing3DWindow()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before opening the 3D viewport.";
+            return;
+        }
+
+        try
+        {
+            SmartMassingDraft? draft = _currentMassingDraft;
+            string path = SmartMassingDraftService.ModelPath(_currentJob);
+            if (draft == null && File.Exists(path))
+                draft = SmartMassingDraftService.LoadDraft(_currentJob);
+
+            IReadOnlyList<SmartAiMarker> markers = SmartContextStore.LoadAiMarkers(_currentJob);
+            if (draft == null && markers.Count > 0)
+                draft = SmartMassingDraftService.BuildDraftFromMarkers(_currentJob);
+            if (draft != null)
+                SmartMassingDraftService.RefreshDerivedGeometry(draft);
+
+            var window = new Massing3DWindow(_currentJob, draft, markers)
+            {
+                Owner = this,
+            };
+            window.Show();
+
+            int footprintPoints = draft?.Footprints.Sum(footprint => footprint.Points.Count) ?? 0;
+            TxtStatus.Text = $"Opened 3D viewport window with {markers.Count} marker(s) and {footprintPoints} footprint point(s).";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Open 3D Viewport", ex);
+        }
     }
 
     private void RefreshMassingDraftPanel(SmartMassingDraft? draft = null, string? path = null)
@@ -9150,8 +15406,12 @@ public partial class MainWindow : Window
         _massingViewport3D.Children.Clear();
         _massing3DObjectInfo.Clear();
 
-        SmartMassingFootprint? footprint = draft?.Footprints.FirstOrDefault(footprint => footprint.Points.Count >= 3);
-        if (draft == null || footprint == null)
+        List<SmartMassingFootprint> footprints = draft?.Footprints
+            .Where(footprint => footprint.Points.Count >= 3)
+            .OrderBy(footprint => SmartMassingDraftService.DisplayBaseElevation(draft, footprint))
+            .ThenBy(footprint => footprint.Level)
+            .ToList() ?? [];
+        if (draft == null || footprints.Count == 0)
         {
             if (_massingViewportStatusText != null)
                 _massingViewportStatusText.Text = draft == null
@@ -9161,7 +15421,7 @@ public partial class MainWindow : Window
         }
 
         SmartMassingDraftService.RefreshDerivedGeometry(draft);
-        if (!TryGetMassing3DBounds(draft, footprint, out double minX, out double maxX, out double minY, out double maxY, out double maxZ))
+        if (!TryGetMassing3DBounds(draft, out double minX, out double maxX, out double minY, out double maxY, out double maxZ))
         {
             if (_massingViewportStatusText != null)
                 _massingViewportStatusText.Text = "Draft bounds are not valid for 3D preview.";
@@ -9180,10 +15440,13 @@ public partial class MainWindow : Window
         group.Children.Add(new DirectionalLight(Color.FromRgb(245, 245, 245), new Vector3D(-0.45, -0.8, -0.35)));
         group.Children.Add(new DirectionalLight(Color.FromRgb(130, 160, 190), new Vector3D(0.65, -0.35, 0.55)));
 
-        AddMassingFootprint3D(group, draft, footprint, centerX, centerY);
+        foreach (SmartMassingFootprint footprint in footprints)
+        {
+            AddMassingFootprint3D(group, draft, footprint, centerX, centerY);
+            AddMassingMarkerPins3D(group, draft, footprint, centerX, centerY);
+        }
         AddMassingRoofPlanes3D(group, draft, centerX, centerY);
-        AddMassingOpenings3D(group, draft, footprint, centerX, centerY);
-        AddMassingMarkerPins3D(group, draft, footprint, centerX, centerY);
+        AddMassingOpenings3D(group, draft, centerX, centerY);
 
         _massingViewport3D.Children.Add(new ModelVisual3D { Content = group });
         EnsureMassingCamera();
@@ -9191,10 +15454,10 @@ public partial class MainWindow : Window
 
         if (_massingViewportStatusText != null)
         {
-            int wallCount = footprint.Points.Count;
+            int wallCount = footprints.Sum(footprint => footprint.Points.Count);
             int roofPlanes = draft.Roof.Planes.Count(plane => !string.Equals(plane.Status, "rejected", StringComparison.OrdinalIgnoreCase));
             int openings = draft.Openings.Count(opening => !string.Equals(opening.Status, "rejected", StringComparison.OrdinalIgnoreCase));
-            _massingViewportStatusText.Text = $"3D shell | walls: {wallCount} | roof planes: {roofPlanes} | openings: {openings} | roof: {draft.Roof.Type} ({draft.Roof.Status})";
+            _massingViewportStatusText.Text = $"3D shell | levels: {footprints.Count} | walls: {wallCount} | roof planes: {roofPlanes} | openings: {openings} | roof: {draft.Roof.Type} ({draft.Roof.Status})";
         }
     }
 
@@ -9205,16 +15468,17 @@ public partial class MainWindow : Window
         double centerX,
         double centerY)
     {
-        double wallTopZ = SmartMassingDraftService.DisplayWallHeight(draft, footprint);
+        double baseZ = SmartMassingDraftService.DisplayBaseElevation(draft, footprint);
+        double wallTopZ = SmartMassingDraftService.DisplayWallTopElevation(draft, footprint);
         var floor = footprint.Points
-            .Select(point => ToMassing3DPoint(point.X, point.Y, 0, centerX, centerY))
+            .Select(point => ToMassing3DPoint(point.X, point.Y, baseZ, centerX, centerY))
             .ToList();
         AddMassingSurface(
             group,
             new Massing3DObjectInfo(
+                $"floor_level_{footprint.Level}",
                 "floor",
-                "floor",
-                "Floor/footprint",
+                $"Level {footprint.Level} floor/footprint",
                 footprint.SourceMarkerIds,
                 "Floor cap generated from exterior corner markers."),
             floor,
@@ -9236,14 +15500,14 @@ public partial class MainWindow : Window
             AddMassingSurface(
                 group,
                 new Massing3DObjectInfo(
-                    $"wall_{i + 1}",
+                    $"wall_level_{footprint.Level}_{i + 1}",
                     "wall",
-                    $"Wall {i + 1}",
+                    $"Level {footprint.Level} wall {i + 1}",
                     sourceIds,
                     "Wall face generated by extruding adjacent footprint points."),
                 [
-                    ToMassing3DPoint(start.X, start.Y, 0, centerX, centerY),
-                    ToMassing3DPoint(end.X, end.Y, 0, centerX, centerY),
+                    ToMassing3DPoint(start.X, start.Y, baseZ, centerX, centerY),
+                    ToMassing3DPoint(end.X, end.Y, baseZ, centerX, centerY),
                     ToMassing3DPoint(end.X, end.Y, wallTopZ, centerX, centerY),
                     ToMassing3DPoint(start.X, start.Y, wallTopZ, centerX, centerY),
                 ],
@@ -9287,13 +15551,14 @@ public partial class MainWindow : Window
     private void AddMassingOpenings3D(
         Model3DGroup group,
         SmartMassingDraft draft,
-        SmartMassingFootprint footprint,
         double centerX,
         double centerY)
     {
         foreach (SmartMassingOpening opening in draft.Openings)
         {
+            SmartMassingFootprint? footprint = FootprintForMassingOpening(draft, opening);
             if (string.Equals(opening.Status, "rejected", StringComparison.OrdinalIgnoreCase) ||
+                footprint == null ||
                 opening.WallIndex < 0 ||
                 opening.WallIndex >= footprint.Points.Count ||
                 opening.Width <= 0 ||
@@ -9353,7 +15618,8 @@ public partial class MainWindow : Window
         double centerX,
         double centerY)
     {
-        double wallTopZ = SmartMassingDraftService.DisplayWallHeight(draft, footprint);
+        double baseZ = SmartMassingDraftService.DisplayBaseElevation(draft, footprint);
+        double wallHeight = SmartMassingDraftService.DisplayWallHeight(draft, footprint);
         foreach (SmartMassingPoint point in footprint.Points)
         {
             if (string.IsNullOrWhiteSpace(point.SourceMarkerId))
@@ -9364,12 +15630,12 @@ public partial class MainWindow : Window
                 "marker_pin",
                 "Exterior corner marker",
                 point.SourceMarkerId,
-                ToMassing3DPoint(point.X, point.Y, 0, centerX, centerY),
+                ToMassing3DPoint(point.X, point.Y, baseZ, centerX, centerY),
                 Color.FromRgb(56, 189, 248),
-                wallTopZ);
+                wallHeight);
         }
 
-        foreach (SmartMassingOpening opening in draft.Openings)
+        foreach (SmartMassingOpening opening in draft.Openings.Where(opening => opening.Level == footprint.Level))
         {
             if (string.IsNullOrWhiteSpace(opening.SourceMarkerId))
                 continue;
@@ -9381,7 +15647,7 @@ public partial class MainWindow : Window
                 opening.SourceMarkerId,
                 ToMassing3DPoint(opening.Center.X, opening.Center.Y, opening.Center.Z, centerX, centerY),
                 Color.FromRgb(244, 114, 182),
-                wallTopZ);
+                wallHeight);
         }
     }
 
@@ -9503,7 +15769,6 @@ public partial class MainWindow : Window
 
     private static bool TryGetMassing3DBounds(
         SmartMassingDraft draft,
-        SmartMassingFootprint footprint,
         out double minX,
         out double maxX,
         out double minY,
@@ -9511,9 +15776,15 @@ public partial class MainWindow : Window
         out double maxZ)
     {
         var vertices = new List<SmartMassingVertex>();
-        double wallTopZ = SmartMassingDraftService.DisplayWallHeight(draft, footprint);
-        vertices.AddRange(footprint.Points.Select(point => new SmartMassingVertex { X = point.X, Y = point.Y, Z = wallTopZ }));
+        foreach (SmartMassingFootprint footprint in draft.Footprints.Where(footprint => footprint.Points.Count >= 3))
+        {
+            double baseZ = SmartMassingDraftService.DisplayBaseElevation(draft, footprint);
+            double wallTopZ = SmartMassingDraftService.DisplayWallTopElevation(draft, footprint);
+            vertices.AddRange(footprint.Points.Select(point => new SmartMassingVertex { X = point.X, Y = point.Y, Z = baseZ }));
+            vertices.AddRange(footprint.Points.Select(point => new SmartMassingVertex { X = point.X, Y = point.Y, Z = wallTopZ }));
+        }
         vertices.AddRange(draft.Roof.Planes.SelectMany(plane => plane.Points));
+        vertices.AddRange(draft.Openings.Select(opening => opening.Center));
 
         vertices = vertices
             .Where(point =>
@@ -9533,6 +15804,18 @@ public partial class MainWindow : Window
         maxY = vertices.Max(point => point.Y);
         maxZ = Math.Max(1, vertices.Max(point => point.Z));
         return maxX > minX && maxY > minY;
+    }
+
+    private static SmartMassingFootprint? FootprintForMassingOpening(SmartMassingDraft draft, SmartMassingOpening opening)
+    {
+        SmartMassingFootprint? exact = draft.Footprints
+            .Where(footprint => footprint.Points.Count >= 3)
+            .FirstOrDefault(footprint => footprint.Level == opening.Level);
+        return exact ?? draft.Footprints
+            .Where(footprint => footprint.Points.Count >= 3)
+            .OrderByDescending(footprint => SmartMassingDraftService.DisplayWallTopElevation(draft, footprint))
+            .ThenByDescending(footprint => footprint.Level)
+            .FirstOrDefault();
     }
 
     private void EnsureMassingCamera()
@@ -9773,7 +16056,7 @@ public partial class MainWindow : Window
                 Stroke = footprintStroke,
                 StrokeThickness = 1.5,
                 Points = new PointCollection(footprint.Points.Select(Project)),
-                ToolTip = $"{footprint.Id}: {footprint.Points.Count} points, height {footprint.Height:F2} {footprint.HeightUnits}",
+                ToolTip = $"{footprint.Id}: level {footprint.Level}, base {footprint.BaseElevation:F2} {footprint.BaseElevationUnits}, height {footprint.Height:F2} {footprint.HeightUnits}, {footprint.Points.Count} points",
             };
             _massingPreviewCanvas.Children.Add(polygon);
         }
@@ -9924,7 +16207,7 @@ public partial class MainWindow : Window
         {
             Text = text,
             FontSize = 10,
-            FontWeight = selected ? FontWeights.Bold : FontWeights.SemiBold,
+            FontWeight = FontWeights.Normal,
             Foreground = foreground,
             Background = new SolidColorBrush(Color.FromArgb(170, 20, 20, 20)),
             Padding = new Thickness(3, 1, 3, 1),
@@ -9965,7 +16248,7 @@ public partial class MainWindow : Window
         {
             Text = index.ToString(CultureInfo.InvariantCulture),
             FontSize = 10,
-            FontWeight = selected ? FontWeights.Bold : FontWeights.Normal,
+            FontWeight = FontWeights.Normal,
             Foreground = selected ? selectedStroke : PreviewForegroundBrush(),
         };
         Canvas.SetLeft(label, point.X + 6);
@@ -10022,11 +16305,12 @@ public partial class MainWindow : Window
         foreach (SmartMassingFootprint footprint in draft.Footprints)
         {
             foreach (string markerId in footprint.SourceMarkerIds)
-                AddMarkerRole(markerId, "Footprint");
+                AddMarkerRole(markerId, $"Level {footprint.Level} footprint");
+            double baseZ = SmartMassingDraftService.DisplayBaseElevation(draft, footprint);
             foreach (SmartMassingPoint point in footprint.Points)
             {
-                AddMarkerRole(point.SourceMarkerId, "Corner");
-                draftPoints[point.SourceMarkerId] = $"{point.X:F2}, {point.Y:F2}";
+                AddMarkerRole(point.SourceMarkerId, $"Level {footprint.Level} corner");
+                draftPoints[point.SourceMarkerId] = $"{point.X:F2}, {point.Y:F2}, z {baseZ:F2}";
             }
         }
 
@@ -10239,7 +16523,9 @@ public partial class MainWindow : Window
         {
             sb.AppendLine();
             sb.AppendLine($"Footprint {footprint.Id}");
+            sb.AppendLine($"- Level: {footprint.Level}");
             sb.AppendLine($"- Page: {footprint.Page}");
+            sb.AppendLine($"- Base elevation: {footprint.BaseElevation:F2} {footprint.BaseElevationUnits}");
             sb.AppendLine($"- Height: {footprint.Height:F2} {footprint.HeightUnits}");
             sb.AppendLine($"- Confidence: {footprint.Confidence:P0}");
             sb.AppendLine($"- Points: {footprint.Points.Count}");
@@ -10251,6 +16537,8 @@ public partial class MainWindow : Window
         sb.AppendLine("Roof");
         sb.AppendLine($"- Status: {draft.Roof.Status}");
         sb.AppendLine($"- Type: {draft.Roof.Type}");
+        if (draft.Roof.Elevation > 0)
+            sb.AppendLine($"- Elevation: {draft.Roof.Elevation:F2} {draft.Roof.ElevationUnits}");
         sb.AppendLine($"- Pitch: {(string.IsNullOrWhiteSpace(draft.Roof.Pitch) ? "unknown" : draft.Roof.Pitch)}");
         sb.AppendLine($"- Confidence: {draft.Roof.Confidence:P0}");
         if (!string.IsNullOrWhiteSpace(draft.Roof.ReviewedAtUtc))
@@ -10577,7 +16865,7 @@ public partial class MainWindow : Window
         {
             Text = $"Markers: {markerCount}   Type: {SelectedMarkerTypeFilterForMarkers()}   Sample: {SelectedMarkerSampleFilter()}",
             Margin = new Thickness(0, 0, 0, 10),
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
         });
 
         panel.Children.Add(new TextBlock { Text = "Set name", Margin = new Thickness(0, 0, 0, 4) });
@@ -11079,7 +17367,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!PdfSheetMetadataService.TryBuildMetadataFromFallbackResponse(page, request, response, out PdfSheetMetadata metadata, out string error))
+        if (!PdfSheetMetadataService.TryBuildMetadataFromFallbackResponse(page, request, response, out PdfSheetMetadata metadata, out string error, _currentJob))
         {
             MessageBox.Show(error, "Apply Sheet Metadata Response", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -12184,7 +18472,7 @@ public partial class MainWindow : Window
             return existing;
 
         string name = AiActionTakeoffName(action, measurementType);
-        var created = CreateUniqueTakeoffItem(name, "#00BCD4", measurementType, CurrentTakeoffParentFolder());
+        var created = CreateUniqueTakeoffItem(name, "#00BCD4", measurementType, NewTakeoffItemParentFolder());
         _takeoffItems.Add(created);
         var parent = FindTakeoffTreeItemByFolder(Path.GetDirectoryName(created.FolderPath) ?? "") ?? (ItemsControl)TakeoffsTree;
         var tvi = AddTakeoffTreeItem(created, parent);
@@ -12201,7 +18489,10 @@ public partial class MainWindow : Window
         Dictionary<string, TakeoffItem> createdByType)
     {
         if (_activeItem != null &&
-            string.Equals(_activeItem.MeasurementType, measurementType, StringComparison.OrdinalIgnoreCase))
+            string.Equals(
+                SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType),
+                measurementType,
+                StringComparison.OrdinalIgnoreCase))
         {
             return _activeItem;
         }
@@ -12210,7 +18501,7 @@ public partial class MainWindow : Window
             return existing;
 
         string name = AiActionTakeoffName(action, measurementType);
-        var created = CreateUniqueTakeoffItem(name, "#00BCD4", measurementType, CurrentTakeoffParentFolder());
+        var created = CreateUniqueTakeoffItem(name, "#00BCD4", measurementType, NewTakeoffItemParentFolder());
         _takeoffItems.Add(created);
         var parent = FindTakeoffTreeItemByFolder(Path.GetDirectoryName(created.FolderPath) ?? "") ?? (ItemsControl)TakeoffsTree;
         var tvi = AddTakeoffTreeItem(created, parent);
@@ -12402,7 +18693,7 @@ public partial class MainWindow : Window
         var header = new TextBlock
         {
             Text = $"{display.TypeShort} | Page: {(string.IsNullOrWhiteSpace(display.Page) ? "Unassigned" : display.Page)} | {display.TimeDisplay}",
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
             Margin = new Thickness(0, 0, 0, 8),
         };
         DockPanel.SetDock(header, Dock.Top);
@@ -12540,6 +18831,7 @@ public partial class MainWindow : Window
         public string BadgeColor  { get; }
         public string Page        { get; }
         public string TextPreview { get; }
+        public string QualityPreview { get; }
         public string TimeDisplay { get; }
         public string CropRelativePath { get; }
         public SmartObservation Observation { get; }
@@ -12561,6 +18853,7 @@ public partial class MainWindow : Window
                 raw = $"{raw} | {markerQuality.Trim()}";
             if (!string.IsNullOrWhiteSpace(statusPrefix))
                 raw = statusPrefix + raw;
+            QualityPreview = markerQuality;
             TextPreview = raw.Length > 120 ? raw[..117] + "…" : raw;
 
             (TypeShort, BadgeColor) = obs.Type switch
@@ -12632,6 +18925,18 @@ public partial class MainWindow : Window
         TakeoffItem? Takeoff,
         Measurement? Measurement);
 
+    private sealed record TakeoffManagerRow(
+        string Name,
+        string Type,
+        string Sections,
+        string Total,
+        string Unit,
+        string UnitPrice,
+        string Cost,
+        string Notes,
+        string Folder,
+        TakeoffItem Item);
+
     private sealed class MassingMarkerReviewRow
     {
         public string MarkerId { get; init; } = "";
@@ -12654,6 +18959,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        SaveSidePanelWidths();
+        SaveCurrentPageAnnotations();
         base.OnClosed(e);
         FlushTakeoffAutosaves();
         PdfLayerRenderService.StopWorker();

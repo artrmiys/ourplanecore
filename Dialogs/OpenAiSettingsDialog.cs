@@ -32,7 +32,7 @@ public sealed class OpenAiSettingsDialog : Window
         root.Children.Add(new TextBlock
         {
             Text = "API key",
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
             Margin = new Thickness(0, 0, 0, 6),
         });
 
@@ -72,7 +72,7 @@ public sealed class OpenAiSettingsDialog : Window
         root.Children.Add(new TextBlock
         {
             Text = "Model",
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
             Margin = new Thickness(0, 0, 0, 6),
         });
         _modelBox = new ComboBox

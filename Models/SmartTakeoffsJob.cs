@@ -42,6 +42,7 @@ public sealed class PageInfo
     public double ScaleMetersPerPt { get; set; }
     public bool PdfLayersCached { get; init; }
     public IReadOnlyList<PdfLayerInfo> PdfLayers { get; init; } = [];
+    public List<string> LegendTakeoffOrder { get; set; } = [];
 }
 
 public sealed class SourceInfo
@@ -60,6 +61,9 @@ public sealed class SourceInfo
 
     [JsonPropertyName("pdf_layers")]
     public List<PdfLayerInfo> PdfLayers { get; set; } = [];
+
+    [JsonPropertyName("legend_takeoff_order")]
+    public List<string> LegendTakeoffOrder { get; set; } = [];
 }
 
 public sealed class PdfLayerInfo
@@ -120,6 +124,36 @@ internal sealed class MeasurementDto
 
     [JsonPropertyName("scale_m_per_pt")]
     public double ScaleMetersPerPt { get; set; }
+
+    [JsonPropertyName("joist_direction_degrees")]
+    public double JoistDirectionDegrees { get; set; }
+
+    [JsonPropertyName("joist_direction_locked")]
+    public bool JoistDirectionLocked { get; set; }
+}
+
+internal sealed class PageAnnotationDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("kind")]
+    public string Kind { get; set; } = "line";
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("color")]
+    public string Color { get; set; } = "#1565C0";
+
+    [JsonPropertyName("page_folder")]
+    public string PageFolder { get; set; } = "";
+
+    [JsonPropertyName("scale_m_per_pt")]
+    public double ScaleMetersPerPt { get; set; }
+
+    [JsonPropertyName("points_pdf")]
+    public List<PointDto> PointsPdf { get; set; } = [];
 }
 
 internal sealed record PointDto(float X, float Y);
@@ -306,6 +340,7 @@ public static class SmartTakeoffsJobStore
             ScaleMetersPerPt = src.ScaleMetersPerPt,
             PdfLayersCached = src.PdfLayersCached,
             PdfLayers = src.PdfLayers,
+            LegendTakeoffOrder = src.LegendTakeoffOrder ?? [],
         };
     }
 
@@ -315,7 +350,16 @@ public static class SmartTakeoffsJobStore
         if (src == null) return;
 
         string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(pageFolder, pdfAbs, src.Page, scaleMetersPerPt, src.PdfLayers, src.PdfLayersCached);
+        WriteSource(pageFolder, pdfAbs, src.Page, scaleMetersPerPt, src.PdfLayers, src.PdfLayersCached, src.LegendTakeoffOrder);
+    }
+
+    public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder)
+    {
+        SourceInfo? src = ReadSource(pageFolder);
+        if (src == null) return;
+
+        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        WriteSource(pageFolder, pdfAbs, src.Page, src.ScaleMetersPerPt, src.PdfLayers, src.PdfLayersCached, legendTakeoffOrder);
     }
 
     public static string CreateTakeoffFolder(SmartTakeoffsJob job, string parentFolder, string name)
@@ -379,8 +423,15 @@ public static class SmartTakeoffsJobStore
             MeasurementType = measurementType,
             UnitPrice = ParseDouble(ReadProperty(folder, "UnitPrice")),
             Notes = ReadProperty(folder, "Notes") ?? "",
+            IsJoistTakeoff = ParseBool(ReadProperty(folder, "JoistEnabled")),
+            JoistType = ReadProperty(folder, "JoistType") ?? "",
+            JoistSpacingInches = ParsePositiveDouble(ReadProperty(folder, "JoistSpacingInches"), 16),
+            JoistDirectionDegrees = ParseDouble(ReadProperty(folder, "JoistDirectionDegrees")),
+            JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(ReadProperty(folder, "JoistLengthRounding")),
+            JoistShowLabels = ParseBool(ReadProperty(folder, "JoistShowLabels")),
         };
         item.Measurements.AddRange(measurements);
+        ApplyTakeoffPropertiesToMeasurements(item);
         return item;
     }
 
@@ -395,6 +446,12 @@ public static class SmartTakeoffsJobStore
         SetProperty(item.FolderPath, "MeasurementType", NormalizeMeasurementType(item.MeasurementType));
         SetProperty(item.FolderPath, "UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture));
         SetProperty(item.FolderPath, "Notes", item.Notes);
+        SetProperty(item.FolderPath, "JoistEnabled", (item.IsJoistArea).ToString(CultureInfo.InvariantCulture));
+        SetProperty(item.FolderPath, "JoistType", item.JoistType ?? "");
+        SetProperty(item.FolderPath, "JoistSpacingInches", Math.Max(0.001, item.JoistSpacingInches).ToString("G17", CultureInfo.InvariantCulture));
+        SetProperty(item.FolderPath, "JoistDirectionDegrees", item.JoistDirectionDegrees.ToString("G17", CultureInfo.InvariantCulture));
+        SetProperty(item.FolderPath, "JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding));
+        SetProperty(item.FolderPath, "JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture));
         SetProperty(item.FolderPath, "MeasurementCount", item.Measurements.Count.ToString());
         SetProperty(item.FolderPath, "MeasuredPageCount", item.Measurements
             .Select(m => m.PageFolder)
@@ -402,7 +459,26 @@ public static class SmartTakeoffsJobStore
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count()
             .ToString());
+        ApplyTakeoffPropertiesToMeasurements(item);
         SaveMeasurements(item.FolderPath, item.Measurements);
+    }
+
+    public static void ApplyTakeoffPropertiesToMeasurements(TakeoffItem item)
+    {
+        bool joistEnabled = item.IsJoistArea;
+        string rounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
+        foreach (Measurement measurement in item.Measurements)
+        {
+            measurement.TakeoffFolder = item.FolderPath;
+            measurement.JoistEnabled = joistEnabled &&
+                NormalizeMeasurementType(measurement.MType) == "area";
+            measurement.JoistType = item.JoistType ?? "";
+            measurement.JoistSpacingInches = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
+            if (!measurement.JoistDirectionLocked)
+                measurement.JoistDirectionDegrees = item.JoistDirectionDegrees;
+            measurement.JoistLengthRounding = rounding;
+            measurement.JoistShowLabels = item.JoistShowLabels;
+        }
     }
 
     public static List<Measurement> LoadMeasurements(string takeoffFolder)
@@ -429,6 +505,8 @@ public static class SmartTakeoffsJobStore
                     PageFolder = dto.PageFolder,
                     TakeoffFolder = takeoffFolder,
                     ScaleMetersPerPt = scale,
+                    JoistDirectionDegrees = dto.JoistDirectionDegrees,
+                    JoistDirectionLocked = dto.JoistDirectionLocked,
                     Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                 };
             }).ToList();
@@ -451,6 +529,8 @@ public static class SmartTakeoffsJobStore
             Color = m.Color,
             PageFolder = m.PageFolder,
             ScaleMetersPerPt = m.ScaleMetersPerPt,
+            JoistDirectionDegrees = m.JoistDirectionDegrees,
+            JoistDirectionLocked = m.JoistDirectionLocked,
             PointsPdf = m.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
         }).ToList();
 
@@ -466,6 +546,57 @@ public static class SmartTakeoffsJobStore
         }
     }
 
+    public static List<PageAnnotation> LoadPageAnnotations(string pageFolder)
+    {
+        string path = PageAnnotationsJsonPath(pageFolder);
+        if (!File.Exists(path)) return [];
+
+        try
+        {
+            var dtos = JsonSerializer.Deserialize<List<PageAnnotationDto>>(File.ReadAllText(path)) ?? [];
+            return dtos.Select(dto => new PageAnnotation
+            {
+                Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
+                Kind = NormalizePageAnnotationKind(dto.Kind),
+                Text = dto.Text ?? "",
+                Color = string.IsNullOrWhiteSpace(dto.Color) ? "#1565C0" : dto.Color,
+                PageFolder = string.IsNullOrWhiteSpace(dto.PageFolder) ? pageFolder : dto.PageFolder,
+                ScaleMetersPerPt = dto.ScaleMetersPerPt,
+                Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
+            }).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations)
+    {
+        Directory.CreateDirectory(pageFolder);
+        var dtos = annotations.Select(annotation => new PageAnnotationDto
+        {
+            Id = annotation.Id,
+            Kind = NormalizePageAnnotationKind(annotation.Kind),
+            Text = annotation.Text ?? "",
+            Color = string.IsNullOrWhiteSpace(annotation.Color) ? "#1565C0" : annotation.Color,
+            PageFolder = string.IsNullOrWhiteSpace(annotation.PageFolder) ? pageFolder : annotation.PageFolder,
+            ScaleMetersPerPt = annotation.ScaleMetersPerPt,
+            PointsPdf = annotation.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
+        }).ToList();
+
+        try
+        {
+            File.WriteAllText(
+                PageAnnotationsJsonPath(pageFolder),
+                JsonSerializer.Serialize(dtos, JsonOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(PageAnnotationsJsonPath(pageFolder))}': {ex.Message}", ex);
+        }
+    }
+
     public static bool IsPageFolder(string folder) =>
         File.Exists(Path.Combine(folder, "source.json"));
 
@@ -474,6 +605,21 @@ public static class SmartTakeoffsJobStore
 
     private static string MeasurementsJsonPath(string takeoffFolder) =>
         Path.Combine(takeoffFolder, "measurements.json");
+
+    public static string PageAnnotationsJsonPath(string pageFolder) =>
+        Path.Combine(pageFolder, "annotations.json");
+
+    public static string NormalizePageAnnotationKind(string value)
+    {
+        string clean = (value ?? "").Trim().ToLowerInvariant();
+        return clean switch
+        {
+            "dimension" or "ruler" => "dimension",
+            "arrow" => "arrow",
+            "rectangle" or "rect" or "box" => "rectangle",
+            _ => "line",
+        };
+    }
 
     public static bool IsTakeoffItemFolder(string folder)
     {
@@ -584,6 +730,30 @@ public static class SmartTakeoffsJobStore
         return true;
     }
 
+    public static bool CanMoveSiblings(IEnumerable<string> folders, int offset) =>
+        TryBuildSiblingMove(folders, offset, out _);
+
+    public static bool MoveSiblings(IEnumerable<string> folders, int offset)
+    {
+        if (!TryBuildSiblingMove(folders, offset, out var siblings))
+            return false;
+
+        ApplySiblingOrder(siblings);
+        return true;
+    }
+
+    public static bool CanMoveSiblingsToPosition(IEnumerable<string> folders, string targetFolder, bool after) =>
+        TryBuildSiblingPositionMove(folders, targetFolder, after, out _);
+
+    public static bool MoveSiblingsToPosition(IEnumerable<string> folders, string targetFolder, bool after)
+    {
+        if (!TryBuildSiblingPositionMove(folders, targetFolder, after, out var siblings))
+            return false;
+
+        ApplySiblingOrder(siblings);
+        return true;
+    }
+
     public static void SortChildren(string parentFolder, bool descending)
     {
         var children = Directory.EnumerateDirectories(parentFolder)
@@ -627,8 +797,17 @@ public static class SmartTakeoffsJobStore
         return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
     }
 
-    public static string NormalizeMeasurementType(string value) =>
-        value is "point" or "area" ? value : "line";
+    public static string NormalizeMeasurementType(string value)
+    {
+        string clean = (value ?? "").Trim().ToLowerInvariant();
+        return clean switch
+        {
+            "point" or "count" or "counts" or "ea" or "each" => "point",
+            "area" or "sf" or "sqft" or "square" => "area",
+            "line" or "linear" or "lf" or "ft" => "line",
+            _ => "line",
+        };
+    }
 
     public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers)
     {
@@ -636,7 +815,7 @@ public static class SmartTakeoffsJobStore
         if (src == null) return;
 
         string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(pageFolder, pdfAbs, src.Page, src.ScaleMetersPerPt, pdfLayers, pdfLayersCached: true);
+        WriteSource(pageFolder, pdfAbs, src.Page, src.ScaleMetersPerPt, pdfLayers, pdfLayersCached: true, src.LegendTakeoffOrder);
     }
 
     public static string PageLayersJsonPath(string pageFolder) =>
@@ -696,7 +875,8 @@ public static class SmartTakeoffsJobStore
         int pageIndex,
         double scaleMetersPerPt,
         IReadOnlyList<PdfLayerInfo>? pdfLayers = null,
-        bool pdfLayersCached = false)
+        bool pdfLayersCached = false,
+        IReadOnlyList<string>? legendTakeoffOrder = null)
     {
         var src = new SourceInfo
         {
@@ -705,6 +885,10 @@ public static class SmartTakeoffsJobStore
             ScaleMetersPerPt = scaleMetersPerPt,
             PdfLayersCached = pdfLayersCached,
             PdfLayers = pdfLayers?.ToList() ?? [],
+            LegendTakeoffOrder = legendTakeoffOrder?
+                .Where(entry => !string.IsNullOrWhiteSpace(entry))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? [],
         };
         try
         {
@@ -830,6 +1014,121 @@ public static class SmartTakeoffsJobStore
         return max + 1;
     }
 
+    private static bool TryBuildSiblingMove(IEnumerable<string> folders, int offset, out List<string> siblings)
+    {
+        siblings = [];
+        if (offset == 0)
+            return false;
+
+        var selected = folders
+            .Where(Directory.Exists)
+            .Select(NormalizeFolderPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (selected.Count == 0)
+            return false;
+
+        string parent = Path.GetDirectoryName(selected[0]) ?? "";
+        if (string.IsNullOrWhiteSpace(parent) ||
+            selected.Any(path => !string.Equals(Path.GetDirectoryName(path) ?? "", parent, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var orderedSiblings = GetOrderedChildDirectories(parent)
+            .Select(NormalizeFolderPath)
+            .ToList();
+        siblings = orderedSiblings;
+        if (siblings.Count <= 1 || selected.Count >= siblings.Count)
+            return false;
+
+        var selectedSet = selected.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedSet.Any(path => !orderedSiblings.Contains(path, StringComparer.OrdinalIgnoreCase)))
+            return false;
+
+        bool moved = false;
+        if (offset < 0)
+        {
+            for (int i = 1; i < siblings.Count; i++)
+            {
+                if (selectedSet.Contains(siblings[i]) && !selectedSet.Contains(siblings[i - 1]))
+                {
+                    (siblings[i - 1], siblings[i]) = (siblings[i], siblings[i - 1]);
+                    moved = true;
+                }
+            }
+        }
+        else
+        {
+            for (int i = siblings.Count - 2; i >= 0; i--)
+            {
+                if (selectedSet.Contains(siblings[i]) && !selectedSet.Contains(siblings[i + 1]))
+                {
+                    (siblings[i], siblings[i + 1]) = (siblings[i + 1], siblings[i]);
+                    moved = true;
+                }
+            }
+        }
+
+        return moved;
+    }
+
+    private static bool TryBuildSiblingPositionMove(
+        IEnumerable<string> folders,
+        string targetFolder,
+        bool after,
+        out List<string> siblings)
+    {
+        siblings = [];
+
+        var selected = folders
+            .Where(Directory.Exists)
+            .Select(NormalizeFolderPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (selected.Count == 0 || !Directory.Exists(targetFolder))
+            return false;
+
+        string target = NormalizeFolderPath(targetFolder);
+        string parent = Path.GetDirectoryName(selected[0]) ?? "";
+        string targetParent = Path.GetDirectoryName(target) ?? "";
+        if (string.IsNullOrWhiteSpace(parent) ||
+            !string.Equals(parent, targetParent, StringComparison.OrdinalIgnoreCase) ||
+            selected.Any(path => !string.Equals(Path.GetDirectoryName(path) ?? "", parent, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var orderedSiblings = GetOrderedChildDirectories(parent)
+            .Select(NormalizeFolderPath)
+            .ToList();
+        var selectedSet = selected.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedSet.Contains(target) ||
+            selectedSet.Any(path => !orderedSiblings.Contains(path, StringComparer.OrdinalIgnoreCase)) ||
+            !orderedSiblings.Contains(target, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var moving = orderedSiblings
+            .Where(path => selectedSet.Contains(path))
+            .ToList();
+        var remaining = orderedSiblings
+            .Where(path => !selectedSet.Contains(path))
+            .ToList();
+        int targetIndex = remaining.FindIndex(path => string.Equals(path, target, StringComparison.OrdinalIgnoreCase));
+        if (targetIndex < 0)
+            return false;
+
+        int insertIndex = after ? targetIndex + 1 : targetIndex;
+        remaining.InsertRange(insertIndex, moving);
+        siblings = remaining;
+        return !orderedSiblings.SequenceEqual(siblings, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeFolderPath(string folder) =>
+        Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
     private static void ApplySiblingOrder(IEnumerable<string> orderedFolders)
     {
         int order = 1;
@@ -940,6 +1239,15 @@ public static class SmartTakeoffsJobStore
             ? parsed
             : 0;
     }
+
+    private static double ParsePositiveDouble(string? value, double fallback)
+    {
+        double parsed = ParseDouble(value);
+        return parsed > 0 ? parsed : fallback;
+    }
+
+    private static bool ParseBool(string? value) =>
+        bool.TryParse(value, out bool parsed) && parsed;
 
     private static XElement? ReadDataRoot(string folder)
     {

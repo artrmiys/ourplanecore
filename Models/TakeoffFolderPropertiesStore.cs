@@ -22,6 +22,15 @@ public sealed class TakeoffFolderProperties
     [JsonPropertyName("default_measurement_type")]
     public string DefaultMeasurementType { get; set; } = "";
 
+    [JsonPropertyName("default_unit_price")]
+    public double? DefaultUnitPrice { get; set; }
+
+    [JsonPropertyName("default_item_notes")]
+    public string DefaultItemNotes { get; set; } = "";
+
+    [JsonPropertyName("default_name_prefix")]
+    public string DefaultNamePrefix { get; set; } = "";
+
     [JsonPropertyName("updated_at_utc")]
     public string UpdatedAtUtc { get; set; } = "";
 }
@@ -74,6 +83,9 @@ public static class TakeoffFolderPropertiesStore
         properties.Notes = properties.Notes.Trim();
         properties.DefaultColor = NormalizeColor(properties.DefaultColor);
         properties.DefaultMeasurementType = NormalizeMeasurementType(properties.DefaultMeasurementType);
+        properties.DefaultUnitPrice = properties.DefaultUnitPrice is >= 0 ? properties.DefaultUnitPrice : null;
+        properties.DefaultItemNotes = properties.DefaultItemNotes.Trim();
+        properties.DefaultNamePrefix = properties.DefaultNamePrefix.Trim();
         properties.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
 
         string path = PropertiesPath(folderPath);

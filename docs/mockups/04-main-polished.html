@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Bluebeam · 04 — Main View Polished</title>
+<link rel="stylesheet" href="bluebeam.css">
+</head>
+<body>
+<div class="nav">
+  <a href="index.html">← Все макеты</a>
+  <span class="crumb">Bluebeam-Dense / </span><b>Main View</b>
+  <span class="crumb"> · </span>
+  <a href="08-dark.html">Тёмный вариант →</a>
+</div>
+
+<!-- Icon defs (inline copy of _icons.html) -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <defs>
+    <symbol id="i-folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H3a1 1 0 0 0-1 1V5.5Z"/></symbol>
+    <symbol id="i-doc-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 1.5h6L13 5v9.5H3.5V1.5Z"/><path d="M9 1.5V5h4M8 9v4M6 11h4"/></symbol>
+    <symbol id="i-save" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5a1 1 0 0 1 1-1h8.5L14 5v7.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9Z"/><path d="M5 2.5v3h6v-3M5 13.5v-3.5h6v3.5"/></symbol>
+    <symbol id="i-import" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5v8M5 7l3 3 3-3"/><path d="M2.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></symbol>
+    <symbol id="i-export" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.5v-8M5 6l3-3 3 3"/><path d="M2.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8V3a1 1 0 0 1 1-1h5l6 6-6 6-6-6Z"/><circle cx="5.5" cy="5.5" r="1"/></symbol>
+    <symbol id="i-pan" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8V4.5a1 1 0 0 1 2 0V8M7 8V3.5a1 1 0 0 1 2 0V8M9 8V4a1 1 0 0 1 2 0v6a4 4 0 0 1-4 4H5.5L3 11.5"/></symbol>
+    <symbol id="i-cursor" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v11l3-3 2 4 2-1-2-4h4L3 2Z"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 11h12M2 11l3-3M2 11l3 3M14 11l-3-3M14 11l-3 3"/><path d="M5 8V4M11 8V4"/></symbol>
+    <symbol id="i-count" viewBox="0 0 16 16" fill="currentColor" stroke="none"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="i-line" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 13L13 2.5"/><circle cx="2.5" cy="13" r="1.2" fill="currentColor"/><circle cx="13" cy="2.5" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-area" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 4l3-2 8 1 1 9-8 1.5-4-2 0-7.5Z" fill="currentColor" fill-opacity="0.18"/></symbol>
+    <symbol id="i-joist" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10"/><path d="M5 3v10M8 3v10M11 3v10"/></symbol>
+    <symbol id="i-snap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/><rect x="6" y="6" width="4" height="4"/></symbol>
+    <symbol id="i-ortho" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 13V3h10"/><path d="M3 7h3M3 10h3"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2l1.6 4.4L14 8l-4.4 1.6L8 14l-1.6-4.4L2 8l4.4-1.6L8 2Z" fill="currentColor" fill-opacity="0.15"/></symbol>
+    <symbol id="i-play" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l9 5-9 5V3Z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5V2.5h2.5M11.5 2.5H14V5M14 11v2.5h-2.5M4.5 13.5H2V11"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4M7 5v4"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 1.5L14 5v6L8 14.5L2 11V5L8 1.5Z"/><path d="M8 1.5V8M8 14.5V8M2 5l6 3M14 5l-6 3"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 1.5h6L13 5v9.5H3.5V1.5Z"/><path d="M9 1.5V5h4"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="tb-logo">S</div>
+    <div class="tb-title">SmartTakeoffs</div>
+    <span style="opacity:0.5;">·</span>
+    <span style="opacity:0.85;">Sample Project — Warehouse</span>
+    <div class="tb-spacer"></div>
+    <div class="tb-profile"><span class="dot"></span> Drawing v1 ▾</div>
+    <button class="tb-iconbtn" title="Command Palette (Ctrl+Shift+P)"><svg width="14" height="14"><use href="#i-search"/></svg></button>
+    <button class="tb-iconbtn" title="Settings"><svg width="14" height="14"><use href="#i-settings"/></svg></button>
+    <div class="win-ctrl">─</div>
+    <div class="win-ctrl">▢</div>
+    <div class="win-ctrl">✕</div>
+  </div>
+
+  <!-- Ribbon tabs -->
+  <div class="ribbon-tabs">
+    <div class="ribbon-tab">File</div>
+    <div class="ribbon-tab">Home</div>
+    <div class="ribbon-tab active">Measure</div>
+    <div class="ribbon-tab">Document</div>
+    <div class="ribbon-tab">View</div>
+    <div class="ribbon-tab">Sheets</div>
+    <div class="ribbon-tab">AI</div>
+    <div class="ribbon-tab contextual">Line Tools</div>
+  </div>
+
+  <!-- Ribbon body (Measure tab) -->
+  <div class="ribbon">
+    <div class="rib-group">
+      <div class="rib-row">
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-pan"/></svg></div>Pan</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-cursor"/></svg></div>Select</div>
+      </div>
+      <div class="rib-group-label">Navigate</div>
+    </div>
+
+    <div class="rib-group" style="min-width:240px;">
+      <div class="rib-row">
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-scale"/></svg></div>Scale</div>
+        <div class="rib-btn color-count"><div class="ico"><svg><use href="#i-count"/></svg></div>Count</div>
+        <div class="rib-btn active color-line"><div class="ico"><svg><use href="#i-line"/></svg></div>Line</div>
+        <div class="rib-btn color-area"><div class="ico"><svg><use href="#i-area"/></svg></div>Area</div>
+        <div class="rib-btn color-joist"><div class="ico"><svg><use href="#i-joist"/></svg></div>Joist</div>
+      </div>
+      <div class="rib-group-label">Takeoff Tools</div>
+    </div>
+
+    <div class="rib-group">
+      <div class="rib-vlist">
+        <button class="rib-btn-sm"><svg><use href="#i-snap"/></svg> Snap</button>
+        <button class="rib-btn-sm active"><svg><use href="#i-ortho"/></svg> Ortho</button>
+        <button class="rib-btn-sm"><svg><use href="#i-fit"/></svg> Fit</button>
+      </div>
+      <div class="rib-group-label">Aid</div>
+    </div>
+
+    <div class="rib-group">
+      <div class="rib-row">
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-fit"/></svg></div>Fit</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-zoom-in"/></svg></div>Zoom +</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-zoom-out"/></svg></div>Zoom −</div>
+      </div>
+      <div class="rib-group-label">View</div>
+    </div>
+
+    <div class="rib-group">
+      <div class="rib-row">
+        <div class="rib-btn"><div class="ico" style="color:var(--accent);"><svg><use href="#i-play"/></svg></div>Run AI</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-plus"/></svg></div>Add Obs</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-sparkle"/></svg></div>AI Fill</div>
+      </div>
+      <div class="rib-group-label">AI</div>
+    </div>
+
+    <div class="rib-group">
+      <div class="rib-row">
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-import"/></svg></div>Import</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-export"/></svg></div>Export</div>
+        <div class="rib-btn"><div class="ico"><svg><use href="#i-tag"/></svg></div>Auto N+S</div>
+      </div>
+      <div class="rib-group-label">PDF</div>
+    </div>
+
+    <div class="rib-group">
+      <div class="rib-row">
+        <div class="rib-btn"><div class="ico" style="color:var(--success);"><svg><use href="#i-save"/></svg></div>Save</div>
+      </div>
+      <div class="rib-group-label">File</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Left: Pages | Layers | Tool Chest -->
+    <div class="left">
+      <div class="panel-tab-row">
+        <div class="panel-tab active">Pages</div>
+        <div class="panel-tab">Layers</div>
+        <div class="panel-tab">Tool Chest</div>
+      </div>
+      <div class="tree">
+        <div class="tree-item tree-folder"><span class="chev"></span> 00 Imported <span class="badge">12</span></div>
+        <div class="tree-item tree-folder"><span class="chev"></span> Arch <span class="badge">5</span></div>
+        <div class="tree-item tree-child active"><svg width="12" height="12" style="color:var(--text-2)"><use href="#i-doc"/></svg> A101 — Floor Plan</div>
+        <div class="tree-item tree-child"><svg width="12" height="12" style="color:var(--text-3)"><use href="#i-doc"/></svg> A102 — Roof Plan</div>
+        <div class="tree-item tree-child"><svg width="12" height="12" style="color:var(--text-3)"><use href="#i-doc"/></svg> A201 — Elevations</div>
+        <div class="tree-item tree-folder"><span class="chev"></span> Struct <span class="badge">3</span></div>
+        <div class="tree-item tree-child"><svg width="12" height="12" style="color:var(--text-3)"><use href="#i-doc"/></svg> S101 — Foundation</div>
+        <div class="tree-item tree-child"><svg width="12" height="12" style="color:var(--text-3)"><use href="#i-doc"/></svg> S102 — Framing</div>
+        <div class="tree-item tree-folder collapsed"><span class="chev"></span> Others <span class="badge">4</span></div>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-wrap">
+      <div class="canvas-toolbar">
+        <span style="color:var(--text-2);">Scale</span>
+        1 :
+        <input class="ct-input" value="100">
+        <button class="ct-btn">Set</button>
+        <button class="ct-btn">▾ Presets</button>
+        <span class="ct-sep"></span>
+        <button class="ct-btn"><svg width="11" height="11" style="vertical-align:-1px;"><use href="#i-fit"/></svg> Fit</button>
+        <button class="ct-btn">+</button>
+        <button class="ct-btn">−</button>
+        <span class="ct-sep"></span>
+        <span style="color:var(--text-2);">Tool:</span>
+        <strong style="color:var(--c-line);">Line</strong>
+        <span class="ct-sep"></span>
+        <span style="color:var(--text-2);">Page:</span>
+        <strong>A101</strong>
+        <span style="margin-left:auto; color:var(--text-3); font-size:10px;">Right-click for context menu</span>
+      </div>
+      <div class="canvas">
+        <div class="recording-banner">
+          <span class="dot"></span>
+          REC · Drawing into Wall 2×4
+          <span style="opacity:0.8; font-weight:400;">· Esc to finish</span>
+        </div>
+        <div class="page-info">
+          <strong>A101 — Floor Plan</strong><br>
+          24″ × 36″ · 1 : 100
+        </div>
+        <div class="drawing">
+          <div class="area-shape"></div>
+          <div class="line-shape"></div>
+          <div class="joist-band"></div>
+          <div class="count-pt" style="left:420px; top:200px;"></div>
+          <div class="count-pt" style="left:480px; top:210px;"></div>
+          <div class="count-pt" style="left:540px; top:200px;"></div>
+          <div class="count-pt" style="left:600px; top:210px;"></div>
+          <!-- selection on Line measurement -->
+          <div class="selection-handle" style="left:377px; top:78px;"></div>
+          <div class="selection-handle" style="left:597px; top:78px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Takeoffs (top) + Properties (bottom) -->
+    <div class="right">
+      <div class="right-section flex">
+        <div class="sect-head">
+          Takeoffs
+          <div class="actions">
+            <button title="New folder"><svg width="10" height="10"><use href="#i-folder"/></svg></button>
+            <button title="New item">+</button>
+            <button title="Refresh">↻</button>
+          </div>
+        </div>
+        <div class="takeoff-tree">
+          <div class="takeoff-row takeoff-folder"><span style="width:10px;font-size:9px;">▾</span> Concrete</div>
+          <div class="takeoff-row takeoff-child">
+            <span class="glyph area" style="background:var(--c-area);"></span>
+            <span class="name">CIP Slab</span>
+            <span class="status-dot" style="background:var(--warning);" title="Takeoff"></span>
+            <span class="qty">504 sf</span>
+          </div>
+          <div class="takeoff-row takeoff-child">
+            <span class="glyph area" style="background:#8E6BC4;"></span>
+            <span class="name">Footing</span>
+            <span class="status-dot" style="background:var(--accent);" title="Reviewed"></span>
+            <span class="qty">86 lf</span>
+          </div>
+          <div class="takeoff-row takeoff-folder"><span style="width:10px;font-size:9px;">▾</span> Framing</div>
+          <div class="takeoff-row takeoff-child active">
+            <span class="glyph line" style="background:var(--c-line);"></span>
+            <span class="name">Wall 2×4</span>
+            <span class="status-dot" style="background:var(--warning);"></span>
+            <span class="qty">24'6"</span>
+          </div>
+          <div class="takeoff-row takeoff-child">
+            <span class="glyph area" style="background:var(--c-joist); position:relative;"></span>
+            <span class="name">Joists 14" OC</span>
+            <span class="status-dot" style="background:var(--success);" title="Final"></span>
+            <span class="qty">18 ea</span>
+          </div>
+          <div class="takeoff-row takeoff-folder"><span style="width:10px;font-size:9px;">▾</span> Doors &amp; Windows</div>
+          <div class="takeoff-row takeoff-child">
+            <span class="glyph point" style="background:var(--c-count);"></span>
+            <span class="name">Door 3'×7'</span>
+            <span class="status-dot" style="background:var(--accent);"></span>
+            <span class="qty">4 ea</span>
+          </div>
+          <div class="takeoff-row takeoff-child">
+            <span class="glyph point" style="background:#9C2861;"></span>
+            <span class="name">Window 4'×4'</span>
+            <span class="status-dot" style="background:var(--text-3);" title="Not started"></span>
+            <span class="qty">— ea</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="right-section fixed" style="height:280px;">
+        <div class="sect-head">
+          Properties — Wall 2×4
+          <div class="actions"><button title="Refresh">↻</button></div>
+        </div>
+        <div class="props-pane">
+          <div class="status-cells" style="margin-bottom:8px;">
+            <span class="active warning">Takeoff</span>
+            <span>Reviewed</span>
+            <span>Revised</span>
+            <span>Final</span>
+          </div>
+          <div class="props-row"><span class="lbl">Subject</span><span class="val"><input value="Wall 2×4"></span></div>
+          <div class="props-row"><span class="lbl">Type</span><span class="val">Line</span></div>
+          <div class="props-row"><span class="lbl">Color</span><span class="val"><span class="swatch-inline" style="background:var(--c-line);"></span> #1A5BA8</span></div>
+          <div class="props-row"><span class="lbl">Cost Code</span><span class="val"><input value="06-10-00"></span></div>
+          <div class="props-row"><span class="lbl">Length</span><span class="val" style="font-family:Consolas,monospace;">24'6"</span></div>
+          <div class="props-row"><span class="lbl">Unit Rate</span><span class="val"><input value="14.20"></span></div>
+          <div class="props-row"><span class="lbl">Waste %</span><span class="val"><input value="10"></span></div>
+          <div class="props-row"><span class="lbl">Formula</span><span class="val" style="font-family:Consolas,monospace;font-size:10px;">[Length]*[Rate]*(1+[Waste]/100)</span></div>
+          <div class="props-row"><span class="lbl"><strong>Total</strong></span><span class="val"><strong style="color:var(--accent); font-size:13px;">$382.69</strong></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Markups list / AI Inbox / Estimating -->
+  <div class="markups" style="height:130px;">
+    <div class="markups-head">
+      <div class="tab2 active">Markups List <span class="stat-pill" style="margin-left:4px;">7</span></div>
+      <div class="tab2">AI Inbox <span class="stat-pill solid">2</span></div>
+      <div class="tab2">Estimating</div>
+      <div style="flex:1"></div>
+      <span style="color:var(--text-2);">Filter:</span>
+      <select style="font:inherit;font-size:11px;height:20px;border:1px solid var(--border);background:var(--surface-elevated); color:var(--text);">
+        <option>All Status</option>
+        <option>Takeoff</option>
+        <option>Reviewed</option>
+        <option>Final</option>
+      </select>
+      <span style="color:var(--text-2);">Page:</span>
+      <select style="font:inherit;font-size:11px;height:20px;border:1px solid var(--border);background:var(--surface-elevated); color:var(--text);">
+        <option>A101</option>
+        <option>All</option>
+      </select>
+    </div>
+    <div class="markups-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:24px;"></th>
+            <th>Subject</th>
+            <th>Page</th>
+            <th>Cost Code</th>
+            <th>Status</th>
+            <th class="right">Qty</th>
+            <th>Unit</th>
+            <th class="right">Rate</th>
+            <th class="right">Cost</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="swatch-inline" style="background:var(--c-area);"></span></td>
+            <td>CIP Slab</td>
+            <td>A101</td>
+            <td>03-30-00</td>
+            <td><span class="stat-pill takeoff">Takeoff</span></td>
+            <td class="num">504.0</td>
+            <td>sf</td>
+            <td class="num">$8.50</td>
+            <td class="num">$4,498.20</td>
+            <td>5% waste</td>
+          </tr>
+          <tr>
+            <td><span class="swatch-inline" style="background:#8E6BC4;"></span></td>
+            <td>Footing</td>
+            <td>A101</td>
+            <td>03-30-00</td>
+            <td><span class="stat-pill reviewed">Reviewed</span></td>
+            <td class="num">86.0</td>
+            <td>lf</td>
+            <td class="num">$22.00</td>
+            <td class="num">$1,892.00</td>
+            <td>—</td>
+          </tr>
+          <tr class="active">
+            <td><span class="swatch-inline" style="background:var(--c-line);"></span></td>
+            <td>Wall 2×4</td>
+            <td>A101</td>
+            <td>06-10-00</td>
+            <td><span class="stat-pill takeoff">Takeoff</span></td>
+            <td class="num">24.5</td>
+            <td>lf</td>
+            <td class="num">$14.20</td>
+            <td class="num">$382.69</td>
+            <td>10% waste · SPF #2</td>
+          </tr>
+          <tr>
+            <td><span class="swatch-inline" style="background:var(--c-joist);"></span></td>
+            <td>Joists 14" OC</td>
+            <td>A101</td>
+            <td>06-10-00</td>
+            <td><span class="stat-pill final">Final</span></td>
+            <td class="num">18</td>
+            <td>ea</td>
+            <td class="num">$32.00</td>
+            <td class="num">$576.00</td>
+            <td>SPF #2 · 12'</td>
+          </tr>
+          <tr>
+            <td><span class="swatch-inline" style="background:var(--c-count);border-radius:50%;"></span></td>
+            <td>Door 3'×7'</td>
+            <td>A101</td>
+            <td>08-10-00</td>
+            <td><span class="stat-pill reviewed">Reviewed</span></td>
+            <td class="num">4</td>
+            <td>ea</td>
+            <td class="num">$425.00</td>
+            <td class="num">$1,700.00</td>
+            <td>Hollow core</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status">
+    <span class="seg">Sample Project</span>
+    <span class="seg">A101 · 24″×36″</span>
+    <span class="seg accent">1 : 100</span>
+    <span class="seg">73 %</span>
+    <span class="seg" style="font-family:Consolas,monospace;">412.0, 188.5 pt · 34′ 4″, 15′ 8″</span>
+    <span class="seg">⊥ Ortho</span>
+    <span class="seg" style="color:var(--c-line);"><span class="swatch-inline" style="background:var(--c-line);vertical-align:-1px;"></span> Wall 2×4</span>
+    <span class="seg recording">● REC</span>
+    <span class="seg spacer"></span>
+    <span class="ok">✓ Saved 12s ago</span>
+  </div>
+</div>
+
+<div class="desc">
+  <h2>04 — Main View Polished</h2>
+  <p>
+    Тот же Bluebeam-канон, но с продакшн-уровнем деталей:
+  </p>
+  <ul>
+    <li>Иконки в ribbon — настоящие SVG-paths (single-stroke 1.5 px), а не эмодзи. Каждая
+    тулза имеет цветовую идентичность измерения (Line синий, Area фиолетовый, Joist зелёный,
+    Count розовый) — перенесено из <code>MeasurementGlyph.cs</code>.</li>
+    <li>Ribbon показывает <strong>контекстуальную вкладку</strong> «Line Tools» (синий
+    italic) — появляется только когда выделено Line-измерение. Microsoft Office UXG
+    pattern.</li>
+    <li><strong>Recording-баннер</strong> в углу канваса с пульсирующей точкой — пользователь
+    точно знает, что геометрия пишется в активный takeoff. Esc закрывает.</li>
+    <li>В Markups List активная строка подсвечена с inset-акцентом слева, добавлены
+    sticky-headers, zebra-полосы (`markups-zebra` token), фильтр по странице и статусу.</li>
+    <li>Status bar показывает full info: Job · Page · Scale · Zoom · XY (pt + ft/in) · Mode
+    chips · активный takeoff с цветным свотчем · REC-индикатор · save state.</li>
+    <li>Профиль в title bar — <code>Drawing v1 ▾</code>, как в Bluebeam Profile dropdown.</li>
+  </ul>
+</div>
+</body>
+</html>

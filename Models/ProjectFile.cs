@@ -18,6 +18,12 @@ internal sealed class ProjectFile
         public string          Name         { get; set; } = "";
         public string          Color        { get; set; } = "#FF4444";
         public string          MeasurementType { get; set; } = "line";
+        public bool            IsJoistTakeoff { get; set; }
+        public string          JoistType { get; set; } = "";
+        public double          JoistSpacingInches { get; set; } = 16;
+        public double          JoistDirectionDegrees { get; set; }
+        public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
+        public bool            JoistShowLabels { get; set; }
         public List<MeasDto>   Measurements { get; set; } = [];
     }
 
@@ -28,6 +34,8 @@ internal sealed class ProjectFile
         public string       Color      { get; set; } = "#FF4444";
         public string       PageFolder { get; set; } = "";
         public double       ScaleMetersPerPt { get; set; }
+        public double       JoistDirectionDegrees { get; set; }
+        public bool         JoistDirectionLocked { get; set; }
         public List<PtDto>  Points     { get; set; } = [];
     }
 
@@ -54,6 +62,12 @@ internal sealed class ProjectFile
                 Name = item.Name,
                 Color = item.Color,
                 MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType),
+                IsJoistTakeoff = item.IsJoistTakeoff,
+                JoistType = item.JoistType,
+                JoistSpacingInches = item.JoistSpacingInches,
+                JoistDirectionDegrees = item.JoistDirectionDegrees,
+                JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
+                JoistShowLabels = item.JoistShowLabels,
             };
             foreach (var m in item.Measurements)
             {
@@ -64,6 +78,8 @@ internal sealed class ProjectFile
                     Color      = m.Color,
                     PageFolder = m.PageFolder,
                     ScaleMetersPerPt = m.ScaleMetersPerPt,
+                    JoistDirectionDegrees = m.JoistDirectionDegrees,
+                    JoistDirectionLocked = m.JoistDirectionLocked,
                     Points     = m.Points.Select(p => new PtDto(p.X, p.Y)).ToList(),
                 };
                 dto.Measurements.Add(md);
@@ -100,6 +116,12 @@ internal sealed class ProjectFile
                 Name = dto.Name,
                 Color = dto.Color,
                 MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(dto.MeasurementType),
+                IsJoistTakeoff = dto.IsJoistTakeoff,
+                JoistType = dto.JoistType,
+                JoistSpacingInches = dto.JoistSpacingInches > 0 ? dto.JoistSpacingInches : 16,
+                JoistDirectionDegrees = dto.JoistDirectionDegrees,
+                JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(dto.JoistLengthRounding),
+                JoistShowLabels = dto.JoistShowLabels,
             };
             foreach (var md in dto.Measurements)
             {
@@ -110,9 +132,12 @@ internal sealed class ProjectFile
                     Color      = md.Color,
                     PageFolder = md.PageFolder,
                     ScaleMetersPerPt = md.ScaleMetersPerPt > 0 ? md.ScaleMetersPerPt : pf.Scale,
+                    JoistDirectionDegrees = md.JoistDirectionDegrees,
+                    JoistDirectionLocked = md.JoistDirectionLocked,
                     Points     = md.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                 });
             }
+            SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             items.Add(item);
         }
         var unit = pf.UnitMode == "Imperial" ? SmartTakeoffs.UnitMode.Imperial : SmartTakeoffs.UnitMode.Metric;

@@ -13,6 +13,9 @@ public sealed class TakeoffFolderPropertiesDialog : Window
     public string Notes { get; private set; }
     public string DefaultColor { get; private set; }
     public string DefaultMeasurementType { get; private set; }
+    public double? DefaultUnitPrice { get; private set; }
+    public string DefaultItemNotes { get; private set; }
+    public string DefaultNamePrefix { get; private set; }
 
     private static readonly (string Label, string Hex)[] Presets =
     [
@@ -42,6 +45,9 @@ public sealed class TakeoffFolderPropertiesDialog : Window
         Notes = properties.Notes;
         DefaultColor = NormalizeColor(properties.DefaultColor);
         DefaultMeasurementType = NormalizeType(properties.DefaultMeasurementType);
+        DefaultUnitPrice = properties.DefaultUnitPrice is >= 0 ? properties.DefaultUnitPrice : null;
+        DefaultItemNotes = properties.DefaultItemNotes;
+        DefaultNamePrefix = properties.DefaultNamePrefix;
 
         Title = "Takeoff Folder Properties";
         Width = 420;
@@ -75,6 +81,36 @@ public sealed class TakeoffFolderPropertiesDialog : Window
             SelectedValue = DefaultMeasurementType,
         };
         panel.Children.Add(typeBox);
+
+        panel.Children.Add(new TextBlock { Text = "Default name prefix:", Margin = new Thickness(0, 10, 0, 4) });
+        var prefixBox = new TextBox
+        {
+            Text = properties.DefaultNamePrefix,
+            ToolTip = "Applied to the suggested name for new takeoff items in this folder.",
+        };
+        panel.Children.Add(prefixBox);
+
+        panel.Children.Add(new TextBlock { Text = "Default unit price:", Margin = new Thickness(0, 10, 0, 4) });
+        var unitPriceBox = new TextBox
+        {
+            Text = properties.DefaultUnitPrice is >= 0
+                ? properties.DefaultUnitPrice.Value.ToString("G", System.Globalization.CultureInfo.InvariantCulture)
+                : "",
+            ToolTip = "Leave blank to inherit from a parent folder or use no default.",
+        };
+        panel.Children.Add(unitPriceBox);
+
+        panel.Children.Add(new TextBlock { Text = "Default notes for new items:", Margin = new Thickness(0, 10, 0, 4) });
+        var defaultItemNotesBox = new TextBox
+        {
+            Text = properties.DefaultItemNotes,
+            MinHeight = 70,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            ToolTip = "Applied to new takeoff items created in this folder.",
+        };
+        panel.Children.Add(defaultItemNotesBox);
 
         panel.Children.Add(new TextBlock { Text = "Default color:", Margin = new Thickness(0, 10, 0, 4) });
         var swatches = new List<Border>();
@@ -111,7 +147,7 @@ public sealed class TakeoffFolderPropertiesDialog : Window
         void RefreshSwatches()
         {
             noDefault.FontWeight = string.IsNullOrWhiteSpace(selectedHex)
-                ? FontWeights.Bold
+                ? FontWeights.Normal
                 : FontWeights.Normal;
             foreach (Border swatch in swatches)
                 swatch.BorderBrush = Brushes.Transparent;
@@ -159,6 +195,26 @@ public sealed class TakeoffFolderPropertiesDialog : Window
             Notes = notesBox.Text.Trim();
             DefaultColor = selectedHex;
             DefaultMeasurementType = typeBox.SelectedValue?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(unitPriceBox.Text))
+            {
+                DefaultUnitPrice = null;
+            }
+            else if (double.TryParse(unitPriceBox.Text.Replace(",", "."), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedPrice) &&
+                     parsedPrice >= 0)
+            {
+                DefaultUnitPrice = parsedPrice;
+            }
+            else
+            {
+                MessageBox.Show("Enter a valid non-negative default unit price, or leave it blank.",
+                                "Takeoff Folder Properties",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Information);
+                return;
+            }
+
+            DefaultItemNotes = defaultItemNotesBox.Text.Trim();
+            DefaultNamePrefix = prefixBox.Text.Trim();
             DialogResult = true;
         };
 

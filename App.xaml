@@ -5,12 +5,21 @@
     <Application.Resources>
         <!-- Scrollbar colors — updated by ApplyTheme -->
         <SolidColorBrush x:Key="ScrollBarTrackBrush"  Color="#E0E0E0"/>
-        <SolidColorBrush x:Key="ScrollBarThumbBrush"  Color="#A0A0A0"/>
+        <SolidColorBrush x:Key="ScrollBarThumbBrush"  Color="#888888"/>
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F0F0F0"/>
         <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#F5F5F5"/>
         <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="SplitterBrush" Color="#CCCCCC"/>
         <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#666666"/>
+
+        <!-- Takeoff tree row state brushes (theme-driven via ApplyTheme) -->
+        <SolidColorBrush x:Key="RowOnPageBrush"        Color="#D6F5DE"/>
+        <SolidColorBrush x:Key="RowActiveBrush"        Color="#FFECBE"/>
+        <SolidColorBrush x:Key="RowMultiSelectBrush"   Color="#CDE2FF"/>
+        <SolidColorBrush x:Key="RowDropOkBrush"        Color="#CCF5DA"/>
+        <SolidColorBrush x:Key="RowDropBadBrush"       Color="#FFD6D6"/>
+        <SolidColorBrush x:Key="RowFlagForegroundBrush" Color="#111111"/>
+        <SolidColorBrush x:Key="RowActiveAccentBrush"   Color="#1F52A6"/>
 
         <!-- Slim scrollbar ControlTemplate (no arrow buttons) -->
         <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
@@ -93,6 +102,17 @@
         <SolidColorBrush x:Key="ControlPressedBackgroundBrush" Color="#D0D0D0"/>
         <SolidColorBrush x:Key="ControlActiveBackgroundBrush" Color="#CCE5FF"/>
         <SolidColorBrush x:Key="ControlActiveForegroundBrush" Color="#111111"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2563A6"/>
+        <SolidColorBrush x:Key="AccentHoverBrush" Color="#1F5591"/>
+        <SolidColorBrush x:Key="AccentPressedBrush" Color="#18446F"/>
+        <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ToolbarBandBrush" Color="#ECEFF3"/>
+        <SolidColorBrush x:Key="ManagerHeaderBrush" Color="#E8EEF6"/>
+        <SolidColorBrush x:Key="SubtleButtonBackgroundBrush" Color="#F3F4F6"/>
+        <SolidColorBrush x:Key="DataGridAltRowBrush" Color="#F7F9FC"/>
+        <SolidColorBrush x:Key="CommitBrush" Color="#2E7D32"/>
+        <SolidColorBrush x:Key="CommitHoverBrush" Color="#276D2C"/>
+        <SolidColorBrush x:Key="CommitPressedBrush" Color="#1D5421"/>
 
         <Style TargetType="Window">
             <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}"/>
@@ -133,7 +153,7 @@
         <Style x:Key="ToolBtnActive" TargetType="Button" BasedOn="{StaticResource ToolBtn}">
             <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontWeight" Value="Normal"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
@@ -143,17 +163,156 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="ManagerButton" TargetType="Button" BasedOn="{StaticResource ToolBtn}">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="MinWidth" Value="66"/>
+            <Setter Property="Padding" Value="7,3"/>
+            <Setter Property="Margin" Value="0,0,6,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+        </Style>
+
+        <Style x:Key="ManagerPrimaryButton" TargetType="Button" BasedOn="{StaticResource ManagerButton}">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentPressedBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.55"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ManagerCommitButton" TargetType="Button" BasedOn="{StaticResource ManagerButton}">
+            <Setter Property="Background" Value="{DynamicResource CommitBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CommitBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CommitHoverBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource CommitHoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CommitPressedBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource CommitPressedBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.55"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ManagerSubtleButton" TargetType="Button" BasedOn="{StaticResource ManagerButton}">
+            <Setter Property="Background" Value="{DynamicResource SubtleButtonBackgroundBrush}"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+        </Style>
+
+        <Style x:Key="ManagerGroupLabel" TargetType="TextBlock">
+            <Setter Property="Background" Value="{DynamicResource ManagerHeaderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,7,4"/>
+        </Style>
+
+        <Style x:Key="ManagerToolbar" TargetType="WrapPanel">
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+
+        <Style x:Key="ManagerToolbarBand" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ToolbarBandBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="7,5,7,1"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="ManagerSurface" TargetType="DockPanel">
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+        </Style>
+
         <Style TargetType="Button" BasedOn="{StaticResource ToolBtn}"/>
         <Style x:Key="{x:Static ToolBar.ButtonStyleKey}" TargetType="Button" BasedOn="{StaticResource ToolBtn}"/>
         <Style TargetType="ToggleButton">
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                    <Setter Property="FontWeight" Value="Normal"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="{x:Static ToolBar.ToggleButtonStyleKey}" TargetType="ToggleButton">
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                    <Setter Property="FontWeight" Value="Normal"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- RadioButton styled as a tool toggle (used for drawing tools group). -->
+        <Style x:Key="ToolRadio" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="MinWidth" Value="40"/>
+            <Setter Property="Margin" Value="1,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                                <Setter Property="FontWeight" Value="Normal"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="TextBox">
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
@@ -181,7 +340,7 @@
 
         <!-- Panel section header (Pages / Takeoffs / PDF Layers headers) -->
         <Style x:Key="PanelHeader" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="FontSize"   Value="12"/>
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
         </Style>
@@ -189,7 +348,7 @@
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="Padding" Value="8,6"/>
         </Style>
 
         <!-- GridView column headers follow theme -->
@@ -233,12 +392,15 @@
             <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
         </Style>
 
         <Style TargetType="TreeViewItem">
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
@@ -251,6 +413,119 @@
             <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+        </Style>
+
+        <Style x:Key="CommandTabItem" TargetType="TabItem">
+            <Setter Property="Background" Value="{DynamicResource ToolbarBandBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="Padding" Value="9,3"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="0,0,1,1"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Border x:Name="SelectedLine"
+                                        Height="2"
+                                        VerticalAlignment="Bottom"
+                                        Background="Transparent"/>
+                                <ContentPresenter ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabChrome" Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabChrome" Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+                                <Setter TargetName="SelectedLine" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                                <Setter Property="FontWeight" Value="Normal"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                    <Setter Property="FontWeight" Value="Normal"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="WorkspaceTabItem" TargetType="TabItem">
+            <Setter Property="Background" Value="{DynamicResource ToolbarBandBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1,1,1,0"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Border x:Name="SelectedLine"
+                                        Height="2"
+                                        VerticalAlignment="Top"
+                                        Background="Transparent"/>
+                                <ContentPresenter ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabChrome" Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabChrome" Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+                                <Setter TargetName="TabChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="SelectedLine" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="Normal"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                    <Setter Property="FontWeight" Value="Normal"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="TabItem">
@@ -281,11 +556,15 @@
             <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
-            <Setter Property="GridLinesVisibility" Value="All"/>
+            <Setter Property="AlternationCount" Value="2"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
             <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource ControlBorderBrush}"/>
             <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource ControlBorderBrush}"/>
             <Setter Property="RowBackground" Value="{DynamicResource SurfaceBackgroundBrush}"/>
-            <Setter Property="AlternatingRowBackground" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="AlternatingRowBackground" Value="{DynamicResource DataGridAltRowBrush}"/>
+            <Setter Property="RowHeight" Value="28"/>
+            <Setter Property="RowHeaderWidth" Value="0"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
         </Style>
 
         <Style TargetType="DataGridRow">
@@ -306,9 +585,11 @@
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ManagerHeaderBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontWeight" Value="Normal"/>
         </Style>
     </Application.Resources>
 </Application>

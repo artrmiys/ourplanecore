@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Mockup 1 — Modern Light</title>
+<style>
+  :root {
+    --surface: #FFFFFF;
+    --surface-alt: #F7F8FA;
+    --surface-elev: #FFFFFF;
+    --canvas: #FAFBFC;
+    --border: #E5E7EB;
+    --border-strong: #D1D5DB;
+    --text: #111827;
+    --text-2: #6B7280;
+    --text-3: #9CA3AF;
+    --accent: #4F46E5;
+    --accent-soft: #EEF2FF;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --recording: #DC2626;
+    --c-area: #7C3AED;
+    --c-line: #2563EB;
+    --c-count: #DB2777;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: #E9EBEF;
+    color: var(--text);
+    padding: 24px;
+  }
+  .app {
+    width: 1280px;
+    height: 780px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(15,23,42,0.18);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+  }
+  /* ── Title bar ─────────────────────────────────────────── */
+  .titlebar {
+    height: 36px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .logo {
+    width: 20px; height: 20px;
+    background: linear-gradient(135deg, var(--accent), #7C3AED);
+    border-radius: 5px;
+    display: grid; place-items: center;
+    color: #fff; font-weight: 700; font-size: 11px;
+  }
+  .title { font-weight: 600; font-size: 13px; }
+  .title-sep { color: var(--text-3); }
+  .title-job { color: var(--text-2); font-weight: 500; }
+  .titlebar .spacer { flex: 1; }
+  .profile-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .profile-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  /* ── Top toolbar ───────────────────────────────────────── */
+  .toolbar {
+    height: 44px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .group {
+    display: flex; align-items: center; gap: 4px;
+    padding-right: 12px;
+    border-right: 1px solid var(--border);
+    margin-right: 8px;
+  }
+  .group:last-child { border-right: 0; }
+  .group-label { color: var(--text-3); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-right: 6px; }
+  .btn {
+    height: 30px; padding: 0 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: inherit; color: var(--text);
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .btn:hover { background: var(--surface-alt); }
+  .btn.primary {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .btn.ghost { background: transparent; border-color: transparent; }
+  .btn.ghost:hover { background: var(--surface-alt); }
+  .scale-chip {
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid #E0E7FF;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-weight: 600; font-size: 12px;
+    cursor: pointer;
+  }
+  .icon { width: 14px; height: 14px; display: inline-block; }
+
+  /* ── Main row ──────────────────────────────────────────── */
+  .main {
+    flex: 1; display: flex; min-height: 0;
+  }
+  /* Left panel */
+  .left {
+    width: 220px;
+    background: var(--surface-alt);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .panel-head {
+    height: 38px; padding: 0 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-head h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.04em; text-transform: uppercase; }
+  .tree { padding: 8px 4px; font-size: 13px; flex: 1; overflow: auto; }
+  .tree-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 5px; cursor: pointer;
+    color: var(--text);
+  }
+  .tree-item:hover { background: rgba(0,0,0,0.03); }
+  .tree-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+  .tree-item .chev { color: var(--text-3); width: 10px; }
+  .tree-item .badge { margin-left: auto; font-size: 10px; color: var(--text-3); }
+  .tree-folder { font-weight: 500; }
+  .tree-folder .chev::before { content: "▾"; }
+  .tree-child { padding-left: 22px; }
+
+  /* Canvas area */
+  .canvas-wrap {
+    flex: 1;
+    background: var(--canvas);
+    position: relative;
+    display: flex;
+    min-width: 0;
+  }
+  .tool-strip {
+    width: 44px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 8px 6px;
+    display: flex; flex-direction: column; gap: 3px;
+    flex-shrink: 0;
+  }
+  .tool-btn {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    display: grid; place-items: center;
+    cursor: pointer; color: var(--text-2);
+    background: transparent; border: 1px solid transparent;
+    font-size: 11px; font-weight: 600;
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--surface-alt); color: var(--text); }
+  .tool-btn.active {
+    background: var(--accent); color: #fff;
+    box-shadow: 0 1px 3px rgba(79,70,229,0.4);
+  }
+  .tool-btn .kb { position: absolute; bottom: 2px; right: 3px; font-size: 8px; opacity: 0.5; }
+  .tool-strip .divider { height: 1px; background: var(--border); margin: 6px 4px; }
+
+  .canvas {
+    flex: 1; position: relative; overflow: hidden;
+    background:
+      linear-gradient(var(--canvas), var(--canvas)),
+      repeating-linear-gradient(0deg, transparent 0 39px, #00000008 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, #00000008 39px 40px);
+  }
+
+  .hud {
+    position: absolute; top: 12px; left: 12px;
+    background: rgba(255,255,255,0.95);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; font-weight: 500;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .hud .tool-name { color: var(--c-line); font-weight: 600; }
+  .hud .sep { color: var(--text-3); }
+  .hud .kb { color: var(--text-3); margin-left: 4px; font-size: 11px; }
+
+  /* Sample drawing */
+  .drawing { position: absolute; inset: 60px 80px 60px 80px; }
+  .area-shape {
+    position: absolute; left: 60px; top: 50px;
+    width: 280px; height: 180px;
+    background: rgba(124,58,237,0.12);
+    border: 2px solid var(--c-area);
+    border-radius: 2px;
+  }
+  .area-shape::after {
+    content: "Slab — 504 sf";
+    position: absolute; left: 8px; top: 8px;
+    font-size: 11px; font-weight: 600; color: var(--c-area);
+    background: rgba(255,255,255,0.92); padding: 2px 6px; border-radius: 3px;
+  }
+  .line-shape {
+    position: absolute; left: 380px; top: 80px;
+    width: 220px; height: 3px;
+    background: var(--c-line);
+  }
+  .line-shape::after {
+    content: "Wall 2×4 — 24′ 6″";
+    position: absolute; left: 0; top: -22px;
+    font-size: 11px; font-weight: 600; color: var(--c-line);
+    background: rgba(255,255,255,0.92); padding: 2px 6px; border-radius: 3px;
+  }
+  .count-pt {
+    position: absolute; width: 14px; height: 14px;
+    background: var(--c-count);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--c-count);
+  }
+
+  /* Right panel — Inspector */
+  .right {
+    width: 320px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    padding: 0 8px;
+  }
+  .tab {
+    padding: 12px 14px; cursor: pointer;
+    color: var(--text-2); font-size: 13px; font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .inspector { padding: 16px; overflow: auto; flex: 1; }
+  .insp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .swatch {
+    width: 32px; height: 32px; border-radius: 6px;
+    background: var(--c-area); position: relative;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,0.15);
+  }
+  .swatch::after {
+    content: ""; position: absolute; inset: 6px;
+    background: rgba(255,255,255,0.4); border-radius: 2px;
+  }
+  .insp-name { font-weight: 600; font-size: 15px; }
+  .insp-meta { color: var(--text-2); font-size: 12px; }
+  .insp-section {
+    margin-top: 18px; padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .insp-section h4 {
+    margin: 0 0 10px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3);
+  }
+  .field {
+    display: grid; grid-template-columns: 110px 1fr;
+    gap: 8px; align-items: center; margin-bottom: 8px;
+  }
+  .field label { color: var(--text-2); font-size: 12px; }
+  .field input, .field .value {
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: 5px; padding: 6px 9px; font: inherit; font-size: 12px;
+    color: var(--text);
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .status-pills { display: flex; gap: 4px; }
+  .status-pill {
+    padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-2);
+  }
+  .status-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .total-card {
+    background: linear-gradient(135deg, var(--accent-soft), #F5F3FF);
+    border: 1px solid #E0E7FF; border-radius: 8px;
+    padding: 14px; margin-top: 18px;
+  }
+  .total-card .label { font-size: 11px; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .total-card .num { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 4px; }
+  .total-card .sub { color: var(--text-2); font-size: 12px; margin-top: 2px; }
+
+  /* AI Inbox bottom */
+  .inbox {
+    height: 38px; flex-shrink: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 16px;
+    gap: 12px;
+  }
+  .inbox-icon {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: var(--accent-soft); color: var(--accent);
+    display: grid; place-items: center; font-weight: 700; font-size: 11px;
+  }
+  .inbox-title { font-weight: 500; font-size: 13px; }
+  .inbox-badge {
+    background: var(--accent); color: #fff; border-radius: 10px;
+    padding: 1px 7px; font-size: 11px; font-weight: 600;
+  }
+  .inbox-msg { color: var(--text-2); font-size: 12px; }
+  .inbox .spacer { flex: 1; }
+
+  /* Status bar */
+  .status {
+    height: 26px; flex-shrink: 0;
+    background: var(--surface-alt);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 12px;
+    font-size: 11px; color: var(--text-2);
+    gap: 14px;
+  }
+  .status .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    color: var(--text);
+  }
+  .status .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-active { color: var(--c-area); font-weight: 500; }
+  .status .spacer { flex: 1; }
+  .status .ok { color: var(--success); }
+
+  /* Page meta */
+  .page-callout {
+    position: absolute; right: 12px; top: 12px;
+    background: rgba(255,255,255,0.95);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 12px; font-size: 11px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .page-callout strong { font-size: 13px; }
+
+  /* description below */
+  .desc {
+    max-width: 1280px; margin: 24px auto 0;
+    color: #4B5563; font-size: 13px; line-height: 1.6;
+  }
+  .desc h2 { color: #111827; font-size: 16px; margin: 0 0 8px; }
+  .nav { max-width: 1280px; margin: 0 auto 12px; font-size: 13px; }
+  .nav a { color: var(--accent); text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="nav"><a href="index.html">← Все макеты</a></div>
+
+  <div class="app">
+    <!-- Title bar -->
+    <div class="titlebar">
+      <div class="logo">S</div>
+      <div class="title">SmartTakeoffs</div>
+      <span class="title-sep">·</span>
+      <span class="title-job">Sample Project — Warehouse</span>
+      <div class="spacer"></div>
+      <div class="profile-pill"><span class="dot"></span> Drawing ▾</div>
+      <button class="btn ghost" title="Command Palette ⌘K">⌘K</button>
+      <button class="btn ghost">⚙</button>
+    </div>
+
+    <!-- Top toolbar -->
+    <div class="toolbar">
+      <div class="group">
+        <span class="group-label">Job</span>
+        <button class="btn">Open</button>
+        <button class="btn">New</button>
+      </div>
+      <div class="group">
+        <span class="group-label">PDF</span>
+        <button class="btn">Import</button>
+        <button class="btn">Export</button>
+        <button class="btn">Auto Name+Scale</button>
+      </div>
+      <div class="group">
+        <span class="group-label">Scale</span>
+        <span class="scale-chip">1 : 100 ▾</span>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn primary">Run AI</button>
+      <button class="btn ghost" title="Save">💾 Save</button>
+    </div>
+
+    <!-- Main -->
+    <div class="main">
+      <!-- Left panel -->
+      <div class="left">
+        <div class="panel-head">
+          <h3>Pages</h3>
+          <button class="btn ghost" style="height:24px;padding:0 8px;font-size:11px;">+ Import</button>
+        </div>
+        <div class="tree">
+          <div class="tree-item tree-folder"><span class="chev"></span> 00 Imported <span class="badge">12</span></div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Arch <span class="badge">5</span></div>
+          <div class="tree-item tree-child active">A101 — Floor Plan</div>
+          <div class="tree-item tree-child">A102 — Roof Plan</div>
+          <div class="tree-item tree-child">A201 — Elevations</div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Struct <span class="badge">3</span></div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Others <span class="badge">4</span></div>
+        </div>
+      </div>
+
+      <!-- Canvas with floating tool strip -->
+      <div class="canvas-wrap">
+        <div class="tool-strip">
+          <div class="tool-btn" title="Pan (V)">P<span class="kb">V</span></div>
+          <div class="tool-btn" title="Select (E)">↖<span class="kb">E</span></div>
+          <div class="divider"></div>
+          <div class="tool-btn" title="Scale (S)">⇿<span class="kb">S</span></div>
+          <div class="tool-btn" title="Count (P)" style="color:var(--c-count);">●<span class="kb">P</span></div>
+          <div class="tool-btn active" title="Line (L)">─<span class="kb">L</span></div>
+          <div class="tool-btn" title="Area (A)" style="color:var(--c-area);">■<span class="kb">A</span></div>
+          <div class="divider"></div>
+          <div class="tool-btn" title="Snap"><span style="font-size:14px;">◇</span></div>
+          <div class="tool-btn active" title="Ortho">⊥</div>
+        </div>
+        <div class="canvas">
+          <div class="hud">
+            <span class="tool-name">Line</span>
+            <span class="sep">·</span>
+            <span>Snap off · Ortho on</span>
+            <span class="kb">L</span>
+          </div>
+          <div class="page-callout">
+            <strong>A101</strong> · Floor Plan<br>
+            24″ × 36″ · 1 : 100
+          </div>
+          <div class="drawing">
+            <div class="area-shape"></div>
+            <div class="line-shape"></div>
+            <div class="count-pt" style="left:420px; top:200px;"></div>
+            <div class="count-pt" style="left:480px; top:210px;"></div>
+            <div class="count-pt" style="left:540px; top:200px;"></div>
+            <div class="count-pt" style="left:600px; top:210px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Inspector -->
+      <div class="right">
+        <div class="tabs">
+          <div class="tab">Takeoffs</div>
+          <div class="tab active">Inspector</div>
+        </div>
+        <div class="inspector">
+          <div class="insp-head">
+            <div class="swatch"></div>
+            <div>
+              <div class="insp-name">Concrete Slab</div>
+              <div class="insp-meta">Area · 504.0 sf · 1 page</div>
+            </div>
+          </div>
+
+          <div class="status-pills">
+            <span class="status-pill active">Takeoff</span>
+            <span class="status-pill">Reviewed</span>
+            <span class="status-pill">Revised</span>
+            <span class="status-pill">Final</span>
+          </div>
+
+          <div class="insp-section">
+            <h4>Properties</h4>
+            <div class="field"><label>Type</label><span class="value">Area</span></div>
+            <div class="field"><label>Subject</label><input type="text" value="CIP Slab"></div>
+            <div class="field"><label>Unit</label><span class="value">sf</span></div>
+            <div class="field"><label>Color</label><span class="value" style="display:flex;gap:6px;align-items:center;"><span style="width:14px;height:14px;background:var(--c-area);border-radius:3px;"></span> #7C3AED</span></div>
+          </div>
+
+          <div class="insp-section">
+            <h4>Quantities</h4>
+            <div class="field"><label>Area</label><span class="value">504.0 sf</span></div>
+            <div class="field"><label>Unit Rate</label><input type="text" value="$8.50"></div>
+            <div class="field"><label>Waste %</label><input type="text" value="5"></div>
+            <div class="field"><label>Formula</label><span class="value" style="font-family:Consolas,monospace;font-size:11px;">[Area]*[Rate]*(1+[Waste]/100)</span></div>
+          </div>
+
+          <div class="total-card">
+            <div class="label">Estimated Cost</div>
+            <div class="num">$4,498.20</div>
+            <div class="sub">504 sf × $8.50 + 5% waste</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Inbox bar -->
+    <div class="inbox">
+      <div class="inbox-icon">AI</div>
+      <span class="inbox-title">Inbox</span>
+      <span class="inbox-badge">2</span>
+      <span class="inbox-msg">Roof type detected on A102 · 1 measurement queued</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" style="height:26px;font-size:12px;">Expand ▴</button>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status">
+      <span class="chip"><span class="dot" style="background:var(--success);"></span> Sample Project</span>
+      <span>A101 · 24″×36″</span>
+      <span class="chip" style="color:var(--accent);">1 : 100</span>
+      <span>73 %</span>
+      <span style="font-family:Consolas,monospace; font-size:11px;">412.0, 188.5 pt · 34′ 4″, 15′ 8″</span>
+      <span class="chip">⊥ Ortho</span>
+      <span class="chip status-active"><span class="dot" style="background:var(--c-area);"></span> Concrete Slab</span>
+      <div class="spacer"></div>
+      <span class="ok">✓ Saved 12s ago</span>
+    </div>
+  </div>
+
+  <div class="desc">
+    <h2>Modern Light — характеристики</h2>
+    <p>
+      Светлая, мягкая, продуктовая эстетика в духе Linear/Figma. Канвас доминирует, hux-чип
+      слева сверху показывает текущий инструмент, плавающая вертикальная панель инструментов
+      освобождает горизонтальное пространство верхнего тулбара.
+    </p>
+    <p>
+      Правая панель — Inspector с активным таб-переключателем; статус-pills (Takeoff →
+      Reviewed → Revised → Final) встроены прямо в карточку, формула цены показана inline,
+      итоговая стоимость — крупная карточка-акцент.
+    </p>
+    <p>
+      Status bar внизу превращён в активную информационную панель: масштаб, зум, координаты
+      курсора в pt и в футах, активный takeoff с цветной точкой, индикатор автосохранения.
+    </p>
+    <p>
+      Цвет акцента (Indigo) используется только для primary-действия и активного состояния —
+      это даёт «pro tool» ощущение без визуального хаоса.
+    </p>
+  </div>
+</body>
+</html>

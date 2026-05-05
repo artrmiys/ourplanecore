@@ -186,7 +186,7 @@ public static class PdfSheetMetadataService
         out string error)
     {
         if (File.Exists(page.PdfPath))
-            return TryAnalyzePage(page, out metadata, out error);
+            return TryAnalyzePage(page, out metadata, out error, job);
 
         return TryAnalyzeFromResolvedSource(job, page, out metadata, out error);
     }
@@ -194,7 +194,8 @@ public static class PdfSheetMetadataService
     public static bool TryAnalyzePage(
         PageInfo page,
         out PdfSheetMetadata metadata,
-        out string error)
+        out string error,
+        SmartTakeoffsJob? job = null)
     {
         metadata = new PdfSheetMetadata();
         error = "";
@@ -215,7 +216,7 @@ public static class PdfSheetMetadataService
         }
 
         metadata = response.Metadata ?? new PdfSheetMetadata();
-        NormalizeMetadata(page, metadata);
+        NormalizeMetadata(page, metadata, job);
         return true;
     }
 
@@ -281,7 +282,7 @@ public static class PdfSheetMetadataService
                     PdfLayers = [],
                 };
 
-                if (!TryAnalyzePage(candidatePage, out PdfSheetMetadata candidate, out string candidateError))
+                if (!TryAnalyzePage(candidatePage, out PdfSheetMetadata candidate, out string candidateError, job))
                 {
                     scanErrors.Add($"{Path.GetFileName(pdf)} page {pageIndex + 1}: {candidateError}");
                     continue;
@@ -435,7 +436,8 @@ public static class PdfSheetMetadataService
         SmartAiRequest request,
         SmartAiResponse response,
         out PdfSheetMetadata metadata,
-        out string error)
+        out string error,
+        SmartTakeoffsJob? job = null)
     {
         metadata = new PdfSheetMetadata();
         error = "";
@@ -476,7 +478,7 @@ public static class PdfSheetMetadataService
                 if (string.IsNullOrWhiteSpace(metadata.SelectedScaleText))
                     metadata.SelectedScaleText = metadata.ScaleText;
 
-                NormalizeMetadata(page, metadata);
+                NormalizeMetadata(page, metadata, job);
                 metadata.Warnings.Add($"metadata fallback response: {request.Id}");
                 return true;
             }
@@ -490,7 +492,7 @@ public static class PdfSheetMetadataService
         return false;
     }
 
-    private static void NormalizeMetadata(PageInfo page, PdfSheetMetadata metadata)
+    private static void NormalizeMetadata(PageInfo page, PdfSheetMetadata metadata, SmartTakeoffsJob? job = null)
     {
         metadata.SchemaVersion = metadata.SchemaVersion <= 0 ? 1 : metadata.SchemaVersion;
         metadata.PdfPath = string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath;
@@ -506,6 +508,8 @@ public static class PdfSheetMetadataService
         if (metadata.AllScales.Count == 0 && metadata.BodyScales.Count > 0)
             metadata.AllScales = metadata.BodyScales.ToList();
 
+        if (job != null)
+            SmartLearningStore.ApplyProjectLearnedRules(job, metadata);
         SmartLearningStore.ApplyLearnedRules(metadata);
 
         if (string.IsNullOrWhiteSpace(metadata.SelectedScaleText) && !string.IsNullOrWhiteSpace(metadata.ScaleText))

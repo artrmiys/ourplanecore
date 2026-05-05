@@ -4,41 +4,212 @@
         Title="SmartTakeoffs" Height="780" Width="1280"
         MinHeight="600" MinWidth="900"
         Background="{DynamicResource WindowBackgroundBrush}">
+    <Window.Resources>
+        <Style x:Key="TopCommandButton" TargetType="Button" BasedOn="{StaticResource ToolBtn}">
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,3,0"/>
+        </Style>
+        <Style x:Key="TopCommandToggle" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,3,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                    <Setter Property="FontWeight" Value="Normal"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TopCommandCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,7,0"/>
+        </Style>
+        <Style x:Key="TopCommandLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+        </Style>
+    </Window.Resources>
     <DockPanel x:Name="RootDock">
+
+        <TabControl x:Name="TopMainTabs"
+                    DockPanel.Dock="Top"
+                    ItemContainerStyle="{StaticResource CommandTabItem}"
+                    MinHeight="60"
+                    MaxHeight="66"
+                    FontSize="11"
+                    Background="{DynamicResource ControlBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlBorderBrush}">
+            <TabItem Header="Main">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6,3">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,9,0">
+                            <TextBlock Text="Job" Style="{StaticResource TopCommandLabel}"/>
+                            <Button Content="Open" Click="BtnOpen_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Open the internal job picker (Ctrl+O)"/>
+                            <Button Content="Folders" Click="BtnOpenJobsFolder_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Add/switch one or more job root folders"/>
+                            <Button Content="New" Click="BtnNewJob_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Create a new job folder"/>
+                        </StackPanel>
+                        <Separator/>
+                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
+                            <TextBlock Text="PDF" Style="{StaticResource TopCommandLabel}"/>
+                            <Button Content="Import" Click="BtnImport_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Add PDF pages to current job"/>
+                            <Button Content="Export" Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Export selected/all sheets to a PDF"/>
+                            <Button Content="Name" Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Preview and apply PDF sheet names"/>
+                            <Button Content="Scale" Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Preview and apply PDF sheet scale"/>
+                            <Button Content="Name+Scale" Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Preview and apply PDF sheet names and scale"/>
+                            <Button Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Queue GPT fallback for missing PDF sheet metadata"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Display">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6,3">
+                        <!-- ── Values: which value labels are shown ───────────── -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,9,0">
+                            <TextBlock Text="Values" Style="{StaticResource TopCommandLabel}"
+                                       ToolTip="Show or hide measurement value labels in the viewport"/>
+                            <CheckBox x:Name="ChkDisplayMeasurementLabels" Content="All" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Master toggle for all measurement value labels"/>
+                            <CheckBox x:Name="ChkDisplayLineLabels" Content="Line ft" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Show length label on each line measurement"/>
+                            <CheckBox x:Name="ChkDisplayAreaLabels" Content="Area sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Show area label on each area measurement"/>
+                            <CheckBox x:Name="ChkDisplayCountLabels" Content="Count ea" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Show count label on each count measurement"/>
+                        </StackPanel>
+                        <Separator/>
+                        <!-- ── Label: appearance of value labels ──────────────── -->
+                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
+                            <TextBlock Text="Label" Style="{StaticResource TopCommandLabel}"
+                                       ToolTip="How measurement value labels are drawn"/>
+                            <TextBox x:Name="TxtMeasurementLabelScale"
+                                     Width="42"
+                                     Height="22"
+                                     Text="1.0"
+                                     VerticalAlignment="Center"
+                                     FontSize="11"
+                                     Margin="0,0,3,0"
+                                     KeyDown="TxtMeasurementLabelScale_KeyDown"
+                                     LostFocus="TxtMeasurementLabelScale_LostFocus"
+                                     ToolTip="Value label scale 0.5 - 3.0 (e.g. 1.0 = default size)"/>
+                            <Button Content="Set" Click="BtnMeasurementLabelApply_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Apply the typed scale value"/>
+                            <Button Content="▾" Click="BtnLabelSizePresets_Click" Style="{StaticResource TopCommandButton}" MinWidth="20"
+                                    ToolTip="Pick a preset (Small / Normal / Large / XL / XXL / Custom)"/>
+                            <CheckBox x:Name="ChkDisplayLabelsScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Off (default): labels keep a fixed screen size when zooming. On: labels grow/shrink with page zoom."/>
+                        </StackPanel>
+                        <Separator/>
+                        <!-- ── Legend: sheet legend overlay ───────────────────── -->
+                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
+                            <TextBlock Text="Legend" Style="{StaticResource TopCommandLabel}"
+                                       ToolTip="Sheet legend overlay (per-page color/sign list)"/>
+                            <CheckBox x:Name="ChkDisplayLegend" Content="Show" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Show or hide the legend overlay on the active sheet"/>
+                            <Button Content="Size" Click="BtnLegendSizeMenu_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Pick legend size preset"/>
+                            <Button Content="Pos" Click="BtnLegendPositionMenu_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Pick legend anchor (corner/edge of the sheet)"/>
+                            <CheckBox x:Name="ChkDisplayLegendScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Off (default): legend keeps a fixed screen size when zooming. On: legend grows/shrinks with page zoom."/>
+                        </StackPanel>
+                        <Separator/>
+                        <!-- ── Header: sheet scale/size header overlay ────────── -->
+                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
+                            <TextBlock Text="Header" Style="{StaticResource TopCommandLabel}"
+                                       ToolTip="Top-of-sheet header overlay (drawing scale + sheet size)"/>
+                            <Button Content="Size" Click="BtnScaleHeaderSizeMenu_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Pick header size preset"/>
+                            <CheckBox x:Name="ChkDisplayHeaderScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Off (default): header keeps a fixed screen size when zooming. On: header grows/shrinks with page zoom."/>
+                        </StackPanel>
+                        <Separator/>
+                        <!-- ── View: viewport appearance ──────────────────────── -->
+                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
+                            <TextBlock Text="View" Style="{StaticResource TopCommandLabel}"
+                                       ToolTip="Viewport units and theme"/>
+                            <CheckBox x:Name="ChkDisplayImperial" Content="ft/sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Imperial units (ft / sf / ea). Off = metric."/>
+                            <Button x:Name="BtnDisplayViewportBg" Content="BG" Click="BtnViewportBg_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Pick viewport background color"/>
+                            <ToggleButton x:Name="BtnDisplayDarkTheme" Content="Dark" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
+                                          Style="{StaticResource TopCommandToggle}"
+                                          ToolTip="Toggle dark/light UI theme"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
 
         <!-- ── Toolbar ─────────────────────────────────────────────────────── -->
         <ToolBar x:Name="MainToolBar" DockPanel.Dock="Top" Background="{DynamicResource ControlBackgroundBrush}">
 
-            <Button x:Name="BtnOpen" Content="📂 Open Job"
-                    ToolTip="Open a SmartTakeoffs job folder (Ctrl+O)"
-                    Click="BtnOpen_Click" Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnOpenJobsFolder" Content="Jobs"
-                    ToolTip="Open a folder containing multiple jobs"
-                    Click="BtnOpenJobsFolder_Click" Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnNewJob" Content="＋ New Job"
-                    ToolTip="Create a new job folder"
-                    Click="BtnNewJob_Click" Style="{StaticResource ToolBtn}"/>
-
-            <Separator/>
             <TextBlock x:Name="TxtJobName" VerticalAlignment="Center"
                        Text="— no job —" FontSize="11" Margin="4,0"
-                       FontStyle="Italic"/>
+                       FontWeight="Normal"/>
 
             <Separator/>
 
-            <!-- Drawing tools -->
-            <Button x:Name="BtnPan"   Content="Pan ✋"  Click="BtnTool_Click" Tag="pan"
-                    ToolTip="Pan (V)"   Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnSelect" Content="Select" Click="BtnTool_Click" Tag="select"
-                    ToolTip="Box select measurements (E). Ctrl+C copy, Ctrl+V paste" Style="{StaticResource ToolBtnActive}"/>
-            <Button x:Name="BtnScale" Content="Scale 📐" Click="BtnTool_Click" Tag="scale"
-                    ToolTip="Set scale (S)" Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnPoint" Content="Count"  Click="BtnTool_Click" Tag="point"
-                    ToolTip="Count point (P)" Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnLine"  Content="Line ╱"   Click="BtnTool_Click" Tag="line"
-                    ToolTip="Measure line (L)" Style="{StaticResource ToolBtn}"/>
-            <Button x:Name="BtnArea"  Content="Area ▭"   Click="BtnTool_Click" Tag="area"
-                    ToolTip="Measure area (A)" Style="{StaticResource ToolBtn}"/>
+            <!-- Drawing tools (radio group) -->
+            <RadioButton x:Name="BtnPan"    Content="Pan"    Click="BtnTool_Click" Tag="pan"
+                         GroupName="DrawingTool" ToolTip="Pan (V)"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnSelect" Content="Select" Click="BtnTool_Click" Tag="select"
+                         GroupName="DrawingTool" IsChecked="True"
+                         ToolTip="Box select measurements (E). Ctrl+C copy, Ctrl+V paste"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnScale"  Content="Scale"  Click="BtnTool_Click" Tag="scale"
+                         GroupName="DrawingTool" ToolTip="Set scale (S)"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnRuler"  Content="Ruler"  Click="BtnTool_Click" Tag="ruler"
+                         GroupName="DrawingTool" ToolTip="Place a dimension/ruler markup on the PDF (R)"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnDrawLine"  Content="Draw"  Click="BtnTool_Click" Tag="drawline"
+                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff line markup (D)"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnDrawArrow"  Content="Arrow"  Click="BtnTool_Click" Tag="drawarrow"
+                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff arrow markup"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnDrawRect"  Content="Box"  Click="BtnTool_Click" Tag="drawrect"
+                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff box markup (B)"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnPoint"  Content="Count"  Click="BtnTool_Click" Tag="point"
+                         GroupName="DrawingTool" ToolTip="Draw count into the active Count item (P). Ctrl+click creates a new Count item"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnLine"   Content="Line"   Click="BtnTool_Click" Tag="line"
+                         GroupName="DrawingTool" ToolTip="Draw line into the active Line item (L). Ctrl+click creates a new Line item"
+                         Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnArea"   Content="Area"   Click="BtnTool_Click" Tag="area"
+                         GroupName="DrawingTool" ToolTip="Draw area into the active Area item (A). Ctrl+click creates a new Area item"
+                         Style="{StaticResource ToolRadio}"/>
             <ToggleButton x:Name="BtnSnap" Content="Snap"
                           ToolTip="Snap to existing takeoff points (F3)"
                           Checked="BtnSnap_Checked" Unchecked="BtnSnap_Unchecked"
@@ -73,16 +244,6 @@
                        FontSize="11" Margin="4,0"/>
 
             <Separator/>
-            <ToggleButton x:Name="BtnImperial" Content="ft"
-                          ToolTip="Toggle imperial units (ft / sf / ea)"
-                          Checked="BtnImperial_Checked" Unchecked="BtnImperial_Unchecked"
-                          Padding="6,2" MinWidth="32"/>
-            <Button x:Name="BtnViewportBg" Content="BG" Click="BtnViewportBg_Click"
-                    ToolTip="Viewport background" Style="{StaticResource ToolBtn}"/>
-            <ToggleButton x:Name="BtnDarkTheme" Content="Dark"
-                          ToolTip="Toggle dark/light UI"
-                          Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
-                          Padding="6,2" MinWidth="48"/>
             <Button x:Name="BtnOpenAiSettings" Content="AI Settings"
                     ToolTip="OpenAI key status and model settings"
                     Click="BtnOpenAiSettings_Click"
@@ -97,7 +258,7 @@
         <StatusBar x:Name="MainStatusBar" DockPanel.Dock="Bottom" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1">
             <StatusBarItem>
                 <TextBlock x:Name="TxtStatusJob" Text="No job"
-                           FontWeight="SemiBold" Margin="0,0,4,0"/>
+                           FontWeight="Normal" Margin="0,0,4,0"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem MinWidth="150">
@@ -111,38 +272,65 @@
         </StatusBar>
 
         <!-- ── Main area: 3-column content + AI Inbox ──────────────────────── -->
+        <TabControl x:Name="WorkspaceTabs"
+                    SelectionChanged="WorkspaceTabs_SelectionChanged"
+                    ItemContainerStyle="{StaticResource WorkspaceTabItem}"
+                    Background="{DynamicResource PanelBackgroundBrush}"
+                    Foreground="{DynamicResource ControlForegroundBrush}"
+                    BorderBrush="{DynamicResource ControlBorderBrush}">
+            <TabItem Header="1 Main View" Tag="MainView">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="280"/>
-                <RowDefinition x:Name="InboxSplitterRow" Height="4"/>
-                <RowDefinition x:Name="InboxRow" Height="170" MinHeight="30"/>
+                <RowDefinition x:Name="InboxSplitterRow" Height="0"/>
+                <RowDefinition x:Name="InboxRow" Height="30" MinHeight="30"/>
             </Grid.RowDefinitions>
 
             <!-- ── Row 0: 3-column layout ───────────────────────────────── -->
             <Grid Grid.Row="0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" MinWidth="120"/>
+                    <ColumnDefinition x:Name="PagesColumn" Width="200" MinWidth="120"/>
                     <ColumnDefinition Width="5"/>
                     <ColumnDefinition Width="*"   MinWidth="400"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition Width="220" MinWidth="120"/>
+                    <ColumnDefinition x:Name="TakeoffsColumn" Width="300" MinWidth="180"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Left panel: Pages -->
-                <DockPanel x:Name="PagesPanel" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}">
+                <DockPanel x:Name="PagesPanel" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
+                           SizeChanged="SidePanel_SizeChanged">
                     <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
-                        <TextBlock Text="Pages" Style="{StaticResource PanelHeader}"/>
+                        <DockPanel LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="BtnCollapsePagesTree"
+                                        Content="-"
+                                        Click="BtnCollapsePagesTree_Click"
+                                        Width="22"
+                                        MinWidth="22"
+                                        Padding="0"
+                                        Margin="2,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Collapse all Pages nodes"/>
+                                <Button x:Name="BtnExpandPagesTree"
+                                        Content="+"
+                                        Click="BtnExpandPagesTree_Click"
+                                        Width="22"
+                                        MinWidth="22"
+                                        Padding="0"
+                                        Margin="2,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Expand all Pages nodes"/>
+                            </StackPanel>
+                            <TextBlock Text="Pages"
+                                       Style="{StaticResource PanelHeader}"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
                     </Border>
                     <ScrollViewer DockPanel.Dock="Top"
                                   VerticalScrollBarVisibility="Auto"
                                   MaxHeight="320">
                         <StackPanel Margin="4">
-                            <Button Content="Import PDF"
-                                    Click="BtnImport_Click"
-                                    Padding="5,3"
-                                    Margin="0,0,0,4"
-                                    ToolTip="Add PDF pages to current job"/>
-                            <UniformGrid Columns="2" Margin="0,0,0,4">
+                            <UniformGrid Columns="3" Margin="0,0,0,4">
                                 <Button x:Name="BtnSortPagesArchStruct"
                                         Content="Sort A/S"
                                         Click="BtnSortPagesArchStruct_Click"
@@ -150,8 +338,15 @@
                                         Margin="0,0,3,0"
                                         FontSize="11"
                                         ToolTip="Move imported A sheets to Arch, S sheets to Struct, and trailing '-' sheets to others"/>
+                                <Button x:Name="BtnSortPagesSuffix"
+                                        Content="D/Sec/WT"
+                                        Click="BtnSortPagesSuffix_Click"
+                                        Padding="4,3"
+                                        Margin="0,0,3,0"
+                                        FontSize="11"
+                                        ToolTip="Sort suffix sheets: d/sec/u into page folders and v/wt/ft/sv/sw to the top of Pages"/>
                                 <Button x:Name="BtnRepairMeasurementPageLinks"
-                                        Content="Repair Links"
+                                        Content="Repair"
                                         Click="BtnRepairMeasurementPageLinks_Click"
                                         Padding="4,3"
                                         FontSize="11"
@@ -185,45 +380,6 @@
                                 </StackPanel>
                             </Expander>
 
-                            <Expander Header="PDF Auto"
-                                      IsExpanded="False"
-                                      Foreground="{DynamicResource ControlForegroundBrush}"
-                                      Background="{DynamicResource ControlBackgroundBrush}"
-                                      BorderBrush="{DynamicResource ControlBorderBrush}"
-                                      BorderThickness="1"
-                                      Padding="4"
-                                      Margin="0,0,0,4">
-                                <UniformGrid Columns="2" Rows="2">
-                                    <Button x:Name="BtnAutoRenamePdf"
-                                            Content="Auto Name"
-                                            Click="BtnAutoRenamePdf_Click"
-                                            Padding="4,2"
-                                            Margin="0,0,3,3"
-                                            FontSize="11"
-                                            ToolTip="Preview and apply PDF sheet names for selected page/folder"/>
-                                    <Button x:Name="BtnAutoScalePdf"
-                                            Content="Auto Scale"
-                                            Click="BtnAutoScalePdf_Click"
-                                            Padding="4,2"
-                                            Margin="0,0,0,3"
-                                            FontSize="11"
-                                            ToolTip="Preview and apply PDF sheet scale for selected page/folder"/>
-                                    <Button x:Name="BtnAutoRenameScalePdf"
-                                            Content="Name+Scale"
-                                            Click="BtnAutoRenameScalePdf_Click"
-                                            Padding="4,2"
-                                            Margin="0,0,3,0"
-                                            FontSize="11"
-                                            ToolTip="Preview and apply PDF sheet names and scale"/>
-                                    <Button x:Name="BtnQueuePdfMetadataFallback"
-                                            Content="AI Fill"
-                                            Click="BtnQueuePdfMetadataFallback_Click"
-                                            Padding="4,2"
-                                            FontSize="11"
-                                            ToolTip="Queue GPT fallback for missing PDF sheet metadata"/>
-                                </UniformGrid>
-                            </Expander>
-
                             <Expander Header="PDF Layers"
                                       IsExpanded="False"
                                       Foreground="{DynamicResource ControlForegroundBrush}"
@@ -251,6 +407,32 @@
                                                 Margin="4,0,0,0"
                                                 FontSize="10"/>
                                     </StackPanel>
+                                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+                                        <ToggleButton x:Name="BtnLayerTraceMode"
+                                                      Content="Layer Trace"
+                                                      Click="BtnLayerTraceMode_Click"
+                                                      Padding="3,1"
+                                                      Margin="0,0,4,0"
+                                                      FontSize="10"/>
+                                        <Button x:Name="BtnLayerTraceCycle"
+                                                Content="Full"
+                                                Click="BtnLayerTraceCycle_Click"
+                                                Padding="3,1"
+                                                Margin="0,0,4,0"
+                                                FontSize="10"/>
+                                        <Button x:Name="BtnLayerTraceApply"
+                                                Content="Apply"
+                                                Click="BtnLayerTraceApply_Click"
+                                                Padding="3,1"
+                                                FontSize="10"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtLayerTraceStatus"
+                                               DockPanel.Dock="Top"
+                                               Text="Select a layer for Layer Trace."
+                                               FontSize="10"
+                                               Foreground="Gray"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,3"/>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="150">
                                         <StackPanel x:Name="LayersPanel" Margin="0"/>
                                     </ScrollViewer>
@@ -260,10 +442,14 @@
                     </ScrollViewer>
                     <TreeView x:Name="PagesTree"
                               SelectedItemChanged="PagesTree_SelectedItemChanged"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              HorizontalAlignment="Stretch"
                               Margin="2"/>
                 </DockPanel>
 
                 <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                              DragCompleted="SidePanelSplitter_DragCompleted"
                               Background="{DynamicResource SplitterBrush}" ResizeBehavior="PreviousAndNext"/>
 
                 <!-- Centre: page tabs + PDF viewport -->
@@ -281,25 +467,184 @@
                                 Foreground="{DynamicResource ControlForegroundBrush}"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"/>
                     <Grid x:Name="ViewportSurfaceHost" Grid.Row="1"/>
+                    <Border x:Name="ViewportLayerTraceBar"
+                            Grid.Row="1"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,10,12,0"
+                            Padding="4"
+                            Background="#EFFFFFFF"
+                            BorderBrush="#66000000"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Panel.ZIndex="8"
+                            Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton x:Name="BtnViewportLayerTraceToggle"
+                                          Content="Manual"
+                                          Click="BtnViewportLayerTraceToggle_Click"
+                                          Padding="7,2"
+                                          MinWidth="82"
+                                          FontSize="11"
+                                          ToolTip="Toggle Manual / PDF Layer Trace mode in the viewport (T)"/>
+                            <Button x:Name="BtnViewportLayerTraceCycle"
+                                    Content="Full"
+                                    Click="BtnViewportLayerTraceCycle_Click"
+                                    Padding="7,2"
+                                    Margin="4,0,0,0"
+                                    MinWidth="58"
+                                    FontSize="11"
+                                    ToolTip="Cycle Layer Trace mode (Tab while Layer Trace is on)"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
                 <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
+                              DragCompleted="SidePanelSplitter_DragCompleted"
                               Background="{DynamicResource SplitterBrush}" ResizeBehavior="PreviousAndNext"/>
 
                 <!-- Right panel: Takeoffs -->
-                <DockPanel x:Name="TakeoffsPanel" Grid.Column="4" Background="{DynamicResource PanelBackgroundBrush}">
+                <DockPanel x:Name="TakeoffsPanel" Grid.Column="4" Background="{DynamicResource PanelBackgroundBrush}"
+                           SizeChanged="SidePanel_SizeChanged">
                     <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
-                        <TextBlock Text="Takeoffs" Style="{StaticResource PanelHeader}"/>
+                        <DockPanel LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="BtnCollapseTakeoffsTree"
+                                        Content="-"
+                                        Click="BtnCollapseTakeoffsTree_Click"
+                                        Width="22"
+                                        MinWidth="22"
+                                        Padding="0"
+                                        Margin="2,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Collapse all Takeoffs nodes"/>
+                                <Button x:Name="BtnExpandTakeoffsTree"
+                                        Content="+"
+                                        Click="BtnExpandTakeoffsTree_Click"
+                                        Width="22"
+                                        MinWidth="22"
+                                        Padding="0"
+                                        Margin="2,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Expand all Takeoffs nodes"/>
+                            </StackPanel>
+                            <TextBlock Text="Takeoffs"
+                                       Style="{StaticResource PanelHeader}"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+                    <Border x:Name="ActiveTakeoffTargetBar"
+                            DockPanel.Dock="Top"
+                            Visibility="Collapsed"
+                            Background="{DynamicResource ControlActiveBackgroundBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="6,4">
+                        <DockPanel LastChildFill="True">
+                            <Button x:Name="BtnActiveTakeoffRecord"
+                                    DockPanel.Dock="Right"
+                                    Content="Record"
+                                    Click="BtnActiveTakeoffRecord_Click"
+                                    Padding="6,2"
+                                    Margin="6,0,0,0"
+                                    FontSize="11"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Record into the active takeoff item"/>
+                            <Button x:Name="BtnActiveTakeoffMore"
+                                    DockPanel.Dock="Right"
+                                    Content="More"
+                                    Click="BtnActiveTakeoffMore_Click"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    FontSize="11"
+                                    VerticalAlignment="Center"
+                                    ToolTip="More active target actions"/>
+                            <Button x:Name="BtnActiveTakeoffProperties"
+                                    DockPanel.Dock="Right"
+                                    Content="Props"
+                                    Click="BtnActiveTakeoffProperties_Click"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    FontSize="11"
+                                    Visibility="Collapsed"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Edit active takeoff item properties"/>
+                            <Button x:Name="BtnActiveTakeoffFind"
+                                    DockPanel.Dock="Right"
+                                    Content="Find"
+                                    Click="BtnActiveTakeoffFind_Click"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    FontSize="11"
+                                    Visibility="Collapsed"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Show active takeoff item in the tree"/>
+                            <Button x:Name="BtnActiveTakeoffSheetNext"
+                                    DockPanel.Dock="Right"
+                                    Content="Sheet"
+                                    Click="BtnActiveTakeoffSheetNext_Click"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    FontSize="11"
+                                    Visibility="Collapsed"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Choose a takeoff item measured on this sheet"/>
+                            <Button x:Name="BtnActiveTakeoffNext"
+                                    DockPanel.Dock="Right"
+                                    Content="&gt;"
+                                    Click="BtnActiveTakeoffNext_Click"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    FontSize="11"
+                                    Visibility="Collapsed"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Switch to next takeoff item"/>
+                            <Button x:Name="BtnActiveTakeoffPrevious"
+                                    DockPanel.Dock="Right"
+                                    Content="&lt;"
+                                    Click="BtnActiveTakeoffPrevious_Click"
+                                    Padding="6,2"
+                                    Margin="4,0,0,0"
+                                    FontSize="11"
+                                    Visibility="Collapsed"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Switch to previous takeoff item"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="ActiveTakeoffTargetGlyphHost"
+                                        Width="18" Height="18"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtActiveTakeoffTarget"
+                                               Text="No active takeoff"
+                                               Foreground="{DynamicResource ControlActiveForegroundBrush}"
+                                               FontWeight="Normal"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtActiveTakeoffTargetMeta"
+                                               Text=""
+                                               Foreground="{DynamicResource ControlActiveForegroundBrush}"
+                                               Opacity="0.86"
+                                               FontSize="10"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DockPanel>
                     </Border>
                     <StackPanel DockPanel.Dock="Bottom" Margin="4,4">
                         <TextBlock x:Name="TxtTotal" Text="Total: —"
-                                   FontWeight="Bold" FontSize="12" Margin="0,0,0,6"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                   FontWeight="Normal" FontSize="12" Margin="0,0,0,6"/>
+                        <UniformGrid Columns="2" Margin="0,0,0,4">
                             <Button Content="Save"       Click="BtnSave_Click"
-                                    Padding="5,3" Margin="0,0,4,0"/>
+                                    Padding="5,3" Margin="0,0,4,3"/>
                             <Button Content="Export CSV" Click="BtnExportCsv_Click"
-                                    Padding="5,3"/>
-                        </StackPanel>
+                                    Padding="5,3" Margin="0,0,0,3"/>
+                            <Button Content="TXT" Click="BtnExportTxt_Click"
+                                    Padding="5,3" Margin="0,0,4,0"
+                                    ToolTip="Export selected/all takeoffs in PlanSwift text format"/>
+                            <Button Content="Excel" Click="BtnExportExcel_Click"
+                                    Padding="5,3"
+                                    ToolTip="Export selected/all takeoffs to .xlsx columns J/K/L from J10"/>
+                        </UniformGrid>
                         <StackPanel Orientation="Horizontal">
                             <Button Content="New Folder" Click="BtnNewTakeoffFolder_Click"
                                     Padding="5,3" Margin="0,0,4,0"/>
@@ -321,6 +666,9 @@
                     </StackPanel>
                     <TreeView x:Name="TakeoffsTree"
                               SelectedItemChanged="TakeoffsTree_SelectedItemChanged"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              HorizontalAlignment="Stretch"
                               Margin="2"/>
                 </DockPanel>
             </Grid>
@@ -347,7 +695,7 @@
                                 Click="BtnToggleInbox_Click"
                                 Background="Transparent" BorderThickness="0"
                                 Padding="6,0" MinWidth="28" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtInboxToggle" Text="▾" FontSize="13"/>
+                            <TextBlock x:Name="TxtInboxToggle" Text="+" FontSize="13"/>
                         </Button>
                         <!-- Add observation -->
                         <Button x:Name="BtnInboxAdd" Content="+ Add"
@@ -363,51 +711,16 @@
                                 Style="{StaticResource ToolBtn}"
                                 Padding="7,2" Margin="4,3" FontSize="11"
                                 VerticalAlignment="Center"/>
-                        <Button x:Name="BtnRunNewBookmarks" Content="Run New"
+                        <Button x:Name="BtnInboxMore" Content="More"
                                 DockPanel.Dock="Right"
-                                Click="BtnRunNewBookmarks_Click"
+                                Click="BtnInboxMore_Click"
                                 Style="{StaticResource ToolBtn}"
                                 Padding="7,2" Margin="4,3" FontSize="11"
-                                ToolTip="Send only new crop bookmarks to OpenAI"
-                                VerticalAlignment="Center"/>
-                        <Button x:Name="BtnRetryFailedBookmarks" Content="Retry Failed"
-                                DockPanel.Dock="Right"
-                                Click="BtnRetryFailedBookmarks_Click"
-                                Style="{StaticResource ToolBtn}"
-                                Padding="7,2" Margin="4,3" FontSize="11"
-                                ToolTip="Retry failed crop bookmarks without rerunning done bookmarks"
-                                VerticalAlignment="Center"/>
-                        <Button x:Name="BtnCreateMarkerSet" Content="Set"
-                                DockPanel.Dock="Right"
-                                Click="BtnCreateMarkerSet_Click"
-                                Style="{StaticResource ToolBtn}"
-                                Padding="7,2" Margin="4,3" FontSize="11"
-                                ToolTip="Create marker set from current marker filters"
-                                VerticalAlignment="Center"/>
-                        <Button x:Name="BtnManageMarkerSets" Content="Sets..."
-                                DockPanel.Dock="Right"
-                                Click="BtnManageMarkerSets_Click"
-                                Style="{StaticResource ToolBtn}"
-                                Padding="7,2" Margin="4,3" FontSize="11"
-                                ToolTip="Apply, rename, delete, or open saved marker sets"
-                                VerticalAlignment="Center"/>
-                        <Button x:Name="BtnExportMarkers" Content="Export"
-                                DockPanel.Dock="Right"
-                                Click="BtnExportMarkers_Click"
-                                Style="{StaticResource ToolBtn}"
-                                Padding="7,2" Margin="4,3" FontSize="11"
-                                ToolTip="Export current active markers into AI_Context/exports/markers_context.json"
-                                VerticalAlignment="Center"/>
-                        <Button x:Name="BtnBuildMassingDraft" Content="Build 3D"
-                                DockPanel.Dock="Right"
-                                Click="BtnBuildMassingDraft_Click"
-                                Style="{StaticResource ToolBtn}"
-                                Padding="7,2" Margin="4,3" FontSize="11"
-                                ToolTip="Build AI_Context/3d_massing/model.json from reviewed AI markers"
+                                ToolTip="More AI Inbox actions"
                                 VerticalAlignment="Center"/>
                         <!-- Title -->
                         <TextBlock x:Name="TxtInboxTitle" Text="AI Inbox"
-                                   FontWeight="Bold" VerticalAlignment="Center"
+                                   FontWeight="Normal" VerticalAlignment="Center"
                                    FontSize="12"/>
                         <!-- Count badge — subtle accent pill -->
                         <Border x:Name="InboxBadge" CornerRadius="8"
@@ -416,7 +729,7 @@
                                 VerticalAlignment="Center" Visibility="Collapsed">
                             <TextBlock x:Name="TxtInboxCount" Text="0"
                                        Foreground="{DynamicResource ControlActiveForegroundBrush}"
-                                       FontSize="10" FontWeight="Bold"/>
+                                       FontSize="10" FontWeight="Normal"/>
                         </Border>
                         <ComboBox x:Name="ComboMarkerTypeFilter"
                                   Width="132" Height="22" Margin="10,3,0,3"
@@ -462,6 +775,192 @@
             </Grid>
 
         </Grid>
+            </TabItem>
+
+            <TabItem Header="2 Sheet Manager" Tag="SheetManager">
+                <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
+                    <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
+                        <WrapPanel.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource ManagerButton}"/>
+                        </WrapPanel.Resources>
+                        <TextBlock Text="PDF" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Import PDF" Click="BtnImport_Click" ToolTip="Add PDF pages to the current job"/>
+                        <Button Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
+                        <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>
+                        <Button Content="Analyze" Click="BtnSheetManagerAnalyze_Click" ToolTip="Read PDF text/layers and preview sheet metadata"/>
+                        <Button Content="Auto Name" Click="BtnSheetManagerAutoName_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview automatic sheet names"/>
+                        <Button Content="Auto Scale" Click="BtnSheetManagerAutoScale_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview automatic sheet scales"/>
+                        <Button Content="Name+Scale" Click="BtnSheetManagerAutoNameScale_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview names and scales together"/>
+                        <Button Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Margin="0,0,12,4" ToolTip="Queue GPT fallback for missing sheet metadata"/>
+                        <Button Content="Apply Checked" Click="BtnSheetManagerApplyChecked_Click" Style="{StaticResource ManagerCommitButton}" ToolTip="Apply checked rename/scale rows to the job"/>
+                        <TextBlock Text="Open" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Open Sheet" Click="BtnSheetManagerOpenSheet_Click" ToolTip="Switch to the selected sheet in Main View"/>
+                        <Button Content="Open JSON" Click="BtnSheetManagerOpenJson_Click" Margin="0,0,12,4" ToolTip="Open the PDF metadata JSON for inspection"/>
+                        <TextBlock Text="Organize" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Sort A/S" Click="BtnSortPagesArchStruct_Click" ToolTip="Sort A sheets into Arch and S sheets into Struct"/>
+                        <Button Content="D/Sec/WT" Click="BtnSortPagesSuffix_Click" ToolTip="Sort detail/section/wall-type suffix sheets into page folders"/>
+                        <Button Content="Repair Links" Click="BtnRepairMeasurementPageLinks_Click" ToolTip="Reconnect saved measurements to current page folders"/>
+                        <Button Content="Auto Folders" Click="BtnAutoPageFolders_Click" ToolTip="Create standard page folders under the selected Pages folder"/>
+                    </WrapPanel>
+                    </Border>
+                    <DataGrid x:Name="SheetManagerGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserSortColumns="True"
+                              EnableColumnVirtualization="True"
+                              EnableRowVirtualization="True"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              IsReadOnly="False"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Rename" Binding="{Binding ApplyRename}"/>
+                            <DataGridCheckBoxColumn Header="Scale" Binding="{Binding ApplyScale}"/>
+                            <DataGridTextColumn Header="Current Page" Binding="{Binding CurrentPageName}" Width="160" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Proposed Name" Binding="{Binding ProposedPageName}" Width="160" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Scale" Binding="{Binding ProposedScale}" Width="110" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Label" Binding="{Binding SheetLabel}" Width="80" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Suffix" Binding="{Binding Suffix}" Width="70" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Title" Binding="{Binding SheetTitle}" Width="240" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="100" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Confidence" Binding="{Binding Confidence}" Width="110" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Why" Binding="{Binding Reason}" Width="320" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Warnings" Binding="{Binding Warnings}" Width="280" IsReadOnly="True"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="3 Takeoff Manager" Tag="TakeoffManager">
+                <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
+                    <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
+                        <WrapPanel.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource ManagerButton}"/>
+                        </WrapPanel.Resources>
+                        <TextBlock Text="File" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Save" Click="BtnSave_Click" Margin="0,0,12,4" ToolTip="Save the current job"/>
+                        <TextBlock Text="Item" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Refresh" Click="BtnTakeoffManagerRefresh_Click" ToolTip="Reload the takeoff manager table"/>
+                        <Button Content="Set Active" Click="BtnTakeoffManagerSetActive_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Make the selected takeoff item the active drawing target"/>
+                        <Button Content="Properties" Click="BtnTakeoffManagerProperties_Click" ToolTip="Edit the selected takeoff item's properties"/>
+                        <Button Content="Open Estimating" Click="BtnTakeoffManagerOpenEstimating_Click" Margin="0,0,12,4" ToolTip="Open the full estimating table window"/>
+                        <Button Content="New Folder" Click="BtnNewTakeoffFolder_Click" ToolTip="Create a takeoff folder"/>
+                        <Button Content="New Item" Click="BtnNewItem_Click" ToolTip="Create a takeoff item"/>
+                        <TextBlock Text="Tree" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Auto Tree" Click="BtnAutoTakeoffTree_Click" ToolTip="Create a standard takeoff tree"/>
+                        <Button Content="From Pages" Click="BtnAutoTakeoffFromPages_Click" Margin="0,0,12,4" ToolTip="Create takeoff folders/items from the page structure"/>
+                        <TextBlock Text="Export" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Export CSV" Click="BtnExportCsv_Click" ToolTip="Export quantities to CSV"/>
+                        <Button Content="TXT" Click="BtnExportTxt_Click" ToolTip="Export quantities to text"/>
+                        <Button Content="Excel" Click="BtnExportExcel_Click" ToolTip="Export quantities to Excel"/>
+                    </WrapPanel>
+                    </Border>
+                    <DataGrid x:Name="TakeoffManagerGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserSortColumns="True"
+                              EnableColumnVirtualization="True"
+                              EnableRowVirtualization="True"
+                              IsReadOnly="True"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="220"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="90"/>
+                            <DataGridTextColumn Header="Sections" Binding="{Binding Sections}" Width="80"/>
+                            <DataGridTextColumn Header="Total" Binding="{Binding Total}" Width="140"/>
+                            <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="70"/>
+                            <DataGridTextColumn Header="Price" Binding="{Binding UnitPrice}" Width="80"/>
+                            <DataGridTextColumn Header="Cost" Binding="{Binding Cost}" Width="90"/>
+                            <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="260"/>
+                            <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="320"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="4 AI Manager" Tag="AiManager">
+                <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
+                    <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
+                        <WrapPanel.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource ManagerButton}"/>
+                        </WrapPanel.Resources>
+                        <TextBlock Text="Setup" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="AI Settings" Click="BtnOpenAiSettings_Click" Margin="0,0,12,4" ToolTip="Open model and key status settings"/>
+                        <Button Content="+ Add" Click="BtnAddObservation_Click" ToolTip="Add a manual AI observation or marker note"/>
+                        <TextBlock Text="Review" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Refresh" Click="BtnAiManagerRefresh_Click" ToolTip="Reload the AI manager table"/>
+                        <Button Content="Open Details" Click="BtnAiManagerOpenDetails_Click" ToolTip="Open details for the selected AI item"/>
+                        <Button Content="Go to Page" Click="BtnAiManagerGoToPage_Click" ToolTip="Switch to the selected item's source page"/>
+                        <Button Content="Run AI" Click="BtnAiManagerRunAi_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Run AI for the selected eligible item"/>
+                        <TextBlock Text="Batch" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Run New" Click="BtnRunNewBookmarks_Click" ToolTip="Run all new queued AI bookmark requests"/>
+                        <Button Content="Retry Failed" Click="BtnRetryFailedBookmarks_Click" Margin="0,0,12,4" ToolTip="Retry failed AI bookmark requests"/>
+                        <TextBlock Text="Markers" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Create Set" Click="BtnCreateMarkerSet_Click" ToolTip="Create a named marker set from reviewed markers"/>
+                        <Button Content="Marker Sets" Click="BtnManageMarkerSets_Click" ToolTip="Manage saved marker sets"/>
+                        <Button Content="Export Markers" Click="BtnExportMarkers_Click" Margin="0,0,12,4" ToolTip="Export reviewed AI markers"/>
+                        <Button Content="Build 3D Draft" Click="BtnBuildMassingDraft_Click" ToolTip="Build a 3D draft from reviewed marker context"/>
+                    </WrapPanel>
+                    </Border>
+                    <DataGrid x:Name="AiManagerGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserSortColumns="True"
+                              EnableColumnVirtualization="True"
+                              EnableRowVirtualization="True"
+                              IsReadOnly="True"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeShort}" Width="110"/>
+                            <DataGridTextColumn Header="Page" Binding="{Binding Page}" Width="110"/>
+                            <DataGridTextColumn Header="Observation" Binding="{Binding TextPreview}" Width="520"/>
+                            <DataGridTextColumn Header="Quality" Binding="{Binding QualityPreview}" Width="220"/>
+                            <DataGridTextColumn Header="Time" Binding="{Binding TimeDisplay}" Width="140"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="5 3D" Tag="3DManager">
+                <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
+                    <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
+                        <WrapPanel.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource ManagerButton}"/>
+                        </WrapPanel.Resources>
+                        <TextBlock Text="Build" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Build 3D Draft" Click="BtnBuildMassingDraft_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Build a 3D draft from reviewed marker context"/>
+                        <Button Content="3D From Takeoffs" Click="Btn3dManagerBuildFromTakeoffs_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Build a 3D draft from Walls/Areas/Sqft level takeoffs"/>
+                        <Button Content="Open 3D Window" Click="Btn3dManagerOpenWindow_Click" ToolTip="Open a detached orbitable 3D window"/>
+                        <Button Content="Open JSON" Click="Btn3dManagerOpenJson_Click" Margin="0,0,12,4" ToolTip="Open the 3D draft JSON"/>
+                        <TextBlock Text="Review" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Auto Roof" Click="BtnDetectRoof_Click" ToolTip="Detect roof guide candidates from reviewed context"/>
+                        <Button Content="Review Roof" Click="BtnReviewRoof_Click" ToolTip="Review roof geometry evidence before accepting"/>
+                        <Button Content="Review Openings" Click="BtnReviewOpenings_Click" ToolTip="Review projected door/window/opening markers"/>
+                        <Button Content="Accept 3D" Click="BtnAcceptMassingDraft_Click" Style="{StaticResource ManagerCommitButton}" ToolTip="Accept the current 3D draft as reviewed project context"/>
+                    </WrapPanel>
+                    </Border>
+                    <TextBox x:Name="Txt3dManagerSummary"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             FontFamily="Consolas"
+                             FontSize="12"
+                             Text="Build or open a 3D draft to inspect massing status."/>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
 
     </DockPanel>
 </Window>

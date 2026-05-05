@@ -30,7 +30,8 @@ public sealed record JobPickerItem(
     string Source,
     bool Exists,
     bool IsPinned,
-    bool IsRecent)
+    bool IsRecent,
+    string RootPath = "")
 {
     public string Status => Exists ? "Ready" : "Missing";
     public string PinStatus => IsPinned ? "Pinned" : "";
@@ -64,8 +65,9 @@ public sealed class JobPickerDialog : Window
     private readonly List<JobPickerItem> _items;
     private readonly Action<string, string, bool>? _pinChanged;
     private readonly Action<string>? _removeRecent;
-    private readonly string _jobsRootPath;
+    private readonly List<string> _jobsRootPaths;
     private readonly TextBox _searchBox;
+    private readonly ComboBox _rootFilter;
     private readonly ListView _list;
     private readonly TextBlock _details;
     private readonly Button _openButton;
@@ -77,12 +79,13 @@ public sealed class JobPickerDialog : Window
         IEnumerable<JobPickerItem> items,
         string jobsRootPath,
         Action<string, string, bool>? pinChanged = null,
-        Action<string>? removeRecent = null)
+        Action<string>? removeRecent = null,
+        IEnumerable<string>? jobsRootPaths = null)
     {
         _items = items.ToList();
         _pinChanged = pinChanged;
         _removeRecent = removeRecent;
-        _jobsRootPath = jobsRootPath;
+        _jobsRootPaths = NormalizeRoots(jobsRootPaths ?? BuildRootList(jobsRootPath, _items));
 
         Title = "Open Job";
         Width = 760;
@@ -97,15 +100,31 @@ public sealed class JobPickerDialog : Window
 
         var title = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(jobsRootPath)
+            Text = _jobsRootPaths.Count == 0
                 ? "Recent jobs"
-                : $"Recent jobs  |  {jobsRootPath}",
+                : $"Recent jobs  |  {_jobsRootPaths.Count} job folder(s)",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 8),
         };
         title.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryForegroundBrush");
         DockPanel.SetDock(title, Dock.Top);
         root.Children.Add(title);
+
+        _rootFilter = new ComboBox
+        {
+            MinHeight = 26,
+            Margin = new Thickness(0, 0, 0, 8),
+            ToolTip = "Switch job folder root",
+        };
+        _rootFilter.Items.Add("All job folders");
+        foreach (string rootPath in _jobsRootPaths)
+            _rootFilter.Items.Add(rootPath);
+        _rootFilter.SelectedIndex = 0;
+        if (_jobsRootPaths.Count > 1)
+        {
+            DockPanel.SetDock(_rootFilter, Dock.Top);
+            root.Children.Add(_rootFilter);
+        }
 
         _searchBox = new TextBox
         {
@@ -169,6 +188,7 @@ public sealed class JobPickerDialog : Window
         root.Children.Add(_list);
 
         _searchBox.TextChanged += (_, _) => ApplyFilter();
+        _rootFilter.SelectionChanged += (_, _) => ApplyFilter();
         _searchBox.PreviewKeyDown += SearchBox_PreviewKeyDown;
         _list.PreviewMouseRightButtonDown += List_PreviewMouseRightButtonDown;
         _list.SelectionChanged += (_, _) => UpdateDetails();
@@ -293,6 +313,16 @@ public sealed class JobPickerDialog : Window
                     item.Source.Contains(query, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
+        if (_rootFilter.SelectedIndex > 0 &&
+            _rootFilter.SelectedItem is string selectedRoot &&
+            !string.IsNullOrWhiteSpace(selectedRoot))
+        {
+            string rootKey = NormalizePath(selectedRoot);
+            visible = visible
+                .Where(item => string.Equals(NormalizePath(item.RootPath), rootKey, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         _list.ItemsSource = visible;
         _list.SelectedIndex = visible.Count > 0 ? 0 : -1;
         UpdateDetails();
@@ -336,7 +366,7 @@ public sealed class JobPickerDialog : Window
         {
             IsPinned = pinned,
             IsRecent = true,
-            Source = item.Source == "Jobs Folder" ? "Recent" : item.Source,
+            Source = item.IsRecent ? item.Source : "Recent",
         });
     }
 
@@ -387,12 +417,44 @@ public sealed class JobPickerDialog : Window
 
     private bool IsUnderJobsRoot(string path)
     {
-        if (string.IsNullOrWhiteSpace(_jobsRootPath) || !Directory.Exists(_jobsRootPath))
-            return false;
-
-        string root = NormalizePath(_jobsRootPath) + Path.DirectorySeparatorChar;
         string candidate = NormalizePath(path);
-        return candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        foreach (string rootPath in _jobsRootPaths)
+        {
+            if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+                continue;
+
+            string root = NormalizePath(rootPath) + Path.DirectorySeparatorChar;
+            if (candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> BuildRootList(string jobsRootPath, IEnumerable<JobPickerItem> items)
+    {
+        if (!string.IsNullOrWhiteSpace(jobsRootPath))
+            yield return jobsRootPath;
+        foreach (JobPickerItem item in items)
+            if (!string.IsNullOrWhiteSpace(item.RootPath))
+                yield return item.RootPath;
+    }
+
+    private static List<string> NormalizeRoots(IEnumerable<string> roots)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+
+            string clean = NormalizePath(root);
+            if (seen.Add(clean))
+                result.Add(clean);
+        }
+
+        return result;
     }
 
     private static string NormalizePath(string path)

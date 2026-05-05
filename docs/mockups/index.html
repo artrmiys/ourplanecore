@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>UX Mockups — Выбор направления дизайна</title>
+<style>
+  :root {
+    --bg: #0E1116;
+    --panel: #161A21;
+    --border: #252B35;
+    --text: #E6E8EC;
+    --text-2: #8B95A7;
+    --accent: #6EA8FE;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 48px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  p.lead {
+    color: var(--text-2);
+    margin: 0 0 32px;
+    max-width: 720px;
+  }
+  .grid {
+    display: grid;
+    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    max-width: 1200px;
+  }
+  a.card {
+    display: block;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  a.card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .card h2 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+  .card .tag {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--text-2);
+    margin-bottom: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .card p { color: var(--text-2); font-size: 13px; margin: 0; }
+  .card ul { color: var(--text-2); font-size: 13px; margin: 8px 0 0; padding-left: 18px; }
+  .card li { margin: 2px 0; }
+  .preview {
+    height: 160px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    position: relative;
+  }
+  .preview-1 { background: linear-gradient(135deg, #FAFBFD 0%, #EEF1F6 100%); }
+  .preview-1::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, #fff 0 18%, transparent 18%) 0 0/100% 28px no-repeat,
+      linear-gradient(90deg, #fff 0 18%, transparent 18%, transparent 78%, #fff 78%) 0 28px/100% 100%;
+    border-bottom: 1px solid #E2E5EB;
+  }
+  .preview-2 { background: #1B1D22; }
+  .preview-2::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, #232830 0 16%, transparent 16%) 0 0/100% 28px no-repeat,
+      linear-gradient(90deg, #232830 0 16%, transparent 16%, transparent 80%, #232830 80%) 0 28px/100% 100%;
+  }
+  .preview-3 { background: #ECEFF3; }
+  .preview-3::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, #DFE3E9 0 28px, transparent 28px) no-repeat,
+      linear-gradient(90deg, #fff 0 14%, transparent 14%, transparent 70%, #fff 70%) 0 28px/100% 100%;
+  }
+
+  footer { color: var(--text-2); margin-top: 48px; max-width: 720px; font-size: 13px; }
+  footer code { background: var(--panel); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>UX Mockups для SmartTakeoffs</h1>
+  <p class="lead">
+    Три направления дизайна одного и того же главного окна. Открой каждый, сравни плотность,
+    палитру, иерархию. Контент один и тот же — Sample Project, страница A101, активный
+    инструмент Line, два AI-наблюдения. Отличаются только визуальный язык и компоновка.
+  </p>
+
+  <div class="grid">
+    <a class="card" href="01-modern-light.html">
+      <div class="preview preview-1"></div>
+      <span class="tag">Вариант 1 · светлая</span>
+      <h2>Modern Light</h2>
+      <p>Linear/Figma-style. Мягкие поверхности, щедрые отступы, один акцент-цвет, скруглённые углы 6 px, активный Inspector справа, плавающая панель инструментов слева.</p>
+      <ul>
+        <li>Самый «продуктовый» вид</li>
+        <li>Меньше визуального шума</li>
+        <li>Хорош для презентаций и онбординга</li>
+      </ul>
+    </a>
+
+    <a class="card" href="02-dark-studio.html">
+      <div class="preview preview-2"></div>
+      <span class="tag">Вариант 2 · тёмная</span>
+      <h2>Dark Studio</h2>
+      <p>Blender/Figma dark. Глубокий нейтральный фон, цветные геометрии измерений
+      «горят», минимальный chrome, тонкая типографика, focus на канвасе.</p>
+      <ul>
+        <li>Максимальный контраст для измерений</li>
+        <li>Меньше глаз устают за 8-часовую смену</li>
+        <li>«Pro tool» эстетика</li>
+      </ul>
+    </a>
+
+    <a class="card" href="03-bluebeam-dense.html">
+      <div class="preview preview-3"></div>
+      <span class="tag">Вариант 3 · плотная</span>
+      <h2>Bluebeam Dense</h2>
+      <p>Канон отрасли. Информационная плотность, классический ribbon, строгий серый
+      палитр, всё на виду, минимум скруглений. Знакомо эстиматорам с первой минуты.</p>
+      <ul>
+        <li>Мгновенно узнаваемый workflow</li>
+        <li>Нулевая кривая обучения для PlanSwift/Bluebeam users</li>
+        <li>Максимум функций без скрытия</li>
+      </ul>
+    </a>
+  </div>
+
+  <footer>
+    Файлы лежат в <code>docs/mockups/</code>. Это не реализация — это направление дизайна.
+    После выбора варианта собирается финальный design system и идёт по плану из
+    <code>UX_DESIGN_IMPLEMENTATION_PLAN_2026_05_04.md</code>.
+  </footer>
+</body>
+</html>

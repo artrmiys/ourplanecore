@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Mockup 3 — Bluebeam Dense</title>
+<style>
+  :root {
+    --surface: #FAFAFA;
+    --surface-alt: #ECEFF3;
+    --surface-elev: #FFFFFF;
+    --canvas: #FFFFFF;
+    --border: #C8CCD2;
+    --border-strong: #9CA3AC;
+    --text: #1F2328;
+    --text-2: #555B62;
+    --text-3: #8A9099;
+    --accent: #1F6FB2;
+    --accent-soft: #DCE9F5;
+    --success: #1E7E34;
+    --warning: #C68A00;
+    --danger: #C62828;
+    --recording: #C62828;
+    --c-area: #6A4FB6;
+    --c-line: #1A5BA8;
+    --c-count: #B83276;
+    --ribbon-tab-bg: #DDE3EA;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 12px/1.4 "Segoe UI", -apple-system, system-ui, sans-serif;
+    background: #B8BEC6;
+    color: var(--text);
+    padding: 24px;
+  }
+  .app {
+    width: 1280px;
+    height: 780px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-strong);
+  }
+
+  /* ── Title bar ─────────────────────────────────────────── */
+  .titlebar {
+    height: 28px;
+    background: linear-gradient(180deg, #2A3138 0%, #1F252B 100%);
+    color: #fff;
+    display: flex; align-items: center;
+    padding: 0 10px; gap: 10px; flex-shrink: 0;
+    font-size: 11px;
+  }
+  .logo {
+    width: 16px; height: 16px;
+    background: var(--accent);
+    color: #fff;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 10px;
+    border-radius: 2px;
+  }
+  .title { font-weight: 600; }
+  .titlebar .spacer { flex: 1; }
+  .win-ctrl { width: 28px; height: 28px; display: grid; place-items: center; cursor: pointer; }
+  .win-ctrl:hover { background: rgba(255,255,255,0.1); }
+
+  /* ── Ribbon tabs ───────────────────────────────────────── */
+  .ribbon-tabs {
+    display: flex;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .ribbon-tab {
+    padding: 5px 14px;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    color: var(--text-2);
+    border-right: 1px solid var(--border);
+  }
+  .ribbon-tab.active {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: -1px;
+  }
+  .ribbon-tab.contextual {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* ── Ribbon body ───────────────────────────────────────── */
+  .ribbon {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    padding: 4px 0;
+    flex-shrink: 0;
+    height: 78px;
+  }
+  .rib-group {
+    border-right: 1px solid var(--border);
+    padding: 2px 8px;
+    display: flex; flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+  }
+  .rib-group:last-child { border-right: 0; }
+  .rib-row { display: flex; gap: 2px; align-items: flex-start; }
+  .rib-btn {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 3px 6px;
+    border-radius: 2px;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    font: inherit; font-size: 10px;
+    min-width: 44px;
+    gap: 2px;
+  }
+  .rib-btn:hover { background: var(--surface-alt); border-color: var(--border); }
+  .rib-btn.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .rib-btn .ico {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    font-size: 14px;
+  }
+  .rib-btn-sm {
+    padding: 2px 6px; height: 22px;
+    font-size: 11px;
+    background: transparent; border: 1px solid transparent;
+    border-radius: 2px; cursor: pointer;
+    text-align: left;
+  }
+  .rib-btn-sm:hover { background: var(--surface-alt); border-color: var(--border); }
+  .rib-group-label {
+    font-size: 10px; color: var(--text-3);
+    text-align: center;
+    margin-top: 2px;
+    border-top: 1px solid var(--border);
+    width: 100%; padding-top: 2px;
+  }
+  .rib-vlist { display: flex; flex-direction: column; gap: 1px; }
+
+  /* ── Main row ──────────────────────────────────────────── */
+  .main { flex: 1; display: flex; min-height: 0; }
+
+  .left {
+    width: 200px;
+    background: var(--surface-alt);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .panel-tab-row {
+    display: flex; background: #D5DAE0;
+    border-bottom: 1px solid var(--border);
+    height: 24px;
+  }
+  .panel-tab {
+    padding: 4px 10px; font-size: 11px; cursor: pointer;
+    color: var(--text-2); border-right: 1px solid var(--border);
+  }
+  .panel-tab.active { background: var(--surface-alt); color: var(--text); font-weight: 600; }
+  .tree { padding: 4px; font-size: 12px; flex: 1; overflow: auto; }
+  .tree-item {
+    display: flex; align-items: center; gap: 4px;
+    padding: 2px 6px; cursor: pointer;
+    color: var(--text);
+  }
+  .tree-item:hover { background: rgba(0,0,0,0.04); }
+  .tree-item.active { background: var(--accent-soft); color: var(--text); }
+  .tree-item .chev { color: var(--text-3); width: 10px; }
+  .tree-item .badge { margin-left: auto; font-size: 10px; color: var(--text-3); }
+  .tree-folder { font-weight: 600; }
+  .tree-folder .chev::before { content: "▾"; }
+  .tree-child { padding-left: 18px; }
+
+  /* Canvas area */
+  .canvas-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .canvas-toolbar {
+    height: 28px; background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 8px; gap: 4px;
+    font-size: 11px;
+  }
+  .canvas-toolbar .scale-input {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-elev);
+    height: 20px; width: 60px;
+    padding: 0 4px; font: inherit;
+  }
+  .canvas-toolbar button {
+    height: 20px; padding: 0 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer; font: inherit; font-size: 11px;
+  }
+  .canvas-toolbar button:hover { background: var(--surface-alt); }
+  .canvas-toolbar .sep {
+    width: 1px; height: 16px; background: var(--border);
+    margin: 0 6px;
+  }
+  .canvas {
+    flex: 1; position: relative; overflow: hidden;
+    background: var(--canvas);
+    background-image:
+      repeating-linear-gradient(0deg, transparent 0 39px, #00000008 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, #00000008 39px 40px);
+  }
+  .page-info {
+    position: absolute; top: 8px; right: 8px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border-strong);
+    padding: 4px 10px; font-size: 11px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .page-info strong { font-size: 12px; }
+
+  /* drawing */
+  .drawing { position: absolute; inset: 50px 60px; }
+  .area-shape {
+    position: absolute; left: 60px; top: 50px;
+    width: 280px; height: 180px;
+    background: rgba(106,79,182,0.14);
+    border: 2px solid var(--c-area);
+  }
+  .area-shape::after {
+    content: "Slab — 504 sf";
+    position: absolute; left: 6px; top: 6px;
+    font-size: 11px; font-weight: 600; color: var(--c-area);
+    background: rgba(255,255,255,0.92); padding: 1px 5px;
+  }
+  .line-shape {
+    position: absolute; left: 380px; top: 80px;
+    width: 220px; height: 3px;
+    background: var(--c-line);
+  }
+  .line-shape::after {
+    content: "Wall 2×4 — 24′ 6″";
+    position: absolute; left: 0; top: -20px;
+    font-size: 11px; font-weight: 600; color: var(--c-line);
+    background: rgba(255,255,255,0.92); padding: 1px 5px;
+  }
+  .count-pt {
+    position: absolute; width: 12px; height: 12px;
+    background: var(--c-count);
+    border: 1.5px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--c-count);
+  }
+
+  /* Right panel — split: Tool Chest top, Properties bottom (Bluebeam) */
+  .right {
+    width: 300px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .right-section {
+    display: flex; flex-direction: column;
+    border-bottom: 1px solid var(--border);
+  }
+  .right-section.takeoffs { flex: 1; min-height: 0; }
+  .right-section.props { height: 280px; flex-shrink: 0; }
+  .sect-head {
+    height: 24px; background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 10px;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-2);
+  }
+  .sect-head .actions { margin-left: auto; display: flex; gap: 2px; }
+  .sect-head .actions button {
+    width: 20px; height: 18px; border: 1px solid var(--border);
+    background: var(--surface); cursor: pointer; font-size: 11px;
+    padding: 0; line-height: 1;
+  }
+
+  .takeoff-tree { font-size: 12px; padding: 4px; flex: 1; overflow: auto; }
+  .takeoff-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px; cursor: pointer;
+  }
+  .takeoff-row:hover { background: rgba(0,0,0,0.04); }
+  .takeoff-row.active { background: var(--accent-soft); }
+  .takeoff-row .glyph {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border-radius: 2px;
+  }
+  .takeoff-row .name { flex: 1; }
+  .takeoff-row .qty {
+    font-family: Consolas, monospace; font-size: 11px;
+    color: var(--text-2);
+  }
+  .takeoff-row .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .takeoff-folder { font-weight: 600; padding-left: 4px; }
+  .takeoff-child { padding-left: 18px; }
+
+  .props { padding: 8px 10px; font-size: 11px; overflow: auto; }
+  .props-row {
+    display: grid; grid-template-columns: 90px 1fr;
+    gap: 6px; padding: 3px 0;
+    border-bottom: 1px dotted var(--border);
+    align-items: center;
+  }
+  .props-row:last-child { border-bottom: 0; }
+  .props-row .lbl { color: var(--text-2); }
+  .props-row .val { color: var(--text); }
+  .props-row input {
+    width: 100%; height: 20px; padding: 0 4px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-elev);
+    font: inherit; font-size: 11px;
+  }
+  .swatch-inline {
+    display: inline-block; width: 12px; height: 12px;
+    background: var(--c-area); margin-right: 4px;
+    vertical-align: -2px;
+  }
+  .status-cells { display: flex; gap: 0; }
+  .status-cells span {
+    flex: 1; text-align: center; padding: 3px 0;
+    font-size: 10px; cursor: pointer;
+    border: 1px solid var(--border); border-right: 0;
+    background: var(--surface);
+  }
+  .status-cells span:last-child { border-right: 1px solid var(--border); }
+  .status-cells span.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Bottom: Markups List (Bluebeam canon) */
+  .markups {
+    height: 130px; flex-shrink: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .markups-head {
+    height: 24px; background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 10px;
+    gap: 8px; font-size: 11px;
+  }
+  .markups-head .tab2 {
+    padding: 3px 10px; cursor: pointer;
+    border-right: 1px solid var(--border);
+    color: var(--text-2);
+  }
+  .markups-head .tab2.active { background: var(--surface); color: var(--text); font-weight: 600; }
+  .markups table {
+    width: 100%; border-collapse: collapse; font-size: 11px;
+  }
+  .markups th {
+    text-align: left; padding: 4px 8px;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600; color: var(--text-2); font-size: 10px;
+  }
+  .markups td {
+    padding: 3px 8px;
+    border-bottom: 1px solid #EEE;
+    color: var(--text);
+  }
+  .markups tr:hover td { background: rgba(31,111,178,0.04); }
+  .markups tr.active td { background: var(--accent-soft); }
+  .markups td.num { text-align: right; font-family: Consolas, monospace; }
+  .stat-pill {
+    display: inline-block; padding: 1px 7px;
+    font-size: 10px; font-weight: 600;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+  }
+  .stat-pill.takeoff { background: #FFF8E1; color: #C68A00; border-color: #FFE082; }
+  .stat-pill.reviewed { background: var(--accent-soft); color: var(--accent); border-color: #B6CFE8; }
+  .stat-pill.final { background: #E8F5E9; color: var(--success); border-color: #A5D6A7; }
+
+  /* Status bar */
+  .status {
+    height: 22px; flex-shrink: 0;
+    background: linear-gradient(180deg, var(--surface-alt) 0%, #DDE3EA 100%);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 8px;
+    font-size: 11px; color: var(--text-2); gap: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .status .seg {
+    border-right: 1px solid var(--border);
+    padding-right: 12px; height: 16px;
+    display: flex; align-items: center;
+  }
+  .status .seg:last-child { border-right: 0; }
+  .status .ok { color: var(--success); font-weight: 600; }
+
+  .nav { max-width: 1280px; margin: 0 auto 12px; font-size: 13px; }
+  .nav a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .desc {
+    max-width: 1280px; margin: 24px auto 0;
+    color: var(--text-2); font-size: 13px; line-height: 1.6;
+  }
+  .desc h2 { color: var(--text); font-size: 16px; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+  <div class="nav"><a href="index.html">← Все макеты</a></div>
+
+  <div class="app">
+    <div class="titlebar">
+      <div class="logo">S</div>
+      <div class="title">SmartTakeoffs · Sample Project — Warehouse · Estimating v1</div>
+      <div class="spacer"></div>
+      <div class="win-ctrl">─</div>
+      <div class="win-ctrl">▢</div>
+      <div class="win-ctrl">✕</div>
+    </div>
+
+    <div class="ribbon-tabs">
+      <div class="ribbon-tab">File</div>
+      <div class="ribbon-tab active">Home</div>
+      <div class="ribbon-tab">Markup</div>
+      <div class="ribbon-tab">Measure</div>
+      <div class="ribbon-tab">Document</div>
+      <div class="ribbon-tab">View</div>
+      <div class="ribbon-tab">Sheets</div>
+      <div class="ribbon-tab">AI</div>
+      <div class="ribbon-tab contextual">Area Tools</div>
+    </div>
+
+    <div class="ribbon">
+      <div class="rib-group">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico">📂</div>Open</div>
+          <div class="rib-btn"><div class="ico">＋</div>New</div>
+        </div>
+        <div class="rib-group-label">Job</div>
+      </div>
+
+      <div class="rib-group">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico" style="color:var(--text);">↖</div>Pan</div>
+          <div class="rib-btn"><div class="ico">⛶</div>Select</div>
+          <div class="rib-btn"><div class="ico">⇿</div>Scale</div>
+        </div>
+        <div class="rib-group-label">Navigate</div>
+      </div>
+
+      <div class="rib-group" style="min-width: 200px;">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico" style="color:var(--c-count);">●</div>Count</div>
+          <div class="rib-btn active"><div class="ico" style="color:var(--c-line);">─</div>Line</div>
+          <div class="rib-btn"><div class="ico" style="color:var(--c-area);">■</div>Area</div>
+          <div class="rib-btn"><div class="ico" style="color:#1B7A60;">⫶⫶⫶</div>Joist</div>
+          <div class="rib-btn"><div class="ico">📐</div>Set Scale</div>
+        </div>
+        <div class="rib-group-label">Takeoff Tools</div>
+      </div>
+
+      <div class="rib-group">
+        <div class="rib-vlist">
+          <button class="rib-btn-sm">◇ Snap</button>
+          <button class="rib-btn-sm" style="background:var(--accent-soft);">⊥ Ortho</button>
+          <button class="rib-btn-sm">▦ Grid</button>
+        </div>
+        <div class="rib-group-label">Aid</div>
+      </div>
+
+      <div class="rib-group">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico">📥</div>Import</div>
+          <div class="rib-btn"><div class="ico">📤</div>Export</div>
+          <div class="rib-btn"><div class="ico">🏷</div>Auto N+S</div>
+        </div>
+        <div class="rib-group-label">PDF</div>
+      </div>
+
+      <div class="rib-group">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico">▶</div>Run AI</div>
+          <div class="rib-btn"><div class="ico">＋</div>Add Obs</div>
+          <div class="rib-btn"><div class="ico">⚙</div>Settings</div>
+        </div>
+        <div class="rib-group-label">AI</div>
+      </div>
+
+      <div class="rib-group">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico">📊</div>CSV</div>
+          <div class="rib-btn"><div class="ico">📋</div>TXT</div>
+          <div class="rib-btn"><div class="ico">📈</div>Excel</div>
+        </div>
+        <div class="rib-group-label">Export</div>
+      </div>
+
+      <div class="rib-group">
+        <div class="rib-row">
+          <div class="rib-btn"><div class="ico">💾</div>Save</div>
+        </div>
+        <div class="rib-group-label">File</div>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="left">
+        <div class="panel-tab-row">
+          <div class="panel-tab active">Pages</div>
+          <div class="panel-tab">Layers</div>
+          <div class="panel-tab">Tool Chest</div>
+        </div>
+        <div class="tree">
+          <div class="tree-item tree-folder"><span class="chev"></span> 00 Imported <span class="badge">12</span></div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Arch <span class="badge">5</span></div>
+          <div class="tree-item tree-child active">A101 — Floor Plan</div>
+          <div class="tree-item tree-child">A102 — Roof Plan</div>
+          <div class="tree-item tree-child">A201 — Elevations</div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Struct <span class="badge">3</span></div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Others <span class="badge">4</span></div>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <div class="canvas-toolbar">
+          <span style="color:var(--text-2);">Scale</span>
+          1 :
+          <input class="scale-input" value="100">
+          <button>Set</button>
+          <button>▾ Presets</button>
+          <span class="sep"></span>
+          <button>Fit</button>
+          <button>+</button>
+          <button>−</button>
+          <span class="sep"></span>
+          <span style="color:var(--text-2);">Tool:</span>
+          <strong style="color:var(--c-line);">Line</strong>
+          <span class="sep"></span>
+          <span style="color:var(--text-2);">Page:</span>
+          <strong>A101</strong>
+        </div>
+        <div class="canvas">
+          <div class="page-info">
+            <strong>A101 — Floor Plan</strong><br>
+            24″ × 36″ · 1 : 100
+          </div>
+          <div class="drawing">
+            <div class="area-shape"></div>
+            <div class="line-shape"></div>
+            <div class="count-pt" style="left:420px; top:200px;"></div>
+            <div class="count-pt" style="left:480px; top:210px;"></div>
+            <div class="count-pt" style="left:540px; top:200px;"></div>
+            <div class="count-pt" style="left:600px; top:210px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Takeoffs tree on top, Properties on bottom -->
+      <div class="right">
+        <div class="right-section takeoffs">
+          <div class="sect-head">
+            TAKEOFFS
+            <div class="actions">
+              <button>+</button>
+              <button>−</button>
+              <button>↻</button>
+            </div>
+          </div>
+          <div class="takeoff-tree">
+            <div class="takeoff-row takeoff-folder"><span style="width:10px;">▾</span> Concrete</div>
+            <div class="takeoff-row active takeoff-child">
+              <span class="glyph" style="background:var(--c-area);"></span>
+              <span class="name">Slab</span>
+              <span class="status-dot" style="background:var(--warning);" title="Takeoff"></span>
+              <span class="qty">504 sf</span>
+            </div>
+            <div class="takeoff-row takeoff-child">
+              <span class="glyph" style="background:#8E6BC4;"></span>
+              <span class="name">Footing</span>
+              <span class="status-dot" style="background:var(--accent);"></span>
+              <span class="qty">86 lf</span>
+            </div>
+            <div class="takeoff-row takeoff-folder"><span style="width:10px;">▾</span> Framing</div>
+            <div class="takeoff-row takeoff-child">
+              <span class="glyph" style="background:var(--c-line);"></span>
+              <span class="name">Wall 2×4</span>
+              <span class="status-dot" style="background:var(--warning);"></span>
+              <span class="qty">24'6"</span>
+            </div>
+            <div class="takeoff-row takeoff-child">
+              <span class="glyph" style="background:#1B7A60;"></span>
+              <span class="name">Joists 14" OC</span>
+              <span class="status-dot" style="background:var(--success);"></span>
+              <span class="qty">18 ea</span>
+            </div>
+            <div class="takeoff-row takeoff-folder"><span style="width:10px;">▾</span> Doors & Windows</div>
+            <div class="takeoff-row takeoff-child">
+              <span class="glyph" style="background:var(--c-count);border-radius:50%;"></span>
+              <span class="name">Door 3'×7'</span>
+              <span class="status-dot" style="background:var(--accent);"></span>
+              <span class="qty">4 ea</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="right-section props">
+          <div class="sect-head">
+            PROPERTIES — Slab
+            <div class="actions"><button>↻</button></div>
+          </div>
+          <div class="props">
+            <div class="status-cells" style="margin-bottom:8px;">
+              <span class="active">Takeoff</span>
+              <span>Reviewed</span>
+              <span>Revised</span>
+              <span>Final</span>
+            </div>
+            <div class="props-row"><span class="lbl">Subject</span><span class="val"><input value="CIP Slab"></span></div>
+            <div class="props-row"><span class="lbl">Type</span><span class="val">Area</span></div>
+            <div class="props-row"><span class="lbl">Color</span><span class="val"><span class="swatch-inline"></span> #6A4FB6</span></div>
+            <div class="props-row"><span class="lbl">Cost Code</span><span class="val"><input value="03-30-00"></span></div>
+            <div class="props-row"><span class="lbl">Unit Rate</span><span class="val"><input value="8.50"></span></div>
+            <div class="props-row"><span class="lbl">Waste %</span><span class="val"><input value="5"></span></div>
+            <div class="props-row"><span class="lbl">Formula</span><span class="val" style="font-family:Consolas,monospace;font-size:10px;">[Area]*[Rate]*(1+[Waste]/100)</span></div>
+            <div class="props-row"><span class="lbl"><strong>Total Cost</strong></span><span class="val"><strong style="color:var(--accent);">$4,498.20</strong></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Markups list (bottom) — Bluebeam canon -->
+    <div class="markups">
+      <div class="markups-head">
+        <div class="tab2 active">Markups List</div>
+        <div class="tab2">AI Inbox <span class="stat-pill" style="margin-left:4px;background:var(--accent);color:#fff;border-color:var(--accent);">2</span></div>
+        <div class="tab2">Estimating</div>
+        <div style="flex:1"></div>
+        <span style="color:var(--text-2);">Filter:</span>
+        <select style="font:inherit;font-size:11px;height:20px;border:1px solid var(--border);">
+          <option>All Status</option>
+        </select>
+      </div>
+      <div style="overflow:auto;flex:1;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24px;"></th>
+              <th>Subject</th>
+              <th>Page</th>
+              <th>Cost Code</th>
+              <th>Status</th>
+              <th class="num" style="text-align:right;">Qty</th>
+              <th class="num" style="text-align:right;">Unit</th>
+              <th class="num" style="text-align:right;">Rate</th>
+              <th class="num" style="text-align:right;">Cost</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="active">
+              <td><span class="swatch-inline" style="background:var(--c-area);"></span></td>
+              <td>CIP Slab</td>
+              <td>A101</td>
+              <td>03-30-00</td>
+              <td><span class="stat-pill takeoff">Takeoff</span></td>
+              <td class="num">504.0</td>
+              <td class="num">sf</td>
+              <td class="num">$8.50</td>
+              <td class="num">$4,498.20</td>
+              <td>5% waste</td>
+            </tr>
+            <tr>
+              <td><span class="swatch-inline" style="background:#8E6BC4;"></span></td>
+              <td>Footing</td>
+              <td>A101</td>
+              <td>03-30-00</td>
+              <td><span class="stat-pill reviewed">Reviewed</span></td>
+              <td class="num">86.0</td>
+              <td class="num">lf</td>
+              <td class="num">$22.00</td>
+              <td class="num">$1,892.00</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><span class="swatch-inline" style="background:var(--c-line);"></span></td>
+              <td>Wall 2×4</td>
+              <td>A101</td>
+              <td>06-10-00</td>
+              <td><span class="stat-pill takeoff">Takeoff</span></td>
+              <td class="num">24.5</td>
+              <td class="num">lf</td>
+              <td class="num">$14.20</td>
+              <td class="num">$347.90</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><span class="swatch-inline" style="background:#1B7A60;"></span></td>
+              <td>Joists 14" OC</td>
+              <td>A101</td>
+              <td>06-10-00</td>
+              <td><span class="stat-pill final">Final</span></td>
+              <td class="num">18</td>
+              <td class="num">ea</td>
+              <td class="num">$32.00</td>
+              <td class="num">$576.00</td>
+              <td>SPF #2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="seg">Sample Project</span>
+      <span class="seg">A101 · 24″×36″</span>
+      <span class="seg" style="color:var(--accent);font-weight:600;">1 : 100</span>
+      <span class="seg">73 %</span>
+      <span class="seg" style="font-family:Consolas,monospace;">412.0, 188.5 pt · 34′ 4″, 15′ 8″</span>
+      <span class="seg">⊥ Ortho</span>
+      <span class="seg" style="color:var(--c-area);"><span class="swatch-inline" style="vertical-align:-1px;"></span> CIP Slab</span>
+      <span style="flex:1;"></span>
+      <span class="ok">✓ Saved 12s ago</span>
+    </div>
+  </div>
+
+  <div class="desc">
+    <h2>Bluebeam Dense — характеристики</h2>
+    <p>
+      Канон отрасли. Полноценный ribbon с 9 вкладками (File / Home / Markup / Measure / Document
+      / View / Sheets / AI / контекстуальный <em>Area Tools</em>) и группами кнопок с
+      подписями — мгновенное узнавание для эстиматоров, привыкших к Bluebeam Revu или
+      PlanSwift. Контекстуальная вкладка появляется только при выборе соответствующего
+      объекта — Microsoft Office UXG паттерн.
+    </p>
+    <p>
+      Правая панель разделена пополам: <strong>Takeoffs</strong> сверху, <strong>Properties</strong>
+      снизу — это Bluebeam-канон. Status-cells (Takeoff/Reviewed/Revised/Final) встроены
+      в Properties как сегментированный контрол.
+    </p>
+    <p>
+      Внизу — <strong>Markups List</strong> с табами AI Inbox / Estimating. Колонки Subject,
+      Page, Cost Code, Status, Qty, Unit, Rate, Cost, Notes — точно как в Bluebeam estimator
+      profile. Каждая строка имеет цветовой свотч и status pill.
+    </p>
+    <p>
+      Палитра серая, утилитарная, минимум скруглений (2-4 px). Это <strong>не</strong> попытка
+      выглядеть «современно» — это попытка выглядеть «знакомо» для аудитории, которая платит
+      за PlanSwift $1700/год. Самый низкий риск отторжения для текущей профессиональной
+      аудитории.
+    </p>
+  </div>
+</body>
+</html>

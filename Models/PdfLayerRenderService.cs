@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SmartTakeoffs.Controls;
+using SkiaSharp;
 
 namespace SmartTakeoffs;
 
@@ -16,6 +17,35 @@ public sealed class PdfLayerRenderResult
     public float WidthPt { get; init; }
     public float HeightPt { get; init; }
     public IReadOnlyList<PdfLayer> Layers { get; init; } = [];
+}
+
+public sealed class PdfLayerTraceResult
+{
+    public int Layer { get; init; }
+    public string LayerName { get; init; } = "";
+    public string Mode { get; init; } = "";
+    public IReadOnlyList<PdfLayerTraceMeasurement> Measurements { get; init; } = [];
+}
+
+public sealed class PdfLayerTraceMeasurement
+{
+    public string MType { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string Notes { get; init; } = "";
+    public IReadOnlyList<SKPoint> Points { get; init; } = [];
+}
+
+public sealed class PdfLayerProbeResult
+{
+    public IReadOnlyList<PdfLayerProbeCandidate> Candidates { get; init; } = [];
+}
+
+public sealed class PdfLayerProbeCandidate
+{
+    public int Layer { get; init; }
+    public string LayerName { get; init; } = "";
+    public float Distance { get; init; }
+    public SKRect Bounds { get; init; }
 }
 
 public static class PdfLayerRenderService
@@ -233,6 +263,127 @@ public static class PdfLayerRenderService
                     Directory.Delete(tempDir, recursive: true);
             }
             catch { }
+        }
+    }
+
+    public static bool TryTraceLayer(
+        string pdfPath,
+        int pageIndex,
+        int layerNumber,
+        string layerName,
+        PdfLayerTraceMode mode,
+        SKPoint? pickPoint,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        out PdfLayerTraceResult result,
+        out string error)
+    {
+        result = new PdfLayerTraceResult();
+        error = "";
+
+        try
+        {
+            var request = new LayerTraceRequest
+            {
+                Pdf = pdfPath,
+                Page = pageIndex,
+                Layer = layerNumber,
+                LayerName = layerName,
+                Mode = LayerTraceModeKey(mode),
+                PointX = pickPoint?.X,
+                PointY = pickPoint?.Y,
+                MaxMeasurements = mode == PdfLayerTraceMode.AllEdges ? 48 : 1,
+                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+            };
+
+            if (!TryInvokeHelper("layertrace", request, out LayerTraceResponse? response, out error))
+                return false;
+
+            if (response == null || !response.Ok)
+            {
+                error = response?.Error ?? "PyMuPDF did not return a layer trace response.";
+                return false;
+            }
+
+            result = new PdfLayerTraceResult
+            {
+                Layer = response.Layer,
+                LayerName = response.LayerName,
+                Mode = response.Mode,
+                Measurements = response.Measurements
+                    .Select(m => new PdfLayerTraceMeasurement
+                    {
+                        MType = m.MType,
+                        Name = m.Name,
+                        Notes = m.Notes,
+                        Points = m.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
+                    })
+                    .ToList(),
+            };
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool TryProbeLayers(
+        string pdfPath,
+        int pageIndex,
+        SKPoint point,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        out PdfLayerProbeResult result,
+        out string error)
+    {
+        result = new PdfLayerProbeResult();
+        error = "";
+
+        try
+        {
+            var request = new LayerProbeRequest
+            {
+                Pdf = pdfPath,
+                Page = pageIndex,
+                PointX = point.X,
+                PointY = point.Y,
+                Tolerance = 24,
+                MaxCandidates = 12,
+                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+            };
+
+            if (!TryInvokeHelper("layerprobe", request, out LayerProbeResponse? response, out error))
+                return false;
+
+            if (response == null || !response.Ok)
+            {
+                error = response?.Error ?? "PyMuPDF did not return a layer probe response.";
+                return false;
+            }
+
+            result = new PdfLayerProbeResult
+            {
+                Candidates = response.Candidates
+                    .Where(candidate => candidate.Layer != 0)
+                    .Select(candidate => new PdfLayerProbeCandidate
+                    {
+                        Layer = candidate.Layer,
+                        LayerName = candidate.LayerName,
+                        Distance = candidate.Distance,
+                        Bounds = new SKRect(
+                            candidate.Bounds.X0,
+                            candidate.Bounds.Y0,
+                            candidate.Bounds.X1,
+                            candidate.Bounds.Y1),
+                    })
+                    .ToList(),
+            };
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
         }
     }
 
@@ -496,6 +647,30 @@ public static class PdfLayerRenderService
         public int Page { get; set; }
     }
 
+    private sealed class LayerTraceRequest
+    {
+        public string Pdf { get; set; } = "";
+        public int Page { get; set; }
+        public int Layer { get; set; }
+        public string LayerName { get; set; } = "";
+        public string Mode { get; set; } = "";
+        public float? PointX { get; set; }
+        public float? PointY { get; set; }
+        public int MaxMeasurements { get; set; } = 48;
+        public List<LayerDto>? VisibleLayers { get; set; }
+    }
+
+    private sealed class LayerProbeRequest
+    {
+        public string Pdf { get; set; } = "";
+        public int Page { get; set; }
+        public float PointX { get; set; }
+        public float PointY { get; set; }
+        public float Tolerance { get; set; } = 24;
+        public int MaxCandidates { get; set; } = 12;
+        public List<LayerDto>? VisibleLayers { get; set; }
+    }
+
     private sealed class RenderResponse
     {
         public bool Ok { get; set; }
@@ -511,6 +686,53 @@ public static class PdfLayerRenderService
         public bool Ok { get; set; }
         public string Error { get; set; } = "";
         public List<LayerDto> Layers { get; set; } = [];
+    }
+
+    private sealed class LayerTraceResponse
+    {
+        public bool Ok { get; set; }
+        public string Error { get; set; } = "";
+        public int Layer { get; set; }
+        public string LayerName { get; set; } = "";
+        public string Mode { get; set; } = "";
+        public List<LayerTraceMeasurementDto> Measurements { get; set; } = [];
+    }
+
+    private sealed class LayerProbeResponse
+    {
+        public bool Ok { get; set; }
+        public string Error { get; set; } = "";
+        public List<LayerProbeCandidateDto> Candidates { get; set; } = [];
+    }
+
+    private sealed class LayerTraceMeasurementDto
+    {
+        public string MType { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Notes { get; set; } = "";
+        public List<PointDto> Points { get; set; } = [];
+    }
+
+    private sealed class PointDto
+    {
+        public float X { get; set; }
+        public float Y { get; set; }
+    }
+
+    private sealed class LayerProbeCandidateDto
+    {
+        public int Layer { get; set; }
+        public string LayerName { get; set; } = "";
+        public float Distance { get; set; }
+        public RectDto Bounds { get; set; } = new();
+    }
+
+    private sealed class RectDto
+    {
+        public float X0 { get; set; }
+        public float Y0 { get; set; }
+        public float X1 { get; set; }
+        public float Y1 { get; set; }
     }
 
     private sealed class WorkerRequest<TRequest>
@@ -539,4 +761,12 @@ public static class PdfLayerRenderService
             On = info.IsOn,
         };
     }
+
+    private static string LayerTraceModeKey(PdfLayerTraceMode mode) => mode switch
+    {
+        PdfLayerTraceMode.Edge => "edge",
+        PdfLayerTraceMode.Point => "point",
+        PdfLayerTraceMode.AllEdges => "all_edges",
+        _ => "full",
+    };
 }

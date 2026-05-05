@@ -21,7 +21,8 @@ public partial class MainWindow
             BuildJobPickerItems(),
             _settings.JobsRootPath,
             SetRecentJobPinned,
-            RemoveRecentJob)
+            RemoveRecentJob,
+            AppSettingsStore.CurrentJobsRootPaths(_settings))
         {
             Owner = this,
         };
@@ -45,12 +46,14 @@ public partial class MainWindow
         var items = new List<JobPickerItem>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var roots = AppSettingsStore.CurrentJobsRootPaths(_settings);
         foreach (var recent in _settings.RecentJobs ?? [])
         {
             if (string.IsNullOrWhiteSpace(recent.Path))
                 continue;
 
             string path = recent.Path.Trim();
+            string rootPath = RootForJobPath(path, roots);
             AddJobPickerItem(
                 items,
                 seen,
@@ -62,12 +65,16 @@ public partial class MainWindow
                 lastOpened: FormatRecentJobTime(recent.LastOpenedUtc),
                 source: "Recent",
                 isPinned: recent.IsPinned,
-                isRecent: true);
+                isRecent: true,
+                rootPath: rootPath);
         }
 
-        if (Directory.Exists(_settings.JobsRootPath))
+        foreach (string rootPath in roots)
         {
-            foreach (string folder in Directory.EnumerateDirectories(_settings.JobsRootPath)
+            if (!Directory.Exists(rootPath))
+                continue;
+
+            foreach (string folder in Directory.EnumerateDirectories(rootPath)
                          .Where(IsJobFolder)
                          .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
             {
@@ -78,9 +85,10 @@ public partial class MainWindow
                     path: folder,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
                     lastOpened: "",
-                    source: "Jobs Folder",
+                    source: $"Jobs: {Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}",
                     isPinned: false,
-                    isRecent: false);
+                    isRecent: false,
+                    rootPath: rootPath);
             }
         }
 
@@ -96,7 +104,8 @@ public partial class MainWindow
         string lastOpened,
         string source,
         bool isPinned,
-        bool isRecent)
+        bool isRecent,
+        string rootPath = "")
     {
         string key = NormalizeJobPath(path);
         if (!seen.Add(key))
@@ -111,7 +120,8 @@ public partial class MainWindow
             source,
             exists,
             isPinned,
-            isRecent));
+            isRecent,
+            rootPath));
     }
 
     private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath)
@@ -155,29 +165,25 @@ public partial class MainWindow
             return;
 
         _settings.JobsRootPath = root;
+        AppSettingsStore.AddJobsRoot(_settings, root);
         SaveAppSettings();
 
-        var jobs = Directory.EnumerateDirectories(root)
-            .Where(IsJobFolder)
-            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-            .Select(folder => new JobPickerItem(
-                Path.GetFileName(folder),
-                folder,
-                JobThumbnailService.ExistingThumbnailPath(folder),
-                "",
-                "Jobs Folder",
-                true,
-                false,
-                false))
+        var jobs = BuildJobPickerItems()
+            .Where(item => item.Exists)
             .ToList();
         if (jobs.Count == 0)
         {
-            MessageBox.Show("No SmartTakeoffs jobs found in that folder.", "Open Jobs Folder",
+            MessageBox.Show("No SmartTakeoffs jobs found in configured job folders.", "Open Jobs Folder",
                             MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        var dialog = new JobPickerDialog(jobs, root, SetRecentJobPinned, RemoveRecentJob)
+        var dialog = new JobPickerDialog(
+            jobs,
+            _settings.JobsRootPath,
+            SetRecentJobPinned,
+            RemoveRecentJob,
+            AppSettingsStore.CurrentJobsRootPaths(_settings))
         {
             Owner = this,
         };
@@ -200,6 +206,7 @@ public partial class MainWindow
         try
         {
             _settings.JobsRootPath = parent;
+            AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
             var job = SmartTakeoffsJobStore.CreateJob(parent, name);
             OpenJob(job.RootPath);
@@ -221,6 +228,7 @@ public partial class MainWindow
         {
             Directory.CreateDirectory(parent);
             _settings.JobsRootPath = parent;
+            AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
             SmartTakeoffsJob job = SampleJobService.CreateSampleJob(parent);
             OpenJob(job.RootPath);
@@ -288,6 +296,23 @@ public partial class MainWindow
             return "";
 
         return utc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+    }
+
+    private static string RootForJobPath(string jobPath, IEnumerable<string> roots)
+    {
+        string candidate = NormalizeJobPath(jobPath);
+        foreach (string root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+
+            string normalizedRoot = NormalizeJobPath(root);
+            string prefix = normalizedRoot + Path.DirectorySeparatorChar;
+            if (candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return normalizedRoot;
+        }
+
+        return "";
     }
 
     private static string NormalizeJobPath(string path)

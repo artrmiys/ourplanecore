@@ -13,6 +13,8 @@ _DOC_CACHE: "OrderedDict[tuple[str, int, int, str], fitz.Document]" = OrderedDic
 _DOC_LAYER_STATES: dict[tuple[str, int, int, str], dict[int, bool]] = {}
 _MAX_DOC_CACHE = 8
 _PT_M = 25.4 / 72.0 / 1000.0
+_PDF_WHITESPACE = set(b"\x00\t\n\f\r ")
+_PDF_DELIMITERS = set(b"()<>[]{}/%")
 
 AI_ALLOWED_SCALES = [
     '1/32" = 1\'0"',
@@ -425,9 +427,552 @@ def _cached_layers(raw_layers: object) -> list[dict] | None:
     return layers
 
 
+def _pdf_content_tokens(data: bytes):
+    i = 0
+    n = len(data)
+    while i < n:
+        c = data[i]
+        if c in _PDF_WHITESPACE:
+            i += 1
+            continue
+        if c == ord("%"):
+            i += 1
+            while i < n and data[i] not in b"\r\n":
+                i += 1
+            continue
+
+        start = i
+        if c == ord("("):
+            i += 1
+            depth = 1
+            escaped = False
+            while i < n and depth > 0:
+                ch = data[i]
+                if escaped:
+                    escaped = False
+                elif ch == ord("\\"):
+                    escaped = True
+                elif ch == ord("("):
+                    depth += 1
+                elif ch == ord(")"):
+                    depth -= 1
+                i += 1
+            continue
+
+        if c == ord("<"):
+            if i + 1 < n and data[i + 1] == ord("<"):
+                yield b"<<", start, i + 2
+                i += 2
+                continue
+            i += 1
+            while i < n:
+                if data[i] == ord(">"):
+                    i += 1
+                    break
+                i += 1
+            continue
+
+        if c == ord(">") and i + 1 < n and data[i + 1] == ord(">"):
+            yield b">>", start, i + 2
+            i += 2
+            continue
+
+        if c in b"[]{}":
+            yield bytes([c]), start, i + 1
+            i += 1
+            continue
+
+        if c == ord("/"):
+            i += 1
+            while i < n and data[i] not in _PDF_WHITESPACE and data[i] not in _PDF_DELIMITERS:
+                i += 1
+            yield data[start:i], start, i
+            continue
+
+        while i < n and data[i] not in _PDF_WHITESPACE and data[i] not in _PDF_DELIMITERS:
+            i += 1
+        yield data[start:i], start, i
+
+
+def _filter_optional_content_stream(data: bytes, hidden_properties: set[str]) -> tuple[bytes, int]:
+    hidden_tokens = {f"/{name}".encode("utf-8") for name in hidden_properties}
+    if not hidden_tokens:
+        return data, 0
+
+    tokens = list(_pdf_content_tokens(data))
+    output = bytearray()
+    cursor = 0
+    skip_depth = 0
+    removed = 0
+
+    for index, (value, start, end) in enumerate(tokens):
+        if skip_depth:
+            if value in (b"BDC", b"BMC"):
+                skip_depth += 1
+            elif value == b"EMC":
+                skip_depth -= 1
+                if skip_depth == 0:
+                    cursor = end
+            continue
+
+        if value != b"BDC" or index < 2:
+            continue
+
+        tag = tokens[index - 2]
+        property_name = tokens[index - 1]
+        if tag[0] == b"/OC" and property_name[0] in hidden_tokens:
+            output.extend(data[cursor:tag[1]])
+            cursor = end
+            skip_depth = 1
+            removed += 1
+
+    output.extend(data[cursor:])
+    return bytes(output), removed
+
+
+def _layer_names_from_states(doc: fitz.Document, states: dict[str, bool], layers: list[dict]) -> set[str]:
+    names_by_id: dict[str, str] = {}
+    for layer in _layers(doc):
+        names_by_id[str(int(layer["xref"]))] = str(layer.get("name") or "").strip()
+    for layer in layers or []:
+        try:
+            names_by_id[str(int(layer["xref"]))] = str(layer.get("name") or "").strip()
+        except Exception:
+            continue
+
+    hidden_names: set[str] = set()
+    for raw_id, on in states.items():
+        if on:
+            continue
+        try:
+            layer_id = str(int(raw_id))
+        except Exception:
+            layer_id = str(raw_id)
+        name = names_by_id.get(layer_id, "").strip()
+        if name:
+            hidden_names.add(name)
+    return hidden_names
+
+
+def _page_oc_property_names(doc: fitz.Document, page_index: int, hidden_layer_names: set[str]) -> set[str]:
+    if not hidden_layer_names:
+        return set()
+
+    try:
+        page = doc.load_page(page_index)
+        items = page.get_oc_items()
+    except Exception:
+        return set()
+
+    hidden_properties: set[str] = set()
+    for property_name, xref, _oc_type in items:
+        try:
+            value = doc.xref_get_key(int(xref), "Name")[1]
+        except Exception:
+            value = ""
+        if str(value or "").strip() in hidden_layer_names:
+            hidden_properties.add(str(property_name))
+    return hidden_properties
+
+
+def _filter_page_content_for_hidden_layers(doc: fitz.Document, page_index: int, hidden_layer_names: set[str]) -> int:
+    hidden_properties = _page_oc_property_names(doc, page_index, hidden_layer_names)
+    if not hidden_properties:
+        return 0
+
+    removed = 0
+    try:
+        page = doc.load_page(page_index)
+        content_xrefs = list(page.get_contents())
+    except Exception:
+        return 0
+
+    for xref in content_xrefs:
+        try:
+            data = doc.xref_stream(int(xref))
+            filtered, count = _filter_optional_content_stream(data, hidden_properties)
+            if count:
+                doc.update_stream(int(xref), filtered)
+                removed += count
+        except Exception:
+            continue
+    return removed
+
+
+def _trace_layer_name(doc: fitz.Document, layer_id: int, cached_layers: list[dict] | None, requested_name: str | None) -> str:
+    if requested_name:
+        return requested_name.strip()
+
+    for layer in cached_layers or []:
+        try:
+            if int(layer["xref"]) == layer_id:
+                return str(layer.get("name") or "").strip()
+        except Exception:
+            continue
+
+    for layer in _layers(doc):
+        try:
+            if int(layer["xref"]) == layer_id:
+                return str(layer.get("name") or "").strip()
+        except Exception:
+            continue
+
+    return ""
+
+
+def _trace_layer_id(doc: fitz.Document, layer_name: str, cached_layers: list[dict] | None) -> int:
+    for layer in cached_layers or []:
+        if str(layer.get("name") or "").strip() == layer_name:
+            try:
+                return int(layer["xref"])
+            except Exception:
+                pass
+
+    for layer in _layers(doc):
+        if str(layer.get("name") or "").strip() == layer_name:
+            try:
+                return int(layer["xref"])
+            except Exception:
+                pass
+
+    return 0
+
+
+def _point_xy(value) -> tuple[float, float] | None:
+    try:
+        if hasattr(value, "x") and hasattr(value, "y"):
+            return float(value.x), float(value.y)
+        return float(value[0]), float(value[1])
+    except Exception:
+        return None
+
+
+def _rect_xyxy(value) -> tuple[float, float, float, float] | None:
+    try:
+        if hasattr(value, "x0"):
+            return float(value.x0), float(value.y0), float(value.x1), float(value.y1)
+        return float(value[0]), float(value[1]), float(value[2]), float(value[3])
+    except Exception:
+        return None
+
+
+def _layer_trace_bounds(page: fitz.Page, layer_name: str) -> tuple[float, float, float, float] | None:
+    bounds: list[tuple[float, float, float, float]] = []
+    try:
+        for item in page.get_bboxlog(layers=True):
+            if len(item) < 3 or str(item[2] or "").strip() != layer_name:
+                continue
+            rect = _rect_xyxy(item[1])
+            if rect is not None:
+                bounds.append(rect)
+    except Exception:
+        pass
+
+    if not bounds:
+        try:
+            for drawing in page.get_cdrawings(extended=True) or []:
+                if str(drawing.get("layer") or "").strip() != layer_name:
+                    continue
+                rect = _rect_xyxy(drawing.get("rect"))
+                if rect is not None:
+                    bounds.append(rect)
+        except Exception:
+            pass
+
+    if not bounds:
+        return None
+
+    return (
+        min(b[0] for b in bounds),
+        min(b[1] for b in bounds),
+        max(b[2] for b in bounds),
+        max(b[3] for b in bounds),
+    )
+
+
+def _rect_points(rect: tuple[float, float, float, float]) -> list[dict]:
+    x0, y0, x1, y1 = rect
+    return [
+        {"x": x0, "y": y0},
+        {"x": x1, "y": y0},
+        {"x": x1, "y": y1},
+        {"x": x0, "y": y1},
+    ]
+
+
+def _rect_segments(rect: tuple[float, float, float, float]) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    x0, y0, x1, y1 = rect
+    return [
+        ((x0, y0), (x1, y0)),
+        ((x1, y0), (x1, y1)),
+        ((x1, y1), (x0, y1)),
+        ((x0, y1), (x0, y0)),
+    ]
+
+
+def _rect_distance(point: tuple[float, float], rect: tuple[float, float, float, float]) -> float:
+    px, py = point
+    x0, y0, x1, y1 = rect
+    dx = max(x0 - px, 0.0, px - x1)
+    dy = max(y0 - py, 0.0, py - y1)
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def _rect_area(rect: tuple[float, float, float, float]) -> float:
+    return max(0.0, rect[2] - rect[0]) * max(0.0, rect[3] - rect[1])
+
+
+def _segments_from_drawing(drawing: dict) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for item in drawing.get("items") or []:
+        if not item:
+            continue
+        command = str(item[0])
+        if command == "l" and len(item) >= 3:
+            a = _point_xy(item[1])
+            b = _point_xy(item[2])
+            if a and b:
+                segments.append((a, b))
+        elif command == "re" and len(item) >= 2:
+            rect = _rect_xyxy(item[1])
+            if rect:
+                segments.extend(_rect_segments(rect))
+        elif command == "qu" and len(item) >= 2:
+            try:
+                points = [_point_xy(point) for point in item[1]]
+            except Exception:
+                points = []
+            points = [point for point in points if point is not None]
+            if len(points) >= 4:
+                segments.extend([
+                    (points[0], points[1]),
+                    (points[1], points[2]),
+                    (points[2], points[3]),
+                    (points[3], points[0]),
+                ])
+        elif command == "c" and len(item) >= 3:
+            a = _point_xy(item[1])
+            b = _point_xy(item[-1])
+            if a and b:
+                segments.append((a, b))
+    return segments
+
+
+def _layer_trace_segments(page: fitz.Page, layer_name: str) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    try:
+        for drawing in page.get_cdrawings(extended=True) or []:
+            if str(drawing.get("layer") or "").strip() == layer_name:
+                segments.extend(_segments_from_drawing(drawing))
+    except Exception:
+        return []
+    return _dedupe_segments(segments)
+
+
+def _segment_length(segment: tuple[tuple[float, float], tuple[float, float]]) -> float:
+    (x0, y0), (x1, y1) = segment
+    return ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+
+
+def _distance_to_segment(point: tuple[float, float], segment: tuple[tuple[float, float], tuple[float, float]]) -> float:
+    px, py = point
+    (x0, y0), (x1, y1) = segment
+    vx = x1 - x0
+    vy = y1 - y0
+    length_sq = vx * vx + vy * vy
+    if length_sq <= 0.000001:
+        return ((px - x0) ** 2 + (py - y0) ** 2) ** 0.5
+    t = max(0.0, min(1.0, ((px - x0) * vx + (py - y0) * vy) / length_sq))
+    sx = x0 + t * vx
+    sy = y0 + t * vy
+    return ((px - sx) ** 2 + (py - sy) ** 2) ** 0.5
+
+
+def _dedupe_segments(
+    segments: list[tuple[tuple[float, float], tuple[float, float]]],
+) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    seen: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+    output: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for segment in segments:
+        if _segment_length(segment) < 3.0:
+            continue
+        a = (round(segment[0][0], 1), round(segment[0][1], 1))
+        b = (round(segment[1][0], 1), round(segment[1][1], 1))
+        key = tuple(sorted([a, b]))
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(segment)
+    return output
+
+
+def _segment_measurement(
+    segment: tuple[tuple[float, float], tuple[float, float]],
+    layer_name: str,
+    mode: str,
+) -> dict:
+    return {
+        "m_type": "line",
+        "name": f"PDF Layer {mode}: {layer_name}",
+        "notes": f"Created from PDF layer '{layer_name}' using Layer Trace {mode}.",
+        "points": [
+            {"x": segment[0][0], "y": segment[0][1]},
+            {"x": segment[1][0], "y": segment[1][1]},
+        ],
+    }
+
+
+def probe_layers_data(req: dict) -> dict:
+    pdf_path = req["pdf"]
+    page_index = int(req.get("page", 0))
+    point = (float(req.get("point_x", 0)), float(req.get("point_y", 0)))
+    tolerance = max(1.0, float(req.get("tolerance", 18.0)))
+    max_candidates = max(1, min(int(req.get("max_candidates", 12)), 40))
+    cached_layers = _cached_layers(req.get("visible_layers"))
+
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc.load_page(page_index)
+        hits: dict[str, dict] = {}
+        try:
+            bbox_items = page.get_bboxlog(layers=True)
+        except Exception:
+            bbox_items = []
+
+        for item in bbox_items:
+            if len(item) < 3:
+                continue
+            layer_name = str(item[2] or "").strip()
+            if not layer_name:
+                continue
+            rect = _rect_xyxy(item[1])
+            if rect is None:
+                continue
+            distance = _rect_distance(point, rect)
+            if distance > tolerance:
+                continue
+            area = _rect_area(rect)
+            current = hits.get(layer_name)
+            if current is None or distance < current["distance"] or (distance == current["distance"] and area < current["area"]):
+                hits[layer_name] = {
+                    "layer": _trace_layer_id(doc, layer_name, cached_layers),
+                    "layer_name": layer_name,
+                    "distance": distance,
+                    "area": area,
+                    "bounds": rect,
+                }
+
+        candidates = sorted(
+            hits.values(),
+            key=lambda candidate: (candidate["distance"], candidate["area"], candidate["layer_name"].casefold()),
+        )[:max_candidates]
+
+        for candidate in candidates:
+            layer_bounds = _layer_trace_bounds(page, candidate["layer_name"])
+            if layer_bounds is not None:
+                candidate["bounds"] = layer_bounds
+
+        return {
+            "ok": True,
+            "candidates": [
+                {
+                    "layer": int(candidate["layer"]),
+                    "layer_name": candidate["layer_name"],
+                    "distance": candidate["distance"],
+                    "bounds": {
+                        "x0": candidate["bounds"][0],
+                        "y0": candidate["bounds"][1],
+                        "x1": candidate["bounds"][2],
+                        "y1": candidate["bounds"][3],
+                    },
+                }
+                for candidate in candidates
+                if int(candidate["layer"]) != 0
+            ],
+        }
+    finally:
+        doc.close()
+
+
+def trace_layer_data(req: dict) -> dict:
+    pdf_path = req["pdf"]
+    page_index = int(req.get("page", 0))
+    layer_id = int(req.get("layer", 0))
+    mode = str(req.get("mode") or "full").strip().lower().replace("-", "_")
+    if mode not in {"full", "edge", "point", "all_edges"}:
+        mode = "full"
+
+    cached_layers = _cached_layers(req.get("visible_layers"))
+    doc = fitz.open(pdf_path)
+    try:
+        layer_name = _trace_layer_name(doc, layer_id, cached_layers, req.get("layer_name"))
+        if not layer_name:
+            return {"ok": False, "error": f"PDF layer {layer_id} was not found."}
+
+        page = doc.load_page(page_index)
+        bounds = _layer_trace_bounds(page, layer_name)
+        segments = _layer_trace_segments(page, layer_name)
+        if not segments and bounds is not None:
+            segments = _rect_segments(bounds)
+
+        measurements: list[dict] = []
+        if mode == "full":
+            if bounds is None:
+                return {"ok": False, "error": f"PDF layer '{layer_name}' has no traceable geometry."}
+            measurements.append({
+                "m_type": "area",
+                "name": f"PDF Layer Full: {layer_name}",
+                "notes": f"Created from PDF layer '{layer_name}' using Layer Trace full outline.",
+                "points": _rect_points(bounds),
+            })
+        elif mode == "edge":
+            if not segments:
+                return {"ok": False, "error": f"PDF layer '{layer_name}' has no traceable edges."}
+
+            point = None
+            if req.get("point_x") is not None and req.get("point_y") is not None:
+                try:
+                    point = (float(req.get("point_x")), float(req.get("point_y")))
+                except Exception:
+                    point = None
+
+            if point is not None:
+                chosen = min(segments, key=lambda segment: _distance_to_segment(point, segment))
+            else:
+                chosen = max(segments, key=_segment_length)
+            measurements.append(_segment_measurement(chosen, layer_name, "edge"))
+        elif mode == "point":
+            if req.get("point_x") is None or req.get("point_y") is None:
+                return {"ok": False, "error": "Layer Trace point mode needs a picked PDF point."}
+            measurements.append({
+                "m_type": "point",
+                "name": f"PDF Layer Point: {layer_name}",
+                "notes": f"Created from PDF layer '{layer_name}' using Layer Trace point.",
+                "points": [
+                    {"x": float(req.get("point_x")), "y": float(req.get("point_y"))},
+                ],
+            })
+        else:
+            max_measurements = max(1, min(int(req.get("max_measurements", 48)), 200))
+            for segment in sorted(segments, key=_segment_length, reverse=True)[:max_measurements]:
+                measurements.append(_segment_measurement(segment, layer_name, "all edges"))
+
+        return {
+            "ok": True,
+            "layer": layer_id,
+            "layer_name": layer_name,
+            "mode": mode,
+            "measurements": measurements,
+        }
+    finally:
+        doc.close()
+
+
 def _apply_layer(doc: fitz.Document, layer_id: int, on: bool) -> None:
     try:
-        doc.set_layer_ui_config(layer_id, 0 if on else 1)
+        on_action = getattr(fitz, "PDF_OC_ON", 0)
+        off_action = getattr(fitz, "PDF_OC_OFF", 2)
+        doc.set_layer_ui_config(layer_id, on_action if on else off_action)
         return
     except Exception:
         pass
@@ -466,11 +1011,6 @@ def _set_layer_state(
     layer_id: int,
     on: bool,
 ) -> None:
-    if doc_key is not None:
-        cached = _DOC_LAYER_STATES.setdefault(doc_key, {})
-        if cached.get(layer_id) == on:
-            return
-
     _apply_layer(doc, layer_id, on)
     if doc_key is not None:
         _DOC_LAYER_STATES.setdefault(doc_key, {})[layer_id] = on
@@ -500,6 +1040,30 @@ def _render_samples(doc: fitz.Document, page_index: int, scale: float) -> tuple[
     matrix = fitz.Matrix(scale, scale)
     pix = page.get_pixmap(matrix=matrix, alpha=False)
     return pix, float(page.rect.width), float(page.rect.height)
+
+
+def _render_samples_for_states(
+    pdf_path: str,
+    page_index: int,
+    scale: float,
+    states: dict[str, bool],
+    layers: list[dict],
+    role: str,
+) -> tuple[fitz.Pixmap, float, float]:
+    has_hidden_layers = any(not on for on in states.values())
+    if has_hidden_layers:
+        doc = fitz.open(pdf_path)
+        try:
+            _apply_render_states(doc, None, states)
+            hidden_layer_names = _layer_names_from_states(doc, states, layers)
+            _filter_page_content_for_hidden_layers(doc, page_index, hidden_layer_names)
+            return _render_samples(doc, page_index, scale)
+        finally:
+            doc.close()
+
+    doc, doc_key = _get_doc(pdf_path, role)
+    _apply_render_states(doc, doc_key, states)
+    return _render_samples(doc, page_index, scale)
 
 
 def _set_all_layers(
@@ -542,23 +1106,21 @@ def render_data(req: dict) -> dict:
     states = {str(k): bool(v) for k, v in (req.get("layers") or {}).items()}
     highlight_xrefs = {int(x) for x in req.get("highlight", [])}
 
-    doc, doc_key = _get_doc(pdf_path, "base")
     layers = _cached_layers(req.get("visible_layers"))
     if layers is None:
         discovery_doc, discovery_key = _get_doc(pdf_path, "discover")
         layers = _filter_layers_for_page(discovery_doc, discovery_key, page_index, _layers(discovery_doc))
-    _apply_render_states(doc, doc_key, states)
-    base, width_pt, height_pt = _render_samples(doc, page_index, scale)
+
+    base, width_pt, height_pt = _render_samples_for_states(pdf_path, page_index, scale, states, layers, "base")
 
     if highlight_xrefs:
-        off_doc, off_key = _get_doc(pdf_path, "highlight_off")
-        _apply_render_states(off_doc, off_key, states)
-        _set_all_layers(off_doc, False, doc_key=off_key)
-        off_all, _, _ = _render_samples(off_doc, page_index, scale)
-
-        hi_doc, hi_key = _get_doc(pdf_path, "highlight_hi")
-        _set_all_layers(hi_doc, False, highlight_xrefs, doc_key=hi_key)
-        hi_only, _, _ = _render_samples(hi_doc, page_index, scale)
+        off_states = {str(int(layer["xref"])): False for layer in layers}
+        hi_states = {
+            str(int(layer["xref"])): int(layer["xref"]) in highlight_xrefs
+            for layer in layers
+        }
+        off_all, _, _ = _render_samples_for_states(pdf_path, page_index, scale, off_states, layers, "highlight_off")
+        hi_only, _, _ = _render_samples_for_states(pdf_path, page_index, scale, hi_states, layers, "highlight_hi")
 
         samples = _highlight(base, off_all, hi_only)
         base = fitz.Pixmap(fitz.csRGB, base.width, base.height, samples, False)
@@ -697,6 +1259,10 @@ def worker_loop() -> int:
                 response = render_data(req)
             elif action == "layers":
                 response = list_layers_data(req)
+            elif action == "layerprobe":
+                response = probe_layers_data(req)
+            elif action == "layertrace":
+                response = trace_layer_data(req)
             elif action == "sheetmeta":
                 response = sheetmeta_data(req)
             else:
@@ -716,14 +1282,18 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "sheetmeta"}:
-        print("usage: pdf_layers_helper.py <render|layers|sheetmeta|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "layertrace", "sheetmeta"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|layertrace|sheetmeta|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
             render(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "layers":
             list_layers(sys.argv[2], sys.argv[3])
+        elif sys.argv[1] == "layerprobe":
+            _write_json(sys.argv[3], probe_layers_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "layertrace":
+            _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
         else:
             sheetmeta(sys.argv[2], sys.argv[3])
         return 0

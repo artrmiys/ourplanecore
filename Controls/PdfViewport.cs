@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -17,6 +18,13 @@ namespace SmartTakeoffs.Controls;
 // ── Simple layer info returned to the UI ─────────────────────────────────────
 
 public sealed record PdfLayer(int Number, string Name, bool IsOn, bool IsHighlighted = false);
+public sealed record SheetLegendEntry(
+    string Color,
+    string Name,
+    string Quantity,
+    string Type,
+    string Sign,
+    IReadOnlyList<string>? Details = null);
 public sealed record ViewportContextRequest(
     double ScreenX,
     double ScreenY,
@@ -27,7 +35,8 @@ public sealed record ViewportContextRequest(
 
 // ── Tool enum ────────────────────────────────────────────────────────────────
 
-public enum ViewerTool { Pan, Select, Scale, Point, Line, Area }
+public enum ViewerTool { Pan, Select, Scale, Ruler, DrawLine, DrawArrow, DrawRect, Point, Line, Area }
+public enum PdfLayerTraceMode { Full, Edge, Point, AllEdges }
 
 // ── Main control ─────────────────────────────────────────────────────────────
 
@@ -72,11 +81,23 @@ public sealed class PdfViewport : SKElement
     private SmartAiActionDraft? _aiActionDraftPreview;
     private string _aiActionDraftPreviewPage = "";
     private readonly List<SmartAiMarker> _aiMarkers = [];
+    private readonly List<SheetLegendEntry> _sheetLegendEntries = [];
     public  double   ScaleMetersPerPt { get; set; } = 0.0;
     public  string   ActiveColor      { get; set; } = "#FF4444";
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;
     public  string   ViewBackgroundColor { get; set; } = "#FFFFFF";
+    public  bool     ShowMeasurementLabels { get; set; } = true;
+    public  bool     ShowLineLabels { get; set; } = true;
+    public  bool     ShowAreaLabels { get; set; } = true;
+    public  bool     ShowCountLabels { get; set; }
+    public  double   MeasurementLabelScale { get; set; } = 1.0;
+    public  string   SheetLegendAnchor { get; set; } = "BottomLeft";
+    public  double   SheetLegendScale { get; set; } = 1.0;
+    public  double   SheetHeaderScale { get; set; } = 1.0;
+    public  bool     ScaleSheetOverlaysWithPage { get; set; } = false;
+    public  bool     ScaleMeasurementLabelsWithPage { get; set; } = false;
+    public  bool     ScaleSheetHeaderWithPage { get; set; } = false;
 
     private bool _snapEnabled;
     public bool SnapEnabled
@@ -111,9 +132,13 @@ public sealed class PdfViewport : SKElement
 
     // ── Measurements ──────────────────────────────────────────────────────────
     private readonly List<Measurement> _measurements = [];
+    private readonly List<PageAnnotation> _annotations = [];
     private string _pageFolder = "";
     private Measurement? _selectedMeasurement;
     private readonly HashSet<Measurement> _selectedMeasurements = [];
+    private Measurement? _joistDirectionMeasurement;
+    private readonly List<SKPoint> _joistDirectionPts = [];
+    private SKPoint? _joistDirectionRubberEnd;
     private int _selectedVertexIndex = -1;
     private bool _draggingVertex;
     private bool _draggingMeasurement;
@@ -127,6 +152,16 @@ public sealed class PdfViewport : SKElement
     private List<PdfLayer> _layers = [];
     private IReadOnlyList<PdfLayerInfo>? _cachedLayers;
     private bool _usingLayerRenderer;
+    private bool _pdfLayerTraceEnabled;
+    private PdfLayerTraceMode _pdfLayerTraceMode = PdfLayerTraceMode.Full;
+    private int? _activePdfLayerTraceLayer;
+    private string _activePdfLayerTraceLayerName = "";
+    private List<PdfLayerProbeCandidate> _pdfLayerTraceCandidates = [];
+    private int _pdfLayerTraceCandidateIndex;
+    private bool _pdfLayerTraceChoosingLayer;
+    private bool _pdfLayerTraceReadyToApply;
+    private SKPoint? _pdfLayerTracePickPoint;
+    private int? _pdfLayerTracePreviewLayer;
     private readonly System.Windows.Threading.DispatcherTimer _zoomRerenderTimer;
     private bool _zoomRerenderForce;
     private bool _repaintQueued;
@@ -164,14 +199,18 @@ public sealed class PdfViewport : SKElement
     public event Action<bool>?                            OrthoChanged;
     public event Action<IReadOnlyList<PdfLayer>>?         LayersChanged;
     public event Action<IReadOnlyList<PdfLayerInfo>>?     PdfLayersDiscovered;
+    public event Action?                                  PdfLayerTraceStateChanged;
     public event Action<Measurement>?                     MeasurementAdded;
     public event Action<Measurement>?                     MeasurementRemoved;
     public event Action<Measurement>?                     MeasurementChanged;
+    public event Action<PageAnnotation>?                   PageAnnotationAdded;
+    public event Action<PageAnnotation>?                   PageAnnotationRemoved;
     public event Action<Measurement?>?                    MeasurementSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      MeasurementsSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      CopyMeasurementsRequested;
     public event Action<SKPoint?>?                        PasteMeasurementsRequested;
     public event Action<ViewportContextRequest>?          ContextRequested;
+    public event Action<Measurement, SKPoint, SKPoint>?   JoistDirectionCaptured;
 
     // ── Constants ─────────────────────────────────────────────────────────────
     private const float ZoomMin    = 0.05f;
@@ -184,6 +223,9 @@ public sealed class PdfViewport : SKElement
     private const float MeasurementHitToleranceScreenPx = 20f;
     private const float SelectedVertexHitToleranceScreenPx = 32f;
     private const float SelectedMeasurementHitToleranceScreenPx = 28f;
+    private const float MeasurementLabelFontScreenPx = 9f;
+    private const float MeasurementLabelPaddingScreenPx = 2f;
+    private const float JoistSegmentLabelFontScreenPx = 7f;
     private static readonly float[] RenderScaleSteps = [0.75f, 1.00f, 1.50f, 2.25f, 3.00f, 4.00f];
 
     private static readonly SKColor TempColor = new(0xFF, 0xD7, 0x00);   // yellow
@@ -231,6 +273,13 @@ public sealed class PdfViewport : SKElement
     public readonly record struct ViewState(float Zoom, float PanX, float PanY);
 
     public ViewState CaptureViewState() => new(_zoom, _panX, _panY);
+    public bool IsPdfLayerTraceEnabled => _pdfLayerTraceEnabled;
+    public string PdfLayerTraceModeTitle => LayerTraceModeTitle(_pdfLayerTraceMode);
+    public string ActivePdfLayerTraceLayerName => _activePdfLayerTraceLayerName;
+    public string PdfLayerTracePhaseTitle =>
+        _pdfLayerTraceChoosingLayer ? "Choose Layer" :
+        _pdfLayerTraceReadyToApply ? "Ready" :
+        "Probe";
 
     public void RestoreViewState(ViewState state)
     {
@@ -262,11 +311,15 @@ public sealed class PdfViewport : SKElement
         _boxSelecting = false;
         SetSnapPreview(null);
         _aiMarkers.Clear();
+        _annotations.Clear();
         ClearAiActionDraftPreview();
         ClearSelection();
         _layerStates.Clear();
         _highlightedLayers.Clear();
         _layers.Clear();
+        _activePdfLayerTraceLayer = null;
+        _activePdfLayerTraceLayerName = "";
+        ClearPdfLayerTraceSession();
         _usingLayerRenderer = false;
         _pendingLayerRender = null;
         _layerRenderVersion++;
@@ -320,6 +373,10 @@ public sealed class PdfViewport : SKElement
         {
             "select" => ViewerTool.Select,
             "scale" => ViewerTool.Scale,
+            "ruler" => ViewerTool.Ruler,
+            "drawline" => ViewerTool.DrawLine,
+            "drawarrow" => ViewerTool.DrawArrow,
+            "drawrect" => ViewerTool.DrawRect,
             "point" => ViewerTool.Point,
             "line"  => ViewerTool.Line,
             "area"  => ViewerTool.Area,
@@ -335,6 +392,20 @@ public sealed class PdfViewport : SKElement
         _selectedMeasurements
             .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
             .ToList();
+
+    public void BeginJoistDirectionCapture(Measurement areaMeasurement)
+    {
+        if (areaMeasurement.MType != "area" || !IsMeasurementOnActivePage(areaMeasurement))
+            return;
+
+        _joistDirectionMeasurement = areaMeasurement;
+        _joistDirectionPts.Clear();
+        _joistDirectionRubberEnd = null;
+        CancelDrawing();
+        SelectMeasurements([areaMeasurement]);
+        PostStatus("Joist direction: click two points parallel to the joists. Esc cancels.");
+        RequestRepaint();
+    }
 
     public void ZoomFit()
     {
@@ -511,8 +582,8 @@ public sealed class PdfViewport : SKElement
             Math.Clamp(renderScale, 0.20f, 4.0f),
             resetLayerStates,
             new Dictionary<int, bool>(_layerStates),
-            new HashSet<int>(_highlightedLayers),
-            _cachedLayers,
+            EffectiveHighlightedLayers(),
+            LayerRenderCachedLayers(),
             statusAfter,
             fireLayersAfter);
 
@@ -576,8 +647,10 @@ public sealed class PdfViewport : SKElement
                 layer.Number,
                 layer.Name,
                 _layerStates.TryGetValue(layer.Number, out bool on) ? on : layer.IsOn,
-                _highlightedLayers.Contains(layer.Number)))
+                _highlightedLayers.Contains(layer.Number) || _pdfLayerTracePreviewLayer == layer.Number))
             .ToList();
+        EnsureActivePdfLayerTraceLayer();
+        PublishPdfLayerTraceState();
     }
 
     public void SetLayerVisible(int configNumber, bool on)
@@ -672,6 +745,381 @@ public sealed class PdfViewport : SKElement
             fireLayersAfter: true);
     }
 
+    public void SetActivePdfLayerTraceLayer(PdfLayer layer) =>
+        SetActivePdfLayerTraceLayer(layer.Number, layer.Name);
+
+    public void SetActivePdfLayerTraceLayer(int layerNumber, string layerName)
+    {
+        _activePdfLayerTraceLayer = layerNumber;
+        _activePdfLayerTraceLayerName = layerName;
+        ClearPdfLayerTraceSession(keepCandidateLayer: true);
+        PublishPdfLayerTraceState();
+        if (_pdfLayerTraceEnabled)
+            PostPdfLayerTraceStatus();
+    }
+
+    public void SetPdfLayerTraceEnabled(bool enabled)
+    {
+        _pdfLayerTraceEnabled = enabled;
+        if (enabled)
+        {
+            EnsureActivePdfLayerTraceLayer();
+            CancelDrawing();
+            ClearSelection();
+            Focus();
+        }
+        else
+        {
+            ClearPdfLayerTraceSession();
+        }
+
+        PublishPdfLayerTraceState();
+        PostPdfLayerTraceStatus();
+    }
+
+    public void TogglePdfLayerTraceEnabled() =>
+        SetPdfLayerTraceEnabled(!_pdfLayerTraceEnabled);
+
+    public void SetPdfLayerTraceMode(PdfLayerTraceMode mode)
+    {
+        _pdfLayerTraceMode = mode;
+        PublishPdfLayerTraceState();
+        if (_pdfLayerTraceEnabled)
+            PostPdfLayerTraceStatus();
+    }
+
+    public void CyclePdfLayerTraceMode()
+    {
+        _pdfLayerTraceMode = _pdfLayerTraceMode switch
+        {
+            PdfLayerTraceMode.Full => PdfLayerTraceMode.Edge,
+            PdfLayerTraceMode.Edge => PdfLayerTraceMode.Point,
+            PdfLayerTraceMode.Point => PdfLayerTraceMode.AllEdges,
+            _ => PdfLayerTraceMode.Full,
+        };
+        PublishPdfLayerTraceState();
+        PostPdfLayerTraceStatus();
+    }
+
+    public void TraceActivePdfLayerFromCurrentPointer() =>
+        AdvancePdfLayerTrace(_lastPointerPdf);
+
+    public void ApplyActivePdfLayerTraceFromCurrentPointer() =>
+        TraceActivePdfLayer(_lastPointerPdf);
+
+    private bool AdvancePdfLayerTrace(SKPoint? pickPoint)
+    {
+        if (!_pdfLayerTraceEnabled)
+            return false;
+
+        if (_pdfLayerTraceChoosingLayer)
+        {
+            LockPdfLayerTraceCandidate();
+            return true;
+        }
+
+        if (!_pdfLayerTraceReadyToApply)
+            return BeginPdfLayerTraceAt(pickPoint);
+
+        return TraceActivePdfLayer(pickPoint ?? _pdfLayerTracePickPoint);
+    }
+
+    private bool BeginPdfLayerTraceAt(SKPoint? pickPoint)
+    {
+        if (pickPoint == null)
+        {
+            PostStatus("Layer Trace: move over the PDF or click a layer first.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_pdfPath) || _pageBitmap == null)
+        {
+            PostStatus("Open a PDF page before using Layer Trace.");
+            return false;
+        }
+
+        if (!PdfLayerRenderService.TryProbeLayers(
+                _pdfPath,
+                _pdfIndex,
+                pickPoint.Value,
+                _cachedLayers ?? _layers
+                    .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
+                    .ToList(),
+                out PdfLayerProbeResult probe,
+                out string error))
+        {
+            PostStatus($"Layer probe failed: {error}");
+            return false;
+        }
+
+        _pdfLayerTraceCandidates = probe.Candidates.ToList();
+        _pdfLayerTraceCandidateIndex = 0;
+        _pdfLayerTracePickPoint = pickPoint;
+
+        if (_pdfLayerTraceCandidates.Count == 0)
+        {
+            _pdfLayerTraceChoosingLayer = false;
+            _pdfLayerTraceReadyToApply = false;
+            RequestRepaint();
+            PostStatus("Layer Trace: no PDF layer found under this point.");
+            PublishPdfLayerTraceState();
+            return false;
+        }
+
+        ApplyCurrentPdfLayerTraceCandidate();
+        _pdfLayerTraceChoosingLayer = _pdfLayerTraceCandidates.Count > 1;
+        _pdfLayerTraceReadyToApply = !_pdfLayerTraceChoosingLayer;
+        RequestRepaint();
+        PostPdfLayerTraceStatus();
+        PublishPdfLayerTraceState();
+        return true;
+    }
+
+    private void CyclePdfLayerTraceCandidate()
+    {
+        if (_pdfLayerTraceCandidates.Count <= 1)
+            return;
+
+        _pdfLayerTraceCandidateIndex = (_pdfLayerTraceCandidateIndex + 1) % _pdfLayerTraceCandidates.Count;
+        ApplyCurrentPdfLayerTraceCandidate();
+        RequestRepaint();
+        PostPdfLayerTraceStatus();
+        PublishPdfLayerTraceState();
+    }
+
+    private void LockPdfLayerTraceCandidate()
+    {
+        if (_pdfLayerTraceCandidates.Count == 0)
+            return;
+
+        ApplyCurrentPdfLayerTraceCandidate();
+        _pdfLayerTraceChoosingLayer = false;
+        _pdfLayerTraceReadyToApply = true;
+        RequestRepaint();
+        PostPdfLayerTraceStatus();
+        PublishPdfLayerTraceState();
+    }
+
+    private void ApplyCurrentPdfLayerTraceCandidate()
+    {
+        if (_pdfLayerTraceCandidates.Count == 0)
+            return;
+
+        _pdfLayerTraceCandidateIndex = Math.Clamp(_pdfLayerTraceCandidateIndex, 0, _pdfLayerTraceCandidates.Count - 1);
+        PdfLayerProbeCandidate candidate = _pdfLayerTraceCandidates[_pdfLayerTraceCandidateIndex];
+        _activePdfLayerTraceLayer = candidate.Layer;
+        _activePdfLayerTraceLayerName = candidate.LayerName;
+        SetPdfLayerTracePreviewLayer(candidate.Layer);
+    }
+
+    private PdfLayerProbeCandidate? CurrentPdfLayerTraceCandidate() =>
+        _pdfLayerTraceCandidates.Count == 0
+            ? null
+            : _pdfLayerTraceCandidates[Math.Clamp(_pdfLayerTraceCandidateIndex, 0, _pdfLayerTraceCandidates.Count - 1)];
+
+    private void ClearPdfLayerTraceSession(bool keepCandidateLayer = false)
+    {
+        _pdfLayerTraceCandidates.Clear();
+        _pdfLayerTraceCandidateIndex = 0;
+        _pdfLayerTraceChoosingLayer = false;
+        _pdfLayerTraceReadyToApply = false;
+        _pdfLayerTracePickPoint = null;
+        SetPdfLayerTracePreviewLayer(null);
+        if (!keepCandidateLayer)
+        {
+            _activePdfLayerTraceLayer = null;
+            _activePdfLayerTraceLayerName = "";
+        }
+        RequestRepaint();
+    }
+
+    private void SetPdfLayerTracePreviewLayer(int? layerNumber)
+    {
+        if (_pdfLayerTracePreviewLayer == layerNumber)
+            return;
+
+        _pdfLayerTracePreviewLayer = layerNumber;
+        UpdateLayerSnapshot(_layers);
+        FireLayersChanged();
+        if (_usingLayerRenderer && _pageBitmap != null && !string.IsNullOrWhiteSpace(_pdfPath))
+        {
+            QueueLayerRender(
+                resetLayerStates: false,
+                renderScale: CurrentRenderScale(),
+                fireLayersAfter: true);
+        }
+        else
+        {
+            RequestRepaint();
+        }
+    }
+
+    private HashSet<int> EffectiveHighlightedLayers()
+    {
+        var highlighted = new HashSet<int>(_highlightedLayers);
+        if (_pdfLayerTracePreviewLayer.HasValue)
+            highlighted.Add(_pdfLayerTracePreviewLayer.Value);
+        return highlighted;
+    }
+
+    private IReadOnlyList<PdfLayerInfo>? LayerRenderCachedLayers()
+    {
+        List<PdfLayerInfo>? layers = _cachedLayers?.ToList()
+            ?? _layers
+                .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
+                .ToList();
+
+        if (_pdfLayerTracePreviewLayer.HasValue &&
+            !layers.Any(layer => layer.Number == _pdfLayerTracePreviewLayer.Value))
+        {
+            layers.Add(new PdfLayerInfo
+            {
+                Number = _pdfLayerTracePreviewLayer.Value,
+                Name = _activePdfLayerTraceLayerName,
+                IsOn = true,
+            });
+        }
+
+        return layers;
+    }
+
+    private bool TraceActivePdfLayer(SKPoint? pickPoint)
+    {
+        if (!_pdfLayerTraceEnabled)
+            return false;
+        if (string.IsNullOrWhiteSpace(_pdfPath) || _pageBitmap == null)
+        {
+            PostStatus("Open a PDF page before using Layer Trace.");
+            return false;
+        }
+
+        if (!_activePdfLayerTraceLayer.HasValue)
+            EnsureActivePdfLayerTraceLayer();
+        if (!_activePdfLayerTraceLayer.HasValue)
+        {
+            PostStatus("Select a PDF layer before tracing.");
+            return false;
+        }
+
+        if (ScaleMetersPerPt <= 0)
+        {
+            PostScaleRequiredStatus();
+            return false;
+        }
+
+        if (!PdfLayerRenderService.TryTraceLayer(
+                _pdfPath,
+                _pdfIndex,
+                _activePdfLayerTraceLayer.Value,
+                _activePdfLayerTraceLayerName,
+                _pdfLayerTraceMode,
+                _pdfLayerTraceMode is PdfLayerTraceMode.Edge or PdfLayerTraceMode.Point ? pickPoint : null,
+                _cachedLayers ?? _layers
+                    .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
+                    .ToList(),
+                out PdfLayerTraceResult trace,
+                out string error))
+        {
+            PostStatus($"Layer Trace failed: {error}");
+            return false;
+        }
+
+        var added = new List<Measurement>();
+        foreach (PdfLayerTraceMeasurement item in trace.Measurements)
+        {
+            string mType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MType);
+            if (mType == "line" && item.Points.Count < 2)
+                continue;
+            if (mType == "area" && item.Points.Count < 3)
+                continue;
+
+            var measurement = new Measurement
+            {
+                Name = item.Name,
+                Notes = item.Notes,
+                MType = mType,
+                Points = item.Points.ToList(),
+                Color = ActiveColor,
+                PageFolder = _pageFolder,
+                TakeoffFolder = ActiveTakeoffFolder,
+                ScaleMetersPerPt = ScaleMetersPerPt,
+            };
+            _measurements.Add(measurement);
+            MeasurementAdded?.Invoke(measurement);
+            if (_measurements.Contains(measurement))
+                added.Add(measurement);
+        }
+
+        if (added.Count == 0)
+        {
+            PostStatus("Layer Trace found no usable takeoff geometry.");
+            return false;
+        }
+
+        SelectMeasurements(added);
+        ClearPdfLayerTraceSession(keepCandidateLayer: true);
+        RequestRepaint();
+        string kind = added.Count == 1 ? ToolTitle(added[0].MType) : $"{added.Count} lines";
+        PostStatus($"Layer Trace added {kind} from '{trace.LayerName}' ({LayerTraceModeTitle(_pdfLayerTraceMode)}).");
+        return true;
+    }
+
+    private void EnsureActivePdfLayerTraceLayer()
+    {
+        if (_layers.Count == 0)
+        {
+            _activePdfLayerTraceLayer = null;
+            _activePdfLayerTraceLayerName = "";
+            return;
+        }
+
+        if (_activePdfLayerTraceLayer.HasValue &&
+            _layers.Any(layer => layer.Number == _activePdfLayerTraceLayer.Value))
+        {
+            PdfLayer current = _layers.First(layer => layer.Number == _activePdfLayerTraceLayer.Value);
+            _activePdfLayerTraceLayerName = current.Name;
+            return;
+        }
+
+        if (_activePdfLayerTraceLayer.HasValue &&
+            !string.IsNullOrWhiteSpace(_activePdfLayerTraceLayerName))
+        {
+            return;
+        }
+
+        PdfLayer preferred = _layers.FirstOrDefault(layer => layer.IsHighlighted) ?? _layers[0];
+        _activePdfLayerTraceLayer = preferred.Number;
+        _activePdfLayerTraceLayerName = preferred.Name;
+    }
+
+    private void PostPdfLayerTraceStatus()
+    {
+        if (!_pdfLayerTraceEnabled)
+        {
+            PostStatus("Layer Trace off.");
+            return;
+        }
+
+        string layer = string.IsNullOrWhiteSpace(_activePdfLayerTraceLayerName)
+            ? "select a PDF layer"
+            : _activePdfLayerTraceLayerName;
+        if (_pdfLayerTraceChoosingLayer)
+        {
+            PostStatus($"Layer Trace: {layer} ({_pdfLayerTraceCandidateIndex + 1}/{_pdfLayerTraceCandidates.Count}). Tab selects layer; click/Enter locks it.");
+            return;
+        }
+        if (_pdfLayerTraceReadyToApply)
+        {
+            PostStatus($"Layer Trace: {layer}, {LayerTraceModeTitle(_pdfLayerTraceMode)}. Tab changes mode; click/Enter creates takeoff.");
+            return;
+        }
+
+        PostStatus("Layer Trace: click a PDF object to pick its layer.");
+    }
+
+    private void PublishPdfLayerTraceState() =>
+        PdfLayerTraceStateChanged?.Invoke();
+
     // ── Undo ─────────────────────────────────────────────────────────────────
 
     public void UndoLast()
@@ -686,6 +1134,19 @@ public sealed class PdfViewport : SKElement
             else
                 PostStatus("Undo: drawing cleared.");
             return;
+        }
+
+        for (int i = _annotations.Count - 1; i >= 0; i--)
+        {
+            if (IsAnnotationOnActivePage(_annotations[i]))
+            {
+                PageAnnotation annotation = _annotations[i];
+                _annotations.RemoveAt(i);
+                RequestRepaint();
+                PostStatus($"Undo: removed {ToolTitle(annotation.Kind)} markup.");
+                PageAnnotationRemoved?.Invoke(annotation);
+                return;
+            }
         }
 
         for (int i = _measurements.Count - 1; i >= 0; i--)
@@ -892,6 +1353,27 @@ public sealed class PdfViewport : SKElement
         RequestRepaint();
     }
 
+    public IReadOnlyList<PageAnnotation> GetPageAnnotations() =>
+        _annotations
+            .Where(annotation => IsAnnotationOnActivePage(annotation))
+            .ToList();
+
+    public void SetPageAnnotations(IEnumerable<PageAnnotation> annotations)
+    {
+        _annotations.Clear();
+        _annotations.AddRange(annotations);
+        RequestRepaint();
+    }
+
+    public void SetSheetLegend(IEnumerable<SheetLegendEntry> entries)
+    {
+        _sheetLegendEntries.Clear();
+        _sheetLegendEntries.AddRange(entries
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+            .Take(50));
+        RequestRepaint();
+    }
+
     public void ShowAiActionDraftPreview(SmartAiActionDraft draft, string pageName)
     {
         _aiActionDraftPreview = draft;
@@ -930,6 +1412,10 @@ public sealed class PdfViewport : SKElement
         _isViewDragging = false;
         _pendingLayerRender = null;
         _layerRenderVersion++;
+        _pdfLayerTraceEnabled = false;
+        _activePdfLayerTraceLayer = null;
+        _activePdfLayerTraceLayerName = "";
+        ClearPdfLayerTraceSession();
         _pageBitmap?.Dispose();
         _pageBitmap = null;
         _pdfW = _pdfH = 0;
@@ -940,9 +1426,13 @@ public sealed class PdfViewport : SKElement
         _aiActionDraftPreview = null;
         _aiActionDraftPreviewPage = "";
         _aiMarkers.Clear();
+        _annotations.Clear();
+        _sheetLegendEntries.Clear();
+        CancelJoistDirectionCapture();
         ClearSelection();
         RequestRepaint();
         FireLayersChanged();
+        PublishPdfLayerTraceState();
     }
 
     public int GetPageCount(string pdfPath)
@@ -1006,12 +1496,14 @@ public sealed class PdfViewport : SKElement
             using var saved = new SKAutoCanvasRestore(canvas, true);
             canvas.SetMatrix(measMtx);
             DrawMeasurements(canvas, visiblePdf);
+            DrawPageAnnotations(canvas, visiblePdf);
             DrawAiActionDraftPreview(canvas, visiblePdf);
             DrawAiMarkers(canvas, visiblePdf);
             DrawInProgress(canvas);
         }
 
         DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
+        DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
     }
 
     private void DrawSheetHeaderOverlay(SKCanvas canvas, float canvasWidth, float canvasHeight)
@@ -1031,29 +1523,33 @@ public sealed class PdfViewport : SKElement
         if (visibleRight - visibleLeft < 48 || visibleBottom - visibleTop < 20)
             return;
 
-        const float fontSize = 13f;
-        const float padX = 7f;
-        const float padY = 4f;
-        const float margin = 8f;
+        float overlayScale = HeaderOverlayScale();
+        float fontSize = 13f * overlayScale;
+        float padX = 7f * overlayScale;
+        float padY = 4f * overlayScale;
+        float margin = 8f * overlayScale;
 
         string scaleText = FormatSheetScale();
         string sheetSizeText = FormatSheetSize();
 
+        SKTypeface monoTypeface = SKTypeface.FromFamilyName("Consolas")
+                                   ?? SKTypeface.FromFamilyName("Cascadia Mono")
+                                   ?? SKTypeface.Default;
         using var textPaint = new SKPaint
         {
             Color = SKColors.Black,
             TextSize = fontSize,
             IsAntialias = true,
-            Typeface = SKTypeface.FromFamilyName("Consolas"),
+            Typeface = monoTypeface,
         };
         using var bgPaint = new SKPaint
         {
-            Color = SKColors.White.WithAlpha(225),
+            Color = SKColors.White.WithAlpha(232),
             Style = SKPaintStyle.Fill,
         };
         using var borderPaint = new SKPaint
         {
-            Color = new SKColor(0x40, 0x40, 0x40, 210),
+            Color = new SKColor(0x30, 0x30, 0x30, 220),
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 1f,
         };
@@ -1101,6 +1597,278 @@ public sealed class PdfViewport : SKElement
         canvas.DrawRect(rect, bgPaint);
         canvas.DrawRect(rect, borderPaint);
         canvas.DrawText(text, x + padX, y + padY - textPaint.FontMetrics.Ascent, textPaint);
+    }
+
+    private void DrawSheetLegendOverlay(SKCanvas canvas, float canvasWidth, float canvasHeight)
+    {
+        if (_sheetLegendEntries.Count == 0 ||
+            _pdfW <= 0 ||
+            _pdfH <= 0 ||
+            _zoom <= 0 ||
+            canvasWidth <= 0 ||
+            canvasHeight <= 0)
+        {
+            return;
+        }
+
+        float pageLeft = -_panX * _zoom;
+        float pageTop = -_panY * _zoom;
+        float pageRight = (_pdfW - _panX) * _zoom;
+        float pageBottom = (_pdfH - _panY) * _zoom;
+        float visibleLeft = Math.Max(0, pageLeft);
+        float visibleTop = Math.Max(0, pageTop);
+        float visibleRight = Math.Min(canvasWidth, pageRight);
+        float visibleBottom = Math.Min(canvasHeight, pageBottom);
+
+        float availableWidth = visibleRight - visibleLeft;
+        float availableHeight = visibleBottom - visibleTop;
+        float overlayScale = LegendOverlayScale();
+        if (availableWidth < Math.Max(96f, 160f * overlayScale) ||
+            availableHeight < Math.Max(56f, 90f * overlayScale))
+            return;
+
+        float margin = 8f * overlayScale;
+        float pad = 8f * overlayScale;
+        float baseTitleSize = 12f * overlayScale;
+        float baseRowSize = 11f * overlayScale;
+        int maxDetailLines = Math.Max(0, _sheetLegendEntries.Max(entry => entry.Details?.Count ?? 0));
+        float baseRowHeight = 16f * overlayScale * (1 + Math.Min(maxDetailLines, 6) * 0.82f);
+        float titleHeight = 18f * overlayScale;
+        float maxBoxWidth = availableWidth - margin * 2;
+        float maxBoxHeight = availableHeight - margin * 2;
+        float contentHeight = Math.Max(baseRowHeight, maxBoxHeight - pad * 2 - titleHeight);
+        float minColumnWidth = 170f * overlayScale;
+        int maxColumns = Math.Max(1, Math.Min(_sheetLegendEntries.Count, (int)(maxBoxWidth / minColumnWidth)));
+        int columns = 1;
+        for (int candidate = 1; candidate <= maxColumns; candidate++)
+        {
+            int candidateRows = (int)Math.Ceiling(_sheetLegendEntries.Count / (double)candidate);
+            if (candidateRows * baseRowHeight <= contentHeight)
+            {
+                columns = candidate;
+                break;
+            }
+
+            columns = candidate;
+        }
+
+        int rowsPerColumn = Math.Max(1, (int)Math.Ceiling(_sheetLegendEntries.Count / (double)columns));
+        float rowHeight = Math.Min(baseRowHeight, contentHeight / rowsPerColumn);
+        float rowScale = Math.Clamp(rowHeight / baseRowHeight, 0.58f, 1f);
+        rowHeight = Math.Max(8f * overlayScale, rowHeight);
+        float titleSize = baseTitleSize * Math.Clamp(rowScale, 0.75f, 1f);
+        float rowSize = baseRowSize * rowScale;
+        float boxWidth = Math.Min(maxBoxWidth, Math.Max(180f * overlayScale, columns * 220f * overlayScale));
+        float boxHeight = Math.Min(maxBoxHeight, pad * 2 + titleHeight + rowsPerColumn * rowHeight);
+        SKPoint position = AnchorOverlayBox(
+            SheetLegendAnchor,
+            boxWidth,
+            boxHeight,
+            visibleLeft,
+            visibleTop,
+            visibleRight,
+            visibleBottom,
+            pageLeft,
+            pageTop,
+            pageRight,
+            pageBottom,
+            margin);
+        float x = position.X;
+        float y = position.Y;
+
+        SKTypeface uiTypeface = SKTypeface.FromFamilyName("Segoe UI")
+                                 ?? SKTypeface.FromFamilyName("Inter")
+                                 ?? SKTypeface.Default;
+        SKTypeface uiBoldTypeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold)
+                                     ?? SKTypeface.FromFamilyName("Inter", SKFontStyle.Bold)
+                                     ?? uiTypeface;
+
+        using var titlePaint = new SKPaint
+        {
+            Color = SKColors.Black,
+            TextSize = titleSize,
+            IsAntialias = true,
+            Typeface = uiBoldTypeface,
+        };
+        using var textPaint = new SKPaint
+        {
+            Color = SKColors.Black,
+            TextSize = rowSize,
+            IsAntialias = true,
+            Typeface = uiTypeface,
+        };
+        using var mutedPaint = new SKPaint
+        {
+            Color = new SKColor(0x44, 0x44, 0x44, 235),
+            TextSize = rowSize,
+            IsAntialias = true,
+            Typeface = uiTypeface,
+        };
+        using var bgPaint = new SKPaint
+        {
+            Color = SKColors.White.WithAlpha(238),
+            Style = SKPaintStyle.Fill,
+        };
+        using var borderPaint = new SKPaint
+        {
+            Color = new SKColor(0x30, 0x30, 0x30, 220),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1f,
+        };
+
+        var box = new SKRect(x, y, x + boxWidth, y + boxHeight);
+        canvas.DrawRect(box, bgPaint);
+        canvas.DrawRect(box, borderPaint);
+        string title = _sheetLegendEntries.Count > 1
+            ? $"Legend ({_sheetLegendEntries.Count})"
+            : "Legend";
+        canvas.DrawText(title, x + pad, y + pad - titlePaint.FontMetrics.Ascent, titlePaint);
+
+        float columnWidth = (boxWidth - pad * 2) / columns;
+        float columnGap = columns > 1 ? 10f * overlayScale : 0f;
+        for (int i = 0; i < _sheetLegendEntries.Count; i++)
+        {
+            SheetLegendEntry entry = _sheetLegendEntries[i];
+            int column = i / rowsPerColumn;
+            int row = i % rowsPerColumn;
+            float columnLeft = x + pad + column * columnWidth;
+            float columnRight = Math.Min(x + boxWidth - pad, columnLeft + columnWidth - columnGap);
+            float rowY = y + pad + titleHeight + row * rowHeight;
+            SKColor color = GetCachedColor(entry.Color, SKColors.Red);
+
+            float baseline = rowY - textPaint.FontMetrics.Ascent;
+
+            // Single colored glyph (no separate colored square).
+            float glyphSize = 16f * overlayScale * rowScale;
+            float glyphLeft = columnLeft;
+            var glyphBox = new SKRect(
+                glyphLeft,
+                rowY + Math.Max(2f * overlayScale, (rowHeight - glyphSize) / 2f),
+                glyphLeft + glyphSize,
+                rowY + Math.Max(2f * overlayScale, (rowHeight - glyphSize) / 2f) + glyphSize);
+            DrawLegendSignIcon(canvas, entry.Sign, glyphBox, color);
+
+            float nameLeft = glyphLeft + glyphSize + 6f * overlayScale * rowScale;
+            float qtyRight = columnRight;
+            float qtyWidth = Math.Min(76f * overlayScale * rowScale, columnWidth * 0.38f);
+            float nameRight = qtyRight - qtyWidth - 4f * overlayScale;
+            string name = FitText(entry.Name, textPaint, Math.Max(24f, nameRight - nameLeft));
+            string qty = FitText(entry.Quantity, mutedPaint, Math.Max(24f, qtyWidth));
+            canvas.DrawText(name, nameLeft, baseline, textPaint);
+            canvas.DrawText(qty, qtyRight - mutedPaint.MeasureText(qty), baseline, mutedPaint);
+            if (entry.Details is { Count: > 0 } details)
+            {
+                float detailBaseline = baseline + baseRowSize * rowScale * 1.08f;
+                foreach (string detail in details.Take(6))
+                {
+                    canvas.DrawText(
+                        FitText(detail, mutedPaint, Math.Max(24f, columnRight - nameLeft)),
+                        nameLeft,
+                        detailBaseline,
+                        mutedPaint);
+                    detailBaseline += baseRowSize * rowScale * 1.08f;
+                }
+            }
+        }
+    }
+
+    private static void DrawLegendSignIcon(SKCanvas canvas, string sign, SKRect box, SKColor color)
+    {
+        MeasurementGlyph.DrawSkia(canvas, MeasurementGlyph.FromSign(sign), color, box);
+    }
+
+    private static string FitText(string text, SKPaint paint, float maxWidth)
+    {
+        string value = (text ?? "").Trim();
+        if (value.Length == 0 || paint.MeasureText(value) <= maxWidth)
+            return value;
+
+        const string suffix = "...";
+        float suffixWidth = paint.MeasureText(suffix);
+        if (suffixWidth >= maxWidth)
+            return suffix;
+
+        int keep = value.Length;
+        while (keep > 1 && paint.MeasureText(value[..keep]) + suffixWidth > maxWidth)
+            keep--;
+        return value[..keep].TrimEnd() + suffix;
+    }
+
+    private float HeaderOverlayScale() =>
+        ClampOverlayUserScale(SheetHeaderScale) * SheetZoomOverlayScale(ScaleSheetHeaderWithPage);
+
+    private float LegendOverlayScale() =>
+        ClampOverlayUserScale(SheetLegendScale) * SheetZoomOverlayScale(ScaleSheetOverlaysWithPage);
+
+    private float SheetZoomOverlayScale(bool enabled)
+    {
+        if (!enabled)
+            return 1f;
+
+        float fitZoom = CurrentFitZoom();
+        if (fitZoom <= 0)
+            return 1f;
+
+        return Math.Clamp(_zoom / fitZoom, 0.35f, 4.0f);
+    }
+
+    private float CurrentFitZoom()
+    {
+        if (_pdfW <= 0 || _pdfH <= 0 || ActualWidth < 2 || ActualHeight < 2)
+            return 0;
+
+        return (float)Math.Min(ActualWidth / _pdfW, ActualHeight / _pdfH) * 0.95f;
+    }
+
+    private static float ClampOverlayUserScale(double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+            return 1f;
+
+        return (float)Math.Clamp(scale, 0.50, 3.00);
+    }
+
+    private static SKPoint AnchorOverlayBox(
+        string anchor,
+        float width,
+        float height,
+        float visibleLeft,
+        float visibleTop,
+        float visibleRight,
+        float visibleBottom,
+        float pageLeft,
+        float pageTop,
+        float pageRight,
+        float pageBottom,
+        float margin)
+    {
+        float minX = Math.Max(visibleLeft + margin, pageLeft + margin);
+        float maxX = Math.Min(visibleRight - margin - width, pageRight - margin - width);
+        float minY = Math.Max(visibleTop + margin, pageTop + margin);
+        float maxY = Math.Min(visibleBottom - margin - height, pageBottom - margin - height);
+        if (maxX < minX)
+            maxX = minX;
+        if (maxY < minY)
+            maxY = minY;
+
+        string clean = (anchor ?? "").Trim().ToLowerInvariant();
+        float centerX = (minX + maxX) / 2f;
+        float centerY = (minY + maxY) / 2f;
+
+        float x = clean switch
+        {
+            "topcenter" or "bottomcenter" => centerX,
+            "topright" or "middleright" or "bottomright" => maxX,
+            _ => minX,
+        };
+        float y = clean switch
+        {
+            "middleleft" or "middleright" => centerY,
+            "bottomleft" or "bottomcenter" or "bottomright" => maxY,
+            _ => minY,
+        };
+
+        return new SKPoint(Math.Clamp(x, minX, maxX), Math.Clamp(y, minY, maxY));
     }
 
     private string FormatSheetScale()
@@ -1194,6 +1962,8 @@ public sealed class PdfViewport : SKElement
                 float r = 5f / _zoom;
                 foreach (var p in pts)
                     canvas.DrawCircle(p, r, fill);
+                if (pts.Count > 0 && ShouldDrawMeasurementLabel("point"))
+                    DrawLabel(canvas, pts[^1], m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
 
             case "line" when pts.Count >= 2:
@@ -1206,7 +1976,8 @@ public sealed class PdfViewport : SKElement
                 float pr = 3f / _zoom;
                 foreach (var p in pts)
                     canvas.DrawCircle(p, pr, fill);
-                DrawLabel(canvas, pts[^1], m.Label(ScaleMetersPerPt, UnitMode), m.Color);
+                if (ShouldDrawMeasurementLabel("line"))
+                    DrawLabel(canvas, pts[^1], m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
 
             case "area" when pts.Count >= 3:
@@ -1222,9 +1993,178 @@ public sealed class PdfViewport : SKElement
                 }
                 canvas.DrawPath(poly, stroke);
                 }
+                DrawJoistLayout(canvas, m, color);
                 var cen = Centroid(pts);
-                DrawLabel(canvas, cen, m.Label(ScaleMetersPerPt, UnitMode), m.Color);
+                if (ShouldDrawMeasurementLabel("area"))
+                    DrawLabel(canvas, cen, m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
+        }
+    }
+
+    private void DrawPageAnnotations(SKCanvas canvas, SKRect visiblePdf)
+    {
+        foreach (PageAnnotation annotation in _annotations)
+        {
+            if (!IsAnnotationOnActivePage(annotation) ||
+                annotation.Points.Count < 2 ||
+                !PointsVisible(annotation.Points, visiblePdf))
+            {
+                continue;
+            }
+
+            DrawPageAnnotation(canvas, annotation);
+        }
+    }
+
+    private void DrawPageAnnotation(SKCanvas canvas, PageAnnotation annotation)
+    {
+        string kind = SmartTakeoffsJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        SKColor color = GetCachedColor(annotation.Color, new SKColor(0x15, 0x65, 0xC0));
+        using var stroke = new SKPaint
+        {
+            Color = color,
+            StrokeWidth = 1.8f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        };
+
+        SKPoint start = annotation.Points[0];
+        SKPoint end = annotation.Points[1];
+        if (kind == "rectangle")
+        {
+            canvas.DrawRect(NormalizeRect(start, end), stroke);
+            return;
+        }
+
+        canvas.DrawLine(start, end, stroke);
+        if (kind == "arrow")
+        {
+            DrawAnnotationArrowHead(canvas, start, end, stroke, 9f / _zoom);
+            return;
+        }
+
+        if (kind == "dimension")
+        {
+            DrawAnnotationDimensionTicks(canvas, start, end, stroke, 6f / _zoom);
+            DrawScreenTextBox(
+                canvas,
+                new SKPoint((start.X + end.X) / 2f, (start.Y + end.Y) / 2f),
+                [AnnotationLabel(annotation)],
+                SKColors.White,
+                SKColors.Black.WithAlpha(185),
+                color,
+                MeasurementLabelFontScreenPx,
+                MeasurementLabelPaddingScreenPx,
+                centered: true);
+        }
+    }
+
+    private void DrawAnnotationArrowHead(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint stroke, float size)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= 0.001f)
+            return;
+
+        float ux = dx / length;
+        float uy = dy / length;
+        float px = -uy;
+        float py = ux;
+        SKPoint left = new(end.X - ux * size + px * size * 0.45f, end.Y - uy * size + py * size * 0.45f);
+        SKPoint right = new(end.X - ux * size - px * size * 0.45f, end.Y - uy * size - py * size * 0.45f);
+        canvas.DrawLine(end, left, stroke);
+        canvas.DrawLine(end, right, stroke);
+    }
+
+    private static void DrawAnnotationDimensionTicks(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint stroke, float tick)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= 0.001f)
+            return;
+
+        float px = -dy / length;
+        float py = dx / length;
+        canvas.DrawLine(start.X - px * tick, start.Y - py * tick, start.X + px * tick, start.Y + py * tick, stroke);
+        canvas.DrawLine(end.X - px * tick, end.Y - py * tick, end.X + px * tick, end.Y + py * tick, stroke);
+    }
+
+    private string AnnotationLabel(PageAnnotation annotation)
+    {
+        if (!string.IsNullOrWhiteSpace(annotation.Text))
+            return annotation.Text;
+
+        if (annotation.Points.Count < 2)
+            return "";
+
+        SKPoint start = annotation.Points[0];
+        SKPoint end = annotation.Points[1];
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        double lengthPt = Math.Sqrt(dx * dx + dy * dy);
+        double scale = annotation.ScaleMetersPerPt > 0
+            ? annotation.ScaleMetersPerPt
+            : ScaleMetersPerPt;
+        return scale > 0
+            ? Units.FormatLength(lengthPt * scale, UnitMode)
+            : $"{lengthPt:F1} pt";
+    }
+
+    private bool ShouldDrawMeasurementLabel(string measurementType)
+    {
+        if (!ShowMeasurementLabels)
+            return false;
+
+        return measurementType switch
+        {
+            "point" => ShowCountLabels,
+            "area" => ShowAreaLabels,
+            _ => ShowLineLabels,
+        };
+    }
+
+    private void DrawJoistLayout(SKCanvas canvas, Measurement m, SKColor color)
+    {
+        if (!m.JoistEnabled)
+            return;
+
+        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(m, ScaleMetersPerPt);
+        if (!layout.HasScale || layout.Count == 0)
+            return;
+
+        using var joistStroke = new SKPaint
+        {
+            Color = color.WithAlpha(220),
+            StrokeWidth = 1.15f / _zoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Round,
+        };
+        bool drawLabels = m.JoistShowLabels && layout.Count <= 180;
+        foreach (JoistSegment segment in layout.Segments)
+        {
+            canvas.DrawLine(segment.Start, segment.End, joistStroke);
+            if (!drawLabels)
+                continue;
+
+            string label = JoistTakeoffCalculator.FormatSegmentLength(segment, UnitMode);
+            SKPoint mid = new(
+                (segment.Start.X + segment.End.X) / 2f,
+                (segment.Start.Y + segment.End.Y) / 2f);
+            DrawScreenTextBox(
+                canvas,
+                mid,
+                [label],
+                SKColors.Black.WithAlpha(220),
+                SKColors.White.WithAlpha(190),
+                SKColors.Transparent,
+                JoistSegmentLabelFontScreenPx,
+                2f,
+                centered: true);
         }
     }
 
@@ -1282,36 +2222,105 @@ public sealed class PdfViewport : SKElement
     {
         if (string.IsNullOrEmpty(text)) return;
 
-        float fontSize = 9f / _zoom;
+        string[] lines = text
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length == 0)
+            return;
+
+        DrawScreenTextBox(
+            canvas,
+            pos,
+            lines,
+            SKColors.White,
+            SKColors.Black.WithAlpha(180),
+            GetCachedColor(hexColor, SKColors.DodgerBlue),
+            MeasurementLabelFontScreenPx,
+            MeasurementLabelPaddingScreenPx,
+            centered: false);
+    }
+
+    private void DrawScreenTextBox(
+        SKCanvas canvas,
+        SKPoint pdfPos,
+        IReadOnlyList<string> lines,
+        SKColor textColor,
+        SKColor backgroundColor,
+        SKColor borderColor,
+        float fontSize,
+        float pad,
+        bool centered)
+    {
+        if (lines.Count == 0)
+            return;
+
+        string[] cleanLines = lines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => line.Trim())
+            .ToArray();
+        if (cleanLines.Length == 0)
+            return;
+
+        float safeZoom = Math.Max(_zoom, 0.001f);
+        float labelScale = ClampOverlayUserScale(MeasurementLabelScale);
+        // When ScaleMeasurementLabelsWithPage is on, labels live in PDF space (relative to fit zoom)
+        // so they grow/shrink with page zoom. Otherwise dividing by _zoom keeps screen size constant.
+        float labelDivisor = ScaleMeasurementLabelsWithPage
+            ? Math.Max(CurrentFitZoom(), 0.001f)
+            : safeZoom;
         using var textPaint = new SKPaint
         {
-            Color       = SKColors.White,
-            TextSize    = fontSize,
+            Color       = textColor,
+            TextSize    = fontSize * labelScale / labelDivisor,
             IsAntialias = true,
             Typeface    = SKTypeface.FromFamilyName("Consolas"),
         };
 
-        var bounds = new SKRect();
-        textPaint.MeasureText(text, ref bounds);
-        float pad = 2f / _zoom;
-        var bg = new SKRect(pos.X + pad, pos.Y - bounds.Height - pad,
-                            pos.X + bounds.Width + pad * 3, pos.Y + pad);
+        float width = 0;
+        foreach (string line in cleanLines)
+            width = Math.Max(width, textPaint.MeasureText(line));
+        float lineHeight = textPaint.TextSize * 1.22f;
+        float textHeight = lineHeight * cleanLines.Length;
+        float pdfPad = pad * labelScale / labelDivisor;
+        SKRect bg = centered
+            ? new SKRect(
+                pdfPos.X - width / 2f - pdfPad,
+                pdfPos.Y - textHeight / 2f - pdfPad,
+                pdfPos.X + width / 2f + pdfPad,
+                pdfPos.Y + textHeight / 2f + pdfPad)
+            : new SKRect(
+                pdfPos.X + pdfPad,
+                pdfPos.Y - textHeight - pdfPad,
+                pdfPos.X + width + pdfPad * 3,
+                pdfPos.Y + pdfPad);
 
         using var bgPaint = new SKPaint
         {
-            Color = SKColors.Black.WithAlpha(180),
+            Color = backgroundColor,
             Style = SKPaintStyle.Fill,
         };
         using var borderPaint = new SKPaint
         {
-            Color       = GetCachedColor(hexColor, SKColors.DodgerBlue),
+            Color       = borderColor,
             Style       = SKPaintStyle.Stroke,
-            StrokeWidth = 1f / _zoom,
+            StrokeWidth = 1f / labelDivisor,
         };
-        canvas.DrawRect(bg, bgPaint);
-        canvas.DrawRect(bg, borderPaint);
-        canvas.DrawText(text, pos.X + pad * 1.5f, pos.Y - pad, textPaint);
+        float radius = 3f / labelDivisor;
+        canvas.DrawRoundRect(bg, radius, radius, bgPaint);
+        if (borderColor.Alpha > 0)
+            canvas.DrawRoundRect(bg, radius, radius, borderPaint);
+        float baseline = bg.Top + pdfPad - textPaint.FontMetrics.Ascent;
+        foreach (string line in cleanLines)
+        {
+            float textX = centered ? bg.Left + pdfPad : pdfPos.X + pdfPad * 1.5f;
+            canvas.DrawText(line, textX, baseline, textPaint);
+            baseline += lineHeight;
+        }
     }
+
+    private SKPoint PdfToScreen(SKPoint point) =>
+        new((point.X - _panX) * _zoom, (point.Y - _panY) * _zoom);
 
     private void DrawAiActionDraftPreview(SKCanvas canvas, SKRect visiblePdf)
     {
@@ -1577,6 +2586,8 @@ public sealed class PdfViewport : SKElement
 
     private void DrawInProgress(SKCanvas canvas)
     {
+        DrawPdfLayerTraceOverlay(canvas);
+
         using var tempPaint = new SKPaint
         {
             Color       = TempColor,
@@ -1613,7 +2624,33 @@ public sealed class PdfViewport : SKElement
                 Style       = SKPaintStyle.Stroke,
                 PathEffect  = SKPathEffect.CreateDash([4f / _zoom, 4f / _zoom], 0),
             };
-            canvas.DrawLine(_drawPts[^1], _rubberEnd.Value, rubber);
+            if (_tool == ViewerTool.DrawRect)
+                canvas.DrawRect(NormalizeRect(_drawPts[0], _rubberEnd.Value), rubber);
+            else
+                canvas.DrawLine(_drawPts[^1], _rubberEnd.Value, rubber);
+        }
+
+        if (_joistDirectionMeasurement != null)
+        {
+            using var joistPaint = new SKPaint
+            {
+                Color = new SKColor(0x00, 0x96, 0x88),
+                StrokeWidth = 2.2f / _zoom,
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                PathEffect = SKPathEffect.CreateDash([7f / _zoom, 4f / _zoom], 0),
+            };
+            using var joistDot = new SKPaint
+            {
+                Color = new SKColor(0x00, 0x96, 0x88),
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill,
+            };
+            float jr = 5f / _zoom;
+            foreach (SKPoint point in _joistDirectionPts)
+                canvas.DrawCircle(point, jr, joistDot);
+            if (_joistDirectionPts.Count == 1 && _joistDirectionRubberEnd.HasValue)
+                canvas.DrawLine(_joistDirectionPts[0], _joistDirectionRubberEnd.Value, joistPaint);
         }
 
         // Scale line
@@ -1687,6 +2724,44 @@ public sealed class PdfViewport : SKElement
         }
     }
 
+    private void DrawPdfLayerTraceOverlay(SKCanvas canvas)
+    {
+        if (!_pdfLayerTraceEnabled || CurrentPdfLayerTraceCandidate() is not { } candidate)
+            return;
+
+        float safeZoom = Math.Max(_zoom, 0.001f);
+        using var fill = new SKPaint
+        {
+            Color = new SKColor(0xFF, 0xD7, 0x00, 34),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var stroke = new SKPaint
+        {
+            Color = _pdfLayerTraceChoosingLayer
+                ? new SKColor(0xFF, 0xA0, 0x00)
+                : new SKColor(0x00, 0x96, 0x88),
+            StrokeWidth = 2.0f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            PathEffect = SKPathEffect.CreateDash([10f / safeZoom, 5f / safeZoom], 0),
+        };
+        canvas.DrawRect(candidate.Bounds, fill);
+        canvas.DrawRect(candidate.Bounds, stroke);
+
+        if (_pdfLayerTracePickPoint.HasValue)
+        {
+            float r = 5f / safeZoom;
+            using var dot = new SKPaint
+            {
+                Color = new SKColor(0xFF, 0xA0, 0x00),
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill,
+            };
+            canvas.DrawCircle(_pdfLayerTracePickPoint.Value, r, dot);
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Mouse / keyboard events
     // ═════════════════════════════════════════════════════════════════════════
@@ -1728,25 +2803,39 @@ public sealed class PdfViewport : SKElement
         {
             var pdf = ScreenToPdf((float)pos.X, (float)pos.Y);
             _lastPointerPdf = pdf;
-            bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
-            if (_tool == ViewerTool.Select && IsSelectionModifierActive() && TryHitMeasurement(pdf, out Measurement toggled))
+            if (_joistDirectionMeasurement != null)
             {
-                ToggleMeasurementSelection(toggled);
+                HandleJoistDirectionClick(ResolveDigitizerPoint(pdf, updatePreview: true));
                 e.Handled = true;
                 return;
             }
 
-            bool preserveSelectionForAdd = _tool == ViewerTool.Select && IsSelectionModifierActive();
-            if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
+            if (_pdfLayerTraceEnabled)
             {
-                if (_draggingVertex || _draggingMeasurement)
-                    CaptureMouse();
+                AdvancePdfLayerTrace(pdf);
                 e.Handled = true;
                 return;
             }
 
             if (_tool == ViewerTool.Select)
             {
+                bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
+                if (IsSelectionModifierActive() && TryHitMeasurement(pdf, out Measurement toggled))
+                {
+                    ToggleMeasurementSelection(toggled);
+                    e.Handled = true;
+                    return;
+                }
+
+                bool preserveSelectionForAdd = IsSelectionModifierActive();
+                if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
+                {
+                    if (_draggingVertex || _draggingMeasurement)
+                        CaptureMouse();
+                    e.Handled = true;
+                    return;
+                }
+
                 BeginBoxSelection(pdf, additive: IsSelectionModifierActive());
                 e.Handled = true;
                 return;
@@ -1858,10 +2947,46 @@ public sealed class PdfViewport : SKElement
             return;
         }
 
+        if (_dragStart.HasValue && (
+            e.MiddleButton == MouseButtonState.Pressed ||
+            e.RightButton  == MouseButtonState.Pressed ||
+            (_tool == ViewerTool.Pan && e.LeftButton == MouseButtonState.Pressed)))
+        {
+            _panX = _dragPanX0 - (float)((pos.X - _dragStart.Value.X) / _zoom);
+            _panY = _dragPanY0 - (float)((pos.Y - _dragStart.Value.Y) / _zoom);
+            RequestRepaint();
+            e.Handled = true;
+            return;
+        }
+
         var pointerPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
         _lastPointerPdf = pointerPdf;
+        if (_joistDirectionMeasurement != null)
+        {
+            pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
+            _lastPointerPdf = pointerPdf;
+            if (_joistDirectionPts.Count > 0)
+            {
+                _joistDirectionRubberEnd = pointerPdf;
+                RequestRepaint();
+            }
+            PostStatus(_joistDirectionPts.Count == 0
+                ? "Joist direction: click the first point."
+                : "Joist direction: click the second point.");
+            e.Handled = true;
+            return;
+        }
+
+        if (_pdfLayerTraceEnabled)
+        {
+            SetSnapPreview(null);
+            PostPdfLayerTraceStatus();
+            e.Handled = true;
+            return;
+        }
+
         if (_pageBitmap != null &&
-            _tool is ViewerTool.Scale or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area &&
+            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area &&
             !IsMissingScaleForLinearArea())
         {
             pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
@@ -1872,19 +2997,8 @@ public sealed class PdfViewport : SKElement
             SetSnapPreview(null);
         }
 
-        // Pan drag
-        if (_dragStart.HasValue && (
-            e.MiddleButton == MouseButtonState.Pressed ||
-            e.RightButton  == MouseButtonState.Pressed ||
-            e.LeftButton   == MouseButtonState.Pressed))
-        {
-            _panX = _dragPanX0 - (float)((pos.X - _dragStart.Value.X) / _zoom);
-            _panY = _dragPanY0 - (float)((pos.Y - _dragStart.Value.Y) / _zoom);
-            RequestRepaint();
-        }
-
         // Rubber-band
-        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area)
+        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect)
         {
             _rubberEnd = pointerPdf;
             RequestRepaint();
@@ -1955,6 +3069,18 @@ public sealed class PdfViewport : SKElement
         e.Handled = true;
     }
 
+    private void CancelJoistDirectionCapture()
+    {
+        if (_joistDirectionMeasurement == null && _joistDirectionPts.Count == 0)
+            return;
+
+        _joistDirectionMeasurement = null;
+        _joistDirectionPts.Clear();
+        _joistDirectionRubberEnd = null;
+        SetSnapPreview(null);
+        RequestRepaint();
+    }
+
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         FinishMeasurementDrag();
@@ -1963,12 +3089,62 @@ public sealed class PdfViewport : SKElement
         base.OnLostMouseCapture(e);
     }
 
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (_pdfLayerTraceEnabled && e.Key == Key.Tab)
+        {
+            if (_pdfLayerTraceChoosingLayer)
+                CyclePdfLayerTraceCandidate();
+            else
+                CyclePdfLayerTraceMode();
+            e.Handled = true;
+            return;
+        }
+
+        base.OnPreviewKeyDown(e);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         switch (e.Key)
         {
             case Key.Escape:
+                if (_pdfLayerTraceEnabled)
+                {
+                    if (_pdfLayerTraceChoosingLayer || _pdfLayerTraceReadyToApply)
+                    {
+                        ClearPdfLayerTraceSession(keepCandidateLayer: true);
+                        PublishPdfLayerTraceState();
+                        PostPdfLayerTraceStatus();
+                    }
+                    else
+                    {
+                        SetPdfLayerTraceEnabled(false);
+                    }
+                    e.Handled = true;
+                    break;
+                }
+
+                if (_joistDirectionMeasurement != null)
+                {
+                    CancelJoistDirectionCapture();
+                    PostStatus("Joist direction cancelled.");
+                    e.Handled = true;
+                    break;
+                }
+
                 CompleteOrCancelDrawing();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                if (_pdfLayerTraceEnabled)
+                {
+                    AdvancePdfLayerTrace(_lastPointerPdf);
+                    e.Handled = true;
+                }
+                break;
+            case Key.T when Keyboard.Modifiers == ModifierKeys.None:
+                TogglePdfLayerTraceEnabled();
                 e.Handled = true;
                 break;
             case Key.C:
@@ -2025,6 +3201,9 @@ public sealed class PdfViewport : SKElement
             case Key.V: ToolChanged?.Invoke("pan");   e.Handled = true; break;
             case Key.E: ToolChanged?.Invoke("select"); e.Handled = true; break;
             case Key.S: ToolChanged?.Invoke("scale"); e.Handled = true; break;
+            case Key.R: ToolChanged?.Invoke("ruler"); e.Handled = true; break;
+            case Key.D: ToolChanged?.Invoke("drawline"); e.Handled = true; break;
+            case Key.B: ToolChanged?.Invoke("drawrect"); e.Handled = true; break;
             case Key.P: ToolChanged?.Invoke("point"); e.Handled = true; break;
             case Key.L: ToolChanged?.Invoke("line");  e.Handled = true; break;
             case Key.A: ToolChanged?.Invoke("area");  e.Handled = true; break;
@@ -2045,6 +3224,18 @@ public sealed class PdfViewport : SKElement
             case ViewerTool.Scale:
                 HandleScaleClick(pdf);
                 break;
+            case ViewerTool.Ruler:
+                AddTwoPointAnnotation(pdf, "dimension");
+                break;
+            case ViewerTool.DrawLine:
+                AddTwoPointAnnotation(pdf, "line");
+                break;
+            case ViewerTool.DrawArrow:
+                AddTwoPointAnnotation(pdf, "arrow");
+                break;
+            case ViewerTool.DrawRect:
+                AddTwoPointAnnotation(pdf, "rectangle");
+                break;
             case ViewerTool.Point:
                 _drawPts.Add(pdf);
                 FinalizeDrawing();
@@ -2056,6 +3247,41 @@ public sealed class PdfViewport : SKElement
                 PostRecordPrompt();
                 break;
         }
+    }
+
+    private void AddTwoPointAnnotation(SKPoint pdf, string kind)
+    {
+        _drawPts.Add(pdf);
+        if (_drawPts.Count < 2)
+        {
+            RequestRepaint();
+            PostRecordPrompt();
+            return;
+        }
+
+        FinalizeAnnotation(kind);
+    }
+
+    private void HandleJoistDirectionClick(SKPoint pdf)
+    {
+        if (_joistDirectionMeasurement == null)
+            return;
+
+        _joistDirectionPts.Add(pdf);
+        if (_joistDirectionPts.Count == 1)
+        {
+            _joistDirectionRubberEnd = pdf;
+            PostStatus("Joist direction: click the second point.");
+            RequestRepaint();
+            return;
+        }
+
+        SKPoint start = _joistDirectionPts[0];
+        SKPoint end = _joistDirectionPts[1];
+        Measurement area = _joistDirectionMeasurement;
+        CancelJoistDirectionCapture();
+        JoistDirectionCaptured?.Invoke(area, start, end);
+        RequestRepaint();
     }
 
     private void HandleScaleClick(SKPoint pdf)
@@ -2119,6 +3345,32 @@ public sealed class PdfViewport : SKElement
         PostRecordPrompt();
     }
 
+    private void FinalizeAnnotation(string kind)
+    {
+        if (_drawPts.Count < 2)
+            return;
+
+        string normalizedKind = SmartTakeoffsJobStore.NormalizePageAnnotationKind(kind);
+        var annotation = new PageAnnotation
+        {
+            Kind = normalizedKind,
+            Points = _drawPts.Take(2).ToList(),
+            Color = normalizedKind == "dimension" ? "#1565C0" : ActiveColor,
+            PageFolder = _pageFolder,
+            ScaleMetersPerPt = ScaleMetersPerPt,
+        };
+        _annotations.Add(annotation);
+        _drawPts.Clear();
+        _rubberEnd = null;
+        SetSnapPreview(null);
+        RequestRepaint();
+        PostStatus(normalizedKind == "dimension"
+            ? $"Added dimension markup: {AnnotationLabel(annotation)}."
+            : $"Added {ToolTitle(normalizedKind)} markup.");
+        PageAnnotationAdded?.Invoke(annotation);
+        PostRecordPrompt();
+    }
+
     private void CompleteOrCancelDrawing()
     {
         if (IsMissingScaleForLinearArea())
@@ -2161,12 +3413,18 @@ public sealed class PdfViewport : SKElement
     }
 
     private bool IsMissingScaleForLinearArea() =>
-        _tool is ViewerTool.Line or ViewerTool.Area && ScaleMetersPerPt <= 0;
+        _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler && ScaleMetersPerPt <= 0;
 
     private void PostScaleRequiredStatus()
     {
-        string tool = _tool == ViewerTool.Area ? "Area" : "Line";
-        PostStatus($"{tool} Record blocked: set sheet scale first with Scale or PDF Auto Scale. Count can be recorded without scale.");
+        string tool = _tool switch
+        {
+            ViewerTool.Area => "Area",
+            ViewerTool.Ruler => "Ruler",
+            _ => "Line",
+        };
+        string mode = _tool == ViewerTool.Ruler ? "markup" : "Record";
+        PostStatus($"{tool} {mode} blocked: set sheet scale first with Scale or PDF Auto Scale. Count and drawing markups can be recorded without scale.");
     }
 
     private void PostRecordPrompt()
@@ -2211,6 +3469,32 @@ public sealed class PdfViewport : SKElement
                     ? $"Scale: click the first point of a known distance.{modes}"
                     : $"Scale: click the second point of a known distance.{modes}");
                 break;
+            case ViewerTool.Ruler:
+                if (IsMissingScaleForLinearArea())
+                {
+                    PostScaleRequiredStatus();
+                    break;
+                }
+
+                PostStatus(_drawPts.Count == 0
+                    ? $"Ruler: click the first endpoint.{modes}"
+                    : $"Ruler: click the second endpoint to place the dimension label.{modes}");
+                break;
+            case ViewerTool.DrawLine:
+                PostStatus(_drawPts.Count == 0
+                    ? $"Draw line: click the first endpoint.{modes}"
+                    : $"Draw line: click the second endpoint.{modes}");
+                break;
+            case ViewerTool.DrawArrow:
+                PostStatus(_drawPts.Count == 0
+                    ? $"Arrow: click the tail point.{modes}"
+                    : $"Arrow: click the arrow head point.{modes}");
+                break;
+            case ViewerTool.DrawRect:
+                PostStatus(_drawPts.Count == 0
+                    ? $"Box: click the first corner.{modes}"
+                    : $"Box: click the opposite corner.{modes}");
+                break;
             case ViewerTool.Select:
                 PostStatus("Select: left-drag a box to select measurements. Ctrl+click toggles, Ctrl+C copies, Ctrl+V pastes.");
                 break;
@@ -2233,6 +3517,9 @@ public sealed class PdfViewport : SKElement
             "point" => "Count",
             "line" => "Line",
             "area" => "Area",
+            "dimension" => "Ruler",
+            "arrow" => "Arrow",
+            "rectangle" => "Box",
             "select" => "Select",
             _ => type,
         };
@@ -2285,7 +3572,8 @@ public sealed class PdfViewport : SKElement
 
     private bool TryGetOrthoAnchor(out SKPoint anchor)
     {
-        if (_tool is ViewerTool.Line or ViewerTool.Area && _drawPts.Count > 0)
+        if (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect &&
+            _drawPts.Count > 0)
         {
             anchor = _drawPts[^1];
             return true;
@@ -2815,6 +4103,9 @@ public sealed class PdfViewport : SKElement
     private bool IsMeasurementOnActivePage(Measurement measurement) =>
         IsSamePageFolder(measurement.PageFolder, _pageFolder);
 
+    private bool IsAnnotationOnActivePage(PageAnnotation annotation) =>
+        IsSamePageFolder(annotation.PageFolder, _pageFolder);
+
     private bool IsMeasurementSelected(Measurement measurement) =>
         _selectedMeasurements.Contains(measurement);
 
@@ -3166,6 +4457,14 @@ public sealed class PdfViewport : SKElement
 
     private string LayerName(int layerNumber) =>
         _layers.FirstOrDefault(layer => layer.Number == layerNumber)?.Name ?? $"Layer {layerNumber}";
+
+    private static string LayerTraceModeTitle(PdfLayerTraceMode mode) => mode switch
+    {
+        PdfLayerTraceMode.Edge => "Edge",
+        PdfLayerTraceMode.Point => "Point",
+        PdfLayerTraceMode.AllEdges => "All Edges",
+        _ => "Full",
+    };
 
     private void FireLayersChanged()
     {

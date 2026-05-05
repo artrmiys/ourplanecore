@@ -76,7 +76,7 @@ public sealed class MarkerSetsDialog : Window
             Text = _rows.Count == 0
                 ? "No marker sets saved yet."
                 : $"Saved marker sets: {_rows.Count}",
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
             Margin = new Thickness(0, 0, 0, 8),
         };
         DockPanel.SetDock(summary, Dock.Top);

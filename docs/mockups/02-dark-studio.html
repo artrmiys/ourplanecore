@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Mockup 2 — Dark Studio</title>
+<style>
+  :root {
+    --surface: #1B1D22;
+    --surface-alt: #16181D;
+    --surface-elev: #22252B;
+    --canvas: #0E1014;
+    --border: #2A2E36;
+    --border-strong: #3A3F49;
+    --text: #E6E8EC;
+    --text-2: #9099AA;
+    --text-3: #5B6478;
+    --accent: #FFB454;
+    --accent-soft: rgba(255,180,84,0.14);
+    --success: #4ADE80;
+    --warning: #FBBF24;
+    --danger: #F87171;
+    --recording: #EF4444;
+    --c-area: #C084FC;
+    --c-line: #60A5FA;
+    --c-count: #F472B6;
+    --c-joist: #34D399;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 -apple-system, "Segoe UI", "Inter", system-ui, sans-serif;
+    background: #08090C;
+    color: var(--text);
+    padding: 24px;
+  }
+  .app {
+    width: 1280px;
+    height: 780px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Title bar ─────────────────────────────────────────── */
+  .titlebar {
+    height: 38px;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px; gap: 12px; flex-shrink: 0;
+  }
+  .logo {
+    width: 22px; height: 22px;
+    background: linear-gradient(135deg, var(--accent), #F97316);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    color: #0E1014; font-weight: 800; font-size: 12px;
+  }
+  .title { font-weight: 600; font-size: 13px; letter-spacing: -0.01em; }
+  .title-sep { color: var(--text-3); }
+  .title-job { color: var(--text-2); font-weight: 400; }
+  .titlebar .spacer { flex: 1; }
+  .profile-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 11px;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer;
+  }
+  .profile-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .icon-btn {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: transparent; border: 0;
+    display: grid; place-items: center;
+    color: var(--text-2); cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--surface-elev); color: var(--text); }
+
+  /* ── Top toolbar ───────────────────────────────────────── */
+  .toolbar {
+    height: 46px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px; gap: 6px; flex-shrink: 0;
+  }
+  .group {
+    display: flex; align-items: center; gap: 4px;
+    padding-right: 12px; border-right: 1px solid var(--border);
+    margin-right: 8px;
+  }
+  .group:last-child { border-right: 0; }
+  .group-label {
+    color: var(--text-3); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; margin-right: 6px;
+  }
+  .btn {
+    height: 30px; padding: 0 12px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: inherit; color: var(--text);
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer;
+  }
+  .btn:hover { background: #2C3038; border-color: var(--border-strong); }
+  .btn.primary {
+    background: var(--accent); color: #0E1014; border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: #FFC270; }
+  .btn.ghost { background: transparent; border-color: transparent; }
+  .btn.ghost:hover { background: var(--surface-elev); }
+  .scale-chip {
+    background: var(--surface-elev); color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 11px;
+    font-weight: 600; font-size: 12px;
+    cursor: pointer; font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Main row ──────────────────────────────────────────── */
+  .main { flex: 1; display: flex; min-height: 0; }
+
+  /* Left panel */
+  .left {
+    width: 220px; background: var(--surface-alt);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .panel-head {
+    height: 38px; padding: 0 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-head h3 {
+    margin: 0; font-size: 11px; font-weight: 600;
+    color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .tree { padding: 8px 4px; font-size: 13px; flex: 1; overflow: auto; }
+  .tree-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 5px; cursor: pointer;
+    color: var(--text-2);
+  }
+  .tree-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .tree-item.active {
+    background: var(--accent-soft); color: var(--accent); font-weight: 500;
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .tree-item .chev { color: var(--text-3); width: 10px; }
+  .tree-item .badge { margin-left: auto; font-size: 10px; color: var(--text-3); }
+  .tree-folder { font-weight: 500; color: var(--text); }
+  .tree-folder .chev::before { content: "▾"; }
+  .tree-child { padding-left: 22px; }
+
+  /* Canvas */
+  .canvas-wrap { flex: 1; display: flex; min-width: 0; }
+  .tool-strip {
+    width: 48px; background: var(--surface-alt);
+    border-right: 1px solid var(--border);
+    padding: 8px 6px;
+    display: flex; flex-direction: column; gap: 3px;
+    flex-shrink: 0;
+  }
+  .tool-btn {
+    width: 36px; height: 36px; border-radius: 7px;
+    display: grid; place-items: center;
+    cursor: pointer; color: var(--text-2);
+    background: transparent; border: 1px solid transparent;
+    font-size: 13px; font-weight: 600;
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--surface-elev); color: var(--text); }
+  .tool-btn.active {
+    background: var(--accent); color: #0E1014;
+    box-shadow: 0 2px 8px rgba(255,180,84,0.4);
+  }
+  .tool-btn .kb {
+    position: absolute; bottom: 2px; right: 4px;
+    font-size: 8px; opacity: 0.6;
+  }
+  .tool-strip .divider { height: 1px; background: var(--border); margin: 6px 4px; }
+
+  .canvas {
+    flex: 1; position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 30% 30%, #14171D 0%, var(--canvas) 60%);
+  }
+  .canvas::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,0.025) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,0.025) 39px 40px);
+    pointer-events: none;
+  }
+
+  .hud {
+    position: absolute; top: 14px; left: 14px;
+    background: rgba(34,37,43,0.92);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 7px 13px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; font-weight: 500;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .hud .tool-name { color: var(--c-line); font-weight: 600; }
+  .hud .sep { color: var(--text-3); }
+  .hud .kb {
+    color: var(--text-3); margin-left: 4px; font-size: 11px;
+    background: var(--surface); padding: 1px 6px; border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .hud .recording-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--recording);
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.25);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.25); }
+    50% { box-shadow: 0 0 0 6px rgba(239,68,68,0.05); }
+  }
+
+  .page-callout {
+    position: absolute; right: 14px; top: 14px;
+    background: rgba(34,37,43,0.92);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 13px; font-size: 11px;
+    color: var(--text-2);
+    backdrop-filter: blur(12px);
+  }
+  .page-callout strong { color: var(--text); font-size: 13px; }
+
+  /* drawing - dark canvas, vibrant */
+  .drawing { position: absolute; inset: 60px 80px 60px 80px; }
+  .area-shape {
+    position: absolute; left: 60px; top: 50px;
+    width: 280px; height: 180px;
+    background: rgba(192,132,252,0.18);
+    border: 2px solid var(--c-area);
+  }
+  .area-shape::after {
+    content: "Slab — 504 sf";
+    position: absolute; left: 8px; top: 8px;
+    font-size: 11px; font-weight: 600; color: var(--c-area);
+    background: rgba(14,16,20,0.85); padding: 2px 7px; border-radius: 3px;
+  }
+  .line-shape {
+    position: absolute; left: 380px; top: 80px;
+    width: 220px; height: 3px;
+    background: var(--c-line);
+    box-shadow: 0 0 6px rgba(96,165,250,0.5);
+  }
+  .line-shape::after {
+    content: "Wall 2×4 — 24′ 6″";
+    position: absolute; left: 0; top: -22px;
+    font-size: 11px; font-weight: 600; color: var(--c-line);
+    background: rgba(14,16,20,0.85); padding: 2px 7px; border-radius: 3px;
+  }
+  .joist-band {
+    position: absolute; left: 60px; top: 250px;
+    width: 280px; height: 120px;
+    border: 1.5px solid var(--c-joist);
+    background: rgba(52,211,153,0.06);
+  }
+  .joist-band::before {
+    content: "";
+    position: absolute; inset: 4px;
+    background:
+      repeating-linear-gradient(0deg, var(--c-joist) 0 1.5px, transparent 1.5px 14px);
+    opacity: 0.7;
+  }
+  .joist-band::after {
+    content: "Joists 14\" OC — 18 pcs";
+    position: absolute; right: 8px; top: 8px;
+    font-size: 11px; font-weight: 600; color: var(--c-joist);
+    background: rgba(14,16,20,0.85); padding: 2px 7px; border-radius: 3px;
+  }
+  .count-pt {
+    position: absolute; width: 14px; height: 14px;
+    background: var(--c-count);
+    border: 2px solid var(--canvas);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--c-count), 0 0 8px rgba(244,114,182,0.4);
+  }
+
+  /* Right panel */
+  .right {
+    width: 320px; background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 8px; }
+  .tab {
+    padding: 12px 14px; cursor: pointer;
+    color: var(--text-3); font-size: 13px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .inspector { padding: 16px; overflow: auto; flex: 1; }
+  .insp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .swatch {
+    width: 36px; height: 36px; border-radius: 7px;
+    background: var(--c-area); position: relative;
+  }
+  .swatch::after {
+    content: ""; position: absolute; inset: 6px;
+    background: rgba(255,255,255,0.25); border-radius: 3px;
+  }
+  .insp-name { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+  .insp-meta { color: var(--text-2); font-size: 12px; }
+  .insp-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .insp-section h4 {
+    margin: 0 0 10px; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3);
+  }
+  .field {
+    display: grid; grid-template-columns: 110px 1fr;
+    gap: 8px; align-items: center; margin-bottom: 8px;
+  }
+  .field label { color: var(--text-2); font-size: 12px; }
+  .field input, .field .value {
+    background: var(--surface-elev); border: 1px solid var(--border);
+    border-radius: 5px; padding: 6px 9px; font: inherit; font-size: 12px;
+    color: var(--text);
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .status-pills { display: flex; gap: 4px; }
+  .status-pill {
+    padding: 5px 11px; border-radius: 5px; font-size: 11px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface-elev); color: var(--text-2);
+  }
+  .status-pill.active {
+    background: var(--accent); color: #0E1014; border-color: var(--accent);
+  }
+  .total-card {
+    background: linear-gradient(135deg, rgba(255,180,84,0.16), rgba(249,115,22,0.05));
+    border: 1px solid rgba(255,180,84,0.25); border-radius: 8px;
+    padding: 14px; margin-top: 18px;
+  }
+  .total-card .label {
+    font-size: 10px; color: var(--accent); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .total-card .num {
+    font-size: 26px; font-weight: 700; color: var(--text); margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .total-card .sub { color: var(--text-2); font-size: 12px; margin-top: 2px; }
+
+  /* AI Inbox */
+  .inbox {
+    height: 38px; flex-shrink: 0;
+    background: var(--surface-alt);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 16px; gap: 12px;
+  }
+  .inbox-icon {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: var(--accent-soft); color: var(--accent);
+    display: grid; place-items: center; font-weight: 700; font-size: 11px;
+  }
+  .inbox-title { font-weight: 500; font-size: 13px; }
+  .inbox-badge {
+    background: var(--accent); color: #0E1014; border-radius: 10px;
+    padding: 1px 7px; font-size: 11px; font-weight: 700;
+  }
+  .inbox-msg { color: var(--text-2); font-size: 12px; }
+  .spinner {
+    width: 12px; height: 12px;
+    border: 2px solid var(--border-strong); border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .inbox .spacer { flex: 1; }
+
+  /* Status bar */
+  .status {
+    height: 28px; flex-shrink: 0;
+    background: var(--surface-alt);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px;
+    font-size: 11px; color: var(--text-2); gap: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .status .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    color: var(--text);
+  }
+  .status .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-active { color: var(--c-area); font-weight: 500; }
+  .status .spacer { flex: 1; }
+  .status .ok { color: var(--success); }
+
+  /* Toast example */
+  .toast {
+    position: absolute; right: 24px; bottom: 100px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; font-weight: 500;
+    border-left: 3px solid var(--accent);
+  }
+  .toast .small { color: var(--text-2); font-weight: 400; font-size: 11px; }
+
+  .nav { max-width: 1280px; margin: 0 auto 12px; font-size: 13px; }
+  .nav a { color: var(--accent); text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+  .desc {
+    max-width: 1280px; margin: 24px auto 0;
+    color: var(--text-2); font-size: 13px; line-height: 1.6;
+  }
+  .desc h2 { color: var(--text); font-size: 16px; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+  <div class="nav"><a href="index.html">← Все макеты</a></div>
+
+  <div class="app">
+    <div class="titlebar">
+      <div class="logo">S</div>
+      <div class="title">SmartTakeoffs</div>
+      <span class="title-sep">·</span>
+      <span class="title-job">Sample Project — Warehouse</span>
+      <div class="spacer"></div>
+      <div class="profile-pill"><span class="dot"></span> Drawing ▾</div>
+      <button class="icon-btn" title="Command Palette ⌘K">⌘</button>
+      <button class="icon-btn">⚙</button>
+    </div>
+
+    <div class="toolbar">
+      <div class="group">
+        <span class="group-label">Job</span>
+        <button class="btn">Open</button>
+        <button class="btn">New</button>
+      </div>
+      <div class="group">
+        <span class="group-label">PDF</span>
+        <button class="btn">Import</button>
+        <button class="btn">Export</button>
+        <button class="btn">Auto Name+Scale</button>
+      </div>
+      <div class="group">
+        <span class="group-label">Scale</span>
+        <span class="scale-chip">1 : 100 ▾</span>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn primary">Run AI</button>
+      <button class="btn ghost">💾 Save</button>
+    </div>
+
+    <div class="main">
+      <div class="left">
+        <div class="panel-head">
+          <h3>Pages</h3>
+          <button class="icon-btn" style="width:22px;height:22px;font-size:14px;">+</button>
+        </div>
+        <div class="tree">
+          <div class="tree-item tree-folder"><span class="chev"></span> 00 Imported <span class="badge">12</span></div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Arch <span class="badge">5</span></div>
+          <div class="tree-item tree-child active">A101 — Floor Plan</div>
+          <div class="tree-item tree-child">A102 — Roof Plan</div>
+          <div class="tree-item tree-child">A201 — Elevations</div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Struct <span class="badge">3</span></div>
+          <div class="tree-item tree-folder"><span class="chev"></span> Others <span class="badge">4</span></div>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <div class="tool-strip">
+          <div class="tool-btn" title="Pan (V)">P<span class="kb">V</span></div>
+          <div class="tool-btn" title="Select (E)">↖<span class="kb">E</span></div>
+          <div class="divider"></div>
+          <div class="tool-btn" title="Scale (S)">⇿<span class="kb">S</span></div>
+          <div class="tool-btn" title="Count (P)" style="color:var(--c-count);">●<span class="kb">P</span></div>
+          <div class="tool-btn active" title="Line (L)">─<span class="kb">L</span></div>
+          <div class="tool-btn" title="Area (A)" style="color:var(--c-area);">■<span class="kb">A</span></div>
+          <div class="divider"></div>
+          <div class="tool-btn" title="Snap">◇</div>
+          <div class="tool-btn active" title="Ortho">⊥</div>
+        </div>
+        <div class="canvas">
+          <div class="hud">
+            <span class="recording-dot"></span>
+            <span class="tool-name">Line</span>
+            <span class="sep">·</span>
+            <span>Snap off · Ortho on</span>
+            <span class="kb">L</span>
+          </div>
+          <div class="page-callout">
+            <strong>A101</strong> · Floor Plan<br>
+            24″ × 36″ · 1 : 100
+          </div>
+          <div class="drawing">
+            <div class="area-shape"></div>
+            <div class="line-shape"></div>
+            <div class="joist-band"></div>
+            <div class="count-pt" style="left:420px; top:200px;"></div>
+            <div class="count-pt" style="left:480px; top:210px;"></div>
+            <div class="count-pt" style="left:540px; top:200px;"></div>
+            <div class="count-pt" style="left:600px; top:210px;"></div>
+          </div>
+
+          <div class="toast">
+            <div class="spinner"></div>
+            <div>
+              Running AI on A102…
+              <div class="small">2 sheets queued</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="tabs">
+          <div class="tab">Takeoffs</div>
+          <div class="tab active">Inspector</div>
+        </div>
+        <div class="inspector">
+          <div class="insp-head">
+            <div class="swatch"></div>
+            <div>
+              <div class="insp-name">Concrete Slab</div>
+              <div class="insp-meta">Area · 504.0 sf · 1 page</div>
+            </div>
+          </div>
+
+          <div class="status-pills">
+            <span class="status-pill active">Takeoff</span>
+            <span class="status-pill">Reviewed</span>
+            <span class="status-pill">Revised</span>
+            <span class="status-pill">Final</span>
+          </div>
+
+          <div class="insp-section">
+            <h4>Properties</h4>
+            <div class="field"><label>Type</label><span class="value">Area</span></div>
+            <div class="field"><label>Subject</label><input type="text" value="CIP Slab"></div>
+            <div class="field"><label>Unit</label><span class="value">sf</span></div>
+            <div class="field"><label>Color</label><span class="value" style="display:flex;gap:6px;align-items:center;"><span style="width:14px;height:14px;background:var(--c-area);border-radius:3px;"></span> #C084FC</span></div>
+          </div>
+
+          <div class="insp-section">
+            <h4>Quantities</h4>
+            <div class="field"><label>Area</label><span class="value">504.0 sf</span></div>
+            <div class="field"><label>Unit Rate</label><input type="text" value="$8.50"></div>
+            <div class="field"><label>Waste %</label><input type="text" value="5"></div>
+            <div class="field"><label>Formula</label><span class="value" style="font-family:Consolas,monospace;font-size:11px;">[Area]*[Rate]*(1+[Waste]/100)</span></div>
+          </div>
+
+          <div class="total-card">
+            <div class="label">Estimated Cost</div>
+            <div class="num">$4,498.20</div>
+            <div class="sub">504 sf × $8.50 + 5% waste</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inbox">
+      <div class="inbox-icon">AI</div>
+      <span class="inbox-title">Inbox</span>
+      <span class="inbox-badge">2</span>
+      <div class="spinner"></div>
+      <span class="inbox-msg">Roof type detected on A102 · 1 measurement queued · running…</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" style="height:26px;font-size:12px;">Expand ▴</button>
+    </div>
+
+    <div class="status">
+      <span class="chip"><span class="dot" style="background:var(--success);"></span> Sample Project</span>
+      <span>A101 · 24″×36″</span>
+      <span class="chip" style="color:var(--accent);">1 : 100</span>
+      <span>73 %</span>
+      <span style="font-family:Consolas,monospace; font-size:11px;">412.0, 188.5 pt · 34′ 4″, 15′ 8″</span>
+      <span class="chip">⊥ Ortho</span>
+      <span class="chip status-active"><span class="dot" style="background:var(--c-area);"></span> Concrete Slab</span>
+      <div class="spacer"></div>
+      <span class="ok">✓ Saved 12s ago</span>
+    </div>
+  </div>
+
+  <div class="desc">
+    <h2>Dark Studio — характеристики</h2>
+    <p>
+      Глубокий нейтральный фон <code style="color:var(--text);">#0E1014</code> для канваса и
+      <code style="color:var(--text);">#1B1D22</code> для панелей — глаз не выгорает за
+      8-часовую смену. Цвета измерений (Line синий, Area фиолетовый, Joist зелёный, Count
+      розовый) насыщены и «горят» на тёмном фоне с лёгким glow-эффектом для свечения линий.
+    </p>
+    <p>
+      Тёплый янтарный акцент <code style="color:var(--text);">#FFB454</code> на primary-кнопках
+      и активных состояниях даёт визуальную связку. Recording-индикатор слева в HUD —
+      пульсирующий красный круг, чтобы пользователь точно знал, что геометрия пишется.
+    </p>
+    <p>
+      Toast в правом нижнем углу показывает прогресс AI-операций без раскрытия Inbox-панели.
+      Спиннер в Inbox-баре дублирует сигнал.
+    </p>
+    <p>
+      Inspector аналогичен светлой версии, но карточки имеют чуть больший контраст. Тонкая
+      типографика Inter/Segoe UI делает плотность приятной — это canonical «pro tool»
+      эстетика 2025-2026.
+    </p>
+  </div>
+</body>
+</html>
