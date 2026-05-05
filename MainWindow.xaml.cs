@@ -11387,29 +11387,23 @@ public partial class MainWindow : Window
 
     private string CurrentTakeoffParentFolder()
     {
-        if (_currentJob == null)
-            return "";
-
-        if (TakeoffsTree.SelectedItem is TreeViewItem { Tag: TakeoffFolderNode folder })
-            return folder.FolderPath;
-
-        if (TakeoffsTree.SelectedItem is TreeViewItem { Tag: TakeoffItem item } &&
-            !string.IsNullOrWhiteSpace(item.FolderPath))
-        {
-            return Path.GetDirectoryName(item.FolderPath) ?? _currentJob.TakeoffsRoot;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_activeTakeoffParentFolder) &&
-            Directory.Exists(_activeTakeoffParentFolder))
-        {
-            return _activeTakeoffParentFolder;
-        }
-
-        return _currentJob.TakeoffsRoot;
+        string? selectedFolder = TakeoffsTree.SelectedItem is TreeViewItem { Tag: TakeoffFolderNode folder }
+            ? folder.FolderPath
+            : null;
+        string? selectedItemParentFolder = TakeoffsTree.SelectedItem is TreeViewItem { Tag: TakeoffItem item } &&
+            !string.IsNullOrWhiteSpace(item.FolderPath)
+                ? Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot
+                : null;
+        return TakeoffCreationPolicy.NewFolderParentFolder(
+            _currentJob,
+            selectedFolder,
+            selectedItemParentFolder,
+            _activeTakeoffParentFolder,
+            Directory.Exists);
     }
 
     private string NewTakeoffItemParentFolder() =>
-        _currentJob?.TakeoffsRoot ?? "";
+        TakeoffCreationPolicy.NewItemParentFolder(_currentJob);
 
     private string ResolveTakeoffFolderDefaultMeasurementType(string folderPath, string fallback)
     {
