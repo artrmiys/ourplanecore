@@ -887,7 +887,7 @@ def probe_layers_data(req: dict) -> dict:
                     },
                 }
                 for candidate in candidates
-                if int(candidate["layer"]) != 0
+                if candidate["layer_name"]
             ],
         }
     finally:

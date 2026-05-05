@@ -235,7 +235,7 @@ public sealed partial class PdfViewport
         if (_pdfLayerTraceEnabled)
         {
             SetSnapPreview(null);
-            PostPdfLayerTraceStatus();
+            UpdatePdfLayerTraceHover(pointerPdf);
             e.Handled = true;
             return;
         }
@@ -368,7 +368,7 @@ public sealed partial class PdfViewport
                 {
                     if (_pdfLayerTraceChoosingLayer || _pdfLayerTraceReadyToApply)
                     {
-                        ClearPdfLayerTraceSession(keepCandidateLayer: true);
+                        ClearPdfLayerTraceSession();
                         PublishPdfLayerTraceState();
                         PostPdfLayerTraceStatus();
                     }

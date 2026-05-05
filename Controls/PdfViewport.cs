@@ -156,12 +156,18 @@ public sealed partial class PdfViewport : SKElement
     private PdfLayerTraceMode _pdfLayerTraceMode = PdfLayerTraceMode.Full;
     private int? _activePdfLayerTraceLayer;
     private string _activePdfLayerTraceLayerName = "";
+    private bool _pdfLayerTraceLayerExplicitlySelected;
     private List<PdfLayerProbeCandidate> _pdfLayerTraceCandidates = [];
     private int _pdfLayerTraceCandidateIndex;
     private bool _pdfLayerTraceChoosingLayer;
     private bool _pdfLayerTraceReadyToApply;
     private SKPoint? _pdfLayerTracePickPoint;
     private int? _pdfLayerTracePreviewLayer;
+    private bool _pdfLayerTraceProbeInProgress;
+    private int _pdfLayerTraceProbeVersion;
+    private SKPoint? _pendingPdfLayerTraceProbePoint;
+    private SKPoint? _lastPdfLayerTraceProbePoint;
+    private DateTime _lastPdfLayerTraceProbeAt = DateTime.MinValue;
     private readonly System.Windows.Threading.DispatcherTimer _zoomRerenderTimer;
     private bool _zoomRerenderForce;
     private bool _repaintQueued;
@@ -274,11 +280,13 @@ public sealed partial class PdfViewport : SKElement
 
     public ViewState CaptureViewState() => new(_zoom, _panX, _panY);
     public bool IsPdfLayerTraceEnabled => _pdfLayerTraceEnabled;
+    public bool CanApplyPdfLayerTrace => _pdfLayerTraceEnabled && _pdfLayerTraceReadyToApply;
     public string PdfLayerTraceModeTitle => LayerTraceModeTitle(_pdfLayerTraceMode);
     public string ActivePdfLayerTraceLayerName => _activePdfLayerTraceLayerName;
     public string PdfLayerTracePhaseTitle =>
         _pdfLayerTraceChoosingLayer ? "Choose Layer" :
         _pdfLayerTraceReadyToApply ? "Ready" :
+        _pdfLayerTraceCandidates.Count > 0 ? "Hover" :
         "Probe";
 
     public void RestoreViewState(ViewState state)

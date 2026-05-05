@@ -13,6 +13,8 @@ publish/
 *.secret*
 *.tmp
 *.bak
+desktop.ini
+.folder_icon.ico
 
 __pycache__/
 *.pyc

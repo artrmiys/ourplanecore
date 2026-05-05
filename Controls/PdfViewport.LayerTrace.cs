@@ -15,7 +15,13 @@ public sealed partial class PdfViewport
     {
         _activePdfLayerTraceLayer = layerNumber;
         _activePdfLayerTraceLayerName = layerName;
-        ClearPdfLayerTraceSession(keepCandidateLayer: true);
+        _pdfLayerTraceLayerExplicitlySelected = true;
+        ClearPdfLayerTraceSession(keepCandidateLayer: true, queueRender: false);
+        if (_pdfLayerTraceEnabled)
+        {
+            _pdfLayerTraceReadyToApply = true;
+            SetPdfLayerTracePreviewLayer(layerNumber, forceRender: true);
+        }
         PublishPdfLayerTraceState();
         if (_pdfLayerTraceEnabled)
             PostPdfLayerTraceStatus();
@@ -26,9 +32,19 @@ public sealed partial class PdfViewport
         _pdfLayerTraceEnabled = enabled;
         if (enabled)
         {
-            EnsureActivePdfLayerTraceLayer();
             CancelDrawing();
             ClearSelection();
+            bool useExplicitLayer = _pdfLayerTraceLayerExplicitlySelected && _activePdfLayerTraceLayer.HasValue;
+            ClearPdfLayerTraceSession(keepCandidateLayer: useExplicitLayer, queueRender: false);
+            if (useExplicitLayer && _activePdfLayerTraceLayer.HasValue)
+            {
+                _pdfLayerTraceReadyToApply = true;
+                SetPdfLayerTracePreviewLayer(_activePdfLayerTraceLayer.Value, forceRender: true);
+            }
+            else
+            {
+                RefreshPdfLayerTraceRender();
+            }
             Focus();
         }
         else
@@ -75,19 +91,19 @@ public sealed partial class PdfViewport
         if (!_pdfLayerTraceEnabled)
             return false;
 
-        if (_pdfLayerTraceChoosingLayer)
+        if (_pdfLayerTraceChoosingLayer || (_pdfLayerTraceCandidates.Count > 0 && !_pdfLayerTraceReadyToApply))
         {
             LockPdfLayerTraceCandidate();
             return true;
         }
 
         if (!_pdfLayerTraceReadyToApply)
-            return BeginPdfLayerTraceAt(pickPoint);
+            return BeginPdfLayerTraceAt(pickPoint, lockCandidate: true);
 
         return TraceActivePdfLayer(pickPoint ?? _pdfLayerTracePickPoint);
     }
 
-    private bool BeginPdfLayerTraceAt(SKPoint? pickPoint)
+    private bool BeginPdfLayerTraceAt(SKPoint? pickPoint, bool lockCandidate = false)
     {
         if (pickPoint == null)
         {
@@ -115,6 +131,90 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        return ApplyPdfLayerTraceProbeResult(pickPoint.Value, probe, lockCandidate);
+    }
+
+    private void UpdatePdfLayerTraceHover(SKPoint pickPoint)
+    {
+        if (!_pdfLayerTraceEnabled || _pdfLayerTraceReadyToApply)
+        {
+            PostPdfLayerTraceStatus();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_pdfPath) || _pageBitmap == null)
+        {
+            PostStatus("Open a PDF page before using Layer Trace.");
+            return;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        if (_lastPdfLayerTraceProbePoint is { } lastPoint &&
+            (now - _lastPdfLayerTraceProbeAt).TotalMilliseconds < 110 &&
+            DistanceSquared(lastPoint, pickPoint) < 36)
+        {
+            PostPdfLayerTraceStatus();
+            return;
+        }
+
+        if (_pdfLayerTraceProbeInProgress)
+        {
+            _pendingPdfLayerTraceProbePoint = pickPoint;
+            return;
+        }
+
+        _lastPdfLayerTraceProbePoint = pickPoint;
+        _lastPdfLayerTraceProbeAt = now;
+        StartPdfLayerTraceHoverProbe(pickPoint);
+    }
+
+    private async void StartPdfLayerTraceHoverProbe(SKPoint pickPoint)
+    {
+        if (_pdfLayerTraceProbeInProgress)
+            return;
+
+        _pdfLayerTraceProbeInProgress = true;
+        int version = ++_pdfLayerTraceProbeVersion;
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        string pageFolder = _pageFolder;
+        IReadOnlyList<PdfLayerInfo>? layers = LayerRenderCachedLayers();
+
+        PdfLayerProbeResult probe = new();
+        string error = "";
+        bool ok = await Task.Run(() => PdfLayerRenderService.TryProbeLayers(
+            pdfPath,
+            pdfIndex,
+            pickPoint,
+            layers,
+            out probe,
+            out error));
+
+        _pdfLayerTraceProbeInProgress = false;
+        if (version == _pdfLayerTraceProbeVersion &&
+            _pdfLayerTraceEnabled &&
+            !_pdfLayerTraceReadyToApply &&
+            string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+            pdfIndex == _pdfIndex &&
+            string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            if (ok)
+                ApplyPdfLayerTraceProbeResult(pickPoint, probe, lockCandidate: false);
+            else
+                PostStatus($"Layer probe failed: {error}");
+        }
+
+        if (_pendingPdfLayerTraceProbePoint is { } pending &&
+            _pdfLayerTraceEnabled &&
+            !_pdfLayerTraceReadyToApply)
+        {
+            _pendingPdfLayerTraceProbePoint = null;
+            UpdatePdfLayerTraceHover(pending);
+        }
+    }
+
+    private bool ApplyPdfLayerTraceProbeResult(SKPoint pickPoint, PdfLayerProbeResult probe, bool lockCandidate)
+    {
         _pdfLayerTraceCandidates = probe.Candidates.ToList();
         _pdfLayerTraceCandidateIndex = 0;
         _pdfLayerTracePickPoint = pickPoint;
@@ -123,18 +223,26 @@ public sealed partial class PdfViewport
         {
             _pdfLayerTraceChoosingLayer = false;
             _pdfLayerTraceReadyToApply = false;
-            RequestRepaint();
+            _activePdfLayerTraceLayer = null;
+            _activePdfLayerTraceLayerName = "";
+            SetPdfLayerTracePreviewLayer(null);
             PostStatus("Layer Trace: no PDF layer found under this point.");
             PublishPdfLayerTraceState();
             return false;
         }
 
         ApplyCurrentPdfLayerTraceCandidate();
-        _pdfLayerTraceChoosingLayer = _pdfLayerTraceCandidates.Count > 1;
-        _pdfLayerTraceReadyToApply = !_pdfLayerTraceChoosingLayer;
-        RequestRepaint();
-        PostPdfLayerTraceStatus();
-        PublishPdfLayerTraceState();
+        if (lockCandidate)
+            LockPdfLayerTraceCandidate();
+        else
+        {
+            _pdfLayerTraceChoosingLayer = _pdfLayerTraceCandidates.Count > 1;
+            _pdfLayerTraceReadyToApply = false;
+            RequestRepaint();
+            PostPdfLayerTraceStatus();
+            PublishPdfLayerTraceState();
+        }
+
         return true;
     }
 
@@ -158,7 +266,7 @@ public sealed partial class PdfViewport
         ApplyCurrentPdfLayerTraceCandidate();
         _pdfLayerTraceChoosingLayer = false;
         _pdfLayerTraceReadyToApply = true;
-        RequestRepaint();
+        RefreshPdfLayerTraceRender();
         PostPdfLayerTraceStatus();
         PublishPdfLayerTraceState();
     }
@@ -180,28 +288,37 @@ public sealed partial class PdfViewport
             ? null
             : _pdfLayerTraceCandidates[Math.Clamp(_pdfLayerTraceCandidateIndex, 0, _pdfLayerTraceCandidates.Count - 1)];
 
-    private void ClearPdfLayerTraceSession(bool keepCandidateLayer = false)
+    private void ClearPdfLayerTraceSession(bool keepCandidateLayer = false, bool queueRender = true)
     {
         _pdfLayerTraceCandidates.Clear();
         _pdfLayerTraceCandidateIndex = 0;
         _pdfLayerTraceChoosingLayer = false;
         _pdfLayerTraceReadyToApply = false;
         _pdfLayerTracePickPoint = null;
-        SetPdfLayerTracePreviewLayer(null);
+        _pendingPdfLayerTraceProbePoint = null;
+        _pdfLayerTraceProbeVersion++;
+        SetPdfLayerTracePreviewLayer(null, forceRender: queueRender, queueRender: queueRender);
         if (!keepCandidateLayer)
         {
             _activePdfLayerTraceLayer = null;
             _activePdfLayerTraceLayerName = "";
+            _pdfLayerTraceLayerExplicitlySelected = false;
         }
         RequestRepaint();
     }
 
-    private void SetPdfLayerTracePreviewLayer(int? layerNumber)
+    private void SetPdfLayerTracePreviewLayer(int? layerNumber, bool forceRender = false, bool queueRender = true)
     {
-        if (_pdfLayerTracePreviewLayer == layerNumber)
+        if (!forceRender && _pdfLayerTracePreviewLayer == layerNumber)
             return;
 
         _pdfLayerTracePreviewLayer = layerNumber;
+        if (queueRender)
+            RefreshPdfLayerTraceRender();
+    }
+
+    private void RefreshPdfLayerTraceRender()
+    {
         UpdateLayerSnapshot(_layers);
         FireLayersChanged();
         if (_usingLayerRenderer && _pageBitmap != null && !string.IsNullOrWhiteSpace(_pdfPath))
@@ -223,6 +340,19 @@ public sealed partial class PdfViewport
         if (_pdfLayerTracePreviewLayer.HasValue)
             highlighted.Add(_pdfLayerTracePreviewLayer.Value);
         return highlighted;
+    }
+
+    private Dictionary<int, bool> EffectiveLayerStates()
+    {
+        var states = new Dictionary<int, bool>(_layerStates);
+        if (!_pdfLayerTraceEnabled || !_pdfLayerTraceReadyToApply || !_activePdfLayerTraceLayer.HasValue)
+            return states;
+
+        IReadOnlyList<PdfLayerInfo> layers = LayerRenderCachedLayers() ?? Array.Empty<PdfLayerInfo>();
+        foreach (PdfLayerInfo layer in layers)
+            states[layer.Number] = layer.Number == _activePdfLayerTraceLayer.Value;
+        states[_activePdfLayerTraceLayer.Value] = true;
+        return states;
     }
 
     private IReadOnlyList<PdfLayerInfo>? LayerRenderCachedLayers()
@@ -257,10 +387,8 @@ public sealed partial class PdfViewport
         }
 
         if (!_activePdfLayerTraceLayer.HasValue)
-            EnsureActivePdfLayerTraceLayer();
-        if (!_activePdfLayerTraceLayer.HasValue)
         {
-            PostStatus("Select a PDF layer before tracing.");
+            PostStatus("Layer Trace: hover PDF geometry and click/Enter to lock a layer before tracing.");
             return false;
         }
 
@@ -320,7 +448,7 @@ public sealed partial class PdfViewport
         }
 
         SelectMeasurements(added);
-        ClearPdfLayerTraceSession(keepCandidateLayer: true);
+        ClearPdfLayerTraceSession();
         RequestRepaint();
         string kind = added.Count == 1 ? ToolTitle(added[0].MType) : $"{added.Count} lines";
         PostStatus($"Layer Trace added {kind} from '{trace.LayerName}' ({LayerTraceModeTitle(_pdfLayerTraceMode)}).");
@@ -371,13 +499,18 @@ public sealed partial class PdfViewport
             PostStatus($"Layer Trace: {layer} ({_pdfLayerTraceCandidateIndex + 1}/{_pdfLayerTraceCandidates.Count}). Tab selects layer; click/Enter locks it.");
             return;
         }
+        if (_pdfLayerTraceCandidates.Count > 0 && !_pdfLayerTraceReadyToApply)
+        {
+            PostStatus($"Layer Trace hover: {layer}. Click/Enter locks layer; Tab cycles candidates if available.");
+            return;
+        }
         if (_pdfLayerTraceReadyToApply)
         {
             PostStatus($"Layer Trace: {layer}, {LayerTraceModeTitle(_pdfLayerTraceMode)}. Tab changes mode; click/Enter creates takeoff.");
             return;
         }
 
-        PostStatus("Layer Trace: click a PDF object to pick its layer.");
+        PostStatus("Layer Trace: hover PDF geometry to preview a layer, click/Enter to lock it.");
     }
 
     private void PublishPdfLayerTraceState() =>
@@ -419,5 +552,22 @@ public sealed partial class PdfViewport
             };
             canvas.DrawCircle(_pdfLayerTracePickPoint.Value, r, dot);
         }
+    }
+
+    private bool IsPdfLayerTraceSoloActive() =>
+        _pdfLayerTraceEnabled && _pdfLayerTraceReadyToApply && _activePdfLayerTraceLayer.HasValue;
+
+    private void DrawPdfLayerTraceGhost(SKCanvas canvas, SKRect pageRect)
+    {
+        if (!_pdfLayerTraceEnabled || IsPdfLayerTraceSoloActive())
+            return;
+
+        using var ghost = new SKPaint
+        {
+            Color = GetCachedColor(ViewBackgroundColor, SKColors.White).WithAlpha(190),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+        canvas.DrawRect(pageRect, ghost);
     }
 }

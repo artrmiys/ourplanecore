@@ -289,23 +289,20 @@ public partial class MainWindow
 
     private void ApplyScaleFromEntry()
     {
-        const double PT_M = 25.4 / 72.0 / 1000.0;
-        if (!double.TryParse(TxtScaleRatio.Text.Replace(",", "."),
-                System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out double ratio)
-            || ratio <= 0)
+        if (!PdfSheetMetadataService.TryParseScaleMetersPerPt(TxtScaleRatio.Text, out double scaleMetersPerPt))
         {
-            MessageBox.Show("Enter a valid number, e.g. 100 for 1:100",
+            MessageBox.Show("Enter an imperial scale, e.g. 1/8\" = 1'0\".",
                             "Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        _viewport.ScaleMetersPerPt = PT_M * ratio;
+
+        _viewport.ScaleMetersPerPt = scaleMetersPerPt;
         if (_currentPage != null)
             _currentPage.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         ApplyScaleToCurrentPageMeasurements(_viewport.ScaleMetersPerPt);
         SaveCurrentPageScale();
         UpdateScaleUi(_viewport.ScaleMetersPerPt);
-        TxtStatus.Text = $"Scale set: 1:{ratio:F0}  (1pt = {_viewport.ScaleMetersPerPt:F6} m)";
+        TxtStatus.Text = $"Scale set: {PdfSheetMetadataService.FormatImperialScale(_viewport.ScaleMetersPerPt)}";
         RefreshAllTotals();
     }
 
@@ -330,7 +327,7 @@ public partial class MainWindow
         var mi = new MenuItem { Header = label };
         mi.Click += (_, _) =>
         {
-            TxtScaleRatio.Text = $"{ratio:F0}";
+            TxtScaleRatio.Text = label;
             ApplyScaleFromEntry();
         };
         menu.Items.Add(mi);

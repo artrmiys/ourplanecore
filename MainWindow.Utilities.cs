@@ -32,6 +32,9 @@ public partial class MainWindow
             ApplyDisplaySettingsToViewport();
             ApplySheetOverlaySettings();
             ApplySidePanelWidths();
+            if (string.Equals(TxtScaleRatio.Text, "100", StringComparison.OrdinalIgnoreCase))
+                TxtScaleRatio.Text = "1/8\" = 1'0\"";
+            TxtScaleRatio.ToolTip = "Imperial sheet scale, e.g. 1/8\" = 1'0\". Ratio values like 1:96 are also accepted.";
         }
         finally
         {
@@ -118,6 +121,10 @@ public partial class MainWindow
         UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(86, 91, 98) : Color.FromRgb(208, 208, 208));
         UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
         UpdateAppBrush("ControlActiveForegroundBrush", dark ? Colors.White : Color.FromRgb(17, 17, 17));
+        UpdateAppBrush(SystemColors.HighlightBrushKey, dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
+        UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Colors.White : Color.FromRgb(17, 17, 17));
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, dark ? Color.FromRgb(50, 72, 96) : Color.FromRgb(204, 229, 255));
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Colors.White : Color.FromRgb(17, 17, 17));
         UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(90, 160, 235) : Color.FromRgb(37, 99, 166));
         UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(112, 178, 245) : Color.FromRgb(31, 85, 145));
         UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(70, 135, 210) : Color.FromRgb(24, 68, 111));
@@ -187,6 +194,11 @@ public partial class MainWindow
     }
 
     private static void UpdateAppBrush(string key, Color color)
+    {
+        Application.Current.Resources[key] = new SolidColorBrush(color);
+    }
+
+    private static void UpdateAppBrush(object key, Color color)
     {
         Application.Current.Resources[key] = new SolidColorBrush(color);
     }
@@ -282,10 +294,12 @@ public partial class MainWindow
 
     private void UpdateScaleUi(double scale)
     {
-        const double PT_M = 25.4 / 72.0 / 1000.0;
-        double ratio = scale > 0 ? scale / PT_M : 0;
+        string scaleText = PdfSheetMetadataService.FormatImperialScale(scale);
+        double ratio = 0;
         TxtScaleInfo.Text = ratio > 0 ? $"≈1:{ratio:F0}" : "";
-        if (ratio > 0) TxtScaleRatio.Text = $"{ratio:F0}";
+        TxtScaleInfo.Text = string.IsNullOrWhiteSpace(scaleText) ? "" : "applied";
+        if (!string.IsNullOrWhiteSpace(scaleText))
+            TxtScaleRatio.Text = scaleText;
     }
 
     private string? ShowInputDialog(string prompt, string initial, string title)

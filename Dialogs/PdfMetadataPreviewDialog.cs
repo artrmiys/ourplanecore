@@ -13,9 +13,9 @@ public sealed class PdfMetadataPreviewRow
     public string CurrentPageName { get; init; } = "";
     public string SheetLabel { get; init; } = "";
     public string SheetTitle { get; init; } = "";
-    public string ProposedPageName { get; init; } = "";
+    public string ProposedPageName { get; set; } = "";
     public string Suffix { get; init; } = "";
-    public string ProposedScale { get; init; } = "";
+    public string ProposedScale { get; set; } = "";
     public string Source { get; init; } = "";
     public string Confidence { get; init; } = "";
     public string Reason { get; init; } = "";

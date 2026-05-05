@@ -102,7 +102,7 @@ public sealed partial class PdfViewport
 
         _lastPointerStatusAt = now;
         string scaleStr = ScaleMetersPerPt > 0
-            ? $"  |  1:{ScaleMetersPerPt / (25.4 / 72.0 / 1000.0):F0}"
+            ? $"  |  {PdfSheetMetadataService.FormatImperialScale(ScaleMetersPerPt)}"
             : "  |  scale: not set";
         PostStatus($"x={p.X:F1}  y={p.Y:F1} pt  |  zoom: {_zoom * 100:F0}%{scaleStr}");
     }

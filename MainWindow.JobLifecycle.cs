@@ -245,7 +245,8 @@ public partial class MainWindow
             }
             const double PT_M = 25.4 / 72.0 / 1000.0;
             double ratio = scale / PT_M;
-            TxtScaleRatio.Text = $"{ratio:F0}";
+            TxtScaleRatio.Text = PdfSheetMetadataService.FormatImperialScale(scale);
+            ratio = 0;
             TxtScaleInfo.Text  = $"≈1:{ratio:F0}";
         }
 

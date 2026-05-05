@@ -62,6 +62,10 @@ public sealed record JobPickerItem(
 
 public sealed class JobPickerDialog : Window
 {
+    private const double FooterButtonHeight = 30;
+    private static readonly Thickness FooterButtonGap = new(0, 0, 6, 0);
+    private static readonly Thickness FooterButtonPadding = new(10, 4, 10, 4);
+
     private readonly List<JobPickerItem> _items;
     private readonly Action<string, string, bool>? _pinChanged;
     private readonly Action<string>? _removeRecent;
@@ -147,12 +151,12 @@ public sealed class JobPickerDialog : Window
         DockPanel.SetDock(buttons, Dock.Right);
         footer.Children.Add(buttons);
 
-        _openButton = new Button { Content = "Open", MinWidth = 78, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
-        var browseJobButton = new Button { Content = "Browse Job...", MinWidth = 104, Margin = new Thickness(0, 0, 6, 0) };
-        var browseRootButton = new Button { Content = "Jobs Folder...", MinWidth = 112, Margin = new Thickness(0, 0, 6, 0) };
-        var newJobButton = new Button { Content = "New Job...", MinWidth = 92, Margin = new Thickness(0, 0, 6, 0) };
-        var sampleJobButton = new Button { Content = "Sample Job", MinWidth = 94, Margin = new Thickness(0, 0, 6, 0) };
-        var cancelButton = new Button { Content = "Cancel", MinWidth = 78, IsCancel = true };
+        _openButton = CreateFooterButton("Open", 72, isDefault: true);
+        var browseJobButton = CreateFooterButton("Browse Job...", 98);
+        var browseRootButton = CreateFooterButton("Jobs Folder...", 104);
+        var newJobButton = CreateFooterButton("New Job...", 88);
+        var sampleJobButton = CreateFooterButton("Sample Job", 92);
+        var cancelButton = CreateFooterButton("Cancel", 72, isCancel: true, hasTrailingGap: false);
         buttons.Children.Add(_openButton);
         buttons.Children.Add(browseJobButton);
         buttons.Children.Add(browseRootButton);
@@ -204,6 +208,25 @@ public sealed class JobPickerDialog : Window
         {
             ApplyFilter();
             _searchBox.Focus();
+        };
+    }
+
+    private static Button CreateFooterButton(
+        string content,
+        double minWidth,
+        bool isDefault = false,
+        bool isCancel = false,
+        bool hasTrailingGap = true)
+    {
+        return new Button
+        {
+            Content = content,
+            MinWidth = minWidth,
+            Height = FooterButtonHeight,
+            Padding = FooterButtonPadding,
+            IsDefault = isDefault,
+            IsCancel = isCancel,
+            Margin = hasTrailingGap ? FooterButtonGap : new Thickness(0),
         };
     }
 

@@ -761,27 +761,19 @@ public partial class MainWindow
             return;
 
         SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
-        if (request == null || !TryResolveRequestPage(request, out PageInfo? page) || page == null)
+        if (request == null)
         {
-            TxtStatus.Text = "Could not resolve the page for this sheet metadata response.";
+            TxtStatus.Text = "No AI request JSON exists for this Inbox entry.";
             return;
         }
 
-        SmartAiResponse? response = SmartContextStore.LoadAiResponse(_currentJob, request.Id);
-        if (response == null)
-        {
-            TxtStatus.Text = "No AI response exists for this sheet metadata request.";
-            return;
-        }
-
-        if (!PdfSheetMetadataService.TryBuildMetadataFromFallbackResponse(page, request, response, out PdfSheetMetadata metadata, out string error, _currentJob))
+        if (!TrySaveSheetMetadataFromFallbackResponse(request, out PdfMetadataPageResult? result, out string error) ||
+            result?.Metadata == null)
         {
             MessageBox.Show(error, "Apply Sheet Metadata Response", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        SmartTakeoffsJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
-        var result = new PdfMetadataPageResult(page, true, metadata, "");
         var rows = BuildPdfMetadataPreviewRows([result], defaultRename: true, defaultScale: true).ToList();
         var dialog = new PdfMetadataPreviewDialog(rows, "Apply Sheet Metadata Response")
         {
@@ -791,6 +783,58 @@ public partial class MainWindow
             return;
 
         ApplyPdfMetadataResults(_currentJob, [result], dialog.Rows);
+    }
+
+    private bool TrySaveSheetMetadataFromFallbackResponse(
+        SmartAiRequest request,
+        out PdfMetadataPageResult? result,
+        out string error)
+    {
+        result = null;
+        error = "";
+
+        if (_currentJob == null)
+        {
+            error = "Open a job before applying sheet metadata.";
+            return false;
+        }
+
+        if (!TryResolveRequestPage(request, out PageInfo? page) || page == null)
+        {
+            error = "Could not resolve the page for this sheet metadata response.";
+            return false;
+        }
+
+        SmartAiResponse? response = SmartContextStore.LoadAiResponse(_currentJob, request.Id);
+        if (response == null)
+        {
+            error = "No AI response exists for this sheet metadata request.";
+            return false;
+        }
+
+        if (!string.Equals(response.Status, "done", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(response.OutputText))
+        {
+            error = string.IsNullOrWhiteSpace(response.Error)
+                ? $"AI response is not ready ({response.Status})."
+                : response.Error;
+            return false;
+        }
+
+        if (!PdfSheetMetadataService.TryBuildMetadataFromFallbackResponse(
+                page,
+                request,
+                response,
+                out PdfSheetMetadata metadata,
+                out error,
+                _currentJob))
+        {
+            return false;
+        }
+
+        SmartTakeoffsJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
+        result = new PdfMetadataPageResult(page, true, metadata, "");
+        return true;
     }
 
     private bool TryResolveRequestPage(SmartAiRequest request, out PageInfo? page)

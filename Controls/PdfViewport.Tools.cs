@@ -101,17 +101,24 @@ public sealed partial class PdfViewport
             float dist = MathF.Sqrt(dx * dx + dy * dy);  // PDF points
 
             const double PT_M = 25.4 / 72.0 / 1000.0;
+            double lengthAtOneEighthFt = dist * PT_M * 96 / 0.3048;
+            double lengthAtQuarterFt = dist * PT_M * 48 / 0.3048;
             string hint =
                 $"Measured {dist:F1} pt on PDF\n" +
                 $"(At 1:100 ≈ {dist * PT_M * 100:F3} m  |  1:50 ≈ {dist * PT_M * 50:F3} m)\n\n" +
-                "Enter real distance in metres:";
+                $"(At 1/8\" = 1'0\" = {lengthAtOneEighthFt:F2} ft  |  1/4\" = 1'0\" = {lengthAtQuarterFt:F2} ft)\n\n" +
+                "Enter real distance in feet:";
+            hint =
+                $"Measured {dist:F1} pt on PDF\n" +
+                $"(At 1/8\" = 1'0\" = {lengthAtOneEighthFt:F2} ft  |  1/4\" = 1'0\" = {lengthAtQuarterFt:F2} ft)\n\n" +
+                "Enter real distance in feet:";
 
             var dlg = new ScaleInputDialog(hint);
             if (dlg.ShowDialog() == true && dlg.Value > 0)
             {
                 ScaleMetersPerPt = dlg.Value / dist;
                 ScaleChanged?.Invoke(ScaleMetersPerPt);
-                PostStatus($"Scale set: 1:{ScaleMetersPerPt / PT_M:F0}  (1pt = {ScaleMetersPerPt:F6} m)");
+                PostStatus($"Scale set: {PdfSheetMetadataService.FormatImperialScale(ScaleMetersPerPt)}");
             }
 
             _scalePts.Clear();

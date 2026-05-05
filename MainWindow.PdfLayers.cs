@@ -20,7 +20,7 @@ public partial class MainWindow
         bool hasLayers = layers.Count > 0;
         BtnLayerTraceMode.IsEnabled = hasLayers;
         BtnLayerTraceCycle.IsEnabled = hasLayers;
-        BtnLayerTraceApply.IsEnabled = hasLayers && _viewport.IsPdfLayerTraceEnabled;
+        BtnLayerTraceApply.IsEnabled = hasLayers && _viewport.CanApplyPdfLayerTrace;
         ViewportLayerTraceBar.Visibility = hasLayers ? Visibility.Visible : Visibility.Collapsed;
         BtnViewportLayerTraceToggle.IsEnabled = hasLayers;
         BtnViewportLayerTraceCycle.IsEnabled = hasLayers;
@@ -90,7 +90,7 @@ public partial class MainWindow
         {
             BtnLayerTraceMode.IsChecked = _viewport.IsPdfLayerTraceEnabled;
             BtnLayerTraceCycle.Content = _viewport.PdfLayerTraceModeTitle;
-            BtnLayerTraceApply.IsEnabled = BtnLayerTraceMode.IsEnabled && _viewport.IsPdfLayerTraceEnabled;
+            BtnLayerTraceApply.IsEnabled = BtnLayerTraceMode.IsEnabled && _viewport.CanApplyPdfLayerTrace;
             BtnViewportLayerTraceToggle.IsChecked = _viewport.IsPdfLayerTraceEnabled;
             BtnViewportLayerTraceToggle.Content = _viewport.IsPdfLayerTraceEnabled ? "Layer Trace" : "Manual";
             BtnViewportLayerTraceCycle.Content = _viewport.PdfLayerTraceModeTitle;
@@ -122,6 +122,7 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Use for Layer Trace", true, () => SelectPdfLayerForTrace(layer)));
         menu.Items.Add(MakeMenuItem("Trace Full Layer to Takeoff", true, () => TracePdfLayer(layer, PdfLayerTraceMode.Full)));
         menu.Items.Add(MakeMenuItem("Trace Nearest Edge to Takeoff", true, () => TracePdfLayer(layer, PdfLayerTraceMode.Edge)));
+        menu.Items.Add(MakeMenuItem("Trace Point to Takeoff", true, () => TracePdfLayer(layer, PdfLayerTraceMode.Point)));
         menu.Items.Add(MakeMenuItem("Trace All Edges to Takeoff", true, () => TracePdfLayer(layer, PdfLayerTraceMode.AllEdges)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(layer.IsOn ? "Hide Layer" : "Show Layer", true, () =>

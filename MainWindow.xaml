@@ -21,6 +21,8 @@
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template" Value="{StaticResource ToolToggleButtonTemplate}"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
@@ -231,9 +233,9 @@
 
             <Separator/>
 
-            <!-- Scale ratio -->
-            <Label Content="1:" VerticalAlignment="Center" Padding="0"/>
-            <TextBox x:Name="TxtScaleRatio" Width="55" VerticalAlignment="Center"
+            <!-- Sheet scale -->
+            <Label Content="Scale:" VerticalAlignment="Center" Padding="0"/>
+            <TextBox x:Name="TxtScaleRatio" Width="112" VerticalAlignment="Center"
                      Text="100" ToolTip="Scale ratio (1:N) — press Enter to apply"
                      KeyDown="TxtScaleRatio_KeyDown"/>
             <Button Content="Set" Click="BtnSetScale_Click"
@@ -821,8 +823,8 @@
                             <DataGridCheckBoxColumn Header="Rename" Binding="{Binding ApplyRename}"/>
                             <DataGridCheckBoxColumn Header="Scale" Binding="{Binding ApplyScale}"/>
                             <DataGridTextColumn Header="Current Page" Binding="{Binding CurrentPageName}" Width="160" IsReadOnly="True"/>
-                            <DataGridTextColumn Header="Proposed Name" Binding="{Binding ProposedPageName}" Width="160" IsReadOnly="True"/>
-                            <DataGridTextColumn Header="Scale" Binding="{Binding ProposedScale}" Width="110" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Proposed Name" Binding="{Binding ProposedPageName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="160"/>
+                            <DataGridTextColumn Header="Scale" Binding="{Binding ProposedScale, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="110"/>
                             <DataGridTextColumn Header="Label" Binding="{Binding SheetLabel}" Width="80" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Suffix" Binding="{Binding Suffix}" Width="70" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Title" Binding="{Binding SheetTitle}" Width="240" IsReadOnly="True"/>

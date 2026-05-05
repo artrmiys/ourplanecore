@@ -6,12 +6,17 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Media;
 using SmartTakeoffs.Controls;
 
 namespace SmartTakeoffs;
 
 public partial class MainWindow
 {
+    private bool _sheetManagerEditableColumnsConfigured;
+
     private void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ReferenceEquals(e.OriginalSource, WorkspaceTabs))
@@ -48,8 +53,70 @@ public partial class MainWindow
     private async void BtnSheetManagerAutoScale_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: true);
     private async void BtnSheetManagerAutoNameScale_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: true);
 
+    private void ConfigureSheetManagerEditableColumns()
+    {
+        if (_sheetManagerEditableColumnsConfigured)
+            return;
+
+        ReplaceSheetManagerTextColumn("Proposed Name", nameof(PdfMetadataPreviewRow.ProposedPageName), 160);
+        ReplaceSheetManagerTextColumn("Scale", nameof(PdfMetadataPreviewRow.ProposedScale), 120);
+        _sheetManagerEditableColumnsConfigured = true;
+    }
+
+    private void ReplaceSheetManagerTextColumn(string header, string bindingPath, double width)
+    {
+        for (int index = 0; index < SheetManagerGrid.Columns.Count; index++)
+        {
+            DataGridColumn column = SheetManagerGrid.Columns[index];
+            if (column is not DataGridTextColumn ||
+                !string.Equals(column.Header?.ToString(), header, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var editorColumn = new DataGridTemplateColumn
+            {
+                Header = header,
+                Width = new DataGridLength(width),
+                SortMemberPath = bindingPath,
+                CellTemplate = CreateSheetManagerTextBoxTemplate(bindingPath),
+            };
+
+            SheetManagerGrid.Columns.RemoveAt(index);
+            SheetManagerGrid.Columns.Insert(index, editorColumn);
+            return;
+        }
+    }
+
+    private static DataTemplate CreateSheetManagerTextBoxTemplate(string bindingPath)
+    {
+        var textBox = new FrameworkElementFactory(typeof(TextBox));
+        textBox.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
+        textBox.SetValue(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1));
+        textBox.SetValue(TextBox.BackgroundProperty, Brushes.Transparent);
+        textBox.SetValue(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center);
+        textBox.SetValue(FrameworkElement.MinWidthProperty, 70.0);
+        textBox.SetBinding(
+            TextBox.TextProperty,
+            new Binding(bindingPath)
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+            });
+        textBox.AddHandler(UIElement.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_GotKeyboardFocus));
+        return new DataTemplate { VisualTree = textBox };
+    }
+
+    private static void SheetManagerTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+            textBox.SelectAll();
+    }
+
     private void RefreshSheetManager()
     {
+        ConfigureSheetManagerEditableColumns();
+
         if (_currentJob == null)
         {
             _sheetManagerMetadataResults = [];
@@ -74,6 +141,7 @@ public partial class MainWindow
             {
                 PageFolder = page.FolderPath,
                 CurrentPageName = page.Name,
+                ProposedPageName = page.Name,
                 ProposedScale = SheetManagerScaleText(page.ScaleMetersPerPt),
                 Reason = "No saved PDF metadata. Click Analyze / Auto Name / Auto Scale.",
                 Confidence = page.ScaleMetersPerPt > 0 ? "scale-set" : "",
@@ -87,6 +155,8 @@ public partial class MainWindow
 
     private async Task AnalyzeSheetManagerAsync(bool defaultRename, bool defaultScale)
     {
+        ConfigureSheetManagerEditableColumns();
+
         if (_currentJob == null)
             return;
 
@@ -156,6 +226,7 @@ public partial class MainWindow
         SheetManagerGrid.CommitEdit(DataGridEditingUnit.Cell, true);
         SheetManagerGrid.CommitEdit(DataGridEditingUnit.Row, true);
         List<PdfMetadataPreviewRow> rows = SheetManagerRows();
+        MarkEditedSheetManagerRowsForApply(rows);
         if (!rows.Any(row => row.ApplyRename || row.ApplyScale))
         {
             TxtStatus.Text = "Sheet Manager: no Rename/Scale rows are checked.";
@@ -164,6 +235,31 @@ public partial class MainWindow
 
         ApplyPdfMetadataResults(_currentJob, _sheetManagerMetadataResults, rows);
         RefreshSheetManager();
+    }
+
+    private void MarkEditedSheetManagerRowsForApply(IReadOnlyList<PdfMetadataPreviewRow> rows)
+    {
+        foreach (PdfMetadataPreviewRow row in rows)
+        {
+            if (!row.ApplyRename &&
+                !string.IsNullOrWhiteSpace(row.ProposedPageName) &&
+                !string.Equals(row.ProposedPageName.Trim(), row.CurrentPageName, StringComparison.OrdinalIgnoreCase))
+            {
+                row.ApplyRename = true;
+            }
+
+            if (row.ApplyScale ||
+                string.IsNullOrWhiteSpace(row.ProposedScale) ||
+                string.Equals(row.ProposedScale.Trim(), "skip", StringComparison.OrdinalIgnoreCase) ||
+                SmartTakeoffsJobStore.TryReadPage(row.PageFolder) is not { } page)
+            {
+                continue;
+            }
+
+            string currentScale = SheetManagerScaleText(page.ScaleMetersPerPt);
+            if (!string.Equals(row.ProposedScale.Trim(), currentScale, StringComparison.OrdinalIgnoreCase))
+                row.ApplyScale = true;
+        }
     }
 
     private void BtnSheetManagerOpenSheet_Click(object sender, RoutedEventArgs e)
@@ -182,10 +278,7 @@ public partial class MainWindow
     }
 
     private static string SheetManagerScaleText(double scaleMetersPerPt)
-    {
-        const double ptM = 25.4 / 72.0 / 1000.0;
-        return scaleMetersPerPt > 0 ? $"1:{scaleMetersPerPt / ptM:F0}" : "";
-    }
+        => PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
 
     private void BtnTakeoffManagerRefresh_Click(object sender, RoutedEventArgs e) => RefreshTakeoffManager();
 

@@ -58,6 +58,7 @@ public sealed partial class PdfViewport
                     (srcRight / _bitmapScale - _panX) * _zoom,
                     (srcBottom / _bitmapScale - _panY) * _zoom);
                 canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
+                DrawPdfLayerTraceGhost(canvas, dst);
             }
         }
 

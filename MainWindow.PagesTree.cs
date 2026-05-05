@@ -2725,10 +2725,157 @@ public partial class MainWindow
             await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true);
     }
 
-    private void BtnQueuePdfMetadataFallback_Click(object sender, RoutedEventArgs e)
+    private async void BtnQueuePdfMetadataFallback_Click(object sender, RoutedEventArgs e)
     {
+        if (await TryRunSheetManagerPdfMetadataFallbackAsync())
+            return;
+
         if (GetSelectedPdfAutomationTarget("AI Fill") is { } item)
             QueuePdfMetadataFallback(item);
+    }
+
+    private async Task<bool> TryRunSheetManagerPdfMetadataFallbackAsync()
+    {
+        if (WorkspaceTabs.SelectedItem is not TabItem tab ||
+            !string.Equals(tab.Tag?.ToString(), "SheetManager", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before PDF automation.";
+            return true;
+        }
+
+        IReadOnlyList<PageInfo> pages = SheetManagerAiFillPages();
+
+        if (pages.Count == 0)
+        {
+            MessageBox.Show("No PDF pages found in Sheet Manager.", "AI Fill",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(ReadOpenAiApiKey()))
+        {
+            MessageBox.Show(
+                "Set OPENAI_API_KEY in Windows environment or OpenAI Settings, then run AI Fill again.",
+                "AI Fill",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            TxtStatus.Text = "AI Fill needs OPENAI_API_KEY before it can run GPT metadata.";
+            return true;
+        }
+
+        SheetManagerGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+        SheetManagerGrid.CommitEdit(DataGridEditingUnit.Row, true);
+
+        PdfMetadataFallbackQueueResult queueResult = QueuePdfMetadataFallback(pages, showMessage: false);
+        IReadOnlyList<SmartAiRequest> requests = RunnableMetadataFallbackRequests(_currentJob, pages);
+
+        if (requests.Count == 0)
+        {
+            ShowSheetManagerAiFillNoRequests(queueResult);
+            return true;
+        }
+
+        TxtStatus.Text = $"AI Fill running GPT metadata for {requests.Count} sheet(s)...";
+        var runResult = await RunAndSaveSheetMetadataFallbackRequestsAsync(requests, queueResult.Errors);
+
+        RefreshSheetManager();
+
+        string summary =
+            $"AI Fill complete. Queued: {queueResult.Queued}. Ran: {runResult.Ran}. " +
+            $"Updated metadata: {runResult.Saved}. Skipped: {queueResult.Skipped}. " +
+            $"Failed: {runResult.Errors.Count}.";
+        ShowSheetManagerAiFillErrors(summary, runResult.Errors);
+
+        TxtStatus.Text = summary;
+        return true;
+    }
+
+    private IReadOnlyList<PageInfo> SheetManagerAiFillPages()
+    {
+        IReadOnlyList<PageInfo> pages = SelectedSheetManagerPages();
+        if (pages.Count > 0)
+            return pages;
+
+        return SheetManagerRows()
+            .Select(row => SmartTakeoffsJobStore.TryReadPage(row.PageFolder))
+            .Where(page => page != null)
+            .Cast<PageInfo>()
+            .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private static IReadOnlyList<SmartAiRequest> RunnableMetadataFallbackRequests(
+        SmartTakeoffsJob job,
+        IReadOnlyList<PageInfo> pages) =>
+        MetadataFallbackRequestsForPages(job, pages)
+            .Where(request => MetadataFallbackRequestStillNeeded(job, request, pages))
+            .Where(request => IsRunnableAiStatus(request.Status) || HasDoneAiResponse(job, request))
+            .GroupBy(request => request.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+    private void ShowSheetManagerAiFillNoRequests(PdfMetadataFallbackQueueResult queueResult)
+    {
+        string message = BuildPdfMetadataFallbackQueueMessage(queueResult);
+        MessageBox.Show(
+            message.Length == 0 ? "No GPT metadata fallback was needed for the selected sheets." : message,
+            "AI Fill",
+            MessageBoxButton.OK,
+            queueResult.Failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        TxtStatus.Text = queueResult.Queued > 0
+            ? "AI Fill queued metadata fallback, but no runnable request was found."
+            : "AI Fill: no GPT metadata fallback needed.";
+    }
+
+    private async Task<(int Ran, int Saved, List<string> Errors)> RunAndSaveSheetMetadataFallbackRequestsAsync(
+        IReadOnlyList<SmartAiRequest> requests,
+        IEnumerable<string> initialErrors)
+    {
+        int ran = 0;
+        int saved = 0;
+        var errors = new List<string>(initialErrors);
+        SmartTakeoffsJob job = _currentJob!;
+
+        foreach (SmartAiRequest request in requests)
+        {
+            SmartAiRequest current = SmartContextStore.LoadAiRequest(job, request.Id) ?? request;
+            if (IsRunnableAiStatus(current.Status))
+            {
+                string statusBeforeRun = current.Status;
+                await RunAiRequestAsync(current);
+                current = SmartContextStore.LoadAiRequest(job, request.Id) ?? current;
+                if (!string.Equals(statusBeforeRun, current.Status, StringComparison.OrdinalIgnoreCase) ||
+                    HasDoneAiResponse(job, current))
+                {
+                    ran++;
+                }
+            }
+
+            if (TrySaveSheetMetadataFromFallbackResponse(current, out _, out string error))
+                saved++;
+            else if (!string.IsNullOrWhiteSpace(error))
+                errors.Add($"{current.Page}: {error}");
+        }
+
+        return (ran, saved, errors);
+    }
+
+    private static void ShowSheetManagerAiFillErrors(string summary, IReadOnlyList<string> errors)
+    {
+        if (errors.Count == 0)
+            return;
+
+        MessageBox.Show(
+            summary + Environment.NewLine + string.Join(Environment.NewLine, errors.Take(6)),
+            "AI Fill",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private TreeViewItem? GetSelectedPdfAutomationTarget(string title)
@@ -2834,32 +2981,57 @@ public partial class MainWindow
         int scaled = 0;
         int failed = 0;
         string? selectAfter = null;
-        var rowsByFolder = rows.ToDictionary(row => NormalizePath(row.PageFolder), StringComparer.OrdinalIgnoreCase);
+        var resultsByFolder = results
+            .Where(result => result.Ok && result.Metadata != null)
+            .GroupBy(result => NormalizePath(result.Page.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var result in results.Where(result => result.Ok && result.Metadata != null))
+        foreach (PdfMetadataPreviewRow row in rows.Where(row => row.ApplyRename || row.ApplyScale))
         {
-            PdfSheetMetadata metadata = result.Metadata!;
-            if (!rowsByFolder.TryGetValue(NormalizePath(result.Page.FolderPath), out PdfMetadataPreviewRow? row))
+            if (string.IsNullOrWhiteSpace(row.PageFolder))
+            {
+                failed++;
                 continue;
-            if (!row.ApplyRename && !row.ApplyScale)
-                continue;
+            }
 
-            string currentPath = result.Page.FolderPath;
+            resultsByFolder.TryGetValue(NormalizePath(row.PageFolder), out PdfMetadataPageResult? result);
+            PageInfo? sourcePage = result?.Page ?? SmartTakeoffsJobStore.TryReadPage(row.PageFolder);
+            if (sourcePage == null)
+            {
+                failed++;
+                continue;
+            }
+
+            PdfSheetMetadata metadata = result?.Metadata
+                ?? SmartTakeoffsJobStore.ReadSourcePdfMetadata(sourcePage.FolderPath)
+                ?? CreateManualSheetMetadata(sourcePage);
+
+            string currentPath = sourcePage.FolderPath;
             string finalName = SmartTakeoffsJobStore.DisplayName(currentPath);
-            double finalScale = result.Page.ScaleMetersPerPt;
+            double finalScale = sourcePage.ScaleMetersPerPt;
 
             try
             {
-                if (row.ApplyScale && metadata.CanApplyScale())
+                if (row.ApplyScale)
                 {
-                    finalScale = metadata.SelectedScaleMetersPerPt;
-                    SmartTakeoffsJobStore.SavePageScale(currentPath, finalScale);
-                    scaled++;
+                    if (TryApplySheetManagerScale(currentPath, metadata, row.ProposedScale, out finalScale))
+                    {
+                        scaled++;
+                    }
+                    else
+                    {
+                        failed++;
+                        metadata.Warnings.Add($"scale not applied: '{row.ProposedScale}'");
+                    }
                 }
 
                 if (row.ApplyRename)
                 {
-                    string proposedName = metadata.ProposedPageName();
+                    string proposedName = string.IsNullOrWhiteSpace(row.ProposedPageName)
+                        ? metadata.ProposedPageName()
+                        : row.ProposedPageName.Trim();
+                    metadata.RenameCandidate = proposedName;
+
                     if (!string.IsNullOrWhiteSpace(proposedName) &&
                         !string.Equals(proposedName, finalName, StringComparison.OrdinalIgnoreCase))
                     {
@@ -2869,6 +3041,10 @@ public partial class MainWindow
                         renamed++;
                     }
                 }
+
+                metadata.GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(metadata.Source))
+                    metadata.Source = "manual";
 
                 SmartTakeoffsJobStore.WriteSourcePdfMetadata(currentPath, metadata);
                 if (SmartTakeoffsJobStore.TryReadPage(currentPath) is { } finalPage)
@@ -2881,7 +3057,7 @@ public partial class MainWindow
                         job,
                         finalPage,
                         PdfSheetMetadataService.BuildLearningRecord(
-                            result.Page,
+                            sourcePage,
                             metadata,
                             outcome,
                             "User applied PDF metadata preview.",
@@ -2895,9 +3071,9 @@ public partial class MainWindow
                 failed++;
                 SmartLearningStore.AppendSheetFeedback(
                     job,
-                    result.Page,
+                    sourcePage,
                     PdfSheetMetadataService.BuildLearningRecord(
-                        result.Page,
+                        sourcePage,
                         metadata,
                         "failed_apply",
                         ex.Message));
@@ -2908,6 +3084,45 @@ public partial class MainWindow
         _currentPdfPath = "";
         ReloadPagesTree(selectAfter ?? _currentJob?.PagesRoot);
         TxtStatus.Text = $"PDF metadata applied: {renamed} renamed, {scaled} scaled, {failed} failed.";
+    }
+
+    private static PdfSheetMetadata CreateManualSheetMetadata(PageInfo page) =>
+        new()
+        {
+            GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            Source = "manual",
+            PdfPath = page.PdfPath,
+            PageIndex = page.PdfPage,
+            PageNumber = page.PdfPage + 1,
+            SheetLabel = page.Name,
+            RenameCandidate = page.Name,
+            Confidence = "manual",
+        };
+
+    private static bool TryApplySheetManagerScale(
+        string pageFolder,
+        PdfSheetMetadata metadata,
+        string scaleText,
+        out double scaleMetersPerPt)
+    {
+        scaleMetersPerPt = 0;
+        string cleanScale = (scaleText ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(cleanScale) ||
+            string.Equals(cleanScale, "skip", StringComparison.OrdinalIgnoreCase) ||
+            !PdfSheetMetadataService.TryParseScaleMetersPerPt(cleanScale, out scaleMetersPerPt))
+        {
+            return false;
+        }
+
+        string displayScale = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
+        const double ptM = 25.4 / 72.0 / 1000.0;
+        metadata.SkipScale = false;
+        metadata.SelectedScaleText = string.IsNullOrWhiteSpace(displayScale) ? cleanScale : displayScale;
+        metadata.ScaleText = metadata.SelectedScaleText;
+        metadata.SelectedScaleRatio = scaleMetersPerPt / ptM;
+        metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
+        SmartTakeoffsJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
+        return true;
     }
 
     private IEnumerable<PdfMetadataPreviewRow> BuildPdfMetadataPreviewRows(
@@ -2939,7 +3154,9 @@ public partial class MainWindow
                 SheetTitle = metadata.SheetTitle,
                 ProposedPageName = proposedName,
                 Suffix = metadata.Suffix,
-                ProposedScale = canScale ? metadata.EffectiveScaleText : metadata.SkipScale ? "skip" : "",
+                ProposedScale = canScale
+                    ? PdfSheetMetadataService.FormatImperialScale(metadata.SelectedScaleMetersPerPt)
+                    : metadata.SkipScale ? "skip" : "",
                 Source = metadata.Source,
                 Confidence = learning.Confidence,
                 Reason = PdfMetadataDecisionReason(metadata, learning, canRename, canScale, nameConflict, learnedConflict),
@@ -3188,6 +3405,15 @@ public partial class MainWindow
         TxtStatus.Text = $"Saved project learned rules: {enabled} enabled, {dialog.RuleSet.Rules.Count - enabled} disabled.";
     }
 
+    private sealed class PdfMetadataFallbackQueueResult
+    {
+        public int Queued { get; set; }
+        public int Skipped { get; set; }
+        public int Failed { get; set; }
+        public List<string> Errors { get; } = [];
+        public List<SmartAiRequest> Requests { get; } = [];
+    }
+
     private void QueuePdfMetadataFallback(TreeViewItem item)
     {
         if (_currentJob == null)
@@ -3197,10 +3423,14 @@ public partial class MainWindow
         if (pages.Count == 0)
             return;
 
-        int queued = 0;
-        int skipped = 0;
-        int failed = 0;
-        var errors = new List<string>();
+        QueuePdfMetadataFallback(pages);
+    }
+
+    private PdfMetadataFallbackQueueResult QueuePdfMetadataFallback(IReadOnlyList<PageInfo> pages, bool showMessage = true)
+    {
+        var result = new PdfMetadataFallbackQueueResult();
+        if (_currentJob == null || pages.Count == 0)
+            return result;
 
         foreach (PageInfo page in pages)
         {
@@ -3214,13 +3444,13 @@ public partial class MainWindow
 
                 if (!PdfSheetMetadataService.NeedsFallback(metadata))
                 {
-                    skipped++;
+                    result.Skipped++;
                     continue;
                 }
 
                 if (HasExistingMetadataFallbackRequest(_currentJob, page))
                 {
-                    skipped++;
+                    result.Skipped++;
                     continue;
                 }
 
@@ -3229,8 +3459,8 @@ public partial class MainWindow
                 string cropPath = Path.Combine(cropsRoot, fileName);
                 if (!PdfSheetMetadataService.TrySaveFallbackCrop(page, cropPath, out SKRect cropRect, out string error))
                 {
-                    failed++;
-                    errors.Add($"{page.Name}: {error}");
+                    result.Failed++;
+                    result.Errors.Add($"{page.Name}: {error}");
                     continue;
                 }
 
@@ -3257,7 +3487,7 @@ public partial class MainWindow
                     page,
                     "pdf_sheet_metadata_fallback",
                     observationText);
-                SmartContextStore.AddAiRequest(
+                SmartAiRequest request = SmartContextStore.AddAiRequest(
                     _currentJob,
                     page,
                     observation,
@@ -3265,23 +3495,81 @@ public partial class MainWindow
                     BuildPdfMetadataFallbackPrompt(page, metadata),
                     relativeCrop,
                     "Read the sheet title block crop and return sheet metadata JSON only.");
-                queued++;
+                result.Requests.Add(request);
+                result.Queued++;
             }
             catch (Exception ex)
             {
-                failed++;
-                errors.Add($"{page.Name}: {ex.Message}");
+                result.Failed++;
+                result.Errors.Add($"{page.Name}: {ex.Message}");
             }
         }
 
         LoadObservationsInbox();
-        string message = $"Queued: {queued}. Skipped: {skipped}. Failed: {failed}.";
-        if (errors.Count > 0)
-            message += Environment.NewLine + string.Join(Environment.NewLine, errors.Take(5));
-        MessageBox.Show(message, "Queue GPT Metadata Fallback",
-                        failed > 0 ? MessageBoxButton.OK : MessageBoxButton.OK,
-                        failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
-        TxtStatus.Text = $"Queued GPT metadata fallback for {queued} page(s).";
+        if (showMessage)
+        {
+            MessageBox.Show(
+                BuildPdfMetadataFallbackQueueMessage(result),
+                "Queue GPT Metadata Fallback",
+                MessageBoxButton.OK,
+                result.Failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
+
+        TxtStatus.Text = $"Queued GPT metadata fallback for {result.Queued} page(s).";
+        return result;
+    }
+
+    private static string BuildPdfMetadataFallbackQueueMessage(PdfMetadataFallbackQueueResult result)
+    {
+        string message = $"Queued: {result.Queued}. Skipped: {result.Skipped}. Failed: {result.Failed}.";
+        if (result.Errors.Count > 0)
+            message += Environment.NewLine + string.Join(Environment.NewLine, result.Errors.Take(5));
+        return message;
+    }
+
+    private static IReadOnlyList<SmartAiRequest> MetadataFallbackRequestsForPages(
+        SmartTakeoffsJob job,
+        IReadOnlyList<PageInfo> pages) =>
+        SmartContextStore.LoadAiRequests(job)
+            .Where(request => string.Equals(request.Type, "pdf_sheet_metadata_fallback", StringComparison.OrdinalIgnoreCase))
+            .Where(request => pages.Any(page => MetadataFallbackRequestMatchesPage(job, request, page)))
+            .OrderBy(request => request.CreatedAtUtc, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static bool HasDoneAiResponse(SmartTakeoffsJob job, SmartAiRequest request)
+    {
+        SmartAiResponse? response = SmartContextStore.LoadAiResponse(job, request.Id);
+        return response != null &&
+               string.Equals(response.Status, "done", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(response.OutputText);
+    }
+
+    private static bool MetadataFallbackRequestStillNeeded(
+        SmartTakeoffsJob job,
+        SmartAiRequest request,
+        IReadOnlyList<PageInfo> pages) =>
+        pages.Any(page =>
+            MetadataFallbackRequestMatchesPage(job, request, page) &&
+            PdfSheetMetadataService.NeedsFallback(SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath)));
+
+    private static bool MetadataFallbackRequestMatchesPage(SmartTakeoffsJob job, SmartAiRequest request, PageInfo page)
+    {
+        string pageFolder = NormalizePath(page.FolderPath);
+        string relativePageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);
+        if (!string.IsNullOrWhiteSpace(request.PageFolder))
+        {
+            string requestFolder = Path.IsPathFullyQualified(request.PageFolder)
+                ? NormalizePath(request.PageFolder)
+                : NormalizePath(Path.Combine(job.RootPath, request.PageFolder));
+
+            if (string.Equals(requestFolder, pageFolder, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(request.PageFolder, relativePageFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return string.Equals(request.Page, page.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasExistingMetadataFallbackRequest(SmartTakeoffsJob job, PageInfo page)

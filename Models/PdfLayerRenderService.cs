@@ -364,7 +364,7 @@ public static class PdfLayerRenderService
             result = new PdfLayerProbeResult
             {
                 Candidates = response.Candidates
-                    .Where(candidate => candidate.Layer != 0)
+                    .Where(candidate => !string.IsNullOrWhiteSpace(candidate.LayerName))
                     .Select(candidate => new PdfLayerProbeCandidate
                     {
                         Layer = candidate.Layer,

@@ -121,6 +121,88 @@ public sealed class PdfSheetMetadata
 
 public static class PdfSheetMetadataService
 {
+    private const double PdfPointMeters = 25.4 / 72.0 / 1000.0;
+
+    public static string FormatImperialScale(double scaleMetersPerPt)
+    {
+        double ratio = scaleMetersPerPt > 0 ? scaleMetersPerPt / PdfPointMeters : 0;
+        return FormatImperialScaleRatio(ratio);
+    }
+
+    public static string FormatImperialScaleRatio(double ratio)
+    {
+        if (ratio <= 0)
+            return "";
+
+        (double Ratio, string Label)[] presets =
+        [
+            (1,   "1\" = 1\""),
+            (4,   "3\" = 1'0\""),
+            (8,   "1-1/2\" = 1'0\""),
+            (12,  "1\" = 1'0\""),
+            (16,  "3/4\" = 1'0\""),
+            (24,  "1/2\" = 1'0\""),
+            (32,  "3/8\" = 1'0\""),
+            (48,  "1/4\" = 1'0\""),
+            (64,  "3/16\" = 1'0\""),
+            (96,  "1/8\" = 1'0\""),
+            (128, "3/32\" = 1'0\""),
+            (192, "1/16\" = 1'0\""),
+            (384, "1/32\" = 1'0\""),
+        ];
+
+        foreach (var preset in presets)
+        {
+            if (Math.Abs(ratio - preset.Ratio) <= 0.25)
+                return preset.Label;
+        }
+
+        double inchesPerFoot = 12.0 / ratio;
+        string inchLabel = FormatScaleInches(inchesPerFoot);
+        return string.IsNullOrWhiteSpace(inchLabel)
+            ? $"1:{ratio:F0}"
+            : $"{inchLabel}\" = 1'0\"";
+    }
+
+    private static string FormatScaleInches(double inches)
+    {
+        if (inches <= 0)
+            return "";
+
+        int numerator64 = (int)Math.Round(inches * 64);
+        double roundedFraction = numerator64 / 64.0;
+        if (Math.Abs(roundedFraction - inches) <= 0.002)
+        {
+            int whole = numerator64 / 64;
+            int remainder = numerator64 % 64;
+            if (remainder == 0)
+                return whole.ToString(CultureInfo.InvariantCulture);
+
+            int divisor = GreatestCommonDivisor(remainder, 64);
+            int numerator = remainder / divisor;
+            int denominator = 64 / divisor;
+            return whole > 0
+                ? $"{whole}-{numerator}/{denominator}"
+                : $"{numerator}/{denominator}";
+        }
+
+        return inches.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static int GreatestCommonDivisor(int left, int right)
+    {
+        left = Math.Abs(left);
+        right = Math.Abs(right);
+        while (right != 0)
+        {
+            int next = left % right;
+            left = right;
+            right = next;
+        }
+
+        return left == 0 ? 1 : left;
+    }
+
     public static bool NeedsFallback(PdfSheetMetadata? metadata) =>
         metadata == null ||
         string.Equals(metadata.Confidence, "no-text", StringComparison.OrdinalIgnoreCase) ||
@@ -539,9 +621,40 @@ public static class PdfSheetMetadataService
             .ToArray());
     }
 
+    public static bool TryParseScaleMetersPerPt(string scaleText, out double scaleMetersPerPt)
+    {
+        scaleMetersPerPt = 0;
+
+        double ratio = ParseScaleRatio(scaleText);
+        if (ratio <= 0)
+            return false;
+
+        scaleMetersPerPt = PdfPointMeters * ratio;
+        return true;
+    }
+
     private static double ParseScaleRatio(string scaleText)
     {
-        string clean = scaleText.Trim();
+        string clean = NormalizeScaleInput(scaleText);
+        if (string.IsNullOrWhiteSpace(clean) ||
+            string.Equals(clean, "skip", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        Match ratioMatch = Regex.Match(clean, @"^1\s*:\s*(?<ratio>\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
+        if (ratioMatch.Success &&
+            double.TryParse(ratioMatch.Groups["ratio"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double directRatio))
+        {
+            return directRatio > 0 ? directRatio : 0;
+        }
+
+        if (!clean.Contains('=', StringComparison.Ordinal) &&
+            double.TryParse(clean, NumberStyles.Float, CultureInfo.InvariantCulture, out directRatio))
+        {
+            return directRatio > 0 ? directRatio : 0;
+        }
+
         if (string.Equals(
                 clean.Replace(" ", ""),
                 "1\"=1\"",
@@ -550,12 +663,25 @@ public static class PdfSheetMetadataService
             return 1;
         }
 
-        string left = clean.Split('=')[0]
+        string left = (clean.Contains('=', StringComparison.Ordinal)
+                ? clean.Split('=')[0]
+                : clean)
             .Replace("\"", "", StringComparison.Ordinal)
             .Trim();
         double inches = ParseInches(left);
         return inches > 0 ? 12.0 / inches : 0;
     }
+
+    private static string NormalizeScaleInput(string scaleText) =>
+        (scaleText ?? "")
+            .Trim()
+            .Replace("\u201d", "\"", StringComparison.Ordinal)
+            .Replace("\u201c", "\"", StringComparison.Ordinal)
+            .Replace("\u2033", "\"", StringComparison.Ordinal)
+            .Replace("\u2019", "'", StringComparison.Ordinal)
+            .Replace("\u2018", "'", StringComparison.Ordinal)
+            .Replace("\u2032", "'", StringComparison.Ordinal)
+            .Replace("'-0\"", "'0\"", StringComparison.Ordinal);
 
     private static double ParseInches(string value)
     {

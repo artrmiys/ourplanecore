@@ -118,7 +118,7 @@ public sealed partial class PdfViewport
             _pageFolder,
             Math.Clamp(renderScale, 0.20f, 4.0f),
             resetLayerStates,
-            new Dictionary<int, bool>(_layerStates),
+            EffectiveLayerStates(),
             EffectiveHighlightedLayers(),
             LayerRenderCachedLayers(),
             statusAfter,
@@ -186,7 +186,8 @@ public sealed partial class PdfViewport
                 _layerStates.TryGetValue(layer.Number, out bool on) ? on : layer.IsOn,
                 _highlightedLayers.Contains(layer.Number) || _pdfLayerTracePreviewLayer == layer.Number))
             .ToList();
-        EnsureActivePdfLayerTraceLayer();
+        if (!_pdfLayerTraceEnabled)
+            EnsureActivePdfLayerTraceLayer();
         PublishPdfLayerTraceState();
     }
 

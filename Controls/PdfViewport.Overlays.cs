@@ -387,11 +387,10 @@ public sealed partial class PdfViewport
         if (ScaleMetersPerPt <= 0)
             return "Scale: not set";
 
-        double ratio = ScaleMetersPerPt / PdfPointMeters;
-        string architectural = FormatArchitecturalScale(ratio);
-        return string.IsNullOrWhiteSpace(architectural)
-            ? $"Scale: 1:{ratio:F0}"
-            : $"Scale: {architectural}";
+        string scale = PdfSheetMetadataService.FormatImperialScale(ScaleMetersPerPt);
+        return string.IsNullOrWhiteSpace(scale)
+            ? "Scale: not set"
+            : $"Scale: {scale}";
     }
 
     private string FormatSheetSize()
@@ -399,35 +398,6 @@ public sealed partial class PdfViewport
         double widthIn = _pdfW / 72.0;
         double heightIn = _pdfH / 72.0;
         return $"{widthIn:F2} x {heightIn:F2}";
-    }
-
-    private static string FormatArchitecturalScale(double ratio)
-    {
-        if (ratio <= 0)
-            return "";
-
-        (double Ratio, string Label)[] presets =
-        [
-            (4,   "3\" = 1' 0\""),
-            (8,   "1-1/2\" = 1' 0\""),
-            (12,  "1\" = 1' 0\""),
-            (16,  "3/4\" = 1' 0\""),
-            (24,  "1/2\" = 1' 0\""),
-            (32,  "3/8\" = 1' 0\""),
-            (48,  "1/4\" = 1' 0\""),
-            (64,  "3/16\" = 1' 0\""),
-            (96,  "1/8\" = 1' 0\""),
-            (128, "3/32\" = 1' 0\""),
-            (192, "1/16\" = 1' 0\""),
-        ];
-
-        foreach (var preset in presets)
-        {
-            if (Math.Abs(ratio - preset.Ratio) <= 0.25)
-                return preset.Label;
-        }
-
-        return "";
     }
 
 }
