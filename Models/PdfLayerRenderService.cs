@@ -6,10 +6,10 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class PdfLayerRenderResult
 {
@@ -87,7 +87,7 @@ public static class PdfLayerRenderService
         if (TryGetCachedRender(cacheKey, out result))
             return true;
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "SmartTakeoffs", Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
         string outputPath = Path.Combine(tempDir, "output.json");
         string imagePath = Path.Combine(tempDir, "page.png");
@@ -222,7 +222,7 @@ public static class PdfLayerRenderService
         layers = [];
         error = "";
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "SmartTakeoffs", Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
         string outputPath = Path.Combine(tempDir, "output.json");
 
@@ -396,7 +396,7 @@ public static class PdfLayerRenderService
         response = default;
         error = "";
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "SmartTakeoffs", Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
         string outputPath = Path.Combine(tempDir, "output.json");
 

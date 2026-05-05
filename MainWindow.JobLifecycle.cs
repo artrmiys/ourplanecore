@@ -10,9 +10,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -116,7 +116,7 @@ public partial class MainWindow
     private void OpenJob(string rootPath, string? initialPageFolder = null)
     {
         SaveCurrentPageScale();
-        _currentJob = SmartTakeoffsJobStore.LoadJob(rootPath);
+        _currentJob = OurPlaneCoreJobStore.LoadJob(rootPath);
         _currentPage = null;
         _currentPdfPath = "";
         _pagesClipboard = null;
@@ -142,7 +142,7 @@ public partial class MainWindow
         TakeoffsTree.Items.Clear();
         _viewport.SetMeasurements([]);
         _viewport.ClearPage();
-        Title = $"SmartTakeoffs — {_currentJob.Name}";
+        Title = $"OurPlaneCore — {_currentJob.Name}";
         ReloadPagesTree(_currentJob.PagesRoot);
         LoadTakeoffsForJob();
         _settings.LastJobPath = _currentJob.RootPath;
@@ -190,7 +190,7 @@ public partial class MainWindow
 
         if (!string.IsNullOrWhiteSpace(_settings.LastPageFolder) &&
             Directory.Exists(_settings.LastPageFolder) &&
-            SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.PagesRoot, _settings.LastPageFolder))
+            OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, _settings.LastPageFolder))
         {
             return _settings.LastPageFolder;
         }
@@ -366,7 +366,7 @@ public partial class MainWindow
             }
 
             if (itemChanged)
-                SmartTakeoffsJobStore.SaveTakeoffItem(item);
+                OurPlaneCoreJobStore.SaveTakeoffItem(item);
         }
 
         _lastMeasurementPageFolderUnresolvedCount = unresolved;
@@ -407,9 +407,9 @@ public partial class MainWindow
 
     private void LoadTakeoffChildren(string parentFolder, ItemsControl parent)
     {
-        foreach (string folder in SmartTakeoffsJobStore.GetOrderedChildDirectories(parentFolder))
+        foreach (string folder in OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder))
         {
-            if (SmartTakeoffsJobStore.TryReadTakeoffItem(folder) is { } item)
+            if (OurPlaneCoreJobStore.TryReadTakeoffItem(folder) is { } item)
             {
                 _takeoffItems.Add(item);
                 AddTakeoffTreeItem(item, parent);
@@ -418,7 +418,7 @@ public partial class MainWindow
             {
                 var node = new TakeoffFolderNode
                 {
-                    Name = SmartTakeoffsJobStore.DisplayName(folder),
+                    Name = OurPlaneCoreJobStore.DisplayName(folder),
                     FolderPath = folder,
                 };
                 var tvi = AddTakeoffFolderTreeItem(node, parent);
@@ -504,7 +504,7 @@ public partial class MainWindow
                 () => BuildPdfLayerCache(dlg.FileName, pageCount, progress));
 
             bool hadUserPageExpansion = _expandedPageTreePaths.Count > 0;
-            var created = SmartTakeoffsJobStore.ImportPdf(_currentJob, dlg.FileName, names, destFolder, pdfLayerCache);
+            var created = OurPlaneCoreJobStore.ImportPdf(_currentJob, dlg.FileName, names, destFolder, pdfLayerCache);
             ReloadPagesTree();
             if (created.Count > 0)
                 SelectPageByFolder(created[0].FolderPath);

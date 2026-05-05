@@ -6,9 +6,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -148,7 +148,7 @@ public partial class MainWindow
 
     private void OpenJobFromFolderDialog()
     {
-        string? folder = SelectFolder("Select SmartTakeoffs job folder", _settings.JobsRootPath);
+        string? folder = SelectFolder("Select OurPlaneCore job folder", _settings.JobsRootPath);
         if (folder == null)
             return;
 
@@ -160,7 +160,7 @@ public partial class MainWindow
         string initial = Directory.Exists(_settings.JobsRootPath)
             ? _settings.JobsRootPath
             : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string? root = SelectFolder("Select folder with SmartTakeoffs jobs", initial);
+        string? root = SelectFolder("Select folder with OurPlaneCore jobs", initial);
         if (root == null)
             return;
 
@@ -173,7 +173,7 @@ public partial class MainWindow
             .ToList();
         if (jobs.Count == 0)
         {
-            MessageBox.Show("No SmartTakeoffs jobs found in configured job folders.", "Open Jobs Folder",
+            MessageBox.Show("No OurPlaneCore jobs found in configured job folders.", "Open Jobs Folder",
                             MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -208,7 +208,7 @@ public partial class MainWindow
             _settings.JobsRootPath = parent;
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
-            var job = SmartTakeoffsJobStore.CreateJob(parent, name);
+            var job = OurPlaneCoreJobStore.CreateJob(parent, name);
             OpenJob(job.RootPath);
         }
         catch (Exception ex)
@@ -230,7 +230,7 @@ public partial class MainWindow
             _settings.JobsRootPath = parent;
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
-            SmartTakeoffsJob job = SampleJobService.CreateSampleJob(parent);
+            OurPlaneCoreJob job = SampleJobService.CreateSampleJob(parent);
             OpenJob(job.RootPath);
             TxtStatus.Text = $"Sample job created: {job.Name}.";
         }
@@ -257,7 +257,7 @@ public partial class MainWindow
         }
     }
 
-    private void QueueRecentJobThumbnailGeneration(SmartTakeoffsJob job)
+    private void QueueRecentJobThumbnailGeneration(OurPlaneCoreJob job)
     {
         string jobRoot = job.RootPath;
         Task.Run(() =>

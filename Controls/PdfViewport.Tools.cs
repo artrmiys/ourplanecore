@@ -8,12 +8,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using SmartTakeoffs;
+using OurPlaneCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -164,7 +164,7 @@ public sealed partial class PdfViewport
         if (_drawPts.Count < 2)
             return;
 
-        string normalizedKind = SmartTakeoffsJobStore.NormalizePageAnnotationKind(kind);
+        string normalizedKind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(kind);
         var annotation = new PageAnnotation
         {
             Kind = normalizedKind,

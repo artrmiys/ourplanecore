@@ -4,7 +4,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public enum PlanSwiftExportRowKind
 {
@@ -23,7 +23,7 @@ public static class PlanSwiftTakeoffExporter
     private const int ExcelStartColumn = 10; // J
 
     public static IReadOnlyList<PlanSwiftExportRow> BuildRows(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<TakeoffItem> takeoffItems,
         IReadOnlyList<string> selectedRoots,
         UnitMode unitMode)
@@ -124,7 +124,7 @@ public static class PlanSwiftTakeoffExporter
         return rows.Count(row => row.Kind != PlanSwiftExportRowKind.Blank);
     }
 
-    private static void EmitSingleItem(List<PlanSwiftExportRow> rows, SmartTakeoffsJob job, TakeoffItem item, UnitMode unitMode)
+    private static void EmitSingleItem(List<PlanSwiftExportRow> rows, OurPlaneCoreJob job, TakeoffItem item, UnitMode unitMode)
     {
         string parent = Path.GetDirectoryName(item.FolderPath) ?? job.TakeoffsRoot;
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Header, GroupTitle(job, parent)));
@@ -134,7 +134,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static void ProcessFolder(
         List<PlanSwiftExportRow> rows,
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         string folder,
         IReadOnlyDictionary<string, TakeoffItem> itemByFolder,
         UnitMode unitMode,
@@ -143,7 +143,7 @@ public static class PlanSwiftTakeoffExporter
         if (!Directory.Exists(folder) || !FolderHasMeasuredItems(folder, itemByFolder))
             return;
 
-        var children = SmartTakeoffsJobStore.GetOrderedChildDirectories(folder);
+        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(folder);
         var items = children
             .Select(child => TryGetItem(itemByFolder, child, out TakeoffItem? item) ? item : null)
             .Where(item => item is { Measurements.Count: > 0 })
@@ -201,7 +201,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static (string Value, string Unit) QuantityValueAndUnit(TakeoffItem item, UnitMode unitMode)
     {
-        string type = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double totalMeters = item.Total(0);
         if (item.IsJoistArea)
             return unitMode == UnitMode.Imperial
@@ -232,7 +232,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static bool FolderHasMeasuredItems(string folder, IReadOnlyDictionary<string, TakeoffItem> itemByFolder)
     {
-        foreach (string child in SmartTakeoffsJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
         {
             if (TryGetItem(itemByFolder, child, out TakeoffItem? item))
             {
@@ -248,13 +248,13 @@ public static class PlanSwiftTakeoffExporter
         return false;
     }
 
-    private static IReadOnlyList<string> NormalizeRoots(SmartTakeoffsJob job, IReadOnlyList<string> selectedRoots)
+    private static IReadOnlyList<string> NormalizeRoots(OurPlaneCoreJob job, IReadOnlyList<string> selectedRoots)
     {
         var rawRoots = selectedRoots.Count == 0 ? [job.TakeoffsRoot] : selectedRoots;
         var valid = rawRoots
             .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
             .Select(NormalizePath)
-            .Where(path => SmartTakeoffsJobStore.IsSameOrDescendant(job.TakeoffsRoot, path))
+            .Where(path => OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path.Length)
             .ToList();
@@ -262,7 +262,7 @@ public static class PlanSwiftTakeoffExporter
         var result = new List<string>();
         foreach (string root in valid)
         {
-            if (result.Any(parent => SmartTakeoffsJobStore.IsSameOrDescendant(parent, root)))
+            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent, root)))
                 continue;
             result.Add(root);
         }
@@ -270,7 +270,7 @@ public static class PlanSwiftTakeoffExporter
         return result.Count == 0 ? [job.TakeoffsRoot] : result;
     }
 
-    private static IEnumerable<TakeoffItem> SortItemsForFolder(SmartTakeoffsJob job, string folder, IReadOnlyList<TakeoffItem> items)
+    private static IEnumerable<TakeoffItem> SortItemsForFolder(OurPlaneCoreJob job, string folder, IReadOnlyList<TakeoffItem> items)
     {
         string relative = RelativeTakeoffPath(job, folder);
         if (!IsWallFloorFolder(relative))
@@ -279,7 +279,7 @@ public static class PlanSwiftTakeoffExporter
         return items.OrderBy(WallItemSortKey).ToList();
     }
 
-    private static string GroupTitle(SmartTakeoffsJob job, string folder)
+    private static string GroupTitle(OurPlaneCoreJob job, string folder)
     {
         string relative = string.IsNullOrWhiteSpace(folder) || IsSamePath(folder, job.TakeoffsRoot)
             ? ""
@@ -343,7 +343,7 @@ public static class PlanSwiftTakeoffExporter
         return matches.Count == 0 ? -1 : int.Parse(matches[^1].Value, CultureInfo.InvariantCulture);
     }
 
-    private static string RelativeTakeoffPath(SmartTakeoffsJob job, string folder)
+    private static string RelativeTakeoffPath(OurPlaneCoreJob job, string folder)
     {
         try
         {
@@ -351,7 +351,7 @@ public static class PlanSwiftTakeoffExporter
         }
         catch
         {
-            return SmartTakeoffsJobStore.DisplayName(folder);
+            return OurPlaneCoreJobStore.DisplayName(folder);
         }
     }
 

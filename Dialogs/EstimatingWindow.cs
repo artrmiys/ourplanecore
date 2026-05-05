@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public sealed class EstimatingWindowRow
 {

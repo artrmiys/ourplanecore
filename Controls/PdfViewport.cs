@@ -8,12 +8,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using SmartTakeoffs;
+using OurPlaneCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 // ── Simple layer info returned to the UI ─────────────────────────────────────
 

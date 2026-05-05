@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public static class SampleJobService
 {
@@ -16,24 +16,24 @@ public static class SampleJobService
         {
             string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             return string.IsNullOrWhiteSpace(documents)
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "SmartTakeoffs Jobs")
-                : Path.Combine(documents, "SmartTakeoffs Jobs");
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "OurPlaneCore Jobs")
+                : Path.Combine(documents, "OurPlaneCore Jobs");
         }
     }
 
-    public static SmartTakeoffsJob CreateSampleJob(string parentDir)
+    public static OurPlaneCoreJob CreateSampleJob(string parentDir)
     {
         Directory.CreateDirectory(parentDir);
         string jobName = UniqueJobName(parentDir, "Sample Job");
-        SmartTakeoffsJob job = SmartTakeoffsJobStore.CreateJob(parentDir, jobName);
+        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parentDir, jobName);
 
-        string tempPdf = Path.Combine(Path.GetTempPath(), $"smarttakeoffs_sample_{Guid.NewGuid():N}.pdf");
+        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplanecore_sample_{Guid.NewGuid():N}.pdf");
         try
         {
             WriteSamplePdf(tempPdf);
             string archFolder = Path.Combine(job.PagesRoot, "00. imported", "Arch");
             Directory.CreateDirectory(archFolder);
-            PageInfo page = SmartTakeoffsJobStore.CreatePageFromPdf(
+            PageInfo page = OurPlaneCoreJobStore.CreatePageFromPdf(
                 job,
                 tempPdf,
                 "A101 Sample Plan",
@@ -53,15 +53,15 @@ public static class SampleJobService
             catch { }
         }
 
-        return SmartTakeoffsJobStore.LoadJob(job.RootPath);
+        return OurPlaneCoreJobStore.LoadJob(job.RootPath);
     }
 
-    private static void CreateSampleTakeoffs(SmartTakeoffsJob job, PageInfo page)
+    private static void CreateSampleTakeoffs(OurPlaneCoreJob job, PageInfo page)
     {
-        string generalFolder = SmartTakeoffsJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "GENERAL");
-        string openingsFolder = SmartTakeoffsJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "OPENINGS");
+        string generalFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "GENERAL");
+        string openingsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "OPENINGS");
 
-        TakeoffItem exterior = SmartTakeoffsJobStore.CreateTakeoffItem(
+        TakeoffItem exterior = OurPlaneCoreJobStore.CreateTakeoffItem(
             job,
             generalFolder,
             "Sample Exterior Walls",
@@ -86,9 +86,9 @@ public static class SampleJobService
                 new SKPoint(120, 140),
             ],
         });
-        SmartTakeoffsJobStore.SaveTakeoffItem(exterior);
+        OurPlaneCoreJobStore.SaveTakeoffItem(exterior);
 
-        TakeoffItem floor = SmartTakeoffsJobStore.CreateTakeoffItem(
+        TakeoffItem floor = OurPlaneCoreJobStore.CreateTakeoffItem(
             job,
             generalFolder,
             "Sample Floor Area",
@@ -112,9 +112,9 @@ public static class SampleJobService
                 new SKPoint(120, 470),
             ],
         });
-        SmartTakeoffsJobStore.SaveTakeoffItem(floor);
+        OurPlaneCoreJobStore.SaveTakeoffItem(floor);
 
-        TakeoffItem doors = SmartTakeoffsJobStore.CreateTakeoffItem(
+        TakeoffItem doors = OurPlaneCoreJobStore.CreateTakeoffItem(
             job,
             openingsFolder,
             "Sample Doors",
@@ -137,14 +137,14 @@ public static class SampleJobService
                 new SKPoint(396, 470),
             ],
         });
-        SmartTakeoffsJobStore.SaveTakeoffItem(doors);
+        OurPlaneCoreJobStore.SaveTakeoffItem(doors);
     }
 
     private static string UniqueJobName(string parentDir, string baseName)
     {
         string candidate = baseName;
         int index = 2;
-        while (Directory.Exists(Path.Combine(parentDir, SmartTakeoffsJobStore.SanitizeName(candidate, 120))))
+        while (Directory.Exists(Path.Combine(parentDir, OurPlaneCoreJobStore.SanitizeName(candidate, 120))))
         {
             candidate = $"{baseName} {index.ToString(CultureInfo.InvariantCulture)}";
             index++;
@@ -170,7 +170,7 @@ public static class SampleJobService
             672 305 m 672 345 l S
             396 470 m 438 470 l S
             0 0 0 rg
-            BT /F1 22 Tf 72 552 Td (SmartTakeoffs Sample Job) Tj ET
+            BT /F1 22 Tf 72 552 Td (OurPlaneCore Sample Job) Tj ET
             BT /F1 12 Tf 72 528 Td (Use Select, Ctrl+Shift+P, Ctrl+Shift+O, Snap, Ortho, and Estimating.) Tj ET
             BT /F1 11 Tf 130 485 Td (Office) Tj ET
             BT /F1 11 Tf 410 485 Td (Open Area) Tj ET

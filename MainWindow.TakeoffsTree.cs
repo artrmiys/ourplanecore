@@ -11,10 +11,10 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -39,7 +39,7 @@ public partial class MainWindow
         if (e.NewValue is TreeViewItem { Tag: TakeoffItem item })
         {
             _takeoffSectionMultiSelection.Clear();
-            item.MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+            item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
             _activeItem           = item;
             _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
             _viewport.ActiveColor = item.Color;
@@ -158,10 +158,10 @@ public partial class MainWindow
 
         try
         {
-            string folderPath = SmartTakeoffsJobStore.CreateTakeoffFolder(_currentJob, parentFolder, name);
+            string folderPath = OurPlaneCoreJobStore.CreateTakeoffFolder(_currentJob, parentFolder, name);
             var node = new TakeoffFolderNode
             {
-                Name = SmartTakeoffsJobStore.DisplayName(folderPath),
+                Name = OurPlaneCoreJobStore.DisplayName(folderPath),
                 FolderPath = folderPath,
             };
             var parent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
@@ -211,7 +211,7 @@ public partial class MainWindow
         string modeLabel = FolderTemplateModeLabel(mode);
         string baseName = string.Equals(baseFolder, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase)
             ? "Takeoffs"
-            : SmartTakeoffsJobStore.DisplayName(baseFolder);
+            : OurPlaneCoreJobStore.DisplayName(baseFolder);
         var confirm = MessageBox.Show(
             $"Create standard {modeLabel} takeoff tree under '{baseName}'?\n\nExisting folders will be skipped.",
             "Auto Takeoff Tree",
@@ -252,7 +252,7 @@ public partial class MainWindow
 
         string baseName = string.Equals(baseFolder, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase)
             ? "Takeoffs"
-            : SmartTakeoffsJobStore.DisplayName(baseFolder);
+            : OurPlaneCoreJobStore.DisplayName(baseFolder);
         string preview = PlanSwiftFolderTemplateService.PreviewNames(groupNames);
         var confirm = MessageBox.Show(
             $"Create {groupNames.Count} top takeoff folder(s) from Pages CAPS names under '{baseName}', then add the standard {modeLabel} tree?\n\n{preview}\n\nExisting folders will be skipped.",
@@ -293,7 +293,7 @@ public partial class MainWindow
             foreach (var item in _takeoffItems)
             {
                 EnsureTakeoffItemFolder(item);
-                SmartTakeoffsJobStore.SaveTakeoffItem(item);
+                OurPlaneCoreJobStore.SaveTakeoffItem(item);
             }
 
             if (!string.IsNullOrEmpty(_currentPdfPath))
@@ -567,7 +567,7 @@ public partial class MainWindow
 
         foreach (var measurement in item.Measurements)
             measurement.TakeoffFolder = item.FolderPath;
-        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
     }
 
     private TakeoffItem CreateUniqueTakeoffItem(string name, string color, string measurementType = "line", string? parentFolder = null)
@@ -582,7 +582,7 @@ public partial class MainWindow
             string candidate = i == 0 ? baseName : $"{baseName} - Copy {i + 1}";
             try
             {
-                return SmartTakeoffsJobStore.CreateTakeoffItem(_currentJob, parent, candidate, color, measurementType);
+                return OurPlaneCoreJobStore.CreateTakeoffItem(_currentJob, parent, candidate, color, measurementType);
             }
             catch (IOException) when (i < 999)
             {
@@ -611,11 +611,11 @@ public partial class MainWindow
         menu.Items.Add(properties);
         menu.Items.Add(MakeMenuItem(
             item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
-            singleSelection && SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
+            singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
             () => EditTakeoffItemProperties(tvi, item)));
         menu.Items.Add(MakeMenuItem(
             "Generate Joists / Draw Direction",
-            singleSelection && SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
+            singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
             () => SetJoistDirectionFromSelectedLine(tvi, item)));
 
         int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
@@ -748,7 +748,7 @@ public partial class MainWindow
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         panel.Children.Add(CreateMeasurementTypeIcon(
-            measurement.JoistEnabled ? "joist" : SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType),
+            measurement.JoistEnabled ? "joist" : OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
             BrushFromHex(measurement.Color, Brushes.Gray),
             12,
             new Thickness(0, 0, 7, 0)));
@@ -871,7 +871,7 @@ public partial class MainWindow
             }
         }
 
-        SmartTakeoffsJobStore.SaveTakeoffItem(anchor.Item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(anchor.Item);
         RefreshTreeItem(anchor.Item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -908,7 +908,7 @@ public partial class MainWindow
 
     private void SetActiveTakeoffTarget(TreeViewItem? tvi, TakeoffItem item, bool selectCanvasMeasurements = true)
     {
-        item.MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
@@ -953,7 +953,7 @@ public partial class MainWindow
 
         if (_currentPage == null)
         {
-            string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+            string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
             MessageBox.Show(
                 measurementType == "point"
                     ? "Select a page before adding a count."
@@ -965,7 +965,7 @@ public partial class MainWindow
         }
 
         SetActiveTakeoffTarget(null, _activeItem, selectCanvasMeasurements: false);
-        SetTool(SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType));
+        SetTool(OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType));
     }
 
     private void BtnActiveTakeoffMore_Click(object sender, RoutedEventArgs e)
@@ -1153,7 +1153,7 @@ public partial class MainWindow
         }
 
         item.UnitPrice = price;
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -1180,15 +1180,15 @@ public partial class MainWindow
                 !string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
             {
                 string oldPath = item.FolderPath;
-                item.FolderPath = SmartTakeoffsJobStore.RenameNode(item.FolderPath, name);
+                item.FolderPath = OurPlaneCoreJobStore.RenameNode(item.FolderPath, name);
                 RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
-                item.Name = SmartTakeoffsJobStore.DisplayName(item.FolderPath);
+                item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
             }
             else
             {
-                item.Name = SmartTakeoffsJobStore.SanitizeName(name, 120);
+                item.Name = OurPlaneCoreJobStore.SanitizeName(name, 120);
             }
 
             item.Color = color;
@@ -1205,13 +1205,13 @@ public partial class MainWindow
                     StringComparison.OrdinalIgnoreCase) ||
                 item.JoistShowLabels != joistEdit.ShowLabels;
             bool wasJoistArea = item.IsJoistArea;
-            item.IsJoistTakeoff = joistEdit.Enabled && SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+            item.IsJoistTakeoff = joistEdit.Enabled && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
             item.JoistType = joistEdit.JoistType.Trim();
             item.JoistSpacingInches = joistEdit.SpacingInches > 0 ? joistEdit.SpacingInches : 16;
             item.JoistDirectionDegrees = joistEdit.DirectionDegrees;
             item.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding);
             item.JoistShowLabels = joistEdit.ShowLabels;
-            SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             if (colorChanged)
             {
                 foreach (Measurement measurement in item.Measurements)
@@ -1220,7 +1220,7 @@ public partial class MainWindow
             if (colorChanged || joistChanged)
                 _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
 
-            SmartTakeoffsJobStore.SaveTakeoffItem(item);
+            OurPlaneCoreJobStore.SaveTakeoffItem(item);
             SetTreeItemHeader(tvi, item);
             RefreshTakeoffSectionNodes(tvi, item);
             RefreshEstimateTable();
@@ -1240,7 +1240,7 @@ public partial class MainWindow
 
     private void SetJoistDirectionFromSelectedLine(TreeViewItem tvi, TakeoffItem item)
     {
-        if (SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
         {
             TxtStatus.Text = "Joist direction can only be set on Area takeoff items.";
             return;
@@ -1255,8 +1255,8 @@ public partial class MainWindow
         }
 
         item.IsJoistTakeoff = true;
-        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
         _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         BeginJoistDirectionCapture(item, area);
     }
@@ -1266,7 +1266,7 @@ public partial class MainWindow
         var selected = _viewport.GetSelectedMeasurements()
             .Where(measurement =>
                 item.Measurements.Contains(measurement) &&
-                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .ToList();
         if (selected.Count == 1)
             return selected[0];
@@ -1275,7 +1275,7 @@ public partial class MainWindow
         {
             var pageAreas = item.Measurements
                 .Where(measurement =>
-                    SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                    OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
                     IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
                 .ToList();
             if (pageAreas.Count == 1)
@@ -1288,7 +1288,7 @@ public partial class MainWindow
     private void BeginJoistDirectionCapture(TakeoffItem item, Measurement area)
     {
         item.IsJoistTakeoff = true;
-        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         area.JoistDirectionLocked = false;
         _viewport.BeginJoistDirectionCapture(area);
         TxtStatus.Text = $"Joist direction for {item.Name}: draw a two-point line parallel to the joists on the selected area.";
@@ -1309,8 +1309,8 @@ public partial class MainWindow
         item.IsJoistTakeoff = true;
         area.JoistDirectionDegrees = directionDegrees;
         area.JoistDirectionLocked = true;
-        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
         _viewport.SelectMeasurements([area]);
         RefreshTreeItem(item);
         RefreshActiveTakeoffVisuals();
@@ -1333,7 +1333,7 @@ public partial class MainWindow
 
         Measurement? next = item.Measurements.FirstOrDefault(measurement =>
             !ReferenceEquals(measurement, skip) &&
-            SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
             IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath) &&
             !measurement.JoistDirectionLocked);
         if (next == null)
@@ -1349,7 +1349,7 @@ public partial class MainWindow
         directionDegrees = 0;
         Measurement? line = _viewport.GetSelectedMeasurements()
             .FirstOrDefault(measurement =>
-                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
                 measurement.Points.Count >= 2);
         if (line == null)
         {
@@ -1424,7 +1424,7 @@ public partial class MainWindow
                 if (edit.ApplyNotes)
                     selectedItem.Notes = edit.Notes.Trim();
 
-                SmartTakeoffsJobStore.SaveTakeoffItem(selectedItem);
+                OurPlaneCoreJobStore.SaveTakeoffItem(selectedItem);
                 RefreshTreeItem(selectedItem);
             }
 
@@ -1460,7 +1460,7 @@ public partial class MainWindow
         string firstNotes = items[0].Notes;
         bool sameNotes = items.All(item => string.Equals(item.Notes, firstNotes, StringComparison.Ordinal));
         var selectedTypes = items
-            .Select(item => SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType))
+            .Select(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         bool sameType = selectedTypes.Count == 1;
@@ -1693,7 +1693,7 @@ public partial class MainWindow
             Foreground = Brushes.Gray,
             Margin = new Thickness(0, 8, 0, 0),
         });
-        bool isAreaTakeoff = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        bool isAreaTakeoff = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
         var joistEnabledBox = new CheckBox
         {
             Content = "Joist layout",
@@ -2180,16 +2180,16 @@ public partial class MainWindow
             if (!string.IsNullOrWhiteSpace(item.FolderPath) && Directory.Exists(item.FolderPath))
             {
                 string oldPath = item.FolderPath;
-                item.FolderPath = SmartTakeoffsJobStore.RenameNode(item.FolderPath, name);
+                item.FolderPath = OurPlaneCoreJobStore.RenameNode(item.FolderPath, name);
                 RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
-                item.Name = SmartTakeoffsJobStore.DisplayName(item.FolderPath);
+                item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
-                SmartTakeoffsJobStore.SaveTakeoffItem(item);
+                OurPlaneCoreJobStore.SaveTakeoffItem(item);
             }
             else
             {
-                item.Name = SmartTakeoffsJobStore.SanitizeName(name, 120);
+                item.Name = OurPlaneCoreJobStore.SanitizeName(name, 120);
             }
 
             SetTreeItemHeader(tvi, item);
@@ -2254,11 +2254,11 @@ public partial class MainWindow
             if (!string.IsNullOrWhiteSpace(requestedName) &&
                 !string.Equals(requestedName, folder.Name, StringComparison.Ordinal))
             {
-                newPath = SmartTakeoffsJobStore.RenameNode(folder.FolderPath, requestedName);
+                newPath = OurPlaneCoreJobStore.RenameNode(folder.FolderPath, requestedName);
                 RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
                 foreach (var item in _takeoffItems)
                 {
-                    if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldPath, item.FolderPath))
+                    if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldPath, item.FolderPath))
                         continue;
 
                     item.FolderPath = Path.Combine(newPath, Path.GetRelativePath(oldPath, item.FolderPath));
@@ -2269,7 +2269,7 @@ public partial class MainWindow
 
             var updatedFolder = new TakeoffFolderNode
             {
-                Name = SmartTakeoffsJobStore.DisplayName(newPath),
+                Name = OurPlaneCoreJobStore.DisplayName(newPath),
                 FolderPath = newPath,
             };
             var updatedProperties = new TakeoffFolderProperties
@@ -2304,11 +2304,11 @@ public partial class MainWindow
         try
         {
             string oldPath = folder.FolderPath;
-            string newPath = SmartTakeoffsJobStore.RenameNode(folder.FolderPath, name);
+            string newPath = OurPlaneCoreJobStore.RenameNode(folder.FolderPath, name);
             RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
             folder = new TakeoffFolderNode
             {
-                Name = SmartTakeoffsJobStore.DisplayName(newPath),
+                Name = OurPlaneCoreJobStore.DisplayName(newPath),
                 FolderPath = newPath,
             };
             tvi.Tag = folder;
@@ -2317,7 +2317,7 @@ public partial class MainWindow
 
             foreach (var item in _takeoffItems)
             {
-                if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldPath, item.FolderPath))
+                if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldPath, item.FolderPath))
                     continue;
 
                 item.FolderPath = Path.Combine(newPath, Path.GetRelativePath(oldPath, item.FolderPath));
@@ -2341,7 +2341,7 @@ public partial class MainWindow
         if (res != MessageBoxResult.Yes) return;
 
         var removedItems = _takeoffItems
-            .Where(i => SmartTakeoffsJobStore.IsSameOrDescendant(folder.FolderPath, i.FolderPath))
+            .Where(i => OurPlaneCoreJobStore.IsSameOrDescendant(folder.FolderPath, i.FolderPath))
             .ToList();
 
         try
@@ -2377,7 +2377,7 @@ public partial class MainWindow
             return;
 
         string message = entries.Count == 1
-            ? $"Delete \"{SmartTakeoffsJobStore.DisplayName(entries[0].SourcePath)}\" and all contained measurements?"
+            ? $"Delete \"{OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}\" and all contained measurements?"
             : $"Delete {entries.Count} selected takeoff node(s) and all contained measurements?";
         var res = MessageBox.Show(message, "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (res != MessageBoxResult.Yes)
@@ -2388,7 +2388,7 @@ public partial class MainWindow
             FlushTakeoffAutosaves();
             var removedItems = _takeoffItems
                 .Where(item => entries.Any(entry =>
-                    SmartTakeoffsJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
+                    OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
                 .ToList();
 
             foreach (var entry in entries)
@@ -2405,7 +2405,7 @@ public partial class MainWindow
 
             if (_takeoffsClipboard != null && entries.Any(entry =>
                     _takeoffsClipboard.Entries.Any(clip =>
-                        SmartTakeoffsJobStore.IsSameOrDescendant(entry.SourcePath, clip.SourcePath))))
+                        OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, clip.SourcePath))))
                 _takeoffsClipboard = null;
 
             _takeoffsMultiSelection.Clear();
@@ -2415,7 +2415,7 @@ public partial class MainWindow
             RefreshEstimateTable();
             UpdateTotalDisplay();
             TxtStatus.Text = entries.Count == 1
-                ? $"Deleted: {SmartTakeoffsJobStore.DisplayName(entries[0].SourcePath)}"
+                ? $"Deleted: {OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}"
                 : $"Deleted {entries.Count} takeoff nodes.";
         }
         catch (Exception ex)
@@ -2434,7 +2434,7 @@ public partial class MainWindow
 
         try
         {
-            if (!SmartTakeoffsJobStore.MoveSibling(folderPath, offset))
+            if (!OurPlaneCoreJobStore.MoveSibling(folderPath, offset))
                 return;
             LoadTakeoffsForJob();
         }
@@ -2449,7 +2449,7 @@ public partial class MainWindow
         var paths = GetSelectedTakeoffEntries(anchor)
             .Select(entry => entry.SourcePath)
             .ToList();
-        return SmartTakeoffsJobStore.CanMoveSiblings(paths, offset);
+        return OurPlaneCoreJobStore.CanMoveSiblings(paths, offset);
     }
 
     private void MoveTakeoffNodes(TreeViewItem anchor, int offset)
@@ -2461,7 +2461,7 @@ public partial class MainWindow
 
         try
         {
-            if (!SmartTakeoffsJobStore.MoveSiblings(paths, offset))
+            if (!OurPlaneCoreJobStore.MoveSiblings(paths, offset))
                 return;
 
             LoadTakeoffsForJob();
@@ -2481,7 +2481,7 @@ public partial class MainWindow
     {
         try
         {
-            SmartTakeoffsJobStore.SortChildren(folderPath, descending);
+            OurPlaneCoreJobStore.SortChildren(folderPath, descending);
             LoadTakeoffsForJob();
         }
         catch (Exception ex)
@@ -2906,7 +2906,7 @@ public partial class MainWindow
         _takeoffsClipboard = new TakeoffsClipboard(entries, mode);
         string verb = mode == TakeoffsClipboardMode.Copy ? "Copied" : "Cut";
         TxtStatus.Text = entries.Count == 1
-            ? $"{verb}: {SmartTakeoffsJobStore.DisplayName(entries[0].SourcePath)}"
+            ? $"{verb}: {OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}"
             : $"{verb} {entries.Count} takeoff nodes.";
     }
 
@@ -2943,7 +2943,7 @@ public partial class MainWindow
                     continue;
                 }
 
-                changed.Add(SmartTakeoffsJobStore.CopyNode(entry.SourcePath, parent));
+                changed.Add(OurPlaneCoreJobStore.CopyNode(entry.SourcePath, parent));
             }
 
             if (changed.Count == 0)
@@ -2953,7 +2953,7 @@ public partial class MainWindow
             SetTakeoffMultiSelection(changed);
             SelectFirstTakeoffPath(changed);
             TxtStatus.Text = changed.Count == 1
-                ? $"Duplicated: {SmartTakeoffsJobStore.DisplayName(changed[0])}"
+                ? $"Duplicated: {OurPlaneCoreJobStore.DisplayName(changed[0])}"
                 : $"Duplicated {changed.Count} takeoff nodes.";
         }
         catch (Exception ex)
@@ -2976,8 +2976,8 @@ public partial class MainWindow
                     continue;
 
                 string changedPath = wasCut
-                    ? SmartTakeoffsJobStore.MoveNode(entry.SourcePath, targetFolder)
-                    : SmartTakeoffsJobStore.CopyNode(entry.SourcePath, targetFolder);
+                    ? OurPlaneCoreJobStore.MoveNode(entry.SourcePath, targetFolder)
+                    : OurPlaneCoreJobStore.CopyNode(entry.SourcePath, targetFolder);
                 changed.Add(changedPath);
                 if (wasCut)
                     rebasedLegendPaths.Add((entry.SourcePath, changedPath));
@@ -2996,7 +2996,7 @@ public partial class MainWindow
             SetTakeoffMultiSelection(changed);
             SelectFirstTakeoffPath(changed);
             TxtStatus.Text = changed.Count == 1
-                ? $"{(wasCut ? "Moved" : "Pasted")}: {SmartTakeoffsJobStore.DisplayName(changed[0])}"
+                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlaneCoreJobStore.DisplayName(changed[0])}"
                 : $"{(wasCut ? "Moved" : "Pasted")} {changed.Count} takeoff nodes.";
         }
         catch (Exception ex)
@@ -3032,7 +3032,7 @@ public partial class MainWindow
         after = IsTakeoffPositionDropAfter(targetItem, targetPoint);
         var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
         canDrop = CanDropTakeoffsToPosition(payload, targetPath, after);
-        string targetName = SmartTakeoffsJobStore.DisplayName(targetPath);
+        string targetName = OurPlaneCoreJobStore.DisplayName(targetPath);
         string position = after ? "after" : "before";
         status = canDrop
             ? $"Move {paths.Count} takeoff node(s) {position} {targetName}."
@@ -3047,7 +3047,7 @@ public partial class MainWindow
 
         string targetParent = Path.GetDirectoryName(targetPath) ?? "";
         if (string.IsNullOrWhiteSpace(targetParent) ||
-            !SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetParent) ||
+            !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetParent) ||
             !Directory.Exists(targetParent))
         {
             return false;
@@ -3058,7 +3058,7 @@ public partial class MainWindow
             return false;
 
         if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
-            return SmartTakeoffsJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
+            return OurPlaneCoreJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
 
         return CanDropTakeoffsInto(payload, targetParent, TakeoffsClipboardMode.Cut);
     }
@@ -3137,7 +3137,7 @@ public partial class MainWindow
             var rebasedLegendPaths = new List<(string OldPath, string NewPath)>();
             if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
             {
-                if (!SmartTakeoffsJobStore.MoveSiblingsToPosition(paths, targetPath, after))
+                if (!OurPlaneCoreJobStore.MoveSiblingsToPosition(paths, targetPath, after))
                     return;
                 changed.AddRange(paths);
             }
@@ -3154,13 +3154,13 @@ public partial class MainWindow
                     if (!CanDropTakeoffsInto(new TakeoffsClipboard([entry], TakeoffsClipboardMode.Cut), targetParent, TakeoffsClipboardMode.Cut))
                         continue;
 
-                    string changedPath = SmartTakeoffsJobStore.MoveNode(entry.SourcePath, targetParent);
+                    string changedPath = OurPlaneCoreJobStore.MoveNode(entry.SourcePath, targetParent);
                     changed.Add(changedPath);
                     rebasedLegendPaths.Add((entry.SourcePath, changedPath));
                 }
 
                 if (changed.Count == 0 ||
-                    !SmartTakeoffsJobStore.MoveSiblingsToPosition(changed, targetPath, after))
+                    !OurPlaneCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
                 {
                     return;
                 }
@@ -3174,8 +3174,8 @@ public partial class MainWindow
             SetTakeoffMultiSelection(changed);
             SelectFirstTakeoffPath(changed);
             TxtStatus.Text = changed.Count == 1
-                ? $"Moved takeoff node {(after ? "after" : "before")} {SmartTakeoffsJobStore.DisplayName(targetPath)}."
-                : $"Moved {changed.Count} takeoff nodes {(after ? "after" : "before")} {SmartTakeoffsJobStore.DisplayName(targetPath)}.";
+                ? $"Moved takeoff node {(after ? "after" : "before")} {OurPlaneCoreJobStore.DisplayName(targetPath)}."
+                : $"Moved {changed.Count} takeoff nodes {(after ? "after" : "before")} {OurPlaneCoreJobStore.DisplayName(targetPath)}.";
         }
         catch (Exception ex)
         {
@@ -3193,8 +3193,8 @@ public partial class MainWindow
         if (!Directory.Exists(targetFolder))
             return false;
 
-        if (!SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetFolder) ||
-            SmartTakeoffsJobStore.IsTakeoffItemFolder(targetFolder))
+        if (!OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetFolder) ||
+            OurPlaneCoreJobStore.IsTakeoffItemFolder(targetFolder))
             return false;
 
         bool hasMovableEntry = false;
@@ -3202,11 +3202,11 @@ public partial class MainWindow
         {
             if (!Directory.Exists(entry.SourcePath))
                 return false;
-            if (!SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
+            if (!OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
                 string.Equals(entry.SourcePath, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            if (SmartTakeoffsJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
+            if (OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
                 return false;
 
             if (mode == TakeoffsClipboardMode.Cut)
@@ -3227,14 +3227,14 @@ public partial class MainWindow
         if (payload.Nodes.Count == 0 || GetTakeoffSectionDropTarget(targetItem) is not { } target)
             return false;
 
-        string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         bool hasMovableNode = false;
         foreach (TakeoffMeasurementNode node in payload.Nodes)
         {
             if (!node.Item.Measurements.Contains(node.Measurement))
                 return false;
-            if (SmartTakeoffsJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
-                SmartTakeoffsJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType)
+            if (OurPlaneCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
+                OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType)
                 return false;
             if (!ReferenceEquals(node.Item, target))
                 hasMovableNode = true;
@@ -3255,17 +3255,17 @@ public partial class MainWindow
             return "Drop section/count rows on a takeoff item.";
 
         string action = copy ? "Copy" : "Move";
-        string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         TakeoffMeasurementNode? stale = payload.Nodes.FirstOrDefault(node => !node.Item.Measurements.Contains(node.Measurement));
         if (stale != null)
             return "Selected section/count row no longer exists.";
 
         TakeoffMeasurementNode? mismatch = payload.Nodes.FirstOrDefault(node =>
-            SmartTakeoffsJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
-            SmartTakeoffsJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType);
+            OurPlaneCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
+            OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType);
         if (mismatch != null)
         {
-            string sourceType = MeasurementTypeTitle(SmartTakeoffsJobStore.NormalizeMeasurementType(mismatch.Measurement.MType));
+            string sourceType = MeasurementTypeTitle(OurPlaneCoreJobStore.NormalizeMeasurementType(mismatch.Measurement.MType));
             string destinationType = MeasurementTypeTitle(targetType);
             return $"{action} blocked: {sourceType} rows can only drop on {sourceType} takeoff items, not {destinationType}.";
         }
@@ -3316,7 +3316,7 @@ public partial class MainWindow
         }
 
         FlushTakeoffAutosaves();
-        string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         var changedItems = new HashSet<TakeoffItem>();
         var resultingNodes = new List<TakeoffMeasurementNode>();
 
@@ -3353,7 +3353,7 @@ public partial class MainWindow
 
         foreach (TakeoffItem changed in changedItems)
         {
-            SmartTakeoffsJobStore.SaveTakeoffItem(changed);
+            OurPlaneCoreJobStore.SaveTakeoffItem(changed);
             RefreshTreeItem(changed);
         }
 
@@ -3414,11 +3414,11 @@ public partial class MainWindow
         var entries = paths
             .Where(Directory.Exists)
             .Where(candidate => _currentJob != null &&
-                                SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, candidate) &&
+                                OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, candidate) &&
                                 !string.Equals(candidate, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
             .Select(candidate => new TakeoffsClipboardEntry(
                 candidate,
-                SmartTakeoffsJobStore.IsTakeoffItemFolder(candidate)))
+                OurPlaneCoreJobStore.IsTakeoffItemFolder(candidate)))
             .ToList();
 
         return NormalizeSelectedTakeoffEntries(entries);
@@ -3510,7 +3510,7 @@ public partial class MainWindow
         var result = new List<TakeoffsClipboardEntry>();
         foreach (var entry in distinct)
         {
-            if (result.Any(parent => SmartTakeoffsJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
+            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
                 continue;
             result.Add(entry);
         }
@@ -3553,7 +3553,7 @@ public partial class MainWindow
 
         _takeoffsMultiSelection.RemoveWhere(path =>
             !Directory.Exists(path) ||
-            !SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path) ||
+            !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path) ||
             string.Equals(path, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase));
     }
 

@@ -7,7 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Microsoft.Win32;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -69,7 +69,7 @@ public partial class MainWindow
 
         _currentPage.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         ApplyScaleToCurrentPageMeasurements(_viewport.ScaleMetersPerPt);
-        SmartTakeoffsJobStore.SavePageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
+        OurPlaneCoreJobStore.SavePageScale(_currentPage.FolderPath, _viewport.ScaleMetersPerPt);
     }
 
     private void ApplyViewportBackground(string color, bool persist)

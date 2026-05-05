@@ -1,5 +1,5 @@
 using System.Windows;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class App : Application { }

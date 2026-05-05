@@ -9,9 +9,9 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -128,7 +128,7 @@ public partial class MainWindow
         var rows = new List<PdfMetadataPreviewRow>();
         foreach (PageInfo page in CollectPagesUnder(_currentJob.PagesRoot))
         {
-            PdfSheetMetadata? metadata = SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath);
+            PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
             if (metadata != null)
             {
                 var result = new PdfMetadataPageResult(page, true, metadata, "");
@@ -172,7 +172,7 @@ public partial class MainWindow
         SaveCurrentPageScale();
         TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
 
-        SmartTakeoffsJob job = _currentJob;
+        OurPlaneCoreJob job = _currentJob;
         List<PdfMetadataPageResult> results = await Task.Run(() =>
         {
             var analyzed = new List<PdfMetadataPageResult>();
@@ -208,7 +208,7 @@ public partial class MainWindow
         var pages = new List<PageInfo>();
         foreach (PdfMetadataPreviewRow row in SheetManagerGrid.SelectedItems.OfType<PdfMetadataPreviewRow>())
         {
-            if (SmartTakeoffsJobStore.TryReadPage(row.PageFolder) is { } page)
+            if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } page)
                 pages.Add(page);
         }
 
@@ -251,7 +251,7 @@ public partial class MainWindow
             if (row.ApplyScale ||
                 string.IsNullOrWhiteSpace(row.ProposedScale) ||
                 string.Equals(row.ProposedScale.Trim(), "skip", StringComparison.OrdinalIgnoreCase) ||
-                SmartTakeoffsJobStore.TryReadPage(row.PageFolder) is not { } page)
+                OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is not { } page)
             {
                 continue;
             }

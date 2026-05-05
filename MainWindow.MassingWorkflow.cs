@@ -11,11 +11,11 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 using Path = System.IO.Path;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -1781,7 +1781,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(marker.PageFolder)
                 ? marker.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, marker.PageFolder));
-            PageInfo? page = SmartTakeoffsJobStore.TryReadPage(folder);
+            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return page;
         }

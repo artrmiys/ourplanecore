@@ -5,9 +5,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using SmartTakeoffs;
+using OurPlaneCore;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public enum MarkerSetsDialogAction
 {

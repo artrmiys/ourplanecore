@@ -2,7 +2,7 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ourplancore", "SmartTakeoffs.csproj", "{148ACBC1-F40C-9D16-330C-F257BF90FCED}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ourplanecore", "ourplanecore.csproj", "{148ACBC1-F40C-9D16-330C-F257BF90FCED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -22,3 +22,4 @@ Global
 		SolutionGuid = {CD33D6B3-4146-43A5-9843-4C440CA6F4B2}
 	EndGlobalSection
 EndGlobal
+

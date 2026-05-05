@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public static class JoistTakeoffCalculator
 {

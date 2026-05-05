@@ -16,10 +16,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.VisualBasic.FileIO;
 using Microsoft.Win32;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -112,9 +112,9 @@ public partial class MainWindow
     {
         if (!Directory.Exists(folder)) return;
 
-        foreach (string dir in SmartTakeoffsJobStore.GetOrderedChildDirectories(folder))
+        foreach (string dir in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
         {
-            PageInfo? page = SmartTakeoffsJobStore.TryReadPage(dir);
+            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(dir);
             if (page != null)
             {
                 var pageItem = new TreeViewItem
@@ -128,7 +128,7 @@ public partial class MainWindow
                 continue;
             }
 
-            string name = SmartTakeoffsJobStore.ReadName(dir) ?? Path.GetFileName(dir);
+            string name = OurPlaneCoreJobStore.ReadName(dir) ?? Path.GetFileName(dir);
             var folderNode = new PageFolderNode { Name = name, FolderPath = dir };
             var tvi = new TreeViewItem
             {
@@ -199,7 +199,7 @@ public partial class MainWindow
         var rebased = new List<(string OldKey, string NewKey)>();
         foreach (string expandedPath in expandedPaths)
         {
-            if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldKey, expandedPath))
+            if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldKey, expandedPath))
                 continue;
 
             rebased.Add((expandedPath, ExpansionPathKey(RebaseDescendantPath(oldKey, newKey, expandedPath))!));
@@ -480,7 +480,7 @@ public partial class MainWindow
         if (_currentJob != null && Path.IsPathFullyQualified(clean))
         {
             string full = NormalizePath(clean);
-            if (SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, full))
+            if (OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, full))
                 clean = Path.GetRelativePath(_currentJob.TakeoffsRoot, full);
         }
 
@@ -498,7 +498,7 @@ public partial class MainWindow
         page.LegendTakeoffOrder = order;
         if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
             _currentPage.LegendTakeoffOrder = order.ToList();
-        SmartTakeoffsJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order);
+        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order);
     }
 
     private void RebasePageLegendTakeoffOrderReferences(string oldPath, string newPath)
@@ -537,7 +537,7 @@ public partial class MainWindow
                 continue;
 
             page.LegendTakeoffOrder = updated;
-            SmartTakeoffsJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated);
+            OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated);
             if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
                 _currentPage.LegendTakeoffOrder = updated.ToList();
         }
@@ -626,7 +626,7 @@ public partial class MainWindow
         PageInfo? page = fallbackPage != null &&
                          string.Equals(fallbackPage.FolderPath, tab.PageFolder, StringComparison.OrdinalIgnoreCase)
             ? fallbackPage
-            : SmartTakeoffsJobStore.TryReadPage(tab.PageFolder);
+            : OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);
 
         if (page == null)
         {
@@ -659,7 +659,7 @@ public partial class MainWindow
             page.FolderPath,
             page.PdfLayersCached ? page.PdfLayers : null,
             restoreView);
-        _viewport.SetPageAnnotations(SmartTakeoffsJobStore.LoadPageAnnotations(page.FolderPath));
+        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath));
         RefreshAiMarkersOverlay();
         SelectPageTreeNodeSilently(page.FolderPath);
         _settings.LastPageFolder = page.FolderPath;
@@ -804,7 +804,7 @@ public partial class MainWindow
         for (int i = _pageTabs.Count - 1; i >= 0; i--)
         {
             PageTabState tab = _pageTabs[i];
-            if (!SmartTakeoffsJobStore.IsSameOrDescendant(affectedPath, tab.PageFolder))
+            if (!OurPlaneCoreJobStore.IsSameOrDescendant(affectedPath, tab.PageFolder))
                 continue;
 
             if (ReferenceEquals(tab, _activePageTab))
@@ -823,23 +823,23 @@ public partial class MainWindow
         string newFull = NormalizePath(newPath);
         RebaseExpandedTreePaths(_expandedPageTreePaths, oldFull, newFull);
         bool activeAffected = _currentPage != null &&
-                              SmartTakeoffsJobStore.IsSameOrDescendant(oldFull, _currentPage.FolderPath);
+                              OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, _currentPage.FolderPath);
         bool tabsChanged = false;
         bool measurementsChanged = RebaseMeasurementPageFolderReferences(oldFull, newFull);
 
         foreach (PageTabState tab in _pageTabs)
         {
-            if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldFull, tab.PageFolder))
+            if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, tab.PageFolder))
                 continue;
 
             tab.PageFolder = RebaseDescendantPath(oldFull, newFull, tab.PageFolder);
-            if (SmartTakeoffsJobStore.TryReadPage(tab.PageFolder) is { } page)
+            if (OurPlaneCoreJobStore.TryReadPage(tab.PageFolder) is { } page)
                 tab.PageName = page.Name;
             tabsChanged = true;
         }
 
         if (!string.IsNullOrWhiteSpace(_settings.LastPageFolder) &&
-            SmartTakeoffsJobStore.IsSameOrDescendant(oldFull, _settings.LastPageFolder))
+            OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, _settings.LastPageFolder))
         {
             _settings.LastPageFolder = RebaseDescendantPath(oldFull, newFull, _settings.LastPageFolder);
             SaveAppSettings();
@@ -878,7 +878,7 @@ public partial class MainWindow
                     continue;
 
                 string current = NormalizePageReferencePath(measurement.PageFolder);
-                if (!SmartTakeoffsJobStore.IsSameOrDescendant(oldFull, current))
+                if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, current))
                     continue;
 
                 measurement.PageFolder = RebaseDescendantPath(oldFull, newFull, current);
@@ -887,7 +887,7 @@ public partial class MainWindow
             }
 
             if (itemChanged)
-                SmartTakeoffsJobStore.SaveTakeoffItem(item);
+                OurPlaneCoreJobStore.SaveTakeoffItem(item);
         }
 
         return changed;
@@ -984,7 +984,7 @@ public partial class MainWindow
                 return Path.GetDirectoryName(page.FolderPath) ?? _currentJob.PagesRoot;
         }
 
-        return SmartTakeoffsJobStore.DefaultImportFolder(_currentJob);
+        return OurPlaneCoreJobStore.DefaultImportFolder(_currentJob);
     }
 
     private void SelectNodeByFolder(string folderPath)
@@ -1458,7 +1458,7 @@ public partial class MainWindow
                 MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
                 MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)),
                 MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)),
-                MakeMenuItem("Open source_pdf.json", File.Exists(SmartTakeoffsJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath))));
+                MakeMenuItem("Open source_pdf.json", File.Exists(OurPlaneCoreJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath))));
             menu.Items.Add(MakeSubmenu(
                 "Learning",
                 MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
@@ -1790,7 +1790,7 @@ public partial class MainWindow
         page.LegendTakeoffOrder = [];
         if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
             _currentPage.LegendTakeoffOrder = [];
-        SmartTakeoffsJobStore.SavePageLegendTakeoffOrder(page.FolderPath, []);
+        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, []);
         RefreshPagesTakeoffIndicators();
         RefreshSheetLegend();
         SelectLegendOrderResult(page, selectTakeoffFolder);
@@ -2009,9 +2009,9 @@ public partial class MainWindow
 
         try
         {
-            string created = SmartTakeoffsJobStore.CreateFolder(folder.FolderPath, name);
+            string created = OurPlaneCoreJobStore.CreateFolder(folder.FolderPath, name);
             ReloadPagesTree(created);
-            TxtStatus.Text = $"Created folder: {SmartTakeoffsJobStore.DisplayName(created)}";
+            TxtStatus.Text = $"Created folder: {OurPlaneCoreJobStore.DisplayName(created)}";
         }
         catch (Exception ex)
         {
@@ -2025,17 +2025,17 @@ public partial class MainWindow
         string? path = GetPagesNodePath(item);
         if (path == null || !IsPathInsidePagesRoot(path, allowRoot: false)) return;
 
-        string currentName = SmartTakeoffsJobStore.DisplayName(path);
+        string currentName = OurPlaneCoreJobStore.DisplayName(path);
         string? name = ShowInputDialog("New name:", currentName, item.Tag is PageInfo ? "Rename Page" : "Rename Folder");
         if (string.IsNullOrWhiteSpace(name) || name == currentName) return;
 
         try
         {
-            string renamed = SmartTakeoffsJobStore.RenameNode(path, name);
+            string renamed = OurPlaneCoreJobStore.RenameNode(path, name);
             bool reloadActiveTab = UpdatePageReferencesForMovedPath(path, renamed);
             ReloadPagesTree(renamed);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
-            TxtStatus.Text = $"Renamed to: {SmartTakeoffsJobStore.DisplayName(renamed)}";
+            TxtStatus.Text = $"Renamed to: {OurPlaneCoreJobStore.DisplayName(renamed)}";
         }
         catch (Exception ex)
         {
@@ -2054,7 +2054,7 @@ public partial class MainWindow
             string path = entries[0].SourcePath;
             bool isPage = entries[0].IsPage;
             bool hasChildren = Directory.EnumerateFileSystemEntries(path).Any();
-            string name = SmartTakeoffsJobStore.DisplayName(path);
+            string name = OurPlaneCoreJobStore.DisplayName(path);
             message = isPage
                 ? $"Delete page '{name}'?"
                 : hasChildren
@@ -2069,7 +2069,7 @@ public partial class MainWindow
         var result = MessageBox.Show(message, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
 
-        var deletedNames = entries.Select(e => SmartTakeoffsJobStore.DisplayName(e.SourcePath)).ToList();
+        var deletedNames = entries.Select(e => OurPlaneCoreJobStore.DisplayName(e.SourcePath)).ToList();
         var parents = entries
             .Select(e => Path.GetDirectoryName(e.SourcePath) ?? _currentJob?.PagesRoot ?? "")
             .Where(Directory.Exists)
@@ -2086,11 +2086,11 @@ public partial class MainWindow
 
             if (_pagesClipboard != null && entries.Any(e =>
                     _pagesClipboard.Entries.Any(c =>
-                        SmartTakeoffsJobStore.IsSameOrDescendant(e.SourcePath, c.SourcePath))))
+                        OurPlaneCoreJobStore.IsSameOrDescendant(e.SourcePath, c.SourcePath))))
                 _pagesClipboard = null;
 
             foreach (string parent in parents.Where(Directory.Exists))
-                SmartTakeoffsJobStore.NormalizeOrder(parent);
+                OurPlaneCoreJobStore.NormalizeOrder(parent);
             _pagesMultiSelection.Clear();
             ReloadPagesTree(selectAfter);
             TxtStatus.Text = entries.Count == 1
@@ -2111,7 +2111,7 @@ public partial class MainWindow
         _pagesClipboard = new PagesClipboard(entries, mode);
         string verb = mode == PagesClipboardMode.Copy ? "Copied" : "Cut";
         TxtStatus.Text = entries.Count == 1
-            ? $"{verb}: {SmartTakeoffsJobStore.DisplayName(entries[0].SourcePath)}"
+            ? $"{verb}: {OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}"
             : $"{verb} {entries.Count} items.";
     }
 
@@ -2148,12 +2148,12 @@ public partial class MainWindow
                 string pasted;
                 if (wasCut)
                 {
-                    pasted = SmartTakeoffsJobStore.MoveNode(source, targetFolder);
+                    pasted = OurPlaneCoreJobStore.MoveNode(source, targetFolder);
                     reloadActiveTab = UpdatePageReferencesForMovedPath(source, pasted) || reloadActiveTab;
                 }
                 else
                 {
-                    pasted = SmartTakeoffsJobStore.CopyNode(source, targetFolder);
+                    pasted = OurPlaneCoreJobStore.CopyNode(source, targetFolder);
                 }
 
                 pastedItems.Add(pasted);
@@ -2170,7 +2170,7 @@ public partial class MainWindow
             ReloadPagesTree(pastedItems[0]);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
             TxtStatus.Text = pastedItems.Count == 1
-                ? $"{(wasCut ? "Moved" : "Pasted")}: {SmartTakeoffsJobStore.DisplayName(pastedItems[0])}"
+                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlaneCoreJobStore.DisplayName(pastedItems[0])}"
                 : $"{(wasCut ? "Moved" : "Pasted")} {pastedItems.Count} items.";
         }
         catch (Exception ex)
@@ -2186,9 +2186,9 @@ public partial class MainWindow
 
         try
         {
-            string duplicated = SmartTakeoffsJobStore.DuplicatePage(page.FolderPath);
+            string duplicated = OurPlaneCoreJobStore.DuplicatePage(page.FolderPath);
             ReloadPagesTree(duplicated);
-            TxtStatus.Text = $"Duplicated page: {SmartTakeoffsJobStore.DisplayName(duplicated)}";
+            TxtStatus.Text = $"Duplicated page: {OurPlaneCoreJobStore.DisplayName(duplicated)}";
         }
         catch (Exception ex)
         {
@@ -2206,7 +2206,7 @@ public partial class MainWindow
         var paths = GetSelectedPageEntries(item)
             .Select(entry => entry.SourcePath)
             .ToList();
-        return SmartTakeoffsJobStore.CanMoveSiblings(paths, offset);
+        return OurPlaneCoreJobStore.CanMoveSiblings(paths, offset);
     }
 
     private void MovePagesNodes(TreeViewItem item, int offset)
@@ -2222,7 +2222,7 @@ public partial class MainWindow
 
         try
         {
-            if (SmartTakeoffsJobStore.MoveSiblings(paths, offset))
+            if (OurPlaneCoreJobStore.MoveSiblings(paths, offset))
             {
                 _pagesMultiSelection.Clear();
                 foreach (string selectedPath in paths)
@@ -2247,7 +2247,7 @@ public partial class MainWindow
 
         try
         {
-            SmartTakeoffsJobStore.SortChildren(folder.FolderPath, descending);
+            OurPlaneCoreJobStore.SortChildren(folder.FolderPath, descending);
             ReloadPagesTree(folder.FolderPath);
             TxtStatus.Text = descending ? "Sorted children Z-A." : "Sorted children A-Z.";
         }
@@ -2266,7 +2266,7 @@ public partial class MainWindow
         if (target == null) return;
         target = Path.GetFullPath(target);
 
-        if (!IsPathInsidePagesRoot(target) || SmartTakeoffsJobStore.IsPageFolder(target))
+        if (!IsPathInsidePagesRoot(target) || OurPlaneCoreJobStore.IsPageFolder(target))
         {
             MessageBox.Show("Choose a folder inside the current job's Pages tree.",
                             "Move to Folder", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -2278,11 +2278,11 @@ public partial class MainWindow
 
         try
         {
-            string moved = SmartTakeoffsJobStore.MoveNode(page.FolderPath, target);
+            string moved = OurPlaneCoreJobStore.MoveNode(page.FolderPath, target);
             bool reloadActiveTab = UpdatePageReferencesForMovedPath(page.FolderPath, moved);
             ReloadPagesTree(moved);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
-            TxtStatus.Text = $"Moved page to: {SmartTakeoffsJobStore.DisplayName(target)}";
+            TxtStatus.Text = $"Moved page to: {OurPlaneCoreJobStore.DisplayName(target)}";
         }
         catch (Exception ex)
         {
@@ -2312,7 +2312,7 @@ public partial class MainWindow
         string modeLabel = FolderTemplateModeLabel(mode);
         string preview = PlanSwiftFolderTemplateService.PreviewNames(
             PlanSwiftFolderTemplateService.PageFolderNames(mode));
-        string baseName = SmartTakeoffsJobStore.DisplayName(baseFolder);
+        string baseName = OurPlaneCoreJobStore.DisplayName(baseFolder);
         var confirm = MessageBox.Show(
             $"Create standard {modeLabel} page folders under '{baseName}'?\n\n{preview}\n\nExisting folders will be skipped.",
             "Auto Page Folders",
@@ -2381,10 +2381,10 @@ public partial class MainWindow
 
         try
         {
-            string imported = SmartTakeoffsJobStore.EnsureFolder(_currentJob.PagesRoot, "00. imported");
-            string arch = SmartTakeoffsJobStore.EnsureFolder(imported, "Arch");
-            string struc = SmartTakeoffsJobStore.EnsureFolder(imported, "Struct");
-            string others = SmartTakeoffsJobStore.EnsureFolder(_currentJob.PagesRoot, "--------others");
+            string imported = OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. imported");
+            string arch = OurPlaneCoreJobStore.EnsureFolder(imported, "Arch");
+            string struc = OurPlaneCoreJobStore.EnsureFolder(imported, "Struct");
+            string others = OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "--------others");
 
             IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot)
                 .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
@@ -2415,7 +2415,7 @@ public partial class MainWindow
                 }
 
                 string oldPath = page.FolderPath;
-                string movedPath = SmartTakeoffsJobStore.MoveNode(oldPath, target);
+                string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
                 reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
                 selectAfter ??= movedPath;
 
@@ -2427,9 +2427,9 @@ public partial class MainWindow
                     movedOthers++;
             }
 
-            SmartTakeoffsJobStore.SortChildren(arch, descending: false);
-            SmartTakeoffsJobStore.SortChildren(struc, descending: false);
-            SmartTakeoffsJobStore.SortChildren(others, descending: false);
+            OurPlaneCoreJobStore.SortChildren(arch, descending: false);
+            OurPlaneCoreJobStore.SortChildren(struc, descending: false);
+            OurPlaneCoreJobStore.SortChildren(others, descending: false);
             ReloadPagesTree(selectAfter ?? imported);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
             TxtStatus.Text = $"Sort A/S: Arch {movedArch}, Struct {movedStruct}, Others {movedOthers}, skipped {skipped}.";
@@ -2508,7 +2508,7 @@ public partial class MainWindow
                 }
 
                 string oldPath = page.FolderPath;
-                string movedPath = SmartTakeoffsJobStore.MoveNode(oldPath, target);
+                string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
                 reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
                 selectAfter ??= movedPath;
 
@@ -2524,10 +2524,10 @@ public partial class MainWindow
                     movedSections++;
             }
 
-            SmartTakeoffsJobStore.SortChildren(detailsStruct, descending: false);
-            SmartTakeoffsJobStore.SortChildren(detailsArch, descending: false);
-            SmartTakeoffsJobStore.SortChildren(units, descending: false);
-            SmartTakeoffsJobStore.SortChildren(sections, descending: false);
+            OurPlaneCoreJobStore.SortChildren(detailsStruct, descending: false);
+            OurPlaneCoreJobStore.SortChildren(detailsArch, descending: false);
+            OurPlaneCoreJobStore.SortChildren(units, descending: false);
+            OurPlaneCoreJobStore.SortChildren(sections, descending: false);
             int reorderedTop = ReorderRootSuffixPagesToTop(_currentJob.PagesRoot);
 
             ReloadPagesTree(selectAfter ?? _currentJob.PagesRoot);
@@ -2547,16 +2547,16 @@ public partial class MainWindow
         if (_currentJob == null)
             return "";
 
-        foreach (string child in SmartTakeoffsJobStore.GetOrderedChildDirectories(_currentJob.PagesRoot))
+        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(_currentJob.PagesRoot))
         {
-            if (!SmartTakeoffsJobStore.IsPageFolder(child) &&
-                string.Equals(SmartTakeoffsJobStore.DisplayName(child), displayName, StringComparison.OrdinalIgnoreCase))
+            if (!OurPlaneCoreJobStore.IsPageFolder(child) &&
+                string.Equals(OurPlaneCoreJobStore.DisplayName(child), displayName, StringComparison.OrdinalIgnoreCase))
             {
                 return child;
             }
         }
 
-        return SmartTakeoffsJobStore.EnsureFolder(_currentJob.PagesRoot, displayName);
+        return OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, displayName);
     }
 
     private string ClassifySuffixPageTarget(
@@ -2591,7 +2591,7 @@ public partial class MainWindow
 
         if (string.IsNullOrWhiteSpace(suffix) || first is not ('a' or 's'))
         {
-            metadata = SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath);
+            metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
         }
 
         if (string.IsNullOrWhiteSpace(suffix) && !string.IsNullOrWhiteSpace(metadata?.Suffix))
@@ -2608,12 +2608,12 @@ public partial class MainWindow
 
     private int ReorderRootSuffixPagesToTop(string pagesRoot)
     {
-        var children = SmartTakeoffsJobStore.GetOrderedChildDirectories(pagesRoot).ToList();
+        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(pagesRoot).ToList();
         var topPages = new List<string>();
         foreach (string suffix in PageSuffixTopOrder)
         {
             topPages.AddRange(children.Where(child =>
-                SmartTakeoffsJobStore.TryReadPage(child) is { } childPage &&
+                OurPlaneCoreJobStore.TryReadPage(child) is { } childPage &&
                 string.Equals(DetectPageSuffixSortInfo(childPage).Suffix, suffix, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -2628,7 +2628,7 @@ public partial class MainWindow
             .ToList();
 
         for (int i = 0; i < ordered.Count; i++)
-            SmartTakeoffsJobStore.SetOrderIndex(ordered[i], i);
+            OurPlaneCoreJobStore.SetOrderIndex(ordered[i], i);
         return topPages.Count;
     }
 
@@ -2802,7 +2802,7 @@ public partial class MainWindow
             return pages;
 
         return SheetManagerRows()
-            .Select(row => SmartTakeoffsJobStore.TryReadPage(row.PageFolder))
+            .Select(row => OurPlaneCoreJobStore.TryReadPage(row.PageFolder))
             .Where(page => page != null)
             .Cast<PageInfo>()
             .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
@@ -2811,7 +2811,7 @@ public partial class MainWindow
     }
 
     private static IReadOnlyList<SmartAiRequest> RunnableMetadataFallbackRequests(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<PageInfo> pages) =>
         MetadataFallbackRequestsForPages(job, pages)
             .Where(request => MetadataFallbackRequestStillNeeded(job, request, pages))
@@ -2840,7 +2840,7 @@ public partial class MainWindow
         int ran = 0;
         int saved = 0;
         var errors = new List<string>(initialErrors);
-        SmartTakeoffsJob job = _currentJob!;
+        OurPlaneCoreJob job = _currentJob!;
 
         foreach (SmartAiRequest request in requests)
         {
@@ -2915,7 +2915,7 @@ public partial class MainWindow
         SaveCurrentPageScale();
         TxtStatus.Text = $"Analyzing PDF metadata for {pages.Count} page(s)...";
 
-        SmartTakeoffsJob job = _currentJob;
+        OurPlaneCoreJob job = _currentJob;
         List<PdfMetadataPageResult> results = await Task.Run(() =>
         {
             var analyzed = new List<PdfMetadataPageResult>();
@@ -2973,7 +2973,7 @@ public partial class MainWindow
     }
 
     private void ApplyPdfMetadataResults(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<PdfMetadataPageResult> results,
         IReadOnlyList<PdfMetadataPreviewRow> rows)
     {
@@ -2995,7 +2995,7 @@ public partial class MainWindow
             }
 
             resultsByFolder.TryGetValue(NormalizePath(row.PageFolder), out PdfMetadataPageResult? result);
-            PageInfo? sourcePage = result?.Page ?? SmartTakeoffsJobStore.TryReadPage(row.PageFolder);
+            PageInfo? sourcePage = result?.Page ?? OurPlaneCoreJobStore.TryReadPage(row.PageFolder);
             if (sourcePage == null)
             {
                 failed++;
@@ -3003,11 +3003,11 @@ public partial class MainWindow
             }
 
             PdfSheetMetadata metadata = result?.Metadata
-                ?? SmartTakeoffsJobStore.ReadSourcePdfMetadata(sourcePage.FolderPath)
+                ?? OurPlaneCoreJobStore.ReadSourcePdfMetadata(sourcePage.FolderPath)
                 ?? CreateManualSheetMetadata(sourcePage);
 
             string currentPath = sourcePage.FolderPath;
-            string finalName = SmartTakeoffsJobStore.DisplayName(currentPath);
+            string finalName = OurPlaneCoreJobStore.DisplayName(currentPath);
             double finalScale = sourcePage.ScaleMetersPerPt;
 
             try
@@ -3035,9 +3035,9 @@ public partial class MainWindow
                     if (!string.IsNullOrWhiteSpace(proposedName) &&
                         !string.Equals(proposedName, finalName, StringComparison.OrdinalIgnoreCase))
                     {
-                        string renamedPath = SmartTakeoffsJobStore.RenameNode(currentPath, proposedName);
+                        string renamedPath = OurPlaneCoreJobStore.RenameNode(currentPath, proposedName);
                         currentPath = renamedPath;
-                        finalName = SmartTakeoffsJobStore.DisplayName(renamedPath);
+                        finalName = OurPlaneCoreJobStore.DisplayName(renamedPath);
                         renamed++;
                     }
                 }
@@ -3046,8 +3046,8 @@ public partial class MainWindow
                 if (string.IsNullOrWhiteSpace(metadata.Source))
                     metadata.Source = "manual";
 
-                SmartTakeoffsJobStore.WriteSourcePdfMetadata(currentPath, metadata);
-                if (SmartTakeoffsJobStore.TryReadPage(currentPath) is { } finalPage)
+                OurPlaneCoreJobStore.WriteSourcePdfMetadata(currentPath, metadata);
+                if (OurPlaneCoreJobStore.TryReadPage(currentPath) is { } finalPage)
                 {
                     var finalDecision = PdfSheetMetadataService.FinalDecision(finalPage, metadata, finalName, finalScale);
                     string outcome = (row.ApplyRename && !string.Equals(row.ProposedPageName, finalName, StringComparison.OrdinalIgnoreCase))
@@ -3121,7 +3121,7 @@ public partial class MainWindow
         metadata.ScaleText = metadata.SelectedScaleText;
         metadata.SelectedScaleRatio = scaleMetersPerPt / ptM;
         metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
-        SmartTakeoffsJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
+        OurPlaneCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
         return true;
     }
 
@@ -3215,7 +3215,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(parent))
             return false;
 
-        string target = Path.Combine(parent, SmartTakeoffsJobStore.SanitizeName(proposedName, 120));
+        string target = Path.Combine(parent, OurPlaneCoreJobStore.SanitizeName(proposedName, 120));
         return !string.Equals(NormalizePath(pageFolder), NormalizePath(target), StringComparison.OrdinalIgnoreCase) &&
                Directory.Exists(target);
     }
@@ -3299,13 +3299,13 @@ public partial class MainWindow
         if (!Directory.Exists(path))
             yield break;
 
-        if (SmartTakeoffsJobStore.TryReadPage(path) is { } page)
+        if (OurPlaneCoreJobStore.TryReadPage(path) is { } page)
         {
             yield return page;
             yield break;
         }
 
-        foreach (string child in SmartTakeoffsJobStore.GetOrderedChildDirectories(path))
+        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(path))
         {
             foreach (PageInfo pageInfo in CollectPagesUnder(child))
                 yield return pageInfo;
@@ -3314,7 +3314,7 @@ public partial class MainWindow
 
     private static void OpenSourcePdfMetadata(string pageFolder)
     {
-        string path = SmartTakeoffsJobStore.SourcePdfMetadataPath(pageFolder);
+        string path = OurPlaneCoreJobStore.SourcePdfMetadataPath(pageFolder);
         if (!File.Exists(path))
             return;
 
@@ -3436,7 +3436,7 @@ public partial class MainWindow
         {
             try
             {
-                PdfSheetMetadata? metadata = SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath);
+                PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
                 if (metadata == null)
                 {
                     PdfSheetMetadataService.TryAnalyzeAndSave(_currentJob, page, out metadata, out _);
@@ -3528,7 +3528,7 @@ public partial class MainWindow
     }
 
     private static IReadOnlyList<SmartAiRequest> MetadataFallbackRequestsForPages(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<PageInfo> pages) =>
         SmartContextStore.LoadAiRequests(job)
             .Where(request => string.Equals(request.Type, "pdf_sheet_metadata_fallback", StringComparison.OrdinalIgnoreCase))
@@ -3536,7 +3536,7 @@ public partial class MainWindow
             .OrderBy(request => request.CreatedAtUtc, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static bool HasDoneAiResponse(SmartTakeoffsJob job, SmartAiRequest request)
+    private static bool HasDoneAiResponse(OurPlaneCoreJob job, SmartAiRequest request)
     {
         SmartAiResponse? response = SmartContextStore.LoadAiResponse(job, request.Id);
         return response != null &&
@@ -3545,14 +3545,14 @@ public partial class MainWindow
     }
 
     private static bool MetadataFallbackRequestStillNeeded(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartAiRequest request,
         IReadOnlyList<PageInfo> pages) =>
         pages.Any(page =>
             MetadataFallbackRequestMatchesPage(job, request, page) &&
-            PdfSheetMetadataService.NeedsFallback(SmartTakeoffsJobStore.ReadSourcePdfMetadata(page.FolderPath)));
+            PdfSheetMetadataService.NeedsFallback(OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)));
 
-    private static bool MetadataFallbackRequestMatchesPage(SmartTakeoffsJob job, SmartAiRequest request, PageInfo page)
+    private static bool MetadataFallbackRequestMatchesPage(OurPlaneCoreJob job, SmartAiRequest request, PageInfo page)
     {
         string pageFolder = NormalizePath(page.FolderPath);
         string relativePageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);
@@ -3572,7 +3572,7 @@ public partial class MainWindow
         return string.Equals(request.Page, page.Name, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool HasExistingMetadataFallbackRequest(SmartTakeoffsJob job, PageInfo page)
+    private static bool HasExistingMetadataFallbackRequest(OurPlaneCoreJob job, PageInfo page)
     {
         string pageFolder = NormalizePath(page.FolderPath);
         string relativePageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);
@@ -3646,7 +3646,7 @@ public partial class MainWindow
             return false;
         if (payload.Entries.Count == 0 || !Directory.Exists(targetFolder))
             return false;
-        if (!IsPathInsidePagesRoot(targetFolder) || SmartTakeoffsJobStore.IsPageFolder(targetFolder))
+        if (!IsPathInsidePagesRoot(targetFolder) || OurPlaneCoreJobStore.IsPageFolder(targetFolder))
             return false;
 
         bool hasMovableEntry = false;
@@ -3656,7 +3656,7 @@ public partial class MainWindow
                 return false;
             if (!IsPathInsidePagesRoot(entry.SourcePath, allowRoot: false))
                 return false;
-            if (SmartTakeoffsJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
+            if (OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
                 return false;
 
             if (mode == PagesClipboardMode.Cut)
@@ -3774,7 +3774,7 @@ public partial class MainWindow
         var entries = paths
             .Where(path => IsPathInsidePagesRoot(path, allowRoot: false))
             .Where(Directory.Exists)
-            .Select(path => new PagesClipboardEntry(path, SmartTakeoffsJobStore.IsPageFolder(path)))
+            .Select(path => new PagesClipboardEntry(path, OurPlaneCoreJobStore.IsPageFolder(path)))
             .ToList();
 
         return NormalizeSelectedEntries(entries);
@@ -3795,7 +3795,7 @@ public partial class MainWindow
         var result = new List<PagesClipboardEntry>();
         foreach (var entry in distinct)
         {
-            if (result.Any(parent => SmartTakeoffsJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
+            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
                 continue;
             result.Add(entry);
         }
@@ -3907,7 +3907,7 @@ public partial class MainWindow
         RemovePageTabsForAffectedPath(affectedPath);
 
         if (_currentPage == null) return;
-        if (!SmartTakeoffsJobStore.IsSameOrDescendant(affectedPath, _currentPage.FolderPath))
+        if (!OurPlaneCoreJobStore.IsSameOrDescendant(affectedPath, _currentPage.FolderPath))
             return;
 
         _currentPage = null;

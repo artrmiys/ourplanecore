@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 internal sealed class ProjectFile
 {
@@ -41,10 +41,10 @@ internal sealed class ProjectFile
 
     public sealed record PtDto(float X, float Y);
 
-    // ── Path convention: <pdf>.smarttakeoffs.json ────────────────────────────
+    // ── Path convention: <pdf>.ourplanecore.json ────────────────────────────
 
     public static string PathFor(string pdfPath) =>
-        Path.ChangeExtension(pdfPath, null) + ".smarttakeoffs.json";
+        Path.ChangeExtension(pdfPath, null) + ".ourplanecore.json";
 
     private static string LegacyPathFor(string pdfPath) =>
         Path.ChangeExtension(pdfPath, null) + ".planswift.json";
@@ -61,7 +61,7 @@ internal sealed class ProjectFile
                 Id = item.Id,
                 Name = item.Name,
                 Color = item.Color,
-                MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType),
+                MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
                 IsJoistTakeoff = item.IsJoistTakeoff,
                 JoistType = item.JoistType,
                 JoistSpacingInches = item.JoistSpacingInches,
@@ -98,14 +98,14 @@ internal sealed class ProjectFile
         if (!File.Exists(path))
         {
             string legacyPath = LegacyPathFor(pdfPath);
-            if (!File.Exists(legacyPath)) return (0, SmartTakeoffs.UnitMode.Metric, []);
+            if (!File.Exists(legacyPath)) return (0, OurPlaneCore.UnitMode.Metric, []);
             path = legacyPath;
         }
 
         ProjectFile? pf;
         try   { pf = JsonSerializer.Deserialize<ProjectFile>(File.ReadAllText(path)); }
-        catch { return (0, SmartTakeoffs.UnitMode.Metric, []); }
-        if (pf == null) return (0, SmartTakeoffs.UnitMode.Metric, []);
+        catch { return (0, OurPlaneCore.UnitMode.Metric, []); }
+        if (pf == null) return (0, OurPlaneCore.UnitMode.Metric, []);
 
         var items = new List<TakeoffItem>();
         foreach (var dto in pf.Items)
@@ -115,7 +115,7 @@ internal sealed class ProjectFile
                 Id = dto.Id,
                 Name = dto.Name,
                 Color = dto.Color,
-                MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(dto.MeasurementType),
+                MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(dto.MeasurementType),
                 IsJoistTakeoff = dto.IsJoistTakeoff,
                 JoistType = dto.JoistType,
                 JoistSpacingInches = dto.JoistSpacingInches > 0 ? dto.JoistSpacingInches : 16,
@@ -137,10 +137,10 @@ internal sealed class ProjectFile
                     Points     = md.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                 });
             }
-            SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             items.Add(item);
         }
-        var unit = pf.UnitMode == "Imperial" ? SmartTakeoffs.UnitMode.Imperial : SmartTakeoffs.UnitMode.Metric;
+        var unit = pf.UnitMode == "Imperial" ? OurPlaneCore.UnitMode.Imperial : OurPlaneCore.UnitMode.Metric;
         return (pf.Scale, unit, items);
     }
 }

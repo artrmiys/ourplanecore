@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class SmartAiRunResult
 {
@@ -43,7 +43,7 @@ public static class OpenAiRequestRunner
     };
 
     public static async Task<SmartAiRunResult> RunAsync(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartAiRequest request,
         string apiKey,
         string model,
@@ -159,7 +159,7 @@ public static class OpenAiRequestRunner
         });
     }
 
-    private static string BuildPrompt(SmartTakeoffsJob job, SmartAiRequest request)
+    private static string BuildPrompt(OurPlaneCoreJob job, SmartAiRequest request)
     {
         if (string.Equals(request.Type, "pdf_sheet_metadata_fallback", StringComparison.OrdinalIgnoreCase))
             return BuildPdfSheetMetadataPrompt(job, request);
@@ -214,7 +214,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildRoofRecognitionPrompt(SmartTakeoffsJob job, SmartAiRequest request)
+    private static string BuildRoofRecognitionPrompt(OurPlaneCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Detect reviewable roof marker candidates from a construction-plan sheet crop.");
@@ -299,7 +299,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildFindSimilarMarkerPrompt(SmartTakeoffsJob job, SmartAiRequest request)
+    private static string BuildFindSimilarMarkerPrompt(OurPlaneCoreJob job, SmartAiRequest request)
     {
         SmartAiMarker? marker = FindSourceMarker(job, request);
         var sb = new StringBuilder();
@@ -400,7 +400,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static void AppendMarkerFeedbackContext(SmartTakeoffsJob job, SmartAiMarker marker, StringBuilder sb)
+    private static void AppendMarkerFeedbackContext(OurPlaneCoreJob job, SmartAiMarker marker, StringBuilder sb)
     {
         IReadOnlyList<SmartMarkerFeedbackRecord> feedback = SmartLearningStore.LoadProjectMarkerFeedback(job)
             .Where(record =>
@@ -432,7 +432,7 @@ public static class OpenAiRequestRunner
         }
     }
 
-    private static string BuildCropBookmarkPrompt(SmartTakeoffsJob job, SmartAiRequest request)
+    private static string BuildCropBookmarkPrompt(OurPlaneCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Analyze this bookmarked construction-plan crop.");
@@ -491,7 +491,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildPdfSheetMetadataPrompt(SmartTakeoffsJob job, SmartAiRequest request)
+    private static string BuildPdfSheetMetadataPrompt(OurPlaneCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are reading a construction sheet title block for Auto Rename / Auto Scale.");
@@ -542,7 +542,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static SmartAiMarker? FindSourceMarker(SmartTakeoffsJob job, SmartAiRequest request)
+    private static SmartAiMarker? FindSourceMarker(OurPlaneCoreJob job, SmartAiRequest request)
     {
         string markerId = ExtractSourceMarkerId(request.MeasurementSummary);
         if (string.IsNullOrWhiteSpace(markerId))
@@ -602,10 +602,10 @@ public static class OpenAiRequestRunner
             : Path.GetFullPath(Path.Combine(basePath, value));
     }
 
-    private static string? ResolveContextPath(SmartTakeoffsJob job, string value, string basePath) =>
+    private static string? ResolveContextPath(OurPlaneCoreJob job, string value, string basePath) =>
         ResolveContextPath(job.RootPath, value, basePath);
 
-    private static string SaveRawResponse(SmartTakeoffsJob job, SmartAiRequest request, string body)
+    private static string SaveRawResponse(OurPlaneCoreJob job, SmartAiRequest request, string body)
     {
         string path = Path.Combine(job.AIContextRoot, "responses", $"{request.Id}.openai.raw.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);

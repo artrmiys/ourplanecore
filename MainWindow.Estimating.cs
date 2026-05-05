@@ -7,9 +7,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -591,7 +591,7 @@ public partial class MainWindow
         var joistAreas = measurements
             .Where(measurement =>
                 measurement.JoistEnabled &&
-                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .ToList();
         if (joistAreas.Count == 0)
             return null;
@@ -636,7 +636,7 @@ public partial class MainWindow
         if (item == null)
             return null;
 
-        item.MeasurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
@@ -694,7 +694,7 @@ public partial class MainWindow
             return;
 
         measurement.Name = name.Trim();
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -712,7 +712,7 @@ public partial class MainWindow
 
         measurement.Name = name.Trim();
         measurement.Notes = notes.Trim();
-        SmartTakeoffsJobStore.SaveTakeoffItem(item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -747,7 +747,7 @@ public partial class MainWindow
             foreach (Measurement measurement in group.Select(node => node.Measurement).Distinct())
                 measurement.Notes = notes.Trim();
 
-            SmartTakeoffsJobStore.SaveTakeoffItem(group.Key);
+            OurPlaneCoreJobStore.SaveTakeoffItem(group.Key);
             RefreshTreeItem(group.Key);
         }
 

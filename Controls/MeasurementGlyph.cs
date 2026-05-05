@@ -5,7 +5,7 @@ using System.Windows.Media;
 using SkiaSharp;
 using WpfShapes = System.Windows.Shapes;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 // Single source of truth for measurement-type icons.
 // Glyph is drawn filled in the takeoff color with a darker stroke around it,

@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -75,7 +75,7 @@ public partial class MainWindow
 
     private string SheetLegendQuantityText(TakeoffItem item, IReadOnlyList<Measurement> measurements)
     {
-        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
             : _viewport.ScaleMetersPerPt;
@@ -290,7 +290,7 @@ public partial class MainWindow
         // colored square, the glyph itself carries the color identity.
         return Controls.MeasurementGlyph.CreateWpf(
             Controls.MeasurementGlyph.Parse(
-                SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType),
+                OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
                 joist: item.IsJoistArea),
             swatchBrush,
             size,
@@ -396,11 +396,11 @@ public partial class MainWindow
 
     private string ResolveTakeoffFolderDefaultMeasurementType(string folderPath, string fallback)
     {
-        string fallbackType = SmartTakeoffsJobStore.NormalizeMeasurementType(fallback);
+        string fallbackType = OurPlaneCoreJobStore.NormalizeMeasurementType(fallback);
         foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
         {
             if (!string.IsNullOrWhiteSpace(properties.DefaultMeasurementType))
-                return SmartTakeoffsJobStore.NormalizeMeasurementType(properties.DefaultMeasurementType);
+                return OurPlaneCoreJobStore.NormalizeMeasurementType(properties.DefaultMeasurementType);
         }
 
         return fallbackType;
@@ -470,7 +470,7 @@ public partial class MainWindow
         }
 
         if (changed)
-            SmartTakeoffsJobStore.SaveTakeoffItem(item);
+            OurPlaneCoreJobStore.SaveTakeoffItem(item);
     }
 
     private IEnumerable<TakeoffFolderProperties> EnumerateTakeoffFolderProperties(string folderPath)
@@ -481,7 +481,7 @@ public partial class MainWindow
         string? current = folderPath;
         while (!string.IsNullOrWhiteSpace(current) &&
                Directory.Exists(current) &&
-               SmartTakeoffsJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, current))
+               OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, current))
         {
             if (TakeoffFolderPropertiesStore.TryLoad(current) != null)
                 yield return TakeoffFolderPropertiesStore.Load(current);
@@ -542,7 +542,7 @@ public partial class MainWindow
             return;
         }
 
-        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
         string typeTitle = TakeoffTypeDisplay(_activeItem);
         string total = _activeItem.Measurements.Count == 0
             ? "no measurements"
@@ -592,7 +592,7 @@ public partial class MainWindow
     {
         string title = MeasurementTypeTitle(measurementType);
         if (_activeItem != null &&
-            SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != measurementType)
+            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != measurementType)
             return $"{_activeItem.Name} - {title}";
         if (_currentPage != null)
             return $"{_currentPage.Name} {title}";
@@ -617,7 +617,7 @@ public partial class MainWindow
     }
 
     private static string MeasurementTypeTitle(string measurementType) =>
-        SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "Count",
             "area" => "Area",
@@ -628,7 +628,7 @@ public partial class MainWindow
         item.IsJoistArea ? "Joist" : MeasurementTypeTitle(item.MeasurementType);
 
     private static string MeasurementTypeSign(string measurementType) =>
-        SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "○",
             "area" => "□",
@@ -653,7 +653,7 @@ public partial class MainWindow
     private static FrameworkElement CreateTakeoffTypeIcon(TakeoffItem item, double size, Thickness margin) =>
         Controls.MeasurementGlyph.CreateWpf(
             Controls.MeasurementGlyph.Parse(
-                SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType),
+                OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
                 joist: item.IsJoistArea),
             BrushFromHex(item.Color, Brushes.Gray),
             size,
@@ -661,7 +661,7 @@ public partial class MainWindow
 
     private static FrameworkElement CreateMeasurementTypeIcon(string kind, Brush brush, double size, Thickness margin) =>
         Controls.MeasurementGlyph.CreateWpf(
-            Controls.MeasurementGlyph.Parse(SmartTakeoffsJobStore.NormalizeMeasurementType(kind),
+            Controls.MeasurementGlyph.Parse(OurPlaneCoreJobStore.NormalizeMeasurementType(kind),
                 joist: kind.Equals("joist", StringComparison.OrdinalIgnoreCase)),
             brush,
             size,
@@ -674,7 +674,7 @@ public partial class MainWindow
         measurement.JoistEnabled ? UnitText("line") : UnitText(measurement.MType);
 
     private static string CsvMeasurementType(TakeoffItem item) =>
-        item.IsJoistArea ? "joist" : SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.IsJoistArea ? "joist" : OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
 
     private TreeViewItem? FindFirstTakeoffTreeItem(ItemsControl parent)
     {
@@ -759,7 +759,7 @@ public partial class MainWindow
         }
 
         return _takeoffItems
-            .Where(item => entries.Any(entry => SmartTakeoffsJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
+            .Where(item => entries.Any(entry => OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
             .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
@@ -771,7 +771,7 @@ public partial class MainWindow
             return [];
 
         return _takeoffItems
-            .Where(item => SmartTakeoffsJobStore.IsSameOrDescendant(folderPath, item.FolderPath))
+            .Where(item => OurPlaneCoreJobStore.IsSameOrDescendant(folderPath, item.FolderPath))
             .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
@@ -1140,7 +1140,7 @@ public partial class MainWindow
             foreach (Measurement measurement in group.Select(node => node.Measurement).Distinct())
                 group.Key.Measurements.Remove(measurement);
 
-            SmartTakeoffsJobStore.SaveTakeoffItem(group.Key);
+            OurPlaneCoreJobStore.SaveTakeoffItem(group.Key);
             RefreshTreeItem(group.Key);
         }
 
@@ -1168,7 +1168,7 @@ public partial class MainWindow
     private static string DefaultSectionName(TakeoffItem item, Measurement measurement, int index)
     {
         string page = SectionPageName(measurement);
-        string entry = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
+        string entry = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
         return string.IsNullOrWhiteSpace(page)
             ? $"{entry} {index + 1}"
             : $"{entry} {index + 1} - {page}";
@@ -1177,20 +1177,20 @@ public partial class MainWindow
     private static string SectionPageName(Measurement measurement) =>
         string.IsNullOrWhiteSpace(measurement.PageFolder)
             ? ""
-            : SmartTakeoffsJobStore.DisplayName(measurement.PageFolder);
+            : OurPlaneCoreJobStore.DisplayName(measurement.PageFolder);
 
     private static string SectionCountLabel(TakeoffItem item) =>
-        SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
+        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
             ? item.Measurements.Count == 1 ? "1 count" : $"{item.Measurements.Count} counts"
             : item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
 
     private static string MeasurementEntryTitle(TakeoffItem item) =>
-        SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
+        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
 
     private static string MeasurementEntryTitlePlural(IEnumerable<TakeoffMeasurementNode> nodes)
     {
         var types = nodes
-            .Select(node => SmartTakeoffsJobStore.NormalizeMeasurementType(node.Item.MeasurementType))
+            .Select(node => OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (types.Count == 1)
@@ -1214,11 +1214,11 @@ public partial class MainWindow
             Measurement m = item.Measurements[i];
             string page = string.IsNullOrWhiteSpace(m.PageFolder)
                 ? "unknown page"
-                : SmartTakeoffsJobStore.DisplayName(m.PageFolder);
+                : OurPlaneCoreJobStore.DisplayName(m.PageFolder);
             string name = string.IsNullOrWhiteSpace(m.Name)
-                ? (SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
+                ? (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
                 : m.Name;
-            string detail = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
+            string detail = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
                 ? "1 count"
                 : $"{m.Points.Count} point(s)";
             lines.Add($"{name}: {page}, {detail}");
@@ -1243,7 +1243,7 @@ public partial class MainWindow
 
     private string QuantityText(TakeoffItem item)
     {
-        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
         if (item.IsJoistArea)
             return QuantityText("line", value);
@@ -1252,7 +1252,7 @@ public partial class MainWindow
 
     private string QuantityText(Measurement measurement)
     {
-        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType);
+        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
         double value = measurement.Value(_viewport.ScaleMetersPerPt);
         if (measurement.JoistEnabled)
             return QuantityText("line", value);
@@ -1276,7 +1276,7 @@ public partial class MainWindow
 
     private string UnitText(string measurementType)
     {
-        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType);
+        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
         return mt switch
         {
             "line" => _viewport.UnitMode == UnitMode.Imperial ? "ft" : "m",
@@ -1309,7 +1309,7 @@ public partial class MainWindow
 
     private double EstimateQuantity(TakeoffItem item)
     {
-        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
         return mt switch
         {
@@ -1322,7 +1322,7 @@ public partial class MainWindow
 
     private double EstimateQuantity(TakeoffItem item, IReadOnlyList<Measurement> measurements)
     {
-        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
             : _viewport.ScaleMetersPerPt;

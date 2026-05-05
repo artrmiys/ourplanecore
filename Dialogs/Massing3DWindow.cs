@@ -8,11 +8,11 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public sealed class Massing3DWindow : Window
 {
-    private readonly SmartTakeoffsJob _job;
+    private readonly OurPlaneCoreJob _job;
     private SmartMassingDraft? _draft;
     private IReadOnlyList<SmartAiMarker> _markers;
     private readonly Viewport3D _viewport;
@@ -37,7 +37,7 @@ public sealed class Massing3DWindow : Window
     private string _selectedMarkerId = "";
 
     public Massing3DWindow(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingDraft? draft,
         IReadOnlyList<SmartAiMarker> markers)
     {

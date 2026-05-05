@@ -5,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public sealed class TakeoffFolderPropertiesDialog : Window
 {

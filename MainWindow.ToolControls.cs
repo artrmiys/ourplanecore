@@ -5,9 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -203,7 +203,7 @@ public partial class MainWindow
             return false;
         }
 
-        string mtype = SmartTakeoffsJobStore.NormalizeMeasurementType(tool);
+        string mtype = OurPlaneCoreJobStore.NormalizeMeasurementType(tool);
         if (mtype is "line" or "area" && _currentPage.ScaleMetersPerPt <= 0)
         {
             MessageBox.Show(
@@ -216,7 +216,7 @@ public partial class MainWindow
 
         if (!forceNewTakeoff &&
             _activeItem != null &&
-            SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == mtype)
+            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == mtype)
         {
             _activeItem.MeasurementType = mtype;
             _viewport.ActiveColor = _activeItem.Color;

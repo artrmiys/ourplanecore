@@ -1,4 +1,4 @@
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public enum UnitMode { Metric, Imperial }
 

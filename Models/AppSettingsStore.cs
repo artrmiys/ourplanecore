@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class AppSettings
 {
@@ -82,7 +82,7 @@ public static class AppSettingsStore
         get
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            return Path.Combine(appData, "SmartTakeoffs", "settings.json");
+            return Path.Combine(appData, "OurPlaneCore", "settings.json");
         }
     }
 
@@ -412,13 +412,13 @@ public static class AppSettingsStore
 
     public static OpenAiModelStatus GetOpenAiModelStatus(AppSettings settings)
     {
-        string? envModel = Environment.GetEnvironmentVariable("SMARTTAKEOFFS_OPENAI_MODEL", EnvironmentVariableTarget.Process);
+        string? envModel = Environment.GetEnvironmentVariable("OURPLANECORE_OPENAI_MODEL", EnvironmentVariableTarget.Process);
         if (!string.IsNullOrWhiteSpace(envModel))
         {
             return new OpenAiModelStatus
             {
                 Model = NormalizeOpenAiModel(envModel),
-                Source = "SMARTTAKEOFFS_OPENAI_MODEL process environment",
+                Source = "OURPLANECORE_OPENAI_MODEL process environment",
             };
         }
 

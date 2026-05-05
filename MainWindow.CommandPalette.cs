@@ -4,9 +4,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -47,7 +47,7 @@ public partial class MainWindow
         Add("file.open", "Open Job", "File", "Ctrl+O", "Open the internal job picker.");
         Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
-        Add("file.newJob", "New Job", "File", "", "Create a new SmartTakeoffs job folder.");
+        Add("file.newJob", "New Job", "File", "", "Create a new OurPlaneCore job folder.");
         Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a small local sample job.");
         Add("file.importPdf", "Import PDF", "File", "", "Import PDF pages into the current job.", hasJob, "Open or create a job first.");
         Add("file.exportPdf", "Export PDF", "File", "", "Export selected/all sheets to a PDF.", hasJob, "Open or create a job first.");

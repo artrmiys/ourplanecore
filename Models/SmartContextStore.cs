@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class SmartProjectContext
 {
@@ -496,7 +496,7 @@ public static class SmartContextStore
         get
         {
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(localAppData, "SmartTakeoffs");
+            return Path.Combine(localAppData, "OurPlaneCore");
         }
     }
 
@@ -542,10 +542,10 @@ public static class SmartContextStore
         return context;
     }
 
-    public static IReadOnlyList<string> LoadHiddenMarkerTypes(SmartTakeoffsJob job) =>
+    public static IReadOnlyList<string> LoadHiddenMarkerTypes(OurPlaneCoreJob job) =>
         EnsureProjectContext(job.RootPath, job.Name).HiddenMarkerTypes.ToList();
 
-    public static void SaveHiddenMarkerTypes(SmartTakeoffsJob job, IEnumerable<string> hiddenMarkerTypes)
+    public static void SaveHiddenMarkerTypes(OurPlaneCoreJob job, IEnumerable<string> hiddenMarkerTypes)
     {
         SmartProjectContext context = EnsureProjectContext(job.RootPath, job.Name);
         context.HiddenMarkerTypes = NormalizeMarkerTypeList(hiddenMarkerTypes);
@@ -553,10 +553,10 @@ public static class SmartContextStore
         SaveProjectContext(job.RootPath, context);
     }
 
-    public static SmartObservation AddManualObservation(SmartTakeoffsJob job, PageInfo? page, string text) =>
+    public static SmartObservation AddManualObservation(OurPlaneCoreJob job, PageInfo? page, string text) =>
         AddObservation(job, page, "manual", text);
 
-    public static SmartObservation AddObservation(SmartTakeoffsJob job, PageInfo? page, string type, string text)
+    public static SmartObservation AddObservation(OurPlaneCoreJob job, PageInfo? page, string type, string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Observation text is required.", nameof(text));
@@ -585,7 +585,7 @@ public static class SmartContextStore
     }
 
     public static SmartAiRequest AddAiRequest(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         PageInfo? page,
         SmartObservation observation,
         string type,
@@ -603,8 +603,8 @@ public static class SmartContextStore
         if (page != null)
         {
             pageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);
-            string manifestPath = SmartTakeoffsJobStore.PageLayersJsonPath(page.FolderPath);
-            PageLayerManifest? manifest = SmartTakeoffsJobStore.ReadPageLayerManifest(page.FolderPath);
+            string manifestPath = OurPlaneCoreJobStore.PageLayersJsonPath(page.FolderPath);
+            PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath);
             if (manifest != null && File.Exists(manifestPath))
                 layerManifestPath = Path.GetRelativePath(job.RootPath, manifestPath);
 
@@ -654,7 +654,7 @@ public static class SmartContextStore
     }
 
     public static SmartAiMarker SaveAiMarker(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         PageInfo page,
         SmartObservation observation,
         string markerType,
@@ -713,7 +713,7 @@ public static class SmartContextStore
 
     private static List<PdfLayerInfo> PageLayers(PageInfo page)
     {
-        PageLayerManifest? manifest = SmartTakeoffsJobStore.ReadPageLayerManifest(page.FolderPath);
+        PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath);
         IEnumerable<PdfLayerInfo> layerSource = manifest?.Layers ?? page.PdfLayers;
         return layerSource
             .OrderBy(layer => layer.Number)
@@ -726,7 +726,7 @@ public static class SmartContextStore
             .ToList();
     }
 
-    public static SmartAiMarker? LoadAiMarker(SmartTakeoffsJob job, string markerId)
+    public static SmartAiMarker? LoadAiMarker(OurPlaneCoreJob job, string markerId)
     {
         if (string.IsNullOrWhiteSpace(markerId))
             return null;
@@ -734,7 +734,7 @@ public static class SmartContextStore
         return LoadJson<SmartAiMarker>(AiMarkerPath(job, markerId));
     }
 
-    public static void SaveAiMarker(SmartTakeoffsJob job, SmartAiMarker marker)
+    public static void SaveAiMarker(OurPlaneCoreJob job, SmartAiMarker marker)
     {
         if (string.IsNullOrWhiteSpace(marker.Id))
             throw new InvalidOperationException("AI marker id is required.");
@@ -752,7 +752,7 @@ public static class SmartContextStore
         }
     }
 
-    public static bool DeleteAiMarker(SmartTakeoffsJob job, string markerId)
+    public static bool DeleteAiMarker(OurPlaneCoreJob job, string markerId)
     {
         if (string.IsNullOrWhiteSpace(markerId))
             return false;
@@ -772,7 +772,7 @@ public static class SmartContextStore
         }
     }
 
-    public static IReadOnlyList<SmartAiMarker> LoadAiMarkers(SmartTakeoffsJob job)
+    public static IReadOnlyList<SmartAiMarker> LoadAiMarkers(OurPlaneCoreJob job)
     {
         string markersDir = Path.Combine(ContextRoot(job.RootPath), "markers");
         if (!Directory.Exists(markersDir))
@@ -786,11 +786,11 @@ public static class SmartContextStore
             .ToList();
     }
 
-    public static string AiMarkerPath(SmartTakeoffsJob job, string markerId) =>
+    public static string AiMarkerPath(OurPlaneCoreJob job, string markerId) =>
         Path.Combine(ContextRoot(job.RootPath), "markers", $"{markerId}.json");
 
     public static SmartAiMarkerSet SaveAiMarkerSet(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         string name,
         string description,
         string typeFilter,
@@ -836,7 +836,7 @@ public static class SmartContextStore
         return set;
     }
 
-    public static void SaveAiMarkerSet(SmartTakeoffsJob job, SmartAiMarkerSet set)
+    public static void SaveAiMarkerSet(OurPlaneCoreJob job, SmartAiMarkerSet set)
     {
         if (string.IsNullOrWhiteSpace(set.Id))
             throw new ArgumentException("Marker set id is required.", nameof(set));
@@ -873,7 +873,7 @@ public static class SmartContextStore
         }
     }
 
-    public static IReadOnlyList<SmartAiMarkerSet> LoadAiMarkerSets(SmartTakeoffsJob job)
+    public static IReadOnlyList<SmartAiMarkerSet> LoadAiMarkerSets(OurPlaneCoreJob job)
     {
         string setsDir = Path.Combine(ContextRoot(job.RootPath), "marker_sets");
         if (!Directory.Exists(setsDir))
@@ -888,10 +888,10 @@ public static class SmartContextStore
             .ToList();
     }
 
-    public static string AiMarkerSetPath(SmartTakeoffsJob job, string markerSetId) =>
+    public static string AiMarkerSetPath(OurPlaneCoreJob job, string markerSetId) =>
         Path.Combine(ContextRoot(job.RootPath), "marker_sets", $"{markerSetId}.json");
 
-    public static bool DeleteAiMarkerSet(SmartTakeoffsJob job, string markerSetId)
+    public static bool DeleteAiMarkerSet(OurPlaneCoreJob job, string markerSetId)
     {
         if (string.IsNullOrWhiteSpace(markerSetId))
             return false;
@@ -912,7 +912,7 @@ public static class SmartContextStore
     }
 
     public static string ExportAiMarkersContext(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<SmartAiMarker> markers,
         IReadOnlyList<string> hiddenMarkerTypes,
         string typeFilter,
@@ -961,7 +961,7 @@ public static class SmartContextStore
     }
 
     private static List<SmartMarkerFeedbackRecord> LoadRelevantMarkerFeedback(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<SmartAiMarker> markers)
     {
         if (markers.Count == 0)
@@ -1029,10 +1029,10 @@ public static class SmartContextStore
     private static string MarkerQualityKey(string type, string sampleKind) =>
         $"{type.Trim()}|{sampleKind.Trim()}";
 
-    public static string AiMarkersContextExportPath(SmartTakeoffsJob job) =>
+    public static string AiMarkersContextExportPath(OurPlaneCoreJob job) =>
         Path.Combine(ContextRoot(job.RootPath), "exports", "markers_context.json");
 
-    public static SmartAiCropBookmark SaveCropBookmark(SmartTakeoffsJob job, SmartAiCropBookmark bookmark)
+    public static SmartAiCropBookmark SaveCropBookmark(OurPlaneCoreJob job, SmartAiCropBookmark bookmark)
     {
         if (string.IsNullOrWhiteSpace(bookmark.CropPath))
             throw new InvalidOperationException("Crop bookmark path is required.");
@@ -1064,7 +1064,7 @@ public static class SmartContextStore
         return bookmark;
     }
 
-    public static SmartAiCropBookmark? LoadCropBookmark(SmartTakeoffsJob job, string bookmarkId)
+    public static SmartAiCropBookmark? LoadCropBookmark(OurPlaneCoreJob job, string bookmarkId)
     {
         if (string.IsNullOrWhiteSpace(bookmarkId))
             return null;
@@ -1072,7 +1072,7 @@ public static class SmartContextStore
         return LoadJson<SmartAiCropBookmark>(CropBookmarkPath(job, bookmarkId));
     }
 
-    public static IReadOnlyList<SmartAiCropBookmark> LoadCropBookmarks(SmartTakeoffsJob job)
+    public static IReadOnlyList<SmartAiCropBookmark> LoadCropBookmarks(OurPlaneCoreJob job)
     {
         string bookmarksDir = Path.Combine(ContextRoot(job.RootPath), "crop_bookmarks");
         if (!Directory.Exists(bookmarksDir))
@@ -1086,7 +1086,7 @@ public static class SmartContextStore
             .ToList();
     }
 
-    public static SmartAiCropBookmark? FindCropBookmarkByObservation(SmartTakeoffsJob job, string observationId)
+    public static SmartAiCropBookmark? FindCropBookmarkByObservation(OurPlaneCoreJob job, string observationId)
     {
         if (string.IsNullOrWhiteSpace(observationId))
             return null;
@@ -1095,10 +1095,10 @@ public static class SmartContextStore
             string.Equals(bookmark.SourceObservationId, observationId, StringComparison.OrdinalIgnoreCase));
     }
 
-    public static string CropBookmarkPath(SmartTakeoffsJob job, string bookmarkId) =>
+    public static string CropBookmarkPath(OurPlaneCoreJob job, string bookmarkId) =>
         Path.Combine(ContextRoot(job.RootPath), "crop_bookmarks", $"{bookmarkId}.json");
 
-    public static SmartAiRequest? LoadAiRequest(SmartTakeoffsJob job, string requestId)
+    public static SmartAiRequest? LoadAiRequest(OurPlaneCoreJob job, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
@@ -1107,7 +1107,7 @@ public static class SmartContextStore
         return LoadJson<SmartAiRequest>(path);
     }
 
-    public static SmartAiResponse? LoadAiResponse(SmartTakeoffsJob job, string requestId)
+    public static SmartAiResponse? LoadAiResponse(OurPlaneCoreJob job, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
@@ -1116,7 +1116,7 @@ public static class SmartContextStore
         return LoadJson<SmartAiResponse>(path);
     }
 
-    public static SmartAiActionDraft? LoadAiActionDraft(SmartTakeoffsJob job, string requestId)
+    public static SmartAiActionDraft? LoadAiActionDraft(OurPlaneCoreJob job, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
@@ -1124,10 +1124,10 @@ public static class SmartContextStore
         return LoadJson<SmartAiActionDraft>(AiActionDraftPath(job, requestId));
     }
 
-    public static string AiActionDraftPath(SmartTakeoffsJob job, string requestId) =>
+    public static string AiActionDraftPath(OurPlaneCoreJob job, string requestId) =>
         Path.Combine(ContextRoot(job.RootPath), "actions", $"{requestId}.json");
 
-    public static void SaveAiActionDraft(SmartTakeoffsJob job, SmartAiActionDraft draft)
+    public static void SaveAiActionDraft(OurPlaneCoreJob job, SmartAiActionDraft draft)
     {
         draft.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
         string path = AiActionDraftPath(job, draft.RequestId);
@@ -1142,7 +1142,7 @@ public static class SmartContextStore
         }
     }
 
-    public static IReadOnlyList<SmartAiRequest> LoadAiRequests(SmartTakeoffsJob job)
+    public static IReadOnlyList<SmartAiRequest> LoadAiRequests(OurPlaneCoreJob job)
     {
         string requestsDir = Path.Combine(ContextRoot(job.RootPath), "requests");
         if (!Directory.Exists(requestsDir))
@@ -1156,7 +1156,7 @@ public static class SmartContextStore
             .ToList();
     }
 
-    public static void SaveAiRequest(SmartTakeoffsJob job, SmartAiRequest request)
+    public static void SaveAiRequest(OurPlaneCoreJob job, SmartAiRequest request)
     {
         request.ContextCropPaths = NormalizeRelativePathList(request.ContextCropPaths);
         request.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
@@ -1172,7 +1172,7 @@ public static class SmartContextStore
     }
 
     public static SmartAiResponse SaveAiResponse(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartAiRequest request,
         string status,
         string outputText,
@@ -1237,7 +1237,7 @@ public static class SmartContextStore
     }
 
     public static SmartAiActionDraft SaveAiActionDraftFromResponse(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartAiRequest request,
         SmartAiResponse response)
     {

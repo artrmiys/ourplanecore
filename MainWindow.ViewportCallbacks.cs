@@ -8,10 +8,10 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -381,7 +381,7 @@ public partial class MainWindow
         }
     }
 
-    private static bool MarkerBelongsToPage(SmartAiMarker marker, PageInfo page, SmartTakeoffsJob job)
+    private static bool MarkerBelongsToPage(SmartAiMarker marker, PageInfo page, OurPlaneCoreJob job)
     {
         if (string.Equals(marker.Page, page.Name, StringComparison.OrdinalIgnoreCase))
             return true;

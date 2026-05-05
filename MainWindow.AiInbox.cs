@@ -13,7 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -804,7 +804,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(bookmark.PageFolder)
                 ? bookmark.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, bookmark.PageFolder));
-            PageInfo? page = SmartTakeoffsJobStore.TryReadPage(folder);
+            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return page;
         }

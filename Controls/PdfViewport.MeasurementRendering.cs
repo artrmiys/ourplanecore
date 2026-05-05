@@ -8,12 +8,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using SmartTakeoffs;
+using OurPlaneCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -116,7 +116,7 @@ public sealed partial class PdfViewport
 
     private void DrawPageAnnotation(SKCanvas canvas, PageAnnotation annotation)
     {
-        string kind = SmartTakeoffsJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         SKColor color = GetCachedColor(annotation.Color, new SKColor(0x15, 0x65, 0xC0));
         using var stroke = new SKPaint
         {

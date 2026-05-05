@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -168,7 +168,7 @@ public partial class MainWindow
                 if (options.IncludeMeasurements)
                     DrawPdfExportMeasurements(canvas, pageItems, page, options.UnitMode);
                 if (options.IncludeAnnotations)
-                    DrawPdfExportAnnotations(canvas, SmartTakeoffsJobStore.LoadPageAnnotations(page.FolderPath), page.ScaleMetersPerPt, options.UnitMode);
+                    DrawPdfExportAnnotations(canvas, OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath), page.ScaleMetersPerPt, options.UnitMode);
                 if (options.IncludeLegend)
                     DrawPdfExportLegend(canvas, render.WidthPt, render.HeightPt, pageItems, page, options);
 
@@ -206,7 +206,7 @@ public partial class MainWindow
     {
         foreach (PageAnnotation annotation in annotations)
         {
-            string kind = SmartTakeoffsJobStore.NormalizePageAnnotationKind(annotation.Kind);
+            string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
             if (annotation.Points.Count < 2)
                 continue;
 
@@ -314,7 +314,7 @@ public partial class MainWindow
         double pageScaleMetersPerPt,
         UnitMode unitMode)
     {
-        string type = SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType);
+        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
         if (measurement.Points.Count == 0)
             return;
 
@@ -657,7 +657,7 @@ public partial class MainWindow
         PageInfo page,
         UnitMode unitMode)
     {
-        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = page.ScaleMetersPerPt;
 
         if (measurementType == "point")

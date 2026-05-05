@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -30,7 +30,7 @@ public partial class MainWindow
         {
             TakeoffItem? item = FindTakeoffItemForMeasurement(measurement);
             entries.Add(new MeasurementClipboardEntry(
-                SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType),
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
                 measurement.Name,
                 measurement.Notes,
                 measurement.Color,
@@ -96,7 +96,7 @@ public partial class MainWindow
             {
                 foreach (TakeoffItem item in changedItems)
                 {
-                    SmartTakeoffsJobStore.SaveTakeoffItem(item);
+                    OurPlaneCoreJobStore.SaveTakeoffItem(item);
                     RefreshTreeItem(item);
                 }
             }
@@ -156,7 +156,7 @@ public partial class MainWindow
 
     private static bool MeasurementTypeRequiresScale(string measurementType)
     {
-        string normalized = SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType);
+        string normalized = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
         return normalized is "line" or "area";
     }
 
@@ -184,7 +184,7 @@ public partial class MainWindow
         MeasurementPasteMode mode,
         Dictionary<string, TakeoffItem> createdTargets)
     {
-        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(entry.MeasurementType);
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
         if (mode == MeasurementPasteMode.SameTakeoffs)
         {
             TakeoffItem? sourceItem = FindTakeoffItemByFolder(entry.SourceTakeoffFolder, measurementType);
@@ -226,7 +226,7 @@ public partial class MainWindow
 
         return new Measurement
         {
-            MType = SmartTakeoffsJobStore.NormalizeMeasurementType(entry.MeasurementType),
+            MType = OurPlaneCoreJobStore.NormalizeMeasurementType(entry.MeasurementType),
             Name = entry.MeasurementName,
             Notes = entry.MeasurementNotes,
             Color = target.Color,
@@ -313,12 +313,12 @@ public partial class MainWindow
 
         string normalizedType = string.IsNullOrWhiteSpace(measurementType)
             ? ""
-            : SmartTakeoffsJobStore.NormalizeMeasurementType(measurementType);
+            : OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
 
         return _takeoffItems.FirstOrDefault(item =>
             string.Equals(item.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase) &&
             (string.IsNullOrWhiteSpace(normalizedType) ||
-             SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == normalizedType));
+             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == normalizedType));
     }
 
     private void QueueTakeoffAutosave(TakeoffItem item)
@@ -351,7 +351,7 @@ public partial class MainWindow
         try
         {
             EnsureTakeoffItemFolder(item);
-            SmartTakeoffsJobStore.SaveTakeoffItem(item);
+            OurPlaneCoreJobStore.SaveTakeoffItem(item);
         }
         catch (Exception ex)
         {

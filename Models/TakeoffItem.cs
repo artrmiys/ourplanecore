@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class TakeoffItem
 {
@@ -22,12 +22,12 @@ public sealed class TakeoffItem
     public List<Measurement> Measurements { get; } = [];
 
     public bool IsJoistArea =>
-        IsJoistTakeoff && SmartTakeoffsJobStore.NormalizeMeasurementType(MeasurementType) == "area";
+        IsJoistTakeoff && OurPlaneCoreJobStore.NormalizeMeasurementType(MeasurementType) == "area";
 
     public bool HasPendingJoistDirections =>
         IsJoistArea &&
         Measurements.Any(measurement =>
-            SmartTakeoffsJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
             !measurement.JoistDirectionLocked);
 
     public double Total(double fallbackScaleMetersPerPt) =>
@@ -49,7 +49,7 @@ public sealed class TakeoffItem
         }
 
         double v = Total(fallbackScaleMetersPerPt);
-        string mt = SmartTakeoffsJobStore.NormalizeMeasurementType(MeasurementType);
+        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(MeasurementType);
         return mt switch
         {
             "line" => Units.FormatLength(v, unit),

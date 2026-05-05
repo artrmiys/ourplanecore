@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 public sealed class AiActionTargetOption
 {
@@ -74,7 +74,7 @@ public sealed class AiActionReviewRow
                     : "line";
         }
 
-        return SmartTakeoffsJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
+        return OurPlaneCoreJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
     }
 }
 

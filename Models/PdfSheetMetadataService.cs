@@ -8,7 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class PdfSheetMetadata
 {
@@ -262,7 +262,7 @@ public static class PdfSheetMetadataService
     }
 
     public static bool TryAnalyzePage(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error)
@@ -277,7 +277,7 @@ public static class PdfSheetMetadataService
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error,
-        SmartTakeoffsJob? job = null)
+        OurPlaneCoreJob? job = null)
     {
         metadata = new PdfSheetMetadata();
         error = "";
@@ -303,7 +303,7 @@ public static class PdfSheetMetadataService
     }
 
     public static bool TryAnalyzeAndSave(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error)
@@ -311,7 +311,7 @@ public static class PdfSheetMetadataService
         if (!TryAnalyzePage(job, page, out metadata, out error))
             return false;
 
-        SmartTakeoffsJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
+        OurPlaneCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
         SmartLearningStore.AppendSheetFeedback(
             job,
             page,
@@ -320,7 +320,7 @@ public static class PdfSheetMetadataService
     }
 
     private static bool TryAnalyzeFromResolvedSource(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         PageInfo page,
         out PdfSheetMetadata metadata,
         out string error)
@@ -393,7 +393,7 @@ public static class PdfSheetMetadataService
         return false;
     }
 
-    private static IEnumerable<string> ResolveSourcePdfCandidates(SmartTakeoffsJob job)
+    private static IEnumerable<string> ResolveSourcePdfCandidates(OurPlaneCoreJob job)
     {
         var roots = new List<string>();
         string jobSources = Path.Combine(job.RootPath, "sources");
@@ -519,7 +519,7 @@ public static class PdfSheetMetadataService
         SmartAiResponse response,
         out PdfSheetMetadata metadata,
         out string error,
-        SmartTakeoffsJob? job = null)
+        OurPlaneCoreJob? job = null)
     {
         metadata = new PdfSheetMetadata();
         error = "";
@@ -574,7 +574,7 @@ public static class PdfSheetMetadataService
         return false;
     }
 
-    private static void NormalizeMetadata(PageInfo page, PdfSheetMetadata metadata, SmartTakeoffsJob? job = null)
+    private static void NormalizeMetadata(PageInfo page, PdfSheetMetadata metadata, OurPlaneCoreJob? job = null)
     {
         metadata.SchemaVersion = metadata.SchemaVersion <= 0 ? 1 : metadata.SchemaVersion;
         metadata.PdfPath = string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath;

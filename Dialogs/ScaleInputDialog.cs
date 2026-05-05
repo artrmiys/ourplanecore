@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace SmartTakeoffs.Controls;
+namespace OurPlaneCore.Controls;
 
 /// <summary>
 /// Minimal dialog: shows a prompt and accepts an imperial distance in feet.

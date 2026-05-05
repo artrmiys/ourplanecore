@@ -17,10 +17,10 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using Microsoft.VisualBasic.FileIO;
 using Microsoft.Win32;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow : Window
 {
@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     private bool _isApplyingSettings;
     private bool _isRunningAiRequest;
 
-    private SmartTakeoffsJob? _currentJob;
+    private OurPlaneCoreJob? _currentJob;
     private PageInfo? _currentPage;
     private string _currentPdfPath = "";
 

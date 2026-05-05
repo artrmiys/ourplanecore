@@ -10,10 +10,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using SmartTakeoffs.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -592,7 +592,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(marker.PageFolder)
                 ? marker.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, marker.PageFolder));
-            PageInfo? page = SmartTakeoffsJobStore.TryReadPage(folder);
+            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return page;
         }
@@ -832,7 +832,7 @@ public partial class MainWindow
             return false;
         }
 
-        SmartTakeoffsJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
+        OurPlaneCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
         result = new PdfMetadataPageResult(page, true, metadata, "");
         return true;
     }
@@ -848,7 +848,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(request.PageFolder)
                 ? request.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, request.PageFolder));
-            page = SmartTakeoffsJobStore.TryReadPage(folder);
+            page = OurPlaneCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return true;
         }
@@ -1041,7 +1041,7 @@ public partial class MainWindow
         if (page == null)
             return false;
 
-        path = SmartTakeoffsJobStore.PageLayersJsonPath(page.FolderPath);
+        path = OurPlaneCoreJobStore.PageLayersJsonPath(page.FolderPath);
         return File.Exists(path);
     }
 
@@ -1368,7 +1368,7 @@ public partial class MainWindow
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(item =>
             {
-                string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType);
+                string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
                 return new AiActionTargetOption
                 {
                     Id = item.Id,
@@ -1405,7 +1405,7 @@ public partial class MainWindow
     {
         if (_activeItem != null)
         {
-            string activeType = SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+            string activeType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
             if (string.Equals(activeType, measurementType, StringComparison.OrdinalIgnoreCase))
             {
                 AiActionTargetOption? active = targets.FirstOrDefault(target =>
@@ -1571,7 +1571,7 @@ public partial class MainWindow
 
             foreach (TakeoffItem target in touchedItems)
             {
-                SmartTakeoffsJobStore.SaveTakeoffItem(target);
+                OurPlaneCoreJobStore.SaveTakeoffItem(target);
                 RefreshTreeItem(target);
             }
 
@@ -1910,7 +1910,7 @@ public partial class MainWindow
 
         if (option.Item != null)
         {
-            string targetType = SmartTakeoffsJobStore.NormalizeMeasurementType(option.Item.MeasurementType);
+            string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(option.Item.MeasurementType);
             return string.Equals(targetType, measurementType, StringComparison.OrdinalIgnoreCase)
                 ? option.Item
                 : null;
@@ -1941,7 +1941,7 @@ public partial class MainWindow
     {
         if (_activeItem != null &&
             string.Equals(
-                SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType),
+                OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType),
                 measurementType,
                 StringComparison.OrdinalIgnoreCase))
         {
@@ -1986,7 +1986,7 @@ public partial class MainWindow
                     : "line";
         }
 
-        return SmartTakeoffsJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
+        return OurPlaneCoreJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
     }
 
     private static List<SKPoint> ActionPoints(SmartAiAction action) =>

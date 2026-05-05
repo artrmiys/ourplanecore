@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public sealed class SmartMassingDraft
 {
@@ -250,27 +250,27 @@ public static partial class SmartMassingDraftService
         WriteIndented = true,
     };
 
-    public static string ModelPath(SmartTakeoffsJob job) =>
+    public static string ModelPath(OurPlaneCoreJob job) =>
         Path.Combine(job.AIContextRoot, "3d_massing", "model.json");
 
-    public static string SnapshotsRoot(SmartTakeoffsJob job) =>
+    public static string SnapshotsRoot(OurPlaneCoreJob job) =>
         Path.Combine(job.AIContextRoot, "3d_massing", "snapshots");
 
-    public static SmartMassingDraft SaveDraftFromMarkers(SmartTakeoffsJob job)
+    public static SmartMassingDraft SaveDraftFromMarkers(OurPlaneCoreJob job)
     {
         SmartMassingDraft draft = BuildDraftFromMarkers(job);
         SaveDraft(job, draft);
         return draft;
     }
 
-    public static SmartMassingDraft SaveDraftFromWallTakeoffs(SmartTakeoffsJob job, double levelSpacingFeet)
+    public static SmartMassingDraft SaveDraftFromWallTakeoffs(OurPlaneCoreJob job, double levelSpacingFeet)
     {
         SmartMassingDraft draft = BuildDraftFromWallTakeoffs(job, levelSpacingFeet);
         SaveDraft(job, draft);
         return draft;
     }
 
-    public static void SaveDraft(SmartTakeoffsJob job, SmartMassingDraft draft)
+    public static void SaveDraft(OurPlaneCoreJob job, SmartMassingDraft draft)
     {
         RefreshDerivedGeometry(draft);
         string path = ModelPath(job);
@@ -278,7 +278,7 @@ public static partial class SmartMassingDraftService
         File.WriteAllText(path, JsonSerializer.Serialize(draft, JsonOptions));
     }
 
-    public static string SaveSnapshot(SmartTakeoffsJob job, SmartMassingDraft draft)
+    public static string SaveSnapshot(OurPlaneCoreJob job, SmartMassingDraft draft)
     {
         RefreshDerivedGeometry(draft);
         string root = SnapshotsRoot(job);
@@ -295,7 +295,7 @@ public static partial class SmartMassingDraftService
         draft.Roof.Planes = BuildRoofPlanes(draft);
     }
 
-    public static SmartMassingDraft? LoadDraft(SmartTakeoffsJob job)
+    public static SmartMassingDraft? LoadDraft(OurPlaneCoreJob job)
     {
         string path = ModelPath(job);
         if (!File.Exists(path))
@@ -304,7 +304,7 @@ public static partial class SmartMassingDraftService
         return JsonSerializer.Deserialize<SmartMassingDraft>(File.ReadAllText(path));
     }
 
-    public static SmartMassingDraft BuildDraftFromMarkers(SmartTakeoffsJob job)
+    public static SmartMassingDraft BuildDraftFromMarkers(OurPlaneCoreJob job)
     {
         IReadOnlyList<SmartAiMarker> markers = SmartContextStore.LoadAiMarkers(job);
         var draft = new SmartMassingDraft
@@ -376,7 +376,7 @@ public static partial class SmartMassingDraftService
         return draft;
     }
 
-    public static SmartMassingDraft BuildDraftFromWallTakeoffs(SmartTakeoffsJob job, double levelSpacingFeet)
+    public static SmartMassingDraft BuildDraftFromWallTakeoffs(OurPlaneCoreJob job, double levelSpacingFeet)
     {
         double floorToFloorFeet = NormalizeLevelSpacingFeet(levelSpacingFeet);
         var draft = new SmartMassingDraft
@@ -387,7 +387,7 @@ public static partial class SmartMassingDraftService
             GeneratedAtUtc = DateTime.UtcNow.ToString("O"),
         };
 
-        IReadOnlyList<TakeoffItem> allItems = SmartTakeoffsJobStore.LoadTakeoffItems(job);
+        IReadOnlyList<TakeoffItem> allItems = OurPlaneCoreJobStore.LoadTakeoffItems(job);
         List<string> takeoffRoots = FindMassingTakeoffRoots(job).ToList();
         if (takeoffRoots.Count == 0)
         {
@@ -422,11 +422,11 @@ public static partial class SmartMassingDraftService
         foreach (WallFloorSource floor in levelSources)
         {
             List<TakeoffItem> areaItems = floor.Items
-                .Where(item => SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "area")
+                .Where(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area")
                 .Where(item => item.Measurements.Any(measurement => measurement.Points.Count >= 3))
                 .ToList();
             List<TakeoffItem> lineItems = floor.Items
-                .Where(item => SmartTakeoffsJobStore.NormalizeMeasurementType(item.MeasurementType) == "line")
+                .Where(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line")
                 .Where(item => item.Measurements.Any(measurement => measurement.Points.Count >= 2))
                 .ToList();
             if (areaItems.Count == 0 && lineItems.Count == 0)
@@ -533,17 +533,17 @@ public static partial class SmartMassingDraftService
         return draft;
     }
 
-    private static IEnumerable<string> FindMassingTakeoffRoots(SmartTakeoffsJob job)
+    private static IEnumerable<string> FindMassingTakeoffRoots(OurPlaneCoreJob job)
     {
         if (!Directory.Exists(job.TakeoffsRoot))
             yield break;
 
         foreach (string folder in Directory.EnumerateDirectories(job.TakeoffsRoot, "*", SearchOption.AllDirectories))
         {
-            if (SmartTakeoffsJobStore.IsTakeoffItemFolder(folder))
+            if (OurPlaneCoreJobStore.IsTakeoffItemFolder(folder))
                 continue;
 
-            string normalized = NormalizeTakeoffName(SmartTakeoffsJobStore.DisplayName(folder));
+            string normalized = NormalizeTakeoffName(OurPlaneCoreJobStore.DisplayName(folder));
             string compact = normalized.Trim();
             if (compact is "wall" or "walls" or "area" or "areas" or "floor" or "floors" or "slab" or "slabs" or "sqft" or "sf" or "sq ft" or "square feet")
                 yield return folder;
@@ -551,34 +551,34 @@ public static partial class SmartMassingDraftService
     }
 
     private static List<WallFloorSource> BuildWallFloorSources(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<string> wallRoots,
         IReadOnlyList<TakeoffItem> allItems)
     {
         var sources = new List<WallFloorSource>();
         foreach (string wallRoot in wallRoots)
         {
-            List<string> levelFolders = SmartTakeoffsJobStore.GetOrderedChildDirectories(wallRoot)
-                .Where(folder => !SmartTakeoffsJobStore.IsTakeoffItemFolder(folder))
-                .Where(folder => TryParseLevel(SmartTakeoffsJobStore.DisplayName(folder), out _))
+            List<string> levelFolders = OurPlaneCoreJobStore.GetOrderedChildDirectories(wallRoot)
+                .Where(folder => !OurPlaneCoreJobStore.IsTakeoffItemFolder(folder))
+                .Where(folder => TryParseLevel(OurPlaneCoreJobStore.DisplayName(folder), out _))
                 .ToList();
 
             if (levelFolders.Count == 0)
             {
                 List<TakeoffItem> items = ItemsUnderFolder(allItems, wallRoot);
                 if (items.Count > 0)
-                    sources.Add(new WallFloorSource(1, wallRoot, SmartTakeoffsJobStore.DisplayName(wallRoot), items));
+                    sources.Add(new WallFloorSource(1, wallRoot, OurPlaneCoreJobStore.DisplayName(wallRoot), items));
                 continue;
             }
 
             foreach (string levelFolder in levelFolders)
             {
-                int level = TryParseLevel(SmartTakeoffsJobStore.DisplayName(levelFolder), out int parsedLevel)
+                int level = TryParseLevel(OurPlaneCoreJobStore.DisplayName(levelFolder), out int parsedLevel)
                     ? parsedLevel
                     : sources.Count + 1;
                 List<TakeoffItem> items = ItemsUnderFolder(allItems, levelFolder);
                 if (items.Count > 0)
-                    sources.Add(new WallFloorSource(level, levelFolder, SmartTakeoffsJobStore.DisplayName(levelFolder), items));
+                    sources.Add(new WallFloorSource(level, levelFolder, OurPlaneCoreJobStore.DisplayName(levelFolder), items));
             }
         }
 
@@ -589,12 +589,12 @@ public static partial class SmartMassingDraftService
 
         static List<TakeoffItem> ItemsUnderFolder(IReadOnlyList<TakeoffItem> items, string folder) =>
             items
-                .Where(item => SmartTakeoffsJobStore.IsSameOrDescendant(folder, item.FolderPath))
+                .Where(item => OurPlaneCoreJobStore.IsSameOrDescendant(folder, item.FolderPath))
                 .ToList();
     }
 
     private static bool TryBuildFootprintFromTakeoffItems(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         string sourceKind,
         out List<SmartMassingPoint> footprintPoints,
@@ -609,7 +609,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static bool TryBuildFootprintFromAreaItems(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         out List<SmartMassingPoint> footprintPoints,
         out string page,
@@ -682,7 +682,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static bool TryBuildFootprintFromLineItems(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         out List<SmartMassingPoint> footprintPoints,
         out string page,
@@ -900,14 +900,14 @@ public static partial class SmartMassingDraftService
         if (measurement.ScaleMetersPerPt > 0)
             return measurement.ScaleMetersPerPt;
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder))
-            return SmartTakeoffsJobStore.TryReadPage(measurement.PageFolder)?.ScaleMetersPerPt ?? 0;
+            return OurPlaneCoreJobStore.TryReadPage(measurement.PageFolder)?.ScaleMetersPerPt ?? 0;
         return 0;
     }
 
     private static string ResolveMeasurementPageName(Measurement measurement)
     {
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder) &&
-            SmartTakeoffsJobStore.TryReadPage(measurement.PageFolder) is { } page)
+            OurPlaneCoreJobStore.TryReadPage(measurement.PageFolder) is { } page)
         {
             return page.Name;
         }
@@ -961,7 +961,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static SmartMassingFootprint? AddFootprint(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingDraft draft,
         List<SmartAiMarker> corners,
         List<SmartAiMarker> heightMarkers,
@@ -1024,7 +1024,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static void AddRoof(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<SmartAiMarker> allMarkers,
         List<SmartAiMarker> roofMarkers)
@@ -1066,7 +1066,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static List<SmartMassingRoofGuide> BuildRoofGuides(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<SmartAiMarker> allMarkers,
         string roofType,
@@ -1194,7 +1194,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static List<SmartMassingRoofGuide> BuildExplicitRoofGuides(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingFootprint footprint,
         IReadOnlyList<SmartAiMarker> allMarkers,
         IReadOnlyList<SmartAiMarker> roofMarkers)
@@ -1332,7 +1332,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static void AddOpenings(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<SmartAiMarker> allMarkers,
         IReadOnlyList<SmartAiMarker> openingMarkers)
@@ -1871,7 +1871,7 @@ public static partial class SmartMassingDraftService
         (lineEnd.Y - lineStart.Y) * (point.X - lineStart.X);
 
     private static bool TryResolveMassingTransform(
-        SmartTakeoffsJob job,
+        OurPlaneCoreJob job,
         SmartMassingFootprint footprint,
         IReadOnlyList<SmartAiMarker> allMarkers,
         out SKPoint origin,
@@ -2047,7 +2047,7 @@ public static partial class SmartMassingDraftService
         return false;
     }
 
-    private static double ResolveMarkerScale(SmartTakeoffsJob job, SmartAiMarker marker)
+    private static double ResolveMarkerScale(OurPlaneCoreJob job, SmartAiMarker marker)
     {
         if (string.IsNullOrWhiteSpace(marker.PageFolder))
             return 0;
@@ -2055,7 +2055,7 @@ public static partial class SmartMassingDraftService
         string folder = Path.IsPathFullyQualified(marker.PageFolder)
             ? marker.PageFolder
             : Path.GetFullPath(Path.Combine(job.RootPath, marker.PageFolder));
-        PageInfo? page = SmartTakeoffsJobStore.TryReadPage(folder);
+        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
         return page?.ScaleMetersPerPt ?? 0;
     }
 

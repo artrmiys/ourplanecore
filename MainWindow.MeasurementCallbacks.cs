@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace SmartTakeoffs;
+namespace OurPlaneCore;
 
 public partial class MainWindow
 {
@@ -20,25 +20,25 @@ public partial class MainWindow
         if (m.ScaleMetersPerPt <= 0)
             m.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         item.Measurements.Add(m);
-        SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         RefreshTreeItem(item);
         RefreshActiveTakeoffVisuals();
         QueueTakeoffAutosave(item);
         RefreshPagesTakeoffIndicators();
         RefreshSheetLegend();
         UpdateTotalDisplay();
-        if (item.IsJoistArea && SmartTakeoffsJobStore.NormalizeMeasurementType(m.MType) == "area")
+        if (item.IsJoistArea && OurPlaneCoreJobStore.NormalizeMeasurementType(m.MType) == "area")
             BeginJoistDirectionCapture(item, m);
     }
 
     private bool TryResolveTakeoffItemForMeasurement(Measurement m, out TakeoffItem item)
     {
-        string measurementType = SmartTakeoffsJobStore.NormalizeMeasurementType(m.MType);
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(m.MType);
 
         if (!string.IsNullOrWhiteSpace(m.TakeoffFolder))
         {
             var byFolder = _takeoffItems.FirstOrDefault(i =>
-                SmartTakeoffsJobStore.NormalizeMeasurementType(i.MeasurementType) == measurementType &&
+                OurPlaneCoreJobStore.NormalizeMeasurementType(i.MeasurementType) == measurementType &&
                 string.Equals(i.FolderPath, m.TakeoffFolder, StringComparison.OrdinalIgnoreCase));
             if (byFolder != null)
             {
@@ -49,7 +49,7 @@ public partial class MainWindow
         }
 
         if (_activeItem != null &&
-            SmartTakeoffsJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
+            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
         {
             _activeItem.MeasurementType = measurementType;
             item = _activeItem;
@@ -85,7 +85,7 @@ public partial class MainWindow
                 m.TakeoffFolder = item.FolderPath;
             if (m.ScaleMetersPerPt <= 0)
                 m.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
-            SmartTakeoffsJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             bool previousSuppressFocus = _suppressCanvasFocusFromTakeoffSelection;
             _suppressCanvasFocusFromTakeoffSelection = true;
             try
@@ -116,7 +116,7 @@ public partial class MainWindow
 
         try
         {
-            SmartTakeoffsJobStore.SavePageAnnotations(
+            OurPlaneCoreJobStore.SavePageAnnotations(
                 _currentPage.FolderPath,
                 _viewport.GetPageAnnotations());
         }
