@@ -25,53 +25,6 @@ public partial class MainWindow
 {
     // ── Pages tree ────────────────────────────────────────────────────────────
 
-    private void BtnViewportBg_Click(object sender, RoutedEventArgs e)
-    {
-        var menu = new ContextMenu { PlacementTarget = (UIElement)sender, Placement = PlacementMode.Bottom };
-        AddViewportBgItem(menu, "White", "#FFFFFF");
-        AddViewportBgItem(menu, "Light gray", "#F2F2F2");
-        AddViewportBgItem(menu, "Warm paper", "#FFF8E8");
-        AddViewportBgItem(menu, "Dark gray", "#2B2B2B");
-        menu.IsOpen = true;
-    }
-
-    private void AddViewportBgItem(ContextMenu menu, string label, string color)
-    {
-        var mi = new MenuItem { Header = label, IsCheckable = true, IsChecked = _settings.ViewportBackground == color };
-        mi.Click += (_, _) => ApplyViewportBackground(color, persist: true);
-        menu.Items.Add(mi);
-    }
-
-    private void ComboFolderTemplateMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isApplyingSettings)
-            return;
-
-        string mode = ComboFolderTemplateMode.SelectedIndex switch
-        {
-            1 => "COM",
-            2 => "EWP",
-            _ => "AUTO",
-        };
-        _settings.FolderTemplateMode = mode;
-        SaveAppSettings();
-        TxtStatus.Text = $"Folder template mode: {mode}.";
-    }
-
-    private void BtnDarkTheme_Checked(object sender, RoutedEventArgs e) =>
-        ApplyThemeFromToggle(dark: true);
-
-    private void BtnDarkTheme_Unchecked(object sender, RoutedEventArgs e) =>
-        ApplyThemeFromToggle(dark: false);
-
-    private void ApplyThemeFromToggle(bool dark)
-    {
-        if (_isApplyingSettings)
-            return;
-
-        ApplyTheme(dark, persist: true);
-    }
-
     private void ReloadPagesTree(string? selectPath = null)
     {
         PagesTree.Items.Clear();
