@@ -83,27 +83,12 @@ public partial class MainWindow
             return;
         }
 
-        var rootNode = new PageFolderNode
-        {
-            Name = "Pages",
-            FolderPath = _currentJob.PagesRoot,
-            IsRoot = true,
-        };
-        var rootItem = new TreeViewItem
-        {
-            Header = "📁 Pages",
-            Tag = rootNode,
-            IsExpanded = false,
-        };
-        PagesTree.Items.Add(rootItem);
-        FillPagesTree(rootItem.Items, _currentJob.PagesRoot);
+        FillPagesTree(PagesTree.Items, _currentJob.PagesRoot);
         RefreshPagesTakeoffIndicators();
         RestoreExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
 
         if (!string.IsNullOrWhiteSpace(selectPath))
             SelectNodeByFolder(selectPath);
-        else
-            rootItem.IsSelected = true;
         PrunePagesMultiSelection();
         ApplyPagesMultiSelectionVisuals();
     }
@@ -140,6 +125,19 @@ public partial class MainWindow
             FillPagesTree(tvi.Items, dir);
         }
     }
+
+    private TreeViewItem CreateHiddenPagesRootItem() =>
+        new()
+        {
+            Header = "Pages",
+            Tag = new PageFolderNode
+            {
+                Name = "Pages",
+                FolderPath = _currentJob?.PagesRoot ?? "",
+                IsRoot = true,
+            },
+            IsExpanded = true,
+        };
 
     private void BtnCollapsePagesTree_Click(object sender, RoutedEventArgs e) =>
         SetProjectTreeExpanded(PagesTree, false, "Pages tree collapsed.");
@@ -334,19 +332,6 @@ public partial class MainWindow
             });
         }
 
-        var takeoffs = TakeoffsForPage(page.FolderPath).ToList();
-        if (takeoffs.Count > 0)
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = $"  {takeoffs.Count} takeoff{(takeoffs.Count == 1 ? "" : "s")}",
-                Foreground = Brushes.Gray,
-                FontSize = 10,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-            panel.ToolTip = string.Join(Environment.NewLine, takeoffs.Select(t => t.Name));
-        }
-
         return panel;
     }
 
@@ -354,18 +339,88 @@ public partial class MainWindow
     {
         pageItem.Items.Clear();
         IReadOnlyList<TakeoffItem> orderedTakeoffs = OrderedTakeoffsForPage(page);
-        for (int index = 0; index < orderedTakeoffs.Count; index++)
+        var addedTakeoffs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int legendIndex = 0;
+        foreach (TakeoffItem takeoff in orderedTakeoffs)
         {
-            TakeoffItem takeoff = orderedTakeoffs[index];
+            if (!addedTakeoffs.Add(TakeoffLegendOrderKey(takeoff)))
+                continue;
+
             var node = new PageTakeoffNode(page, takeoff);
             var child = new TreeViewItem
             {
-                Header = BuildPageTakeoffHeader(page, takeoff, index),
+                Header = BuildPageTakeoffHeader(page, takeoff, legendIndex),
                 Tag = node,
             };
             child.ContextMenu = BuildPageTakeoffContextMenu(node);
             pageItem.Items.Add(child);
+            legendIndex++;
         }
+
+        if (!string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+            pageItem.Items.Add(CreatePageOverlayTreeItem(page));
+    }
+
+    private TreeViewItem CreatePageOverlayTreeItem(PageInfo page)
+    {
+        string overlayName = OverlayPageName(page);
+        var node = new PageOverlayNode(page, overlayName);
+        return new TreeViewItem
+        {
+            Header = BuildPageOverlayHeader(page, overlayName),
+            Tag = node,
+            ContextMenu = BuildPageOverlayContextMenu(node),
+        };
+    }
+
+    private FrameworkElement BuildPageOverlayHeader(PageInfo page, string overlayName)
+    {
+        var secondaryBrush = (Brush)Application.Current.Resources["SecondaryForegroundBrush"]
+            ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
+        Brush swatchBrush = BrushFromHex(page.OverlayColor, Brushes.Gray);
+
+        var dock = new DockPanel { LastChildFill = true };
+        var transform = new TextBlock
+        {
+            Text = $"{page.OverlayScale:0.###}x  {page.OverlayOffsetXPt:0.#},{page.OverlayOffsetYPt:0.#}",
+            Foreground = secondaryBrush,
+            FontSize = 10,
+            FontFamily = new FontFamily("Consolas, Cascadia Mono, Segoe UI"),
+            Margin = new Thickness(8, 0, 4, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Right,
+            MinWidth = 76,
+        };
+        DockPanel.SetDock(transform, Dock.Right);
+        dock.Children.Add(transform);
+
+        var colorBox = new Border
+        {
+            Width = 12,
+            Height = 12,
+            Background = swatchBrush,
+            BorderBrush = secondaryBrush,
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(28, 0, 6, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var nameRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        nameRow.Children.Add(colorBox);
+        nameRow.Children.Add(new TextBlock
+        {
+            Text = $"Overlay: {overlayName}",
+            FontWeight = FontWeights.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        dock.Children.Add(nameRow);
+        dock.ToolTip = "Sheet overlay. Right-click to move, scale, recolor, or clear.";
+        return dock;
     }
 
     private FrameworkElement BuildPageTakeoffHeader(PageInfo page, TakeoffItem takeoff, int legendIndex)
@@ -432,8 +487,11 @@ public partial class MainWindow
     }
 
     private IEnumerable<TakeoffItem> TakeoffsForPage(string pageFolder) =>
-        _takeoffItems.Where(item => item.Measurements.Any(m =>
-            IsSamePageFolder(m.PageFolder, pageFolder)));
+        _takeoffItems
+            .Where(item => item.Measurements.Any(m =>
+                IsSamePageFolder(m.PageFolder, pageFolder)))
+            .GroupBy(TakeoffLegendOrderKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First());
 
     private IEnumerable<Measurement> MeasurementsForTakeoffOnPage(TakeoffItem item, string pageFolder) =>
         item.Measurements.Where(measurement => IsSamePageFolder(measurement.PageFolder, pageFolder));
@@ -659,6 +717,7 @@ public partial class MainWindow
             page.FolderPath,
             page.PdfLayersCached ? page.PdfLayers : null,
             restoreView);
+        LoadSheetOverlay(page);
         _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath));
         RefreshAiMarkersOverlay();
         SelectPageTreeNodeSilently(page.FolderPath);
@@ -670,6 +729,7 @@ public partial class MainWindow
         if (_takeoffItems.Count == 0)
             TryAutoLoad();
         ApplyTakeoffPageHighlights();
+        RefreshFloatingPageSetup(page.FolderPath);
     }
 
     private void ClosePageTab(PageTabState tab)
@@ -703,6 +763,7 @@ public partial class MainWindow
         TxtStatusPage.Text = "—";
         UpdateScaleUi(0);
         _viewport.ClearPage();
+        RefreshFloatingPageSetup();
         TxtStatus.Text = "Closed page tab.";
     }
 
@@ -943,7 +1004,7 @@ public partial class MainWindow
 
     private void RefreshPagesTakeoffIndicators()
     {
-        foreach (TreeViewItem item in EnumeratePageTreeItems())
+        foreach (TreeViewItem item in EnumeratePageTreeItems().ToList())
         {
             if (item.Tag is PageInfo page)
             {
@@ -968,6 +1029,10 @@ public partial class MainWindow
         else if (e.NewValue is TreeViewItem { Tag: PageTakeoffNode node })
         {
             SelectLinkedPageTakeoff(node);
+        }
+        else if (e.NewValue is TreeViewItem { Tag: PageOverlayNode overlay })
+        {
+            TxtStatus.Text = $"Sheet overlay on {overlay.Page.Name}: {overlay.OverlayName}.";
         }
     }
 
@@ -997,6 +1062,18 @@ public partial class MainWindow
                     return;
             }
         });
+    }
+
+    private TreeViewItem? FindPageTreeItemByFolder(string folderPath)
+    {
+        foreach (TreeViewItem item in EnumeratePageTreeItems())
+        {
+            string? itemPath = GetPagesNodePath(item);
+            if (itemPath != null && IsSamePageFolder(itemPath, folderPath))
+                return item;
+        }
+
+        return null;
     }
 
     private static bool SelectNodeByFolder(TreeViewItem item, string folderPath)
@@ -1073,9 +1150,17 @@ public partial class MainWindow
                 ApplyPagesMultiSelectionVisuals();
             }
 
-            item.Focus();
-            item.IsSelected = true;
-            item.ContextMenu = BuildPageTakeoffContextMenu(pageTakeoff);
+            OpenPagesTreeContextMenu(item, BuildPageTakeoffContextMenu(pageTakeoff));
+            e.Handled = true;
+            return;
+        }
+
+        if (item.Tag is PageOverlayNode pageOverlay)
+        {
+            _pagesMultiSelection.Clear();
+            _pageTakeoffMultiSelection.Clear();
+            ApplyPagesMultiSelectionVisuals();
+            OpenPagesTreeContextMenu(item, BuildPageOverlayContextMenu(pageOverlay));
             e.Handled = true;
             return;
         }
@@ -1097,9 +1182,39 @@ public partial class MainWindow
             ApplyPagesMultiSelectionVisuals();
         }
 
-        item.Focus();
-        item.IsSelected = true;
-        item.ContextMenu = BuildPagesContextMenu(item);
+        OpenPagesTreeContextMenu(item, BuildPagesContextMenu(item));
+        e.Handled = true;
+    }
+
+    private void OpenPagesTreeContextMenu(TreeViewItem item, ContextMenu menu)
+    {
+        _syncingPageTreeSelection = true;
+        try
+        {
+            item.Focus();
+            item.IsSelected = true;
+        }
+        finally
+        {
+            _syncingPageTreeSelection = false;
+        }
+
+        item.ContextMenu = menu;
+        menu.PlacementTarget = item;
+        menu.IsOpen = true;
+    }
+
+    private void SelectPagesTreeItemSilently(TreeViewItem item)
+    {
+        _syncingPageTreeSelection = true;
+        try
+        {
+            item.IsSelected = true;
+        }
+        finally
+        {
+            _syncingPageTreeSelection = false;
+        }
     }
 
     private void PagesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1111,6 +1226,16 @@ public partial class MainWindow
         if (item.Tag is PageTakeoffNode pageTakeoff)
         {
             HandlePageTakeoffNodeMultiSelect(item, pageTakeoff, e);
+            return;
+        }
+
+        if (item.Tag is PageOverlayNode)
+        {
+            _pagesMultiSelection.Clear();
+            _pageTakeoffMultiSelection.Clear();
+            ApplyPagesMultiSelectionVisuals();
+            TxtStatus.Text = "Sheet overlay selected. Right-click it to move, scale, recolor, or clear.";
+            e.Handled = true;
             return;
         }
 
@@ -1175,7 +1300,7 @@ public partial class MainWindow
             _pageTakeoffMultiSelection.Count > 1 &&
             _pageTakeoffMultiSelection.Contains(key))
         {
-            item.IsSelected = true;
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             return;
         }
@@ -1185,7 +1310,7 @@ public partial class MainWindow
             bool additive = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
             SelectPageTakeoffRange(_pageTakeoffRangeAnchorKey, key, node.Page.FolderPath, additive);
             _pageTakeoffRangeAnchorKey = key;
-            item.IsSelected = true;
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             Dispatcher.InvokeAsync(() => SelectSelectedPageTakeoffMeasurementsOnCanvas(node));
             e.Handled = true;
@@ -1197,7 +1322,7 @@ public partial class MainWindow
             if (!_pageTakeoffMultiSelection.Add(key))
                 _pageTakeoffMultiSelection.Remove(key);
             _pageTakeoffRangeAnchorKey = key;
-            item.IsSelected = true;
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             Dispatcher.InvokeAsync(() => SelectSelectedPageTakeoffMeasurementsOnCanvas(node));
             e.Handled = true;
@@ -1237,8 +1362,7 @@ public partial class MainWindow
                 return;
 
             var legendPayload = new PageTakeoffLegendDrag(pageTakeoff.Page.FolderPath, takeoffFolders);
-            DragDrop.DoDragDrop(PagesTree, legendPayload, DragDropEffects.Move);
-            _pagesDragStart = null;
+            DoPagesDragDrop(legendPayload, DragDropEffects.Move);
             return;
         }
 
@@ -1247,8 +1371,20 @@ public partial class MainWindow
             return;
 
         var payload = new PagesClipboard(entries, PagesClipboardMode.Cut);
-        DragDrop.DoDragDrop(PagesTree, payload, DragDropEffects.Move | DragDropEffects.Copy);
-        _pagesDragStart = null;
+        DoPagesDragDrop(payload, DragDropEffects.Move | DragDropEffects.Copy);
+    }
+
+    private void DoPagesDragDrop(object payload, DragDropEffects effects)
+    {
+        try
+        {
+            DragDrop.DoDragDrop(PagesTree, payload, effects);
+        }
+        finally
+        {
+            _pagesDragStart = null;
+            FlushPendingPagesTreeDropRefresh();
+        }
     }
 
     private void PagesTree_DragOver(object sender, DragEventArgs e)
@@ -1266,6 +1402,7 @@ public partial class MainWindow
             {
                 ClearPageTakeoffLegendDropCue();
             }
+            ClearPagesPositionDropCue();
             e.Handled = true;
             return;
         }
@@ -1273,6 +1410,7 @@ public partial class MainWindow
         ClearPageTakeoffLegendDropCue();
         if (e.Data.GetData(typeof(PagesClipboard)) is not PagesClipboard payload)
         {
+            ClearPagesPositionDropCue();
             e.Handled = true;
             return;
         }
@@ -1281,6 +1419,16 @@ public partial class MainWindow
         string? targetFolder = targetItem == null ? _currentJob?.PagesRoot : GetPasteTargetFolder(targetItem);
         bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
 
+        if (TryGetPagesPositionDropCue(payload, targetItem, copy, e, out bool after, out bool canDropPosition, out string positionStatus))
+        {
+            UpdatePagesPositionDropCue(targetItem, after, canDropPosition, positionStatus);
+            if (canDropPosition)
+                e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
+
+        ClearPagesPositionDropCue();
         if (CanDropInto(payload, targetFolder, copy ? PagesClipboardMode.Copy : PagesClipboardMode.Cut))
             e.Effects = copy ? DragDropEffects.Copy : DragDropEffects.Move;
         e.Handled = true;
@@ -1294,18 +1442,34 @@ public partial class MainWindow
             if (legendTargetItem != null)
                 DropPageTakeoffLegend(legendDrag, legendTargetItem, e.GetPosition(legendTargetItem));
             ClearPageTakeoffLegendDropCue();
+            ClearPagesPositionDropCue();
             e.Handled = true;
             return;
         }
 
         if (e.Data.GetData(typeof(PagesClipboard)) is not PagesClipboard payload)
+        {
+            ClearPagesPositionDropCue();
             return;
+        }
 
         TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
-        string? targetFolder = targetItem == null ? _currentJob?.PagesRoot : GetPasteTargetFolder(targetItem);
         PagesClipboardMode mode = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey
             ? PagesClipboardMode.Copy
             : PagesClipboardMode.Cut;
+
+        if (TryGetPagesPositionDropCue(payload, targetItem, mode == PagesClipboardMode.Copy, e, out bool after, out bool canDropPosition, out _) &&
+            canDropPosition &&
+            targetItem != null)
+        {
+            DropPagesPosition(payload, targetItem, after);
+            ClearPagesPositionDropCue();
+            e.Handled = true;
+            return;
+        }
+
+        ClearPagesPositionDropCue();
+        string? targetFolder = targetItem == null ? _currentJob?.PagesRoot : GetPasteTargetFolder(targetItem);
         if (!CanDropInto(payload, targetFolder, mode))
             return;
 
@@ -1316,7 +1480,10 @@ public partial class MainWindow
     private void PagesTree_DragLeave(object sender, DragEventArgs e)
     {
         if (!PagesTree.IsMouseOver)
+        {
             ClearPageTakeoffLegendDropCue();
+            ClearPagesPositionDropCue();
+        }
     }
 
     private void PagesTree_KeyDown(object sender, KeyEventArgs e)
@@ -1431,6 +1598,7 @@ public partial class MainWindow
             int selectedCount = PageSelectionCount(item);
             string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
             menu.Items.Add(MakeMenuItem("Open in New Tab", true, () => OpenPageInNewTab(page)));
+            menu.Items.Add(BuildSheetOverlayMenu(page));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
             menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", true, () => DeletePagesNode(item)));
@@ -1471,6 +1639,10 @@ public partial class MainWindow
         {
             menu = BuildPageTakeoffContextMenu(node);
         }
+        else if (item.Tag is PageOverlayNode overlay)
+        {
+            menu = BuildPageOverlayContextMenu(overlay);
+        }
 
         return menu;
     }
@@ -1507,8 +1679,10 @@ public partial class MainWindow
             OpenPageInActiveTab(node.Page);
 
         var selectedNodes = SelectedPageTakeoffNodes(node, fallbackToAnchor: true);
-        SelectTakeoffItem(node.Takeoff);
-        SelectPageTakeoffNodeSilently(node.Page.FolderPath, node.Takeoff.FolderPath);
+        ActivateTakeoffItem(node.Takeoff);
+        SelectTakeoffItemSilently(node.Takeoff);
+        RefreshActiveTakeoffVisuals();
+        UpdateTotalDisplay();
         Dispatcher.InvokeAsync(() => SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, node.Page));
         if (selectedNodes.Count <= 1)
             TxtStatus.Text = $"Linked takeoff selected for {node.Page.Name}: {node.Takeoff.Name}.";
@@ -1904,6 +2078,242 @@ public partial class MainWindow
             : $"Moved {moved.Count} linked takeoffs to {targetNode.Page.Name} legend positions {firstPosition}-{firstPosition + moved.Count - 1}.";
     }
 
+    private bool TryGetPagesPositionDropCue(
+        PagesClipboard payload,
+        TreeViewItem? targetItem,
+        bool copy,
+        DragEventArgs e,
+        out bool after,
+        out bool canDrop,
+        out string status)
+    {
+        after = false;
+        canDrop = false;
+        status = "";
+
+        if (copy || _currentJob == null || payload.Entries.Count == 0 || targetItem == null)
+            return false;
+
+        string? targetPath = GetPagesNodePath(targetItem);
+        if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
+            return false;
+
+        Point targetPoint = e.GetPosition(targetItem);
+        bool dropOutOfTargetFolder = targetItem.Tag is PageFolderNode && AreDirectPageChildren(payload, targetPath);
+        if (targetItem.Tag is PageFolderNode && !dropOutOfTargetFolder && !IsPagesPositionEdgeDrop(targetItem, targetPoint))
+            return false;
+
+        after = dropOutOfTargetFolder || IsPagesPositionDropAfter(targetItem, targetPoint);
+        canDrop = CanDropPagesToPosition(payload, targetPath, after);
+        string targetName = OurPlaneCoreJobStore.DisplayName(targetPath);
+        string position = after ? "below" : "above";
+        status = canDrop
+            ? dropOutOfTargetFolder
+                ? $"Move {payload.Entries.Count} page/folder item(s) out below {targetName}."
+                : $"Move {payload.Entries.Count} page/folder item(s) {position} {targetName}."
+            : "Cannot reorder here. Drop on a sibling position in the same Pages folder.";
+        return true;
+    }
+
+    private static bool AreDirectPageChildren(PagesClipboard payload, string folderPath)
+    {
+        if (payload.Entries.Count == 0)
+            return false;
+
+        return payload.Entries.All(entry =>
+            string.Equals(
+                Path.GetDirectoryName(entry.SourcePath) ?? "",
+                folderPath,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool CanDropPagesToPosition(PagesClipboard payload, string targetPath, bool after)
+    {
+        if (_currentJob == null || payload.Entries.Count == 0 || string.IsNullOrWhiteSpace(targetPath))
+            return false;
+
+        string targetParent = Path.GetDirectoryName(targetPath) ?? "";
+        if (string.IsNullOrWhiteSpace(targetParent) ||
+            !IsPathInsidePagesRoot(targetParent) ||
+            !Directory.Exists(targetParent))
+        {
+            return false;
+        }
+
+        var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
+        if (paths.Any(path => string.Equals(path, targetPath, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
+            return OurPlaneCoreJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
+
+        return CanDropInto(payload, targetParent, PagesClipboardMode.Cut);
+    }
+
+    private static bool IsPagesPositionDropAfter(TreeViewItem item, Point targetPoint) =>
+        targetPoint.Y >= PagesNodeHeaderDropHeight(item) / 2.0;
+
+    private static bool IsPagesPositionEdgeDrop(TreeViewItem item, Point targetPoint)
+    {
+        double height = PagesNodeHeaderDropHeight(item);
+        if (targetPoint.Y < 0 || targetPoint.Y > height)
+            return false;
+
+        double edge = Math.Min(5.0, Math.Max(3.0, height * 0.18));
+        return targetPoint.Y <= edge || targetPoint.Y >= height - edge;
+    }
+
+    private static double PagesNodeHeaderDropHeight(TreeViewItem item)
+    {
+        double itemHeight = Math.Max(1.0, item.ActualHeight);
+        if (item.Header is FrameworkElement header && header.ActualHeight > 0)
+            return Math.Min(itemHeight, Math.Max(18.0, header.ActualHeight + 6.0));
+
+        return Math.Min(itemHeight, 28.0);
+    }
+
+    private void UpdatePagesPositionDropCue(TreeViewItem? targetItem, bool after, bool canDrop, string status)
+    {
+        if (ReferenceEquals(_pagesPositionDropTarget, targetItem) &&
+            _pagesPositionDropAfter == after &&
+            _pagesPositionDropAllowed == canDrop &&
+            string.Equals(_pagesPositionDropStatus, status, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _pagesPositionDropTarget = targetItem;
+        _pagesPositionDropAfter = after;
+        _pagesPositionDropAllowed = canDrop;
+        _pagesPositionDropStatus = status;
+        ApplyPagesMultiSelectionVisuals();
+        if (!string.IsNullOrWhiteSpace(status))
+            TxtStatus.Text = status;
+    }
+
+    private void ClearPagesPositionDropCue()
+    {
+        if (_pagesPositionDropTarget == null && string.IsNullOrEmpty(_pagesPositionDropStatus))
+            return;
+
+        _pagesPositionDropTarget = null;
+        _pagesPositionDropAfter = false;
+        _pagesPositionDropAllowed = false;
+        _pagesPositionDropStatus = "";
+        ApplyPagesMultiSelectionVisuals();
+    }
+
+    private void DropPagesPosition(PagesClipboard payload, TreeViewItem targetItem, bool after)
+    {
+        string? targetPath = GetPagesNodePath(targetItem);
+        if (string.IsNullOrWhiteSpace(targetPath))
+            return;
+
+        var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
+        if (paths.Count == 0)
+            return;
+
+        try
+        {
+            string targetParent = Path.GetDirectoryName(targetPath) ?? "";
+            if (string.IsNullOrWhiteSpace(targetParent))
+                return;
+
+            var changed = new List<string>();
+            bool reloadActiveTab = false;
+            if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!OurPlaneCoreJobStore.MoveSiblingsToPosition(paths, targetPath, after))
+                    return;
+                changed.AddRange(paths);
+            }
+            else
+            {
+                foreach (var entry in payload.Entries)
+                {
+                    if (string.Equals(Path.GetDirectoryName(entry.SourcePath) ?? "", targetParent, StringComparison.OrdinalIgnoreCase))
+                    {
+                        changed.Add(entry.SourcePath);
+                        continue;
+                    }
+
+                    if (!CanDropInto(new PagesClipboard([entry], PagesClipboardMode.Cut), targetParent, PagesClipboardMode.Cut))
+                        continue;
+
+                    string changedPath = OurPlaneCoreJobStore.MoveNode(entry.SourcePath, targetParent);
+                    reloadActiveTab = UpdatePageReferencesForMovedPath(entry.SourcePath, changedPath) || reloadActiveTab;
+                    changed.Add(changedPath);
+                }
+
+                if (changed.Count == 0 ||
+                    !OurPlaneCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
+                {
+                    return;
+                }
+
+                _pagesClipboard = null;
+            }
+
+            _pagesMultiSelection.Clear();
+            foreach (string changedPath in changed)
+                _pagesMultiSelection.Add(changedPath);
+
+            string selectPath = changed[0];
+            QueuePagesTreeDropRefresh(selectPath, reloadActiveTab);
+            TxtStatus.Text = changed.Count == 1
+                ? $"Moved page/folder {(after ? "below" : "above")} {OurPlaneCoreJobStore.DisplayName(targetPath)}."
+                : $"Moved {changed.Count} page/folder items {(after ? "below" : "above")} {OurPlaneCoreJobStore.DisplayName(targetPath)}.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Reorder Pages", ex);
+        }
+    }
+
+    private void QueuePagesTreeDropRefresh(string selectPath, bool reloadActiveTab)
+    {
+        _pendingPagesTreeDropRefreshPath = selectPath;
+        _pendingPagesTreeDropReloadActiveTab = _pendingPagesTreeDropReloadActiveTab || reloadActiveTab;
+        int version = ++_pendingPagesTreeDropRefreshVersion;
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (version == _pendingPagesTreeDropRefreshVersion)
+                FlushPendingPagesTreeDropRefresh();
+        }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
+    private void FlushPendingPagesTreeDropRefresh()
+    {
+        if (string.IsNullOrWhiteSpace(_pendingPagesTreeDropRefreshPath))
+            return;
+
+        string selectPath = _pendingPagesTreeDropRefreshPath;
+        bool reloadActiveTab = _pendingPagesTreeDropReloadActiveTab;
+        _pendingPagesTreeDropRefreshPath = null;
+        _pendingPagesTreeDropReloadActiveTab = false;
+
+        ClearPagesPositionDropCue();
+        ReloadPagesTree(selectPath);
+        ReloadActivePageTabAfterPathChange(reloadActiveTab);
+        PagesTree.Items.Refresh();
+        PagesTree.UpdateLayout();
+        RevealPageNodeAfterDrop(selectPath);
+    }
+
+    private void RevealPageNodeAfterDrop(string folderPath)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (!Directory.Exists(folderPath))
+                return;
+
+            SelectPageTreeNodeSilently(folderPath);
+            if (FindPageTreeItemByFolder(folderPath) is { } item)
+                BringPageTreeItemIntoCenteredView(item);
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     private static int IndexOfTakeoff(IReadOnlyList<TakeoffItem> takeoffs, TakeoffItem target)
     {
         for (int i = 0; i < takeoffs.Count; i++)
@@ -1936,7 +2346,8 @@ public partial class MainWindow
         {
             ExpandTreeItemAndAncestorsWithoutTracking(item);
             item.IsSelected = true;
-            item.BringIntoView();
+            ApplyPagesMultiSelectionVisuals();
+            BringPageTreeItemIntoCenteredView(item);
         }
         finally
         {
@@ -1981,6 +2392,32 @@ public partial class MainWindow
         {
             foreach (ScrollViewer scrollViewer in FindVisualChildren<ScrollViewer>(tree))
                 scrollViewer.ScrollToHorizontalOffset(0);
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void BringPageTreeItemIntoCenteredView(TreeViewItem item)
+    {
+        item.BringIntoView();
+        Dispatcher.InvokeAsync(() =>
+        {
+            ScrollViewer? scrollViewer = FindVisualChildren<ScrollViewer>(PagesTree).FirstOrDefault();
+            if (scrollViewer == null || scrollViewer.ViewportHeight <= 0)
+                return;
+
+            Point top;
+            try
+            {
+                top = item.TranslatePoint(new Point(0, 0), scrollViewer);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            double itemHeight = item.ActualHeight > 0 ? item.ActualHeight : 22.0;
+            double offset = scrollViewer.VerticalOffset + top.Y - ((scrollViewer.ViewportHeight - itemHeight) / 2.0);
+            scrollViewer.ScrollToVerticalOffset(Math.Max(0, offset));
+            scrollViewer.ScrollToHorizontalOffset(0);
         }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
@@ -2031,7 +2468,9 @@ public partial class MainWindow
 
         try
         {
-            string renamed = OurPlaneCoreJobStore.RenameNode(path, name);
+            string renamed = item.Tag is PageInfo
+                ? OurPlaneCoreJobStore.RenamePageAllowDuplicateName(path, name)
+                : OurPlaneCoreJobStore.RenameNode(path, name);
             bool reloadActiveTab = UpdatePageReferencesForMovedPath(path, renamed);
             ReloadPagesTree(renamed);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
@@ -2167,8 +2606,7 @@ public partial class MainWindow
             _pagesMultiSelection.Clear();
             foreach (string pasted in pastedItems)
                 _pagesMultiSelection.Add(pasted);
-            ReloadPagesTree(pastedItems[0]);
-            ReloadActivePageTabAfterPathChange(reloadActiveTab);
+            QueuePagesTreeDropRefresh(pastedItems[0], reloadActiveTab);
             TxtStatus.Text = pastedItems.Count == 1
                 ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlaneCoreJobStore.DisplayName(pastedItems[0])}"
                 : $"{(wasCut ? "Moved" : "Pasted")} {pastedItems.Count} items.";
@@ -2709,29 +3147,53 @@ public partial class MainWindow
 
     private async void BtnAutoRenamePdf_Click(object sender, RoutedEventArgs e)
     {
-        if (GetSelectedPdfAutomationTarget("Auto Name") is { } item)
-            await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false);
+        await RunAsyncUiHandler(
+            async () =>
+            {
+                if (GetSelectedPdfAutomationTarget("Auto Name") is { } item)
+                    await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false);
+            },
+            "Auto Name failed.",
+            "Auto Name");
     }
 
     private async void BtnAutoScalePdf_Click(object sender, RoutedEventArgs e)
     {
-        if (GetSelectedPdfAutomationTarget("Auto Scale") is { } item)
-            await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true);
+        await RunAsyncUiHandler(
+            async () =>
+            {
+                if (GetSelectedPdfAutomationTarget("Auto Scale") is { } item)
+                    await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true);
+            },
+            "Auto Scale failed.",
+            "Auto Scale");
     }
 
     private async void BtnAutoRenameScalePdf_Click(object sender, RoutedEventArgs e)
     {
-        if (GetSelectedPdfAutomationTarget("Auto Name + Scale") is { } item)
-            await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true);
+        await RunAsyncUiHandler(
+            async () =>
+            {
+                if (GetSelectedPdfAutomationTarget("Auto Name + Scale") is { } item)
+                    await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true);
+            },
+            "Auto Name + Scale failed.",
+            "Auto Name + Scale");
     }
 
     private async void BtnQueuePdfMetadataFallback_Click(object sender, RoutedEventArgs e)
     {
-        if (await TryRunSheetManagerPdfMetadataFallbackAsync())
-            return;
+        await RunAsyncUiHandler(
+            async () =>
+            {
+                if (await TryRunSheetManagerPdfMetadataFallbackAsync())
+                    return;
 
-        if (GetSelectedPdfAutomationTarget("AI Fill") is { } item)
-            QueuePdfMetadataFallback(item);
+                if (GetSelectedPdfAutomationTarget("AI Fill") is { } item)
+                    QueuePdfMetadataFallback(item);
+            },
+            "AI Fill failed.",
+            "AI Fill");
     }
 
     private async Task<bool> TryRunSheetManagerPdfMetadataFallbackAsync()
@@ -2892,8 +3354,8 @@ public partial class MainWindow
             return selected;
         }
 
-        if (PagesTree.Items.OfType<TreeViewItem>().FirstOrDefault() is { } root)
-            return root;
+        if (Directory.Exists(_currentJob.PagesRoot))
+            return CreateHiddenPagesRootItem();
 
         MessageBox.Show("No PDF pages found.", title, MessageBoxButton.OK, MessageBoxImage.Information);
         return null;
@@ -3035,7 +3497,7 @@ public partial class MainWindow
                     if (!string.IsNullOrWhiteSpace(proposedName) &&
                         !string.Equals(proposedName, finalName, StringComparison.OrdinalIgnoreCase))
                     {
-                        string renamedPath = OurPlaneCoreJobStore.RenameNode(currentPath, proposedName);
+                        string renamedPath = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(currentPath, proposedName);
                         currentPath = renamedPath;
                         finalName = OurPlaneCoreJobStore.DisplayName(renamedPath);
                         renamed++;
@@ -3115,11 +3577,10 @@ public partial class MainWindow
         }
 
         string displayScale = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
-        const double ptM = 25.4 / 72.0 / 1000.0;
         metadata.SkipScale = false;
         metadata.SelectedScaleText = string.IsNullOrWhiteSpace(displayScale) ? cleanScale : displayScale;
         metadata.ScaleText = metadata.SelectedScaleText;
-        metadata.SelectedScaleRatio = scaleMetersPerPt / ptM;
+        metadata.SelectedScaleRatio = scaleMetersPerPt / ViewportConstants.PdfPointMeters;
         metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
         OurPlaneCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
         return true;
@@ -3142,7 +3603,7 @@ public partial class MainWindow
             bool learnedConflict = string.Equals(learning.Confidence, "learned-conflict", StringComparison.OrdinalIgnoreCase);
             var warnings = metadata.Warnings.ToList();
             if (nameConflict)
-                warnings.Add("proposed page name already exists in this folder");
+                warnings.Add("same page name allowed; folder path will be uniqued");
             if (!string.IsNullOrWhiteSpace(learning.Warning))
                 warnings.Add(learning.Warning);
 
@@ -3161,7 +3622,7 @@ public partial class MainWindow
                 Confidence = learning.Confidence,
                 Reason = PdfMetadataDecisionReason(metadata, learning, canRename, canScale, nameConflict, learnedConflict),
                 Warnings = string.Join("; ", warnings),
-                ApplyRename = defaultRename && canRename && !nameConflict && !learnedConflict,
+                ApplyRename = defaultRename && canRename && !learnedConflict,
                 ApplyScale = defaultScale && canScale && !learnedConflict,
             };
         }
@@ -3181,10 +3642,12 @@ public partial class MainWindow
         {
             string suffix = string.IsNullOrWhiteSpace(metadata.Suffix) ? "no suffix" : $"suffix {metadata.Suffix}";
             parts.Add($"name from {metadata.Source}: {metadata.SheetLabel} / {key} / {suffix}");
+            if (nameConflict)
+                parts.Add("duplicate page name allowed; folder path will be unique");
         }
         else if (nameConflict)
         {
-            parts.Add("rename blocked: proposed name already exists");
+            parts.Add("rename unchanged; same page name is allowed when needed");
         }
         else
         {
@@ -3811,6 +4274,13 @@ public partial class MainWindow
 
     private void ApplyPagesMultiSelectionVisuals()
     {
+        Brush? brushOrNull(string key) => Application.Current.Resources[key] as Brush;
+        Brush dropOk = brushOrNull("RowDropOkBrush") ?? new SolidColorBrush(Color.FromRgb(204, 245, 218));
+        Brush activeLinked = brushOrNull("RowSelectionBrush") ?? new SolidColorBrush(Color.FromRgb(204, 229, 255));
+        Brush multiLinked = brushOrNull("RowMultiSelectBrush") ?? new SolidColorBrush(Color.FromRgb(205, 226, 255));
+        Brush measuredByActive = brushOrNull("RowActiveBrush") ?? new SolidColorBrush(Color.FromRgb(255, 236, 190));
+        Brush rowFg = brushOrNull("RowFlagForegroundBrush") ?? Brushes.Black;
+
         foreach (TreeViewItem item in EnumeratePageTreeItems())
         {
             string? path = GetPagesNodePath(item);
@@ -3820,10 +4290,20 @@ public partial class MainWindow
             item.ClearValue(Control.BorderBrushProperty);
             item.ClearValue(Control.BorderThicknessProperty);
 
-            if (ReferenceEquals(item, _pageTakeoffLegendDropTarget))
+            if (ReferenceEquals(item, _pagesPositionDropTarget))
             {
-                item.Background = new SolidColorBrush(Color.FromRgb(204, 245, 218));
-                item.Foreground = Brushes.Black;
+                item.ClearValue(Control.BackgroundProperty);
+                item.ClearValue(Control.ForegroundProperty);
+                item.FontWeight = FontWeights.Normal;
+                item.BorderBrush = _pagesPositionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+                item.BorderThickness = _pagesPositionDropAfter
+                    ? new Thickness(0, 0, 0, 2)
+                    : new Thickness(0, 2, 0, 0);
+            }
+            else if (ReferenceEquals(item, _pageTakeoffLegendDropTarget))
+            {
+                item.Background = dropOk;
+                item.Foreground = rowFg;
                 item.FontWeight = FontWeights.Normal;
                 item.BorderBrush = Brushes.SeaGreen;
                 item.BorderThickness = _pageTakeoffLegendDropAfter
@@ -3832,20 +4312,20 @@ public partial class MainWindow
             }
             else if (IsActivePageTakeoffNode(item))
             {
-                item.Background = new SolidColorBrush(Color.FromRgb(176, 214, 255));
-                item.Foreground = Brushes.Black;
+                item.Background = activeLinked;
+                item.Foreground = rowFg;
                 item.FontWeight = FontWeights.Normal;
             }
             else if (selected || linkedSelected)
             {
-                item.Background = new SolidColorBrush(Color.FromRgb(205, 226, 255));
-                item.Foreground = Brushes.Black;
+                item.Background = multiLinked;
+                item.Foreground = rowFg;
                 item.ClearValue(Control.FontWeightProperty);
             }
             else if (IsPageMeasuredByActiveTakeoff(item))
             {
-                item.Background = new SolidColorBrush(Color.FromRgb(255, 242, 166));
-                item.Foreground = Brushes.Black;
+                item.Background = measuredByActive;
+                item.Foreground = rowFg;
                 item.ClearValue(Control.FontWeightProperty);
             }
             else

@@ -16,6 +16,7 @@ namespace OurPlaneCore;
 public partial class MainWindow
 {
     private bool _sheetManagerEditableColumnsConfigured;
+    private bool _updatingSheetManagerBulkEdit;
 
     private void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -48,10 +49,38 @@ public partial class MainWindow
     }
 
     private void BtnSheetManagerRefresh_Click(object sender, RoutedEventArgs e) => RefreshSheetManager();
-    private async void BtnSheetManagerAnalyze_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: false);
-    private async void BtnSheetManagerAutoName_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: false);
-    private async void BtnSheetManagerAutoScale_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: true);
-    private async void BtnSheetManagerAutoNameScale_Click(object sender, RoutedEventArgs e) => await AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: true);
+
+    private async void BtnSheetManagerAnalyze_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: false),
+            "Sheet Manager analysis failed.",
+            "Sheet Manager");
+    }
+
+    private async void BtnSheetManagerAutoName_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: false),
+            "Sheet Manager Auto Name failed.",
+            "Sheet Manager");
+    }
+
+    private async void BtnSheetManagerAutoScale_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => AnalyzeSheetManagerAsync(defaultRename: false, defaultScale: true),
+            "Sheet Manager Auto Scale failed.",
+            "Sheet Manager");
+    }
+
+    private async void BtnSheetManagerAutoNameScale_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => AnalyzeSheetManagerAsync(defaultRename: true, defaultScale: true),
+            "Sheet Manager Auto Name + Scale failed.",
+            "Sheet Manager");
+    }
 
     private void ConfigureSheetManagerEditableColumns()
     {
@@ -94,6 +123,7 @@ public partial class MainWindow
         textBox.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
         textBox.SetValue(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1));
         textBox.SetValue(TextBox.BackgroundProperty, Brushes.Transparent);
+        textBox.SetValue(FrameworkElement.TagProperty, bindingPath);
         textBox.SetValue(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center);
         textBox.SetValue(FrameworkElement.MinWidthProperty, 70.0);
         textBox.SetBinding(
@@ -104,6 +134,7 @@ public partial class MainWindow
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
             });
         textBox.AddHandler(UIElement.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_GotKeyboardFocus));
+        textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(SheetManagerTextBox_TextChanged));
         return new DataTemplate { VisualTree = textBox };
     }
 
@@ -111,6 +142,62 @@ public partial class MainWindow
     {
         if (sender is TextBox textBox)
             textBox.SelectAll();
+    }
+
+    private static void SheetManagerTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox ||
+            textBox.DataContext is not PdfMetadataPreviewRow editedRow ||
+            textBox.Tag is not string bindingPath ||
+            Window.GetWindow(textBox) is not MainWindow owner)
+        {
+            return;
+        }
+
+        owner.ApplySheetManagerTextToSelectedRows(editedRow, bindingPath, textBox.Text);
+    }
+
+    private void ApplySheetManagerTextToSelectedRows(PdfMetadataPreviewRow editedRow, string bindingPath, string value)
+    {
+        if (_updatingSheetManagerBulkEdit ||
+            SheetManagerGrid.SelectedItems.Count <= 1 ||
+            !SheetManagerGrid.SelectedItems.Contains(editedRow))
+        {
+            return;
+        }
+
+        var selectedRows = SheetManagerGrid.SelectedItems
+            .OfType<PdfMetadataPreviewRow>()
+            .ToList();
+        if (selectedRows.Count <= 1)
+            return;
+
+        _updatingSheetManagerBulkEdit = true;
+        try
+        {
+            foreach (PdfMetadataPreviewRow row in selectedRows)
+            {
+                if (string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedPageName), StringComparison.Ordinal))
+                {
+                    row.ProposedPageName = value;
+                    row.ApplyRename = ShouldApplySheetManagerRename(row, value);
+                }
+                else if (string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedScale), StringComparison.Ordinal))
+                {
+                    row.ProposedScale = value;
+                    row.ApplyScale = ShouldApplySheetManagerScale(row, value);
+                }
+            }
+        }
+        finally
+        {
+            _updatingSheetManagerBulkEdit = false;
+        }
+
+        string field = string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedPageName), StringComparison.Ordinal)
+            ? "name"
+            : "scale";
+        TxtStatus.Text = $"Sheet Manager: {field} copied to {selectedRows.Count} selected row(s).";
     }
 
     private void RefreshSheetManager()
@@ -241,25 +328,40 @@ public partial class MainWindow
     {
         foreach (PdfMetadataPreviewRow row in rows)
         {
-            if (!row.ApplyRename &&
-                !string.IsNullOrWhiteSpace(row.ProposedPageName) &&
-                !string.Equals(row.ProposedPageName.Trim(), row.CurrentPageName, StringComparison.OrdinalIgnoreCase))
+            if (!row.ApplyRename && ShouldApplySheetManagerRename(row, row.ProposedPageName))
             {
                 row.ApplyRename = true;
             }
 
             if (row.ApplyScale ||
-                string.IsNullOrWhiteSpace(row.ProposedScale) ||
-                string.Equals(row.ProposedScale.Trim(), "skip", StringComparison.OrdinalIgnoreCase) ||
-                OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is not { } page)
+                !ShouldApplySheetManagerScale(row, row.ProposedScale))
             {
                 continue;
             }
 
-            string currentScale = SheetManagerScaleText(page.ScaleMetersPerPt);
-            if (!string.Equals(row.ProposedScale.Trim(), currentScale, StringComparison.OrdinalIgnoreCase))
-                row.ApplyScale = true;
+            row.ApplyScale = true;
         }
+    }
+
+    private static bool ShouldApplySheetManagerRename(PdfMetadataPreviewRow row, string proposedName) =>
+        !string.IsNullOrWhiteSpace(proposedName) &&
+        !string.Equals(proposedName.Trim(), row.CurrentPageName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldApplySheetManagerScale(PdfMetadataPreviewRow row, string proposedScale)
+    {
+        string clean = (proposedScale ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(clean) ||
+            string.Equals(clean, "skip", StringComparison.OrdinalIgnoreCase) ||
+            OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is not { } page ||
+            !PdfSheetMetadataService.TryParseScaleMetersPerPt(clean, out double scaleMetersPerPt))
+        {
+            return false;
+        }
+
+        string currentScale = SheetManagerScaleText(page.ScaleMetersPerPt);
+        string normalizedScale = SheetManagerScaleText(scaleMetersPerPt);
+        return !string.Equals(clean, currentScale, StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(normalizedScale, currentScale, StringComparison.OrdinalIgnoreCase);
     }
 
     private void BtnSheetManagerOpenSheet_Click(object sender, RoutedEventArgs e)
@@ -353,8 +455,14 @@ public partial class MainWindow
 
     private async void BtnAiManagerRunAi_Click(object sender, RoutedEventArgs e)
     {
-        if (SelectedAiManagerItem() is { } item && CanRunAiRequest(item))
-            await RunAiRequestAsync(item);
+        await RunAsyncUiHandler(
+            async () =>
+            {
+                if (SelectedAiManagerItem() is { } item && CanRunAiRequest(item))
+                    await RunAiRequestAsync(item);
+            },
+            "AI Manager request failed.",
+            "AI Manager");
     }
 
     private void Btn3dManagerBuildFromTakeoffs_Click(object sender, RoutedEventArgs e)

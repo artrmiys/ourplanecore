@@ -8,7 +8,7 @@ namespace OurPlaneCore;
 
 public static class SampleJobService
 {
-    private const double SampleScaleMetersPerPt = 25.4 / 72.0 / 1000.0 * 96.0;
+    private const double SampleScaleMetersPerPt = ViewportConstants.PdfPointMeters * 96.0;
 
     public static string DefaultJobsRoot
     {

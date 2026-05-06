@@ -27,57 +27,76 @@ public sealed partial class PdfViewport
         canvas.Clear(GetCachedColor(ViewBackgroundColor, SKColors.White));
 
         if (_pageBitmap == null) return;
-        SKRect visiblePdf = GetVisiblePdfRect();
-
-        // ── PDF page bitmap ───────────────────────────────────────────────────
-        // PDF point (px,py) → screen pixel (sx,sy):
-        //   sx = (px - panX) * zoom
-        //   sy = (py - panY) * zoom
-        // bitmap pixel (bx,by) → screen pixel:
-        //   sx = bx * zoom/bitmapScale - panX*zoom
+        bool previousFastFrame = _renderNavigationFastFrame;
+        _renderNavigationFastFrame = IsFastNavigationFrame();
+        try
         {
-            using var bitmapPaint = new SKPaint
-            {
-                IsAntialias = true,
-                FilterQuality = _isViewDragging ? SKFilterQuality.Low : SKFilterQuality.Medium,
-            };
+            SKRect visiblePdf = GetVisiblePdfRect();
 
-            float visibleW = (float)ActualWidth / Math.Max(_zoom, 0.001f);
-            float visibleH = (float)ActualHeight / Math.Max(_zoom, 0.001f);
-            float srcLeft = Math.Clamp(_panX * _bitmapScale, 0, _pageBitmap.Width);
-            float srcTop = Math.Clamp(_panY * _bitmapScale, 0, _pageBitmap.Height);
-            float srcRight = Math.Clamp((_panX + visibleW) * _bitmapScale, 0, _pageBitmap.Width);
-            float srcBottom = Math.Clamp((_panY + visibleH) * _bitmapScale, 0, _pageBitmap.Height);
-
-            if (srcRight > srcLeft && srcBottom > srcTop)
+            // ── PDF page bitmap ───────────────────────────────────────────────────
+            // PDF point (px,py) → screen pixel (sx,sy):
+            //   sx = (px - panX) * zoom
+            //   sy = (py - panY) * zoom
+            // bitmap pixel (bx,by) → screen pixel:
+            //   sx = bx * zoom/bitmapScale - panX*zoom
             {
-                var src = new SKRect(srcLeft, srcTop, srcRight, srcBottom);
-                var dst = new SKRect(
-                    (srcLeft / _bitmapScale - _panX) * _zoom,
-                    (srcTop / _bitmapScale - _panY) * _zoom,
-                    (srcRight / _bitmapScale - _panX) * _zoom,
-                    (srcBottom / _bitmapScale - _panY) * _zoom);
-                canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
-                DrawPdfLayerTraceGhost(canvas, dst);
+                using var bitmapPaint = new SKPaint
+                {
+                    IsAntialias = true,
+                    FilterQuality = _renderNavigationFastFrame ? SKFilterQuality.Low : SKFilterQuality.Medium,
+                };
+
+                float visibleW = (float)ActualWidth / Math.Max(_zoom, 0.001f);
+                float visibleH = (float)ActualHeight / Math.Max(_zoom, 0.001f);
+                float srcLeft = Math.Clamp(_panX * _bitmapScale, 0, _pageBitmap.Width);
+                float srcTop = Math.Clamp(_panY * _bitmapScale, 0, _pageBitmap.Height);
+                float srcRight = Math.Clamp((_panX + visibleW) * _bitmapScale, 0, _pageBitmap.Width);
+                float srcBottom = Math.Clamp((_panY + visibleH) * _bitmapScale, 0, _pageBitmap.Height);
+
+                if (srcRight > srcLeft && srcBottom > srcTop)
+                {
+                    var src = new SKRect(srcLeft, srcTop, srcRight, srcBottom);
+                    var dst = new SKRect(
+                        (srcLeft / _bitmapScale - _panX) * _zoom,
+                        (srcTop / _bitmapScale - _panY) * _zoom,
+                        (srcRight / _bitmapScale - _panX) * _zoom,
+                        (srcBottom / _bitmapScale - _panY) * _zoom);
+                    canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
+                    DrawPdfLayerTraceGhost(canvas, dst);
+                }
+            }
+
+            // ── Measurement overlay (PDF-point coordinate system) ─────────────────
+            {
+                var measMtx = SKMatrix.CreateScaleTranslation(
+                    _zoom, _zoom, -_panX * _zoom, -_panY * _zoom);
+                using var saved = new SKAutoCanvasRestore(canvas, true);
+                canvas.SetMatrix(measMtx);
+                DrawSheetOverlay(canvas);
+                DrawSheetOverlayEditGuides(canvas);
+                if (!_renderNavigationFastFrame)
+                    DrawTransformOverlay(canvas);
+                DrawMeasurements(canvas, visiblePdf);
+                DrawPageAnnotations(canvas, visiblePdf);
+                if (!_renderNavigationFastFrame)
+                {
+                    DrawAiActionDraftPreview(canvas, visiblePdf);
+                    DrawAiMarkers(canvas, visiblePdf);
+                }
+                DrawInProgress(canvas);
+                DrawMeasurementLabels(canvas, visiblePdf);
+            }
+
+            if (!_renderNavigationFastFrame)
+            {
+                DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
+                DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
             }
         }
-
-        // ── Measurement overlay (PDF-point coordinate system) ─────────────────
+        finally
         {
-            var measMtx = SKMatrix.CreateScaleTranslation(
-                _zoom, _zoom, -_panX * _zoom, -_panY * _zoom);
-            using var saved = new SKAutoCanvasRestore(canvas, true);
-            canvas.SetMatrix(measMtx);
-            DrawTransformOverlay(canvas);
-            DrawMeasurements(canvas, visiblePdf);
-            DrawPageAnnotations(canvas, visiblePdf);
-            DrawAiActionDraftPreview(canvas, visiblePdf);
-            DrawAiMarkers(canvas, visiblePdf);
-            DrawInProgress(canvas);
+            _renderNavigationFastFrame = previousFastFrame;
         }
-
-        DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
-        DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
     }
 
 }

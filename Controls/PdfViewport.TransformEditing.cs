@@ -14,13 +14,21 @@ public sealed partial class PdfViewport
     public bool MirrorSelectedHorizontal()
     {
         SKPoint center = CurrentSelectionCenter();
-        return TransformSelectedPoints(point => new SKPoint(2 * center.X - point.X, point.Y), "Mirrored selection horizontal.");
+        return TransformSelectedPoints(
+            point => new SKPoint(2 * center.X - point.X, point.Y),
+            "Mirrored selection horizontal.",
+            "mirror-horizontal",
+            coalesceUndo: false);
     }
 
     public bool MirrorSelectedVertical()
     {
         SKPoint center = CurrentSelectionCenter();
-        return TransformSelectedPoints(point => new SKPoint(point.X, 2 * center.Y - point.Y), "Mirrored selection vertical.");
+        return TransformSelectedPoints(
+            point => new SKPoint(point.X, 2 * center.Y - point.Y),
+            "Mirrored selection vertical.",
+            "mirror-vertical",
+            coalesceUndo: false);
     }
 
     public bool RotateSelectedBy(double degrees)
@@ -32,7 +40,11 @@ public sealed partial class PdfViewport
         float radians = (float)(degrees * Math.PI / 180.0);
         float cos = MathF.Cos(radians);
         float sin = MathF.Sin(radians);
-        return TransformSelectedPoints(point => RotatePoint(point, center, cos, sin), $"Rotated selection {degrees:0.#} deg.");
+        return TransformSelectedPoints(
+            point => RotatePoint(point, center, cos, sin),
+            $"Rotated selection {degrees:0.#} deg.",
+            "rotate-slider",
+            coalesceUndo: true);
     }
 
     public bool ScaleSelectedBy(double factor)
@@ -46,10 +58,16 @@ public sealed partial class PdfViewport
             point => new SKPoint(
                 center.X + (float)((point.X - center.X) * factor),
                 center.Y + (float)((point.Y - center.Y) * factor)),
-            $"Scaled selection {factor:0.##}x.");
+            $"Scaled selection {factor:0.##}x.",
+            "scale-slider",
+            coalesceUndo: true);
     }
 
-    private bool TransformSelectedPoints(Func<SKPoint, SKPoint> transform, string status)
+    private bool TransformSelectedPoints(
+        Func<SKPoint, SKPoint> transform,
+        string status,
+        string undoKey,
+        bool coalesceUndo)
     {
         var measurements = SelectedTransformMeasurements();
         var annotations = SelectedTransformAnnotations();
@@ -59,13 +77,14 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        foreach (PageAnnotation annotation in annotations)
-            EnsureAnnotationTransformPoints(annotation);
-
+        PushGeometryUndoSnapshot(measurements, annotations, "selection transform", undoKey, coalesceUndo);
         foreach (Measurement measurement in measurements)
+        {
             ApplyTransform(measurement.Points, transform);
+            ApplyTransformToHoles(measurement.Holes, transform);
+        }
         foreach (PageAnnotation annotation in annotations)
-            ApplyTransform(annotation.Points, transform);
+            ApplyAnnotationTransform(annotation, transform);
 
         RequestRepaint();
         foreach (Measurement measurement in measurements)
@@ -80,6 +99,22 @@ public sealed partial class PdfViewport
     {
         for (int i = 0; i < points.Count; i++)
             points[i] = transform(points[i]);
+    }
+
+    private static void ApplyTransformToHoles(List<List<SKPoint>> holes, Func<SKPoint, SKPoint> transform)
+    {
+        foreach (var hole in holes)
+            ApplyTransform(hole, transform);
+    }
+
+    private static void RestoreTransformedHoles(
+        List<List<SKPoint>> target,
+        IReadOnlyList<IReadOnlyList<SKPoint>> originals,
+        Func<SKPoint, SKPoint> transform)
+    {
+        target.Clear();
+        foreach (var originalHole in originals)
+            target.Add(originalHole.Select(transform).ToList());
     }
 
     private static SKPoint RotatePoint(SKPoint point, SKPoint center, float cos, float sin)
@@ -103,7 +138,7 @@ public sealed partial class PdfViewport
         _draggingTransformRotate = handle == TransformHandleKind.Rotate;
         _dragScreenStart = screen;
         _transformCenter = CurrentSelectionCenter();
-        _transformStartDistance = Math.Max(0.001f, Distance(pdf, _transformCenter));
+        _transformStartDistance = Math.Max(ViewportConstants.ZeroLengthEpsilon, Distance(pdf, _transformCenter));
         _transformStartAngle = AngleFromCenter(_transformCenter, pdf);
         CaptureMouse();
         PostStatus(_draggingTransformRotate
@@ -120,14 +155,15 @@ public sealed partial class PdfViewport
             return false;
 
         _transformMeasurementOriginalPoints.Clear();
+        _transformMeasurementOriginalHoles.Clear();
         _transformAnnotationOriginalPoints.Clear();
         foreach (Measurement measurement in measurements)
-            _transformMeasurementOriginalPoints[measurement] = measurement.Points.ToList();
-        foreach (PageAnnotation annotation in annotations)
         {
-            EnsureAnnotationTransformPoints(annotation);
-            _transformAnnotationOriginalPoints[annotation] = annotation.Points.ToList();
+            _transformMeasurementOriginalPoints[measurement] = measurement.Points.ToList();
+            _transformMeasurementOriginalHoles[measurement] = CloneHoles(measurement.Holes);
         }
+        foreach (PageAnnotation annotation in annotations)
+            _transformAnnotationOriginalPoints[annotation] = annotation.Points.ToList();
 
         return true;
     }
@@ -140,7 +176,7 @@ public sealed partial class PdfViewport
         if (_draggingTransformScale)
         {
             float distance = Distance(pdf, _transformCenter);
-            float factor = Math.Clamp(distance / Math.Max(_transformStartDistance, 0.001f), 0.05f, 20f);
+            float factor = Math.Clamp(distance / Math.Max(_transformStartDistance, ViewportConstants.ZeroLengthEpsilon), 0.05f, 20f);
             ApplyTransformFromOriginal(point => new SKPoint(
                 _transformCenter.X + (point.X - _transformCenter.X) * factor,
                 _transformCenter.Y + (point.Y - _transformCenter.Y) * factor));
@@ -165,13 +201,13 @@ public sealed partial class PdfViewport
         {
             for (int i = 0; i < measurement.Points.Count && i < originalPoints.Count; i++)
                 measurement.Points[i] = transform(originalPoints[i]);
+
+            if (_transformMeasurementOriginalHoles.TryGetValue(measurement, out var originalHoles))
+                RestoreTransformedHoles(measurement.Holes, originalHoles, transform);
         }
 
         foreach (var (annotation, originalPoints) in _transformAnnotationOriginalPoints)
-        {
-            for (int i = 0; i < annotation.Points.Count && i < originalPoints.Count; i++)
-                annotation.Points[i] = transform(originalPoints[i]);
-        }
+            RestoreAnnotationTransform(annotation, originalPoints, transform);
     }
 
     private void FinishTransformDrag()
@@ -181,20 +217,79 @@ public sealed partial class PdfViewport
 
         var changedMeasurements = _transformMeasurementOriginalPoints.Keys.ToList();
         var changedAnnotations = _transformAnnotationOriginalPoints.Keys.ToList();
+        bool changed = TransformOriginalsChanged();
+        if (changed)
+            PushGeometryUndoSnapshotFromOriginals(
+                _transformMeasurementOriginalPoints,
+                _transformMeasurementOriginalHoles,
+                _transformAnnotationOriginalPoints,
+                "canvas transform",
+                "canvas-transform");
+
         _draggingTransformScale = false;
         _draggingTransformRotate = false;
         _transformMeasurementOriginalPoints.Clear();
+        _transformMeasurementOriginalHoles.Clear();
         _transformAnnotationOriginalPoints.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
 
-        foreach (Measurement measurement in changedMeasurements)
-            MeasurementChanged?.Invoke(measurement);
-        foreach (PageAnnotation annotation in changedAnnotations)
-            PageAnnotationChanged?.Invoke(annotation);
+        if (changed)
+        {
+            foreach (Measurement measurement in changedMeasurements)
+                MeasurementChanged?.Invoke(measurement);
+            foreach (PageAnnotation annotation in changedAnnotations)
+                PageAnnotationChanged?.Invoke(annotation);
+        }
+
         RequestRepaint();
     }
 
+    private bool TransformOriginalsChanged()
+    {
+        foreach (var (measurement, originalPoints) in _transformMeasurementOriginalPoints)
+            if (!SamePoints(measurement.Points, originalPoints) ||
+                _transformMeasurementOriginalHoles.TryGetValue(measurement, out var holes) &&
+                !SameHoles(measurement.Holes, holes))
+            {
+                return true;
+            }
+
+        foreach (var (annotation, originalPoints) in _transformAnnotationOriginalPoints)
+            if (!SamePoints(annotation.Points, originalPoints))
+                return true;
+
+        return false;
+    }
+
+    private static bool SamePoints(IReadOnlyList<SKPoint> left, IReadOnlyList<SKPoint> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (Math.Abs(left[i].X - right[i].X) > ViewportConstants.ZeroLengthEpsilon ||
+                Math.Abs(left[i].Y - right[i].Y) > ViewportConstants.ZeroLengthEpsilon)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool SameHoles(IReadOnlyList<IReadOnlyList<SKPoint>> left, IReadOnlyList<IReadOnlyList<SKPoint>> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (int i = 0; i < left.Count; i++)
+            if (!SamePoints(left[i], right[i]))
+                return false;
+
+        return true;
+    }
     private bool TryHitTransformHandle(SKPoint pdf, out TransformHandleKind handle)
     {
         handle = TransformHandleKind.None;
@@ -225,10 +320,10 @@ public sealed partial class PdfViewport
         }
 
         bounds = PointsBounds(points);
-        if (bounds.Width < 0.001f)
-            bounds.Inflate(8f / Math.Max(_zoom, 0.001f), 0);
-        if (bounds.Height < 0.001f)
-            bounds.Inflate(0, 8f / Math.Max(_zoom, 0.001f));
+        if (bounds.Width < ViewportConstants.ZeroLengthEpsilon)
+            bounds.Inflate(ScreenToPdfDistance(8f), 0);
+        if (bounds.Height < ViewportConstants.ZeroLengthEpsilon)
+            bounds.Inflate(0, ScreenToPdfDistance(8f));
         return true;
     }
 
@@ -242,7 +337,7 @@ public sealed partial class PdfViewport
 
     private SKRect TransformHandleBounds(SKRect bounds)
     {
-        float inflate = 18f / Math.Max(_zoom, 0.001f);
+        float inflate = ScreenToPdfDistance(18f);
         bounds.Inflate(inflate, inflate);
         return bounds;
     }
@@ -253,7 +348,7 @@ public sealed partial class PdfViewport
         yield return (TransformHandleKind.ScaleTopRight, new SKPoint(bounds.Right, bounds.Top));
         yield return (TransformHandleKind.ScaleBottomRight, new SKPoint(bounds.Right, bounds.Bottom));
         yield return (TransformHandleKind.ScaleBottomLeft, new SKPoint(bounds.Left, bounds.Bottom));
-        yield return (TransformHandleKind.Rotate, new SKPoint((bounds.Left + bounds.Right) / 2f, bounds.Top - 22f / Math.Max(_zoom, 0.001f)));
+        yield return (TransformHandleKind.Rotate, new SKPoint((bounds.Left + bounds.Right) / 2f, bounds.Top - ScreenToPdfDistance(22f)));
     }
 
     private IReadOnlyList<Measurement> SelectedTransformMeasurements() =>
@@ -269,8 +364,13 @@ public sealed partial class PdfViewport
     private IEnumerable<SKPoint> SelectedTransformPoints()
     {
         foreach (Measurement measurement in SelectedTransformMeasurements())
+        {
             foreach (SKPoint point in measurement.Points)
                 yield return point;
+            foreach (var hole in measurement.Holes)
+                foreach (SKPoint point in hole)
+                    yield return point;
+        }
 
         foreach (PageAnnotation annotation in SelectedTransformAnnotations())
             foreach (SKPoint point in AnnotationTransformPoints(annotation))
@@ -280,22 +380,52 @@ public sealed partial class PdfViewport
     private bool HasSelectedTransformTargets() =>
         SelectedTransformMeasurements().Count > 0 || SelectedTransformAnnotations().Count > 0;
 
-    private void EnsureAnnotationTransformPoints(PageAnnotation annotation)
-    {
-        if (!IsRectangleAnnotation(annotation) || annotation.Points.Count != 2)
-            return;
-
-        IReadOnlyList<SKPoint> corners = RectangleCorners(annotation.Points);
-        annotation.Points.Clear();
-        annotation.Points.AddRange(corners);
-    }
-
     private static IReadOnlyList<SKPoint> AnnotationTransformPoints(PageAnnotation annotation)
     {
         if (!IsRectangleAnnotation(annotation) || annotation.Points.Count != 2)
             return annotation.Points;
 
         return RectangleCorners(annotation.Points);
+    }
+
+    private static void ApplyAnnotationTransform(PageAnnotation annotation, Func<SKPoint, SKPoint> transform)
+    {
+        if (IsRectangleAnnotation(annotation) && annotation.Points.Count == 2)
+        {
+            StoreRectangleFromTransformedCorners(annotation.Points, RectangleCorners(annotation.Points).Select(transform));
+            return;
+        }
+
+        ApplyTransform(annotation.Points, transform);
+    }
+
+    private static void RestoreAnnotationTransform(
+        PageAnnotation annotation,
+        IReadOnlyList<SKPoint> originalPoints,
+        Func<SKPoint, SKPoint> transform)
+    {
+        if (IsRectangleAnnotation(annotation) && originalPoints.Count == 2)
+        {
+            StoreRectangleFromTransformedCorners(annotation.Points, RectangleCorners(originalPoints).Select(transform));
+            return;
+        }
+
+        for (int i = 0; i < annotation.Points.Count && i < originalPoints.Count; i++)
+            annotation.Points[i] = transform(originalPoints[i]);
+    }
+
+    private static void StoreRectangleFromTransformedCorners(
+        List<SKPoint> target,
+        IEnumerable<SKPoint> transformedCorners)
+    {
+        var corners = transformedCorners.ToList();
+        if (corners.Count == 0)
+            return;
+
+        SKRect bounds = PointsBounds(corners);
+        target.Clear();
+        target.Add(new SKPoint(bounds.Left, bounds.Top));
+        target.Add(new SKPoint(bounds.Right, bounds.Bottom));
     }
 
     private static bool IsRectangleAnnotation(PageAnnotation annotation) =>
@@ -317,7 +447,7 @@ public sealed partial class PdfViewport
     }
 
     private static float Distance(SKPoint a, SKPoint b) =>
-        MathF.Sqrt(DistanceSquared(a, b));
+        MeasurementGeometry.Distance(a, b);
 
     private static float AngleFromCenter(SKPoint center, SKPoint point) =>
         MathF.Atan2(point.Y - center.Y, point.X - center.X);
@@ -334,4 +464,5 @@ public sealed partial class PdfViewport
         ScaleBottomLeft,
         Rotate,
     }
+
 }

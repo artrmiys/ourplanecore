@@ -609,7 +609,7 @@ public static class OpenAiRequestRunner
     {
         string path = Path.Combine(job.AIContextRoot, "responses", $"{request.Id}.openai.raw.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
-        File.WriteAllText(path, body);
+        IoUtil.WriteAllTextAtomic(path, body);
         return Path.GetRelativePath(job.RootPath, path);
     }
 

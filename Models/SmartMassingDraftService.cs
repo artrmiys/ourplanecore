@@ -275,7 +275,7 @@ public static partial class SmartMassingDraftService
         RefreshDerivedGeometry(draft);
         string path = ModelPath(job);
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
-        File.WriteAllText(path, JsonSerializer.Serialize(draft, JsonOptions));
+        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(draft, JsonOptions));
     }
 
     public static string SaveSnapshot(OurPlaneCoreJob job, SmartMassingDraft draft)
@@ -286,7 +286,7 @@ public static partial class SmartMassingDraftService
         string stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
         string id = SafeFilePart(string.IsNullOrWhiteSpace(draft.Id) ? "massing" : draft.Id);
         string path = Path.Combine(root, $"{stamp}_{id}.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(draft, JsonOptions));
+        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(draft, JsonOptions));
         return path;
     }
 

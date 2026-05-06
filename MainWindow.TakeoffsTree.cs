@@ -25,6 +25,8 @@ public partial class MainWindow
         if (_syncingTakeoffTreeSelection)
             return;
 
+        CancelPendingTakeoffSelectionSync();
+
         if (e.NewValue is TreeViewItem selectedNode &&
             GetTakeoffNodePath(selectedNode) is { } selectedPath &&
             (Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control &&
@@ -51,7 +53,7 @@ public partial class MainWindow
             RefreshPagesTakeoffIndicators();
             RefreshActiveTakeoffVisuals();
             RevealPagesForTakeoffSelection(e.NewValue as TreeViewItem);
-            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
             UpdateTotalDisplay();
         }
         else if (e.NewValue is TreeViewItem { Tag: TakeoffFolderNode folder })
@@ -65,7 +67,7 @@ public partial class MainWindow
             RefreshPagesTakeoffIndicators();
             RefreshActiveTakeoffVisuals();
             RevealPagesForTakeoffSelection(e.NewValue as TreeViewItem);
-            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
             UpdateTotalDisplay();
         }
         else if (e.NewValue is TreeViewItem { Tag: TakeoffMeasurementNode node })
@@ -100,6 +102,32 @@ public partial class MainWindow
             RevealPagesForTakeoffItems([node.Item], node.Measurement.PageFolder);
             UpdateTotalDisplay();
         }
+    }
+
+    private void CancelPendingTakeoffSelectionSync()
+    {
+        unchecked
+        {
+            _takeoffSelectionSyncVersion++;
+        }
+    }
+
+    private void ScheduleTakeoffSelectionSync(Action action)
+    {
+        int version;
+        unchecked
+        {
+            _takeoffSelectionSyncVersion++;
+            version = _takeoffSelectionSyncVersion;
+        }
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (version != _takeoffSelectionSyncVersion)
+                return;
+
+            action();
+        });
     }
 
     private void BtnNewItem_Click(object sender, RoutedEventArgs e)
@@ -487,7 +515,7 @@ public partial class MainWindow
                 "ItemTotal",
                 item.Name,
                 itemTypes,
-                item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode),
+                ExportItemTotalText(item),
                 item.Measurements.Count.ToString(),
                 item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture),
                 CostText(item),
@@ -525,6 +553,20 @@ public partial class MainWindow
         }
 
         return sb.ToString();
+    }
+
+    private string ExportItemTotalText(TakeoffItem item)
+    {
+        if (!item.IsJoistArea)
+            return item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode);
+
+        string labelText = PlanSwiftTakeoffExporter.JoistLabelText(
+            item,
+            _viewport.ScaleMetersPerPt,
+            _viewport.UnitMode);
+        return string.IsNullOrWhiteSpace(labelText)
+            ? item.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode)
+            : labelText;
     }
 
     private static void AppendCsvRow(StringBuilder sb, params string[] values)
@@ -804,39 +846,16 @@ public partial class MainWindow
 
     private bool CanMoveTakeoffSections(IReadOnlyList<TakeoffMeasurementNode> selectedNodes, TakeoffItem item, int offset)
     {
-        if (offset == 0 || selectedNodes.Count == 0 || item.Measurements.Count <= 1)
+        if (selectedNodes.Count == 0)
             return false;
 
         if (selectedNodes.Any(node => !ReferenceEquals(node.Item, item)))
             return false;
 
-        var selectedIds = selectedNodes
-            .Select(node => node.Measurement.Id)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (selectedIds.Count == 0 || selectedIds.Count >= item.Measurements.Count)
-            return false;
-
-        if (offset < 0)
-        {
-            for (int i = 1; i < item.Measurements.Count; i++)
-            {
-                if (selectedIds.Contains(item.Measurements[i].Id) &&
-                    !selectedIds.Contains(item.Measurements[i - 1].Id))
-                    return true;
-            }
-        }
-        else
-        {
-            for (int i = 0; i < item.Measurements.Count - 1; i++)
-            {
-                if (selectedIds.Contains(item.Measurements[i].Id) &&
-                    !selectedIds.Contains(item.Measurements[i + 1].Id))
-                    return true;
-            }
-        }
-
-        return false;
+        return TakeoffSectionOrderService.CanMove(
+            item.Measurements,
+            selectedNodes.Select(node => node.Measurement.Id),
+            offset);
     }
 
     private void MoveTakeoffSections(TakeoffMeasurementNode anchor, int offset)
@@ -845,40 +864,17 @@ public partial class MainWindow
         if (!CanMoveTakeoffSections(selectedNodes, anchor.Item, offset))
             return;
 
-        var selectedIds = selectedNodes
-            .Select(node => node.Measurement.Id)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (offset < 0)
-        {
-            for (int i = 1; i < anchor.Item.Measurements.Count; i++)
-            {
-                if (selectedIds.Contains(anchor.Item.Measurements[i].Id) &&
-                    !selectedIds.Contains(anchor.Item.Measurements[i - 1].Id))
-                {
-                    (anchor.Item.Measurements[i - 1], anchor.Item.Measurements[i]) =
-                        (anchor.Item.Measurements[i], anchor.Item.Measurements[i - 1]);
-                }
-            }
-        }
-        else
-        {
-            for (int i = anchor.Item.Measurements.Count - 2; i >= 0; i--)
-            {
-                if (selectedIds.Contains(anchor.Item.Measurements[i].Id) &&
-                    !selectedIds.Contains(anchor.Item.Measurements[i + 1].Id))
-                {
-                    (anchor.Item.Measurements[i], anchor.Item.Measurements[i + 1]) =
-                        (anchor.Item.Measurements[i + 1], anchor.Item.Measurements[i]);
-                }
-            }
-        }
+        if (!TakeoffSectionOrderService.Move(
+                anchor.Item.Measurements,
+                selectedNodes.Select(node => node.Measurement.Id),
+                offset))
+            return;
 
         OurPlaneCoreJobStore.SaveTakeoffItem(anchor.Item);
         RefreshTreeItem(anchor.Item);
         RefreshEstimateTable();
         RefreshSheetLegend();
+        CancelPendingTakeoffSelectionSync();
         SelectTakeoffSectionNodesSilently(selectedNodes);
         TxtStatus.Text = selectedNodes.Count == 1
             ? (offset < 0 ? $"Moved {MeasurementEntryTitle(anchor.Item).ToLowerInvariant()} up." : $"Moved {MeasurementEntryTitle(anchor.Item).ToLowerInvariant()} down.")
@@ -912,6 +908,7 @@ public partial class MainWindow
 
     private void SetActiveTakeoffTarget(TreeViewItem? tvi, TakeoffItem item, bool selectCanvasMeasurements = true)
     {
+        CancelPendingTakeoffSelectionSync();
         item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
@@ -936,13 +933,21 @@ public partial class MainWindow
         RefreshActiveTakeoffVisuals();
         RevealPagesForTakeoffItems([item], _currentPage?.FolderPath);
         if (selectCanvasMeasurements)
-            Dispatcher.InvokeAsync(() => SelectCurrentPageTakeoffMeasurementsOnCanvas(item));
+            ScheduleTakeoffSelectionSync(() => SelectCurrentPageTakeoffMeasurementsOnCanvas(item));
         UpdateTotalDisplay();
         TxtStatus.Text = $"Active takeoff target: {item.Name}.";
     }
 
     private void BtnActiveTakeoffRecord_Click(object sender, RoutedEventArgs e)
     {
+        if (_activeTool is "point" or "line" or "area")
+        {
+            string recordType = MeasurementTypeTitle(_activeTool);
+            SetTool("select");
+            TxtStatus.Text = $"Record stopped: {recordType}.";
+            return;
+        }
+
         if (_activeItem == null)
         {
             TxtStatus.Text = "Select a takeoff item before recording.";
@@ -1211,7 +1216,8 @@ public partial class MainWindow
                     JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                     JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding),
                     StringComparison.OrdinalIgnoreCase) ||
-                item.JoistShowLabels != joistEdit.ShowLabels;
+                item.JoistShowLabels != joistEdit.ShowLabels ||
+                item.JoistDetailedLabels != joistEdit.DetailedLabels;
             bool wasJoistArea = item.IsJoistArea;
             item.IsJoistTakeoff = joistEdit.Enabled && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
             item.JoistType = joistEdit.JoistType.Trim();
@@ -1220,6 +1226,7 @@ public partial class MainWindow
             item.JoistPitch = JoistTakeoffCalculator.NormalizePitch(joistEdit.Pitch);
             item.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding);
             item.JoistShowLabels = joistEdit.ShowLabels;
+            item.JoistDetailedLabels = joistEdit.DetailedLabels;
             OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             if (colorChanged)
             {
@@ -1680,7 +1687,8 @@ public partial class MainWindow
             item.JoistDirectionDegrees,
             JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
             JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
-            item.JoistShowLabels);
+            item.JoistShowLabels,
+            item.JoistDetailedLabels);
 
         var dialog = new Window
         {
@@ -1720,7 +1728,7 @@ public partial class MainWindow
         };
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
             joistPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         AddLabeledTextBox(joistPanel, 0, "Joist type:", out TextBox joistTypeBox, item.JoistType);
@@ -1807,11 +1815,22 @@ public partial class MainWindow
             Content = "Label each joist",
             IsChecked = item.JoistShowLabels,
             Margin = new Thickness(0, 3, 0, 3),
-            ToolTip = "When off, the area label still shows count / length.",
+            ToolTip = "When off, the area label still shows count and order length.",
         };
         Grid.SetRow(joistLabelsBox, 5);
         Grid.SetColumn(joistLabelsBox, 1);
         joistPanel.Children.Add(joistLabelsBox);
+
+        var joistDetailedLabelsBox = new CheckBox
+        {
+            Content = "Detailed area label",
+            IsChecked = item.JoistDetailedLabels,
+            Margin = new Thickness(0, 3, 0, 3),
+            ToolTip = "On: show order/raw/flat lengths. Off: use the old compact count / length format.",
+        };
+        Grid.SetRow(joistDetailedLabelsBox, 6);
+        Grid.SetColumn(joistDetailedLabelsBox, 1);
+        joistPanel.Children.Add(joistDetailedLabelsBox);
 
         joistEnabledBox.Checked += (_, _) => joistPanel.IsEnabled = isAreaTakeoff;
         joistEnabledBox.Unchecked += (_, _) => joistPanel.IsEnabled = false;
@@ -1971,7 +1990,8 @@ public partial class MainWindow
                 joistDirection,
                 joistPitch,
                 joistRounding,
-                joistLabelsBox.IsChecked == true);
+                joistLabelsBox.IsChecked == true,
+                joistDetailedLabelsBox.IsChecked == true);
             dialog.DialogResult = true;
         };
         dialog.Loaded += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };
@@ -2590,10 +2610,12 @@ public partial class MainWindow
     {
         _takeoffsDragStart = e.GetPosition(TakeoffsTree);
         _takeoffsDragItem = null;
+        _takeoffsDragArmed = false;
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
             return;
 
         _takeoffsDragItem = item;
+        _takeoffsDragArmed = CanArmTakeoffsTreeDrag(item, e.OriginalSource as DependencyObject);
 
         if (item.Tag is TakeoffMeasurementNode sectionNode)
         {
@@ -2614,7 +2636,7 @@ public partial class MainWindow
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
             RevealPagesForTakeoffSelection(item);
-            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
             return;
         }
 
@@ -2627,7 +2649,7 @@ public partial class MainWindow
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
             RevealPagesForTakeoffSelection(item);
-            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
             e.Handled = true;
             return;
         }
@@ -2641,7 +2663,7 @@ public partial class MainWindow
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
             RevealPagesForTakeoffSelection(item);
-            Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
             e.Handled = true;
             return;
         }
@@ -2654,8 +2676,22 @@ public partial class MainWindow
             ApplyTakeoffPageHighlights();
         }
         _takeoffsRangeAnchorPath = path;
+        item.IsSelected = true;
         RevealPagesForTakeoffSelection(item);
-        Dispatcher.InvokeAsync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+        ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(item));
+    }
+
+    private bool CanArmTakeoffsTreeDrag(TreeViewItem item, DependencyObject? source)
+    {
+        if (FindAncestor<ToggleButton>(source) != null)
+            return false;
+        if (ReferenceEquals(TakeoffsTree.SelectedItem, item))
+            return true;
+        if (item.Tag is TakeoffMeasurementNode sectionNode)
+            return _takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(sectionNode));
+
+        string? path = GetTakeoffNodePath(item);
+        return path != null && _takeoffsMultiSelection.Contains(path);
     }
 
     private void HandleTakeoffSectionNodeMultiSelect(TreeViewItem item, TakeoffMeasurementNode node, MouseButtonEventArgs e)
@@ -2670,7 +2706,7 @@ public partial class MainWindow
         {
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
-            Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
             return;
         }
 
@@ -2681,7 +2717,7 @@ public partial class MainWindow
             _takeoffSectionRangeAnchorKey = key;
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
-            Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
             e.Handled = true;
             return;
         }
@@ -2693,7 +2729,7 @@ public partial class MainWindow
             _takeoffSectionRangeAnchorKey = key;
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
-            Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
             e.Handled = true;
             return;
         }
@@ -2702,7 +2738,7 @@ public partial class MainWindow
         _takeoffSectionMultiSelection.Add(key);
         _takeoffSectionRangeAnchorKey = key;
         ApplyTakeoffPageHighlights();
-        Dispatcher.InvokeAsync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: true)));
+        ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: true)));
     }
 
     private void SelectTakeoffsRange(string? anchorPath, string targetPath, bool additive)
@@ -2720,6 +2756,13 @@ public partial class MainWindow
     {
         if (_takeoffsDragStart == null || e.LeftButton != MouseButtonState.Pressed)
             return;
+
+        if (!_takeoffsDragArmed)
+        {
+            _takeoffsDragStart = null;
+            _takeoffsDragItem = null;
+            return;
+        }
 
         Point pos = e.GetPosition(TakeoffsTree);
         if (Math.Abs(pos.X - _takeoffsDragStart.Value.X) < SystemParameters.MinimumHorizontalDragDistance &&
@@ -2745,6 +2788,7 @@ public partial class MainWindow
             ClearTakeoffPositionDropCue();
             _takeoffsDragStart = null;
             _takeoffsDragItem = null;
+            _takeoffsDragArmed = false;
             return;
         }
 
@@ -2753,6 +2797,7 @@ public partial class MainWindow
         {
             _takeoffsDragStart = null;
             _takeoffsDragItem = null;
+            _takeoffsDragArmed = false;
             return;
         }
 
@@ -2761,6 +2806,7 @@ public partial class MainWindow
         ClearTakeoffPositionDropCue();
         _takeoffsDragStart = null;
         _takeoffsDragItem = null;
+        _takeoffsDragArmed = false;
     }
 
     private void TakeoffsTree_DragOver(object sender, DragEventArgs e)
@@ -3385,6 +3431,7 @@ public partial class MainWindow
         }
 
         _viewport.LoadMeasurements(_takeoffItems.SelectMany(item => item.Measurements));
+        CancelPendingTakeoffSelectionSync();
         SelectTakeoffSectionNodesSilently(resultingNodes);
         SelectTakeoffSectionMeasurementsOnCanvas(resultingNodes);
         RefreshPagesTakeoffIndicators();
@@ -3512,9 +3559,10 @@ public partial class MainWindow
             _syncingTakeoffTreeSelection = true;
             try
             {
-                ExpandTreeItemAndAncestorsWithoutTracking(first);
-                first.IsSelected = true;
-                first.BringIntoView();
+                TreeViewItem visibleTarget = TakeoffVisibleSelectionTarget(first);
+                ExpandTakeoffFolderAncestorsWithoutTracking(visibleTarget);
+                visibleTarget.IsSelected = true;
+                visibleTarget.BringIntoView();
             }
             finally
             {

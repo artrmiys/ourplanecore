@@ -81,12 +81,12 @@ public sealed partial class PdfViewport
     }
 
     public void TraceActivePdfLayerFromCurrentPointer() =>
-        AdvancePdfLayerTrace(_lastPointerPdf);
+        _ = AdvancePdfLayerTraceAsync(_lastPointerPdf);
 
     public void ApplyActivePdfLayerTraceFromCurrentPointer() =>
-        TraceActivePdfLayer(_lastPointerPdf);
+        _ = TraceActivePdfLayerAsync(_lastPointerPdf);
 
-    private bool AdvancePdfLayerTrace(SKPoint? pickPoint)
+    private async Task<bool> AdvancePdfLayerTraceAsync(SKPoint? pickPoint)
     {
         if (!_pdfLayerTraceEnabled)
             return false;
@@ -98,12 +98,12 @@ public sealed partial class PdfViewport
         }
 
         if (!_pdfLayerTraceReadyToApply)
-            return BeginPdfLayerTraceAt(pickPoint, lockCandidate: true);
+            return await BeginPdfLayerTraceAtAsync(pickPoint, lockCandidate: true);
 
-        return TraceActivePdfLayer(pickPoint ?? _pdfLayerTracePickPoint);
+        return await TraceActivePdfLayerAsync(pickPoint ?? _pdfLayerTracePickPoint);
     }
 
-    private bool BeginPdfLayerTraceAt(SKPoint? pickPoint, bool lockCandidate = false)
+    private async Task<bool> BeginPdfLayerTraceAtAsync(SKPoint? pickPoint, bool lockCandidate = false)
     {
         if (pickPoint == null)
         {
@@ -117,21 +117,29 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (!PdfLayerRenderService.TryProbeLayers(
+        try
+        {
+            var probeResult = await PdfLayerRenderService.TryProbeLayersAsync(
                 _pdfPath,
                 _pdfIndex,
                 pickPoint.Value,
                 _cachedLayers ?? _layers
                     .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
-                    .ToList(),
-                out PdfLayerProbeResult probe,
-                out string error))
+                    .ToList());
+            if (!probeResult.Ok)
+            {
+                PostStatus($"Layer probe failed: {probeResult.Error}");
+                return false;
+            }
+
+            return ApplyPdfLayerTraceProbeResult(pickPoint.Value, probeResult.Result, lockCandidate);
+        }
+        catch (Exception ex)
         {
-            PostStatus($"Layer probe failed: {error}");
+            AppLog.Error(ex, "PDF layer trace probe failed.");
+            PostStatus($"Layer probe failed: {ex.Message}");
             return false;
         }
-
-        return ApplyPdfLayerTraceProbeResult(pickPoint.Value, probe, lockCandidate);
     }
 
     private void UpdatePdfLayerTraceHover(SKPoint pickPoint)
@@ -165,51 +173,57 @@ public sealed partial class PdfViewport
 
         _lastPdfLayerTraceProbePoint = pickPoint;
         _lastPdfLayerTraceProbeAt = now;
-        StartPdfLayerTraceHoverProbe(pickPoint);
+        _ = StartPdfLayerTraceHoverProbeAsync(pickPoint);
     }
 
-    private async void StartPdfLayerTraceHoverProbe(SKPoint pickPoint)
+    private async Task StartPdfLayerTraceHoverProbeAsync(SKPoint pickPoint)
     {
         if (_pdfLayerTraceProbeInProgress)
             return;
 
         _pdfLayerTraceProbeInProgress = true;
-        int version = ++_pdfLayerTraceProbeVersion;
-        string pdfPath = _pdfPath;
-        int pdfIndex = _pdfIndex;
-        string pageFolder = _pageFolder;
-        IReadOnlyList<PdfLayerInfo>? layers = LayerRenderCachedLayers();
-
-        PdfLayerProbeResult probe = new();
-        string error = "";
-        bool ok = await Task.Run(() => PdfLayerRenderService.TryProbeLayers(
-            pdfPath,
-            pdfIndex,
-            pickPoint,
-            layers,
-            out probe,
-            out error));
-
-        _pdfLayerTraceProbeInProgress = false;
-        if (version == _pdfLayerTraceProbeVersion &&
-            _pdfLayerTraceEnabled &&
-            !_pdfLayerTraceReadyToApply &&
-            string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
-            pdfIndex == _pdfIndex &&
-            string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            if (ok)
-                ApplyPdfLayerTraceProbeResult(pickPoint, probe, lockCandidate: false);
-            else
-                PostStatus($"Layer probe failed: {error}");
+            int version = ++_pdfLayerTraceProbeVersion;
+            string pdfPath = _pdfPath;
+            int pdfIndex = _pdfIndex;
+            string pageFolder = _pageFolder;
+            IReadOnlyList<PdfLayerInfo>? layers = LayerRenderCachedLayers();
+
+            var probeResult = await PdfLayerRenderService.TryProbeLayersAsync(
+                pdfPath,
+                pdfIndex,
+                pickPoint,
+                layers);
+
+            if (version == _pdfLayerTraceProbeVersion &&
+                _pdfLayerTraceEnabled &&
+                !_pdfLayerTraceReadyToApply &&
+                string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+                pdfIndex == _pdfIndex &&
+                string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                if (probeResult.Ok)
+                    ApplyPdfLayerTraceProbeResult(pickPoint, probeResult.Result, lockCandidate: false);
+                else
+                    PostStatus($"Layer probe failed: {probeResult.Error}");
+            }
         }
-
-        if (_pendingPdfLayerTraceProbePoint is { } pending &&
-            _pdfLayerTraceEnabled &&
-            !_pdfLayerTraceReadyToApply)
+        catch (Exception ex)
         {
-            _pendingPdfLayerTraceProbePoint = null;
-            UpdatePdfLayerTraceHover(pending);
+            AppLog.Error(ex, "PDF layer trace probe failed.");
+            PostStatus($"Layer probe failed: {ex.Message}");
+        }
+        finally
+        {
+            _pdfLayerTraceProbeInProgress = false;
+            if (_pendingPdfLayerTraceProbePoint is { } pending &&
+                _pdfLayerTraceEnabled &&
+                !_pdfLayerTraceReadyToApply)
+            {
+                _pendingPdfLayerTraceProbePoint = null;
+                UpdatePdfLayerTraceHover(pending);
+            }
         }
     }
 
@@ -376,7 +390,7 @@ public sealed partial class PdfViewport
         return layers;
     }
 
-    private bool TraceActivePdfLayer(SKPoint? pickPoint)
+    private async Task<bool> TraceActivePdfLayerAsync(SKPoint? pickPoint)
     {
         if (!_pdfLayerTraceEnabled)
             return false;
@@ -398,7 +412,10 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (!PdfLayerRenderService.TryTraceLayer(
+        PdfLayerTraceResult trace;
+        try
+        {
+            var traceResult = await PdfLayerRenderService.TryTraceLayerAsync(
                 _pdfPath,
                 _pdfIndex,
                 _activePdfLayerTraceLayer.Value,
@@ -407,11 +424,19 @@ public sealed partial class PdfViewport
                 _pdfLayerTraceMode is PdfLayerTraceMode.Edge or PdfLayerTraceMode.Point ? pickPoint : null,
                 _cachedLayers ?? _layers
                     .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
-                    .ToList(),
-                out PdfLayerTraceResult trace,
-                out string error))
+                    .ToList());
+            if (!traceResult.Ok)
+            {
+                PostStatus($"Layer Trace failed: {traceResult.Error}");
+                return false;
+            }
+
+            trace = traceResult.Result;
+        }
+        catch (Exception ex)
         {
-            PostStatus($"Layer Trace failed: {error}");
+            AppLog.Error(ex, "PDF layer trace failed.");
+            PostStatus($"Layer Trace failed: {ex.Message}");
             return false;
         }
 
@@ -448,6 +473,7 @@ public sealed partial class PdfViewport
         }
 
         SelectMeasurements(added);
+        PushAddedMeasurementsUndo(added, "remove Layer Trace geometry");
         ClearPdfLayerTraceSession();
         RequestRepaint();
         string kind = added.Count == 1 ? ToolTitle(added[0].MType) : $"{added.Count} lines";
@@ -521,7 +547,6 @@ public sealed partial class PdfViewport
         if (!_pdfLayerTraceEnabled || CurrentPdfLayerTraceCandidate() is not { } candidate)
             return;
 
-        float safeZoom = Math.Max(_zoom, 0.001f);
         using var fill = new SKPaint
         {
             Color = new SKColor(0xFF, 0xD7, 0x00, 34),
@@ -533,17 +558,17 @@ public sealed partial class PdfViewport
             Color = _pdfLayerTraceChoosingLayer
                 ? new SKColor(0xFF, 0xA0, 0x00)
                 : new SKColor(0x00, 0x96, 0x88),
-            StrokeWidth = 2.0f / safeZoom,
+            StrokeWidth = ScreenToPdfDistance(2.0f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
-            PathEffect = SKPathEffect.CreateDash([10f / safeZoom, 5f / safeZoom], 0),
+            PathEffect = SKPathEffect.CreateDash([ScreenToPdfDistance(10f), ScreenToPdfDistance(5f)], 0),
         };
         canvas.DrawRect(candidate.Bounds, fill);
         canvas.DrawRect(candidate.Bounds, stroke);
 
         if (_pdfLayerTracePickPoint.HasValue)
         {
-            float r = 5f / safeZoom;
+            float r = ScreenToPdfDistance(5f);
             using var dot = new SKPaint
             {
                 Color = new SKColor(0xFF, 0xA0, 0x00),

@@ -20,8 +20,9 @@ public sealed partial class PdfViewport
     private void ApplyZoom(float factor, float screenX, float screenY)
     {
         float newZoom = Math.Clamp(_zoom * factor, ZoomMin, ZoomMax);
-        if (Math.Abs(newZoom - _zoom) < 0.0001f) return;
+        if (Math.Abs(newZoom - _zoom) < ViewportConstants.GeometryEpsilon) return;
 
+        BeginFastNavigation();
         // Keep the PDF point under cursor fixed
         float pdfX = screenX / _zoom + _panX;
         float pdfY = screenY / _zoom + _panY;
@@ -32,6 +33,40 @@ public sealed partial class PdfViewport
         RequestRepaint();
         PostStatus($"Zoom: {_zoom * 100:F0}%");
     }
+
+    private void BeginFastNavigation()
+    {
+        if (!SimplifyNavigationRendering)
+            return;
+
+        _isFastNavigating = true;
+        _navigationIdleTimer.Stop();
+        _navigationIdleTimer.Start();
+    }
+
+    private void EndFastNavigation()
+    {
+        if (!_isFastNavigating)
+            return;
+
+        _navigationIdleTimer.Stop();
+        _isFastNavigating = false;
+        RequestRepaint();
+    }
+
+    private bool IsFastNavigationFrame() =>
+        SimplifyNavigationRendering &&
+        _isFastNavigating &&
+        !_draggingMeasurement &&
+        !_draggingVertex &&
+        !_draggingAnnotation &&
+        !_draggingAnnotationVertex &&
+        !_draggingTransformScale &&
+        !_draggingTransformRotate &&
+        !_boxSelecting &&
+        _drawPts.Count == 0 &&
+        _scalePts.Count == 0 &&
+        _joistDirectionMeasurement == null;
 
     private float CurrentRenderScale()
     {
@@ -109,6 +144,13 @@ public sealed partial class PdfViewport
 
     private SKPoint ScreenToPdf(float sx, float sy)
         => new(sx / _zoom + _panX, sy / _zoom + _panY);
+
+    private SKPoint PdfToScreen(SKPoint point) =>
+        new((point.X - _panX) * _zoom, (point.Y - _panY) * _zoom);
+
+    private float ScreenToPdfDistance(float pixels) => pixels / _zoom;
+
+    private float PdfToScreenDistance(float pts) => pts * _zoom;
 
     private SKRect GetVisiblePdfRect(float screenPadding = 64f)
     {

@@ -155,6 +155,7 @@ public partial class MainWindow
         LoadPersistedMarkerVisibility();
         if (ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);
+        ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
         TxtStatusJob.Text  = _currentJob.Name;
         TxtJobName.Text    = _currentJob.Name;
@@ -165,6 +166,23 @@ public partial class MainWindow
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void ReportCorruptJsonFiles()
+    {
+        IReadOnlyList<string> corruptFiles = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+        if (corruptFiles.Count == 0)
+            return;
+
+        string details = string.Join(Environment.NewLine, corruptFiles.Take(8));
+        if (corruptFiles.Count > 8)
+            details += $"{Environment.NewLine}...and {corruptFiles.Count - 8} more.";
+
+        MessageBox.Show(
+            $"Some project JSON files could not be read and were moved aside for manual recovery.{Environment.NewLine}{Environment.NewLine}{details}",
+            "Project Data Warning",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private string BuildMeasurementRepairStatus(string prefix)
@@ -244,10 +262,8 @@ public partial class MainWindow
                 _currentPage.ScaleMetersPerPt = scale;
                 SaveCurrentPageScale();
             }
-            const double PT_M = 25.4 / 72.0 / 1000.0;
-            double ratio = scale / PT_M;
+            double ratio = scale / ViewportConstants.PdfPointMeters;
             TxtScaleRatio.Text = PdfSheetMetadataService.FormatImperialScale(scale);
-            ratio = 0;
             TxtScaleInfo.Text  = $"≈1:{ratio:F0}";
         }
 
@@ -261,9 +277,11 @@ public partial class MainWindow
 
     private void LoadTakeoffsForJob()
     {
+        TakeoffsTreeSelectionSnapshot selectionSnapshot = CaptureTakeoffsTreeSelectionState();
         _takeoffItems.Clear();
         TakeoffsTree.Items.Clear();
         _takeoffsRangeAnchorPath = null;
+        _takeoffsMultiSelection.Clear();
         _takeoffSectionMultiSelection.Clear();
         _takeoffSectionRangeAnchorKey = null;
         _activeItem = null;
@@ -285,14 +303,18 @@ public partial class MainWindow
 
         _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));
 
-        if (FindFirstTakeoffTreeItem(TakeoffsTree) is { } firstItem)
+        bool restoredSelection = RestoreTakeoffsTreeSelectionState(selectionSnapshot);
+        if (!restoredSelection)
         {
-            firstItem.IsSelected = true;
-        }
-        else
-        {
-            _viewport.ActiveColor = "#FF4444";
-            _viewport.ActiveTakeoffFolder = "";
+            if (FindFirstTakeoffTreeItem(TakeoffsTree) is { } firstItem)
+            {
+                firstItem.IsSelected = true;
+            }
+            else
+            {
+                _viewport.ActiveColor = "#FF4444";
+                _viewport.ActiveTakeoffFolder = "";
+            }
         }
 
         PruneTakeoffsMultiSelection();
@@ -317,38 +339,53 @@ public partial class MainWindow
         var pagesByPdfPage = pages
             .GroupBy(page => page.PdfPage)
             .ToDictionary(group => group.Key, group => group.ToList());
+        PageInfo? firstPage = pages
+            .OrderBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
 
         int repaired = 0;
         int unresolved = 0;
         foreach (TakeoffItem item in _takeoffItems)
         {
             bool itemChanged = false;
-            foreach (Measurement measurement in item.Measurements)
+            PageInfo? emptyItemFallback = item.Measurements.Count > 0 &&
+                                          item.Measurements.All(measurement => string.IsNullOrWhiteSpace(measurement.PageFolder))
+                ? firstPage
+                : null;
+            for (int index = 0; index < item.Measurements.Count; index++)
             {
+                Measurement measurement = item.Measurements[index];
+                PageInfo? matchedPage;
                 if (string.IsNullOrWhiteSpace(measurement.PageFolder))
+                {
+                    matchedPage = emptyItemFallback ??
+                                  InferNeighborMeasurementPage(
+                                      item.Measurements,
+                                      index,
+                                      pagesByPath,
+                                      pagesByLeaf,
+                                      pagesByPdfPage);
+                    if (matchedPage != null)
+                    {
+                        measurement.PageFolder = matchedPage.FolderPath;
+                        if (measurement.ScaleMetersPerPt <= 0)
+                            measurement.ScaleMetersPerPt = matchedPage.ScaleMetersPerPt;
+                        repaired++;
+                        itemChanged = true;
+                        AppLog.Info($"Repaired empty measurement PageFolder for {item.Name} -> {matchedPage.FolderPath}");
+                        continue;
+                    }
+
+                    unresolved++;
                     continue;
+                }
 
                 string oldPath = NormalizePageReferencePath(measurement.PageFolder);
-                PageInfo? matchedPage = null;
-                if (pagesByPath.TryGetValue(oldPath, out PageInfo? exactPage))
-                {
-                    matchedPage = exactPage;
-                }
-                else
-                {
-                    string leaf = Path.GetFileName(oldPath);
-                    if (!string.IsNullOrWhiteSpace(leaf) &&
-                        pagesByLeaf.TryGetValue(leaf, out List<PageInfo>? leafMatches) &&
-                        leafMatches.Count == 1)
-                    {
-                        matchedPage = leafMatches[0];
-                    }
-                    else if (TryResolveLegacyImportedPage(leaf, pagesByPdfPage, out PageInfo legacyPage))
-                    {
-                        matchedPage = legacyPage;
-                    }
-                }
-
+                matchedPage = ResolveMeasurementPage(
+                    oldPath,
+                    pagesByPath,
+                    pagesByLeaf,
+                    pagesByPdfPage);
                 if (matchedPage == null)
                 {
                     if (!Directory.Exists(oldPath))
@@ -363,6 +400,7 @@ public partial class MainWindow
                         measurement.ScaleMetersPerPt = matchedPage.ScaleMetersPerPt;
                     repaired++;
                     itemChanged = true;
+                    AppLog.Info($"Repaired measurement PageFolder for {item.Name}: {oldPath} -> {matchedPage.FolderPath}");
                 }
             }
 
@@ -372,6 +410,73 @@ public partial class MainWindow
 
         _lastMeasurementPageFolderUnresolvedCount = unresolved;
         return repaired;
+    }
+
+    private PageInfo? InferNeighborMeasurementPage(
+        IReadOnlyList<Measurement> measurements,
+        int index,
+        Dictionary<string, PageInfo> pagesByPath,
+        Dictionary<string, List<PageInfo>> pagesByLeaf,
+        Dictionary<int, List<PageInfo>> pagesByPdfPage)
+    {
+        for (int i = index - 1; i >= 0; i--)
+        {
+            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
+                return page;
+        }
+
+        for (int i = index + 1; i < measurements.Count; i++)
+        {
+            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
+                return page;
+        }
+
+        return null;
+    }
+
+    private bool TryResolveMeasurementPage(
+        string? pageFolder,
+        Dictionary<string, PageInfo> pagesByPath,
+        Dictionary<string, List<PageInfo>> pagesByLeaf,
+        Dictionary<int, List<PageInfo>> pagesByPdfPage,
+        out PageInfo page)
+    {
+        page = null!;
+        if (string.IsNullOrWhiteSpace(pageFolder))
+            return false;
+
+        PageInfo? resolved = ResolveMeasurementPage(
+            NormalizePageReferencePath(pageFolder),
+            pagesByPath,
+            pagesByLeaf,
+            pagesByPdfPage);
+        if (resolved == null)
+            return false;
+
+        page = resolved;
+        return true;
+    }
+
+    private static PageInfo? ResolveMeasurementPage(
+        string oldPath,
+        Dictionary<string, PageInfo> pagesByPath,
+        Dictionary<string, List<PageInfo>> pagesByLeaf,
+        Dictionary<int, List<PageInfo>> pagesByPdfPage)
+    {
+        if (pagesByPath.TryGetValue(oldPath, out PageInfo? exactPage))
+            return exactPage;
+
+        string leaf = Path.GetFileName(oldPath);
+        if (!string.IsNullOrWhiteSpace(leaf) &&
+            pagesByLeaf.TryGetValue(leaf, out List<PageInfo>? leafMatches) &&
+            leafMatches.Count == 1)
+        {
+            return leafMatches[0];
+        }
+
+        return TryResolveLegacyImportedPage(leaf, pagesByPdfPage, out PageInfo legacyPage)
+            ? legacyPage
+            : null;
     }
 
     private static bool TryResolveLegacyImportedPage(
@@ -452,6 +557,14 @@ public partial class MainWindow
 
     private async void BtnImport_Click(object sender, RoutedEventArgs e)
     {
+        await RunAsyncUiHandler(
+            () => ImportPdfAsync(sender),
+            "Import PDF failed.",
+            "Import PDF");
+    }
+
+    private async Task ImportPdfAsync(object sender)
+    {
         if (_currentJob == null)
         {
             MessageBox.Show("Open or create a job first.", "Import PDF",
@@ -516,6 +629,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            AppLog.Error(ex, "Import PDF failed.");
             MessageBox.Show($"Import failed:\n{ex.Message}", "Import PDF",
                             MessageBoxButton.OK, MessageBoxImage.Error);
         }

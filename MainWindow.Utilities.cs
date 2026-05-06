@@ -107,6 +107,9 @@ public partial class MainWindow
         Color tree = dark ? Color.FromRgb(31, 33, 36) : Colors.White;
         Color splitter = dark ? Color.FromRgb(68, 72, 78) : Color.FromRgb(204, 204, 204);
         Brush foreground = new SolidColorBrush(dark ? Color.FromRgb(230, 230, 230) : Color.FromRgb(30, 30, 30));
+        Color rowSelection = MuteRowHighlight(
+            dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255),
+            tree);
         UpdateAppBrush("WindowBackgroundBrush", window);
         UpdateAppBrush("PanelBackgroundBrush", panel);
         UpdateAppBrush("SurfaceBackgroundBrush", tree);
@@ -121,10 +124,22 @@ public partial class MainWindow
         UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(86, 91, 98) : Color.FromRgb(208, 208, 208));
         UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
         UpdateAppBrush("ControlActiveForegroundBrush", dark ? Colors.White : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush(SystemColors.HighlightBrushKey, dark ? Color.FromRgb(37, 99, 160) : Color.FromRgb(204, 229, 255));
+        UpdateAppBrush("RowSelectionBrush", rowSelection);
+        UpdateAppBrush(SystemColors.HighlightBrushKey, rowSelection);
         UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Colors.White : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, dark ? Color.FromRgb(50, 72, 96) : Color.FromRgb(204, 229, 255));
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, MuteRowHighlight(
+            dark ? Color.FromRgb(50, 72, 96) : Color.FromRgb(204, 229, 255),
+            tree));
         UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Colors.White : Color.FromRgb(17, 17, 17));
+        UpdateAppBrush(SystemColors.MenuBrushKey, dark ? tree : Colors.White);
+        UpdateAppBrush(SystemColors.MenuTextBrushKey, dark ? Color.FromRgb(238, 238, 238) : Color.FromRgb(32, 32, 32));
+        UpdateAppBrush(SystemColors.WindowBrushKey, dark ? tree : Colors.White);
+        UpdateAppBrush(SystemColors.WindowTextBrushKey, dark ? Color.FromRgb(238, 238, 238) : Color.FromRgb(32, 32, 32));
+        UpdateAppBrush(SystemColors.ControlBrushKey, dark ? Color.FromRgb(58, 61, 66) : Color.FromRgb(248, 248, 248));
+        UpdateAppBrush(SystemColors.ControlTextBrushKey, dark ? Color.FromRgb(238, 238, 238) : Color.FromRgb(32, 32, 32));
+        UpdateAppBrush(SystemColors.GrayTextBrushKey, dark ? Color.FromRgb(150, 154, 162) : Color.FromRgb(136, 136, 136));
+        UpdateAppBrush(SystemColors.InfoBrushKey, dark ? Color.FromRgb(58, 61, 66) : Color.FromRgb(248, 248, 248));
+        UpdateAppBrush(SystemColors.InfoTextBrushKey, dark ? Color.FromRgb(238, 238, 238) : Color.FromRgb(32, 32, 32));
         UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(90, 160, 235) : Color.FromRgb(37, 99, 166));
         UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(112, 178, 245) : Color.FromRgb(31, 85, 145));
         UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(70, 135, 210) : Color.FromRgb(24, 68, 111));
@@ -138,13 +153,13 @@ public partial class MainWindow
         UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(52, 122, 63) : Color.FromRgb(29, 84, 33));
 
         // Tree row state — theme-aware (paired light/dark variants)
-        UpdateAppBrush("RowOnPageBrush",        dark ? Color.FromRgb(34, 64, 46)   : Color.FromRgb(214, 245, 222));
-        UpdateAppBrush("RowActiveBrush",        dark ? Color.FromRgb(82, 64, 24)   : Color.FromRgb(255, 236, 190));
-        UpdateAppBrush("RowMultiSelectBrush",   dark ? Color.FromRgb(38, 70, 110)  : Color.FromRgb(205, 226, 255));
-        UpdateAppBrush("RowDropOkBrush",        dark ? Color.FromRgb(40, 86, 58)   : Color.FromRgb(204, 245, 218));
-        UpdateAppBrush("RowDropBadBrush",       dark ? Color.FromRgb(110, 48, 48)  : Color.FromRgb(255, 214, 214));
+        UpdateAppBrush("RowOnPageBrush",        MuteRowHighlight(dark ? Color.FromRgb(34, 64, 46)   : Color.FromRgb(214, 245, 222), tree));
+        UpdateAppBrush("RowActiveBrush",        MuteTreeCrossHighlight(dark ? Color.FromRgb(82, 64, 24)   : Color.FromRgb(255, 236, 190), tree));
+        UpdateAppBrush("RowMultiSelectBrush",   MuteTreeCrossHighlight(dark ? Color.FromRgb(38, 70, 110)  : Color.FromRgb(205, 226, 255), tree));
+        UpdateAppBrush("RowDropOkBrush",        MuteRowHighlight(dark ? Color.FromRgb(40, 86, 58)   : Color.FromRgb(204, 245, 218), tree));
+        UpdateAppBrush("RowDropBadBrush",       MuteRowHighlight(dark ? Color.FromRgb(110, 48, 48)  : Color.FromRgb(255, 214, 214), tree));
         UpdateAppBrush("RowFlagForegroundBrush",dark ? Colors.White                : Color.FromRgb(17, 17, 17));
-        UpdateAppBrush("RowActiveAccentBrush",  dark ? Color.FromRgb(120, 170, 255): Color.FromRgb(31, 82, 166));
+        UpdateAppBrush("RowActiveAccentBrush",  MuteRowHighlight(dark ? Color.FromRgb(120, 170, 255): Color.FromRgb(31, 82, 166), tree));
         SetupToolButtonContent();
 
         Background = new SolidColorBrush(window);
@@ -201,6 +216,22 @@ public partial class MainWindow
     private static void UpdateAppBrush(object key, Color color)
     {
         Application.Current.Resources[key] = new SolidColorBrush(color);
+    }
+
+    private static Color MuteRowHighlight(Color color, Color surface) =>
+        BlendColor(color, surface, 0.25);
+
+    private static Color MuteTreeCrossHighlight(Color color, Color surface) =>
+        BlendColor(color, surface, 0.45);
+
+    private static Color BlendColor(Color color, Color target, double targetAmount)
+    {
+        targetAmount = Math.Clamp(targetAmount, 0.0, 1.0);
+        double sourceAmount = 1.0 - targetAmount;
+        return Color.FromRgb(
+            (byte)Math.Round(color.R * sourceAmount + target.R * targetAmount),
+            (byte)Math.Round(color.G * sourceAmount + target.G * targetAmount),
+            (byte)Math.Round(color.B * sourceAmount + target.B * targetAmount));
     }
 
     private void SaveAppSettings()

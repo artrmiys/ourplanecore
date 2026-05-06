@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using OurPlaneCore.Controls;
 using SkiaSharp;
 
@@ -50,7 +52,7 @@ public sealed class PdfLayerProbeCandidate
 
 public static class PdfLayerRenderService
 {
-    private static readonly object WorkerLock = new();
+    private static readonly SemaphoreSlim WorkerSemaphore = new(1, 1);
     private static Process? WorkerProcess;
     private static StreamWriter? WorkerInput;
     private static StreamReader? WorkerOutput;
@@ -65,7 +67,71 @@ public static class PdfLayerRenderService
         WriteIndented = true,
     };
 
-    public static bool TryRender(
+    public static Task<(bool Ok, PdfLayerRenderResult Result, string Error)> TryRenderAsync(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        Task.Run(() =>
+        {
+            bool ok = TryRender(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                layerStates,
+                highlightedLayers,
+                cachedLayers,
+                out PdfLayerRenderResult result,
+                out string error);
+            return (ok, result, error);
+        });
+
+    public static Task<(bool Ok, IReadOnlyList<PdfLayerInfo> Layers, string Error)> TryReadVisibleLayersAsync(
+        string pdfPath,
+        int pageIndex) =>
+        Task.Run(() =>
+        {
+            bool ok = TryReadVisibleLayers(pdfPath, pageIndex, out IReadOnlyList<PdfLayerInfo> layers, out string error);
+            return (ok, layers, error);
+        });
+
+    public static Task<(bool Ok, PdfLayerTraceResult Result, string Error)> TryTraceLayerAsync(
+        string pdfPath,
+        int pageIndex,
+        int layerNumber,
+        string layerName,
+        PdfLayerTraceMode mode,
+        SKPoint? pickPoint,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        Task.Run(() =>
+        {
+            bool ok = TryTraceLayer(
+                pdfPath,
+                pageIndex,
+                layerNumber,
+                layerName,
+                mode,
+                pickPoint,
+                cachedLayers,
+                out PdfLayerTraceResult result,
+                out string error);
+            return (ok, result, error);
+        });
+
+    public static Task<(bool Ok, PdfLayerProbeResult Result, string Error)> TryProbeLayersAsync(
+        string pdfPath,
+        int pageIndex,
+        SKPoint point,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        Task.Run(() =>
+        {
+            bool ok = TryProbeLayers(pdfPath, pageIndex, point, cachedLayers, out PdfLayerProbeResult result, out string error);
+            return (ok, result, error);
+        });
+
+    internal static bool TryRender(
         string pdfPath,
         int pageIndex,
         double renderScale,
@@ -136,6 +202,7 @@ public static class PdfLayerRenderService
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, $"TryRender failed for {pdfPath} page {pageIndex}");
             error = ex.Message;
             return false;
         }
@@ -213,7 +280,7 @@ public static class PdfLayerRenderService
         return sb.ToString();
     }
 
-    public static bool TryReadVisibleLayers(
+    internal static bool TryReadVisibleLayers(
         string pdfPath,
         int pageIndex,
         out IReadOnlyList<PdfLayerInfo> layers,
@@ -252,6 +319,7 @@ public static class PdfLayerRenderService
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, $"TryReadVisibleLayers failed for {pdfPath} page {pageIndex}");
             error = ex.Message;
             return false;
         }
@@ -266,7 +334,7 @@ public static class PdfLayerRenderService
         }
     }
 
-    public static bool TryTraceLayer(
+    internal static bool TryTraceLayer(
         string pdfPath,
         int pageIndex,
         int layerNumber,
@@ -323,12 +391,13 @@ public static class PdfLayerRenderService
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, $"TryTraceLayer failed for {pdfPath} page {pageIndex} layer {layerNumber}");
             error = ex.Message;
             return false;
         }
     }
 
-    public static bool TryProbeLayers(
+    internal static bool TryProbeLayers(
         string pdfPath,
         int pageIndex,
         SKPoint point,
@@ -382,6 +451,7 @@ public static class PdfLayerRenderService
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, $"TryProbeLayers failed for {pdfPath} page {pageIndex}");
             error = ex.Message;
             return false;
         }
@@ -408,6 +478,7 @@ public static class PdfLayerRenderService
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, $"TryInvokeHelper {action} failed");
             error = ex.Message;
             return false;
         }
@@ -428,60 +499,70 @@ public static class PdfLayerRenderService
         out TResponse? response,
         out string error)
     {
-        response = default;
-        error = "";
+        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request).GetAwaiter().GetResult();
+        response = result.Response;
+        error = result.Error;
+        return result.Ok;
+    }
 
-        lock (WorkerLock)
+    private static async Task<(bool Ok, TResponse? Response, string Error)> TryInvokeWorkerAsync<TRequest, TResponse>(
+        string action,
+        TRequest request)
+    {
+        await WorkerSemaphore.WaitAsync().ConfigureAwait(false);
+
+        try
         {
-            try
+            if (!EnsureWorker(out string error))
+                return (false, default, error);
+
+            string id = Guid.NewGuid().ToString("N");
+            var envelope = new WorkerRequest<TRequest>
             {
-                if (!EnsureWorker(out error))
-                    return false;
+                Id = id,
+                Action = action,
+                Request = request,
+            };
 
-                string id = Guid.NewGuid().ToString("N");
-                var envelope = new WorkerRequest<TRequest>
-                {
-                    Id = id,
-                    Action = action,
-                    Request = request,
-                };
+            await WorkerInput!
+                .WriteLineAsync(JsonSerializer.Serialize(envelope, JsonOptions))
+                .ConfigureAwait(false);
+            await WorkerInput.FlushAsync().ConfigureAwait(false);
 
-                WorkerInput!.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
-                WorkerInput.Flush();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            string? line = await WorkerOutput!.ReadLineAsync(timeout.Token).ConfigureAwait(false);
 
-                var readTask = WorkerOutput!.ReadLineAsync();
-                if (!readTask.Wait(30000))
-                {
-                    ResetWorker();
-                    error = $"PyMuPDF worker {action} timed out.";
-                    return false;
-                }
-
-                string? line = readTask.Result;
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    ResetWorker();
-                    error = "PyMuPDF worker stopped unexpectedly.";
-                    return false;
-                }
-
-                var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, JsonOptions);
-                if (workerResponse == null || workerResponse.Id != id)
-                {
-                    ResetWorker();
-                    error = "PyMuPDF worker returned an invalid response.";
-                    return false;
-                }
-
-                response = workerResponse.Response;
-                return true;
-            }
-            catch (Exception ex)
+            if (string.IsNullOrWhiteSpace(line))
             {
                 ResetWorker();
-                error = ex.Message;
-                return false;
+                return (false, default, "PyMuPDF worker stopped unexpectedly.");
             }
+
+            var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, JsonOptions);
+            if (workerResponse == null || workerResponse.Id != id)
+            {
+                ResetWorker();
+                return (false, default, "PyMuPDF worker returned an invalid response.");
+            }
+
+            return (true, workerResponse.Response, "");
+        }
+        catch (OperationCanceledException ex)
+        {
+            ResetWorker();
+            string error = $"PyMuPDF worker {action} timed out.";
+            AppLog.Warn(ex, error);
+            return (false, default, error);
+        }
+        catch (Exception ex)
+        {
+            ResetWorker();
+            AppLog.Warn(ex, $"PyMuPDF worker {action} failed");
+            return (false, default, ex.Message);
+        }
+        finally
+        {
+            WorkerSemaphore.Release();
         }
     }
 
@@ -506,10 +587,11 @@ public static class PdfLayerRenderService
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = false,
+            RedirectStandardError = true,
             CreateNoWindow = true,
             StandardInputEncoding = Encoding.UTF8,
             StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         psi.ArgumentList.Add("-u");
         psi.ArgumentList.Add(helperPath);
@@ -522,6 +604,12 @@ public static class PdfLayerRenderService
             return false;
         }
 
+        WorkerProcess.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                AppLog.Warn($"[pyhelper] {e.Data}");
+        };
+        WorkerProcess.BeginErrorReadLine();
         WorkerInput = WorkerProcess.StandardInput;
         WorkerOutput = WorkerProcess.StandardOutput;
         return true;
@@ -546,9 +634,14 @@ public static class PdfLayerRenderService
 
     public static void StopWorker()
     {
-        lock (WorkerLock)
+        WorkerSemaphore.Wait();
+        try
         {
             ResetWorker();
+        }
+        finally
+        {
+            WorkerSemaphore.Release();
         }
     }
 
@@ -560,17 +653,25 @@ public static class PdfLayerRenderService
         out TResponse? response,
         out string error)
     {
-        response = default;
-        error = "";
+        var result = TryRunFileCommandAsync<TRequest, TResponse>(action, request, inputPath, outputPath)
+            .GetAwaiter()
+            .GetResult();
+        response = result.Response;
+        error = result.Error;
+        return result.Ok;
+    }
 
-        File.WriteAllText(inputPath, JsonSerializer.Serialize(request, JsonOptions));
+    private static async Task<(bool Ok, TResponse? Response, string Error)> TryRunFileCommandAsync<TRequest, TResponse>(
+        string action,
+        TRequest request,
+        string inputPath,
+        string outputPath)
+    {
+        await File.WriteAllTextAsync(inputPath, JsonSerializer.Serialize(request, JsonOptions)).ConfigureAwait(false);
 
         string helperPath = ResolveHelperPath();
         if (helperPath.Length == 0)
-        {
-            error = "PyMuPDF layer helper was not found.";
-            return false;
-        }
+            return (false, default, "PyMuPDF layer helper was not found.");
 
         var psi = new ProcessStartInfo
         {
@@ -579,6 +680,8 @@ public static class PdfLayerRenderService
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             CreateNoWindow = true,
+            StandardErrorEncoding = Encoding.UTF8,
+            StandardOutputEncoding = Encoding.UTF8,
         };
         psi.ArgumentList.Add(helperPath);
         psi.ArgumentList.Add(action);
@@ -587,28 +690,38 @@ public static class PdfLayerRenderService
 
         using var process = Process.Start(psi);
         if (process == null)
-        {
-            error = "Could not start python.";
-            return false;
-        }
+            return (false, default, "Could not start python.");
 
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(30000))
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex)
         {
             try { process.Kill(entireProcessTree: true); } catch { }
-            error = $"PyMuPDF {action} timed out.";
-            return false;
+            string timeoutError = $"PyMuPDF {action} timed out.";
+            AppLog.Warn(ex, timeoutError);
+            return (false, default, timeoutError);
         }
+
+        string stdout = await stdoutTask.ConfigureAwait(false);
+        string stderr = await stderrTask.ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(stderr))
+            AppLog.Warn($"[pyhelper] {stderr.Trim()}");
 
         if (!File.Exists(outputPath))
         {
-            error = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-            return false;
+            string error = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+            return (false, default, error);
         }
 
-        response = JsonSerializer.Deserialize<TResponse>(File.ReadAllText(outputPath), JsonOptions);
-        return true;
+        TResponse? response = JsonSerializer.Deserialize<TResponse>(
+            await File.ReadAllTextAsync(outputPath).ConfigureAwait(false),
+            JsonOptions);
+        return (true, response, "");
     }
 
     private static string ResolveHelperPath()

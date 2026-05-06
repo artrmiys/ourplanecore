@@ -19,17 +19,25 @@ public sealed partial class PdfViewport
 {
     private bool TryBeginMeasurementEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
     {
-        if (_selectedMeasurements.Count > 1 &&
-            TryHitSelectedMeasurement(pdf, out Measurement groupMeasurement))
-        {
-            BeginMeasurementMove(groupMeasurement, screen);
-            return true;
-        }
-
         if (TryHitSelectedVertex(pdf, out Measurement selectedVertexMeasurement, out int selectedVertexIndex) ||
             TryHitVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex))
         {
             BeginVertexEdit(selectedVertexMeasurement, selectedVertexIndex, screen);
+            return true;
+        }
+
+        if (SelectedVertexCount() > 0 &&
+            TryHitSelectedMeasurement(pdf, out Measurement vertexModeMeasurement) &&
+            TryGetSelectedVertexDragAnchor(vertexModeMeasurement, out Measurement anchorMeasurement, out int anchorVertexIndex))
+        {
+            BeginVertexEdit(anchorMeasurement, anchorVertexIndex, screen);
+            return true;
+        }
+
+        if (_selectedMeasurements.Count > 1 &&
+            TryHitSelectedMeasurement(pdf, out Measurement groupMeasurement))
+        {
+            BeginMeasurementMove(groupMeasurement, screen);
             return true;
         }
 
@@ -52,15 +60,37 @@ public sealed partial class PdfViewport
     private void BeginVertexEdit(Measurement measurement, int vertexIndex, Point screen)
     {
         ClearInProgressInputForEdit();
+        PrepareMeasurementVertexDragSelection(measurement, vertexIndex);
         _draggingVertex = true;
         _draggingMeasurement = false;
         _dragMeasurementChanged = false;
         _dragScreenStart = screen;
-        _dragVertexOriginalPoint = measurement.Points[vertexIndex];
+        _dragVertexOriginalPoint = MeasurementVertexPoint(measurement, vertexIndex);
+        _dragMeasurementVertexOriginalPoints.Clear();
+        foreach (Measurement selectedMeasurement in ActiveVertexMeasurements())
+        {
+            var points = new Dictionary<int, SKPoint>();
+            foreach (int index in ActiveMeasurementVertexIndices(selectedMeasurement))
+            {
+                if (IsValidMeasurementVertexIndex(selectedMeasurement, index))
+                    points[index] = MeasurementVertexPoint(selectedMeasurement, index);
+            }
+
+            if (points.Count > 0)
+                _dragMeasurementVertexOriginalPoints[selectedMeasurement] = points;
+        }
         _dragSelectionOriginalPoints.Clear();
+        _dragSelectionOriginalHoles.Clear();
         CaptureMouse();
-        SelectMeasurement(measurement, vertexIndex);
-        PostStatus($"Editing {ToolTitle(measurement.MType)} vertex {vertexIndex + 1}. Drag to move.");
+        foreach (Measurement selectedMeasurement in ActiveVertexMeasurements())
+        {
+            _dragSelectionOriginalPoints[selectedMeasurement] = selectedMeasurement.Points.ToList();
+            _dragSelectionOriginalHoles[selectedMeasurement] = CloneHoles(selectedMeasurement.Holes);
+        }
+        int vertexCount = DraggedVertexCount();
+        PostStatus(vertexCount > 1
+            ? $"Editing {vertexCount} selected vertices. Drag to move together; Delete removes selected vertices."
+            : $"Editing {ToolTitle(measurement.MType)} vertex {vertexIndex + 1}. Drag to move.");
     }
 
     private void BeginMeasurementMove(Measurement measurement, Point screen)
@@ -82,8 +112,12 @@ public sealed partial class PdfViewport
         if (selected.Count > 1 && selected.Contains(measurement))
         {
             foreach (Measurement selectedMeasurement in selected)
+            {
                 _dragSelectionOriginalPoints[selectedMeasurement] = selectedMeasurement.Points.ToList();
+                _dragSelectionOriginalHoles[selectedMeasurement] = CloneHoles(selectedMeasurement.Holes);
+            }
         }
+        _dragMeasurementOriginalHoles = CloneHoles(measurement.Holes);
 
         PostStatus(selected.Count > 1
             ? $"Moving {selected.Count} selected measurements."
@@ -95,13 +129,36 @@ public sealed partial class PdfViewport
         if (!_draggingVertex && !_draggingMeasurement)
             return;
 
-        if (_dragMeasurementChanged && _dragSelectionOriginalPoints.Count > 0)
+        bool wasVertexDrag = _draggingVertex;
+
+        if (_dragMeasurementChanged && _dragMeasurementVertexOriginalPoints.Count > 0)
         {
+            PushMeasurementUndoSnapshots(
+                _dragSelectionOriginalPoints,
+                _dragSelectionOriginalHoles,
+                "move selected vertices",
+                "vertex-drag");
+            foreach (Measurement measurement in _dragMeasurementVertexOriginalPoints.Keys.ToList())
+                MeasurementChanged?.Invoke(measurement);
+        }
+        else if (_dragMeasurementChanged && _dragSelectionOriginalPoints.Count > 0)
+        {
+            PushMeasurementUndoSnapshots(
+                _dragSelectionOriginalPoints,
+                _dragSelectionOriginalHoles,
+                "move selected measurements",
+                "measurement-drag");
             foreach (Measurement measurement in _dragSelectionOriginalPoints.Keys.ToList())
                 MeasurementChanged?.Invoke(measurement);
         }
         else if (_dragMeasurementChanged && _selectedMeasurement != null)
         {
+            PushMeasurementUndoSnapshot(
+                _selectedMeasurement,
+                _dragMeasurementOriginalPoints,
+                _dragMeasurementOriginalHoles,
+                wasVertexDrag ? "move vertex" : "move measurement",
+                wasVertexDrag ? "vertex-drag" : "measurement-drag");
             MeasurementChanged?.Invoke(_selectedMeasurement);
         }
 
@@ -109,7 +166,10 @@ public sealed partial class PdfViewport
         _draggingMeasurement = false;
         _dragMeasurementChanged = false;
         _dragMeasurementOriginalPoints.Clear();
+        _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementVertexOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
+        _dragSelectionOriginalHoles.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
         RequestRepaint();
@@ -148,7 +208,7 @@ public sealed partial class PdfViewport
         _dragAnnotationChanged = false;
         _dragScreenStart = screen;
         _dragAnnotationVertexOriginalPoint = annotation.Points[vertexIndex];
-        _dragAnnotationOriginalPoints.Clear();
+        _dragAnnotationOriginalPoints = annotation.Points.ToList();
         CaptureMouse();
         SelectAnnotation(annotation, vertexIndex);
         PostStatus($"Editing {ToolTitle(annotation.Kind)} markup point {vertexIndex + 1}. Drag to move.");
@@ -173,6 +233,7 @@ public sealed partial class PdfViewport
             return;
 
         PageAnnotation? changed = _dragAnnotationChanged ? _selectedAnnotation : null;
+        List<SKPoint> beforePoints = _dragAnnotationOriginalPoints.ToList();
         _draggingAnnotationVertex = false;
         _draggingAnnotation = false;
         _dragAnnotationChanged = false;
@@ -180,7 +241,10 @@ public sealed partial class PdfViewport
         if (IsMouseCaptured)
             ReleaseMouseCapture();
         if (changed != null)
+        {
+            PushAnnotationUndoSnapshot(changed, beforePoints, "move markup", "annotation-drag");
             PageAnnotationChanged?.Invoke(changed);
+        }
         RequestRepaint();
     }
 
@@ -210,8 +274,8 @@ public sealed partial class PdfViewport
             return;
 
         _lastPointerStatusAt = now;
-        float screenDx = delta.X * _zoom;
-        float screenDy = delta.Y * _zoom;
+        float screenDx = PdfToScreenDistance(delta.X);
+        float screenDy = PdfToScreenDistance(delta.Y);
         PostStatus($"{label}: dx={screenDx:F0}px dy={screenDy:F0}px.");
     }
 
@@ -224,7 +288,9 @@ public sealed partial class PdfViewport
         _boxSelectAdditive = additive;
         CaptureMouse();
         PostStatus(additive
-            ? "Select: drag box to add measurements to the current selection."
+            ? HasEditableMeasurementSelection()
+                ? "Select vertices: drag box around Line/Area handles on selected measurements."
+                : "Select: drag box to add measurements to the current selection."
             : "Select: drag box around measurements.");
         RequestRepaint();
     }
@@ -235,18 +301,40 @@ public sealed partial class PdfViewport
             return;
 
         SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
-        bool tiny = rect.Width * Math.Max(_zoom, 0.001f) < 4f &&
-                    rect.Height * Math.Max(_zoom, 0.001f) < 4f;
+        bool tiny = PdfToScreenDistance(rect.Width) < 4f &&
+                    PdfToScreenDistance(rect.Height) < 4f;
         _boxSelecting = false;
         if (IsMouseCaptured)
             ReleaseMouseCapture();
 
         if (tiny)
         {
+            if (_boxSelectAdditive)
+            {
+                if (TryToggleMeasurementVertexSelection(_boxSelectStartPdf))
+                {
+                    RequestRepaint();
+                    return;
+                }
+
+                if (TryHitMeasurement(_boxSelectStartPdf, out Measurement toggled))
+                {
+                    ToggleMeasurementSelection(toggled);
+                    RequestRepaint();
+                    return;
+                }
+            }
+
             if (!_boxSelectAdditive)
                 ClearSelection();
             RequestRepaint();
             PostStatus("Select: no box drawn.");
+            return;
+        }
+
+        if (_boxSelectAdditive && TrySelectMeasurementVerticesInBox(rect))
+        {
+            RequestRepaint();
             return;
         }
 
@@ -302,17 +390,20 @@ public sealed partial class PdfViewport
 
         _lastPointerStatusAt = now;
         SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
-        PostStatus($"Select box: {rect.Width * _zoom:F0}px x {rect.Height * _zoom:F0}px.");
+        PostStatus($"Select box: {PdfToScreenDistance(rect.Width):F0}px x {PdfToScreenDistance(rect.Height):F0}px.");
     }
 
     private bool TryHitSelectedVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
     {
-        if (_selectedMeasurement != null &&
-            IsMeasurementOnActivePage(_selectedMeasurement) &&
-            TryHitVertexOnMeasurement(_selectedMeasurement, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+        foreach (Measurement candidate in GetSelectedMeasurements().Reverse())
         {
-            measurement = _selectedMeasurement;
-            return true;
+            if (IsMeasurementOnActivePage(candidate) &&
+                CanEditMeasurementVertices(candidate) &&
+                TryHitVertexOnMeasurement(candidate, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+            {
+                measurement = candidate;
+                return true;
+            }
         }
 
         measurement = null!;
@@ -344,11 +435,11 @@ public sealed partial class PdfViewport
         float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
         float tolSq = tol * tol;
 
-        for (int p = measurement.Points.Count - 1; p >= 0; p--)
+        foreach (MeasurementVertexRef vertex in MeasurementVertices(measurement).Reverse())
         {
-            if (DistanceSquared(pdf, measurement.Points[p]) <= tolSq)
+            if (DistanceSquared(pdf, vertex.Point) <= tolSq)
             {
-                vertexIndex = p;
+                vertexIndex = vertex.GlobalIndex;
                 return true;
             }
         }
@@ -493,9 +584,26 @@ public sealed partial class PdfViewport
                 return true;
         }
 
-        return measurement.MType == "area" &&
-               measurement.Points.Count > 2 &&
-               DistanceToSegment(pdf, measurement.Points[^1], measurement.Points[0]) <= tol;
+        if (measurement.MType != "area" || measurement.Points.Count <= 2)
+            return false;
+
+        if (DistanceToSegment(pdf, measurement.Points[^1], measurement.Points[0]) <= tol)
+            return true;
+
+        foreach (var hole in measurement.Holes)
+        {
+            if (hole.Count < 3)
+                continue;
+
+            for (int p = 1; p < hole.Count; p++)
+                if (DistanceToSegment(pdf, hole[p - 1], hole[p]) <= tol)
+                    return true;
+
+            if (DistanceToSegment(pdf, hole[^1], hole[0]) <= tol)
+                return true;
+        }
+
+        return PointInMeasurementFill(measurement, pdf);
     }
 
     private bool IsAnnotationHit(PageAnnotation annotation, SKPoint pdf, float screenTolerancePx)
@@ -559,6 +667,10 @@ public sealed partial class PdfViewport
 
         _selectedMeasurement = nextPrimary;
         _selectedVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+        ClearMeasurementVertexSelection();
+        if (nextPrimary != null && vertexIndex >= 0)
+            VertexSelectionSet(nextPrimary, create: true).Add(vertexIndex);
+
         if (next.Count > 0)
             ClearAnnotationSelection();
 
@@ -609,6 +721,7 @@ public sealed partial class PdfViewport
             _selectedMeasurements.Clear();
             _selectedMeasurement = null;
             _selectedVertexIndex = -1;
+            ClearMeasurementVertexSelection();
             MeasurementSelectionChanged?.Invoke(null);
             MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
         }
@@ -630,8 +743,8 @@ public sealed partial class PdfViewport
         SKRect bounds = MeasurementBounds(measurement);
         float centerX = (bounds.Left + bounds.Right) / 2f;
         float centerY = (bounds.Top + bounds.Bottom) / 2f;
-        float visibleW = (float)ActualWidth / _zoom;
-        float visibleH = (float)ActualHeight / _zoom;
+        float visibleW = ScreenToPdfDistance((float)ActualWidth);
+        float visibleH = ScreenToPdfDistance((float)ActualHeight);
 
         _panX = centerX - visibleW / 2f;
         _panY = centerY - visibleH / 2f;
@@ -644,8 +757,8 @@ public sealed partial class PdfViewport
         if (_pdfW <= 0 || _pdfH <= 0 || ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
             return;
 
-        float visibleW = (float)ActualWidth / _zoom;
-        float visibleH = (float)ActualHeight / _zoom;
+        float visibleW = ScreenToPdfDistance((float)ActualWidth);
+        float visibleH = ScreenToPdfDistance((float)ActualHeight);
         _panX = Math.Clamp(_panX, 0, Math.Max(0, _pdfW - visibleW));
         _panY = Math.Clamp(_panY, 0, Math.Max(0, _pdfH - visibleH));
     }
@@ -658,6 +771,7 @@ public sealed partial class PdfViewport
         _selectedMeasurement = null;
         _selectedMeasurements.Clear();
         _selectedVertexIndex = -1;
+        ClearMeasurementVertexSelection();
         ClearAnnotationSelection();
         _draggingVertex = false;
         _draggingMeasurement = false;
@@ -668,9 +782,13 @@ public sealed partial class PdfViewport
         _dragMeasurementChanged = false;
         _dragAnnotationChanged = false;
         _dragMeasurementOriginalPoints.Clear();
+        _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementVertexOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
+        _dragSelectionOriginalHoles.Clear();
         _dragAnnotationOriginalPoints.Clear();
         _transformMeasurementOriginalPoints.Clear();
+        _transformMeasurementOriginalHoles.Clear();
         _transformAnnotationOriginalPoints.Clear();
         if (changed)
         {
@@ -688,6 +806,9 @@ public sealed partial class PdfViewport
 
     private void DeleteSelectedOverlay()
     {
+        if (TryDeleteSelectedMeasurementVertices())
+            return;
+
         if (GetSelectedMeasurements().Count > 0)
         {
             DeleteSelectedMeasurement();
@@ -703,8 +824,12 @@ public sealed partial class PdfViewport
         if (selected.Count == 0)
             return;
 
+        PushRemovedMeasurementsUndo(selected, $"restore {selected.Count} deleted measurement(s)");
         foreach (Measurement removed in selected)
+        {
             _measurements.Remove(removed);
+            ForgetMeasurementState(removed);
+        }
         ClearSelection();
         RequestRepaint();
         PostStatus(selected.Count == 1
@@ -734,6 +859,24 @@ public sealed partial class PdfViewport
 
     private bool IsAnnotationSelected(PageAnnotation annotation) =>
         ReferenceEquals(_selectedAnnotation, annotation);
+
+    private void ForgetMeasurementState(Measurement measurement)
+    {
+        _selectedMeasurements.Remove(measurement);
+        _selectedMeasurementVertexIndices.Remove(measurement);
+        _dragMeasurementVertexOriginalPoints.Remove(measurement);
+        _dragSelectionOriginalPoints.Remove(measurement);
+        _dragSelectionOriginalHoles.Remove(measurement);
+        _transformMeasurementOriginalPoints.Remove(measurement);
+        _transformMeasurementOriginalHoles.Remove(measurement);
+
+        if (ReferenceEquals(_selectedMeasurement, measurement))
+        {
+            _selectedMeasurement = null;
+            _dragMeasurementOriginalPoints.Clear();
+            _dragMeasurementOriginalHoles.Clear();
+        }
+    }
 
     private static bool IsSamePageFolder(string? left, string? right)
     {

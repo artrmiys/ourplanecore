@@ -67,8 +67,9 @@ public static class TakeoffFolderPropertiesStore
         {
             return JsonSerializer.Deserialize<TakeoffFolderProperties>(File.ReadAllText(path));
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Load folder properties failed for {path}");
             return null;
         }
     }
@@ -91,7 +92,7 @@ public static class TakeoffFolderPropertiesStore
         string path = PropertiesPath(folderPath);
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(properties, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(properties, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

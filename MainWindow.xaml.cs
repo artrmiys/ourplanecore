@@ -60,10 +60,11 @@ public partial class MainWindow : Window
     private string? _takeoffsRangeAnchorPath;
     private string? _takeoffSectionRangeAnchorKey;
     private TreeViewItem? _takeoffsDragItem;
+    private bool _takeoffsDragArmed;
     private readonly HashSet<TakeoffItem> _pendingTakeoffAutosaves = [];
     private readonly System.Windows.Threading.DispatcherTimer _takeoffAutosaveTimer = new()
     {
-        Interval = TimeSpan.FromMilliseconds(500),
+        Interval = TimeSpan.FromMilliseconds(ViewportConstants.AutosaveDebounceMs),
     };
 
     private readonly Dictionary<string, RadioButton> _toolBtns;
@@ -77,6 +78,7 @@ public partial class MainWindow : Window
     private Button? _estimateOpenWindowButton;
     private TextBlock? _estimateSummaryText;
     private EstimatingWindow? _estimatingWindow;
+    private PageSetupWindow? _pageSetupWindow;
     private IReadOnlyList<PdfMetadataPageResult> _sheetManagerMetadataResults = [];
     private TextBox? _massingDraftTextBox;
     private ListView? _massingMarkerList;
@@ -112,11 +114,19 @@ public partial class MainWindow : Window
     private bool _updatingPageTabs;
     private bool _syncingPageTreeSelection;
     private bool _syncingTakeoffTreeSelection;
+    private int _takeoffSelectionSyncVersion;
     private bool _suppressCanvasFocusFromTakeoffSelection;
     private bool _suppressTakeoffSelectionFromViewport;
     private bool _suppressTreeExpansionTracking;
     private TreeViewItem? _pageTakeoffLegendDropTarget;
     private bool _pageTakeoffLegendDropAfter;
+    private TreeViewItem? _pagesPositionDropTarget;
+    private bool _pagesPositionDropAfter;
+    private bool _pagesPositionDropAllowed;
+    private string _pagesPositionDropStatus = "";
+    private string? _pendingPagesTreeDropRefreshPath;
+    private bool _pendingPagesTreeDropReloadActiveTab;
+    private int _pendingPagesTreeDropRefreshVersion;
     private TreeViewItem? _takeoffSectionDropTarget;
     private bool _takeoffSectionDropAllowed;
     private string _takeoffSectionDropStatus = "";
@@ -141,12 +151,21 @@ public partial class MainWindow : Window
     // Metric presets — 1:N ratio
     private static readonly (string Label, double Ratio)[] MetricPresets =
     [
+        ("1:1",    1),
+        ("1:2",    2),
+        ("1:5",    5),
         ("1:10",   10),
         ("1:20",   20),
         ("1:25",   25),
+        ("1:30",   30),
+        ("1:40",   40),
         ("1:50",   50),
+        ("1:75",   75),
         ("1:100",  100),
+        ("1:125",  125),
+        ("1:150",  150),
         ("1:200",  200),
+        ("1:250",  250),
         ("1:500",  500),
         ("1:1000", 1000),
     ];
@@ -154,10 +173,16 @@ public partial class MainWindow : Window
     // Imperial presets — x" = 1'-0"  ⟹  ratio = 12 / x_inches
     private static readonly (string Label, double Ratio)[] ImperialPresets =
     [
+        ("1\" = 1\"",        1),
+        ("6\" = 1'-0\"",     2),
+        ("4\" = 1'-0\"",     3),
         ("3\" = 1'-0\"",     4),
-        ("1-1/2\" = 1'-0\"", 8),
+        ("2\" = 1'-0\"",     6),
+        ("1 1/2\" = 1'-0\"", 8),
+        ("1 1/4\" = 1'-0\"", 9.6),
         ("1\" = 1'-0\"",     12),
         ("3/4\" = 1'-0\"",   16),
+        ("5/8\" = 1'-0\"",   19.2),
         ("1/2\" = 1'-0\"",   24),
         ("3/8\" = 1'-0\"",   32),
         ("1/4\" = 1'-0\"",   48),
@@ -165,6 +190,8 @@ public partial class MainWindow : Window
         ("1/8\" = 1'-0\"",   96),
         ("3/32\" = 1'-0\"",  128),
         ("1/16\" = 1'-0\"",  192),
+        ("1/32\" = 1'-0\"",  384),
+        ("1/64\" = 1'-0\"",  768),
     ];
 
     private static readonly string[] AiMarkerTypes =
@@ -238,6 +265,7 @@ public partial class MainWindow : Window
         _viewport.ToolChanged        += OnToolChanged;
         _viewport.SnapChanged        += OnViewportSnapChanged;
         _viewport.OrthoChanged       += OnViewportOrthoChanged;
+        _viewport.BoxModeChanged     += OnViewportBoxModeChanged;
         _viewport.LayersChanged      += OnLayersChanged;
         _viewport.PdfLayersDiscovered += OnPdfLayersDiscovered;
         _viewport.PdfLayerTraceStateChanged += RefreshPdfLayerTraceControls;
@@ -254,6 +282,7 @@ public partial class MainWindow : Window
         _viewport.PasteMeasurementsRequested += PasteMeasurementsFromClipboard;
         _viewport.ContextRequested   += OnViewportContextRequested;
         _viewport.JoistDirectionCaptured += OnJoistDirectionCaptured;
+        _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChanged;
         ViewportSurfaceHost.Children.Add(_viewport);
 
         _toolBtns = new Dictionary<string, RadioButton>
@@ -268,6 +297,7 @@ public partial class MainWindow : Window
             ["point"] = BtnPoint,
             ["line"]  = BtnLine,
             ["area"]  = BtnArea,
+            ["areacut"] = BtnAreaCut,
         };
         SetupToolButtonContent();
         BtnPoint.ToolTip = "Count item (P)";
@@ -284,6 +314,7 @@ public partial class MainWindow : Window
         InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
         CommandBindings.Add(new CommandBinding(OpenCommandPaletteCommand, (_, _) => ShowCommandPalette()));
         InputBindings.Add(new KeyBinding(OpenCommandPaletteCommand, Key.P, ModifierKeys.Control | ModifierKeys.Shift));
+        PreviewKeyDown += MainWindow_GlobalPreviewKeyDown;
         PagesTree.PreviewMouseRightButtonDown += PagesTree_PreviewMouseRightButtonDown;
         PagesTree.PreviewMouseLeftButtonDown += PagesTree_PreviewMouseLeftButtonDown;
         PagesTree.MouseMove += PagesTree_MouseMove;

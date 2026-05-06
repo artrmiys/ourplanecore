@@ -27,21 +27,22 @@ public sealed partial class PdfViewport
             bool selected = IsMeasurementSelected(m);
             if (!selected && !IsMeasurementVisible(m, visiblePdf))
                 continue;
-            DrawMeasurement(canvas, m, selected);
-            if (selected && !ReferenceEquals(m, _selectedMeasurement))
+            DrawMeasurement(canvas, m, selected, drawLabels: false);
+            if (!_renderNavigationFastFrame && selected && !ReferenceEquals(m, _selectedMeasurement))
                 DrawSelectionBounds(canvas, m);
-            if (ReferenceEquals(m, _selectedMeasurement))
+            if (!_renderNavigationFastFrame && ShouldDrawMeasurementHandles(m))
                 DrawSelectionHandles(canvas, m);
         }
+
     }
 
-    private void DrawMeasurement(SKCanvas canvas, Measurement m, bool selected)
+    private void DrawMeasurement(SKCanvas canvas, Measurement m, bool selected, bool drawLabels)
     {
         SKColor color = GetCachedColor(m.Color, SKColors.Red);
         using var stroke = new SKPaint
         {
             Color       = color,
-            StrokeWidth = (selected ? 3f : 2f) / _zoom,       // constant screen width regardless of zoom
+            StrokeWidth = ScreenToPdfDistance(selected ? 3f : 2f),
             IsAntialias = true,
             Style       = SKPaintStyle.Stroke,
         };
@@ -57,10 +58,10 @@ public sealed partial class PdfViewport
         switch (m.MType)
         {
             case "point":
-                float r = 5f / _zoom;
+                float r = ScreenToPdfDistance(5f);
                 foreach (var p in pts)
                     canvas.DrawCircle(p, r, fill);
-                if (pts.Count > 0 && ShouldDrawMeasurementLabel("point"))
+                if (drawLabels && pts.Count > 0 && ShouldDrawMeasurementLabel("point"))
                     DrawLabel(canvas, pts[^1], m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
 
@@ -71,19 +72,16 @@ public sealed partial class PdfViewport
                 for (int i = 1; i < pts.Count; i++) path.LineTo(pts[i]);
                 canvas.DrawPath(path, stroke);
                 }
-                float pr = 3f / _zoom;
+                float pr = ScreenToPdfDistance(3f);
                 foreach (var p in pts)
                     canvas.DrawCircle(p, pr, fill);
-                if (ShouldDrawMeasurementLabel("line"))
+                if (drawLabels && ShouldDrawMeasurementLabel("line"))
                     DrawLabel(canvas, pts[^1], m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
 
             case "area" when pts.Count >= 3:
-                using (var poly = new SKPath())
+                using (var poly = BuildAreaPath(m))
                 {
-                poly.MoveTo(pts[0]);
-                for (int i = 1; i < pts.Count; i++) poly.LineTo(pts[i]);
-                poly.Close();
                 using (var fillTrans = fill.Clone())
                 {
                     fillTrans.Color = fillTrans.Color.WithAlpha(60);
@@ -91,12 +89,73 @@ public sealed partial class PdfViewport
                 }
                 canvas.DrawPath(poly, stroke);
                 }
-                DrawJoistLayout(canvas, m, color);
+                if (!_renderNavigationFastFrame)
+                    DrawJoistLayout(canvas, m, color, drawLabels);
                 var cen = Centroid(pts);
-                if (ShouldDrawMeasurementLabel("area"))
+                if (drawLabels && ShouldDrawMeasurementLabel("area"))
                     DrawLabel(canvas, cen, m.Label(ScaleMetersPerPt, UnitMode), m.Color);
                 break;
         }
+    }
+
+    private void DrawMeasurementLabels(SKCanvas canvas, SKRect visiblePdf)
+    {
+        if (_renderNavigationFastFrame)
+            return;
+
+        foreach (var measurement in _measurements)
+        {
+            if (!IsMeasurementOnActivePage(measurement))
+                continue;
+            if (!IsMeasurementSelected(measurement) && !IsMeasurementVisible(measurement, visiblePdf))
+                continue;
+
+            DrawMeasurementTopLabels(canvas, measurement);
+        }
+    }
+
+    private void DrawMeasurementTopLabels(SKCanvas canvas, Measurement measurement)
+    {
+        if (measurement.MType == "area" && measurement.JoistEnabled)
+            DrawJoistLayoutLabels(canvas, measurement);
+
+        if (!ShouldDrawMeasurementLabel(measurement.MType))
+            return;
+
+        var points = measurement.Points;
+        switch (measurement.MType)
+        {
+            case "point" when points.Count > 0:
+            case "line" when points.Count >= 2:
+                DrawLabel(canvas, points[^1], measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
+                break;
+            case "area" when points.Count >= 3:
+                DrawLabel(canvas, Centroid(points), measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
+                break;
+        }
+    }
+
+    private static SKPath BuildAreaPath(Measurement measurement)
+    {
+        var path = new SKPath
+        {
+            FillType = SKPathFillType.EvenOdd,
+        };
+        AddClosedContour(path, measurement.Points);
+        foreach (var hole in measurement.Holes)
+            AddClosedContour(path, hole);
+        return path;
+    }
+
+    private static void AddClosedContour(SKPath path, IReadOnlyList<SKPoint> points)
+    {
+        if (points.Count < 3)
+            return;
+
+        path.MoveTo(points[0]);
+        for (int i = 1; i < points.Count; i++)
+            path.LineTo(points[i]);
+        path.Close();
     }
 
     private void DrawPageAnnotations(SKCanvas canvas, SKRect visiblePdf)
@@ -114,7 +173,7 @@ public sealed partial class PdfViewport
                 continue;
 
             DrawPageAnnotation(canvas, annotation, selected);
-            if (selected)
+            if (selected && !_renderNavigationFastFrame)
             {
                 DrawAnnotationSelectionBounds(canvas, annotation);
                 DrawAnnotationSelectionHandles(canvas, annotation);
@@ -129,7 +188,7 @@ public sealed partial class PdfViewport
         using var stroke = new SKPaint
         {
             Color = color,
-            StrokeWidth = (selected ? 2.7f : 1.8f) / _zoom,
+            StrokeWidth = ScreenToPdfDistance(selected ? 2.7f : 1.8f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
             StrokeCap = SKStrokeCap.Round,
@@ -159,13 +218,13 @@ public sealed partial class PdfViewport
         canvas.DrawLine(start, end, stroke);
         if (kind == "arrow")
         {
-            DrawAnnotationArrowHead(canvas, start, end, stroke, 9f / _zoom);
+            AnnotationGlyphRenderer.DrawArrowHead(canvas, start, end, stroke, ScreenToPdfDistance(9f));
             return;
         }
 
-        if (kind == "dimension")
+        if (kind == "dimension" && !_renderNavigationFastFrame)
         {
-            DrawAnnotationDimensionTicks(canvas, start, end, stroke, 6f / _zoom);
+            AnnotationGlyphRenderer.DrawDimensionTicks(canvas, start, end, stroke, ScreenToPdfDistance(6f));
             DrawScreenTextBox(
                 canvas,
                 new SKPoint((start.X + end.X) / 2f, (start.Y + end.Y) / 2f),
@@ -187,12 +246,6 @@ public sealed partial class PdfViewport
         SKRect outer = TransformHandleBounds(selectedBounds);
         float safeZoom = Math.Max(_zoom, 0.001f);
         SKColor orange = new(0xF4, 0x9B, 0x24);
-        using var fill = new SKPaint
-        {
-            Color = orange.WithAlpha(24),
-            IsAntialias = true,
-            Style = SKPaintStyle.Fill,
-        };
         using var stroke = new SKPaint
         {
             Color = orange.WithAlpha(190),
@@ -215,7 +268,6 @@ public sealed partial class PdfViewport
             Style = SKPaintStyle.Stroke,
         };
 
-        canvas.DrawRect(outer, fill);
         canvas.DrawRect(outer, stroke);
 
         float handle = 8f / safeZoom;
@@ -242,14 +294,14 @@ public sealed partial class PdfViewport
             return;
 
         SKRect bounds = PointsBounds(annotation.Points);
-        bounds.Inflate(6f / Math.Max(_zoom, 0.001f), 6f / Math.Max(_zoom, 0.001f));
+        bounds.Inflate(ScreenToPdfDistance(6f), ScreenToPdfDistance(6f));
         using var stroke = new SKPaint
         {
             Color = SKColors.DodgerBlue,
-            StrokeWidth = 1.3f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.3f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
-            PathEffect = SKPathEffect.CreateDash([5f / _zoom, 4f / _zoom], 0),
+            PathEffect = SKPathEffect.CreateDash([ScreenToPdfDistance(5f), ScreenToPdfDistance(4f)], 0),
         };
         canvas.DrawRect(bounds, stroke);
     }
@@ -259,7 +311,7 @@ public sealed partial class PdfViewport
         if (annotation.Points.Count == 0)
             return;
 
-        float radius = 5f / _zoom;
+        float radius = ScreenToPdfDistance(5f);
         using var fill = new SKPaint
         {
             Color = SKColors.White,
@@ -275,7 +327,7 @@ public sealed partial class PdfViewport
         using var stroke = new SKPaint
         {
             Color = SKColors.DodgerBlue,
-            StrokeWidth = 1.5f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.5f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
@@ -289,38 +341,6 @@ public sealed partial class PdfViewport
         }
     }
 
-    private void DrawAnnotationArrowHead(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint stroke, float size)
-    {
-        float dx = end.X - start.X;
-        float dy = end.Y - start.Y;
-        float length = MathF.Sqrt(dx * dx + dy * dy);
-        if (length <= 0.001f)
-            return;
-
-        float ux = dx / length;
-        float uy = dy / length;
-        float px = -uy;
-        float py = ux;
-        SKPoint left = new(end.X - ux * size + px * size * 0.45f, end.Y - uy * size + py * size * 0.45f);
-        SKPoint right = new(end.X - ux * size - px * size * 0.45f, end.Y - uy * size - py * size * 0.45f);
-        canvas.DrawLine(end, left, stroke);
-        canvas.DrawLine(end, right, stroke);
-    }
-
-    private static void DrawAnnotationDimensionTicks(SKCanvas canvas, SKPoint start, SKPoint end, SKPaint stroke, float tick)
-    {
-        float dx = end.X - start.X;
-        float dy = end.Y - start.Y;
-        float length = MathF.Sqrt(dx * dx + dy * dy);
-        if (length <= 0.001f)
-            return;
-
-        float px = -dy / length;
-        float py = dx / length;
-        canvas.DrawLine(start.X - px * tick, start.Y - py * tick, start.X + px * tick, start.Y + py * tick, stroke);
-        canvas.DrawLine(end.X - px * tick, end.Y - py * tick, end.X + px * tick, end.Y + py * tick, stroke);
-    }
-
     private string AnnotationLabel(PageAnnotation annotation)
     {
         if (!string.IsNullOrWhiteSpace(annotation.Text))
@@ -331,20 +351,18 @@ public sealed partial class PdfViewport
 
         SKPoint start = annotation.Points[0];
         SKPoint end = annotation.Points[1];
-        float dx = end.X - start.X;
-        float dy = end.Y - start.Y;
-        double lengthPt = Math.Sqrt(dx * dx + dy * dy);
+        float lengthPt = MeasurementGeometry.Distance(start, end);
         double scale = annotation.ScaleMetersPerPt > 0
             ? annotation.ScaleMetersPerPt
             : ScaleMetersPerPt;
-        return scale > 0
-            ? Units.FormatLength(lengthPt * scale, UnitMode)
-            : $"{lengthPt:F1} pt";
+        return AnnotationGlyphRenderer.FormatLength(lengthPt, (float)scale, UnitMode);
     }
 
     private bool ShouldDrawMeasurementLabel(string measurementType)
     {
         if (!ShowMeasurementLabels)
+            return false;
+        if (_renderNavigationFastFrame)
             return false;
 
         return measurementType switch
@@ -355,7 +373,7 @@ public sealed partial class PdfViewport
         };
     }
 
-    private void DrawJoistLayout(SKCanvas canvas, Measurement m, SKColor color)
+    private void DrawJoistLayout(SKCanvas canvas, Measurement m, SKColor color, bool drawLabels)
     {
         if (!m.JoistEnabled)
             return;
@@ -367,18 +385,31 @@ public sealed partial class PdfViewport
         using var joistStroke = new SKPaint
         {
             Color = color.WithAlpha(220),
-            StrokeWidth = 1.15f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.15f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
             StrokeCap = SKStrokeCap.Round,
         };
-        bool drawLabels = m.JoistShowLabels && layout.Count <= 180;
         foreach (JoistSegment segment in layout.Segments)
         {
             canvas.DrawLine(segment.Start, segment.End, joistStroke);
-            if (!drawLabels)
-                continue;
+        }
 
+        if (drawLabels)
+            DrawJoistLayoutLabels(canvas, m);
+    }
+
+    private void DrawJoistLayoutLabels(SKCanvas canvas, Measurement measurement)
+    {
+        if (!measurement.JoistEnabled || !measurement.JoistShowLabels)
+            return;
+
+        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, ScaleMetersPerPt);
+        if (!layout.HasScale || layout.Count == 0 || layout.Count > 180)
+            return;
+
+        foreach (JoistSegment segment in layout.Segments)
+        {
             string label = JoistTakeoffCalculator.FormatSegmentLength(segment, UnitMode);
             SKPoint mid = new(
                 (segment.Start.X + segment.End.X) / 2f,
@@ -401,14 +432,14 @@ public sealed partial class PdfViewport
         if (m.Points.Count == 0) return;
 
         SKRect bounds = RawMeasurementBounds(m);
-        bounds.Inflate(6f / Math.Max(_zoom, 0.001f), 6f / Math.Max(_zoom, 0.001f));
+        bounds.Inflate(ScreenToPdfDistance(6f), ScreenToPdfDistance(6f));
         using var stroke = new SKPaint
         {
             Color = SKColors.DodgerBlue,
-            StrokeWidth = 1.5f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.5f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
-            PathEffect = SKPathEffect.CreateDash([6f / _zoom, 4f / _zoom], 0),
+            PathEffect = SKPathEffect.CreateDash([ScreenToPdfDistance(6f), ScreenToPdfDistance(4f)], 0),
         };
         canvas.DrawRect(bounds, stroke);
     }
@@ -417,7 +448,7 @@ public sealed partial class PdfViewport
     {
         if (m.Points.Count == 0) return;
 
-        float radius = 5f / _zoom;
+        float radius = ScreenToPdfDistance(5f);
         using var fill = new SKPaint
         {
             Color = SKColors.White,
@@ -433,18 +464,25 @@ public sealed partial class PdfViewport
         using var stroke = new SKPaint
         {
             Color = SKColors.DodgerBlue,
-            StrokeWidth = 1.5f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.5f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
 
-        for (int i = 0; i < m.Points.Count; i++)
+        foreach (MeasurementVertexRef vertex in MeasurementVertices(m))
         {
-            var rect = SKRect.Create(m.Points[i].X - radius, m.Points[i].Y - radius, radius * 2, radius * 2);
-            canvas.DrawRect(rect, i == _selectedVertexIndex ? activeFill : fill);
+            var rect = SKRect.Create(vertex.Point.X - radius, vertex.Point.Y - radius, radius * 2, radius * 2);
+            bool vertexSelected = ReferenceEquals(_selectedMeasurement, m) &&
+                                  vertex.GlobalIndex == _selectedVertexIndex ||
+                                  IsMeasurementVertexSelected(m, vertex.GlobalIndex);
+            canvas.DrawRect(rect, vertexSelected ? activeFill : fill);
             canvas.DrawRect(rect, stroke);
         }
     }
+
+    private bool ShouldDrawMeasurementHandles(Measurement measurement) =>
+        ReferenceEquals(measurement, _selectedMeasurement) ||
+        IsMeasurementSelected(measurement) && CanEditMeasurementVertices(measurement);
 
     private void DrawLabel(SKCanvas canvas, SKPoint pos, string text, string hexColor)
     {
@@ -502,7 +540,7 @@ public sealed partial class PdfViewport
             Color       = textColor,
             TextSize    = fontSize * labelScale / labelDivisor,
             IsAntialias = true,
-            Typeface    = SKTypeface.FromFamilyName("Consolas"),
+            Typeface    = LabelTypeface,
         };
 
         float width = 0;
@@ -547,9 +585,6 @@ public sealed partial class PdfViewport
         }
     }
 
-    private SKPoint PdfToScreen(SKPoint point) =>
-        new((point.X - _panX) * _zoom, (point.Y - _panY) * _zoom);
-
     private void DrawAiActionDraftPreview(SKCanvas canvas, SKRect visiblePdf)
     {
         if (_aiActionDraftPreview == null || _aiActionDraftPreview.Actions.Count == 0)
@@ -558,10 +593,10 @@ public sealed partial class PdfViewport
         using var stroke = new SKPaint
         {
             Color = new SKColor(0x00, 0xBC, 0xD4, 230),
-            StrokeWidth = 2.5f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(2.5f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
-            PathEffect = SKPathEffect.CreateDash([10f / _zoom, 5f / _zoom], 0),
+            PathEffect = SKPathEffect.CreateDash([ScreenToPdfDistance(10f), ScreenToPdfDistance(5f)], 0),
         };
         using var fill = new SKPaint
         {
@@ -578,7 +613,7 @@ public sealed partial class PdfViewport
         using var dotStroke = new SKPaint
         {
             Color = SKColors.White,
-            StrokeWidth = 1.5f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.5f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
@@ -640,7 +675,7 @@ public sealed partial class PdfViewport
 
     private void DrawAiActionDots(SKCanvas canvas, IReadOnlyList<SKPoint> points, SKPaint fill, SKPaint stroke)
     {
-        float radius = 4.5f / _zoom;
+        float radius = ScreenToPdfDistance(4.5f);
         foreach (SKPoint point in points)
         {
             canvas.DrawCircle(point, radius, fill);
@@ -669,13 +704,13 @@ public sealed partial class PdfViewport
         using var stroke = new SKPaint
         {
             Color = SKColors.White.WithAlpha(245),
-            StrokeWidth = 1.8f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(1.8f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
         using var accent = new SKPaint
         {
-            StrokeWidth = 2.2f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(2.2f),
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
@@ -690,7 +725,7 @@ public sealed partial class PdfViewport
             fill.Color = color.WithAlpha(220);
             accent.Color = color.WithAlpha(245);
 
-            float size = 7f / _zoom;
+            float size = ScreenToPdfDistance(7f);
             using var markerPath = new SKPath();
             markerPath.MoveTo(point.X, point.Y - size);
             markerPath.LineTo(point.X + size, point.Y);
@@ -710,7 +745,7 @@ public sealed partial class PdfViewport
             }
             else
             {
-                canvas.DrawCircle(point, 2.2f / _zoom, stroke);
+                canvas.DrawCircle(point, ScreenToPdfDistance(2.2f), stroke);
             }
 
             DrawLabel(
@@ -723,7 +758,7 @@ public sealed partial class PdfViewport
 
     private bool PointVisible(SKPoint point, SKRect visiblePdf)
     {
-        float margin = 24f / Math.Max(_zoom, 0.001f);
+        float margin = ScreenToPdfDistance(24f);
         return point.X >= visiblePdf.Left - margin &&
                point.X <= visiblePdf.Right + margin &&
                point.Y >= visiblePdf.Top - margin &&
@@ -819,7 +854,7 @@ public sealed partial class PdfViewport
         using var tempPaint = new SKPaint
         {
             Color       = TempColor,
-            StrokeWidth = 2f / _zoom,
+            StrokeWidth = ScreenToPdfDistance(2f),
             IsAntialias = true,
             Style       = SKPaintStyle.Stroke,
         };
@@ -830,7 +865,7 @@ public sealed partial class PdfViewport
             Style       = SKPaintStyle.Fill,
         };
 
-        float r = 4f / _zoom;
+        float r = ScreenToPdfDistance(4f);
 
         foreach (var p in _drawPts)
             canvas.DrawCircle(p, r, dotPaint);
@@ -847,12 +882,12 @@ public sealed partial class PdfViewport
             using var rubber = new SKPaint
             {
                 Color       = TempColor,
-                StrokeWidth = 1f / _zoom,
+                StrokeWidth = ScreenToPdfDistance(1f),
                 IsAntialias = true,
                 Style       = SKPaintStyle.Stroke,
-                PathEffect  = SKPathEffect.CreateDash([4f / _zoom, 4f / _zoom], 0),
+                PathEffect  = SKPathEffect.CreateDash([ScreenToPdfDistance(4f), ScreenToPdfDistance(4f)], 0),
             };
-            if (_tool == ViewerTool.DrawRect)
+            if (ShouldPreviewAsBox())
                 canvas.DrawRect(NormalizeRect(_drawPts[0], _rubberEnd.Value), rubber);
             else
                 canvas.DrawLine(_drawPts[^1], _rubberEnd.Value, rubber);
@@ -863,10 +898,10 @@ public sealed partial class PdfViewport
             using var joistPaint = new SKPaint
             {
                 Color = new SKColor(0x00, 0x96, 0x88),
-                StrokeWidth = 2.2f / _zoom,
+                StrokeWidth = ScreenToPdfDistance(2.2f),
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
-                PathEffect = SKPathEffect.CreateDash([7f / _zoom, 4f / _zoom], 0),
+                PathEffect = SKPathEffect.CreateDash([ScreenToPdfDistance(7f), ScreenToPdfDistance(4f)], 0),
             };
             using var joistDot = new SKPaint
             {
@@ -874,7 +909,7 @@ public sealed partial class PdfViewport
                 IsAntialias = true,
                 Style = SKPaintStyle.Fill,
             };
-            float jr = 5f / _zoom;
+            float jr = ScreenToPdfDistance(5f);
             foreach (SKPoint point in _joistDirectionPts)
                 canvas.DrawCircle(point, jr, joistDot);
             if (_joistDirectionPts.Count == 1 && _joistDirectionRubberEnd.HasValue)
@@ -887,7 +922,7 @@ public sealed partial class PdfViewport
             using var scPaint = new SKPaint
             {
                 Color       = ScaleClr,
-                StrokeWidth = 2f / _zoom,
+                StrokeWidth = ScreenToPdfDistance(2f),
                 IsAntialias = true,
                 Style       = SKPaintStyle.Stroke,
             };
@@ -897,7 +932,7 @@ public sealed partial class PdfViewport
                 IsAntialias = true,
                 Style       = SKPaintStyle.Fill,
             };
-            float sr = 6f / _zoom;
+            float sr = ScreenToPdfDistance(6f);
             foreach (var p in _scalePts)
                 canvas.DrawCircle(p, sr, scDot);
             if (_scalePts.Count == 2)
@@ -907,7 +942,7 @@ public sealed partial class PdfViewport
         if (_snapPreview.HasValue)
         {
             SKPoint point = _snapPreview.Value;
-            float half = SnapMarkerScreenPx / Math.Max(_zoom, 0.001f);
+            float half = ScreenToPdfDistance(SnapMarkerScreenPx);
             var rect = new SKRect(
                 point.X - half,
                 point.Y - half,
@@ -922,7 +957,7 @@ public sealed partial class PdfViewport
             using var snapStroke = new SKPaint
             {
                 Color = new SKColor(0xE5, 0x39, 0x35),
-                StrokeWidth = 2f / Math.Max(_zoom, 0.001f),
+                StrokeWidth = ScreenToPdfDistance(2f),
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
             };
@@ -957,7 +992,7 @@ public sealed partial class PdfViewport
                 _ => "end",
             };
             string label = $"{labelKind} {point.X:F0},{point.Y:F0}";
-            float textSize = 10f / Math.Max(_zoom, 0.001f);
+            float textSize = ScreenToPdfDistance(10f);
             using var snapText = new SKPaint
             {
                 Color = new SKColor(0xE5, 0x39, 0x35),

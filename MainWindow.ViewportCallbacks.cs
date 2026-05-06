@@ -24,6 +24,7 @@ public partial class MainWindow
         ApplyScaleToCurrentPageMeasurements(scale);
         SaveCurrentPageScale();
         UpdateScaleUi(scale);
+        RefreshFloatingPageSetup(_currentPage?.FolderPath);
         RefreshPagesTakeoffIndicators();
         RefreshAllTotals();
     }

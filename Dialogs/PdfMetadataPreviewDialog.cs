@@ -1,27 +1,61 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 
 namespace OurPlaneCore.Controls;
 
-public sealed class PdfMetadataPreviewRow
+public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
 {
+    private string _proposedPageName = "";
+    private string _proposedScale = "";
+    private bool _applyRename;
+    private bool _applyScale;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     public string PageFolder { get; init; } = "";
     public string CurrentPageName { get; init; } = "";
     public string SheetLabel { get; init; } = "";
     public string SheetTitle { get; init; } = "";
-    public string ProposedPageName { get; set; } = "";
+    public string ProposedPageName
+    {
+        get => _proposedPageName;
+        set => SetField(ref _proposedPageName, value ?? "");
+    }
     public string Suffix { get; init; } = "";
-    public string ProposedScale { get; set; } = "";
+    public string ProposedScale
+    {
+        get => _proposedScale;
+        set => SetField(ref _proposedScale, value ?? "");
+    }
     public string Source { get; init; } = "";
     public string Confidence { get; init; } = "";
     public string Reason { get; init; } = "";
     public string Warnings { get; init; } = "";
-    public bool ApplyRename { get; set; }
-    public bool ApplyScale { get; set; }
+    public bool ApplyRename
+    {
+        get => _applyRename;
+        set => SetField(ref _applyRename, value);
+    }
+    public bool ApplyScale
+    {
+        get => _applyScale;
+        set => SetField(ref _applyScale, value);
+    }
+
+    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+            return;
+
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }
 
 public sealed class PdfMetadataPreviewDialog : Window

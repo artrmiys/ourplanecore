@@ -160,6 +160,7 @@ public partial class MainWindow
         _settings.ScaleSheetOverlaysWithPage = ChkDisplayLegendScaleWithPage.IsChecked == true;
         _settings.ScaleMeasurementLabelsWithPage = ChkDisplayLabelsScaleWithPage.IsChecked == true;
         _settings.ScaleSheetHeaderWithPage = ChkDisplayHeaderScaleWithPage.IsChecked == true;
+        _settings.SimplifyViewportNavigation = ChkDisplaySimplifyNavigation.IsChecked == true;
         _settings.UnitMode = ChkDisplayImperial.IsChecked == true
             ? UnitMode.Imperial.ToString()
             : UnitMode.Metric.ToString();
@@ -352,6 +353,7 @@ public partial class MainWindow
         _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
         _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
+        _viewport.SimplifyNavigationRendering = _settings.SimplifyViewportNavigation;
         _viewport.UnitMode = _settings.UnitMode == UnitMode.Metric.ToString()
             ? UnitMode.Metric
             : UnitMode.Imperial;
@@ -374,6 +376,7 @@ public partial class MainWindow
             ChkDisplayLabelsScaleWithPage.IsChecked = _settings.ScaleMeasurementLabelsWithPage;
             ChkDisplayHeaderScaleWithPage.IsChecked = _settings.ScaleSheetHeaderWithPage;
             ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
+            ChkDisplaySimplifyNavigation.IsChecked = _settings.SimplifyViewportNavigation;
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
         }
         finally
@@ -394,6 +397,7 @@ public partial class MainWindow
         _viewport.ScaleSheetOverlaysWithPage = _settings.ScaleSheetOverlaysWithPage;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
         _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
+        _viewport.SimplifyNavigationRendering = _settings.SimplifyViewportNavigation;
         _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
         _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = _settings.ShowLineLabels;

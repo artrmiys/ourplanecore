@@ -22,10 +22,12 @@ public sealed partial class PdfViewport
         if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || canvasWidth <= 0 || canvasHeight <= 0)
             return;
 
-        float pageLeft = -_panX * _zoom;
-        float pageTop = -_panY * _zoom;
-        float pageRight = (_pdfW - _panX) * _zoom;
-        float pageBottom = (_pdfH - _panY) * _zoom;
+        SKPoint pageTopLeft = PdfToScreen(new SKPoint(0, 0));
+        SKPoint pageBottomRight = PdfToScreen(new SKPoint(_pdfW, _pdfH));
+        float pageLeft = pageTopLeft.X;
+        float pageTop = pageTopLeft.Y;
+        float pageRight = pageBottomRight.X;
+        float pageBottom = pageBottomRight.Y;
         float visibleLeft = Math.Max(0, pageLeft);
         float visibleTop = Math.Max(0, pageTop);
         float visibleRight = Math.Min(canvasWidth, pageRight);
@@ -43,15 +45,12 @@ public sealed partial class PdfViewport
         string scaleText = FormatSheetScale();
         string sheetSizeText = FormatSheetSize();
 
-        SKTypeface monoTypeface = SKTypeface.FromFamilyName("Consolas")
-                                   ?? SKTypeface.FromFamilyName("Cascadia Mono")
-                                   ?? SKTypeface.Default;
         using var textPaint = new SKPaint
         {
             Color = SKColors.Black,
             TextSize = fontSize,
             IsAntialias = true,
-            Typeface = monoTypeface,
+            Typeface = OverlayMonoTypeface,
         };
         using var bgPaint = new SKPaint
         {
@@ -122,10 +121,12 @@ public sealed partial class PdfViewport
             return;
         }
 
-        float pageLeft = -_panX * _zoom;
-        float pageTop = -_panY * _zoom;
-        float pageRight = (_pdfW - _panX) * _zoom;
-        float pageBottom = (_pdfH - _panY) * _zoom;
+        SKPoint pageTopLeft = PdfToScreen(new SKPoint(0, 0));
+        SKPoint pageBottomRight = PdfToScreen(new SKPoint(_pdfW, _pdfH));
+        float pageLeft = pageTopLeft.X;
+        float pageTop = pageTopLeft.Y;
+        float pageRight = pageBottomRight.X;
+        float pageBottom = pageBottomRight.Y;
         float visibleLeft = Math.Max(0, pageLeft);
         float visibleTop = Math.Max(0, pageTop);
         float visibleRight = Math.Min(canvasWidth, pageRight);
@@ -187,33 +188,26 @@ public sealed partial class PdfViewport
         float x = position.X;
         float y = position.Y;
 
-        SKTypeface uiTypeface = SKTypeface.FromFamilyName("Segoe UI")
-                                 ?? SKTypeface.FromFamilyName("Inter")
-                                 ?? SKTypeface.Default;
-        SKTypeface uiBoldTypeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold)
-                                     ?? SKTypeface.FromFamilyName("Inter", SKFontStyle.Bold)
-                                     ?? uiTypeface;
-
         using var titlePaint = new SKPaint
         {
             Color = SKColors.Black,
             TextSize = titleSize,
             IsAntialias = true,
-            Typeface = uiBoldTypeface,
+            Typeface = OverlayUiBoldTypeface,
         };
         using var textPaint = new SKPaint
         {
             Color = SKColors.Black,
             TextSize = rowSize,
             IsAntialias = true,
-            Typeface = uiTypeface,
+            Typeface = OverlayUiTypeface,
         };
         using var mutedPaint = new SKPaint
         {
             Color = new SKColor(0x44, 0x44, 0x44, 235),
             TextSize = rowSize,
             IsAntialias = true,
-            Typeface = uiTypeface,
+            Typeface = OverlayUiTypeface,
         };
         using var bgPaint = new SKPaint
         {

@@ -169,6 +169,26 @@ public static class PlanSwiftTakeoffExporter
 
     private static void EmitItem(List<PlanSwiftExportRow> rows, TakeoffItem item, UnitMode unitMode)
     {
+        if (item.IsJoistArea)
+        {
+            var joistLabelLines = JoistLabelLines(item, 0, unitMode).ToList();
+            if (joistLabelLines.Count > 0)
+            {
+                rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Item, item.Name, joistLabelLines[0]));
+                foreach (string line in joistLabelLines.Skip(1))
+                    rows.Add(string.IsNullOrWhiteSpace(line)
+                        ? new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, "")
+                        : new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
+
+                foreach (string line in ExportNotes(item))
+                    rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
+
+                if (joistLabelLines.Count > 1 || ExportNotes(item).Any())
+                    rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
+                return;
+            }
+        }
+
         var (value, unit) = QuantityValueAndUnit(item, unitMode);
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Item, item.Name, value, unit));
 
@@ -198,6 +218,44 @@ public static class PlanSwiftTakeoffExporter
             .Replace('\r', '\n')
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(line => !string.IsNullOrWhiteSpace(line));
+
+    public static IReadOnlyList<string> JoistLabelLines(
+        TakeoffItem item,
+        double fallbackScaleMetersPerPt,
+        UnitMode unitMode)
+    {
+        if (!item.IsJoistArea)
+            return [];
+
+        var lines = new List<string>();
+        foreach (Measurement measurement in item.Measurements)
+        {
+            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area" ||
+                !measurement.JoistEnabled)
+            {
+                continue;
+            }
+
+            if (lines.Count > 0)
+                lines.Add("");
+
+            lines.AddRange(SplitLabelLines(measurement.Label(fallbackScaleMetersPerPt, unitMode)));
+        }
+
+        return lines;
+    }
+
+    public static string JoistLabelText(
+        TakeoffItem item,
+        double fallbackScaleMetersPerPt,
+        UnitMode unitMode) =>
+        string.Join("\n", JoistLabelLines(item, fallbackScaleMetersPerPt, unitMode));
+
+    private static IEnumerable<string> SplitLabelLines(string label) =>
+        (label ?? "")
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
 
     private static (string Value, string Unit) QuantityValueAndUnit(TakeoffItem item, UnitMode unitMode)
     {

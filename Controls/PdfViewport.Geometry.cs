@@ -18,11 +18,7 @@ namespace OurPlaneCore.Controls;
 public sealed partial class PdfViewport
 {
     private static float DistanceSquared(SKPoint a, SKPoint b)
-    {
-        float dx = a.X - b.X;
-        float dy = a.Y - b.Y;
-        return dx * dx + dy * dy;
-    }
+        => MeasurementGeometry.DistanceSquared(a, b);
 
     private static double DistanceSquared(Point a, Point b)
     {
@@ -32,25 +28,10 @@ public sealed partial class PdfViewport
     }
 
     private static float DistanceToSegment(SKPoint p, SKPoint a, SKPoint b)
-    {
-        float vx = b.X - a.X;
-        float vy = b.Y - a.Y;
-        float lenSq = vx * vx + vy * vy;
-        if (lenSq <= 0.0001f)
-            return MathF.Sqrt(DistanceSquared(p, a));
-
-        float t = ((p.X - a.X) * vx + (p.Y - a.Y) * vy) / lenSq;
-        t = Math.Clamp(t, 0f, 1f);
-        var projection = new SKPoint(a.X + t * vx, a.Y + t * vy);
-        return MathF.Sqrt(DistanceSquared(p, projection));
-    }
+        => MeasurementGeometry.DistanceToSegment(p, a, b);
 
     private static SKRect NormalizeRect(SKPoint a, SKPoint b) =>
-        new(
-            Math.Min(a.X, b.X),
-            Math.Min(a.Y, b.Y),
-            Math.Max(a.X, b.X),
-            Math.Max(a.Y, b.Y));
+        MeasurementGeometry.NormalizeRect(a, b);
 
     private static bool RectContains(SKRect rect, SKPoint point) =>
         point.X >= rect.Left &&
@@ -92,7 +73,7 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        const float eps = 0.0001f;
+        const float eps = ViewportConstants.GeometryEpsilon;
         return Math.Abs(d1) <= eps && PointOnSegment(c, a, b) ||
                Math.Abs(d2) <= eps && PointOnSegment(d, a, b) ||
                Math.Abs(d3) <= eps && PointOnSegment(a, c, d) ||
@@ -107,14 +88,14 @@ public sealed partial class PdfViewport
         float sx = d.X - c.X;
         float sy = d.Y - c.Y;
         float denom = rx * sy - ry * sx;
-        if (Math.Abs(denom) <= 0.0001f)
+        if (Math.Abs(denom) <= ViewportConstants.GeometryEpsilon)
             return false;
 
         float qpx = c.X - a.X;
         float qpy = c.Y - a.Y;
         float t = (qpx * sy - qpy * sx) / denom;
         float u = (qpx * ry - qpy * rx) / denom;
-        const float eps = 0.0001f;
+        const float eps = ViewportConstants.GeometryEpsilon;
         if (t < -eps || t > 1f + eps || u < -eps || u > 1f + eps)
             return false;
 
@@ -126,27 +107,13 @@ public sealed partial class PdfViewport
         (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
 
     private static bool PointOnSegment(SKPoint p, SKPoint a, SKPoint b) =>
-        p.X >= Math.Min(a.X, b.X) - 0.0001f &&
-        p.X <= Math.Max(a.X, b.X) + 0.0001f &&
-        p.Y >= Math.Min(a.Y, b.Y) - 0.0001f &&
-        p.Y <= Math.Max(a.Y, b.Y) + 0.0001f;
+        p.X >= Math.Min(a.X, b.X) - ViewportConstants.GeometryEpsilon &&
+        p.X <= Math.Max(a.X, b.X) + ViewportConstants.GeometryEpsilon &&
+        p.Y >= Math.Min(a.Y, b.Y) - ViewportConstants.GeometryEpsilon &&
+        p.Y <= Math.Max(a.Y, b.Y) + ViewportConstants.GeometryEpsilon;
 
     private static bool PointInPolygon(SKPoint point, IReadOnlyList<SKPoint> polygon)
-    {
-        bool inside = false;
-        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
-        {
-            SKPoint pi = polygon[i];
-            SKPoint pj = polygon[j];
-            float denom = Math.Abs(pj.Y - pi.Y) < 0.000001f ? 0.000001f : pj.Y - pi.Y;
-            bool crosses = (pi.Y > point.Y) != (pj.Y > point.Y) &&
-                           point.X < (pj.X - pi.X) * (point.Y - pi.Y) / denom + pi.X;
-            if (crosses)
-                inside = !inside;
-        }
-
-        return inside;
-    }
+        => MeasurementGeometry.PointInPolygon(point, polygon);
 
     private static bool IsMeasurementVisible(Measurement measurement, SKRect visiblePdf)
     {
@@ -186,8 +153,23 @@ public sealed partial class PdfViewport
             if (SegmentIntersectsRect(measurement.Points[^1], measurement.Points[0], rect))
                 return true;
 
+            foreach (var hole in measurement.Holes)
+            {
+                if (hole.Count < 3)
+                    continue;
+
+                for (int i = 1; i < hole.Count; i++)
+                {
+                    if (SegmentIntersectsRect(hole[i - 1], hole[i], rect))
+                        return true;
+                }
+
+                if (SegmentIntersectsRect(hole[^1], hole[0], rect))
+                    return true;
+            }
+
             var center = new SKPoint((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
-            return PointInPolygon(center, measurement.Points);
+            return PointInMeasurementFill(measurement, center);
         }
 
         return false;
@@ -223,7 +205,7 @@ public sealed partial class PdfViewport
     }
 
     private static SKRect RawMeasurementBounds(Measurement measurement) =>
-        PointsBounds(measurement.Points);
+        PointsBounds(MeasurementGeometryPoints(measurement).ToList());
 
     private static SKRect MeasurementBounds(Measurement measurement)
     {
@@ -232,7 +214,7 @@ public sealed partial class PdfViewport
         float right = float.NegativeInfinity;
         float bottom = float.NegativeInfinity;
 
-        foreach (var point in measurement.Points)
+        foreach (var point in MeasurementGeometryPoints(measurement))
         {
             left = Math.Min(left, point.X);
             top = Math.Min(top, point.Y);
@@ -246,6 +228,26 @@ public sealed partial class PdfViewport
     }
 
     private static SKPoint Centroid(List<SKPoint> pts)
-        => new(pts.Average(p => p.X), pts.Average(p => p.Y));
+        => MeasurementGeometry.Centroid(pts);
+
+    private static bool PointInMeasurementFill(Measurement measurement, SKPoint point)
+    {
+        if (measurement.MType != "area" || measurement.Points.Count < 3)
+            return false;
+
+        if (!PointInPolygon(point, measurement.Points))
+            return false;
+
+        return !measurement.Holes.Any(hole => hole.Count >= 3 && PointInPolygon(point, hole));
+    }
+
+    private static IEnumerable<SKPoint> MeasurementGeometryPoints(Measurement measurement)
+    {
+        foreach (SKPoint point in measurement.Points)
+            yield return point;
+        foreach (var hole in measurement.Holes)
+            foreach (SKPoint point in hole)
+                yield return point;
+    }
 
 }

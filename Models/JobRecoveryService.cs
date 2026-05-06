@@ -95,7 +95,7 @@ public static class JobRecoveryService
             CreatedAtUtc = DateTime.UtcNow.ToString("O"),
         };
 
-        File.WriteAllText(LockPath(job), JsonSerializer.Serialize(info, JsonOptions));
+        IoUtil.WriteAllTextAtomic(LockPath(job), JsonSerializer.Serialize(info, JsonOptions));
     }
 
     public static bool TryReadLock(OurPlaneCoreJob job, out JobRecoveryLockInfo info)
@@ -110,8 +110,9 @@ public static class JobRecoveryService
             info = JsonSerializer.Deserialize<JobRecoveryLockInfo>(File.ReadAllText(path)) ?? new JobRecoveryLockInfo();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Read job recovery lock failed for {path}");
             info = new JobRecoveryLockInfo
             {
                 JobRoot = job.RootPath,
@@ -144,7 +145,7 @@ public static class JobRecoveryService
             excluded = new[] { "source PDFs", "rendered images", "AI crop images", "build output" },
         };
 
-        File.WriteAllText(
+        IoUtil.WriteAllTextAtomic(
             Path.Combine(snapshotPath, "snapshot_manifest.json"),
             JsonSerializer.Serialize(manifest, JsonOptions));
     }

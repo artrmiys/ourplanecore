@@ -35,6 +35,9 @@ public partial class MainWindow
                 measurement.Notes,
                 measurement.Color,
                 measurement.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
+                measurement.Holes
+                    .Select(hole => (IReadOnlyList<SKPoint>)hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
+                    .ToList(),
                 measurement.PageFolder,
                 measurement.ScaleMetersPerPt,
                 item?.FolderPath ?? measurement.TakeoffFolder,
@@ -231,6 +234,10 @@ public partial class MainWindow
             Notes = entry.MeasurementNotes,
             Color = target.Color,
             Points = entry.Points.Select(p => new SKPoint(p.X + pasteOffset.X, p.Y + pasteOffset.Y)).ToList(),
+            Holes = entry.Holes
+                .Select(hole => hole.Select(p => new SKPoint(p.X + pasteOffset.X, p.Y + pasteOffset.Y)).ToList())
+                .Where(hole => hole.Count >= 3)
+                .ToList(),
             PageFolder = _currentPage?.FolderPath ?? "",
             TakeoffFolder = target.FolderPath,
             ScaleMetersPerPt = scale,
@@ -265,7 +272,7 @@ public partial class MainWindow
 
         foreach (MeasurementClipboardEntry entry in entries)
         {
-            foreach (SKPoint point in entry.Points)
+            foreach (SKPoint point in MeasurementClipboardPoints(entry))
             {
                 if (!hasPoint)
                 {
@@ -287,6 +294,15 @@ public partial class MainWindow
 
         bounds = new SKRect(left, top, right, bottom);
         return true;
+    }
+
+    private static IEnumerable<SKPoint> MeasurementClipboardPoints(MeasurementClipboardEntry entry)
+    {
+        foreach (SKPoint point in entry.Points)
+            yield return point;
+        foreach (var hole in entry.Holes)
+            foreach (SKPoint point in hole)
+                yield return point;
     }
 
     private static string MeasurementClipboardTargetKey(MeasurementClipboardEntry entry)
@@ -343,6 +359,9 @@ public partial class MainWindow
             PersistTakeoffItemQuietly(item);
     }
 
+    internal void FlushPendingAutosave() =>
+        FlushTakeoffAutosaves();
+
     private void PersistTakeoffItemQuietly(TakeoffItem item)
     {
         if (_currentJob == null)
@@ -355,6 +374,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Autosave failed for {item.FolderPath}");
             TxtStatus.Text = $"Autosave skipped: {ex.Message}";
         }
     }

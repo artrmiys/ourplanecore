@@ -643,7 +643,7 @@ public static class SmartContextStore
         string requestPath = Path.Combine(ContextRoot(job.RootPath), "requests", $"{request.Id}.json");
         try
         {
-            File.WriteAllText(requestPath, JsonSerializer.Serialize(request, JsonOptions));
+            IoUtil.WriteAllTextAtomic(requestPath, JsonSerializer.Serialize(request, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -702,7 +702,7 @@ public static class SmartContextStore
 
         try
         {
-            File.WriteAllText(AiMarkerPath(job, marker.Id), JsonSerializer.Serialize(marker, JsonOptions));
+            IoUtil.WriteAllTextAtomic(AiMarkerPath(job, marker.Id), JsonSerializer.Serialize(marker, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -744,7 +744,7 @@ public static class SmartContextStore
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(marker, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(marker, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -826,7 +826,7 @@ public static class SmartContextStore
         string path = AiMarkerSetPath(job, set.Id);
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(set, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(set, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -865,7 +865,7 @@ public static class SmartContextStore
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(set, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(set, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -950,7 +950,7 @@ public static class SmartContextStore
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(export, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(export, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1054,7 +1054,7 @@ public static class SmartContextStore
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(bookmark, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(bookmark, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1134,7 +1134,7 @@ public static class SmartContextStore
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(draft, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(draft, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1163,7 +1163,7 @@ public static class SmartContextStore
         string path = Path.Combine(ContextRoot(job.RootPath), "requests", $"{request.Id}.json");
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(request, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(request, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1209,7 +1209,7 @@ public static class SmartContextStore
         string requestPath = Path.Combine(contextRoot, "requests", $"{request.Id}.json");
         try
         {
-            File.WriteAllText(
+            IoUtil.WriteAllTextAtomic(
                 requestPath,
                 JsonSerializer.Serialize(request, JsonOptions));
         }
@@ -1221,7 +1221,7 @@ public static class SmartContextStore
         string responsePath = Path.Combine(contextRoot, "responses", $"{response.Id}.json");
         try
         {
-            File.WriteAllText(
+            IoUtil.WriteAllTextAtomic(
                 responsePath,
                 JsonSerializer.Serialize(response, JsonOptions));
         }
@@ -1249,7 +1249,7 @@ public static class SmartContextStore
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ContextRoot(job.RootPath));
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(draft, JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(draft, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1497,8 +1497,9 @@ public static class SmartContextStore
                 ? JsonSerializer.Deserialize<SmartProjectContext>(File.ReadAllText(path))
                 : null;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Load project context failed for {path}");
             return null;
         }
     }
@@ -1511,8 +1512,9 @@ public static class SmartContextStore
                 ? JsonSerializer.Deserialize<T>(File.ReadAllText(path))
                 : default;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Load JSON failed for {path}");
             return default;
         }
     }
@@ -1547,15 +1549,18 @@ public static class SmartContextStore
                         records.Add(existing);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    AppLog.Warn(ex, $"Project registry row could not be read from {GlobalRegistryPath}");
                     // Keep the registry usable even if an older line was edited by hand.
                 }
             }
         }
 
         records.Add(record);
-        File.WriteAllLines(GlobalRegistryPath, records.ConvertAll(r => JsonSerializer.Serialize(r)));
+        IoUtil.WriteAllTextAtomic(
+            GlobalRegistryPath,
+            string.Join(Environment.NewLine, records.ConvertAll(r => JsonSerializer.Serialize(r))) + Environment.NewLine);
     }
 
     private static string BuildMarkdownObservation(SmartObservation observation)
@@ -1589,7 +1594,7 @@ public static class SmartContextStore
         {
             try
             {
-                File.WriteAllText(path, initialContent);
+                IoUtil.WriteAllTextAtomic(path, initialContent);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -1629,7 +1634,7 @@ public static class SmartContextStore
         string projectJsonPath = ProjectContextPath(jobRoot);
         try
         {
-            File.WriteAllText(projectJsonPath, JsonSerializer.Serialize(context, JsonOptions));
+            IoUtil.WriteAllTextAtomic(projectJsonPath, JsonSerializer.Serialize(context, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -260,17 +260,26 @@ public partial class MainWindow
 
     private async void BtnRunAi_Click(object sender, RoutedEventArgs e)
     {
-        await RunSelectedOrNextAiRequestAsync();
+        await RunAsyncUiHandler(
+            RunSelectedOrNextAiRequestAsync,
+            "AI request failed.",
+            "AI Inbox");
     }
 
     private async void BtnRunNewBookmarks_Click(object sender, RoutedEventArgs e)
     {
-        await RunNewCropBookmarksAsync();
+        await RunAsyncUiHandler(
+            RunNewCropBookmarksAsync,
+            "AI bookmark run failed.",
+            "AI Inbox");
     }
 
     private async void BtnRetryFailedBookmarks_Click(object sender, RoutedEventArgs e)
     {
-        await RetryFailedCropBookmarksAsync();
+        await RunAsyncUiHandler(
+            RetryFailedCropBookmarksAsync,
+            "AI bookmark retry failed.",
+            "AI Inbox");
     }
 
     private bool CanBookmarkObservationCrop(ObservationDisplayItem item)

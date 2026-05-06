@@ -1,28 +1,63 @@
 using OurPlaneCore;
 using SkiaSharp;
+using System.Reflection;
 
 var tests = new List<(string Name, Action Run)>
 {
     ("measurement count value and label", MeasurementCountValueAndLabel),
     ("measurement line uses own scale first", MeasurementLineUsesOwnScaleFirst),
     ("measurement area uses fallback scale", MeasurementAreaUsesFallbackScale),
+    ("measurement area subtracts holes", MeasurementAreaSubtractsHoles),
+    ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
+    ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
     ("takeoff creation policy chooses safe parents", TakeoffCreationPolicyChoosesSafeParents),
+    ("takeoff section order moves single up", TakeoffSectionOrderMovesSingleUp),
+    ("takeoff section order moves single down", TakeoffSectionOrderMovesSingleDown),
+    ("takeoff section order blocks top up", TakeoffSectionOrderBlocksTopUp),
+    ("takeoff section order blocks bottom down", TakeoffSectionOrderBlocksBottomDown),
+    ("takeoff section order blocks all selected", TakeoffSectionOrderBlocksAllSelected),
+    ("takeoff section order moves contiguous block up", TakeoffSectionOrderMovesContiguousBlockUp),
+    ("takeoff section order moves contiguous block down", TakeoffSectionOrderMovesContiguousBlockDown),
+    ("takeoff section order moves disjoint selection up", TakeoffSectionOrderMovesDisjointSelectionUp),
+    ("takeoff section order moves disjoint selection down", TakeoffSectionOrderMovesDisjointSelectionDown),
+    ("takeoff section order ignores invalid duplicate ids", TakeoffSectionOrderIgnoresInvalidDuplicateIds),
+    ("takeoff tree order keeps creation order", TakeoffTreeOrderKeepsCreationOrder),
+    ("takeoff tree order moves sibling up", TakeoffTreeOrderMovesSiblingUp),
+    ("takeoff tree order moves sibling down", TakeoffTreeOrderMovesSiblingDown),
+    ("takeoff tree order blocks top up", TakeoffTreeOrderBlocksTopUp),
+    ("takeoff tree order blocks bottom down", TakeoffTreeOrderBlocksBottomDown),
+    ("takeoff tree order moves sibling block up", TakeoffTreeOrderMovesSiblingBlockUp),
+    ("takeoff tree order moves sibling block down", TakeoffTreeOrderMovesSiblingBlockDown),
+    ("takeoff tree order moves before target", TakeoffTreeOrderMovesBeforeTarget),
+    ("takeoff tree order moves after target", TakeoffTreeOrderMovesAfterTarget),
+    ("takeoff tree order appends moved node into folder", TakeoffTreeOrderAppendsMovedNodeIntoFolder),
+    ("page tree order moves sheet before folder", PageTreeOrderMovesSheetBeforeFolder),
+    ("page tree order moves folder before folder", PageTreeOrderMovesFolderBeforeFolder),
+    ("page tree order moves nested folder out below parent", PageTreeOrderMovesNestedFolderOutBelowParent),
+    ("page rename allows duplicate display names", PageRenameAllowsDuplicateDisplayNames),
     ("job store sanitizes unsafe names", JobStoreSanitizesUnsafeNames),
     ("pdf metadata page name and scale gate", PdfMetadataPageNameAndScaleGate),
     ("pdf scale parser handles architectural scale", PdfScaleParserHandlesArchitecturalScale),
+    ("pdf scale parser handles mixed fraction scale", PdfScaleParserHandlesMixedFractionScale),
     ("joist rounding aliases normalize", JoistRoundingAliasesNormalize),
     ("joist pitch normalizes common input", JoistPitchNormalizesCommonInput),
     ("joist pitch flat input normalizes empty", JoistPitchFlatInputNormalizesEmpty),
     ("joist pitch rejects invalid input", JoistPitchRejectsInvalidInput),
     ("joist pitch factor matches rise run", JoistPitchFactorMatchesRiseRun),
     ("joist pitch accepts single rise over twelve", JoistPitchAcceptsSingleRiseOverTwelve),
+    ("joist layout subtracts area cut holes", JoistLayoutSubtractsAreaCutHoles),
     ("joist pitch length applies slope factor", JoistPitchLengthAppliesSlopeFactor),
     ("joist pitch rounding applies per segment", JoistPitchRoundingAppliesPerSegment),
     ("joist pitch label shows indicator", JoistPitchLabelShowsIndicator),
+    ("joist length label shows order and raw lengths", JoistLengthLabelShowsOrderAndRawLengths),
+    ("joist length label can use standard format", JoistLengthLabelCanUseStandardFormat),
+    ("joist pitch label explains flat slope and order lengths", JoistPitchLabelExplainsFlatSlopeAndOrderLengths),
+    ("joist export uses visible label lines", JoistExportUsesVisibleLabelLines),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
+    ("page overlay persists through source rewrites", PageOverlayPersistsThroughSourceRewrites),
     ("job recovery normalizes snapshot reasons", JobRecoveryNormalizesSnapshotReasons),
     ("job recovery filters metadata files", JobRecoveryFiltersMetadataFiles),
     ("job recovery lock writes reads and clears", JobRecoveryLockWritesReadsAndClears),
@@ -104,6 +139,113 @@ static void MeasurementAreaUsesFallbackScale()
     AssertClose(25.0, measurement.AreaValue(0.5), "scaled area");
 }
 
+static void MeasurementAreaSubtractsHoles()
+{
+    var measurement = new Measurement
+    {
+        MType = "area",
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(10, 0),
+            new SKPoint(10, 10),
+            new SKPoint(0, 10),
+        ],
+        Holes =
+        [
+            [
+                new SKPoint(2, 2),
+                new SKPoint(5, 2),
+                new SKPoint(5, 6),
+                new SKPoint(2, 6),
+            ],
+        ],
+    };
+
+    AssertClose(88.0, measurement.AreaValue(1), "area should subtract the 3x4 hole");
+}
+
+static void PdfExportAreaPathCutsHoles()
+{
+    var measurement = new Measurement
+    {
+        MType = "area",
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(10, 0),
+            new SKPoint(10, 10),
+            new SKPoint(0, 10),
+        ],
+        Holes =
+        [
+            [
+                new SKPoint(2, 2),
+                new SKPoint(5, 2),
+                new SKPoint(5, 6),
+                new SKPoint(2, 6),
+            ],
+        ],
+    };
+
+    MethodInfo method = typeof(PdfExporter).GetMethod(
+        "BuildPdfExportAreaPath",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("PDF export area path helper was not found.");
+
+    using var path = (SKPath)(method.Invoke(null, [measurement])
+        ?? throw new InvalidOperationException("PDF export area path helper returned null."));
+
+    AssertEqual(SKPathFillType.EvenOdd.ToString(), path.FillType.ToString(), "export area path fill rule");
+    AssertEqual("8", path.PointCount.ToString(), "export area path should include outer and hole contour points");
+    AssertTrue(path.Contains(1, 1), "export area path should include outer area");
+    AssertFalse(path.Contains(3, 3), "export area path should cut the hole");
+    AssertTrue(path.Contains(8, 8), "export area path should include area outside the hole");
+}
+
+static void JobStorePersistsMeasurementHoles()
+{
+    WithTempJob("Hole Job", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(
+            job,
+            job.TakeoffsRoot,
+            "Area",
+            "#FF4444",
+            "area");
+        var measurement = new Measurement
+        {
+            MType = "area",
+            PageFolder = job.PagesRoot,
+            Points =
+            [
+                new SKPoint(0, 0),
+                new SKPoint(12, 0),
+                new SKPoint(12, 10),
+                new SKPoint(0, 10),
+            ],
+            Holes =
+            [
+                [
+                    new SKPoint(3, 3),
+                    new SKPoint(7, 3),
+                    new SKPoint(7, 6),
+                    new SKPoint(3, 6),
+                ],
+            ],
+        };
+
+        item.Measurements.Add(measurement);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        List<Measurement> loaded = OurPlaneCoreJobStore.LoadMeasurements(item.FolderPath);
+
+        AssertEqual("1", loaded.Count.ToString(), "loaded measurement count");
+        AssertEqual("1", loaded[0].Holes.Count.ToString(), "loaded hole count");
+        AssertEqual("4", loaded[0].Holes[0].Count.ToString(), "loaded hole vertices");
+        AssertClose(108.0, loaded[0].AreaValue(1), "loaded area should subtract persisted hole");
+    });
+}
+
 static void MeasurementJoistWithoutDirectionIsBlocked()
 {
     var measurement = new Measurement
@@ -157,6 +299,270 @@ static void TakeoffCreationPolicyChoosesSafeParents()
     AssertEqual(job.TakeoffsRoot, TakeoffCreationPolicy.NewFolderParentFolder(job, "", "", active, _ => false), "root fallback");
 }
 
+static void TakeoffSectionOrderMovesSingleUp()
+{
+    var measurements = SectionMeasurements("a", "b", "c");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["b"], -1), "move should apply");
+    AssertSectionOrder("b,a,c", measurements, "single up");
+}
+
+static void TakeoffSectionOrderMovesSingleDown()
+{
+    var measurements = SectionMeasurements("a", "b", "c");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["b"], 1), "move should apply");
+    AssertSectionOrder("a,c,b", measurements, "single down");
+}
+
+static void TakeoffSectionOrderBlocksTopUp()
+{
+    var measurements = SectionMeasurements("a", "b", "c");
+
+    AssertFalse(TakeoffSectionOrderService.Move(measurements, ["a"], -1), "top cannot move up");
+    AssertSectionOrder("a,b,c", measurements, "top up should not change order");
+}
+
+static void TakeoffSectionOrderBlocksBottomDown()
+{
+    var measurements = SectionMeasurements("a", "b", "c");
+
+    AssertFalse(TakeoffSectionOrderService.Move(measurements, ["c"], 1), "bottom cannot move down");
+    AssertSectionOrder("a,b,c", measurements, "bottom down should not change order");
+}
+
+static void TakeoffSectionOrderBlocksAllSelected()
+{
+    var measurements = SectionMeasurements("a", "b", "c");
+
+    AssertFalse(TakeoffSectionOrderService.CanMove(measurements, ["a", "b", "c"], -1), "all selected cannot move up");
+    AssertFalse(TakeoffSectionOrderService.CanMove(measurements, ["a", "b", "c"], 1), "all selected cannot move down");
+    AssertFalse(TakeoffSectionOrderService.Move(measurements, ["a", "b", "c"], 1), "all selected move should be blocked");
+    AssertSectionOrder("a,b,c", measurements, "all selected should not change order");
+}
+
+static void TakeoffSectionOrderMovesContiguousBlockUp()
+{
+    var measurements = SectionMeasurements("a", "b", "c", "d");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["b", "c"], -1), "block should move up");
+    AssertSectionOrder("b,c,a,d", measurements, "contiguous block up");
+}
+
+static void TakeoffSectionOrderMovesContiguousBlockDown()
+{
+    var measurements = SectionMeasurements("a", "b", "c", "d");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["b", "c"], 1), "block should move down");
+    AssertSectionOrder("a,d,b,c", measurements, "contiguous block down");
+}
+
+static void TakeoffSectionOrderMovesDisjointSelectionUp()
+{
+    var measurements = SectionMeasurements("a", "b", "c", "d", "e");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["c", "e"], -1), "disjoint selection should move up");
+    AssertSectionOrder("a,c,b,e,d", measurements, "disjoint up");
+}
+
+static void TakeoffSectionOrderMovesDisjointSelectionDown()
+{
+    var measurements = SectionMeasurements("a", "b", "c", "d", "e");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["a", "c"], 1), "disjoint selection should move down");
+    AssertSectionOrder("b,a,d,c,e", measurements, "disjoint down");
+}
+
+static void TakeoffSectionOrderIgnoresInvalidDuplicateIds()
+{
+    var measurements = SectionMeasurements("a", "b", "c");
+
+    AssertTrue(TakeoffSectionOrderService.Move(measurements, ["missing", "b", "b", ""], -1), "valid selected id should move once");
+    AssertSectionOrder("b,a,c", measurements, "invalid and duplicate ids should not duplicate moves");
+
+    AssertFalse(TakeoffSectionOrderService.Move(measurements, ["missing", ""], 1), "invalid-only selection should not move");
+    AssertSectionOrder("b,a,c", measurements, "invalid-only selection should leave order unchanged");
+}
+
+static void TakeoffTreeOrderKeepsCreationOrder()
+{
+    WithTempJob("tree_order_create", job =>
+    {
+        CreateRootTakeoffItem(job, "B");
+        CreateTakeoffFolder(job, "A");
+        CreateRootTakeoffItem(job, "C");
+
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "B,A,C", "creation order");
+    });
+}
+
+static void TakeoffTreeOrderMovesSiblingUp()
+{
+    WithTempJob("tree_order_up", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C");
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSibling(items[1].FolderPath, -1), "move up should apply");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "B,A,C", "sibling up");
+    });
+}
+
+static void TakeoffTreeOrderMovesSiblingDown()
+{
+    WithTempJob("tree_order_down", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C");
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSibling(items[0].FolderPath, 1), "move down should apply");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "B,A,C", "sibling down");
+    });
+}
+
+static void TakeoffTreeOrderBlocksTopUp()
+{
+    WithTempJob("tree_order_top", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C");
+
+        AssertFalse(OurPlaneCoreJobStore.MoveSibling(items[0].FolderPath, -1), "top move up should be blocked");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "A,B,C", "top up blocked");
+    });
+}
+
+static void TakeoffTreeOrderBlocksBottomDown()
+{
+    WithTempJob("tree_order_bottom", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C");
+
+        AssertFalse(OurPlaneCoreJobStore.MoveSibling(items[2].FolderPath, 1), "bottom move down should be blocked");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "A,B,C", "bottom down blocked");
+    });
+}
+
+static void TakeoffTreeOrderMovesSiblingBlockUp()
+{
+    WithTempJob("tree_order_block_up", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C", "D");
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblings([items[1].FolderPath, items[2].FolderPath], -1), "block up should apply");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "B,C,A,D", "block up");
+    });
+}
+
+static void TakeoffTreeOrderMovesSiblingBlockDown()
+{
+    WithTempJob("tree_order_block_down", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C", "D");
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblings([items[1].FolderPath, items[2].FolderPath], 1), "block down should apply");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "A,D,B,C", "block down");
+    });
+}
+
+static void TakeoffTreeOrderMovesBeforeTarget()
+{
+    WithTempJob("tree_order_before", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C", "D");
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([items[2].FolderPath], items[0].FolderPath, after: false), "move before should apply");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "C,A,B,D", "move before target");
+    });
+}
+
+static void TakeoffTreeOrderMovesAfterTarget()
+{
+    WithTempJob("tree_order_after", job =>
+    {
+        var items = CreateTakeoffItems(job, "A", "B", "C", "D");
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([items[0].FolderPath], items[2].FolderPath, after: true), "move after should apply");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "B,C,A,D", "move after target");
+    });
+}
+
+static void TakeoffTreeOrderAppendsMovedNodeIntoFolder()
+{
+    WithTempJob("tree_order_into_folder", job =>
+    {
+        string targetFolder = CreateTakeoffFolder(job, "Folder");
+        CreateNestedTakeoffItem(job, targetFolder, "X");
+        CreateNestedTakeoffItem(job, targetFolder, "Y");
+        TakeoffItem moving = CreateRootTakeoffItem(job, "A");
+
+        string movedPath = OurPlaneCoreJobStore.MoveNode(moving.FolderPath, targetFolder);
+
+        AssertTrue(OurPlaneCoreJobStore.IsSameOrDescendant(targetFolder, movedPath), "node should move into folder");
+        AssertTakeoffChildOrder(targetFolder, "X,Y,A", "moved node appended into target folder");
+    });
+}
+
+static void PageTreeOrderMovesSheetBeforeFolder()
+{
+    WithTempJob("page_order_sheet_before_folder", job =>
+    {
+        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string folderA = OurPlaneCoreJobStore.CreateFolder(parent, "Folder A");
+        PageInfo sheetB = CreatePageItem(job, parent, "Sheet B");
+        OurPlaneCoreJobStore.CreateFolder(parent, "Folder C");
+
+        AssertPageChildOrder(parent, "Folder A,Sheet B,Folder C", "initial page/folder order");
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([sheetB.FolderPath], folderA, after: false), "sheet before folder should apply");
+        AssertPageChildOrder(parent, "Sheet B,Folder A,Folder C", "sheet moved before folder");
+    });
+}
+
+static void PageTreeOrderMovesFolderBeforeFolder()
+{
+    WithTempJob("page_order_folder_before_folder", job =>
+    {
+        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string folderA = OurPlaneCoreJobStore.CreateFolder(parent, "Folder A");
+        string folderB = OurPlaneCoreJobStore.CreateFolder(parent, "Folder B");
+        CreatePageItem(job, parent, "Sheet C");
+
+        AssertPageChildOrder(parent, "Folder A,Folder B,Sheet C", "initial folder/folder order");
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([folderB], folderA, after: false), "folder before folder should apply");
+        AssertPageChildOrder(parent, "Folder B,Folder A,Sheet C", "folder moved before folder");
+    });
+}
+
+static void PageTreeOrderMovesNestedFolderOutBelowParent()
+{
+    WithTempJob("page_order_nested_folder_out", job =>
+    {
+        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string child = OurPlaneCoreJobStore.CreateFolder(parent, "Child");
+        OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Other");
+
+        string moved = OurPlaneCoreJobStore.MoveNode(child, job.PagesRoot);
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([moved], parent, after: true), "nested folder out should apply");
+        AssertPageChildOrder(job.PagesRoot, "Parent,Child,Other", "nested folder moved out below parent");
+    });
+}
+
+static void PageRenameAllowsDuplicateDisplayNames()
+{
+    WithTempJob("page_duplicate_names", job =>
+    {
+        PageInfo first = CreatePageItem(job, job.PagesRoot, "S101");
+        PageInfo second = CreatePageItem(job, job.PagesRoot, "S102");
+
+        string renamed = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(second.FolderPath, "S101");
+        PageInfo? renamedPage = OurPlaneCoreJobStore.TryReadPage(renamed);
+
+        AssertTrue(Directory.Exists(first.FolderPath), "first duplicate-name page should remain");
+        AssertTrue(Directory.Exists(renamed), "renamed duplicate-name page should exist");
+        AssertFalse(string.Equals(first.FolderPath, renamed, StringComparison.OrdinalIgnoreCase), "duplicate-name pages need unique folders");
+        AssertEqual("S101", OurPlaneCoreJobStore.DisplayName(first.FolderPath), "first display name");
+        AssertEqual("S101", OurPlaneCoreJobStore.DisplayName(renamed), "renamed display name");
+        AssertEqual("S101", renamedPage?.Name ?? "", "renamed page info name");
+    });
+}
+
 static void JobStoreSanitizesUnsafeNames()
 {
     string clean = OurPlaneCoreJobStore.SanitizeName("  bad:name?.  ", 120);
@@ -191,12 +597,23 @@ static void PdfScaleParserHandlesArchitecturalScale()
     AssertEqual("1/8\" = 1'0\"", PdfSheetMetadataService.FormatImperialScale(metersPerPt), "roundtrip label");
 }
 
+static void PdfScaleParserHandlesMixedFractionScale()
+{
+    bool parsed = PdfSheetMetadataService.TryParseScaleMetersPerPt("1 1/2\" = 1'0\"", out double mixedMetersPerPt);
+    bool parsedLegacy = PdfSheetMetadataService.TryParseScaleMetersPerPt("1-1/2\" = 1'0\"", out double legacyMetersPerPt);
+
+    AssertTrue(parsed, "space mixed fraction scale should parse");
+    AssertTrue(parsedLegacy, "hyphen mixed fraction scale should still parse");
+    AssertClose(legacyMetersPerPt, mixedMetersPerPt, "mixed fraction styles should match");
+    AssertEqual("1 1/2\" = 1'0\"", PdfSheetMetadataService.FormatImperialScale(mixedMetersPerPt), "mixed fraction roundtrip label");
+}
+
 static void JoistRoundingAliasesNormalize()
 {
     AssertEqual(JoistTakeoffCalculator.RoundingNearestFoot, JoistTakeoffCalculator.NormalizeLengthRounding("foot"), "foot alias");
     AssertEqual(JoistTakeoffCalculator.RoundingNearestEvenFoot, JoistTakeoffCalculator.NormalizeLengthRounding("even foot"), "even alias");
     AssertEqual(JoistTakeoffCalculator.RoundingNearestTwoFeet, JoistTakeoffCalculator.NormalizeLengthRounding("2 feet"), "two feet alias");
-    AssertEqual("Nearest 2 Feet", JoistTakeoffCalculator.LengthRoundingTitle("nearesttwofeet"), "rounding title");
+    AssertEqual("Round Up 2 Feet", JoistTakeoffCalculator.LengthRoundingTitle("nearesttwofeet"), "rounding title");
 }
 
 static void JoistPitchNormalizesCommonInput()
@@ -227,6 +644,42 @@ static void JoistPitchFactorMatchesRiseRun()
 static void JoistPitchAcceptsSingleRiseOverTwelve()
 {
     AssertEqual("4:12", JoistTakeoffCalculator.NormalizePitch("4"), "single rise default run");
+}
+
+static void JoistLayoutSubtractsAreaCutHoles()
+{
+    var measurement = new Measurement
+    {
+        MType = "area",
+        JoistEnabled = true,
+        JoistDirectionLocked = true,
+        JoistSpacingInches = 60,
+        JoistDirectionDegrees = 0,
+        JoistLengthRounding = JoistTakeoffCalculator.RoundingNone,
+        ScaleMetersPerPt = 0.3048,
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(10, 0),
+            new SKPoint(10, 10),
+            new SKPoint(0, 10),
+        ],
+        Holes =
+        [
+            [
+                new SKPoint(4, 2),
+                new SKPoint(6, 2),
+                new SKPoint(6, 8),
+                new SKPoint(4, 8),
+            ],
+        ],
+    };
+
+    JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, 0);
+
+    AssertEqual("4", layout.Count.ToString(), "cut hole splits middle joist run into two pieces");
+    AssertClose(28.0, layout.TotalRawLengthMeters / 0.3048, "joist length should subtract the 2 ft opening on the middle line");
+    AssertClose(88.0, layout.AreaMetersSquared / (0.3048 * 0.3048), "joist area should subtract the hole");
 }
 
 static void JoistPitchLengthAppliesSlopeFactor()
@@ -261,7 +714,7 @@ static void JoistPitchRoundingAppliesPerSegment()
         "6:12");
 
     AssertEqual("2", rounded.Count.ToString(), "joist count");
-    AssertClose(20.0, rounded.TotalLengthMeters / 0.3048, "each sloped 8 ft joist rounds up to 10 ft");
+    AssertClose(16.0, rounded.TotalLengthMeters / 0.3048, "order length rounds the flat 8 ft joist length");
 }
 
 static void JoistPitchLabelShowsIndicator()
@@ -281,6 +734,111 @@ static void JoistPitchLabelShowsIndicator()
     AssertTrue(measurement.Label(0.3048, UnitMode.Imperial).Contains("Pitch 3:12", StringComparison.Ordinal), "label pitch line");
 }
 
+static void JoistLengthLabelShowsOrderAndRawLengths()
+{
+    var measurement = new Measurement
+    {
+        MType = "area",
+        JoistEnabled = true,
+        JoistDirectionLocked = true,
+        JoistSpacingInches = 12,
+        JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestEvenFoot,
+        ScaleMetersPerPt = 0.3048,
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(4.93f, 0),
+            new SKPoint(4.93f, 1),
+            new SKPoint(0, 1),
+        ],
+    };
+
+    string label = measurement.Label(0, UnitMode.Imperial);
+
+    AssertTrue(label.Contains("2 pcs @ 6.00 FT order (raw 4.93)", StringComparison.Ordinal), "label shows raw and order length");
+    AssertFalse(label.Contains("(2 / 6.00", StringComparison.Ordinal), "label avoids count slash fraction format");
+}
+
+static void JoistLengthLabelCanUseStandardFormat()
+{
+    var measurement = new Measurement
+    {
+        MType = "area",
+        JoistEnabled = true,
+        JoistDirectionLocked = true,
+        JoistSpacingInches = 12,
+        JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestEvenFoot,
+        JoistDetailedLabels = false,
+        ScaleMetersPerPt = 0.3048,
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(4.93f, 0),
+            new SKPoint(4.93f, 1),
+            new SKPoint(0, 1),
+        ],
+    };
+
+    string label = measurement.Label(0, UnitMode.Imperial);
+
+    AssertTrue(label.Contains("(2 / 6.00)", StringComparison.Ordinal), "standard label keeps old count / length format");
+    AssertFalse(label.Contains("raw 4.93", StringComparison.Ordinal), "standard label hides raw details");
+}
+
+static void JoistPitchLabelExplainsFlatSlopeAndOrderLengths()
+{
+    var measurement = new Measurement
+    {
+        MType = "area",
+        JoistEnabled = true,
+        JoistDirectionLocked = true,
+        JoistSpacingInches = 12,
+        JoistPitch = "1:3",
+        JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestFoot,
+        ScaleMetersPerPt = 0.3048,
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(11.94f, 0),
+            new SKPoint(11.94f, 1),
+            new SKPoint(0, 1),
+        ],
+    };
+
+    string label = measurement.Label(0, UnitMode.Imperial);
+
+    AssertTrue(label.Contains("2 pcs @ 12.00 FT order (flat 11.94, slope 12.59)", StringComparison.Ordinal), "label explains flat, slope, and order length");
+}
+
+static void JoistExportUsesVisibleLabelLines()
+{
+    WithTempJob("Joist Export", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        item.IsJoistTakeoff = true;
+        item.Measurements.Add(new Measurement
+        {
+            MType = "area",
+            JoistEnabled = true,
+            JoistDirectionLocked = true,
+            JoistType = "2x10",
+            JoistSpacingInches = 120,
+            JoistPitch = "3:12",
+            JoistLengthRounding = JoistTakeoffCalculator.RoundingNone,
+            ScaleMetersPerPt = 0.3048,
+            Points = SimpleJoistAreaPolygon().ToList(),
+        });
+
+        string visibleLabel = item.Measurements[0].Label(0, UnitMode.Imperial);
+        IReadOnlyList<string> labelLines = PlanSwiftTakeoffExporter.JoistLabelLines(item, 0, UnitMode.Imperial);
+        IReadOnlyList<PlanSwiftExportRow> rows = PlanSwiftTakeoffExporter.BuildRows(job, [item], [job.TakeoffsRoot], UnitMode.Imperial);
+
+        AssertEqual(visibleLabel, string.Join("\n", labelLines), "export label helper matches canvas label");
+        AssertEqual(labelLines[0], rows.First(row => row.Kind == PlanSwiftExportRowKind.Item).Value, "item row value is first label line");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Pitch 3:12"), "pitch label line exported");
+    });
+}
+
 static void JoistPitchPersistsOnTakeoffItem()
 {
     WithTempJob("Joist Pitch", job =>
@@ -290,6 +848,7 @@ static void JoistPitchPersistsOnTakeoffItem()
         item.JoistPitch = "3/12";
         item.JoistSpacingInches = 120;
         item.JoistLengthRounding = JoistTakeoffCalculator.RoundingNone;
+        item.JoistDetailedLabels = false;
         item.Measurements.Add(new Measurement
         {
             MType = "area",
@@ -304,6 +863,8 @@ static void JoistPitchPersistsOnTakeoffItem()
 
         AssertEqual("3:12", loaded.JoistPitch, "loaded item pitch");
         AssertEqual("3:12", loaded.Measurements[0].JoistPitch, "loaded measurement pitch");
+        AssertFalse(loaded.JoistDetailedLabels, "loaded item label format");
+        AssertFalse(loaded.Measurements[0].JoistDetailedLabels, "loaded measurement label format");
     });
 }
 
@@ -314,6 +875,7 @@ static void JoistPitchAppliesItemProperties()
         MeasurementType = "area",
         IsJoistTakeoff = true,
         JoistPitch = "4/12",
+        JoistDetailedLabels = false,
     };
     item.Measurements.Add(new Measurement
     {
@@ -324,6 +886,40 @@ static void JoistPitchAppliesItemProperties()
     OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
 
     AssertEqual("4:12", item.Measurements[0].JoistPitch, "measurement pitch copied");
+    AssertFalse(item.Measurements[0].JoistDetailedLabels, "measurement label format copied");
+}
+
+static void PageOverlayPersistsThroughSourceRewrites()
+{
+    WithTempJob("Page Overlay", job =>
+    {
+        PageInfo basePage = CreatePageItem(job, job.PagesRoot, "S101");
+        PageInfo overlayPage = CreatePageItem(job, job.PagesRoot, "S102");
+
+        OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
+        OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2);
+        PageInfo loaded = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            ?? throw new InvalidOperationException("base page missing");
+        AssertEqual(overlayPage.FolderPath, loaded.OverlayPageFolder, "overlay page path");
+        AssertEqual("#1E88E5", loaded.OverlayColor, "overlay color");
+        AssertClose(0.42, loaded.OverlayOpacity, "overlay opacity");
+        AssertClose(12.5, loaded.OverlayOffsetXPt, "overlay x offset");
+        AssertClose(-7.25, loaded.OverlayOffsetYPt, "overlay y offset");
+        AssertClose(1.2, loaded.OverlayScale, "overlay scale");
+
+        OurPlaneCoreJobStore.SavePageScale(basePage.FolderPath, 0.3048);
+        PageInfo afterScale = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            ?? throw new InvalidOperationException("base page after scale missing");
+        AssertEqual(overlayPage.FolderPath, afterScale.OverlayPageFolder, "overlay survives scale save");
+        AssertClose(12.5, afterScale.OverlayOffsetXPt, "overlay x survives scale save");
+        AssertClose(-7.25, afterScale.OverlayOffsetYPt, "overlay y survives scale save");
+        AssertClose(1.2, afterScale.OverlayScale, "overlay scale survives scale save");
+
+        OurPlaneCoreJobStore.ClearPageOverlay(basePage.FolderPath);
+        PageInfo cleared = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            ?? throw new InvalidOperationException("base page after clear missing");
+        AssertEqual("", cleared.OverlayPageFolder, "overlay clears");
+    });
 }
 
 static void JobRecoveryNormalizesSnapshotReasons()
@@ -457,6 +1053,49 @@ static void PdfMetadataSkipScaleAvoidsFallback()
     };
 
     AssertFalse(PdfSheetMetadataService.NeedsFallback(metadata), "skip scale detail should not need fallback");
+}
+
+static List<Measurement> SectionMeasurements(params string[] ids) =>
+    ids.Select(id => new Measurement { Id = id }).ToList();
+
+static void AssertSectionOrder(string expected, IReadOnlyList<Measurement> measurements, string message) =>
+    AssertEqual(expected, string.Join(",", measurements.Select(measurement => measurement.Id)), message);
+
+static TakeoffItem CreateRootTakeoffItem(OurPlaneCoreJob job, string name) =>
+    OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, name, "#FF4444", "line");
+
+static TakeoffItem CreateNestedTakeoffItem(OurPlaneCoreJob job, string parentFolder, string name) =>
+    OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", "line");
+
+static string CreateTakeoffFolder(OurPlaneCoreJob job, string name) =>
+    OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, name);
+
+static List<TakeoffItem> CreateTakeoffItems(OurPlaneCoreJob job, params string[] names) =>
+    names.Select(name => CreateRootTakeoffItem(job, name)).ToList();
+
+static PageInfo CreatePageItem(OurPlaneCoreJob job, string parentFolder, string name)
+{
+    string sourcePdf = Path.Combine(job.RootPath, "source.pdf");
+    if (!File.Exists(sourcePdf))
+        File.WriteAllText(sourcePdf, "%PDF-1.4 test");
+
+    return OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, name, parentFolder);
+}
+
+static void AssertTakeoffChildOrder(string parentFolder, string expected, string message)
+{
+    string actual = string.Join(",",
+        OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
+            .Select(OurPlaneCoreJobStore.DisplayName));
+    AssertEqual(expected, actual, message);
+}
+
+static void AssertPageChildOrder(string parentFolder, string expected, string message)
+{
+    string actual = string.Join(",",
+        OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
+            .Select(OurPlaneCoreJobStore.DisplayName));
+    AssertEqual(expected, actual, message);
 }
 
 static void AssertTrue(bool condition, string message)

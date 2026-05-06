@@ -33,10 +33,15 @@ public sealed record ViewportContextRequest(
     string PageFolder,
     Measurement? Measurement,
     PageAnnotation? Annotation = null);
+public sealed record SheetOverlayTransformChange(
+    float OffsetXPt,
+    float OffsetYPt,
+    float OverlayScale,
+    string Status);
 
 // ── Tool enum ────────────────────────────────────────────────────────────────
 
-public enum ViewerTool { Pan, Select, Scale, Ruler, DrawLine, DrawArrow, DrawRect, Point, Line, Area }
+public enum ViewerTool { Pan, Select, Scale, Ruler, DrawLine, DrawArrow, DrawRect, Point, Line, Area, AreaCut }
 public enum PdfLayerTraceMode { Full, Edge, Point, AllEdges }
 
 // ── Main control ─────────────────────────────────────────────────────────────
@@ -78,6 +83,7 @@ public sealed partial class PdfViewport : SKElement
     private SKPoint                 _boxSelectStartPdf;
     private SKPoint                 _boxSelectEndPdf;
     private bool                    _boxSelectAdditive;
+    private Measurement?            _areaCutMeasurement;
 
     // Scale calibration
     private readonly List<SKPoint> _scalePts = [];
@@ -101,6 +107,7 @@ public sealed partial class PdfViewport : SKElement
     public  bool     ScaleSheetOverlaysWithPage { get; set; } = false;
     public  bool     ScaleMeasurementLabelsWithPage { get; set; } = false;
     public  bool     ScaleSheetHeaderWithPage { get; set; } = false;
+    public  bool     SimplifyNavigationRendering { get; set; } = false;
 
     private bool _snapEnabled;
     public bool SnapEnabled
@@ -134,6 +141,22 @@ public sealed partial class PdfViewport : SKElement
     }
 
     // ── Measurements ──────────────────────────────────────────────────────────
+    private bool _boxModeEnabled;
+    public bool BoxModeEnabled
+    {
+        get => _boxModeEnabled;
+        set
+        {
+            if (_boxModeEnabled == value)
+                return;
+
+            _boxModeEnabled = value;
+            BoxModeChanged?.Invoke(_boxModeEnabled);
+            PostRecordPrompt();
+            RequestRepaint();
+        }
+    }
+
     private readonly List<Measurement> _measurements = [];
     private readonly List<PageAnnotation> _annotations = [];
     private string _pageFolder = "";
@@ -145,6 +168,7 @@ public sealed partial class PdfViewport : SKElement
     private readonly List<SKPoint> _joistDirectionPts = [];
     private SKPoint? _joistDirectionRubberEnd;
     private int _selectedVertexIndex = -1;
+    private readonly Dictionary<Measurement, HashSet<int>> _selectedMeasurementVertexIndices = [];
     private bool _draggingVertex;
     private bool _draggingMeasurement;
     private bool _draggingAnnotationVertex;
@@ -156,11 +180,17 @@ public sealed partial class PdfViewport : SKElement
     private Point _dragScreenStart;
     private SKPoint _dragVertexOriginalPoint;
     private SKPoint _dragAnnotationVertexOriginalPoint;
+    private readonly Dictionary<Measurement, Dictionary<int, SKPoint>> _dragMeasurementVertexOriginalPoints = [];
     private List<SKPoint> _dragMeasurementOriginalPoints = [];
+    private List<List<SKPoint>> _dragMeasurementOriginalHoles = [];
     private List<SKPoint> _dragAnnotationOriginalPoints = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _dragSelectionOriginalPoints = [];
+    private readonly Dictionary<Measurement, List<List<SKPoint>>> _dragSelectionOriginalHoles = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _transformMeasurementOriginalPoints = [];
+    private readonly Dictionary<Measurement, List<List<SKPoint>>> _transformMeasurementOriginalHoles = [];
     private readonly Dictionary<PageAnnotation, List<SKPoint>> _transformAnnotationOriginalPoints = [];
+    private readonly List<ViewportUndoAction> _undoStack = [];
+    private bool _applyingViewportUndo;
     private SKPoint _transformCenter;
     private float _transformStartDistance;
     private float _transformStartAngle;
@@ -186,9 +216,11 @@ public sealed partial class PdfViewport : SKElement
     private SKPoint? _lastPdfLayerTraceProbePoint;
     private DateTime _lastPdfLayerTraceProbeAt = DateTime.MinValue;
     private readonly System.Windows.Threading.DispatcherTimer _zoomRerenderTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _navigationIdleTimer;
     private bool _zoomRerenderForce;
     private bool _repaintQueued;
-    private bool _isViewDragging;
+    private bool _isFastNavigating;
+    private bool _renderNavigationFastFrame;
     private DateTime _lastPointerStatusAt = DateTime.MinValue;
     private readonly Dictionary<string, SKColor> _colorCache = new(StringComparer.OrdinalIgnoreCase);
     private LayerRenderRequest? _pendingLayerRender;
@@ -220,6 +252,7 @@ public sealed partial class PdfViewport : SKElement
     public event Action<string>?                          ToolChanged;
     public event Action<bool>?                            SnapChanged;
     public event Action<bool>?                            OrthoChanged;
+    public event Action<bool>?                            BoxModeChanged;
     public event Action<IReadOnlyList<PdfLayer>>?         LayersChanged;
     public event Action<IReadOnlyList<PdfLayerInfo>>?     PdfLayersDiscovered;
     public event Action?                                  PdfLayerTraceStateChanged;
@@ -236,22 +269,39 @@ public sealed partial class PdfViewport : SKElement
     public event Action<SKPoint?>?                        PasteMeasurementsRequested;
     public event Action<ViewportContextRequest>?          ContextRequested;
     public event Action<Measurement, SKPoint, SKPoint>?   JoistDirectionCaptured;
+    public event Action<SheetOverlayTransformChange>?     SheetOverlayTransformChanged;
 
     // ── Constants ─────────────────────────────────────────────────────────────
     private const float ZoomMin    = 0.05f;
     private const float ZoomMax    = 16.0f;
     private const float RenderDpi  = 144f;           // initial render quality (2 px/pt)
-    private const double PdfPointMeters = 25.4 / 72.0 / 1000.0;
-    private const float SnapToleranceScreenPx = 14f;
+    private const double PdfPointMeters = ViewportConstants.PdfPointMeters;
+    private const float SnapToleranceScreenPx = ViewportConstants.SnapToleranceScreen;
     private const float SnapMarkerScreenPx = 8f;
-    private const float VertexHitToleranceScreenPx = 24f;
-    private const float MeasurementHitToleranceScreenPx = 20f;
+    private const float VertexHitToleranceScreenPx = ViewportConstants.VertexHitRadiusScreen;
+    private const float MeasurementHitToleranceScreenPx = ViewportConstants.MeasurementHitRadiusScreen;
     private const float SelectedVertexHitToleranceScreenPx = 32f;
     private const float SelectedMeasurementHitToleranceScreenPx = 28f;
     private const float MeasurementLabelFontScreenPx = 9f;
     private const float MeasurementLabelPaddingScreenPx = 2f;
     private const float JoistSegmentLabelFontScreenPx = 7f;
     private static readonly float[] RenderScaleSteps = [0.75f, 1.00f, 1.50f, 2.25f, 3.00f, 4.00f];
+    private static readonly SKTypeface LabelTypeface =
+        SKTypeface.FromFamilyName("Consolas") ??
+        SKTypeface.FromFamilyName("Cascadia Mono") ??
+        SKTypeface.Default;
+    private static readonly SKTypeface OverlayMonoTypeface =
+        SKTypeface.FromFamilyName("Consolas") ??
+        SKTypeface.FromFamilyName("Cascadia Mono") ??
+        SKTypeface.Default;
+    private static readonly SKTypeface OverlayUiTypeface =
+        SKTypeface.FromFamilyName("Segoe UI") ??
+        SKTypeface.FromFamilyName("Inter") ??
+        SKTypeface.Default;
+    private static readonly SKTypeface OverlayUiBoldTypeface =
+        SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold) ??
+        SKTypeface.FromFamilyName("Inter", SKFontStyle.Bold) ??
+        OverlayUiTypeface;
 
     private static readonly SKColor TempColor = new(0xFF, 0xD7, 0x00);   // yellow
     private static readonly SKColor ScaleClr  = new(0x00, 0xE5, 0xFF);   // cyan
@@ -266,7 +316,7 @@ public sealed partial class PdfViewport : SKElement
         ContextMenu   = null;
         _zoomRerenderTimer = new System.Windows.Threading.DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(180),
+            Interval = TimeSpan.FromMilliseconds(ViewportConstants.ZoomRerenderDelayMs),
         };
         _zoomRerenderTimer.Tick += (_, _) =>
         {
@@ -276,6 +326,38 @@ public sealed partial class PdfViewport : SKElement
             RerenderForZoomIfNeeded(force);
             RequestRepaint();
         };
+        _navigationIdleTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(ViewportConstants.NavigationIdleMs),
+        };
+        _navigationIdleTimer.Tick += (_, _) =>
+        {
+            _navigationIdleTimer.Stop();
+            _isFastNavigating = false;
+            RequestRepaint();
+        };
+        Unloaded += PdfViewport_Unloaded;
+    }
+
+    private void PdfViewport_Unloaded(object sender, RoutedEventArgs e)
+    {
+        _zoomRerenderTimer.Stop();
+        _navigationIdleTimer.Stop();
+        _pendingLayerRender = null;
+        _layerRenderVersion++;
+        _pageBitmap?.Dispose();
+        _pageBitmap = null;
+        ClearSheetOverlay();
+        _selectedMeasurementVertexIndices.Clear();
+        _dragMeasurementOriginalPoints.Clear();
+        _dragMeasurementOriginalHoles.Clear();
+        _dragMeasurementVertexOriginalPoints.Clear();
+        _dragSelectionOriginalPoints.Clear();
+        _dragSelectionOriginalHoles.Clear();
+        _transformMeasurementOriginalPoints.Clear();
+        _transformMeasurementOriginalHoles.Clear();
+        _transformAnnotationOriginalPoints.Clear();
+        ClearViewportUndoStack();
     }
 
     private void RequestRepaint()
@@ -332,6 +414,7 @@ public sealed partial class PdfViewport : SKElement
 
         _pageBitmap?.Dispose();
         _pageBitmap = null;
+        ClearSheetOverlay();
         _drawPts.Clear();
         _scalePts.Clear();
         _rubberEnd = null;
@@ -339,6 +422,7 @@ public sealed partial class PdfViewport : SKElement
         SetSnapPreview(null);
         _aiMarkers.Clear();
         _annotations.Clear();
+        ClearViewportUndoStack();
         ClearAiActionDraftPreview();
         ClearSelection();
         _layerStates.Clear();
@@ -407,9 +491,10 @@ public sealed partial class PdfViewport : SKElement
             "point" => ViewerTool.Point,
             "line"  => ViewerTool.Line,
             "area"  => ViewerTool.Area,
+            "areacut" => ViewerTool.AreaCut,
             _       => ViewerTool.Pan,
         };
-        CancelDrawing();
+        CancelDrawing(clearSelection: _tool != ViewerTool.AreaCut);
         SetSnapPreview(null);
         UpdateCursor();
         PostRecordPrompt();
@@ -516,6 +601,8 @@ public sealed partial class PdfViewport : SKElement
         {
             _drawPts.RemoveAt(_drawPts.Count - 1);
             _rubberEnd = _drawPts.Count > 0 ? _rubberEnd : null;
+            if (_drawPts.Count == 0)
+                _areaCutMeasurement = null;
             RequestRepaint();
             if (_drawPts.Count > 0)
                 PostRecordPrompt();
@@ -524,33 +611,9 @@ public sealed partial class PdfViewport : SKElement
             return;
         }
 
-        for (int i = _annotations.Count - 1; i >= 0; i--)
-        {
-            if (IsAnnotationOnActivePage(_annotations[i]))
-            {
-                PageAnnotation annotation = _annotations[i];
-                _annotations.RemoveAt(i);
-                RequestRepaint();
-                PostStatus($"Undo: removed {ToolTitle(annotation.Kind)} markup.");
-                PageAnnotationRemoved?.Invoke(annotation);
-                return;
-            }
-        }
+        if (TryUndoLastViewportAction())
+            return;
 
-        for (int i = _measurements.Count - 1; i >= 0; i--)
-        {
-            if (IsMeasurementOnActivePage(_measurements[i]))
-            {
-                var m = _measurements[i];
-                _measurements.RemoveAt(i);
-                if (ReferenceEquals(_selectedMeasurement, m))
-                    ClearSelection();
-                RequestRepaint();
-                PostStatus($"Undo: removed {ToolTitle(m.MType)}.");
-                MeasurementRemoved?.Invoke(m);
-                return;
-            }
-        }
         PostStatus("Nothing to undo on this page.");
     }
 
@@ -561,9 +624,7 @@ public sealed partial class PdfViewport : SKElement
         foreach (var m in toRemove.ToList())
         {
             _measurements.Remove(m);
-            _selectedMeasurements.Remove(m);
-            if (ReferenceEquals(_selectedMeasurement, m))
-                _selectedMeasurement = null;
+            ForgetMeasurementState(m);
         }
         if (_selectedMeasurement == null && _selectedMeasurements.Count > 0)
             _selectedMeasurement = _selectedMeasurements.LastOrDefault();
@@ -574,6 +635,7 @@ public sealed partial class PdfViewport : SKElement
 
     public bool DeletePageAnnotation(PageAnnotation annotation)
     {
+        PushRemovedAnnotationsUndo([annotation], $"restore deleted {ToolTitle(annotation.Kind)} markup");
         if (!_annotations.Remove(annotation))
             return false;
 
@@ -619,8 +681,8 @@ public sealed partial class PdfViewport : SKElement
         if (ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
             return;
 
-        float visibleW = (float)ActualWidth / _zoom;
-        float visibleH = (float)ActualHeight / _zoom;
+        float visibleW = ScreenToPdfDistance((float)ActualWidth);
+        float visibleH = ScreenToPdfDistance((float)ActualHeight);
         _panX = pdfX - visibleW / 2f;
         _panY = pdfY - visibleH / 2f;
         ClampPanToPage();
@@ -662,7 +724,9 @@ public sealed partial class PdfViewport : SKElement
             }
         }
 
+        List<SKPoint> beforePoints = measurement.Points.ToList();
         measurement.Points.Insert(insertIndex, point);
+        PushMeasurementUndoSnapshot(measurement, beforePoints, $"insert {ToolTitle(measurement.MType)} vertex");
         SelectMeasurement(measurement, insertIndex);
         MeasurementChanged?.Invoke(measurement);
         RequestRepaint();
@@ -700,6 +764,7 @@ public sealed partial class PdfViewport : SKElement
             }
         }
 
+        PushMeasurementUndoSnapshot(measurement, measurement.Points.ToList(), $"remove {ToolTitle(measurement.MType)} vertex");
         measurement.Points.RemoveAt(removeIndex);
         SelectMeasurement(measurement, Math.Min(removeIndex, measurement.Points.Count - 1));
         MeasurementChanged?.Invoke(measurement);
@@ -751,6 +816,7 @@ public sealed partial class PdfViewport : SKElement
     {
         _measurements.Clear();
         _measurements.AddRange(measurements);
+        ClearViewportUndoStack();
         ClearSelection();
         RequestRepaint();
     }
@@ -764,6 +830,7 @@ public sealed partial class PdfViewport : SKElement
     {
         _annotations.Clear();
         _annotations.AddRange(annotations);
+        ClearViewportUndoStack();
         ClearAnnotationSelection();
         PublishTransformSelectionChanged();
         RequestRepaint();
@@ -812,8 +879,10 @@ public sealed partial class PdfViewport : SKElement
         _pageFolder = "";
         _cachedLayers = null;
         _zoomRerenderTimer.Stop();
+        _navigationIdleTimer.Stop();
         _zoomRerenderForce = false;
-        _isViewDragging = false;
+        _isFastNavigating = false;
+        _renderNavigationFastFrame = false;
         _pendingLayerRender = null;
         _layerRenderVersion++;
         _pdfLayerTraceEnabled = false;
@@ -822,6 +891,7 @@ public sealed partial class PdfViewport : SKElement
         ClearPdfLayerTraceSession();
         _pageBitmap?.Dispose();
         _pageBitmap = null;
+        ClearSheetOverlay();
         _pdfW = _pdfH = 0;
         _drawPts.Clear();
         _scalePts.Clear();
@@ -832,6 +902,7 @@ public sealed partial class PdfViewport : SKElement
         _aiMarkers.Clear();
         _annotations.Clear();
         _sheetLegendEntries.Clear();
+        ClearViewportUndoStack();
         CancelJoistDirectionCapture();
         ClearSelection();
         PublishTransformSelectionChanged();

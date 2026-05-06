@@ -37,7 +37,7 @@ public partial class MainWindow
         _recordButton.Checked += (_, _) => OnRecordToggled(on: true);
         _recordButton.Unchecked += (_, _) => OnRecordToggled(on: false);
 
-        int areaIndex = MainToolBar.Items.IndexOf(BtnArea);
+        int areaIndex = MainToolBar.Items.IndexOf(BtnAreaCut);
         MainToolBar.Items.Insert(areaIndex >= 0 ? areaIndex + 1 : MainToolBar.Items.Count, _recordButton);
     }
 
@@ -113,8 +113,8 @@ public partial class MainWindow
         _recordButton.ToolTip = recording
             ? _activeItem == null
                 ? $"Recording {recordType}; no active takeoff target is selected."
-                : $"Recording {recordType} into {_activeItem.Name}. Click to stop."
-            : "Start recording into the active takeoff target.";
+                : $"Recording {recordType} into {_activeItem.Name}. Click or press Space to stop."
+            : "Start recording into the active takeoff target (Space).";
         _recordButton.Background = recording
             ? new SolidColorBrush(Color.FromRgb(196, 32, 32))
             : (Brush)FindResource("ControlBackgroundBrush");
@@ -139,6 +139,12 @@ public partial class MainWindow
     private void BtnOrtho_Unchecked(object sender, RoutedEventArgs e) =>
         SetOrthoMode(enabled: false);
 
+    private void BtnBoxMode_Checked(object sender, RoutedEventArgs e) =>
+        SetBoxMode(enabled: true);
+
+    private void BtnBoxMode_Unchecked(object sender, RoutedEventArgs e) =>
+        SetBoxMode(enabled: false);
+
     private void SetSnapMode(bool enabled)
     {
         if (_updatingConstraintButtons)
@@ -159,6 +165,16 @@ public partial class MainWindow
         UpdateToolStatus();
     }
 
+    private void SetBoxMode(bool enabled)
+    {
+        if (_updatingConstraintButtons)
+            return;
+
+        _viewport.BoxModeEnabled = enabled;
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
     private void OnViewportSnapChanged(bool enabled)
     {
         UpdateConstraintButtons();
@@ -166,6 +182,12 @@ public partial class MainWindow
     }
 
     private void OnViewportOrthoChanged(bool enabled)
+    {
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
+    private void OnViewportBoxModeChanged(bool enabled)
     {
         UpdateConstraintButtons();
         UpdateToolStatus();
@@ -180,6 +202,8 @@ public partial class MainWindow
             BtnSnap.Content = _viewport.SnapEnabled ? "Snap On" : "Snap";
             BtnOrtho.IsChecked = _viewport.OrthoEnabled;
             BtnOrtho.Content = _viewport.OrthoEnabled ? "Ortho On" : "Ortho";
+            BtnBoxMode.IsChecked = _viewport.BoxModeEnabled;
+            BtnBoxMode.Content = _viewport.BoxModeEnabled ? "Box On" : "Box";
         }
         finally
         {
@@ -449,6 +473,7 @@ public partial class MainWindow
         ApplyScaleToCurrentPageMeasurements(_viewport.ScaleMetersPerPt);
         SaveCurrentPageScale();
         UpdateScaleUi(_viewport.ScaleMetersPerPt);
+        RefreshFloatingPageSetup(_currentPage?.FolderPath);
         TxtStatus.Text = $"Scale set: {PdfSheetMetadataService.FormatImperialScale(_viewport.ScaleMetersPerPt)}";
         RefreshAllTotals();
     }

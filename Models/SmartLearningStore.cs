@@ -442,7 +442,7 @@ public static class SmartLearningStore
         string path = ProjectLearnedRulesPath(job);
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(rules, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(rules, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -459,7 +459,7 @@ public static class SmartLearningStore
         rules.GeneratedAtUtc = DateTime.UtcNow.ToString("O");
         try
         {
-            File.WriteAllText(GlobalLearnedRulesPath, JsonSerializer.Serialize(rules, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(GlobalLearnedRulesPath, JsonSerializer.Serialize(rules, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -491,7 +491,7 @@ public static class SmartLearningStore
         string path = ProjectSummaryPath(job);
         try
         {
-            File.WriteAllText(path, JsonSerializer.Serialize(summary, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(summary, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -672,8 +672,9 @@ public static class SmartLearningStore
                 if (record != null)
                     records.Add(record);
             }
-            catch
+            catch (Exception ex)
             {
+                AppLog.Warn(ex, $"Learning history row could not be read from {path}");
                 // Keep learning history readable even if a hand-edited row is bad.
             }
         }
@@ -689,8 +690,9 @@ public static class SmartLearningStore
                 ? JsonSerializer.Deserialize<T>(File.ReadAllText(path))
                 : default;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Load learning JSON failed for {path}");
             return default;
         }
     }
@@ -751,7 +753,7 @@ public static class SmartLearningStore
         PreserveRuleEnabledStates(projectRulesPath, projectRules);
         try
         {
-            File.WriteAllText(projectRulesPath, JsonSerializer.Serialize(projectRules, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(projectRulesPath, JsonSerializer.Serialize(projectRules, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -763,7 +765,7 @@ public static class SmartLearningStore
         PreserveRuleEnabledStates(GlobalLearnedRulesPath, globalRules);
         try
         {
-            File.WriteAllText(GlobalLearnedRulesPath, JsonSerializer.Serialize(globalRules, FileJsonOptions));
+            IoUtil.WriteAllTextAtomic(GlobalLearnedRulesPath, JsonSerializer.Serialize(globalRules, FileJsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -875,7 +877,7 @@ public static class SmartLearningStore
         {
             try
             {
-                File.WriteAllText(path, initialContent);
+                IoUtil.WriteAllTextAtomic(path, initialContent);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

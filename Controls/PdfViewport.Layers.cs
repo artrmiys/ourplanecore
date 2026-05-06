@@ -124,10 +124,10 @@ public sealed partial class PdfViewport
             statusAfter,
             fireLayersAfter);
 
-        StartNextLayerRender();
+        _ = StartNextLayerRenderAsync();
     }
 
-    private async void StartNextLayerRender()
+    private async Task StartNextLayerRenderAsync()
     {
         if (_layerRenderInProgress || _pendingLayerRender == null)
             return;
@@ -135,46 +135,53 @@ public sealed partial class PdfViewport
         LayerRenderRequest request = _pendingLayerRender;
         _pendingLayerRender = null;
         _layerRenderInProgress = true;
-
-        LayerRenderCompletion completion = await Task.Run(() =>
+        try
         {
-            bool ok = PdfLayerRenderService.TryRender(
+            var renderResult = await PdfLayerRenderService.TryRenderAsync(
                 request.PdfPath,
                 request.PdfIndex,
                 request.RenderScale,
                 request.LayerStates,
                 request.HighlightedLayers,
-                request.CachedLayers,
-                out PdfLayerRenderResult render,
-                out string error);
-            return new LayerRenderCompletion(request, ok, render, error);
-        });
+                request.CachedLayers);
+            LayerRenderCompletion completion = new(
+                request,
+                renderResult.Ok,
+                renderResult.Result,
+                renderResult.Error);
 
-        _layerRenderInProgress = false;
-
-        if (completion.Request.Version == _layerRenderVersion &&
-            string.Equals(completion.Request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
-            completion.Request.PdfIndex == _pdfIndex &&
-            string.Equals(completion.Request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
-        {
-            if (completion.Ok)
+            if (completion.Request.Version == _layerRenderVersion &&
+                string.Equals(completion.Request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+                completion.Request.PdfIndex == _pdfIndex &&
+                string.Equals(completion.Request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
             {
-                if (ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates))
+                if (completion.Ok)
                 {
-                    if (completion.Request.FireLayersAfter)
-                        FireLayersChanged();
-                    if (!string.IsNullOrWhiteSpace(completion.Request.StatusAfter))
-                        PostStatus(completion.Request.StatusAfter);
+                    if (ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates))
+                    {
+                        if (completion.Request.FireLayersAfter)
+                            FireLayersChanged();
+                        if (!string.IsNullOrWhiteSpace(completion.Request.StatusAfter))
+                            PostStatus(completion.Request.StatusAfter);
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(completion.Error))
+                {
+                    PostStatus($"Layer render unavailable: {completion.Error}");
                 }
             }
-            else if (!string.IsNullOrWhiteSpace(completion.Error))
-            {
-                PostStatus($"Layer render unavailable: {completion.Error}");
-            }
         }
-
-        if (_pendingLayerRender != null)
-            StartNextLayerRender();
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, "PDF layer render failed.");
+            PostStatus($"Layer render failed: {ex.Message}");
+        }
+        finally
+        {
+            _layerRenderInProgress = false;
+            if (_pendingLayerRender != null)
+                _ = StartNextLayerRenderAsync();
+        }
     }
 
     private void UpdateLayerSnapshot(IEnumerable<PdfLayer> layers)

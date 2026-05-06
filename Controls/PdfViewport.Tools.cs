@@ -47,13 +47,65 @@ public sealed partial class PdfViewport
                 _drawPts.Add(pdf);
                 FinalizeDrawing();
                 break;
+            case ViewerTool.Line when BoxModeEnabled:
+            case ViewerTool.Area when BoxModeEnabled:
+                AddBoxMeasurementPoint(pdf);
+                break;
             case ViewerTool.Line:
             case ViewerTool.Area:
                 _drawPts.Add(pdf);
                 RequestRepaint();
                 PostRecordPrompt();
                 break;
+            case ViewerTool.AreaCut:
+                AddAreaCutPoint(pdf);
+                break;
         }
+    }
+
+    private void AddBoxMeasurementPoint(SKPoint pdf)
+    {
+        _drawPts.Add(pdf);
+        if (_drawPts.Count < 2)
+        {
+            RequestRepaint();
+            PostRecordPrompt();
+            return;
+        }
+
+        SKPoint first = _drawPts[0];
+        _drawPts.Clear();
+        _drawPts.AddRange(BoxMeasurementPoints(first, pdf, closeForLine: _tool == ViewerTool.Line));
+        FinalizeDrawing();
+    }
+
+    private void AddAreaCutPoint(SKPoint pdf)
+    {
+        if (_drawPts.Count == 0)
+        {
+            if (!TryResolveAreaCutTarget(pdf, out Measurement target, out string status))
+            {
+                PostStatus(status);
+                return;
+            }
+
+            _areaCutMeasurement = target;
+            SelectMeasurement(target, -1);
+            _drawPts.Add(pdf);
+            RequestRepaint();
+            PostRecordPrompt();
+            return;
+        }
+
+        if (BoxModeEnabled)
+        {
+            ApplyAreaCutBox(_drawPts[0], pdf);
+            return;
+        }
+
+        _drawPts.Add(pdf);
+        RequestRepaint();
+        PostRecordPrompt();
     }
 
     private void AddTwoPointAnnotation(SKPoint pdf, string kind)
@@ -67,6 +119,199 @@ public sealed partial class PdfViewport
         }
 
         FinalizeAnnotation(kind);
+    }
+
+    private void ApplyAreaCutBox(SKPoint first, SKPoint second)
+    {
+        SKRect rect = NormalizeRect(first, second);
+        float minSize = ScreenToPdfDistance(4f);
+        if (rect.Width < minSize || rect.Height < minSize)
+        {
+            _drawPts.Clear();
+            _rubberEnd = null;
+            PostStatus("Area Cut: box is too small.");
+            RequestRepaint();
+            return;
+        }
+
+        SKPoint center = new((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
+        Measurement? target = _areaCutMeasurement;
+        if (target == null || !_measurements.Contains(target) || !PointInMeasurementFill(target, center))
+        {
+            TryResolveAreaCutTarget(center, out target, out _);
+        }
+
+        if (target == null)
+        {
+            _drawPts.Clear();
+            _rubberEnd = null;
+            _areaCutMeasurement = null;
+            PostStatus("Area Cut: draw the cut box inside a selected Area.");
+            RequestRepaint();
+            return;
+        }
+
+        var hole = BoxMeasurementPoints(first, second, closeForLine: false);
+        ApplyAreaCutHole(target, hole, "box");
+    }
+
+    private void FinalizeAreaCutPolygon()
+    {
+        if (_drawPts.Count < 3)
+        {
+            CancelDrawing(clearSelection: false);
+            PostStatus("Area Cut cancelled.");
+            return;
+        }
+
+        Measurement? target = _areaCutMeasurement;
+        if (target == null || !_measurements.Contains(target))
+            TryResolveAreaCutTarget(Centroid(_drawPts), out target, out _);
+
+        if (target == null)
+        {
+            _drawPts.Clear();
+            _rubberEnd = null;
+            _areaCutMeasurement = null;
+            PostStatus("Area Cut: draw the cut polygon inside a selected Area.");
+            RequestRepaint();
+            return;
+        }
+
+        ApplyAreaCutHole(target, _drawPts.ToList(), "polygon");
+    }
+
+    private void ApplyAreaCutHole(Measurement target, List<SKPoint> hole, string shapeName)
+    {
+        if (!CanApplyAreaCut(target, hole, out string error))
+        {
+            _drawPts.Clear();
+            _rubberEnd = null;
+            PostStatus(error);
+            RequestRepaint();
+            return;
+        }
+
+        List<SKPoint> beforePoints = target.Points.ToList();
+        List<List<SKPoint>> beforeHoles = CloneHoles(target.Holes);
+        target.Holes.Add(hole);
+        PushMeasurementUndoSnapshot(target, beforePoints, beforeHoles, "cut area hole", "area-cut");
+        _drawPts.Clear();
+        _rubberEnd = null;
+        _areaCutMeasurement = null;
+        SelectMeasurement(target, -1);
+        MeasurementChanged?.Invoke(target);
+        RequestRepaint();
+        PostStatus($"Area Cut: subtracted {shapeName}. New area {target.Label(ScaleMetersPerPt, UnitMode)}.");
+        PostRecordPrompt();
+    }
+
+    private bool TryResolveAreaCutTarget(SKPoint point, out Measurement target, out string status)
+    {
+        target = null!;
+        status = "";
+        if (_selectedMeasurement is { MType: "area" } selected &&
+            IsMeasurementOnActivePage(selected) &&
+            PointInMeasurementFill(selected, point))
+        {
+            target = selected;
+            return true;
+        }
+
+        for (int i = _measurements.Count - 1; i >= 0; i--)
+        {
+            Measurement candidate = _measurements[i];
+            if (candidate.MType == "area" &&
+                IsMeasurementOnActivePage(candidate) &&
+                PointInMeasurementFill(candidate, point))
+            {
+                target = candidate;
+                return true;
+            }
+        }
+
+        status = "Area Cut: click inside the Area you want to cut.";
+        return false;
+    }
+
+    private static bool CanApplyAreaCut(Measurement target, IReadOnlyList<SKPoint> hole, out string error)
+    {
+        error = "";
+        if (target.MType != "area" || target.Points.Count < 3)
+        {
+            error = "Area Cut: select an Area first.";
+            return false;
+        }
+
+        if (hole.Count < 3)
+        {
+            error = "Area Cut: draw a larger box.";
+            return false;
+        }
+
+        foreach (SKPoint point in hole)
+        {
+            if (!PointInMeasurementFill(target, point))
+            {
+                error = "Area Cut: cut box must stay inside the Area and outside existing holes.";
+                return false;
+            }
+        }
+
+        if (PolygonEdgesIntersect(hole, target.Points))
+        {
+            error = "Area Cut: cut box cannot cross the Area edge.";
+            return false;
+        }
+
+        foreach (var existingHole in target.Holes)
+        {
+            if (existingHole.Count >= 3 && PolygonEdgesIntersect(hole, existingHole))
+            {
+                error = "Area Cut: cut box cannot overlap an existing hole.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<SKPoint> BoxMeasurementPoints(SKPoint first, SKPoint second, bool closeForLine)
+    {
+        SKRect rect = NormalizeRect(first, second);
+        var points = new List<SKPoint>
+        {
+            new(rect.Left, rect.Top),
+            new(rect.Right, rect.Top),
+            new(rect.Right, rect.Bottom),
+            new(rect.Left, rect.Bottom),
+        };
+        if (closeForLine)
+            points.Add(points[0]);
+        return points;
+    }
+
+    private static bool PolygonEdgesIntersect(IReadOnlyList<SKPoint> left, IReadOnlyList<SKPoint> right)
+    {
+        foreach ((SKPoint a, SKPoint b) in PolygonEdges(left))
+        foreach ((SKPoint c, SKPoint d) in PolygonEdges(right))
+        {
+            if (SegmentsIntersect(a, b, c, d))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<(SKPoint Start, SKPoint End)> PolygonEdges(IReadOnlyList<SKPoint> points)
+    {
+        if (points.Count < 2)
+            yield break;
+
+        for (int i = 1; i < points.Count; i++)
+            yield return (points[i - 1], points[i]);
+        if (points.Count > 2)
+            yield return (points[^1], points[0]);
     }
 
     private void HandleJoistDirectionClick(SKPoint pdf)
@@ -96,11 +341,21 @@ public sealed partial class PdfViewport
         _scalePts.Add(pdf);
         if (_scalePts.Count == 2)
         {
-            float dx = _scalePts[1].X - _scalePts[0].X;
-            float dy = _scalePts[1].Y - _scalePts[0].Y;
-            float dist = MathF.Sqrt(dx * dx + dy * dy);  // PDF points
+            float dist = MeasurementGeometry.Distance(_scalePts[1], _scalePts[0]);  // PDF points
+            if (dist < 1.0f)
+            {
+                MessageBox.Show(
+                    "Calibration distance is too short, please pick two distinct points.",
+                    "Set Scale",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                _scalePts.Clear();
+                RequestRepaint();
+                PostStatus("Scale was not changed: pick two distinct calibration points.");
+                return;
+            }
 
-            const double PT_M = 25.4 / 72.0 / 1000.0;
+            const double PT_M = ViewportConstants.PdfPointMeters;
             double lengthAtOneEighthFt = dist * PT_M * 96 / 0.3048;
             double lengthAtQuarterFt = dist * PT_M * 48 / 0.3048;
             string hint =
@@ -150,6 +405,7 @@ public sealed partial class PdfViewport
             ScaleMetersPerPt = ScaleMetersPerPt,
         };
         _measurements.Add(m);
+        PushAddedMeasurementsUndo([m], $"remove added {EntryTitle(m.MType)}");
         _drawPts.Clear();
         _rubberEnd = null;
         SetSnapPreview(null);
@@ -174,6 +430,7 @@ public sealed partial class PdfViewport
             ScaleMetersPerPt = ScaleMetersPerPt,
         };
         _annotations.Add(annotation);
+        PushAddedAnnotationsUndo([annotation], $"remove added {ToolTitle(normalizedKind)} markup");
         _drawPts.Clear();
         _rubberEnd = null;
         SetSnapPreview(null);
@@ -205,7 +462,20 @@ public sealed partial class PdfViewport
             return;
         }
 
-        CancelDrawing();
+        if (_tool == ViewerTool.AreaCut && !BoxModeEnabled)
+        {
+            if (_drawPts.Count >= 3)
+            {
+                FinalizeAreaCutPolygon();
+                return;
+            }
+
+            CancelDrawing(clearSelection: false);
+            PostStatus("Area Cut cancelled.");
+            return;
+        }
+
+        CancelDrawing(clearSelection: _tool != ViewerTool.AreaCut);
         PostStatus("Cancelled.");
     }
 
@@ -256,6 +526,14 @@ public sealed partial class PdfViewport
                     break;
                 }
 
+                if (BoxModeEnabled)
+                {
+                    PostStatus(_drawPts.Count == 0
+                        ? $"Line Box: click the first corner.{modes}"
+                        : $"Line Box: click the opposite corner to create a rectangular perimeter.{modes}");
+                    break;
+                }
+
                 PostStatus(_drawPts.Count switch
                 {
                     0 => $"Line Record: click the first point.{modes}",
@@ -270,6 +548,14 @@ public sealed partial class PdfViewport
                     break;
                 }
 
+                if (BoxModeEnabled)
+                {
+                    PostStatus(_drawPts.Count == 0
+                        ? $"Area Box: click the first corner.{modes}"
+                        : $"Area Box: click the opposite corner to create a rectangular area.{modes}");
+                    break;
+                }
+
                 PostStatus(_drawPts.Count switch
                 {
                     0 => $"Area Record: click the first corner.{modes}",
@@ -277,6 +563,24 @@ public sealed partial class PdfViewport
                     2 => $"Area Record: click at least one more corner, then finish.{modes}",
                     _ => $"Area Record: click next corner, or Esc / C / double-click to finish.{modes}",
                 });
+                break;
+            case ViewerTool.AreaCut:
+                if (BoxModeEnabled)
+                {
+                    PostStatus(_drawPts.Count == 0
+                        ? $"Area Cut Box: click inside the selected Area at the first cut-box corner.{modes}"
+                        : $"Area Cut Box: click the opposite cut-box corner.{modes}");
+                }
+                else
+                {
+                    PostStatus(_drawPts.Count switch
+                    {
+                        0 => $"Area Cut: click the first polygon point inside the selected Area.{modes}",
+                        1 => $"Area Cut: click the next polygon point.{modes}",
+                        2 => $"Area Cut: click at least one more point, then C / Esc / double-click to finish.{modes}",
+                        _ => $"Area Cut: click next point, or C / Esc / double-click to finish.{modes}",
+                    });
+                }
                 break;
             case ViewerTool.Scale:
                 PostStatus(_scalePts.Count == 0
@@ -322,6 +626,8 @@ public sealed partial class PdfViewport
             modes.Add("Snap F3");
         if (OrthoEnabled)
             modes.Add("Ortho F8");
+        if (BoxModeEnabled)
+            modes.Add("Box");
         return modes.Count == 0 ? "" : $" [{string.Join(", ", modes)}]";
     }
 
@@ -331,6 +637,7 @@ public sealed partial class PdfViewport
             "point" => "Count",
             "line" => "Line",
             "area" => "Area",
+            "areacut" => "Area Cut",
             "dimension" => "Ruler",
             "arrow" => "Arrow",
             "rectangle" => "Box",
@@ -341,16 +648,18 @@ public sealed partial class PdfViewport
     private static string EntryTitle(string type) =>
         type == "point" ? "Count mark" : $"{ToolTitle(type)} section";
 
-    private void CancelDrawing()
+    private void CancelDrawing(bool clearSelection = true)
     {
         _drawPts.Clear();
         _scalePts.Clear();
         _rubberEnd = null;
         _boxSelecting = false;
+        _areaCutMeasurement = null;
         SetSnapPreview(null);
         if (_draggingVertex && IsMouseCaptured)
             ReleaseMouseCapture();
-        ClearSelection();
+        if (clearSelection)
+            ClearSelection();
         RequestRepaint();
     }
 
@@ -370,6 +679,9 @@ public sealed partial class PdfViewport
         if (updatePreview)
             SetSnapPreview(null);
 
+        if (ShouldPreviewAsBox())
+            return rawPdf;
+
         return TryGetOrthoAnchor(out SKPoint anchor) && IsOrthoActive()
             ? ApplyOrtho(anchor, rawPdf)
             : rawPdf;
@@ -384,8 +696,19 @@ public sealed partial class PdfViewport
     private static bool IsSelectionModifierActive() =>
         (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None;
 
+    private bool ShouldPreviewAsBox() =>
+        _tool == ViewerTool.DrawRect ||
+        _tool == ViewerTool.AreaCut && BoxModeEnabled ||
+        BoxModeEnabled && _tool is (ViewerTool.Line or ViewerTool.Area);
+
     private bool TryGetOrthoAnchor(out SKPoint anchor)
     {
+        if (_joistDirectionMeasurement != null && _joistDirectionPts.Count > 0)
+        {
+            anchor = _joistDirectionPts[^1];
+            return true;
+        }
+
         if (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect &&
             _drawPts.Count > 0)
         {
@@ -407,8 +730,8 @@ public sealed partial class PdfViewport
     {
         float dx = point.X - anchor.X;
         float dy = point.Y - anchor.Y;
-        float length = MathF.Sqrt(dx * dx + dy * dy);
-        if (length <= 0.001f)
+        float length = MeasurementGeometry.Distance(point, anchor);
+        if (length <= ViewportConstants.ZeroLengthEpsilon)
             return point;
 
         float angle = MathF.Atan2(dy, dx);
@@ -421,7 +744,7 @@ public sealed partial class PdfViewport
 
     private bool TryFindSnapPoint(SKPoint rawPdf, out SKPoint snapped, out string snapKind)
     {
-        float tolerance = SnapToleranceScreenPx / Math.Max(_zoom, 0.001f);
+        float tolerance = ScreenToPdfDistance(SnapToleranceScreenPx);
         float best = tolerance * tolerance;
         SKPoint bestPoint = default;
         string bestKind = "";
@@ -463,12 +786,12 @@ public sealed partial class PdfViewport
 
         for (int i = 0; i < _drawPts.Count; i++)
         {
-            if (i == _drawPts.Count - 1 && _tool is ViewerTool.Line or ViewerTool.Area)
+            if (i == _drawPts.Count - 1 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut)
                 continue;
 
             Consider(_drawPts[i], "endpoint");
         }
-        ConsiderPolyline(_drawPts, _tool == ViewerTool.Area, includeEndpoints: false);
+        ConsiderPolyline(_drawPts, _tool == ViewerTool.Area || _tool == ViewerTool.AreaCut && !BoxModeEnabled, includeEndpoints: false);
 
         foreach (SKPoint point in _scalePts)
             Consider(point, "endpoint");
@@ -479,7 +802,12 @@ public sealed partial class PdfViewport
                 continue;
 
             if (measurement.MType is "line" or "area")
+            {
                 ConsiderPolyline(measurement.Points, measurement.MType == "area", includeEndpoints: true);
+                if (measurement.MType == "area")
+                    foreach (var hole in measurement.Holes)
+                        ConsiderPolyline(hole, closed: true, includeEndpoints: true);
+            }
             else
                 foreach (SKPoint point in measurement.Points)
                     Consider(point, "endpoint");
@@ -551,10 +879,10 @@ public sealed partial class PdfViewport
     }
 
     private static bool SharesEndpoint(SnapSegment left, SnapSegment right) =>
-        DistanceSquared(left.Start, right.Start) <= 0.0001f ||
-        DistanceSquared(left.Start, right.End) <= 0.0001f ||
-        DistanceSquared(left.End, right.Start) <= 0.0001f ||
-        DistanceSquared(left.End, right.End) <= 0.0001f;
+        DistanceSquared(left.Start, right.Start) <= ViewportConstants.GeometryEpsilon ||
+        DistanceSquared(left.Start, right.End) <= ViewportConstants.GeometryEpsilon ||
+        DistanceSquared(left.End, right.Start) <= ViewportConstants.GeometryEpsilon ||
+        DistanceSquared(left.End, right.End) <= ViewportConstants.GeometryEpsilon;
 
     private sealed record SnapSegment(SKPoint Start, SKPoint End);
 

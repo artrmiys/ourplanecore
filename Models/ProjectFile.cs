@@ -25,6 +25,7 @@ internal sealed class ProjectFile
         public string          JoistPitch { get; set; } = "";
         public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
         public bool            JoistShowLabels { get; set; }
+        public bool?           JoistDetailedLabels { get; set; } = true;
         public List<MeasDto>   Measurements { get; set; } = [];
     }
 
@@ -38,6 +39,7 @@ internal sealed class ProjectFile
         public double       JoistDirectionDegrees { get; set; }
         public bool         JoistDirectionLocked { get; set; }
         public List<PtDto>  Points     { get; set; } = [];
+        public List<List<PtDto>> Holes { get; set; } = [];
     }
 
     public sealed record PtDto(float X, float Y);
@@ -70,6 +72,7 @@ internal sealed class ProjectFile
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                 JoistShowLabels = item.JoistShowLabels,
+                JoistDetailedLabels = item.JoistDetailedLabels,
             };
             foreach (var m in item.Measurements)
             {
@@ -83,12 +86,16 @@ internal sealed class ProjectFile
                     JoistDirectionDegrees = m.JoistDirectionDegrees,
                     JoistDirectionLocked = m.JoistDirectionLocked,
                     Points     = m.Points.Select(p => new PtDto(p.X, p.Y)).ToList(),
+                    Holes      = m.Holes
+                        .Where(hole => hole.Count >= 3)
+                        .Select(hole => hole.Select(p => new PtDto(p.X, p.Y)).ToList())
+                        .ToList(),
                 };
                 dto.Measurements.Add(md);
             }
             pf.Items.Add(dto);
         }
-        File.WriteAllText(PathFor(pdfPath),
+        IoUtil.WriteAllTextAtomic(PathFor(pdfPath),
             JsonSerializer.Serialize(pf, new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -106,7 +113,11 @@ internal sealed class ProjectFile
 
         ProjectFile? pf;
         try   { pf = JsonSerializer.Deserialize<ProjectFile>(File.ReadAllText(path)); }
-        catch { return (0, OurPlaneCore.UnitMode.Metric, []); }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Restore project file failed for {path}");
+            return (0, OurPlaneCore.UnitMode.Metric, []);
+        }
         if (pf == null) return (0, OurPlaneCore.UnitMode.Metric, []);
 
         var items = new List<TakeoffItem>();
@@ -125,6 +136,7 @@ internal sealed class ProjectFile
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(dto.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(dto.JoistLengthRounding),
                 JoistShowLabels = dto.JoistShowLabels,
+                JoistDetailedLabels = dto.JoistDetailedLabels ?? true,
             };
             foreach (var md in dto.Measurements)
             {
@@ -138,6 +150,10 @@ internal sealed class ProjectFile
                     JoistDirectionDegrees = md.JoistDirectionDegrees,
                     JoistDirectionLocked = md.JoistDirectionLocked,
                     Points     = md.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
+                    Holes      = md.Holes
+                        .Select(hole => hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
+                        .Where(hole => hole.Count >= 3)
+                        .ToList(),
                 });
             }
             OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);

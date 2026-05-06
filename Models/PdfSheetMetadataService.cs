@@ -121,7 +121,7 @@ public sealed class PdfSheetMetadata
 
 public static class PdfSheetMetadataService
 {
-    private const double PdfPointMeters = 25.4 / 72.0 / 1000.0;
+    private const double PdfPointMeters = ViewportConstants.PdfPointMeters;
 
     public static string FormatImperialScale(double scaleMetersPerPt)
     {
@@ -137,10 +137,15 @@ public static class PdfSheetMetadataService
         (double Ratio, string Label)[] presets =
         [
             (1,   "1\" = 1\""),
+            (2,   "6\" = 1'0\""),
+            (3,   "4\" = 1'0\""),
             (4,   "3\" = 1'0\""),
-            (8,   "1-1/2\" = 1'0\""),
+            (6,   "2\" = 1'0\""),
+            (8,   "1 1/2\" = 1'0\""),
+            (9.6, "1 1/4\" = 1'0\""),
             (12,  "1\" = 1'0\""),
             (16,  "3/4\" = 1'0\""),
+            (19.2,"5/8\" = 1'0\""),
             (24,  "1/2\" = 1'0\""),
             (32,  "3/8\" = 1'0\""),
             (48,  "1/4\" = 1'0\""),
@@ -182,7 +187,7 @@ public static class PdfSheetMetadataService
             int numerator = remainder / divisor;
             int denominator = 64 / divisor;
             return whole > 0
-                ? $"{whole}-{numerator}/{denominator}"
+                ? $"{whole} {numerator}/{denominator}"
                 : $"{numerator}/{denominator}";
         }
 
@@ -347,6 +352,7 @@ public static class PdfSheetMetadataService
             }
             catch (Exception ex)
             {
+                AppLog.Warn(ex, $"PDF source scan failed for {pdf}");
                 scanErrors.Add($"{Path.GetFileName(pdf)}: {ex.Message}");
                 continue;
             }
@@ -604,7 +610,7 @@ public static class PdfSheetMetadataService
             double ratio = ParseScaleRatio(metadata.EffectiveScaleText);
             metadata.SelectedScaleRatio = ratio;
             metadata.SelectedScaleMetersPerPt = ratio > 0
-                ? (25.4 / 72.0 / 1000.0) * ratio
+                ? ViewportConstants.PdfPointMeters * ratio
                 : 0;
         }
 
@@ -687,16 +693,24 @@ public static class PdfSheetMetadataService
     {
         try
         {
-            if (value.Contains('-', StringComparison.Ordinal))
+            string clean = value.Trim();
+            Match mixedMatch = Regex.Match(clean, @"^(?<whole>\d+(?:\.\d+)?)\s+(?<fraction>\d+\s*/\s*\d+)$");
+            if (mixedMatch.Success)
             {
-                string[] pieces = value.Split('-', 2);
+                return double.Parse(mixedMatch.Groups["whole"].Value, CultureInfo.InvariantCulture) +
+                       ParseFraction(mixedMatch.Groups["fraction"].Value);
+            }
+
+            if (clean.Contains('-', StringComparison.Ordinal))
+            {
+                string[] pieces = clean.Split('-', 2);
                 return double.Parse(pieces[0], CultureInfo.InvariantCulture) + ParseFraction(pieces[1]);
             }
 
-            if (value.Contains('/', StringComparison.Ordinal))
-                return ParseFraction(value);
+            if (clean.Contains('/', StringComparison.Ordinal))
+                return ParseFraction(clean);
 
-            return double.Parse(value, CultureInfo.InvariantCulture);
+            return double.Parse(clean, CultureInfo.InvariantCulture);
         }
         catch
         {

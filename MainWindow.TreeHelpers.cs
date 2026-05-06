@@ -508,6 +508,7 @@ public partial class MainWindow
             "drawline" => "Draw Line",
             "drawarrow" => "Arrow",
             "drawrect" => "Box",
+            "areacut" => "Area Cut",
             _ => "Pan",
         };
         bool recording = _activeTool is "point" or "line" or "area";
@@ -517,7 +518,8 @@ public partial class MainWindow
         TxtTool.Text =
             $"  Tool: {title}  |  Record: {(recording ? "On" : "Off")}" +
             $"  |  Snap: {(_viewport.SnapEnabled ? "On" : "Off")}" +
-            $"  |  Ortho: {(_viewport.OrthoEnabled ? "On" : "Off")}{item}";
+            $"  |  Ortho: {(_viewport.OrthoEnabled ? "On" : "Off")}" +
+            $"  |  Box: {(_viewport.BoxModeEnabled ? "On" : "Off")}{item}";
         UpdateActiveTakeoffTargetBar();
     }
 
@@ -526,12 +528,16 @@ public partial class MainWindow
         if (ActiveTakeoffTargetBar == null)
             return;
 
+        ActiveTakeoffTargetBar.Visibility = Visibility.Visible;
         if (_activeItem == null)
         {
-            ActiveTakeoffTargetBar.Visibility = Visibility.Collapsed;
-            TxtActiveTakeoffTarget.Text = "No active takeoff";
+            TxtActiveTakeoffTarget.Text = "";
             TxtActiveTakeoffTargetMeta.Text = "";
             ActiveTakeoffTargetGlyphHost.Child = null;
+            BtnActiveTakeoffRecord.Content = "Record";
+            BtnActiveTakeoffRecord.ToolTip = "Select a takeoff item before recording (Space)";
+            BtnActiveTakeoffMore.ToolTip = "Select a takeoff item for actions";
+            BtnActiveTakeoffSheetNext.ToolTip = "No active takeoff item";
             BtnActiveTakeoffRecord.IsEnabled = false;
             BtnActiveTakeoffMore.IsEnabled = false;
             BtnActiveTakeoffFind.IsEnabled = false;
@@ -550,7 +556,6 @@ public partial class MainWindow
         string sheetTotal = ActiveTakeoffSheetTotalText(_activeItem);
         bool recordingThis = _activeTool == measurementType;
 
-        ActiveTakeoffTargetBar.Visibility = Visibility.Visible;
         TxtActiveTakeoffTarget.Text = _activeItem.Name;
         TxtActiveTakeoffTargetMeta.Text = $"{TakeoffTypeTitle(_activeItem)} | total: {total}{sheetTotal}";
         ActiveTakeoffTargetGlyphHost.Child = BuildTakeoffSwatchGlyph(
@@ -561,8 +566,8 @@ public partial class MainWindow
         BtnActiveTakeoffRecord.ToolTip = _currentPage == null
             ? "Select a sheet before recording"
             : recordingThis
-                ? $"Recording {typeTitle} into {_activeItem.Name}. Click the toolbar Record button to stop."
-                : $"Start recording {typeTitle} into {_activeItem.Name}";
+                ? $"Recording {typeTitle} into {_activeItem.Name}. Click or press Space to stop."
+                : $"Start recording {typeTitle} into {_activeItem.Name} (Space)";
         bool hasTreeItem = FindTakeoffTreeItem(_activeItem) != null;
         BtnActiveTakeoffFind.IsEnabled = hasTreeItem;
         BtnActiveTakeoffProperties.IsEnabled = hasTreeItem;
@@ -720,6 +725,40 @@ public partial class MainWindow
         }
     }
 
+    private void SelectTakeoffItemSilently(TakeoffItem item)
+    {
+        if (FindTakeoffTreeItem(item) is not { } tvi)
+            return;
+
+        _syncingTakeoffTreeSelection = true;
+        try
+        {
+            _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
+            if (!string.IsNullOrWhiteSpace(item.FolderPath))
+                _takeoffsMultiSelection.Add(item.FolderPath);
+            tvi.IsSelected = true;
+            tvi.BringIntoView();
+        }
+        finally
+        {
+            _syncingTakeoffTreeSelection = false;
+        }
+    }
+
+    private void ActivateTakeoffItem(TakeoffItem item)
+    {
+        item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        _activeItem = item;
+        _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
+        _viewport.ActiveColor = item.Color;
+        _viewport.ActiveTakeoffFolder = item.FolderPath;
+        if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
+            ApplyToolSelection(item.MeasurementType);
+        else
+            UpdateToolStatus();
+    }
+
     private void SelectFirstTakeoffItemSilently(IReadOnlyList<TakeoffItem> items)
     {
         TreeViewItem? first = items
@@ -731,7 +770,7 @@ public partial class MainWindow
         _syncingTakeoffTreeSelection = true;
         try
         {
-            ExpandTreeItemAndAncestorsWithoutTracking(first);
+            ExpandTakeoffFolderAncestorsWithoutTracking(first);
             first.IsSelected = true;
             first.BringIntoView();
         }
@@ -798,6 +837,7 @@ public partial class MainWindow
         }
 
         TreeViewItem? preferredLinked = null;
+        TreeViewItem? firstLinked = null;
         foreach (TreeViewItem pageItem in EnumeratePageTreeItems())
         {
             if (pageItem.Tag is not PageInfo page)
@@ -819,12 +859,14 @@ public partial class MainWindow
             {
                 _pageTakeoffMultiSelection.Add(PageTakeoffSelectionKey(new PageTakeoffNode(page, takeoff)));
                 TreeViewItem? linked = FindPageTakeoffTreeItem(page.FolderPath, takeoff.FolderPath);
+                firstLinked ??= linked;
                 if (isPreferredPage)
                     preferredLinked ??= linked;
             }
         }
 
         ApplyPagesMultiSelectionVisuals();
+        preferredLinked ??= firstLinked;
 
         if (preferredLinked == null)
         {
@@ -837,8 +879,7 @@ public partial class MainWindow
         try
         {
             ExpandTreeItemAndAncestorsWithoutTracking(preferredLinked);
-            preferredLinked.IsSelected = true;
-            preferredLinked.BringIntoView();
+            BringPageTreeItemIntoCenteredView(preferredLinked);
         }
         finally
         {
@@ -854,14 +895,41 @@ public partial class MainWindow
         _syncingTakeoffTreeSelection = true;
         try
         {
-            ExpandTreeItemAndAncestorsWithoutTracking(tvi);
-            tvi.IsSelected = true;
-            tvi.BringIntoView();
+            TreeViewItem visibleTarget = TakeoffVisibleSelectionTarget(tvi);
+            ExpandTakeoffFolderAncestorsWithoutTracking(visibleTarget);
+            visibleTarget.IsSelected = true;
+            visibleTarget.BringIntoView();
         }
         finally
         {
             _syncingTakeoffTreeSelection = false;
         }
+    }
+
+    private void ExpandTakeoffFolderAncestorsWithoutTracking(TreeViewItem item)
+    {
+        WithTreeExpansionTrackingSuppressed(() =>
+        {
+            ItemsControl? parent = ItemsControl.ItemsControlFromItemContainer(item);
+            while (parent is TreeViewItem parentItem)
+            {
+                if (parentItem.Tag is not TakeoffItem)
+                    parentItem.IsExpanded = true;
+                parent = ItemsControl.ItemsControlFromItemContainer(parentItem);
+            }
+        });
+    }
+
+    private static TreeViewItem TakeoffVisibleSelectionTarget(TreeViewItem item)
+    {
+        if (item.Tag is TakeoffMeasurementNode &&
+            ItemsControl.ItemsControlFromItemContainer(item) is TreeViewItem parentTakeoff &&
+            !parentTakeoff.IsExpanded)
+        {
+            return parentTakeoff;
+        }
+
+        return item;
     }
 
     private TreeViewItem? FindTakeoffTreeItem(TakeoffItem item) =>

@@ -27,6 +27,7 @@ public sealed class AppSettings
     public bool ScaleSheetOverlaysWithPage { get; set; } = false;
     public bool ScaleMeasurementLabelsWithPage { get; set; } = false;
     public bool ScaleSheetHeaderWithPage { get; set; } = false;
+    public bool SimplifyViewportNavigation { get; set; } = false;
     public double MassingFloorAssemblyFeet { get; set; } = SmartMassingDraftService.DefaultFloorAssemblyFeet;
     public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
     public double LeftPanelWidth { get; set; } = 200.0;
@@ -99,8 +100,9 @@ public static class AppSettingsStore
             NormalizeRecentJobs(settings);
             return settings;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, $"Load app settings failed for {SettingsPath}");
             return new AppSettings();
         }
     }
@@ -112,7 +114,7 @@ public static class AppSettingsStore
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
 
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+        IoUtil.WriteAllTextAtomic(SettingsPath, JsonSerializer.Serialize(settings, JsonOptions));
     }
 
     public static IReadOnlyList<string> CurrentJobsRootPaths(AppSettings settings)
@@ -362,6 +364,7 @@ public static class AppSettingsStore
         }
         catch (Exception ex)
         {
+            AppLog.Warn(ex, "GetOpenAiKeyStatus user environment lookup failed");
             return new OpenAiKeyStatus
             {
                 Found = false,
@@ -389,8 +392,9 @@ public static class AppSettingsStore
             string? userKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY", EnvironmentVariableTarget.User);
             return string.IsNullOrWhiteSpace(userKey) ? "" : userKey.Trim();
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Warn(ex, "ReadOpenAiApiKey user environment lookup failed");
             return "";
         }
     }

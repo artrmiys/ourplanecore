@@ -97,10 +97,10 @@ public partial class MainWindow
         Add("layers.clearHighlight", "Clear PDF Layer Highlights", "PDF Layers", "", "Clear highlighted PDF layers.", BtnLayersClearHi.IsEnabled, "Select a PDF page with layers first.");
 
         Add("takeoffs.newFolder", "New Takeoff Folder", "Takeoffs", "", "Create a takeoff folder under the selected/root folder.", hasJob, "Open or create a job first.");
-        Add("takeoffs.newItem", "New Takeoff Item", "Takeoffs", "", "Create a takeoff item under the selected/root folder.", hasJob, "Open or create a job first.");
+        Add("takeoffs.newItem", "New Takeoff Item", "Takeoffs", "T", "Create a takeoff item under the selected/root folder.", hasJob, "Open or create a job first.");
         Add("takeoffs.activeFind", "Show Active Takeoff", "Takeoffs", "", "Scroll the Takeoffs tree to the active target item.", _activeItem != null, "Select a takeoff item first.");
         Add("takeoffs.activeProperties", "Active Takeoff Properties", "Takeoffs", "", "Edit properties for the active target item.", _activeItem != null, "Select a takeoff item first.");
-        Add("takeoffs.activeRecord", "Record Active Takeoff", "Takeoffs", "", "Start recording into the active target item.", _activeItem != null && hasPage, "Select a takeoff item and sheet first.");
+        Add("takeoffs.activeRecord", "Record Active Takeoff", "Takeoffs", "Space", "Start or stop recording into the active target item.", _activeItem != null && hasPage, "Select a takeoff item and sheet first.");
         Add("takeoffs.activePrevious", "Previous Takeoff Target", "Takeoffs", "", "Switch the active target to the previous takeoff item.", _takeoffItems.Count > 1, "Create at least two takeoff items first.");
         Add("takeoffs.activeNext", "Next Takeoff Target", "Takeoffs", "", "Switch the active target to the next takeoff item.", _takeoffItems.Count > 1, "Create at least two takeoff items first.");
         Add("takeoffs.activeSheetNext", "Next Sheet Takeoff Target", "Takeoffs", "", "Switch to the next takeoff item measured on the active sheet.", hasSheetTakeoffTargets, "Select a sheet with measured takeoffs first.");

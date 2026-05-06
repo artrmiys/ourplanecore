@@ -19,6 +19,7 @@ public sealed class TakeoffItem
     public string JoistPitch { get; set; } = "";
     public string JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool JoistShowLabels { get; set; }
+    public bool JoistDetailedLabels { get; set; } = true;
 
     public List<Measurement> Measurements { get; } = [];
 
