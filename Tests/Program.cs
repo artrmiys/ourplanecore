@@ -38,6 +38,8 @@ var tests = new List<(string Name, Action Run)>
     ("page tree order moves nested folder out below parent", PageTreeOrderMovesNestedFolderOutBelowParent),
     ("page rename allows duplicate display names", PageRenameAllowsDuplicateDisplayNames),
     ("job store sanitizes unsafe names", JobStoreSanitizesUnsafeNames),
+    ("node sort uses natural page order", StorageTests.NodeSortUsesNaturalPageOrder),
+    ("duplicate page clones page and rejects folder", StorageTests.DuplicatePageClonesPageAndRejectsFolder),
     ("job layout create and load ensures base folders", StorageTests.JobLayoutCreateAndLoadEnsuresBaseFolders),
     ("page import writes layer manifest and metadata", StorageTests.PageImportWritesLayerManifestAndMetadata),
     ("page copy and move preserve source overlay and layers", StorageTests.PageCopyAndMovePreserveSourceOverlayAndLayers),

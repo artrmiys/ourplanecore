@@ -210,6 +210,52 @@ internal static class StorageTests
         });
     }
 
+    public static void NodeSortUsesNaturalPageOrder()
+    {
+        WithTempJob("Natural Sort", job =>
+        {
+            string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Sort Parent");
+            string sourcePdf = CreateSourcePdf(job, "sort.pdf");
+            OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, "A10", parent);
+            OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, "A2", parent);
+            OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, "A1", parent);
+
+            OurPlaneCoreJobStore.SortChildren(parent, descending: false);
+            AssertEqual("A1,A2,A10", PageChildOrder(parent), "ascending natural order");
+
+            OurPlaneCoreJobStore.SortChildren(parent, descending: true);
+            AssertEqual("A10,A2,A1", PageChildOrder(parent), "descending natural order");
+        });
+    }
+
+    public static void DuplicatePageClonesPageAndRejectsFolder()
+    {
+        WithTempJob("Duplicate Page", job =>
+        {
+            PageInfo page = CreatePageItem(job, "D100");
+            string duplicatedPath = OurPlaneCoreJobStore.DuplicatePage(page.FolderPath);
+            PageInfo duplicate = OurPlaneCoreJobStore.TryReadPage(duplicatedPath)
+                ?? throw new InvalidOperationException("duplicate page missing");
+
+            AssertFalse(string.Equals(page.FolderPath, duplicatedPath, StringComparison.OrdinalIgnoreCase), "duplicate should use new folder");
+            AssertEqual("D100 - Copy", OurPlaneCoreJobStore.DisplayName(duplicatedPath), "duplicate display name");
+            AssertTrue(File.Exists(duplicate.PdfPath), "duplicate pdf should resolve");
+
+            string folder = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Folder Only");
+            bool rejected = false;
+            try
+            {
+                _ = OurPlaneCoreJobStore.DuplicatePage(folder);
+            }
+            catch (InvalidOperationException)
+            {
+                rejected = true;
+            }
+
+            AssertTrue(rejected, "folder duplicate should be rejected");
+        });
+    }
+
     private static void AssertPageSourceState(string pageFolder, string overlayPageFolder)
     {
         PageInfo page = OurPlaneCoreJobStore.TryReadPage(pageFolder)
@@ -274,6 +320,10 @@ internal static class StorageTests
             ?.Attribute("Value")
             ?.Value ?? "";
     }
+
+    private static string PageChildOrder(string parentFolder) =>
+        string.Join(",", OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
+            .Select(OurPlaneCoreJobStore.DisplayName));
 
     private static void AssertTrue(bool condition, string message)
     {
