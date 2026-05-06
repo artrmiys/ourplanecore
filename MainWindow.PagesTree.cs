@@ -176,43 +176,18 @@ public partial class MainWindow
         }
     }
 
-    private void CollapseTreeAndExpansionState(ItemsControl tree, HashSet<string> expandedPaths)
+    private void CollapseTreeAndExpansionState(ItemsControl tree, TreeExpansionState expandedPaths)
     {
         SetTreeItemsExpanded(tree, false);
         expandedPaths.Clear();
     }
 
-    private static void RebaseExpandedTreePaths(HashSet<string> expandedPaths, string oldPath, string newPath)
-    {
-        string? oldKey = ExpansionPathKey(oldPath);
-        string? newKey = ExpansionPathKey(newPath);
-        if (oldKey == null ||
-            newKey == null ||
-            string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase) ||
-            expandedPaths.Count == 0)
-        {
-            return;
-        }
-
-        var rebased = new List<(string OldKey, string NewKey)>();
-        foreach (string expandedPath in expandedPaths)
-        {
-            if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldKey, expandedPath))
-                continue;
-
-            rebased.Add((expandedPath, ExpansionPathKey(RebaseDescendantPath(oldKey, newKey, expandedPath))!));
-        }
-
-        foreach (var (oldExpandedKey, newExpandedKey) in rebased)
-        {
-            expandedPaths.Remove(oldExpandedKey);
-            expandedPaths.Add(newExpandedKey);
-        }
-    }
+    private static void RebaseExpandedTreePaths(TreeExpansionState expandedPaths, string oldPath, string newPath) =>
+        expandedPaths.Rebase(oldPath, newPath);
 
     private void RestoreExpandedTreeState(
         ItemsControl tree,
-        HashSet<string> expandedPaths,
+        TreeExpansionState expandedPaths,
         Func<TreeViewItem, string?> getPath)
     {
         WithTreeExpansionTrackingSuppressed(() =>
@@ -221,13 +196,12 @@ public partial class MainWindow
 
     private static void RestoreExpandedTreeStateCore(
         ItemsControl parent,
-        HashSet<string> expandedPaths,
+        TreeExpansionState expandedPaths,
         Func<TreeViewItem, string?> getPath)
     {
         foreach (TreeViewItem item in parent.Items.OfType<TreeViewItem>())
         {
-            string? key = ExpansionPathKey(getPath(item));
-            if (key != null && expandedPaths.Contains(key))
+            if (expandedPaths.Contains(getPath(item)))
                 item.IsExpanded = true;
 
             RestoreExpandedTreeStateCore(item, expandedPaths, getPath);
@@ -236,7 +210,7 @@ public partial class MainWindow
 
     private static void CaptureExpandedTreeState(
         ItemsControl tree,
-        HashSet<string> expandedPaths,
+        TreeExpansionState expandedPaths,
         Func<TreeViewItem, string?> getPath)
     {
         expandedPaths.Clear();
@@ -245,13 +219,13 @@ public partial class MainWindow
 
     private static void CaptureExpandedTreeStateCore(
         ItemsControl parent,
-        HashSet<string> expandedPaths,
+        TreeExpansionState expandedPaths,
         Func<TreeViewItem, string?> getPath)
     {
         foreach (TreeViewItem item in parent.Items.OfType<TreeViewItem>())
         {
-            if (item.IsExpanded && ExpansionPathKey(getPath(item)) is { } key)
-                expandedPaths.Add(key);
+            if (item.IsExpanded)
+                expandedPaths.Add(getPath(item));
 
             CaptureExpandedTreeStateCore(item, expandedPaths, getPath);
         }
@@ -271,21 +245,17 @@ public partial class MainWindow
 
     private void TrackTreeExpansion(
         RoutedEventArgs e,
-        HashSet<string> expandedPaths,
+        TreeExpansionState expandedPaths,
         Func<TreeViewItem, string?> getPath,
         bool expanded)
     {
         if (_suppressTreeExpansionTracking || e.OriginalSource is not TreeViewItem item)
             return;
 
-        string? key = ExpansionPathKey(getPath(item));
-        if (key == null)
-            return;
-
         if (expanded)
-            expandedPaths.Add(key);
+            expandedPaths.Add(getPath(item));
         else
-            expandedPaths.Remove(key);
+            expandedPaths.Remove(getPath(item));
     }
 
     private void WithTreeExpansionTrackingSuppressed(Action action)
@@ -309,7 +279,7 @@ public partial class MainWindow
     }
 
     private static string? ExpansionPathKey(string? path) =>
-        string.IsNullOrWhiteSpace(path) ? null : NormalizePathForCompare(path);
+        TreeExpansionState.NormalizePathKey(path);
 
     private StackPanel BuildPageHeader(PageInfo page)
     {
