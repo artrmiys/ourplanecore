@@ -6,7 +6,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
-using SkiaSharp;
 
 namespace OurPlaneCore;
 
@@ -187,7 +186,7 @@ internal sealed record PointDto(float X, float Y);
 
 public static class OurPlaneCoreJobStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
     };
@@ -205,118 +204,28 @@ public static class OurPlaneCoreJobStore
         }
     }
 
-    public static OurPlaneCoreJob CreateJob(string parentDir, string jobName)
-    {
-        string root = Path.Combine(parentDir, SanitizeName(jobName, 120));
-        Directory.CreateDirectory(root);
-        WriteItemDataXml(root, "Folder", jobName, 0);
+    public static OurPlaneCoreJob CreateJob(string parentDir, string jobName) =>
+        JobLayout.CreateJob(parentDir, jobName);
 
-        EnsureFolder(root, "sources");
-        string pages = EnsureFolder(root, "Pages");
-        string imported = EnsureFolder(pages, "00. imported");
-        EnsureFolder(imported, "Arch");
-        EnsureFolder(imported, "Struct");
-        EnsureFolder(pages, "--------others");
-        EnsureFolder(root, "Takeoffs");
-        SmartContextStore.EnsureProjectContext(root, jobName);
+    public static OurPlaneCoreJob LoadJob(string rootPath) =>
+        JobLayout.LoadJob(rootPath);
 
-        return LoadJob(root);
-    }
+    public static string EnsureFolder(string parentFolder, string name) =>
+        JobLayout.EnsureFolder(parentFolder, name);
 
-    public static OurPlaneCoreJob LoadJob(string rootPath)
-    {
-        if (!Directory.Exists(rootPath))
-            throw new DirectoryNotFoundException(rootPath);
+    public static string CreateFolder(string parentFolder, string name) =>
+        JobLayout.CreateFolder(parentFolder, name);
 
-        if (!File.Exists(Path.Combine(rootPath, "Data.xml")))
-            WriteItemDataXml(rootPath, "Folder", Path.GetFileName(rootPath), 0);
-
-        string name = ReadName(rootPath) ?? Path.GetFileName(rootPath);
-        var job = new OurPlaneCoreJob { Name = name, RootPath = rootPath };
-
-        EnsureFolder(rootPath, "sources");
-        string pages = EnsureFolder(rootPath, "Pages");
-        string imported = EnsureFolder(pages, "00. imported");
-        EnsureFolder(imported, "Arch");
-        EnsureFolder(imported, "Struct");
-        EnsureFolder(pages, "--------others");
-        EnsureFolder(rootPath, "Takeoffs");
-        SmartContextStore.EnsureProjectContext(rootPath, name);
-
-        return job;
-    }
-
-    public static string EnsureFolder(string parentFolder, string name)
-    {
-        string path = Path.Combine(parentFolder, SanitizeName(name, 120));
-        Directory.CreateDirectory(path);
-        string dataXml = Path.Combine(path, "Data.xml");
-        if (!File.Exists(dataXml))
-            WriteItemDataXml(path, "Folder", name, GetNextOrderIndex(parentFolder));
-        return path;
-    }
-
-    public static string CreateFolder(string parentFolder, string name)
-    {
-        string cleanName = SanitizeName(name, 120);
-        string path = Path.Combine(parentFolder, cleanName);
-        if (Directory.Exists(path))
-            throw new IOException($"'{cleanName}' already exists in this folder.");
-
-        Directory.CreateDirectory(path);
-        WriteItemDataXml(path, "Folder", cleanName, GetNextOrderIndex(parentFolder));
-        return path;
-    }
-
-    public static string DefaultImportFolder(OurPlaneCoreJob job)
-    {
-        string imported = EnsureFolder(job.PagesRoot, "00. imported");
-        return EnsureFolder(imported, "Arch");
-    }
+    public static string DefaultImportFolder(OurPlaneCoreJob job) =>
+        JobLayout.DefaultImportFolder(job);
 
     public static IReadOnlyList<PageInfo> ImportPdf(
         OurPlaneCoreJob job,
         string pdfSourcePath,
         IReadOnlyList<string> pageNames,
         string destinationFolder,
-        IReadOnlyDictionary<int, IReadOnlyList<PdfLayerInfo>>? pdfLayerCache = null)
-    {
-        string sourcesDir = EnsureFolder(job.RootPath, "sources");
-        string pdfDest = UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
-        if (!File.Exists(pdfDest))
-            File.Copy(pdfSourcePath, pdfDest);
-
-        var created = new List<PageInfo>();
-        for (int i = 0; i < pageNames.Count; i++)
-        {
-            string displayName = string.IsNullOrWhiteSpace(pageNames[i])
-                ? $"Page {i + 1}"
-                : pageNames[i].Trim();
-            string pageFolder = UniqueDirectoryPath(Path.Combine(destinationFolder, SanitizeName(displayName, 120)));
-            Directory.CreateDirectory(pageFolder);
-
-            WriteItemDataXml(pageFolder, "Page", displayName, GetNextOrderIndex(destinationFolder));
-            if (pdfLayerCache != null && pdfLayerCache.TryGetValue(i, out var cachedLayers))
-                WriteSource(pageFolder, pdfDest, i, 0, cachedLayers, pdfLayersCached: true);
-            else
-                WriteSource(pageFolder, pdfDest, i, 0);
-
-            created.Add(new PageInfo
-            {
-                Name = displayName,
-                FolderPath = pageFolder,
-                PdfPath = pdfDest,
-                PdfPage = i,
-                ScaleMetersPerPt = 0,
-                PdfLayersCached = pdfLayerCache != null && pdfLayerCache.ContainsKey(i),
-                PdfLayers = pdfLayerCache != null && pdfLayerCache.TryGetValue(i, out var layers)
-                    ? layers.ToList()
-                    : [],
-            });
-        }
-
-        return created;
-    }
+        IReadOnlyDictionary<int, IReadOnlyList<PdfLayerInfo>>? pdfLayerCache = null) =>
+        PageStore.ImportPdf(job, pdfSourcePath, pageNames, destinationFolder, pdfLayerCache);
 
     public static PageInfo CreatePageFromPdf(
         OurPlaneCoreJob job,
@@ -324,489 +233,70 @@ public static class OurPlaneCoreJobStore
         string displayName,
         string destinationFolder,
         int pdfPage = 0,
-        double scaleMetersPerPt = 0)
-    {
-        string sourcesDir = EnsureFolder(job.RootPath, "sources");
-        string pdfDest = UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
-        if (!File.Exists(pdfDest))
-            File.Copy(pdfSourcePath, pdfDest);
+        double scaleMetersPerPt = 0) =>
+        PageStore.CreatePageFromPdf(job, pdfSourcePath, displayName, destinationFolder, pdfPage, scaleMetersPerPt);
 
-        string cleanName = string.IsNullOrWhiteSpace(displayName)
-            ? $"Page {pdfPage + 1}"
-            : displayName.Trim();
-        string pageFolder = UniqueDirectoryPath(Path.Combine(destinationFolder, SanitizeName(cleanName, 120)));
-        Directory.CreateDirectory(pageFolder);
+    public static SourceInfo? ReadSource(string pageFolder) =>
+        PageStore.ReadSource(pageFolder);
 
-        WriteItemDataXml(pageFolder, "Page", cleanName, GetNextOrderIndex(destinationFolder));
-        WriteSource(pageFolder, pdfDest, pdfPage, scaleMetersPerPt);
-        return new PageInfo
-        {
-            Name = cleanName,
-            FolderPath = pageFolder,
-            PdfPath = pdfDest,
-            PdfPage = pdfPage,
-            ScaleMetersPerPt = scaleMetersPerPt,
-        };
-    }
+    public static PageInfo? TryReadPage(string pageFolder) =>
+        PageStore.TryReadPage(pageFolder);
 
-    public static SourceInfo? ReadSource(string pageFolder)
-    {
-        string path = Path.Combine(pageFolder, "source.json");
-        if (!File.Exists(path)) return null;
+    public static void SavePageScale(string pageFolder, double scaleMetersPerPt) =>
+        PageStore.SavePageScale(pageFolder, scaleMetersPerPt);
 
-        try
-        {
-            return JsonSerializer.Deserialize<SourceInfo>(File.ReadAllText(path));
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            QuarantineCorruptJson(path, "ReadSource", ex);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"ReadSource failed for {path}");
-            return null;
-        }
-    }
-
-    public static PageInfo? TryReadPage(string pageFolder)
-    {
-        SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return null;
-
-        string pdfPath = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        return new PageInfo
-        {
-            Name = ReadName(pageFolder) ?? Path.GetFileName(pageFolder),
-            FolderPath = pageFolder,
-            PdfPath = pdfPath,
-            PdfPage = src.Page,
-            ScaleMetersPerPt = src.ScaleMetersPerPt,
-            PdfLayersCached = src.PdfLayersCached,
-            PdfLayers = src.PdfLayers,
-            LegendTakeoffOrder = src.LegendTakeoffOrder ?? [],
-            OverlayPageFolder = ResolveRelativePagePath(pageFolder, src.OverlayPageFolder),
-            OverlayColor = string.IsNullOrWhiteSpace(src.OverlayColor) ? "#E53935" : src.OverlayColor,
-            OverlayOpacity = NormalizeOverlayOpacity(src.OverlayOpacity),
-            OverlayOffsetXPt = NormalizeOverlayOffset(src.OverlayOffsetXPt),
-            OverlayOffsetYPt = NormalizeOverlayOffset(src.OverlayOffsetYPt),
-            OverlayScale = NormalizeOverlayScale(src.OverlayScale),
-        };
-    }
-
-    private static string ResolveRelativePagePath(string pageFolder, string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return "";
-
-        try
-        {
-            return Path.IsPathRooted(path)
-                ? Path.GetFullPath(path)
-                : Path.GetFullPath(Path.Combine(pageFolder, path));
-        }
-        catch
-        {
-            return path;
-        }
-    }
-
-    private static string MakeRelativePageReference(string pageFolder, string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return "";
-
-        try
-        {
-            string full = Path.IsPathRooted(path)
-                ? Path.GetFullPath(path)
-                : Path.GetFullPath(Path.Combine(pageFolder, path));
-            return Path.GetRelativePath(pageFolder, full);
-        }
-        catch
-        {
-            return path;
-        }
-    }
-
-    private static double NormalizeOverlayOpacity(double opacity)
-    {
-        if (double.IsNaN(opacity) || double.IsInfinity(opacity) || opacity <= 0)
-            return 0.55;
-
-        return Math.Clamp(opacity, 0.05, 1.0);
-    }
-
-    private static double NormalizeOverlayOffset(double offset) =>
-        double.IsNaN(offset) || double.IsInfinity(offset)
-            ? 0
-            : Math.Clamp(offset, -100000, 100000);
-
-    private static double NormalizeOverlayScale(double scale) =>
-        double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0
-            ? 1.0
-            : Math.Clamp(scale, 0.05, 20.0);
-
-    public static void SavePageScale(string pageFolder, double scaleMetersPerPt)
-    {
-        SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return;
-
-        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(
-            pageFolder,
-            pdfAbs,
-            src.Page,
-            scaleMetersPerPt,
-            src.PdfLayers,
-            src.PdfLayersCached,
-            src.LegendTakeoffOrder,
-            src.OverlayPageFolder,
-            src.OverlayColor,
-            src.OverlayOpacity,
-            src.OverlayOffsetXPt,
-            src.OverlayOffsetYPt,
-            src.OverlayScale);
-    }
-
-    public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder)
-    {
-        SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return;
-
-        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(
-            pageFolder,
-            pdfAbs,
-            src.Page,
-            src.ScaleMetersPerPt,
-            src.PdfLayers,
-            src.PdfLayersCached,
-            legendTakeoffOrder,
-            src.OverlayPageFolder,
-            src.OverlayColor,
-            src.OverlayOpacity,
-            src.OverlayOffsetXPt,
-            src.OverlayOffsetYPt,
-            src.OverlayScale);
-    }
+    public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder) =>
+        PageStore.SavePageLegendTakeoffOrder(pageFolder, legendTakeoffOrder);
 
     public static void SavePageOverlay(
         string pageFolder,
         string overlayPageFolder,
         string overlayColor,
-        double overlayOpacity)
-    {
-        SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return;
-
-        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(
-            pageFolder,
-            pdfAbs,
-            src.Page,
-            src.ScaleMetersPerPt,
-            src.PdfLayers,
-            src.PdfLayersCached,
-            src.LegendTakeoffOrder,
-            overlayPageFolder,
-            string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
-            NormalizeOverlayOpacity(overlayOpacity),
-            src.OverlayOffsetXPt,
-            src.OverlayOffsetYPt,
-            src.OverlayScale);
-    }
+        double overlayOpacity) =>
+        PageStore.SavePageOverlay(pageFolder, overlayPageFolder, overlayColor, overlayOpacity);
 
     public static void ClearPageOverlay(string pageFolder) =>
-        SavePageOverlay(pageFolder, "", "#E53935", 0.55);
+        PageStore.ClearPageOverlay(pageFolder);
 
     public static void SavePageOverlayTransform(
         string pageFolder,
         double offsetXPt,
         double offsetYPt,
-        double overlayScale)
-    {
-        SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return;
+        double overlayScale) =>
+        PageStore.SavePageOverlayTransform(pageFolder, offsetXPt, offsetYPt, overlayScale);
 
-        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(
-            pageFolder,
-            pdfAbs,
-            src.Page,
-            src.ScaleMetersPerPt,
-            src.PdfLayers,
-            src.PdfLayersCached,
-            src.LegendTakeoffOrder,
-            src.OverlayPageFolder,
-            src.OverlayColor,
-            src.OverlayOpacity,
-            offsetXPt,
-            offsetYPt,
-            overlayScale);
-    }
-
-    public static string CreateTakeoffFolder(OurPlaneCoreJob job, string parentFolder, string name)
-    {
-        string targetParent = IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
-            ? parentFolder
-            : job.TakeoffsRoot;
-        string folder = CreateFolder(targetParent, name);
-        SetProperty(folder, "SmartNodeKind", "folder");
-        return folder;
-    }
+    public static string CreateTakeoffFolder(OurPlaneCoreJob job, string parentFolder, string name) =>
+        TakeoffStore.CreateTakeoffFolder(job, parentFolder, name);
 
     public static TakeoffItem CreateTakeoffItem(OurPlaneCoreJob job, string name, string color) =>
-        CreateTakeoffItem(job, job.TakeoffsRoot, name, color, "line");
+        TakeoffStore.CreateTakeoffItem(job, name, color);
 
-    public static TakeoffItem CreateTakeoffItem(OurPlaneCoreJob job, string parentFolder, string name, string color, string measurementType)
-    {
-        string targetParent = IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
-            ? parentFolder
-            : job.TakeoffsRoot;
-        string folder = CreateFolder(targetParent, name);
-        SetProperty(folder, "SmartNodeKind", "item");
-        SetProperty(folder, "Color", color);
-        SetProperty(folder, "MeasurementType", NormalizeMeasurementType(measurementType));
-        return new TakeoffItem
-        {
-            Name = DisplayName(folder),
-            Color = color,
-            FolderPath = folder,
-            MeasurementType = NormalizeMeasurementType(measurementType),
-        };
-    }
+    public static TakeoffItem CreateTakeoffItem(OurPlaneCoreJob job, string parentFolder, string name, string color, string measurementType) =>
+        TakeoffStore.CreateTakeoffItem(job, parentFolder, name, color, measurementType);
 
-    public static IReadOnlyList<TakeoffItem> LoadTakeoffItems(OurPlaneCoreJob job)
-    {
-        var items = new List<TakeoffItem>();
-        if (!Directory.Exists(job.TakeoffsRoot)) return items;
+    public static IReadOnlyList<TakeoffItem> LoadTakeoffItems(OurPlaneCoreJob job) =>
+        TakeoffStore.LoadTakeoffItems(job);
 
-        foreach (string folder in EnumerateSelfAndDescendants(job.TakeoffsRoot).Skip(1))
-            if (TryReadTakeoffItem(folder) is { } item)
-                items.Add(item);
+    public static TakeoffItem? TryReadTakeoffItem(string folder) =>
+        TakeoffStore.TryReadTakeoffItem(folder);
 
-        return items;
-    }
+    public static void SaveTakeoffItem(TakeoffItem item) =>
+        TakeoffStore.SaveTakeoffItem(item);
 
-    public static TakeoffItem? TryReadTakeoffItem(string folder)
-    {
-        if (!IsTakeoffItemFolder(folder)) return null;
+    public static void ApplyTakeoffPropertiesToMeasurements(TakeoffItem item) =>
+        TakeoffStore.ApplyTakeoffPropertiesToMeasurements(item);
 
-        var measurements = LoadMeasurements(folder);
-        string measurementType = NormalizeMeasurementType(
-            ReadProperty(folder, "MeasurementType") ??
-            measurements.FirstOrDefault()?.MType ??
-            "line");
+    public static List<Measurement> LoadMeasurements(string takeoffFolder) =>
+        TakeoffStore.LoadMeasurements(takeoffFolder);
 
-        var item = new TakeoffItem
-        {
-            Name = DisplayName(folder),
-            Color = ReadProperty(folder, "Color") ?? "#FF4444",
-            FolderPath = folder,
-            MeasurementType = measurementType,
-            UnitPrice = ParseDouble(ReadProperty(folder, "UnitPrice")),
-            Notes = ReadProperty(folder, "Notes") ?? "",
-            IsJoistTakeoff = ParseBool(ReadProperty(folder, "JoistEnabled")),
-            JoistType = ReadProperty(folder, "JoistType") ?? "",
-            JoistSpacingInches = ParsePositiveDouble(ReadProperty(folder, "JoistSpacingInches"), 16),
-            JoistDirectionDegrees = ParseDouble(ReadProperty(folder, "JoistDirectionDegrees")),
-            JoistPitch = JoistTakeoffCalculator.NormalizePitch(ReadProperty(folder, "JoistPitch")),
-            JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(ReadProperty(folder, "JoistLengthRounding")),
-            JoistShowLabels = ParseBool(ReadProperty(folder, "JoistShowLabels")),
-            JoistDetailedLabels = ParseBool(ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
-        };
-        item.Measurements.AddRange(measurements);
-        ApplyTakeoffPropertiesToMeasurements(item);
-        return item;
-    }
+    public static void SaveMeasurements(string takeoffFolder, IEnumerable<Measurement> measurements) =>
+        TakeoffStore.SaveMeasurements(takeoffFolder, measurements);
 
-    public static void SaveTakeoffItem(TakeoffItem item)
-    {
-        if (string.IsNullOrWhiteSpace(item.FolderPath) || !Directory.Exists(item.FolderPath))
-            return;
+    public static List<PageAnnotation> LoadPageAnnotations(string pageFolder) =>
+        PageAnnotationStore.LoadPageAnnotations(pageFolder);
 
-        UpdateItemName(item.FolderPath, item.Name);
-        SetProperty(item.FolderPath, "SmartNodeKind", "item");
-        SetProperty(item.FolderPath, "Color", item.Color);
-        SetProperty(item.FolderPath, "MeasurementType", NormalizeMeasurementType(item.MeasurementType));
-        SetProperty(item.FolderPath, "UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture));
-        SetProperty(item.FolderPath, "Notes", item.Notes);
-        SetProperty(item.FolderPath, "JoistEnabled", (item.IsJoistArea).ToString(CultureInfo.InvariantCulture));
-        SetProperty(item.FolderPath, "JoistType", item.JoistType ?? "");
-        SetProperty(item.FolderPath, "JoistSpacingInches", Math.Max(0.001, item.JoistSpacingInches).ToString("G17", CultureInfo.InvariantCulture));
-        SetProperty(item.FolderPath, "JoistDirectionDegrees", item.JoistDirectionDegrees.ToString("G17", CultureInfo.InvariantCulture));
-        SetProperty(item.FolderPath, "JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch));
-        SetProperty(item.FolderPath, "JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding));
-        SetProperty(item.FolderPath, "JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture));
-        SetProperty(item.FolderPath, "JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture));
-        SetProperty(item.FolderPath, "MeasurementCount", item.Measurements.Count.ToString());
-        SetProperty(item.FolderPath, "MeasuredPageCount", item.Measurements
-            .Select(m => m.PageFolder)
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count()
-            .ToString());
-        ApplyTakeoffPropertiesToMeasurements(item);
-        SaveMeasurements(item.FolderPath, item.Measurements);
-    }
-
-    public static void ApplyTakeoffPropertiesToMeasurements(TakeoffItem item)
-    {
-        bool joistEnabled = item.IsJoistArea;
-        string rounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
-        foreach (Measurement measurement in item.Measurements)
-        {
-            measurement.TakeoffFolder = item.FolderPath;
-            measurement.JoistEnabled = joistEnabled &&
-                NormalizeMeasurementType(measurement.MType) == "area";
-            measurement.JoistType = item.JoistType ?? "";
-            measurement.JoistSpacingInches = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
-            if (!measurement.JoistDirectionLocked)
-                measurement.JoistDirectionDegrees = item.JoistDirectionDegrees;
-            measurement.JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch);
-            measurement.JoistLengthRounding = rounding;
-            measurement.JoistShowLabels = item.JoistShowLabels;
-            measurement.JoistDetailedLabels = item.JoistDetailedLabels;
-        }
-    }
-
-    public static List<Measurement> LoadMeasurements(string takeoffFolder)
-    {
-        string path = MeasurementsJsonPath(takeoffFolder);
-        if (!File.Exists(path)) return [];
-
-        try
-        {
-            var dtos = JsonSerializer.Deserialize<List<MeasurementDto>>(File.ReadAllText(path)) ?? [];
-            return dtos.Select(dto =>
-            {
-                double scale = dto.ScaleMetersPerPt;
-                if (scale <= 0 && !string.IsNullOrWhiteSpace(dto.PageFolder))
-                    scale = ReadSource(dto.PageFolder)?.ScaleMetersPerPt ?? 0;
-
-                return new Measurement
-                {
-                    Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
-                    Name = dto.Name ?? "",
-                    Notes = dto.Notes ?? "",
-                    MType = NormalizeMeasurementType(dto.MType),
-                    Color = dto.Color,
-                    PageFolder = dto.PageFolder,
-                    TakeoffFolder = takeoffFolder,
-                    ScaleMetersPerPt = scale,
-                    JoistDirectionDegrees = dto.JoistDirectionDegrees,
-                    JoistDirectionLocked = dto.JoistDirectionLocked,
-                    Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
-                    Holes = dto.HolesPdf
-                        .Select(hole => hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
-                        .Where(hole => hole.Count >= 3)
-                        .ToList(),
-                };
-            }).ToList();
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            QuarantineCorruptJson(path, "LoadMeasurements", ex);
-            return [];
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"LoadMeasurements failed for {path}");
-            return [];
-        }
-    }
-
-    public static void SaveMeasurements(string takeoffFolder, IEnumerable<Measurement> measurements)
-    {
-        Directory.CreateDirectory(takeoffFolder);
-        var dtos = measurements.Select(m => new MeasurementDto
-        {
-            Id = m.Id,
-            Name = m.Name,
-            Notes = m.Notes,
-            MType = NormalizeMeasurementType(m.MType),
-            Color = m.Color,
-            PageFolder = m.PageFolder,
-            ScaleMetersPerPt = m.ScaleMetersPerPt,
-            JoistDirectionDegrees = m.JoistDirectionDegrees,
-            JoistDirectionLocked = m.JoistDirectionLocked,
-            PointsPdf = m.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
-            HolesPdf = m.Holes
-                .Where(hole => hole.Count >= 3)
-                .Select(hole => hole.Select(p => new PointDto(p.X, p.Y)).ToList())
-                .ToList(),
-        }).ToList();
-
-        try
-        {
-            IoUtil.WriteAllTextAtomic(
-                MeasurementsJsonPath(takeoffFolder),
-                JsonSerializer.Serialize(dtos, JsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(MeasurementsJsonPath(takeoffFolder))}': {ex.Message}", ex);
-        }
-    }
-
-    public static List<PageAnnotation> LoadPageAnnotations(string pageFolder)
-    {
-        string path = PageAnnotationsJsonPath(pageFolder);
-        if (!File.Exists(path)) return [];
-
-        try
-        {
-            var dtos = JsonSerializer.Deserialize<List<PageAnnotationDto>>(File.ReadAllText(path)) ?? [];
-            return dtos.Select(dto => new PageAnnotation
-            {
-                Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
-                Kind = NormalizePageAnnotationKind(dto.Kind),
-                Text = dto.Text ?? "",
-                Color = string.IsNullOrWhiteSpace(dto.Color) ? "#1565C0" : dto.Color,
-                PageFolder = string.IsNullOrWhiteSpace(dto.PageFolder) ? pageFolder : dto.PageFolder,
-                ScaleMetersPerPt = dto.ScaleMetersPerPt,
-                Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
-            }).ToList();
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            QuarantineCorruptJson(path, "LoadPageAnnotations", ex);
-            return [];
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"LoadPageAnnotations failed for {path}");
-            return [];
-        }
-    }
-
-    public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations)
-    {
-        Directory.CreateDirectory(pageFolder);
-        var dtos = annotations.Select(annotation => new PageAnnotationDto
-        {
-            Id = annotation.Id,
-            Kind = NormalizePageAnnotationKind(annotation.Kind),
-            Text = annotation.Text ?? "",
-            Color = string.IsNullOrWhiteSpace(annotation.Color) ? "#1565C0" : annotation.Color,
-            PageFolder = string.IsNullOrWhiteSpace(annotation.PageFolder) ? pageFolder : annotation.PageFolder,
-            ScaleMetersPerPt = annotation.ScaleMetersPerPt,
-            PointsPdf = annotation.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
-        }).ToList();
-
-        try
-        {
-            IoUtil.WriteAllTextAtomic(
-                PageAnnotationsJsonPath(pageFolder),
-                JsonSerializer.Serialize(dtos, JsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(PageAnnotationsJsonPath(pageFolder))}': {ex.Message}", ex);
-        }
-    }
+    public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations) =>
+        PageAnnotationStore.SavePageAnnotations(pageFolder, annotations);
 
     public static bool IsPageFolder(string folder) =>
         File.Exists(Path.Combine(folder, "source.json"));
@@ -814,34 +304,14 @@ public static class OurPlaneCoreJobStore
     public static string DisplayName(string folder) =>
         ReadName(folder) ?? Path.GetFileName(folder);
 
-    private static string MeasurementsJsonPath(string takeoffFolder) =>
-        Path.Combine(takeoffFolder, "measurements.json");
-
     public static string PageAnnotationsJsonPath(string pageFolder) =>
-        Path.Combine(pageFolder, "annotations.json");
+        PageAnnotationStore.PageAnnotationsJsonPath(pageFolder);
 
-    public static string NormalizePageAnnotationKind(string value)
-    {
-        string clean = (value ?? "").Trim().ToLowerInvariant();
-        return clean switch
-        {
-            "dimension" or "ruler" => "dimension",
-            "arrow" => "arrow",
-            "rectangle" or "rect" or "box" => "rectangle",
-            _ => "line",
-        };
-    }
+    public static string NormalizePageAnnotationKind(string value) =>
+        PageAnnotationStore.NormalizePageAnnotationKind(value);
 
-    public static bool IsTakeoffItemFolder(string folder)
-    {
-        string? kind = ReadProperty(folder, "SmartNodeKind");
-        if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (string.Equals(kind, "folder", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return File.Exists(MeasurementsJsonPath(folder)) || ReadProperty(folder, "Color") != null;
-    }
+    public static bool IsTakeoffItemFolder(string folder) =>
+        TakeoffStore.IsTakeoffItemFolder(folder);
 
     public static IReadOnlyList<string> GetOrderedChildDirectories(string parentFolder)
     {
@@ -903,10 +373,10 @@ public static class OurPlaneCoreJobStore
         string displayName = DisplayName(sourcePath);
         string copyName = UniqueCopyDisplayName(targetFolder, displayName);
         string destPath = Path.Combine(targetFolder, SanitizeName(copyName, 120));
-        var pageSources = CollectPageSources(sourcePath);
+        var pageSources = PageStore.CollectPageSources(sourcePath);
 
         CopyDirectory(sourcePath, destPath);
-        RewritePageSources(destPath, pageSources);
+        PageStore.RewritePageSources(destPath, pageSources);
         RegenerateGuidsRecursively(destPath);
         RegenerateMeasurementIdsRecursively(destPath);
         UpdateItemName(destPath, copyName);
@@ -925,10 +395,10 @@ public static class OurPlaneCoreJobStore
             ? UniqueCopyDisplayName(targetFolder, displayName)
             : displayName;
         string destPath = Path.Combine(targetFolder, SanitizeName(targetName, 120));
-        var pageSources = CollectPageSources(sourcePath);
+        var pageSources = PageStore.CollectPageSources(sourcePath);
 
         Directory.Move(sourcePath, destPath);
-        RewritePageSources(destPath, pageSources);
+        PageStore.RewritePageSources(destPath, pageSources);
         if (!string.Equals(displayName, targetName, StringComparison.Ordinal))
             UpdateItemName(destPath, targetName);
         SetOrderIndex(destPath, GetNextOrderIndex(targetFolder));
@@ -1037,230 +507,25 @@ public static class OurPlaneCoreJobStore
         };
     }
 
-    public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers)
-    {
-        SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return;
-
-        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
-        WriteSource(
-            pageFolder,
-            pdfAbs,
-            src.Page,
-            src.ScaleMetersPerPt,
-            pdfLayers,
-            pdfLayersCached: true,
-            src.LegendTakeoffOrder,
-            src.OverlayPageFolder,
-            src.OverlayColor,
-            src.OverlayOpacity,
-            src.OverlayOffsetXPt,
-            src.OverlayOffsetYPt,
-            src.OverlayScale);
-    }
+    public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers) =>
+        PageStore.SavePageLayerCache(pageFolder, pdfLayers);
 
     public static string PageLayersJsonPath(string pageFolder) =>
-        Path.Combine(pageFolder, "layers.json");
+        PageStore.PageLayersJsonPath(pageFolder);
 
     public static string SourcePdfMetadataPath(string pageFolder) =>
-        Path.Combine(pageFolder, "source_pdf.json");
+        PageStore.SourcePdfMetadataPath(pageFolder);
 
-    public static PdfSheetMetadata? ReadSourcePdfMetadata(string pageFolder)
-    {
-        string path = SourcePdfMetadataPath(pageFolder);
-        if (!File.Exists(path)) return null;
+    public static PdfSheetMetadata? ReadSourcePdfMetadata(string pageFolder) =>
+        PageStore.ReadSourcePdfMetadata(pageFolder);
 
-        try
-        {
-            return JsonSerializer.Deserialize<PdfSheetMetadata>(File.ReadAllText(path));
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            QuarantineCorruptJson(path, "ReadSourcePdfMetadata", ex);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"ReadSourcePdfMetadata failed for {path}");
-            return null;
-        }
-    }
+    public static void WriteSourcePdfMetadata(string pageFolder, PdfSheetMetadata metadata) =>
+        PageStore.WriteSourcePdfMetadata(pageFolder, metadata);
 
-    public static void WriteSourcePdfMetadata(string pageFolder, PdfSheetMetadata metadata)
-    {
-        Directory.CreateDirectory(pageFolder);
-        try
-        {
-            IoUtil.WriteAllTextAtomic(
-                SourcePdfMetadataPath(pageFolder),
-                JsonSerializer.Serialize(metadata, JsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(SourcePdfMetadataPath(pageFolder))}': {ex.Message}", ex);
-        }
-    }
+    public static PageLayerManifest? ReadPageLayerManifest(string pageFolder) =>
+        PageStore.ReadPageLayerManifest(pageFolder);
 
-    public static PageLayerManifest? ReadPageLayerManifest(string pageFolder)
-    {
-        string path = PageLayersJsonPath(pageFolder);
-        if (!File.Exists(path)) return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<PageLayerManifest>(File.ReadAllText(path));
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-            QuarantineCorruptJson(path, "ReadPageLayerManifest", ex);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"ReadPageLayerManifest failed for {path}");
-            return null;
-        }
-    }
-
-    private static void WriteSource(
-        string pageFolder,
-        string pdfAbsPath,
-        int pageIndex,
-        double scaleMetersPerPt,
-        IReadOnlyList<PdfLayerInfo>? pdfLayers = null,
-        bool pdfLayersCached = false,
-        IReadOnlyList<string>? legendTakeoffOrder = null,
-        string overlayPageFolder = "",
-        string overlayColor = "#E53935",
-        double overlayOpacity = 0.55,
-        double overlayOffsetXPt = 0,
-        double overlayOffsetYPt = 0,
-        double overlayScale = 1.0)
-    {
-        var src = new SourceInfo
-        {
-            Pdf = Path.GetRelativePath(pageFolder, pdfAbsPath),
-            Page = pageIndex,
-            ScaleMetersPerPt = scaleMetersPerPt,
-            PdfLayersCached = pdfLayersCached,
-            PdfLayers = pdfLayers?.ToList() ?? [],
-            LegendTakeoffOrder = legendTakeoffOrder?
-                .Where(entry => !string.IsNullOrWhiteSpace(entry))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList() ?? [],
-            OverlayPageFolder = MakeRelativePageReference(pageFolder, overlayPageFolder),
-            OverlayColor = string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
-            OverlayOpacity = NormalizeOverlayOpacity(overlayOpacity),
-            OverlayOffsetXPt = NormalizeOverlayOffset(overlayOffsetXPt),
-            OverlayOffsetYPt = NormalizeOverlayOffset(overlayOffsetYPt),
-            OverlayScale = NormalizeOverlayScale(overlayScale),
-        };
-        try
-        {
-            IoUtil.WriteAllTextAtomic(
-                Path.Combine(pageFolder, "source.json"),
-                JsonSerializer.Serialize(src, JsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(Path.Combine(pageFolder, "source.json"))}': {ex.Message}", ex);
-        }
-        WritePageLayerManifest(pageFolder, src);
-    }
-
-    private static void WritePageLayerManifest(string pageFolder, SourceInfo src)
-    {
-        string path = PageLayersJsonPath(pageFolder);
-        if (src.PdfLayers.Count == 0)
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-            return;
-        }
-
-        var manifest = new PageLayerManifest
-        {
-            SourcePdf = src.Pdf,
-            Page = src.Page,
-            PageNumber = src.Page + 1,
-            GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-            LayerCount = src.PdfLayers.Count,
-            Layers = src.PdfLayers
-                .OrderBy(layer => layer.Number)
-                .Select(layer => new PdfLayerInfo
-                {
-                    Number = layer.Number,
-                    Name = layer.Name,
-                    IsOn = layer.IsOn,
-                })
-                .ToList(),
-        };
-
-        try
-        {
-            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(manifest, JsonOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException($"Failed to save '{Path.GetFileName(path)}': {ex.Message}", ex);
-        }
-    }
-
-    private static void RewritePageSources(string newRoot, IReadOnlyList<PageSourceSnapshot> snapshots)
-    {
-        foreach (var snap in snapshots)
-        {
-            string targetFolder = snap.RelativeFolder == "."
-                ? newRoot
-                : Path.Combine(newRoot, snap.RelativeFolder);
-            if (Directory.Exists(targetFolder))
-                WriteSource(
-                    targetFolder,
-                    snap.PdfAbsPath,
-                    snap.Page,
-                    snap.ScaleMetersPerPt,
-                    snap.PdfLayers,
-                    snap.PdfLayersCached,
-                    overlayPageFolder: snap.OverlayPageFolder,
-                    overlayColor: snap.OverlayColor,
-                    overlayOpacity: snap.OverlayOpacity,
-                    overlayOffsetXPt: snap.OverlayOffsetXPt,
-                    overlayOffsetYPt: snap.OverlayOffsetYPt,
-                    overlayScale: snap.OverlayScale);
-        }
-    }
-
-    private static List<PageSourceSnapshot> CollectPageSources(string rootFolder)
-    {
-        var snapshots = new List<PageSourceSnapshot>();
-        if (!Directory.Exists(rootFolder)) return snapshots;
-
-        foreach (string dir in EnumerateSelfAndDescendants(rootFolder))
-        {
-            SourceInfo? src = ReadSource(dir);
-            if (src == null) continue;
-
-            string rel = Path.GetRelativePath(rootFolder, dir);
-            string pdfAbs = Path.GetFullPath(Path.Combine(dir, src.Pdf));
-            snapshots.Add(new PageSourceSnapshot(
-                rel,
-                pdfAbs,
-                src.Page,
-                src.ScaleMetersPerPt,
-                src.PdfLayersCached,
-                src.PdfLayers,
-                ResolveRelativePagePath(dir, src.OverlayPageFolder),
-                src.OverlayColor,
-                src.OverlayOpacity,
-                src.OverlayOffsetXPt,
-                src.OverlayOffsetYPt,
-                src.OverlayScale));
-        }
-
-        return snapshots;
-    }
-
-    private static void WriteItemDataXml(string folder, string itemClass, string name, int orderIndex)
+    internal static void WriteItemDataXml(string folder, string itemClass, string name, int orderIndex)
     {
         string guid = Guid.NewGuid().ToString().ToUpperInvariant();
         var root = new XElement("Item",
@@ -1277,7 +542,7 @@ public static class OurPlaneCoreJobStore
         doc.Save(Path.Combine(folder, "Data.xml"));
     }
 
-    private static int GetNextOrderIndex(string parentFolder)
+    internal static int GetNextOrderIndex(string parentFolder)
     {
         if (!Directory.Exists(parentFolder)) return 1;
 
@@ -1413,7 +678,7 @@ public static class OurPlaneCoreJobStore
             SetOrderIndex(folder, order++);
     }
 
-    private static void UpdateItemName(string folder, string name)
+    internal static void UpdateItemName(string folder, string name)
     {
         string path = Path.Combine(folder, "Data.xml");
         if (!File.Exists(path)) return;
@@ -1437,7 +702,7 @@ public static class OurPlaneCoreJobStore
     {
         foreach (string dir in EnumerateSelfAndDescendants(folder))
         {
-            string path = MeasurementsJsonPath(dir);
+            string path = TakeoffStore.MeasurementsJsonPath(dir);
             if (!File.Exists(path)) continue;
 
             try
@@ -1469,7 +734,7 @@ public static class OurPlaneCoreJobStore
         doc.Save(path);
     }
 
-    private static void SetProperty(string folder, string propertyName, string value)
+    internal static void SetProperty(string folder, string propertyName, string value)
     {
         string path = Path.Combine(folder, "Data.xml");
         if (!File.Exists(path)) return;
@@ -1499,7 +764,7 @@ public static class OurPlaneCoreJobStore
         prop.SetAttributeValue("Value", value);
     }
 
-    private static string? ReadProperty(string folder, string propertyName)
+    internal static string? ReadProperty(string folder, string propertyName)
     {
         XElement? root = ReadDataRoot(folder);
         return root?
@@ -1509,25 +774,6 @@ public static class OurPlaneCoreJobStore
             .Attribute("Value")?
             .Value;
     }
-
-    private static double ParseDouble(string? value)
-    {
-        return double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out double parsed)
-            ? parsed
-            : 0;
-    }
-
-    private static double ParsePositiveDouble(string? value, double fallback)
-    {
-        double parsed = ParseDouble(value);
-        return parsed > 0 ? parsed : fallback;
-    }
-
-    private static bool ParseBool(string? value) =>
-        bool.TryParse(value, out bool parsed) && parsed;
-
-    private static bool ParseBool(string? value, bool fallback) =>
-        bool.TryParse(value, out bool parsed) ? parsed : fallback;
 
     private static XElement? ReadDataRoot(string folder)
     {
@@ -1544,7 +790,7 @@ public static class OurPlaneCoreJobStore
         }
     }
 
-    private static string UniqueDirectoryPath(string desiredPath)
+    internal static string UniqueDirectoryPath(string desiredPath)
     {
         if (!Directory.Exists(desiredPath)) return desiredPath;
 
@@ -1555,7 +801,7 @@ public static class OurPlaneCoreJobStore
         }
     }
 
-    private static string UniqueFilePath(string desiredPath)
+    internal static string UniqueFilePath(string desiredPath)
     {
         if (!File.Exists(desiredPath)) return desiredPath;
 
@@ -1600,7 +846,7 @@ public static class OurPlaneCoreJobStore
         }
     }
 
-    private static IEnumerable<string> EnumerateSelfAndDescendants(string rootFolder)
+    internal static IEnumerable<string> EnumerateSelfAndDescendants(string rootFolder)
     {
         yield return rootFolder;
         foreach (string dir in Directory.EnumerateDirectories(rootFolder, "*", SearchOption.AllDirectories))
@@ -1613,7 +859,7 @@ public static class OurPlaneCoreJobStore
         return full + Path.DirectorySeparatorChar;
     }
 
-    private static void QuarantineCorruptJson(string path, string context, Exception exception)
+    internal static void QuarantineCorruptJson(string path, string context, Exception exception)
     {
         AppLog.Error(exception, $"{context} failed for {path}");
         string targetPath = "";
@@ -1651,20 +897,6 @@ public static class OurPlaneCoreJobStore
                 return candidate;
         }
     }
-
-    private sealed record PageSourceSnapshot(
-        string RelativeFolder,
-        string PdfAbsPath,
-        int Page,
-        double ScaleMetersPerPt,
-        bool PdfLayersCached,
-        IReadOnlyList<PdfLayerInfo> PdfLayers,
-        string OverlayPageFolder,
-        string OverlayColor,
-        double OverlayOpacity,
-        double OverlayOffsetXPt,
-        double OverlayOffsetYPt,
-        double OverlayScale);
 
     private sealed class NaturalStringComparer : IComparer<string>
     {
