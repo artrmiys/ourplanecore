@@ -95,7 +95,20 @@ public sealed partial class PdfViewport : SKElement
     public  string   ActiveColor      { get; set; } = "#FF4444";
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;
-    public  string   ViewBackgroundColor { get; set; } = "#FFFFFF";
+    private string _viewBackgroundColor = ViewportBackgroundPolicy.DefaultColor;
+    public  string   ViewBackgroundColor
+    {
+        get => _viewBackgroundColor;
+        set
+        {
+            string clean = ViewportBackgroundPolicy.NormalizeColor(value);
+            if (string.Equals(_viewBackgroundColor, clean, StringComparison.Ordinal))
+                return;
+
+            _viewBackgroundColor = clean;
+            RequestRepaint();
+        }
+    }
     public  bool     ShowMeasurementLabels { get; set; } = true;
     public  bool     ShowLineLabels { get; set; } = true;
     public  bool     ShowAreaLabels { get; set; } = true;

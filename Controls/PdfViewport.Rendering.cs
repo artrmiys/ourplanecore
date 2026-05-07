@@ -138,11 +138,11 @@ public sealed partial class PdfViewport
         canvas.DrawRect(new SKRect(0, 0, width, height), paint);
     }
 
-    private static void DrawBlankPageLoadingSurface(SKCanvas canvas, float width, float height)
+    private void DrawBlankPageLoadingSurface(SKCanvas canvas, float width, float height)
     {
         using var paint = new SKPaint
         {
-            Color = SKColors.White,
+            Color = GetCachedColor(ViewBackgroundColor, SKColors.White),
             Style = SKPaintStyle.Fill,
             IsAntialias = false,
         };

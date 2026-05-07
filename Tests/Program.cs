@@ -85,6 +85,8 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
+    ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
+    ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
     ("viewport high zoom respects fast navigation toggle", ViewportHighZoomRespectsFastNavigationToggle),
     ("viewport far zoom respects fast navigation toggle", ViewportFarZoomRespectsFastNavigationToggle),
     ("viewport dense page respects fast navigation toggle", ViewportDensePageRespectsFastNavigationToggle),
@@ -1117,6 +1119,19 @@ static void ViewportRenderScaleChoosesNextQualityStep()
     AssertClose(0.75, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom clamps to first render step");
     AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
     AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom stays on responsive render cap");
+}
+
+static void ViewportBackgroundDefaultsToOpaqueWhite()
+{
+    AssertEqual("#FFFFFF", ViewportBackgroundPolicy.NormalizeColor(null), "null falls back to white");
+    AssertEqual("#FFFFFF", ViewportBackgroundPolicy.NormalizeColor("   "), "blank falls back to white");
+    AssertEqual("#FFFFFF", ViewportBackgroundPolicy.NormalizeColor("not-a-color"), "invalid falls back to white");
+}
+
+static void ViewportBackgroundStripsTransparency()
+{
+    AssertEqual("#ABCDEF", ViewportBackgroundPolicy.NormalizeColor("#00ABCDEF"), "transparent alpha is removed");
+    AssertEqual("#ABCDEF", ViewportBackgroundPolicy.NormalizeColor(" #abcdef "), "valid color is canonicalized");
 }
 
 static void ViewportHighZoomRespectsFastNavigationToggle()

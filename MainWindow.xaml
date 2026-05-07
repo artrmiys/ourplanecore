@@ -518,7 +518,10 @@
                                 Background="{DynamicResource PanelBackgroundBrush}"
                                 Foreground="{DynamicResource ControlForegroundBrush}"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"/>
-                    <Grid x:Name="ViewportSurfaceHost" Grid.Row="1"/>
+                    <Grid x:Name="ViewportSurfaceHost"
+                          Grid.Row="1"
+                          Background="#FFFFFF"
+                          ClipToBounds="True"/>
                     <Border x:Name="ViewportLayerTraceBar"
                             Grid.Row="1"
                             HorizontalAlignment="Right"

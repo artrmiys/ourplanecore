@@ -74,9 +74,11 @@ public partial class MainWindow
 
     private void ApplyViewportBackground(string color, bool persist)
     {
-        string cleanColor = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color;
+        string cleanColor = ViewportBackgroundPolicy.NormalizeColor(color);
+        var backgroundBrush = new SolidColorBrush(ParseWpfColor(cleanColor, Colors.White));
         _viewport.ViewBackgroundColor = cleanColor;
-        ViewportHost.Background = new SolidColorBrush(ParseWpfColor(cleanColor, Colors.White));
+        ViewportHost.Background = backgroundBrush;
+        ViewportSurfaceHost.Background = backgroundBrush;
         _viewport.InvalidateVisual();
 
         if (persist)

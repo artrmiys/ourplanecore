@@ -259,7 +259,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _viewport = new PdfViewport();
+        _viewport = new PdfViewport
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
         _viewport.StatusChanged      += msg => TxtStatus.Text = msg;
         _viewport.ScaleChanged       += OnScaleChanged;
         _viewport.ToolChanged        += OnToolChanged;
