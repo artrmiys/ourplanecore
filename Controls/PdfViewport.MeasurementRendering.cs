@@ -376,8 +376,6 @@ public sealed partial class PdfViewport
     {
         if (!ShowMeasurementLabels)
             return false;
-        if (_renderNavigationFastFrame)
-            return false;
 
         return measurementType switch
         {

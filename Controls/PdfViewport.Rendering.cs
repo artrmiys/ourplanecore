@@ -96,11 +96,8 @@ public sealed partial class PdfViewport
                 DrawMeasurementLabels(canvas, visiblePdf);
             }
 
-            if (!_renderNavigationFastFrame)
-            {
-                DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
-                DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
-            }
+            DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
+            DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
         }
         finally
         {

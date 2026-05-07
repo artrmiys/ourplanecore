@@ -79,7 +79,7 @@ public partial class MainWindow
             Background = page.OverlayVisible ? swatchBrush : Brushes.Transparent,
             BorderBrush = secondaryBrush,
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(28, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -88,6 +88,7 @@ public partial class MainWindow
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        nameRow.Children.Add(BuildPageOverlayVisibilityDot(page, swatchBrush));
         nameRow.Children.Add(colorBox);
         nameRow.Children.Add(new TextBlock
         {
@@ -101,6 +102,31 @@ public partial class MainWindow
             ? "Sheet overlay. Right-click to hide, move, scale, recolor, or clear."
             : "Sheet overlay is hidden. Right-click to show it.";
         return dock;
+    }
+
+    private FrameworkElement BuildPageOverlayVisibilityDot(PageInfo page, Brush swatchBrush)
+    {
+        var dot = new Border
+        {
+            Width = 11,
+            Height = 11,
+            CornerRadius = new CornerRadius(6),
+            Background = page.OverlayVisible ? swatchBrush : Brushes.Transparent,
+            BorderBrush = swatchBrush,
+            BorderThickness = new Thickness(1.5),
+            Margin = new Thickness(2, 0, 7, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = Cursors.Hand,
+            ToolTip = page.OverlayVisible
+                ? $"Hide overlay on {page.Name}"
+                : $"Show overlay on {page.Name}",
+        };
+        dot.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            TogglePageOverlayVisibility(page);
+            e.Handled = true;
+        };
+        return dot;
     }
 
     private FrameworkElement BuildPageTakeoffHeader(PageInfo page, TakeoffItem takeoff, int legendIndex)

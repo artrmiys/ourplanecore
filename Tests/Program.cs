@@ -85,11 +85,11 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
-    ("viewport high zoom uses automatic fast navigation", ViewportHighZoomUsesAutomaticFastNavigation),
-    ("viewport far zoom uses automatic fast navigation", ViewportFarZoomUsesAutomaticFastNavigation),
-    ("viewport dense page uses automatic fast navigation", ViewportDensePageUsesAutomaticFastNavigation),
+    ("viewport high zoom respects fast navigation toggle", ViewportHighZoomRespectsFastNavigationToggle),
+    ("viewport far zoom respects fast navigation toggle", ViewportFarZoomRespectsFastNavigationToggle),
+    ("viewport dense page respects fast navigation toggle", ViewportDensePageRespectsFastNavigationToggle),
     ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
-    ("viewport measurement LOD skips distant labels", ViewportMeasurementLodSkipsDistantLabels),
+    ("viewport measurement labels survive distant zoom", ViewportMeasurementLabelsSurviveDistantZoom),
     ("viewport measurement LOD limits dense details", ViewportMeasurementLodLimitsDenseDetails),
     ("viewport LOD hides expensive layers during fast frames", ViewportLodHidesExpensiveLayersDuringFastFrames),
 };
@@ -1119,49 +1119,76 @@ static void ViewportRenderScaleChoosesNextQualityStep()
     AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom stays on responsive render cap");
 }
 
-static void ViewportHighZoomUsesAutomaticFastNavigation()
+static void ViewportHighZoomRespectsFastNavigationToggle()
 {
-    AssertTrue(
+    AssertFalse(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold,
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
-        "high zoom should get fast navigation even without the manual setting");
+        "disabled fast navigation should keep full high-zoom frames");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: true,
+            isFastNavigating: true,
+            zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold,
+            activePageMeasurementCount: 0,
+            hasBlockingInteraction: false),
+        "enabled fast navigation should use fast frames at high zoom");
 
     AssertFalse(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
-            simplifyNavigationRendering: false,
+            simplifyNavigationRendering: true,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold - 0.1f,
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
-        "lower zoom should still respect the manual fast navigation setting");
+        "lower zoom should stay full frame when no fast-frame trigger is active");
 }
 
-static void ViewportFarZoomUsesAutomaticFastNavigation()
+static void ViewportFarZoomRespectsFastNavigationToggle()
 {
-    AssertTrue(
+    AssertFalse(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.FarZoomFastFrameThreshold,
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
-        "far zoom should use fast navigation while the user is moving around");
+        "disabled fast navigation should keep full far-zoom frames");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: true,
+            isFastNavigating: true,
+            zoom: ViewportRenderPolicy.FarZoomFastFrameThreshold,
+            activePageMeasurementCount: 0,
+            hasBlockingInteraction: false),
+        "enabled fast navigation should use fast frames at far zoom");
 }
 
-static void ViewportDensePageUsesAutomaticFastNavigation()
+static void ViewportDensePageRespectsFastNavigationToggle()
 {
-    AssertTrue(
+    AssertFalse(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: 1.0f,
             activePageMeasurementCount: ViewportRenderPolicy.DenseNavigationFastFrameThreshold,
             hasBlockingInteraction: false),
-        "dense pages should use fast navigation even at medium zoom");
+        "disabled fast navigation should keep full dense-page frames");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: true,
+            isFastNavigating: true,
+            zoom: 1.0f,
+            activePageMeasurementCount: ViewportRenderPolicy.DenseNavigationFastFrameThreshold,
+            hasBlockingInteraction: false),
+        "enabled fast navigation should use fast frames for dense pages");
 }
 
 static void ViewportEditingBlocksFastNavigationFrame()
@@ -1176,14 +1203,14 @@ static void ViewportEditingBlocksFastNavigationFrame()
         "active edit interaction should keep the full render frame");
 }
 
-static void ViewportMeasurementLodSkipsDistantLabels()
+static void ViewportMeasurementLabelsSurviveDistantZoom()
 {
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldDrawMeasurementLabels(
             zoom: ViewportRenderPolicy.MeasurementLabelMinZoom - 0.01f,
             activePageMeasurementCount: 1,
             fastNavigationFrame: false),
-        "distant zoom should skip measurement labels");
+        "distant zoom should keep measurement labels controlled by display toggles");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldDrawMeasurementLabels(
@@ -1191,6 +1218,20 @@ static void ViewportMeasurementLodSkipsDistantLabels()
             activePageMeasurementCount: 1,
             fastNavigationFrame: false),
         "near zoom should draw labels for small pages");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+            zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold,
+            activePageMeasurementCount: 1,
+            fastNavigationFrame: true),
+        "small-page labels should not blink off during fast navigation frames");
+
+    AssertFalse(
+        ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+            zoom: 2.0f,
+            activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementLabelThreshold + 1,
+            fastNavigationFrame: false),
+        "very dense pages can still suppress expensive label drawing");
 }
 
 static void ViewportMeasurementLodLimitsDenseDetails()

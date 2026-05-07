@@ -27,10 +27,10 @@ public static class ViewportRenderPolicy
         int activePageMeasurementCount,
         bool hasBlockingInteraction)
     {
-        return isFastNavigating &&
+        return simplifyNavigationRendering &&
+               isFastNavigating &&
                !hasBlockingInteraction &&
-               (simplifyNavigationRendering ||
-                zoom <= FarZoomFastFrameThreshold ||
+               (zoom <= FarZoomFastFrameThreshold ||
                 zoom >= HighZoomFastFrameThreshold ||
                 activePageMeasurementCount >= DenseNavigationFastFrameThreshold);
     }
@@ -56,9 +56,7 @@ public static class ViewportRenderPolicy
         int activePageMeasurementCount,
         bool fastNavigationFrame)
     {
-        return !fastNavigationFrame &&
-               zoom >= MeasurementLabelMinZoom &&
-               activePageMeasurementCount <= DenseMeasurementLabelThreshold;
+        return activePageMeasurementCount <= DenseMeasurementLabelThreshold;
     }
 
     public static bool ShouldDrawMeasurementDetails(
