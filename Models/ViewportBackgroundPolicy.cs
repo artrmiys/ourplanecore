@@ -5,6 +5,7 @@ namespace OurPlaneCore;
 public static class ViewportBackgroundPolicy
 {
     public const string DefaultColor = "#FFFFFF";
+    public const byte PageTintAlpha = 82;
 
     public static string NormalizeColor(string? color)
     {
@@ -18,5 +19,19 @@ public static class ViewportBackgroundPolicy
         {
             return DefaultColor;
         }
+    }
+
+    public static bool IsDefaultColor(string? color) =>
+        string.Equals(NormalizeColor(color), DefaultColor, StringComparison.Ordinal);
+
+    public static bool ShouldTintRenderedPage(string? color)
+    {
+        string clean = NormalizeColor(color);
+        if (string.Equals(clean, DefaultColor, StringComparison.Ordinal))
+            return false;
+
+        SKColor parsed = SKColor.Parse(clean);
+        double luminance = ((0.2126 * parsed.Red) + (0.7152 * parsed.Green) + (0.0722 * parsed.Blue)) / 255.0;
+        return luminance >= 0.70;
     }
 }

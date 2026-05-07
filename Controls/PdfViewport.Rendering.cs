@@ -68,6 +68,7 @@ public sealed partial class PdfViewport
                         (srcRight / _bitmapScale - _panX) * _zoom,
                         (srcBottom / _bitmapScale - _panY) * _zoom);
                     canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
+                    DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);
                 }
             }
@@ -136,6 +137,21 @@ public sealed partial class PdfViewport
             IsAntialias = false,
         };
         canvas.DrawRect(new SKRect(0, 0, width, height), paint);
+    }
+
+    private void DrawPageBackgroundTint(SKCanvas canvas, SKRect rect)
+    {
+        if (!ViewportBackgroundPolicy.ShouldTintRenderedPage(PageBackgroundColor))
+            return;
+
+        using var paint = new SKPaint
+        {
+            Color = GetCachedColor(PageBackgroundColor, SKColors.White).WithAlpha(ViewportBackgroundPolicy.PageTintAlpha),
+            Style = SKPaintStyle.Fill,
+            BlendMode = SKBlendMode.Multiply,
+            IsAntialias = false,
+        };
+        canvas.DrawRect(rect, paint);
     }
 
     private void DrawBlankPageLoadingSurface(SKCanvas canvas, float width, float height)

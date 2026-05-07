@@ -87,6 +87,7 @@ var tests = new List<(string Name, Action Run)>
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
     ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
+    ("viewport background tints comfort colors", ViewportBackgroundTintsComfortColors),
     ("viewport high zoom respects fast navigation toggle", ViewportHighZoomRespectsFastNavigationToggle),
     ("viewport far zoom respects fast navigation toggle", ViewportFarZoomRespectsFastNavigationToggle),
     ("viewport dense page respects fast navigation toggle", ViewportDensePageRespectsFastNavigationToggle),
@@ -1132,6 +1133,14 @@ static void ViewportBackgroundStripsTransparency()
 {
     AssertEqual("#ABCDEF", ViewportBackgroundPolicy.NormalizeColor("#00ABCDEF"), "transparent alpha is removed");
     AssertEqual("#ABCDEF", ViewportBackgroundPolicy.NormalizeColor(" #abcdef "), "valid color is canonicalized");
+}
+
+static void ViewportBackgroundTintsComfortColors()
+{
+    AssertFalse(ViewportBackgroundPolicy.ShouldTintRenderedPage("#FFFFFF"), "default white is not tinted");
+    AssertTrue(ViewportBackgroundPolicy.ShouldTintRenderedPage("#FFF8E8"), "warm paper tints rendered page");
+    AssertTrue(ViewportBackgroundPolicy.ShouldTintRenderedPage("#EFF7ED"), "soft green tints rendered page");
+    AssertFalse(ViewportBackgroundPolicy.ShouldTintRenderedPage("#2B2B2B"), "dark edge does not tint rendered page");
 }
 
 static void ViewportHighZoomRespectsFastNavigationToggle()

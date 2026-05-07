@@ -15,6 +15,7 @@ public sealed class AppSettings
     public string UnitMode { get; set; } = "Imperial";
     public string Theme { get; set; } = "Light";
     public string ViewportBackground { get; set; } = "#FFFFFF";
+    public string PageBackground { get; set; } = "#FFFFFF";
     public bool ShowMeasurementLabels { get; set; } = true;
     public bool ShowLineLabels { get; set; } = true;
     public bool ShowAreaLabels { get; set; } = true;

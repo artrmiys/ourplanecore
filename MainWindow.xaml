@@ -160,8 +160,35 @@
                                        ToolTip="Viewport units and theme"/>
                             <CheckBox x:Name="ChkDisplayImperial" Content="ft/sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                       ToolTip="Imperial units (ft / sf / ea). Off = metric."/>
-                            <Button x:Name="BtnDisplayViewportBg" Content="BG" Click="BtnViewportBg_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Pick viewport background color"/>
+                            <TextBlock Text="Edge" Style="{StaticResource TopCommandLabel}"
+                                       Margin="0,0,3,0"
+                                       ToolTip="Background around the PDF sheet"/>
+                            <ComboBox x:Name="ComboDisplayViewportBackground"
+                                      Width="82"
+                                      Height="24"
+                                      FontSize="11"
+                                      Margin="0,0,5,0"
+                                      SelectionChanged="ComboDisplayViewportBackground_SelectionChanged"
+                                      ToolTip="Choose the background around the sheet">
+                                <ComboBoxItem Content="White" Tag="#FFFFFF"/>
+                                <ComboBoxItem Content="Gray" Tag="#F2F2F2"/>
+                                <ComboBoxItem Content="Dark" Tag="#2B2B2B"/>
+                            </ComboBox>
+                            <TextBlock Text="Paper" Style="{StaticResource TopCommandLabel}"
+                                       Margin="0,0,3,0"
+                                       ToolTip="PDF page background tint for eye comfort"/>
+                            <ComboBox x:Name="ComboDisplayPageBackground"
+                                      Width="96"
+                                      Height="24"
+                                      FontSize="11"
+                                      Margin="0,0,5,0"
+                                      SelectionChanged="ComboDisplayPageBackground_SelectionChanged"
+                                      ToolTip="Choose a softer page background tint">
+                                <ComboBoxItem Content="White" Tag="#FFFFFF"/>
+                                <ComboBoxItem Content="Soft gray" Tag="#F2F2F2"/>
+                                <ComboBoxItem Content="Warm" Tag="#FFF8E8"/>
+                                <ComboBoxItem Content="Soft green" Tag="#EFF7ED"/>
+                            </ComboBox>
                             <CheckBox x:Name="ChkDisplaySimplifyNavigation" Content="Fast pan/zoom" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                       ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>
                             <ToggleButton x:Name="BtnDisplayDarkTheme" Content="Dark" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"

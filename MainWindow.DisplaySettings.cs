@@ -11,21 +11,17 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private void BtnViewportBg_Click(object sender, RoutedEventArgs e)
+    private void ComboDisplayViewportBackground_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var menu = new ContextMenu { PlacementTarget = (UIElement)sender, Placement = PlacementMode.Bottom };
-        AddViewportBgItem(menu, "White", "#FFFFFF");
-        AddViewportBgItem(menu, "Light gray", "#F2F2F2");
-        AddViewportBgItem(menu, "Warm paper", "#FFF8E8");
-        AddViewportBgItem(menu, "Dark gray", "#2B2B2B");
-        menu.IsOpen = true;
-    }
+        if (_isApplyingSettings)
+            return;
 
-    private void AddViewportBgItem(ContextMenu menu, string label, string color)
-    {
-        var mi = new MenuItem { Header = label, IsCheckable = true, IsChecked = _settings.ViewportBackground == color };
-        mi.Click += (_, _) => ApplyViewportBackground(color, persist: true);
-        menu.Items.Add(mi);
+        if (ComboDisplayViewportBackground.SelectedItem is not ComboBoxItem { Tag: string color })
+            return;
+
+        ApplyViewportBackground(color, persist: true);
+        SyncDisplaySettingsControls();
+        TxtStatus.Text = $"Viewport edge background: {ViewportBackgroundLabel(_settings.ViewportBackground)}.";
     }
 
     private void ComboFolderTemplateMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -42,6 +38,19 @@ public partial class MainWindow
         _settings.FolderTemplateMode = mode;
         SaveAppSettings();
         TxtStatus.Text = $"Folder template mode: {mode}.";
+    }
+
+    private void ComboDisplayPageBackground_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        if (ComboDisplayPageBackground.SelectedItem is not ComboBoxItem { Tag: string color })
+            return;
+
+        ApplyPageBackground(color, persist: true);
+        SyncDisplaySettingsControls();
+        TxtStatus.Text = $"Page paper background: {PageBackgroundLabel(_settings.PageBackground)}.";
     }
 
     private void BtnDarkTheme_Checked(object sender, RoutedEventArgs e) =>
@@ -424,6 +433,8 @@ public partial class MainWindow
             ChkDisplayHeaderScaleWithPage.IsChecked = _settings.ScaleSheetHeaderWithPage;
             ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
             ChkDisplaySimplifyNavigation.IsChecked = _settings.SimplifyViewportNavigation;
+            ComboDisplayViewportBackground.SelectedIndex = ViewportBackgroundSelectedIndex(_settings.ViewportBackground);
+            ComboDisplayPageBackground.SelectedIndex = PageBackgroundSelectedIndex(_settings.PageBackground);
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
         }
         finally
@@ -473,4 +484,59 @@ public partial class MainWindow
 
     private static string LegendAnchorLabel(string anchor) =>
         LegendAnchorOptions().FirstOrDefault(option => string.Equals(option.Anchor, anchor, StringComparison.OrdinalIgnoreCase)).Label ?? "Bottom Left";
+
+    private static int ViewportBackgroundSelectedIndex(string color)
+    {
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        for (int i = 0; i < ViewportBackgroundOptions().Count; i++)
+        {
+            if (string.Equals(ViewportBackgroundOptions()[i].Color, clean, StringComparison.Ordinal))
+                return i;
+        }
+
+        return 0;
+    }
+
+    private static string ViewportBackgroundLabel(string color)
+    {
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        return ViewportBackgroundOptions()
+            .FirstOrDefault(option => string.Equals(option.Color, clean, StringComparison.Ordinal))
+            .Label ?? "White";
+    }
+
+    private static IReadOnlyList<(string Label, string Color)> ViewportBackgroundOptions() =>
+    [
+        ("White", "#FFFFFF"),
+        ("Gray", "#F2F2F2"),
+        ("Dark", "#2B2B2B"),
+    ];
+
+    private static int PageBackgroundSelectedIndex(string color)
+    {
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        for (int i = 0; i < PageBackgroundOptions().Count; i++)
+        {
+            if (string.Equals(PageBackgroundOptions()[i].Color, clean, StringComparison.Ordinal))
+                return i;
+        }
+
+        return 0;
+    }
+
+    private static string PageBackgroundLabel(string color)
+    {
+        string clean = ViewportBackgroundPolicy.NormalizeColor(color);
+        return PageBackgroundOptions()
+            .FirstOrDefault(option => string.Equals(option.Color, clean, StringComparison.Ordinal))
+            .Label ?? "White";
+    }
+
+    private static IReadOnlyList<(string Label, string Color)> PageBackgroundOptions() =>
+    [
+        ("White", "#FFFFFF"),
+        ("Soft gray", "#F2F2F2"),
+        ("Warm", "#FFF8E8"),
+        ("Soft green", "#EFF7ED"),
+    ];
 }

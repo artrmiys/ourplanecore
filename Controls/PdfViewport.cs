@@ -109,6 +109,20 @@ public sealed partial class PdfViewport : SKElement
             RequestRepaint();
         }
     }
+    private string _pageBackgroundColor = ViewportBackgroundPolicy.DefaultColor;
+    public  string   PageBackgroundColor
+    {
+        get => _pageBackgroundColor;
+        set
+        {
+            string clean = ViewportBackgroundPolicy.NormalizeColor(value);
+            if (string.Equals(_pageBackgroundColor, clean, StringComparison.Ordinal))
+                return;
+
+            _pageBackgroundColor = clean;
+            RequestRepaint();
+        }
+    }
     public  bool     ShowMeasurementLabels { get; set; } = true;
     public  bool     ShowLineLabels { get; set; } = true;
     public  bool     ShowAreaLabels { get; set; } = true;

@@ -60,7 +60,7 @@ public partial class MainWindow
         Add("view.zoomIn", "Zoom In", "View", "Ctrl++", "Zoom into the active page.", hasPage, "Select a page first.");
         Add("view.zoomOut", "Zoom Out", "View", "Ctrl+-", "Zoom out of the active page.", hasPage, "Select a page first.");
         Add("view.toggleTheme", "Toggle Dark Theme", "View", "", "Switch between light and dark UI theme.");
-        Add("view.viewportBackground", "Viewport Background", "View", "", "Open viewport background presets.");
+        Add("view.viewportBackground", "Page Background", "View", "", "Open page background presets.");
         Add("view.toggleInbox", "Toggle AI Inbox", "View", "", "Collapse or expand the AI Inbox panel.");
         Add("view.mainView", "Show Main View", "Workspace", "", "Switch to the drawing canvas workspace.");
         Add("view.sheetManager", "Show Sheet Manager", "Workspace", "", "Switch to the sheet table / PDF metadata workspace.");
@@ -148,7 +148,11 @@ public partial class MainWindow
             case "view.toggleTheme":
                 ApplyTheme(!string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: true);
                 break;
-            case "view.viewportBackground": BtnViewportBg_Click(BtnDisplayViewportBg, new RoutedEventArgs()); break;
+            case "view.viewportBackground":
+                TopMainTabs.SelectedIndex = 1;
+                ComboDisplayPageBackground.Focus();
+                ComboDisplayPageBackground.IsDropDownOpen = true;
+                break;
             case "view.toggleInbox": BtnToggleInbox_Click(BtnToggleInbox, new RoutedEventArgs()); break;
             case "view.mainView": SelectWorkspaceTab("MainView"); break;
             case "view.sheetManager": SelectWorkspaceTab("SheetManager"); break;

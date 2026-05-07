@@ -28,6 +28,7 @@ public partial class MainWindow
                 _ => 0,
             };
             ApplyViewportBackground(_settings.ViewportBackground, persist: false);
+            ApplyPageBackground(_settings.PageBackground, persist: false);
             ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
             ApplyDisplaySettingsToViewport();
             ApplySheetOverlaySettings();
@@ -80,12 +81,23 @@ public partial class MainWindow
         ViewportHost.Background = backgroundBrush;
         ViewportSurfaceHost.Background = backgroundBrush;
         _viewport.InvalidateVisual();
+        _settings.ViewportBackground = cleanColor;
 
         if (persist)
         {
-            _settings.ViewportBackground = cleanColor;
             SaveAppSettings();
         }
+    }
+
+    private void ApplyPageBackground(string color, bool persist)
+    {
+        string cleanColor = ViewportBackgroundPolicy.NormalizeColor(color);
+        _viewport.PageBackgroundColor = cleanColor;
+        _settings.PageBackground = cleanColor;
+        _viewport.InvalidateVisual();
+
+        if (persist)
+            SaveAppSettings();
     }
 
     private void ApplyTheme(bool dark, bool persist)
