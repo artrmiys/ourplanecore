@@ -26,9 +26,14 @@ public sealed partial class PdfViewport
             _zoom,
             activeMeasurements.Count,
             _renderNavigationFastFrame);
+        bool drawGeometry = ViewportRenderPolicy.ShouldDrawMeasurementGeometry(
+            activeMeasurements.Count,
+            _renderNavigationFastFrame);
 
         foreach (var m in activeMeasurements)
         {
+            if (!drawGeometry && !IsMeasurementSelected(m))
+                continue;
             bool selected = IsMeasurementSelected(m);
             if (!selected && !IsMeasurementVisible(m, visiblePdf))
                 continue;

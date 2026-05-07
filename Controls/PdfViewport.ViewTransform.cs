@@ -69,6 +69,7 @@ public sealed partial class PdfViewport
             SimplifyNavigationRendering,
             _isFastNavigating,
             _zoom,
+            ActivePageMeasurements().Count,
             hasBlockingInteraction);
     }
 

@@ -223,6 +223,8 @@ public sealed partial class PdfViewport : SKElement
     private bool _isFastNavigating;
     private bool _renderNavigationFastFrame;
     private DateTime _lastPointerStatusAt = DateTime.MinValue;
+    private DateTime _lastSlowFrameLogAt = DateTime.MinValue;
+    private DateTime _lastSlowRenderLogAt = DateTime.MinValue;
     private readonly Dictionary<string, SKColor> _colorCache = new(StringComparer.OrdinalIgnoreCase);
     private LayerRenderRequest? _pendingLayerRender;
     private bool _layerRenderInProgress;
@@ -255,7 +257,13 @@ public sealed partial class PdfViewport : SKElement
         string PdfPath,
         int PdfIndex,
         string PageFolder,
-        float RenderScale);
+        float RenderScale,
+        ViewState? RestoreView,
+        bool FitAfter,
+        bool QueueLayerAfter,
+        bool ResetLayerStates,
+        string? StatusAfter,
+        bool FireLayersAfter);
 
     private sealed record DocnetRenderResult(
         float WidthPt,
@@ -456,20 +464,12 @@ public sealed partial class PdfViewport : SKElement
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
 
-        bool hasPreview = false;
-        try
+        float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
+        string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
+        string previewCacheKey = DocnetRenderCacheKey(_pdfPath, _pdfIndex, previewScale);
+        if (DocnetRenderCache.TryGet(previewCacheKey, out CachedBitmapRender cachedPreview))
         {
-            RenderPageWithDocnet(ViewportRenderPolicy.InitialPagePreviewRenderScale);
-            hasPreview = true;
-        }
-        catch (Exception ex)
-        {
-            PostStatus($"Fast PDF preview unavailable: {ex.Message}");
-        }
-
-        // Fit after WPF has finished layout
-        if (hasPreview)
-        {
+            ApplyCachedBitmapRender(cachedPreview);
             Dispatcher.InvokeAsync(() =>
             {
                 if (restoreView.HasValue)
@@ -479,20 +479,22 @@ public sealed partial class PdfViewport : SKElement
                 QueueLayerRender(
                     resetLayerStates: true,
                     renderScale: CurrentRenderScale(),
-                    statusAfter: $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}",
+                    statusAfter: loadedStatus,
                     fireLayersAfter: true);
             });
         }
         else
         {
-            if (restoreView.HasValue)
-                RestoreViewState(restoreView.Value);
-            QueueLayerRender(
+            QueueDocnetRender(
+                previewScale,
+                restoreView,
+                fitAfter: !restoreView.HasValue,
+                queueLayerAfter: true,
                 resetLayerStates: true,
-                renderScale: CurrentRenderScale(),
-                statusAfter: $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}",
+                statusAfter: loadedStatus,
                 fireLayersAfter: true);
         }
+
         PostStatus($"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
 
         // Fire layers event

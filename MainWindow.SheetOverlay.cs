@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -14,6 +15,7 @@ public partial class MainWindow
 {
     private const string DefaultSheetOverlayColor = "#E53935";
     private const double DefaultSheetOverlayOpacity = 0.55;
+    private readonly SheetOverlayBitmapCache _sheetOverlayBitmapCache = new(maxEntries: 8);
 
     private static readonly IReadOnlyList<(string Label, string Hex)> SheetOverlayColors =
     [
@@ -406,10 +408,22 @@ public partial class MainWindow
             return false;
         }
 
+        string cacheKey = BuildSheetOverlayCacheKey(page, overlayPage, renderScale);
+        if (_sheetOverlayBitmapCache.TryGet(cacheKey, out SheetOverlayBitmapCache.Entry? cached) &&
+            cached != null)
+        {
+            overlayBitmap = cached.Bitmap;
+            widthPt = cached.WidthPt;
+            heightPt = cached.HeightPt;
+            overlayName = cached.OverlayName;
+            return true;
+        }
+
         var layerStates = overlayPage.PdfLayers
             .GroupBy(layer => layer.Number)
             .ToDictionary(group => group.Key, group => group.First().IsOn);
 
+        Stopwatch renderWatch = Stopwatch.StartNew();
         if (!PdfLayerRenderService.TryRender(
                 overlayPage.PdfPath,
                 overlayPage.PdfPage,
@@ -421,6 +435,13 @@ public partial class MainWindow
                 out error))
         {
             return false;
+        }
+        renderWatch.Stop();
+        if (renderWatch.ElapsedMilliseconds >= ViewportRenderPolicy.SlowRenderLogMs)
+        {
+            AppLog.Info(
+                $"Sheet overlay render {renderWatch.ElapsedMilliseconds}ms; base='{page.FolderPath}'; " +
+                $"overlay='{overlayPage.FolderPath}'; scale={renderScale:0.###}");
         }
 
         using SKBitmap? sourceBitmap = SKBitmap.Decode(render.ImageBytes);
@@ -434,7 +455,25 @@ public partial class MainWindow
         widthPt = render.WidthPt;
         heightPt = render.HeightPt;
         overlayName = overlayPage.Name;
+        _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
         return true;
+    }
+
+    private static string BuildSheetOverlayCacheKey(PageInfo page, PageInfo overlayPage, float renderScale)
+    {
+        var info = new FileInfo(overlayPage.PdfPath);
+        return string.Join(
+            '|',
+            overlayPage.FolderPath.ToLowerInvariant(),
+            info.Exists ? info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) : "0",
+            info.Exists ? info.Length.ToString(CultureInfo.InvariantCulture) : "0",
+            overlayPage.PdfPage.ToString(CultureInfo.InvariantCulture),
+            Math.Round(renderScale, 3).ToString(CultureInfo.InvariantCulture),
+            page.OverlayColor,
+            page.OverlayOpacity.ToString("0.###", CultureInfo.InvariantCulture),
+            string.Join(';', overlayPage.PdfLayers
+                .OrderBy(layer => layer.Number)
+                .Select(layer => $"{layer.Number}:{layer.IsOn}:{layer.Name}")));
     }
 
     private bool ShowSheetOverlayTransformDialog(
@@ -602,6 +641,95 @@ public partial class MainWindow
         catch
         {
             return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private sealed class SheetOverlayBitmapCache
+    {
+        private readonly int _maxEntries;
+        private readonly Dictionary<string, Entry> _entries = [];
+        private long _clock;
+
+        public SheetOverlayBitmapCache(int maxEntries)
+        {
+            _maxEntries = Math.Max(1, maxEntries);
+        }
+
+        public bool TryGet(string key, out Entry? entry)
+        {
+            if (_entries.TryGetValue(key, out Entry? cached))
+            {
+                cached.LastUsed = ++_clock;
+                entry = new Entry(
+                    cached.Bitmap.Copy(),
+                    cached.WidthPt,
+                    cached.HeightPt,
+                    cached.OverlayName,
+                    cached.LastUsed);
+                return true;
+            }
+
+            entry = null;
+            return false;
+        }
+
+        public void Put(string key, SKBitmap bitmap, float widthPt, float heightPt, string overlayName)
+        {
+            SKBitmap copy = bitmap.Copy();
+            if (_entries.TryGetValue(key, out Entry? existing))
+            {
+                existing.Bitmap.Dispose();
+                existing.Bitmap = copy;
+                existing.WidthPt = widthPt;
+                existing.HeightPt = heightPt;
+                existing.OverlayName = overlayName;
+                existing.LastUsed = ++_clock;
+                return;
+            }
+
+            _entries[key] = new Entry(copy, widthPt, heightPt, overlayName, ++_clock);
+            Trim();
+        }
+
+        private void Trim()
+        {
+            while (_entries.Count > _maxEntries)
+            {
+                string oldestKey = "";
+                long oldest = long.MaxValue;
+                foreach (var pair in _entries)
+                {
+                    if (pair.Value.LastUsed >= oldest)
+                        continue;
+
+                    oldest = pair.Value.LastUsed;
+                    oldestKey = pair.Key;
+                }
+
+                if (string.IsNullOrWhiteSpace(oldestKey))
+                    return;
+
+                _entries[oldestKey].Bitmap.Dispose();
+                _entries.Remove(oldestKey);
+            }
+        }
+
+        public sealed class Entry
+        {
+            public Entry(SKBitmap bitmap, float widthPt, float heightPt, string overlayName, long lastUsed)
+            {
+                Bitmap = bitmap;
+                WidthPt = widthPt;
+                HeightPt = heightPt;
+                OverlayName = overlayName;
+                LastUsed = lastUsed;
+            }
+
+            public SKBitmap Bitmap { get; set; }
+            public float WidthPt { get; set; }
+            public float HeightPt { get; set; }
+            public string OverlayName { get; set; }
+            public long LastUsed { get; set; }
         }
     }
 }

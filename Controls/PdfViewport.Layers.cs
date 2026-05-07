@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -21,7 +22,16 @@ public sealed partial class PdfViewport
 
     private void RenderPageWithDocnet(float renderScale)
     {
-        ApplyDocnetRenderResult(RenderPageBitmapWithDocnet(_pdfPath, _pdfIndex, renderScale));
+        string cacheKey = DocnetRenderCacheKey(_pdfPath, _pdfIndex, renderScale);
+        if (DocnetRenderCache.TryGet(cacheKey, out CachedBitmapRender cached))
+        {
+            ApplyCachedBitmapRender(cached);
+            return;
+        }
+
+        DocnetRenderResult render = RenderPageBitmapWithDocnet(_pdfPath, _pdfIndex, renderScale);
+        DocnetRenderCache.Put(cacheKey, render);
+        ApplyDocnetRenderResult(render);
     }
 
     private static DocnetRenderResult RenderPageBitmapWithDocnet(string pdfPath, int pdfIndex, float renderScale)
@@ -57,18 +67,44 @@ public sealed partial class PdfViewport
         _renderedScale = render.BitmapScale;
     }
 
-    private void QueueDocnetRender(float renderScale)
+    private void ApplyCachedBitmapRender(CachedBitmapRender render)
+    {
+        _pageBitmap?.Dispose();
+        _pageBitmap = render.Bitmap;
+        _pdfW = render.WidthPt;
+        _pdfH = render.HeightPt;
+        _bitmapScale = render.BitmapScale;
+        _layers = [];
+        _usingLayerRenderer = false;
+        _renderedScale = render.BitmapScale;
+    }
+
+    private void QueueDocnetRender(
+        float renderScale,
+        ViewState? restoreView = null,
+        bool fitAfter = false,
+        bool queueLayerAfter = false,
+        bool resetLayerStates = false,
+        string? statusAfter = null,
+        bool fireLayersAfter = false)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath))
             return;
 
+        float scale = Math.Clamp(renderScale, 0.20f, 4.0f);
         int version = ++_docnetRenderVersion;
         _pendingDocnetRender = new DocnetRenderRequest(
             version,
             _pdfPath,
             _pdfIndex,
             _pageFolder,
-            Math.Clamp(renderScale, 0.20f, 4.0f));
+            scale,
+            restoreView,
+            fitAfter,
+            queueLayerAfter,
+            resetLayerStates,
+            statusAfter,
+            fireLayersAfter);
 
         _ = StartNextDocnetRenderAsync();
     }
@@ -83,18 +119,32 @@ public sealed partial class PdfViewport
         _docnetRenderInProgress = true;
         try
         {
-            DocnetRenderResult render = await Task.Run(() =>
-                RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
+            Stopwatch renderWatch = Stopwatch.StartNew();
+            string cacheKey = DocnetRenderCacheKey(request.PdfPath, request.PdfIndex, request.RenderScale);
+            bool fromCache = DocnetRenderCache.TryGet(cacheKey, out CachedBitmapRender cached);
+            DocnetRenderResult? render = null;
+            if (!fromCache)
+            {
+                render = await Task.Run(() =>
+                    RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
+                DocnetRenderCache.Put(cacheKey, render);
+            }
+            renderWatch.Stop();
+            ReportSlowPdfRender("docnet", request, renderWatch.ElapsedMilliseconds, fromCache);
 
             if (request.Version == _docnetRenderVersion &&
                 string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
                 request.PdfIndex == _pdfIndex &&
                 string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
             {
-                ApplyDocnetRenderResult(render);
+                if (fromCache)
+                    ApplyCachedBitmapRender(cached);
+                else if (render != null)
+                    ApplyDocnetRenderResult(render);
+                ApplyDocnetRenderContinuation(request);
                 RequestRepaint();
             }
-            else
+            else if (render != null)
             {
                 render.Bitmap.Dispose();
             }
@@ -111,6 +161,42 @@ public sealed partial class PdfViewport
             if (_pendingDocnetRender != null)
                 _ = StartNextDocnetRenderAsync();
         }
+    }
+
+    private void ApplyDocnetRenderContinuation(DocnetRenderRequest request)
+    {
+        if (request.RestoreView.HasValue)
+            RestoreViewState(request.RestoreView.Value);
+        else if (request.FitAfter)
+            ZoomFit();
+
+        if (request.QueueLayerAfter)
+        {
+            QueueLayerRender(
+                request.ResetLayerStates,
+                CurrentRenderScale(),
+                request.StatusAfter,
+                request.FireLayersAfter);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StatusAfter))
+            PostStatus(request.StatusAfter);
+    }
+
+    private void ReportSlowPdfRender(string kind, DocnetRenderRequest request, long elapsedMs, bool fromCache)
+    {
+        if (fromCache || elapsedMs < ViewportRenderPolicy.SlowRenderLogMs)
+            return;
+
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastSlowRenderLogAt).TotalSeconds < 2)
+            return;
+
+        _lastSlowRenderLogAt = now;
+        AppLog.Info(
+            $"Viewport slow {kind} render {elapsedMs}ms; page='{request.PageFolder}'; " +
+            $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; scale={request.RenderScale:0.###}");
     }
 
     private bool RenderPageWithLayers(bool resetLayerStates, float renderScale)
@@ -208,6 +294,7 @@ public sealed partial class PdfViewport
         _layerRenderInProgress = true;
         try
         {
+            Stopwatch renderWatch = Stopwatch.StartNew();
             var renderResult = await PdfLayerRenderService.TryRenderAsync(
                 request.PdfPath,
                 request.PdfIndex,
@@ -215,6 +302,8 @@ public sealed partial class PdfViewport
                 request.LayerStates,
                 request.HighlightedLayers,
                 request.CachedLayers);
+            renderWatch.Stop();
+            ReportSlowLayerRender(request, renderWatch.ElapsedMilliseconds);
             LayerRenderCompletion completion = new(
                 request,
                 renderResult.Ok,
@@ -253,6 +342,22 @@ public sealed partial class PdfViewport
             if (_pendingLayerRender != null)
                 _ = StartNextLayerRenderAsync();
         }
+    }
+
+    private void ReportSlowLayerRender(LayerRenderRequest request, long elapsedMs)
+    {
+        if (elapsedMs < ViewportRenderPolicy.SlowRenderLogMs)
+            return;
+
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastSlowRenderLogAt).TotalSeconds < 2)
+            return;
+
+        _lastSlowRenderLogAt = now;
+        AppLog.Info(
+            $"Viewport slow layer render {elapsedMs}ms; page='{request.PageFolder}'; " +
+            $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; scale={request.RenderScale:0.###}; " +
+            $"layers={request.LayerStates.Count}; highlights={request.HighlightedLayers.Count}");
     }
 
     private void UpdateLayerSnapshot(IEnumerable<PdfLayer> layers)

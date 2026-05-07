@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -23,6 +24,7 @@ public sealed partial class PdfViewport
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
     {
+        Stopwatch frameWatch = Stopwatch.StartNew();
         var canvas = e.Surface.Canvas;
         canvas.Clear(GetCachedColor(ViewBackgroundColor, SKColors.White));
 
@@ -72,14 +74,15 @@ public sealed partial class PdfViewport
                     _zoom, _zoom, -_panX * _zoom, -_panY * _zoom);
                 using var saved = new SKAutoCanvasRestore(canvas, true);
                 canvas.SetMatrix(measMtx);
-                DrawSheetOverlay(canvas);
+                if (ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
+                    DrawSheetOverlay(canvas);
                 DrawSheetOverlayEditGuides(canvas);
                 if (!_renderNavigationFastFrame)
                     DrawTransformOverlay(canvas);
                 DrawMeasurements(canvas, visiblePdf);
-                DrawPageAnnotations(canvas, visiblePdf);
                 if (!_renderNavigationFastFrame)
                 {
+                    DrawPageAnnotations(canvas, visiblePdf);
                     DrawAiActionDraftPreview(canvas, visiblePdf);
                     DrawAiMarkers(canvas, visiblePdf);
                 }
@@ -95,8 +98,26 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            frameWatch.Stop();
+            ReportSlowViewportFrame(frameWatch.ElapsedMilliseconds);
             _renderNavigationFastFrame = previousFastFrame;
         }
+    }
+
+    private void ReportSlowViewportFrame(long elapsedMs)
+    {
+        if (elapsedMs < ViewportRenderPolicy.SlowFrameLogMs)
+            return;
+
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastSlowFrameLogAt).TotalSeconds < 2)
+            return;
+
+        _lastSlowFrameLogAt = now;
+        AppLog.Info(
+            $"Viewport slow frame {elapsedMs}ms; zoom={_zoom:0.###}; fast={_renderNavigationFastFrame}; " +
+            $"page='{_pageFolder}'; activeMeasurements={ActivePageMeasurements().Count}; renderedScale={_renderedScale:0.###}; " +
+            $"overlay={(_sheetOverlayBitmap != null)}");
     }
 
 }

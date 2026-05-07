@@ -86,9 +86,12 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport high zoom uses automatic fast navigation", ViewportHighZoomUsesAutomaticFastNavigation),
+    ("viewport far zoom uses automatic fast navigation", ViewportFarZoomUsesAutomaticFastNavigation),
+    ("viewport dense page uses automatic fast navigation", ViewportDensePageUsesAutomaticFastNavigation),
     ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
     ("viewport measurement LOD skips distant labels", ViewportMeasurementLodSkipsDistantLabels),
     ("viewport measurement LOD limits dense details", ViewportMeasurementLodLimitsDenseDetails),
+    ("viewport LOD hides expensive layers during fast frames", ViewportLodHidesExpensiveLayersDuringFastFrames),
 };
 
 int passed = 0;
@@ -1117,6 +1120,7 @@ static void ViewportHighZoomUsesAutomaticFastNavigation()
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold,
+            activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
         "high zoom should get fast navigation even without the manual setting");
 
@@ -1125,8 +1129,33 @@ static void ViewportHighZoomUsesAutomaticFastNavigation()
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold - 0.1f,
+            activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
         "lower zoom should still respect the manual fast navigation setting");
+}
+
+static void ViewportFarZoomUsesAutomaticFastNavigation()
+{
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: false,
+            isFastNavigating: true,
+            zoom: ViewportRenderPolicy.FarZoomFastFrameThreshold,
+            activePageMeasurementCount: 0,
+            hasBlockingInteraction: false),
+        "far zoom should use fast navigation while the user is moving around");
+}
+
+static void ViewportDensePageUsesAutomaticFastNavigation()
+{
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: false,
+            isFastNavigating: true,
+            zoom: 1.0f,
+            activePageMeasurementCount: ViewportRenderPolicy.DenseNavigationFastFrameThreshold,
+            hasBlockingInteraction: false),
+        "dense pages should use fast navigation even at medium zoom");
 }
 
 static void ViewportEditingBlocksFastNavigationFrame()
@@ -1136,6 +1165,7 @@ static void ViewportEditingBlocksFastNavigationFrame()
             simplifyNavigationRendering: true,
             isFastNavigating: true,
             zoom: 6.0f,
+            activePageMeasurementCount: ViewportRenderPolicy.DenseNavigationFastFrameThreshold,
             hasBlockingInteraction: true),
         "active edit interaction should keep the full render frame");
 }
@@ -1165,6 +1195,27 @@ static void ViewportMeasurementLodLimitsDenseDetails()
             activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementDetailThreshold + 1,
             fastNavigationFrame: false),
         "dense pages should skip expensive measurement detail layer");
+}
+
+static void ViewportLodHidesExpensiveLayersDuringFastFrames()
+{
+    AssertFalse(
+        ViewportRenderPolicy.ShouldDrawSheetOverlay(
+            fastNavigationFrame: true,
+            isOverlayEditing: false),
+        "fast navigation should skip sheet overlay until idle");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldDrawSheetOverlay(
+            fastNavigationFrame: true,
+            isOverlayEditing: true),
+        "overlay point editing should keep the overlay visible");
+
+    AssertFalse(
+        ViewportRenderPolicy.ShouldDrawMeasurementGeometry(
+            activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementGeometryThreshold + 1,
+            fastNavigationFrame: true),
+        "very dense takeoff pages should skip non-selected measurement geometry during navigation");
 }
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>
