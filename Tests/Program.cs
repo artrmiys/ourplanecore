@@ -81,6 +81,9 @@ var tests = new List<(string Name, Action Run)>
     ("app settings removes recent job by path", AppSettingsRemovesRecentJobByPath),
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
+    ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
+    ("viewport high zoom uses automatic fast navigation", ViewportHighZoomUsesAutomaticFastNavigation),
+    ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
 };
 
 int passed = 0;
@@ -1066,6 +1069,45 @@ static void PdfMetadataSkipScaleAvoidsFallback()
     };
 
     AssertFalse(PdfSheetMetadataService.NeedsFallback(metadata), "skip scale detail should not need fallback");
+}
+
+static void ViewportRenderScaleChoosesNextQualityStep()
+{
+    float[] steps = [0.75f, 1.0f, 1.5f, 2.25f, 3.0f, 4.0f];
+
+    AssertClose(0.75, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom clamps to first render step");
+    AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
+    AssertClose(4.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom clamps to final render step");
+}
+
+static void ViewportHighZoomUsesAutomaticFastNavigation()
+{
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: false,
+            isFastNavigating: true,
+            zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold,
+            hasBlockingInteraction: false),
+        "high zoom should get fast navigation even without the manual setting");
+
+    AssertFalse(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: false,
+            isFastNavigating: true,
+            zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold - 0.1f,
+            hasBlockingInteraction: false),
+        "lower zoom should still respect the manual fast navigation setting");
+}
+
+static void ViewportEditingBlocksFastNavigationFrame()
+{
+    AssertFalse(
+        ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            simplifyNavigationRendering: true,
+            isFastNavigating: true,
+            zoom: 6.0f,
+            hasBlockingInteraction: true),
+        "active edit interaction should keep the full render frame");
 }
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>

@@ -36,9 +36,6 @@ public sealed partial class PdfViewport
 
     private void BeginFastNavigation()
     {
-        if (!SimplifyNavigationRendering)
-            return;
-
         _isFastNavigating = true;
         _navigationIdleTimer.Stop();
         _navigationIdleTimer.Start();
@@ -54,32 +51,33 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
-    private bool IsFastNavigationFrame() =>
-        SimplifyNavigationRendering &&
-        _isFastNavigating &&
-        !_draggingMeasurement &&
-        !_draggingVertex &&
-        !_draggingAnnotation &&
-        !_draggingAnnotationVertex &&
-        !_draggingTransformScale &&
-        !_draggingTransformRotate &&
-        !_boxSelecting &&
-        _drawPts.Count == 0 &&
-        _scalePts.Count == 0 &&
-        _joistDirectionMeasurement == null;
+    private bool IsFastNavigationFrame()
+    {
+        bool hasBlockingInteraction =
+            _draggingMeasurement ||
+            _draggingVertex ||
+            _draggingAnnotation ||
+            _draggingAnnotationVertex ||
+            _draggingTransformScale ||
+            _draggingTransformRotate ||
+            _boxSelecting ||
+            _drawPts.Count > 0 ||
+            _scalePts.Count > 0 ||
+            _joistDirectionMeasurement != null;
+
+        return ViewportRenderPolicy.ShouldUseFastNavigationFrame(
+            SimplifyNavigationRendering,
+            _isFastNavigating,
+            _zoom,
+            hasBlockingInteraction);
+    }
 
     private float CurrentRenderScale()
     {
         if (_zoom <= 0)
             return 1.0f;
 
-        float desired = Math.Clamp(_zoom, RenderScaleSteps[0], RenderScaleSteps[^1]);
-        foreach (float step in RenderScaleSteps)
-        {
-            if (desired <= step)
-                return step;
-        }
-        return RenderScaleSteps[^1];
+        return ViewportRenderPolicy.SelectRenderScale(_zoom, RenderScaleSteps);
     }
 
     private void RerenderForZoomIfNeeded(bool force)
@@ -103,7 +101,7 @@ public sealed partial class PdfViewport
 
         try
         {
-            RenderPageWithDocnet(desired);
+            QueueDocnetRender(desired);
         }
         catch (Exception ex)
         {

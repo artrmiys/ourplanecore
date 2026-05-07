@@ -21,25 +21,96 @@ public sealed partial class PdfViewport
 
     private void RenderPageWithDocnet(float renderScale)
     {
+        ApplyDocnetRenderResult(RenderPageBitmapWithDocnet(_pdfPath, _pdfIndex, renderScale));
+    }
+
+    private static DocnetRenderResult RenderPageBitmapWithDocnet(string pdfPath, int pdfIndex, float renderScale)
+    {
         float scale = Math.Clamp(renderScale, 0.20f, 4.0f);
-        using var docReader  = _docLib.GetDocReader(_pdfPath, new PageDimensions(scale));
-        using var pageReader = docReader.GetPageReader(_pdfIndex);
+        using var docReader = _docLib.GetDocReader(pdfPath, new PageDimensions(scale));
+        using var pageReader = docReader.GetPageReader(pdfIndex);
 
         int bw = pageReader.GetPageWidth();
         int bh = pageReader.GetPageHeight();
-        _pdfW        = bw / scale;
-        _pdfH        = bh / scale;
-        _bitmapScale = scale;
-
         byte[] bytes = pageReader.GetImage();
 
         var info = new SKImageInfo(bw, bh, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var bitmap = new SKBitmap(info);
+        Marshal.Copy(bytes, 0, bitmap.GetPixels(), bytes.Length);
+
+        return new DocnetRenderResult(
+            bw / scale,
+            bh / scale,
+            scale,
+            bitmap);
+    }
+
+    private void ApplyDocnetRenderResult(DocnetRenderResult render)
+    {
         _pageBitmap?.Dispose();
-        _pageBitmap = new SKBitmap(info);
-        Marshal.Copy(bytes, 0, _pageBitmap.GetPixels(), bytes.Length);
+        _pageBitmap = render.Bitmap;
+        _pdfW = render.WidthPt;
+        _pdfH = render.HeightPt;
+        _bitmapScale = render.BitmapScale;
         _layers = [];
         _usingLayerRenderer = false;
-        _renderedScale = scale;
+        _renderedScale = render.BitmapScale;
+    }
+
+    private void QueueDocnetRender(float renderScale)
+    {
+        if (string.IsNullOrWhiteSpace(_pdfPath))
+            return;
+
+        int version = ++_docnetRenderVersion;
+        _pendingDocnetRender = new DocnetRenderRequest(
+            version,
+            _pdfPath,
+            _pdfIndex,
+            _pageFolder,
+            Math.Clamp(renderScale, 0.20f, 4.0f));
+
+        _ = StartNextDocnetRenderAsync();
+    }
+
+    private async Task StartNextDocnetRenderAsync()
+    {
+        if (_docnetRenderInProgress || _pendingDocnetRender == null)
+            return;
+
+        DocnetRenderRequest request = _pendingDocnetRender;
+        _pendingDocnetRender = null;
+        _docnetRenderInProgress = true;
+        try
+        {
+            DocnetRenderResult render = await Task.Run(() =>
+                RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
+
+            if (request.Version == _docnetRenderVersion &&
+                string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+                request.PdfIndex == _pdfIndex &&
+                string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyDocnetRenderResult(render);
+                RequestRepaint();
+            }
+            else
+            {
+                render.Bitmap.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, "PDF render failed.");
+            if (request.Version == _docnetRenderVersion)
+                PostStatus($"Render error: {ex.Message}");
+        }
+        finally
+        {
+            _docnetRenderInProgress = false;
+            if (_pendingDocnetRender != null)
+                _ = StartNextDocnetRenderAsync();
+        }
     }
 
     private bool RenderPageWithLayers(bool resetLayerStates, float renderScale)

@@ -226,6 +226,9 @@ public sealed partial class PdfViewport : SKElement
     private LayerRenderRequest? _pendingLayerRender;
     private bool _layerRenderInProgress;
     private int _layerRenderVersion;
+    private DocnetRenderRequest? _pendingDocnetRender;
+    private bool _docnetRenderInProgress;
+    private int _docnetRenderVersion;
 
     private sealed record LayerRenderRequest(
         int Version,
@@ -245,6 +248,19 @@ public sealed partial class PdfViewport : SKElement
         bool Ok,
         PdfLayerRenderResult Result,
         string Error);
+
+    private sealed record DocnetRenderRequest(
+        int Version,
+        string PdfPath,
+        int PdfIndex,
+        string PageFolder,
+        float RenderScale);
+
+    private sealed record DocnetRenderResult(
+        float WidthPt,
+        float HeightPt,
+        float BitmapScale,
+        SKBitmap Bitmap);
 
     // ── Events ────────────────────────────────────────────────────────────────
     public event Action<string>?                          StatusChanged;
@@ -345,6 +361,8 @@ public sealed partial class PdfViewport : SKElement
         _navigationIdleTimer.Stop();
         _pendingLayerRender = null;
         _layerRenderVersion++;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
         _pageBitmap?.Dispose();
         _pageBitmap = null;
         ClearSheetOverlay();
@@ -434,6 +452,8 @@ public sealed partial class PdfViewport : SKElement
         _usingLayerRenderer = false;
         _pendingLayerRender = null;
         _layerRenderVersion++;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
 
         bool hasPreview = false;
         try
@@ -885,6 +905,8 @@ public sealed partial class PdfViewport : SKElement
         _renderNavigationFastFrame = false;
         _pendingLayerRender = null;
         _layerRenderVersion++;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
         _pdfLayerTraceEnabled = false;
         _activePdfLayerTraceLayer = null;
         _activePdfLayerTraceLayerName = "";
