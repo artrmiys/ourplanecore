@@ -70,7 +70,7 @@ public partial class MainWindow
             if (button != null) button.IsEnabled = false;
             SaveCurrentPageScale();
             SaveCurrentPageAnnotations();
-            TxtStatus.Text = $"Exporting {pages.Count} sheet(s) to PDF...";
+            TxtStatus.Text = $"Exporting {pages.Count} sheet(s) to PDF with white paper...";
 
             var options = new PdfExportOptions(
                 dialog.IncludeMeasurements,

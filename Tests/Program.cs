@@ -12,6 +12,7 @@ var tests = new List<(string Name, Action Run)>
     ("measurement area uses fallback scale", MeasurementAreaUsesFallbackScale),
     ("measurement area subtracts holes", MeasurementAreaSubtractsHoles),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
+    ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
@@ -253,6 +254,11 @@ static void PdfExportAreaPathCutsHoles()
     AssertTrue(path.Contains(1, 1), "export area path should include outer area");
     AssertFalse(path.Contains(3, 3), "export area path should cut the hole");
     AssertTrue(path.Contains(8, 8), "export area path should include area outside the hole");
+}
+
+static void PdfExportAlwaysUsesWhitePaper()
+{
+    AssertEqual("#FFFFFF", PdfExporter.ExportPaperColorHex, "export paper color must stay white");
 }
 
 static void JobStorePersistsMeasurementHoles()

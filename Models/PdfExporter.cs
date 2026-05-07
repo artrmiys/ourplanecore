@@ -32,6 +32,9 @@ public delegate (bool Ok, string Error) PdfSheetOverlayExportRenderer(
 
 public static class PdfExporter
 {
+    public const string ExportPaperColorHex = "#FFFFFF";
+    private static readonly SKColor ExportPaperColor = SKColors.White;
+
     public static (bool Ok, string Error) TryExport(
         IReadOnlyList<PdfExportPageInput> pages,
         string outputPath,
@@ -76,7 +79,8 @@ public static class PdfExporter
                     return (false, $"Could not decode rendered sheet '{page.Name}'.");
 
                 SKCanvas canvas = document.BeginPage(render.WidthPt, render.HeightPt);
-                canvas.Clear(SKColors.White);
+                canvas.Clear(ExportPaperColor);
+                DrawExportPaperUnderlay(canvas, render.WidthPt, render.HeightPt);
                 canvas.DrawBitmap(bitmap, new SKRect(0, 0, render.WidthPt, render.HeightPt));
 
                 if (overlayRenderer != null)
@@ -104,6 +108,17 @@ public static class PdfExporter
             AppLog.Error(ex, "PDF export failed.");
             return (false, ex.Message);
         }
+    }
+
+    private static void DrawExportPaperUnderlay(SKCanvas canvas, float widthPt, float heightPt)
+    {
+        using var paint = new SKPaint
+        {
+            Color = ExportPaperColor,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+        canvas.DrawRect(new SKRect(0, 0, widthPt, heightPt), paint);
     }
 
     private static void DrawMeasurements(
