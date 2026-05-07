@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using SkiaSharp;
 
 namespace OurPlaneCore.Controls;
@@ -33,7 +34,10 @@ public sealed partial class PdfViewport
         string overlayName,
         float offsetXPt = 0,
         float offsetYPt = 0,
-        float overlayScale = 1)
+        float overlayScale = 1,
+        string overlayPdfPath = "",
+        int overlayPageIndex = 0,
+        IReadOnlyList<PdfLayerInfo>? overlayLayers = null)
     {
         ClearSheetOverlay();
         _sheetOverlayBitmap = bitmap;
@@ -43,6 +47,8 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetYPt = offsetYPt;
         _sheetOverlayScale = NormalizeSheetOverlayScale(overlayScale);
         _sheetOverlayName = overlayName ?? "";
+        if (!string.IsNullOrWhiteSpace(overlayPdfPath))
+            SetOverlayPdfSnapSource(overlayPdfPath, overlayPageIndex, _sheetOverlayName, overlayLayers);
         CancelSheetOverlayPointEdit(silent: true);
         RequestRepaint();
     }
@@ -57,6 +63,7 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetYPt = 0;
         _sheetOverlayScale = 1;
         _sheetOverlayName = "";
+        ClearOverlayPdfSnapSource();
         CancelSheetOverlayPointEdit(silent: true);
         RequestRepaint();
     }

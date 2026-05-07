@@ -333,6 +333,7 @@ public partial class MainWindow
             return;
         }
 
+        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
         _viewport.SetSheetOverlay(
             bitmap,
             widthPt,
@@ -340,7 +341,10 @@ public partial class MainWindow
             overlayName,
             (float)page.OverlayOffsetXPt,
             (float)page.OverlayOffsetYPt,
-            (float)page.OverlayScale);
+            (float)page.OverlayScale,
+            overlayPage?.PdfPath ?? "",
+            overlayPage?.PdfPage ?? 0,
+            OverlaySnapLayers(overlayPage));
     }
 
     private async Task LoadSheetOverlayAsync(PageInfo page, int version)
@@ -374,6 +378,7 @@ public partial class MainWindow
         }
 
         PageInfo target = _currentPage;
+        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(target.OverlayPageFolder);
         _viewport.SetSheetOverlay(
             result.Bitmap,
             result.WidthPt,
@@ -381,8 +386,16 @@ public partial class MainWindow
             result.OverlayName,
             (float)target.OverlayOffsetXPt,
             (float)target.OverlayOffsetYPt,
-            (float)target.OverlayScale);
+            (float)target.OverlayScale,
+            overlayPage?.PdfPath ?? "",
+            overlayPage?.PdfPage ?? 0,
+            OverlaySnapLayers(overlayPage));
     }
+
+    private static IReadOnlyList<PdfLayerInfo>? OverlaySnapLayers(PageInfo? overlayPage) =>
+        overlayPage is { PdfLayersCached: true, PdfLayers.Count: > 0 }
+            ? overlayPage.PdfLayers
+            : null;
 
     private (bool Ok, string Error) DrawPdfExportSheetOverlay(
         SKCanvas canvas,

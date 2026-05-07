@@ -14,6 +14,15 @@ public sealed partial class PdfViewport
     private bool _pdfSnapLoadInProgress;
     private bool _pdfSnapReloadPending;
     private int _pdfSnapLoadVersion;
+    private string _overlayPdfSnapPath = "";
+    private int _overlayPdfSnapPageIndex;
+    private string _overlayPdfSnapName = "";
+    private IReadOnlyList<PdfLayerInfo>? _overlayPdfSnapLayers;
+    private PdfSnapPointIndex _overlayPdfSnapIndex = PdfSnapPointIndex.Empty;
+    private string _overlayPdfSnapCacheKey = "";
+    private bool _overlayPdfSnapLoadInProgress;
+    private bool _overlayPdfSnapReloadPending;
+    private int _overlayPdfSnapLoadVersion;
 
     public bool PdfSnapEnabled
     {
@@ -27,8 +36,14 @@ public sealed partial class PdfViewport
             SetSnapPreview(null);
             PdfSnapChanged?.Invoke(_pdfSnapEnabled);
             if (_pdfSnapEnabled)
+            {
                 QueuePdfSnapPointLoad(force: false);
+                QueueOverlayPdfSnapPointLoad(force: false);
+            }
             PostRecordPrompt();
+            PostStatus(_pdfSnapEnabled
+                ? "PDF Snap on: current sheet and sheet overlay vector points."
+                : "PDF Snap off.");
         }
     }
 
@@ -40,6 +55,37 @@ public sealed partial class PdfViewport
         _pdfSnapCacheKey = "";
         _pdfSnapReloadPending = false;
         _pdfSnapLoadVersion++;
+    }
+
+    private void SetOverlayPdfSnapSource(
+        string pdfPath,
+        int pageIndex,
+        string overlayName,
+        IReadOnlyList<PdfLayerInfo>? layers)
+    {
+        _overlayPdfSnapPath = pdfPath ?? "";
+        _overlayPdfSnapPageIndex = pageIndex;
+        _overlayPdfSnapName = overlayName ?? "";
+        _overlayPdfSnapLayers = layers;
+        ResetOverlayPdfSnapCache();
+        QueueOverlayPdfSnapPointLoad(force: true);
+    }
+
+    private void ClearOverlayPdfSnapSource()
+    {
+        _overlayPdfSnapPath = "";
+        _overlayPdfSnapPageIndex = 0;
+        _overlayPdfSnapName = "";
+        _overlayPdfSnapLayers = null;
+        ResetOverlayPdfSnapCache();
+    }
+
+    private void ResetOverlayPdfSnapCache()
+    {
+        _overlayPdfSnapIndex = PdfSnapPointIndex.Empty;
+        _overlayPdfSnapCacheKey = "";
+        _overlayPdfSnapReloadPending = false;
+        _overlayPdfSnapLoadVersion++;
     }
 
     private void QueuePdfSnapPointLoad(bool force)
@@ -114,6 +160,87 @@ public sealed partial class PdfViewport
         pdfIndex == _pdfIndex &&
         string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
 
+    private void QueueOverlayPdfSnapPointLoad(bool force)
+    {
+        if (!_pdfSnapEnabled || string.IsNullOrWhiteSpace(_overlayPdfSnapPath))
+            return;
+
+        string cacheKey = PdfSnapCacheKey(
+            _overlayPdfSnapPath,
+            _overlayPdfSnapPageIndex,
+            _overlayPdfSnapName,
+            PdfSnapLayerStateKey(_overlayPdfSnapLayers));
+        if (!force && string.Equals(_overlayPdfSnapCacheKey, cacheKey, StringComparison.Ordinal))
+            return;
+
+        if (_overlayPdfSnapLoadInProgress)
+        {
+            _overlayPdfSnapReloadPending = true;
+            return;
+        }
+
+        _overlayPdfSnapLoadInProgress = true;
+        int version = ++_overlayPdfSnapLoadVersion;
+        _ = LoadOverlayPdfSnapPointsAsync(
+            version,
+            _overlayPdfSnapPath,
+            _overlayPdfSnapPageIndex,
+            _overlayPdfSnapName,
+            _overlayPdfSnapLayers,
+            cacheKey);
+    }
+
+    private async Task LoadOverlayPdfSnapPointsAsync(
+        int version,
+        string pdfPath,
+        int pdfIndex,
+        string overlayName,
+        IReadOnlyList<PdfLayerInfo>? layers,
+        string cacheKey)
+    {
+        try
+        {
+            var result = await PdfGeometrySnapService.TryReadSnapPointsAsync(pdfPath, pdfIndex, layers);
+            if (!IsCurrentOverlayPdfSnapRequest(version, pdfPath, pdfIndex, overlayName))
+                return;
+
+            if (!result.Ok)
+            {
+                _overlayPdfSnapIndex = PdfSnapPointIndex.Empty;
+                _overlayPdfSnapCacheKey = cacheKey;
+                PostStatus($"Overlay PDF Snap unavailable: {result.Error}");
+                return;
+            }
+
+            _overlayPdfSnapIndex = new PdfSnapPointIndex(result.Result.Points);
+            _overlayPdfSnapCacheKey = cacheKey;
+            if (_pdfSnapEnabled)
+                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points, {_overlayPdfSnapIndex.Count} overlay points.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, "Overlay PDF snap point load failed.");
+            if (IsCurrentOverlayPdfSnapRequest(version, pdfPath, pdfIndex, overlayName))
+                PostStatus($"Overlay PDF Snap failed: {ex.Message}");
+        }
+        finally
+        {
+            _overlayPdfSnapLoadInProgress = false;
+            if (_overlayPdfSnapReloadPending)
+            {
+                _overlayPdfSnapReloadPending = false;
+                QueueOverlayPdfSnapPointLoad(force: true);
+            }
+        }
+    }
+
+    private bool IsCurrentOverlayPdfSnapRequest(int version, string pdfPath, int pdfIndex, string overlayName) =>
+        version == _overlayPdfSnapLoadVersion &&
+        _pdfSnapEnabled &&
+        string.Equals(pdfPath, _overlayPdfSnapPath, StringComparison.OrdinalIgnoreCase) &&
+        pdfIndex == _overlayPdfSnapPageIndex &&
+        string.Equals(overlayName, _overlayPdfSnapName, StringComparison.OrdinalIgnoreCase);
+
     private IReadOnlyList<PdfLayerInfo>? CurrentPdfSnapVisibleLayers()
     {
         IReadOnlyList<PdfLayerInfo>? source = _cachedLayers?.Count > 0
@@ -160,14 +287,32 @@ public sealed partial class PdfViewport
         if (!IsPdfSnapCacheCurrent())
             QueuePdfSnapPointLoad(force: false);
 
-        if (!_pdfSnapIndex.TryFind(rawPdf, tolerancePt, out PdfGeometrySnapPoint snap))
-            return false;
+        bool found = false;
+        float best = tolerancePt * tolerancePt;
+        SKPoint bestPoint = default;
+        string bestKind = "";
 
-        snapped = snap.Point;
-        snapKind = string.Equals(snap.Kind, "pdf-corner", StringComparison.OrdinalIgnoreCase)
-            ? "pdf-corner"
-            : "pdf-point";
-        return true;
+        void Consider(SKPoint candidate, string kind)
+        {
+            float distance = DistanceSquared(rawPdf, candidate);
+            if (distance >= best)
+                return;
+
+            best = distance;
+            bestPoint = candidate;
+            bestKind = kind;
+            found = true;
+        }
+
+        if (_pdfSnapIndex.TryFind(rawPdf, tolerancePt, out PdfGeometrySnapPoint snap))
+            Consider(snap.Point, NormalizePdfSnapKind(snap.Kind, overlay: false));
+
+        if (TryFindOverlayPdfSnapPoint(rawPdf, tolerancePt, out SKPoint overlaySnap, out string overlayKind))
+            Consider(overlaySnap, overlayKind);
+
+        snapped = bestPoint;
+        snapKind = bestKind;
+        return found;
     }
 
     private bool IsPdfSnapCacheCurrent()
@@ -178,5 +323,46 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfLayerInfo>? layers = CurrentPdfSnapVisibleLayers();
         string cacheKey = PdfSnapCacheKey(_pdfPath, _pdfIndex, _pageFolder, PdfSnapLayerStateKey(layers));
         return string.Equals(_pdfSnapCacheKey, cacheKey, StringComparison.Ordinal);
+    }
+
+    private bool TryFindOverlayPdfSnapPoint(SKPoint rawPdf, float tolerancePt, out SKPoint snapped, out string snapKind)
+    {
+        snapped = default;
+        snapKind = "";
+        if (_sheetOverlayBitmap == null || string.IsNullOrWhiteSpace(_overlayPdfSnapPath))
+            return false;
+
+        if (!IsOverlayPdfSnapCacheCurrent())
+            QueueOverlayPdfSnapPointLoad(force: false);
+
+        float scale = Math.Max(_sheetOverlayScale, 0.001f);
+        SKPoint local = OverlayDisplayToLocal(rawPdf);
+        if (!_overlayPdfSnapIndex.TryFind(local, tolerancePt / scale, out PdfGeometrySnapPoint snap))
+            return false;
+
+        snapped = OverlayLocalToDisplay(snap.Point);
+        snapKind = NormalizePdfSnapKind(snap.Kind, overlay: true);
+        return true;
+    }
+
+    private bool IsOverlayPdfSnapCacheCurrent()
+    {
+        if (string.IsNullOrWhiteSpace(_overlayPdfSnapCacheKey) || string.IsNullOrWhiteSpace(_overlayPdfSnapPath))
+            return false;
+
+        string cacheKey = PdfSnapCacheKey(
+            _overlayPdfSnapPath,
+            _overlayPdfSnapPageIndex,
+            _overlayPdfSnapName,
+            PdfSnapLayerStateKey(_overlayPdfSnapLayers));
+        return string.Equals(_overlayPdfSnapCacheKey, cacheKey, StringComparison.Ordinal);
+    }
+
+    private static string NormalizePdfSnapKind(string kind, bool overlay)
+    {
+        bool corner = string.Equals(kind, "pdf-corner", StringComparison.OrdinalIgnoreCase);
+        if (overlay)
+            return corner ? "pdf-overlay-corner" : "pdf-overlay-point";
+        return corner ? "pdf-corner" : "pdf-point";
     }
 }

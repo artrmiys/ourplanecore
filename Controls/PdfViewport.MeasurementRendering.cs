@@ -1005,6 +1005,8 @@ public sealed partial class PdfViewport
                 "intersection" => "int",
                 "pdf-corner" => "pdf corner",
                 "pdf-point" => "pdf point",
+                "pdf-overlay-corner" => "overlay corner",
+                "pdf-overlay-point" => "overlay point",
                 _ => "end",
             };
             string label = $"{labelKind} {point.X:F0},{point.Y:F0}";
