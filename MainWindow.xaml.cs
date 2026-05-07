@@ -358,9 +358,16 @@ public partial class MainWindow : Window
         BtnViewportLayerTraceCycle.IsEnabled = false;
 
         ApplyPersistedSettings();
-        Loaded += (_, _) => Dispatcher.InvokeAsync(
-            TryOpenLastJobFromSettings,
-            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        Loaded += MainWindow_Loaded;
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.InvokeAsync(async () =>
+        {
+            TryOpenLastJobFromSettings();
+            await TryRunViewportPageStressSmokeAsync();
+        }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     // Toolbar and job lifecycle moved to MainWindow.JobLifecycle.cs

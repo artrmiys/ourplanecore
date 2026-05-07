@@ -423,6 +423,14 @@ public sealed partial class PdfViewport : SKElement
     public readonly record struct ViewState(float Zoom, float PanX, float PanY);
 
     public ViewState CaptureViewState() => new(_zoom, _panX, _panY);
+    public bool IsPageRenderReady(string pageFolder) =>
+        _pageBitmap != null &&
+        _bitmapScale > 0 &&
+        _pdfW > 0 &&
+        _pdfH > 0 &&
+        !_showingPreviousPageDuringSwitch &&
+        string.Equals(_pageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
+
     public bool IsPdfLayerTraceEnabled => _pdfLayerTraceEnabled;
     public bool CanApplyPdfLayerTrace => _pdfLayerTraceEnabled && _pdfLayerTraceReadyToApply;
     public string PdfLayerTraceModeTitle => LayerTraceModeTitle(_pdfLayerTraceMode);
