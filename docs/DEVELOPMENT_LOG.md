@@ -1,5 +1,63 @@
 ﻿# Development Log
 
+## 2026-05-06 Viewport Performance and Sheet Visibility Toggles
+
+- Recent viewport performance commits:
+  - `cf3cca3` improved zoom responsiveness while panning/zooming real PDF
+    pages;
+  - `10fbd3a` capped high-zoom render detail so very close zoom does not keep
+    requesting unnecessarily dense page rasters;
+  - `e401f49` added fast navigation behavior that skips expensive drawing
+    paths while the user is actively zooming or panning;
+  - `d7f6d45` added cached page renders so opening/switching sheets can reuse
+    existing preview/full render work instead of starting blank every time;
+  - `bd746bb` added sheet/takeoff visibility toggles and finalized the latest
+    user-facing visibility behavior;
+  - `fe17b74` fixed the follow-up label regression: line/area/joist summary
+    labels no longer disappear because of zoom distance or fast-frame state,
+    disabled fast pan/zoom now really keeps full frames, sheet legend/header
+    overlays no longer blink off during navigation, and overlay rows now have
+    the same show/hide dot as sheet-linked takeoffs.
+- The active PDF viewport no longer shows a transparent empty sheet while a new
+  page render is pending. It keeps a cached or instant low-detail preview ready
+  first, and when it must keep the previous page for a moment it draws a subtle
+  white veil instead of mixing old takeoffs with the next sheet.
+- Sheet overlay behavior now has a saved on/off state:
+  - each page `source.json` can persist `overlay_visible`;
+  - overlay rows in the expanded Pages tree show hidden state and expose
+    `Hide Overlay` / `Show Overlay` from the context menu;
+  - hidden overlays are not drawn in the viewport and are skipped by PDF export;
+  - overlay bitmap cache access is lock-protected because viewport overlay
+    loading can render in the background.
+- Sheet-linked takeoffs in the expanded Pages tree now have a small visibility
+  dot to the left of the row:
+  - filled dot means the takeoff is visible on that sheet;
+  - empty dot means the takeoff is hidden on that sheet;
+  - clicking the dot toggles only that sheet, not the real takeoff item;
+  - the context menu also exposes `Hide on This Sheet` / `Show on This Sheet`.
+- Hidden takeoffs are persisted per page as `hidden_takeoffs` in `source.json`.
+  The viewport, sheet legend, and PDF export all respect the hidden list, and
+  the viewport clears or updates canvas selection when a selected takeoff is
+  hidden.
+- Tests were extended so page source rewrites preserve overlay visibility and
+  hidden takeoff lists across scale/overlay/layer/source mutations.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Regression runner:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` passed 85/85.
+- Whitespace/conflict check:
+  `git diff --check` passed with only Git LF-to-CRLF warnings.
+- Real-job smoke:
+  `run-viewport-zoom-smoke.cmd` passed on a copied Mallory `A35` sheet with
+  repeated zoom in/out and middle-button pan cycles; UI stayed responsive.
+- Rollback for only the latest visibility toggle block:
+  `git revert bd746bb`
+- Rollback for the label regression follow-up:
+  `git revert fe17b74`
+- Rollback for the full recent viewport performance and visibility block:
+  `git revert fe17b74 bd746bb d7f6d45 e401f49 10fbd3a cf3cca3`
+
 ## 2026-05-06 Takeoffs Tree Refactor Block
 
 - Completed a no-behavior split of the oversized takeoffs workflow into focused
