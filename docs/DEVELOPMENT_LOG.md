@@ -1,5 +1,74 @@
 ﻿# Development Log
 
+## 2026-05-07 Viewport Paper Rendering, Export Paper Color, and PDF Snap
+
+- Hardened sheet opening/switching so the viewport does not flash or remain
+  transparent while a page render is pending:
+  - `9707cb3` hardened the viewport page background path;
+  - `878a709` stabilized page paper rendering;
+  - the viewport now keeps an opaque paper underlay visible during blank,
+    loading, and page-switch states.
+- Added a real page/background display control block:
+  - `214a657` added display controls for the area around the sheet and for the
+    sheet paper/background itself;
+  - paper presets include white plus darker gray/black options for eye comfort;
+  - this affects viewport comfort only, not takeoff geometry.
+- Added regression coverage for sheet opening and navigation:
+  - `d5b5d32` added a viewport page stress smoke runner that opens project
+    sheets, revisits sheets, and opens sheets in additional tabs;
+  - real-job smoke was run against
+    `71. Mallory View_Rid` / `Pages\00. imported\Struct\A35`.
+- Forced exported PDFs to use white paper:
+  - `7e6fb4a` makes PDF export render with paper white regardless of the
+    user's viewport paper/background comfort color;
+  - export remains suitable for client/print output even if the app viewport is
+    set to gray/black paper.
+- Added a separate `PDF Snap` mode:
+  - `12e331f` added the separate toolbar toggle, Command Palette command, and
+    `Ctrl+F3` hotkey;
+  - the normal `Snap` mode still snaps to existing takeoff/markup geometry;
+  - `PDF Snap` is independent and can be turned on/off without changing the
+    selected takeoff item or the regular snap toggle.
+- Extended `PDF Snap` to sheet overlay PDFs:
+  - `5bb75df` passes the sheet overlay PDF source into the viewport snap cache;
+  - overlay PDF snap points are transformed through the saved overlay
+    offset/scale so they land in the active sheet coordinate system;
+  - snap labels distinguish `overlay corner` / `overlay point`.
+- Extended `PDF Snap` from point-only behavior to line geometry:
+  - `daa19ca` makes `Tools/pdf_layers_helper.py` return PDF vector segments in
+    addition to endpoints/corners;
+  - `Models/PdfGeometrySnapService.cs` now indexes both snap points and snap
+    segments;
+  - hovering near the middle of a vector PDF line snaps to the closest point on
+    that line, with labels such as `pdf line` or `overlay line`;
+  - point/corner priority still wins when the cursor is on an actual PDF
+    endpoint/corner.
+- Current limitation:
+  - this is vector PDF snap, not raster/image snap;
+  - if a sheet or overlay is a scanned bitmap inside a PDF, there may be no PDF
+    line/corner objects to snap to;
+  - raster/scan support would need a separate `Image Snap` mode based on pixel
+    edge/intersection detection, with its own performance controls.
+- Verification:
+  - `python -m py_compile Tools\pdf_layers_helper.py` passed;
+  - `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+    passed with 0 warnings and 0 errors;
+  - `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` passed 92/92;
+  - `git diff --check` passed with only Git LF-to-CRLF warnings;
+  - helper checks on real `A35` returned vector snap points and segments for
+    both the active sheet and its overlay;
+  - `run-viewport-zoom-smoke.cmd` passed on a copied Mallory `A35` sheet with
+    repeated zoom in/out and middle-button pan cycles.
+- Rollback:
+  - export paper only: `git revert 7e6fb4a`;
+  - page stress smoke only: `git revert d5b5d32`;
+  - page/background controls only: `git revert 214a657`;
+  - page paper rendering hardening: `git revert 878a709 9707cb3`;
+  - PDF Snap base mode: `git revert 12e331f`;
+  - PDF Snap overlay support: `git revert 5bb75df`;
+  - PDF Snap line-geometry support: `git revert daa19ca`;
+  - full block: `git revert daa19ca 5bb75df 12e331f 7e6fb4a 878a709 214a657 d5b5d32 9707cb3`.
+
 ## 2026-05-06 Viewport Performance and Sheet Visibility Toggles
 
 - Recent viewport performance commits:
