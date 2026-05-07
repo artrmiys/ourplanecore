@@ -505,6 +505,7 @@ public sealed partial class PdfViewport : SKElement
         float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         string previewCacheKey = DocnetRenderCacheKey(_pdfPath, _pdfIndex, previewScale);
+        bool queueLayerAfterPreview = ShouldQueueInitialLayerRender();
         if (DocnetRenderCache.TryGet(previewCacheKey, out CachedBitmapRender cachedPreview))
         {
             ApplyCachedBitmapRender(cachedPreview);
@@ -514,11 +515,20 @@ public sealed partial class PdfViewport : SKElement
                     RestoreViewState(restoreView.Value);
                 else
                     ZoomFit();
-                QueueLayerRender(
-                    resetLayerStates: true,
-                    renderScale: CurrentRenderScale(),
-                    statusAfter: loadedStatus,
-                    fireLayersAfter: true);
+                if (queueLayerAfterPreview)
+                {
+                    QueueLayerRender(
+                        resetLayerStates: true,
+                        renderScale: CurrentRenderScale(),
+                        statusAfter: loadedStatus,
+                        fireLayersAfter: true);
+                }
+                else
+                {
+                    _showingPreviousPageDuringSwitch = false;
+                    PostStatus(loadedStatus);
+                    RequestRepaint();
+                }
             });
         }
         else
@@ -527,7 +537,7 @@ public sealed partial class PdfViewport : SKElement
                 ViewportRenderPolicy.InstantPagePreviewRenderScale,
                 restoreView,
                 fitAfter: !restoreView.HasValue,
-                queueLayerAfter: true,
+                queueLayerAfter: queueLayerAfterPreview,
                 resetLayerStates: true,
                 statusAfter: loadedStatus,
                 fireLayersAfter: true);
@@ -538,6 +548,14 @@ public sealed partial class PdfViewport : SKElement
 
         // Fire layers event
         FireLayersChanged();
+    }
+
+    private bool ShouldQueueInitialLayerRender()
+    {
+        if (_cachedLayers == null)
+            return true;
+
+        return _cachedLayers.Count > 0;
     }
 
     public void SetTool(string name)

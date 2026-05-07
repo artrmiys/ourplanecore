@@ -178,7 +178,7 @@
                                        Margin="0,0,3,0"
                                        ToolTip="PDF page background tint for eye comfort"/>
                             <ComboBox x:Name="ComboDisplayPageBackground"
-                                      Width="96"
+                                      Width="112"
                                       Height="24"
                                       FontSize="11"
                                       Margin="0,0,5,0"
@@ -186,8 +186,11 @@
                                       ToolTip="Choose a softer page background tint">
                                 <ComboBoxItem Content="White" Tag="#FFFFFF"/>
                                 <ComboBoxItem Content="Soft gray" Tag="#F2F2F2"/>
+                                <ComboBoxItem Content="Medium gray" Tag="#D8D8D8"/>
+                                <ComboBoxItem Content="Dark gray" Tag="#B8B8B8"/>
                                 <ComboBoxItem Content="Warm" Tag="#FFF8E8"/>
                                 <ComboBoxItem Content="Soft green" Tag="#EFF7ED"/>
+                                <ComboBoxItem Content="Black" Tag="#000000"/>
                             </ComboBox>
                             <CheckBox x:Name="ChkDisplaySimplifyNavigation" Content="Fast pan/zoom" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                       ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>

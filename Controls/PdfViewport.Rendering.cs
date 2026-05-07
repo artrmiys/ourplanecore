@@ -67,6 +67,7 @@ public sealed partial class PdfViewport
                         (srcTop / _bitmapScale - _panY) * _zoom,
                         (srcRight / _bitmapScale - _panX) * _zoom,
                         (srcBottom / _bitmapScale - _panY) * _zoom);
+                    DrawPagePaperUnderlay(canvas, dst);
                     canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
                     DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);
@@ -139,14 +140,26 @@ public sealed partial class PdfViewport
         canvas.DrawRect(new SKRect(0, 0, width, height), paint);
     }
 
+    private void DrawPagePaperUnderlay(SKCanvas canvas, SKRect rect)
+    {
+        using var paint = new SKPaint
+        {
+            Color = GetCachedColor(PageBackgroundColor, SKColors.White),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+        canvas.DrawRect(rect, paint);
+    }
+
     private void DrawPageBackgroundTint(SKCanvas canvas, SKRect rect)
     {
-        if (!ViewportBackgroundPolicy.ShouldTintRenderedPage(PageBackgroundColor))
+        byte alpha = ViewportBackgroundPolicy.RenderedPageTintAlpha(PageBackgroundColor);
+        if (alpha == 0)
             return;
 
         using var paint = new SKPaint
         {
-            Color = GetCachedColor(PageBackgroundColor, SKColors.White).WithAlpha(ViewportBackgroundPolicy.PageTintAlpha),
+            Color = GetCachedColor(PageBackgroundColor, SKColors.White).WithAlpha(alpha),
             Style = SKPaintStyle.Fill,
             BlendMode = SKBlendMode.Multiply,
             IsAntialias = false,
@@ -158,7 +171,7 @@ public sealed partial class PdfViewport
     {
         using var paint = new SKPaint
         {
-            Color = GetCachedColor(ViewBackgroundColor, SKColors.White),
+            Color = GetCachedColor(PageBackgroundColor, SKColors.White),
             Style = SKPaintStyle.Fill,
             IsAntialias = false,
         };

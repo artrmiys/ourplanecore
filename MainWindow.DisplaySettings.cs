@@ -536,7 +536,10 @@ public partial class MainWindow
     [
         ("White", "#FFFFFF"),
         ("Soft gray", "#F2F2F2"),
+        ("Medium gray", "#D8D8D8"),
+        ("Dark gray", "#B8B8B8"),
         ("Warm", "#FFF8E8"),
         ("Soft green", "#EFF7ED"),
+        ("Black", "#000000"),
     ];
 }

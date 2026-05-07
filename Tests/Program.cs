@@ -1140,7 +1140,11 @@ static void ViewportBackgroundTintsComfortColors()
     AssertFalse(ViewportBackgroundPolicy.ShouldTintRenderedPage("#FFFFFF"), "default white is not tinted");
     AssertTrue(ViewportBackgroundPolicy.ShouldTintRenderedPage("#FFF8E8"), "warm paper tints rendered page");
     AssertTrue(ViewportBackgroundPolicy.ShouldTintRenderedPage("#EFF7ED"), "soft green tints rendered page");
-    AssertFalse(ViewportBackgroundPolicy.ShouldTintRenderedPage("#2B2B2B"), "dark edge does not tint rendered page");
+    AssertTrue(ViewportBackgroundPolicy.ShouldTintRenderedPage("#B8B8B8"), "dark gray paper tints rendered page");
+    AssertTrue(ViewportBackgroundPolicy.ShouldTintRenderedPage("#000000"), "black paper tints rendered page");
+    AssertTrue(
+        ViewportBackgroundPolicy.RenderedPageTintAlpha("#000000") == ViewportBackgroundPolicy.DarkPageTintAlpha,
+        "black paper uses dark tint alpha");
 }
 
 static void ViewportHighZoomRespectsFastNavigationToggle()

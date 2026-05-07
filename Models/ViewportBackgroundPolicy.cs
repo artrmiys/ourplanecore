@@ -6,6 +6,7 @@ public static class ViewportBackgroundPolicy
 {
     public const string DefaultColor = "#FFFFFF";
     public const byte PageTintAlpha = 82;
+    public const byte DarkPageTintAlpha = 118;
 
     public static string NormalizeColor(string? color)
     {
@@ -26,12 +27,17 @@ public static class ViewportBackgroundPolicy
 
     public static bool ShouldTintRenderedPage(string? color)
     {
+        return RenderedPageTintAlpha(color) > 0;
+    }
+
+    public static byte RenderedPageTintAlpha(string? color)
+    {
         string clean = NormalizeColor(color);
         if (string.Equals(clean, DefaultColor, StringComparison.Ordinal))
-            return false;
+            return 0;
 
         SKColor parsed = SKColor.Parse(clean);
         double luminance = ((0.2126 * parsed.Red) + (0.7152 * parsed.Green) + (0.0722 * parsed.Blue)) / 255.0;
-        return luminance >= 0.70;
+        return luminance >= 0.70 ? PageTintAlpha : DarkPageTintAlpha;
     }
 }

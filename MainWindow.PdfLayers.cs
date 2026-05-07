@@ -284,13 +284,14 @@ public partial class MainWindow
 
     private void OnPdfLayersDiscovered(IReadOnlyList<PdfLayerInfo> layers)
     {
-        if (_currentPage == null || _currentPage.PdfLayersCached || layers.Count == 0)
+        if (_currentPage == null || _currentPage.PdfLayersCached)
             return;
 
         try
         {
             OurPlaneCoreJobStore.SavePageLayerCache(_currentPage.FolderPath, layers);
-            TxtStatus.Text = $"Cached {layers.Count} visible PDF layer(s) and wrote layers.json for this page.";
+            if (layers.Count > 0)
+                TxtStatus.Text = $"Cached {layers.Count} visible PDF layer(s) and wrote layers.json for this page.";
         }
         catch
         {

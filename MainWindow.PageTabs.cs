@@ -99,25 +99,26 @@ public partial class MainWindow
 
     private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)
     {
-        _currentPage = page;
-        _currentPdfPath = page.PdfPath;
-        TxtStatusPage.Text = page.Name;
-        _viewport.ScaleMetersPerPt = page.ScaleMetersPerPt;
-        UpdateScaleUi(page.ScaleMetersPerPt);
-        ApplyScaleToCurrentPageMeasurements(page.ScaleMetersPerPt);
+        PageInfo viewportPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        _currentPage = viewportPage;
+        _currentPdfPath = viewportPage.PdfPath;
+        TxtStatusPage.Text = viewportPage.Name;
+        _viewport.ScaleMetersPerPt = viewportPage.ScaleMetersPerPt;
+        UpdateScaleUi(viewportPage.ScaleMetersPerPt);
+        ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt);
         RefreshAllTotals();
         _viewport.LoadPage(
-            page.PdfPath,
-            page.PdfPage,
-            page.FolderPath,
-            page.PdfLayersCached ? page.PdfLayers : null,
+            viewportPage.PdfPath,
+            viewportPage.PdfPage,
+            viewportPage.FolderPath,
+            viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
             restoreView);
-        ApplyViewportPageTakeoffVisibility(page);
-        LoadSheetOverlay(page);
-        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath));
+        ApplyViewportPageTakeoffVisibility(viewportPage);
+        LoadSheetOverlay(viewportPage);
+        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
         RefreshAiMarkersOverlay();
-        SelectPageTreeNodeSilently(page.FolderPath);
-        _settings.LastPageFolder = page.FolderPath;
+        SelectPageTreeNodeSilently(viewportPage.FolderPath);
+        _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
         SaveAppSettings();
@@ -125,7 +126,7 @@ public partial class MainWindow
         if (_takeoffItems.Count == 0)
             TryAutoLoad();
         ApplyTakeoffPageHighlights();
-        RefreshFloatingPageSetup(page.FolderPath);
+        RefreshFloatingPageSetup(viewportPage.FolderPath);
     }
 
     private void ClosePageTab(PageTabState tab)

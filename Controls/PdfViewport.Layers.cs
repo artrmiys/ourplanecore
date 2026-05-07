@@ -213,6 +213,17 @@ public sealed partial class PdfViewport
 
     private bool ApplyLayerRenderResult(PdfLayerRenderResult render, bool resetLayerStates)
     {
+        if (render.Layers.Count == 0 && _pageBitmap != null)
+        {
+            _cachedLayers ??= [];
+            _layers = [];
+            _usingLayerRenderer = false;
+            _showingPreviousPageDuringSwitch = false;
+            RequestRepaint();
+            PdfLayersDiscovered?.Invoke(_cachedLayers);
+            return true;
+        }
+
         var bitmap = SKBitmap.Decode(render.ImageBytes);
         if (bitmap == null)
         {
