@@ -1077,7 +1077,7 @@ static void ViewportRenderScaleChoosesNextQualityStep()
 
     AssertClose(0.75, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom clamps to first render step");
     AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
-    AssertClose(4.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom clamps to final render step");
+    AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom stays on responsive render cap");
 }
 
 static void ViewportHighZoomUsesAutomaticFastNavigation()

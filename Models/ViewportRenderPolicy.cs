@@ -5,7 +5,8 @@ namespace OurPlaneCore;
 
 public static class ViewportRenderPolicy
 {
-    public const float HighZoomFastFrameThreshold = 3.0f;
+    public const float HighZoomFastFrameThreshold = 2.0f;
+    public const float ResponsiveMaxRenderScale = 1.5f;
 
     public static bool ShouldUseFastNavigationFrame(
         bool simplifyNavigationRendering,
@@ -23,13 +24,14 @@ public static class ViewportRenderPolicy
         if (zoom <= 0 || renderScaleSteps.Count == 0)
             return 1.0f;
 
-        float desired = Math.Clamp(zoom, renderScaleSteps[0], renderScaleSteps[^1]);
+        float maxScale = Math.Min(renderScaleSteps[^1], ResponsiveMaxRenderScale);
+        float desired = Math.Clamp(zoom, renderScaleSteps[0], maxScale);
         foreach (float step in renderScaleSteps)
         {
             if (desired <= step)
-                return step;
+                return Math.Min(step, maxScale);
         }
 
-        return renderScaleSteps[^1];
+        return maxScale;
     }
 }

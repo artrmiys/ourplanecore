@@ -6,7 +6,7 @@ public static class ViewportConstants
     public const float ZeroLengthEpsilon = 1e-3f;
     public const int AutosaveDebounceMs = 500;
     public const int ZoomRerenderDelayMs = 180;
-    public const int NavigationIdleMs = 90;
+    public const int NavigationIdleMs = 180;
     public const float SnapToleranceScreen = 14f;
     public const float VertexHitRadiusScreen = 24f;
     public const float MeasurementHitRadiusScreen = 20f;
