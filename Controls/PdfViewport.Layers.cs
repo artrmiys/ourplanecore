@@ -20,20 +20,6 @@ public sealed partial class PdfViewport
 {
     // ── Layer API ─────────────────────────────────────────────────────────────
 
-    private void RenderPageWithDocnet(float renderScale)
-    {
-        string cacheKey = DocnetRenderCacheKey(_pdfPath, _pdfIndex, renderScale);
-        if (DocnetRenderCache.TryGet(cacheKey, out CachedBitmapRender cached))
-        {
-            ApplyCachedBitmapRender(cached);
-            return;
-        }
-
-        DocnetRenderResult render = RenderPageBitmapWithDocnet(_pdfPath, _pdfIndex, renderScale);
-        DocnetRenderCache.Put(cacheKey, render);
-        ApplyDocnetRenderResult(render);
-    }
-
     private static DocnetRenderResult RenderPageBitmapWithDocnet(string pdfPath, int pdfIndex, float renderScale)
     {
         float scale = Math.Clamp(renderScale, 0.20f, 4.0f);
@@ -79,21 +65,6 @@ public sealed partial class PdfViewport
         _usingLayerRenderer = false;
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
-    }
-
-    private bool TryRenderInstantPagePreview()
-    {
-        try
-        {
-            RenderPageWithDocnet(ViewportRenderPolicy.InstantPagePreviewRenderScale);
-            RequestRepaint();
-            return true;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"Instant PDF preview unavailable for {_pdfPath} page {_pdfIndex + 1}");
-            return false;
-        }
     }
 
     private void QueueDocnetRender(
@@ -170,7 +141,11 @@ public sealed partial class PdfViewport
         {
             AppLog.Error(ex, "PDF render failed.");
             if (request.Version == _docnetRenderVersion)
+            {
+                _showingPreviousPageDuringSwitch = false;
+                RequestRepaint();
                 PostStatus($"Render error: {ex.Message}");
+            }
         }
         finally
         {
@@ -346,6 +321,9 @@ public sealed partial class PdfViewport
                 else if (!string.IsNullOrWhiteSpace(completion.Error))
                 {
                     PostStatus($"Layer render unavailable: {completion.Error}");
+                    QueueDocnetRender(
+                        completion.Request.RenderScale,
+                        statusAfter: completion.Request.StatusAfter);
                 }
             }
         }
@@ -353,6 +331,13 @@ public sealed partial class PdfViewport
         {
             AppLog.Error(ex, "PDF layer render failed.");
             PostStatus($"Layer render failed: {ex.Message}");
+            if (request.Version == _layerRenderVersion &&
+                string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+                request.PdfIndex == _pdfIndex &&
+                string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                QueueDocnetRender(request.RenderScale, statusAfter: request.StatusAfter);
+            }
         }
         finally
         {

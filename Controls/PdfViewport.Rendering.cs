@@ -28,7 +28,11 @@ public sealed partial class PdfViewport
         var canvas = e.Surface.Canvas;
         canvas.Clear(GetCachedColor(ViewBackgroundColor, SKColors.White));
 
-        if (_pageBitmap == null) return;
+        if (_pageBitmap == null)
+        {
+            DrawBlankPageLoadingSurface(canvas, (float)e.Info.Width, (float)e.Info.Height);
+            return;
+        }
         bool previousFastFrame = _renderNavigationFastFrame;
         _renderNavigationFastFrame = IsFastNavigationFrame();
         try
@@ -128,6 +132,17 @@ public sealed partial class PdfViewport
         using var paint = new SKPaint
         {
             Color = new SKColor(255, 255, 255, 82),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+        canvas.DrawRect(new SKRect(0, 0, width, height), paint);
+    }
+
+    private static void DrawBlankPageLoadingSurface(SKCanvas canvas, float width, float height)
+    {
+        using var paint = new SKPaint
+        {
+            Color = SKColors.White,
             Style = SKPaintStyle.Fill,
             IsAntialias = false,
         };

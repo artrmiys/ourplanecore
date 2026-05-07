@@ -488,36 +488,18 @@ public sealed partial class PdfViewport : SKElement
         }
         else
         {
-            bool hasInstantPreview = TryRenderInstantPagePreview();
-            if (hasInstantPreview)
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    if (restoreView.HasValue)
-                        RestoreViewState(restoreView.Value);
-                    else
-                        ZoomFit();
-                    QueueLayerRender(
-                        resetLayerStates: true,
-                        renderScale: CurrentRenderScale(),
-                        statusAfter: loadedStatus,
-                        fireLayersAfter: true);
-                });
-            }
-            else
-            {
-                QueueDocnetRender(
-                    previewScale,
-                    restoreView,
-                    fitAfter: !restoreView.HasValue,
-                    queueLayerAfter: true,
-                    resetLayerStates: true,
-                    statusAfter: loadedStatus,
-                    fireLayersAfter: true);
-            }
+            QueueDocnetRender(
+                ViewportRenderPolicy.InstantPagePreviewRenderScale,
+                restoreView,
+                fitAfter: !restoreView.HasValue,
+                queueLayerAfter: true,
+                resetLayerStates: true,
+                statusAfter: loadedStatus,
+                fireLayersAfter: true);
         }
 
         PostStatus($"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+        RequestRepaint();
 
         // Fire layers event
         FireLayersChanged();

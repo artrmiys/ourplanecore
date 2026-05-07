@@ -11,6 +11,8 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private const string PageOverlayVisibilityToggleTag = "PageOverlayVisibilityToggle";
+
     private void RebuildPageTakeoffNodes(TreeViewItem pageItem, PageInfo page)
     {
         pageItem.Items.Clear();
@@ -117,6 +119,7 @@ public partial class MainWindow
             Margin = new Thickness(2, 0, 7, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = Cursors.Hand,
+            Tag = PageOverlayVisibilityToggleTag,
             ToolTip = page.OverlayVisible
                 ? $"Hide overlay on {page.Name}"
                 : $"Show overlay on {page.Name}",

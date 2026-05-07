@@ -371,12 +371,16 @@ public partial class MainWindow
             return;
         }
 
-        if (item.Tag is PageOverlayNode)
+        if (item.Tag is PageOverlayNode overlay)
         {
             _pagesMultiSelection.Clear();
             _pageTakeoffMultiSelection.Clear();
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
-            TxtStatus.Text = "Sheet overlay selected. Right-click it to move, scale, recolor, or clear.";
+            if (IsPageOverlayVisibilityToggleSource(e.OriginalSource as DependencyObject))
+                TogglePageOverlayVisibility(overlay.Page);
+            else
+                TxtStatus.Text = "Sheet overlay selected. Right-click it to move, scale, recolor, or clear.";
             e.Handled = true;
             return;
         }
@@ -430,6 +434,21 @@ public partial class MainWindow
         _pagesRangeAnchorPath = path;
         _pageTakeoffMultiSelection.Clear();
         ApplyPagesMultiSelectionVisuals();
+    }
+
+    private static bool IsPageOverlayVisibilityToggleSource(DependencyObject? source)
+    {
+        while (source != null)
+        {
+            if (source is FrameworkElement { Tag: PageOverlayVisibilityToggleTag })
+                return true;
+            if (source is TreeViewItem)
+                return false;
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     private void HandlePageTakeoffNodeMultiSelect(TreeViewItem item, PageTakeoffNode node, MouseButtonEventArgs e)
