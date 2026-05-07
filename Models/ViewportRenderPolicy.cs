@@ -8,6 +8,7 @@ public static class ViewportRenderPolicy
     public const float HighZoomFastFrameThreshold = 2.0f;
     public const float FarZoomFastFrameThreshold = 0.85f;
     public const float ResponsiveMaxRenderScale = 1.5f;
+    public const float InstantPagePreviewRenderScale = 0.35f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float SheetOverlayViewportRenderScale = 1.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;

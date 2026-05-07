@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace OurPlaneCore;
@@ -54,10 +55,12 @@ public partial class MainWindow
             ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
         Brush swatchBrush = BrushFromHex(page.OverlayColor, Brushes.Gray);
 
-        var dock = new DockPanel { LastChildFill = true };
+        var dock = new DockPanel { LastChildFill = true, Opacity = page.OverlayVisible ? 1.0 : 0.58 };
         var transform = new TextBlock
         {
-            Text = $"{page.OverlayScale:0.###}x  {page.OverlayOffsetXPt:0.#},{page.OverlayOffsetYPt:0.#}",
+            Text = page.OverlayVisible
+                ? $"{page.OverlayScale:0.###}x  {page.OverlayOffsetXPt:0.#},{page.OverlayOffsetYPt:0.#}"
+                : "hidden",
             Foreground = secondaryBrush,
             FontSize = 10,
             FontFamily = new FontFamily("Consolas, Cascadia Mono, Segoe UI"),
@@ -73,7 +76,7 @@ public partial class MainWindow
         {
             Width = 12,
             Height = 12,
-            Background = swatchBrush,
+            Background = page.OverlayVisible ? swatchBrush : Brushes.Transparent,
             BorderBrush = secondaryBrush,
             BorderThickness = new Thickness(1),
             Margin = new Thickness(28, 0, 6, 0),
@@ -94,7 +97,9 @@ public partial class MainWindow
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         dock.Children.Add(nameRow);
-        dock.ToolTip = "Sheet overlay. Right-click to move, scale, recolor, or clear.";
+        dock.ToolTip = page.OverlayVisible
+            ? "Sheet overlay. Right-click to hide, move, scale, recolor, or clear."
+            : "Sheet overlay is hidden. Right-click to show it.";
         return dock;
     }
 
@@ -105,7 +110,8 @@ public partial class MainWindow
             ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
         Brush swatchBrush = BrushFromHex(takeoff.Color, Brushes.Gray);
 
-        var dock = new DockPanel { LastChildFill = true };
+        bool isVisible = IsPageTakeoffVisible(page, takeoff);
+        var dock = new DockPanel { LastChildFill = true, Opacity = isVisible ? 1.0 : 0.58 };
 
         var pageMeasurements = MeasurementsForTakeoffOnPage(takeoff, page.FolderPath).ToList();
         if (pageMeasurements.Count > 0)
@@ -144,6 +150,7 @@ public partial class MainWindow
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        nameRow.Children.Add(BuildPageTakeoffVisibilityDot(page, takeoff, swatchBrush, isVisible));
         nameRow.Children.Add(indexText);
         nameRow.Children.Add(swatchHost);
         nameRow.Children.Add(new TextBlock
@@ -156,9 +163,39 @@ public partial class MainWindow
         dock.Children.Add(nameRow);
 
         dock.ToolTip =
+            $"{(isVisible ? "Visible" : "Hidden")} on this sheet. Click the dot to toggle." + Environment.NewLine +
             $"Legend position: {legendIndex + 1}" + Environment.NewLine +
             "Linked to the real Takeoffs item. Use Move Up/Down here only to change this sheet's legend order.";
         return dock;
+    }
+
+    private FrameworkElement BuildPageTakeoffVisibilityDot(
+        PageInfo page,
+        TakeoffItem takeoff,
+        Brush swatchBrush,
+        bool isVisible)
+    {
+        var dot = new Border
+        {
+            Width = 11,
+            Height = 11,
+            CornerRadius = new CornerRadius(6),
+            Background = isVisible ? swatchBrush : Brushes.Transparent,
+            BorderBrush = swatchBrush,
+            BorderThickness = new Thickness(1.5),
+            Margin = new Thickness(2, 0, 7, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = Cursors.Hand,
+            ToolTip = isVisible
+                ? $"Hide {takeoff.Name} on {page.Name}"
+                : $"Show {takeoff.Name} on {page.Name}",
+        };
+        dot.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            TogglePageTakeoffVisibility(page, takeoff);
+            e.Handled = true;
+        };
+        return dot;
     }
 
     private IEnumerable<TakeoffItem> TakeoffsForPage(string pageFolder) =>
@@ -199,6 +236,74 @@ public partial class MainWindow
             .ThenBy(takeoff => takeoff.Name, StringComparer.OrdinalIgnoreCase));
 
         return ordered;
+    }
+
+    private IReadOnlyList<TakeoffItem> VisibleOrderedTakeoffsForPage(PageInfo page) =>
+        OrderedTakeoffsForPage(page)
+            .Where(takeoff => IsPageTakeoffVisible(page, takeoff))
+            .ToList();
+
+    private bool IsPageTakeoffVisible(PageInfo page, TakeoffItem takeoff)
+    {
+        string key = TakeoffLegendOrderKey(takeoff);
+        if (string.IsNullOrWhiteSpace(key))
+            return true;
+
+        return !page.HiddenTakeoffs
+            .Select(NormalizeTakeoffLegendOrderKey)
+            .Contains(key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void TogglePageTakeoffVisibility(PageInfo page, TakeoffItem takeoff)
+    {
+        string key = TakeoffLegendOrderKey(takeoff);
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
+        var hidden = page.HiddenTakeoffs
+            .Select(NormalizeTakeoffLegendOrderKey)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        bool nowHidden;
+        if (hidden.Contains(key, StringComparer.OrdinalIgnoreCase))
+        {
+            hidden.RemoveAll(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase));
+            nowHidden = false;
+        }
+        else
+        {
+            hidden.Add(key);
+            nowHidden = true;
+        }
+
+        page.HiddenTakeoffs = hidden;
+        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            _currentPage.HiddenTakeoffs = hidden.ToList();
+        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, hidden);
+        RefreshPageOverlayTreeNode(page);
+        ApplyViewportPageTakeoffVisibility(page);
+        RefreshSheetLegend();
+        TxtStatus.Text = nowHidden
+            ? $"Hidden on {page.Name}: {takeoff.Name}."
+            : $"Visible on {page.Name}: {takeoff.Name}.";
+    }
+
+    private void ApplyViewportPageTakeoffVisibility(PageInfo page)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            return;
+
+        var hiddenKeys = page.HiddenTakeoffs
+            .Select(NormalizeTakeoffLegendOrderKey)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hiddenFolders = _takeoffItems
+            .Where(item => hiddenKeys.Contains(TakeoffLegendOrderKey(item)))
+            .Select(item => item.FolderPath)
+            .ToList();
+        _viewport.SetHiddenTakeoffFolders(hiddenFolders);
     }
 
     private string TakeoffLegendOrderKey(TakeoffItem item) =>
@@ -297,6 +402,10 @@ public partial class MainWindow
             selectedCount > 1 ? $"Select {selectedCount} Linked Takeoffs" : "Select Linked Takeoff",
             true,
             () => SelectLinkedPageTakeoff(node)));
+        menu.Items.Add(MakeMenuItem(
+            IsPageTakeoffVisible(node.Page, node.Takeoff) ? "Hide on This Sheet" : "Show on This Sheet",
+            true,
+            () => TogglePageTakeoffVisibility(node.Page, node.Takeoff)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
             selectedCount > 1 ? $"Move {selectedCount} Up in Legend" : "Move Up in Legend",

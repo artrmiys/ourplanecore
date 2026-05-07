@@ -83,6 +83,8 @@ internal static class StorageTests
             PageInfo overlayPage = CreatePageItem(job, "S102");
             OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
             OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2);
+            OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
+            OurPlaneCoreJobStore.SavePageHiddenTakeoffs(basePage.FolderPath, ["Walls", "Joists"]);
             OurPlaneCoreJobStore.SavePageLayerCache(
                 basePage.FolderPath,
                 [new PdfLayerInfo { Number = 1, Name = "Walls", IsOn = true }]);
@@ -268,6 +270,8 @@ internal static class StorageTests
         AssertClose(12.5, page.OverlayOffsetXPt, "overlay x should survive rewrite");
         AssertClose(-7.25, page.OverlayOffsetYPt, "overlay y should survive rewrite");
         AssertClose(1.2, page.OverlayScale, "overlay scale should survive rewrite");
+        AssertFalse(page.OverlayVisible, "overlay visibility should survive rewrite");
+        AssertEqual("Walls,Joists", string.Join(",", page.HiddenTakeoffs), "hidden takeoffs should survive rewrite");
         AssertEqual("1", manifest.LayerCount.ToString(), "layer manifest should survive rewrite");
     }
 

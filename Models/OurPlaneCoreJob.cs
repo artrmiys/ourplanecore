@@ -55,12 +55,18 @@ public static class OurPlaneCoreJobStore
     public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder) =>
         PageStore.SavePageLegendTakeoffOrder(pageFolder, legendTakeoffOrder);
 
+    public static void SavePageHiddenTakeoffs(string pageFolder, IReadOnlyList<string> hiddenTakeoffs) =>
+        PageStore.SavePageHiddenTakeoffs(pageFolder, hiddenTakeoffs);
+
     public static void SavePageOverlay(
         string pageFolder,
         string overlayPageFolder,
         string overlayColor,
         double overlayOpacity) =>
         PageStore.SavePageOverlay(pageFolder, overlayPageFolder, overlayColor, overlayOpacity);
+
+    public static void SavePageOverlayVisibility(string pageFolder, bool isVisible) =>
+        PageStore.SavePageOverlayVisibility(pageFolder, isVisible);
 
     public static void ClearPageOverlay(string pageFolder) =>
         PageStore.ClearPageOverlay(pageFolder);

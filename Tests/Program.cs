@@ -947,6 +947,8 @@ static void PageOverlayPersistsThroughSourceRewrites()
 
         OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
         OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2);
+        OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
+        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(basePage.FolderPath, ["Walls"]);
         PageInfo loaded = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page missing");
         AssertEqual(overlayPage.FolderPath, loaded.OverlayPageFolder, "overlay page path");
@@ -955,6 +957,8 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(12.5, loaded.OverlayOffsetXPt, "overlay x offset");
         AssertClose(-7.25, loaded.OverlayOffsetYPt, "overlay y offset");
         AssertClose(1.2, loaded.OverlayScale, "overlay scale");
+        AssertFalse(loaded.OverlayVisible, "overlay visibility");
+        AssertEqual("Walls", string.Join(",", loaded.HiddenTakeoffs), "hidden takeoffs");
 
         OurPlaneCoreJobStore.SavePageScale(basePage.FolderPath, 0.3048);
         PageInfo afterScale = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
@@ -963,6 +967,8 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(12.5, afterScale.OverlayOffsetXPt, "overlay x survives scale save");
         AssertClose(-7.25, afterScale.OverlayOffsetYPt, "overlay y survives scale save");
         AssertClose(1.2, afterScale.OverlayScale, "overlay scale survives scale save");
+        AssertFalse(afterScale.OverlayVisible, "overlay visibility survives scale save");
+        AssertEqual("Walls", string.Join(",", afterScale.HiddenTakeoffs), "hidden takeoffs survive scale save");
 
         OurPlaneCoreJobStore.ClearPageOverlay(basePage.FolderPath);
         PageInfo cleared = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)

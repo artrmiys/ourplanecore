@@ -52,7 +52,7 @@ public partial class MainWindow
             return;
         }
 
-        var entries = OrderedTakeoffsForPage(_currentPage)
+        var entries = VisibleOrderedTakeoffsForPage(_currentPage)
             .Select(item =>
             {
                 var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();

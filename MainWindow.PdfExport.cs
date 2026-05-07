@@ -138,7 +138,7 @@ public partial class MainWindow
         pages
             .Select(page => new PdfExportPageInput(
                 page,
-                OrderedTakeoffsForPage(page)
+                VisibleOrderedTakeoffsForPage(page)
                     .Select(item => new PdfExportTakeoffInput(
                         item,
                         MeasurementsForTakeoffOnPage(item, page.FolderPath).ToList()))

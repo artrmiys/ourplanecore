@@ -121,7 +121,9 @@ internal static class PageStore
             PdfLayersCached = src.PdfLayersCached,
             PdfLayers = src.PdfLayers,
             LegendTakeoffOrder = src.LegendTakeoffOrder ?? [],
+            HiddenTakeoffs = NormalizeStringList(src.HiddenTakeoffs),
             OverlayPageFolder = ResolveRelativePagePath(pageFolder, src.OverlayPageFolder),
+            OverlayVisible = src.OverlayVisible,
             OverlayColor = string.IsNullOrWhiteSpace(src.OverlayColor) ? "#E53935" : src.OverlayColor,
             OverlayOpacity = NormalizeOverlayOpacity(src.OverlayOpacity),
             OverlayOffsetXPt = NormalizeOverlayOffset(src.OverlayOffsetXPt),
@@ -145,11 +147,13 @@ internal static class PageStore
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
             src.OverlayPageFolder,
+            src.OverlayVisible,
             src.OverlayColor,
             src.OverlayOpacity,
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
-            src.OverlayScale);
+            src.OverlayScale,
+            src.HiddenTakeoffs);
     }
 
     public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder)
@@ -167,11 +171,37 @@ internal static class PageStore
             src.PdfLayersCached,
             legendTakeoffOrder,
             src.OverlayPageFolder,
+            src.OverlayVisible,
             src.OverlayColor,
             src.OverlayOpacity,
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
-            src.OverlayScale);
+            src.OverlayScale,
+            src.HiddenTakeoffs);
+    }
+
+    public static void SavePageHiddenTakeoffs(string pageFolder, IReadOnlyList<string> hiddenTakeoffs)
+    {
+        SourceInfo? src = ReadSource(pageFolder);
+        if (src == null) return;
+
+        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        WriteSource(
+            pageFolder,
+            pdfAbs,
+            src.Page,
+            src.ScaleMetersPerPt,
+            src.PdfLayers,
+            src.PdfLayersCached,
+            src.LegendTakeoffOrder,
+            src.OverlayPageFolder,
+            src.OverlayVisible,
+            src.OverlayColor,
+            src.OverlayOpacity,
+            src.OverlayOffsetXPt,
+            src.OverlayOffsetYPt,
+            src.OverlayScale,
+            hiddenTakeoffs);
     }
 
     public static void SavePageOverlay(
@@ -193,11 +223,37 @@ internal static class PageStore
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
             overlayPageFolder,
+            src.OverlayVisible,
             string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
             NormalizeOverlayOpacity(overlayOpacity),
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
-            src.OverlayScale);
+            src.OverlayScale,
+            src.HiddenTakeoffs);
+    }
+
+    public static void SavePageOverlayVisibility(string pageFolder, bool isVisible)
+    {
+        SourceInfo? src = ReadSource(pageFolder);
+        if (src == null) return;
+
+        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        WriteSource(
+            pageFolder,
+            pdfAbs,
+            src.Page,
+            src.ScaleMetersPerPt,
+            src.PdfLayers,
+            src.PdfLayersCached,
+            src.LegendTakeoffOrder,
+            src.OverlayPageFolder,
+            isVisible,
+            src.OverlayColor,
+            src.OverlayOpacity,
+            src.OverlayOffsetXPt,
+            src.OverlayOffsetYPt,
+            src.OverlayScale,
+            src.HiddenTakeoffs);
     }
 
     public static void ClearPageOverlay(string pageFolder) =>
@@ -222,11 +278,13 @@ internal static class PageStore
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
             src.OverlayPageFolder,
+            src.OverlayVisible,
             src.OverlayColor,
             src.OverlayOpacity,
             NormalizeOverlayOffset(overlayOffsetXPt),
             NormalizeOverlayOffset(overlayOffsetYPt),
-            NormalizeOverlayScale(overlayScale));
+            NormalizeOverlayScale(overlayScale),
+            src.HiddenTakeoffs);
     }
 
     public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers)
@@ -244,11 +302,13 @@ internal static class PageStore
             pdfLayersCached: true,
             src.LegendTakeoffOrder,
             src.OverlayPageFolder,
+            src.OverlayVisible,
             src.OverlayColor,
             src.OverlayOpacity,
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
-            src.OverlayScale);
+            src.OverlayScale,
+            src.HiddenTakeoffs);
     }
 
     public static string PageLayersJsonPath(string pageFolder) =>
@@ -330,11 +390,13 @@ internal static class PageStore
                     snap.PdfLayers,
                     snap.PdfLayersCached,
                     overlayPageFolder: snap.OverlayPageFolder,
+                    overlayVisible: snap.OverlayVisible,
                     overlayColor: snap.OverlayColor,
                     overlayOpacity: snap.OverlayOpacity,
                     overlayOffsetXPt: snap.OverlayOffsetXPt,
                     overlayOffsetYPt: snap.OverlayOffsetYPt,
-                    overlayScale: snap.OverlayScale);
+                    overlayScale: snap.OverlayScale,
+                    hiddenTakeoffs: snap.HiddenTakeoffs);
         }
     }
 
@@ -358,11 +420,13 @@ internal static class PageStore
                 src.PdfLayersCached,
                 src.PdfLayers,
                 ResolveRelativePagePath(dir, src.OverlayPageFolder),
+                src.OverlayVisible,
                 src.OverlayColor,
                 src.OverlayOpacity,
                 src.OverlayOffsetXPt,
                 src.OverlayOffsetYPt,
-                src.OverlayScale));
+                src.OverlayScale,
+                NormalizeStringList(src.HiddenTakeoffs)));
         }
 
         return snapshots;
@@ -377,11 +441,13 @@ internal static class PageStore
         bool pdfLayersCached = false,
         IReadOnlyList<string>? legendTakeoffOrder = null,
         string overlayPageFolder = "",
+        bool overlayVisible = true,
         string overlayColor = "#E53935",
         double overlayOpacity = 0.55,
         double overlayOffsetXPt = 0,
         double overlayOffsetYPt = 0,
-        double overlayScale = 1.0)
+        double overlayScale = 1.0,
+        IReadOnlyList<string>? hiddenTakeoffs = null)
     {
         var src = new SourceInfo
         {
@@ -394,7 +460,9 @@ internal static class PageStore
                 .Where(entry => !string.IsNullOrWhiteSpace(entry))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList() ?? [],
+            HiddenTakeoffs = NormalizeStringList(hiddenTakeoffs),
             OverlayPageFolder = MakeRelativePageReference(pageFolder, overlayPageFolder),
+            OverlayVisible = overlayVisible,
             OverlayColor = string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
             OverlayOpacity = NormalizeOverlayOpacity(overlayOpacity),
             OverlayOffsetXPt = NormalizeOverlayOffset(overlayOffsetXPt),
@@ -504,6 +572,13 @@ internal static class PageStore
         double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0
             ? 1.0
             : Math.Clamp(scale, 0.05, 20.0);
+
+    private static List<string> NormalizeStringList(IEnumerable<string>? values) =>
+        values?
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
 }
 
 internal sealed record PageSourceSnapshot(
@@ -514,8 +589,10 @@ internal sealed record PageSourceSnapshot(
     bool PdfLayersCached,
     IReadOnlyList<PdfLayerInfo> PdfLayers,
     string OverlayPageFolder,
+    bool OverlayVisible,
     string OverlayColor,
     double OverlayOpacity,
     double OverlayOffsetXPt,
     double OverlayOffsetYPt,
-    double OverlayScale);
+    double OverlayScale,
+    IReadOnlyList<string> HiddenTakeoffs);

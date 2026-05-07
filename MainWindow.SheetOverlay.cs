@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using OurPlaneCore.Controls;
@@ -16,6 +17,7 @@ public partial class MainWindow
     private const string DefaultSheetOverlayColor = "#E53935";
     private const double DefaultSheetOverlayOpacity = 0.55;
     private readonly SheetOverlayBitmapCache _sheetOverlayBitmapCache = new(maxEntries: 8);
+    private int _sheetOverlayLoadVersion;
 
     private static readonly IReadOnlyList<(string Label, string Hex)> SheetOverlayColors =
     [
@@ -56,6 +58,11 @@ public partial class MainWindow
     {
         var menu = new ContextMenu();
         bool isCurrent = _currentPage != null && SameFolder(_currentPage.FolderPath, node.Page.FolderPath);
+        menu.Items.Add(MakeMenuItem(
+            node.Page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
+            true,
+            () => TogglePageOverlayVisibility(node.Page)));
+        menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Edit Overlay by Points", true, () => BeginSheetOverlayPointEdit(node.Page)));
         menu.Items.Add(MakeMenuItem("Edit Transform...", true, () => EditSheetOverlayTransform(node.Page)));
         menu.Items.Add(new Separator());
@@ -116,6 +123,7 @@ public partial class MainWindow
             overlayPage.FolderPath,
             CurrentSheetOverlayColor(),
             CurrentSheetOverlayOpacity());
+        OurPlaneCoreJobStore.SavePageOverlayVisibility(_currentPage.FolderPath, true);
 
         ReloadCurrentSheetOverlay($"Overlay set: {overlayPage.Name}");
     }
@@ -305,13 +313,15 @@ public partial class MainWindow
 
     private void LoadSheetOverlay(PageInfo page)
     {
+        int version = ++_sheetOverlayLoadVersion;
         _viewport.ClearSheetOverlay();
-        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
             return;
 
         if (!TryBuildSheetOverlayBitmap(
                 page,
                 ViewportRenderPolicy.SheetOverlayViewportRenderScale,
+                allowRender: false,
                 out SKBitmap? bitmap,
                 out float widthPt,
                 out float heightPt,
@@ -319,7 +329,7 @@ public partial class MainWindow
                 out string error) ||
             bitmap == null)
         {
-            TxtStatus.Text = $"Sheet overlay unavailable: {error}";
+            _ = LoadSheetOverlayAsync(page, version);
             return;
         }
 
@@ -333,13 +343,54 @@ public partial class MainWindow
             (float)page.OverlayScale);
     }
 
+    private async Task LoadSheetOverlayAsync(PageInfo page, int version)
+    {
+        SheetOverlayBuildResult result = await Task.Run(() =>
+        {
+            bool ok = TryBuildSheetOverlayBitmap(
+                page,
+                ViewportRenderPolicy.SheetOverlayViewportRenderScale,
+                allowRender: true,
+                out SKBitmap? bitmap,
+                out float widthPt,
+                out float heightPt,
+                out string overlayName,
+                out string error);
+            return new SheetOverlayBuildResult(ok, bitmap, widthPt, heightPt, overlayName, error);
+        });
+
+        if (version != _sheetOverlayLoadVersion ||
+            _currentPage == null ||
+            !SameFolder(_currentPage.FolderPath, page.FolderPath))
+        {
+            result.Bitmap?.Dispose();
+            return;
+        }
+
+        if (!result.Ok || result.Bitmap == null)
+        {
+            TxtStatus.Text = $"Sheet overlay unavailable: {result.Error}";
+            return;
+        }
+
+        PageInfo target = _currentPage;
+        _viewport.SetSheetOverlay(
+            result.Bitmap,
+            result.WidthPt,
+            result.HeightPt,
+            result.OverlayName,
+            (float)target.OverlayOffsetXPt,
+            (float)target.OverlayOffsetYPt,
+            (float)target.OverlayScale);
+    }
+
     private (bool Ok, string Error) DrawPdfExportSheetOverlay(
         SKCanvas canvas,
         PageInfo page,
         float pageWidthPt,
         float pageHeightPt)
     {
-        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
             return (true, "");
 
         SKBitmap? bitmap = null;
@@ -348,6 +399,7 @@ public partial class MainWindow
             if (!TryBuildSheetOverlayBitmap(
                     page,
                     ViewportRenderPolicy.SheetOverlayExportRenderScale,
+                    allowRender: true,
                     out bitmap,
                     out float overlayWidthPt,
                     out float overlayHeightPt,
@@ -380,6 +432,7 @@ public partial class MainWindow
     private bool TryBuildSheetOverlayBitmap(
         PageInfo page,
         float renderScale,
+        bool allowRender,
         out SKBitmap? overlayBitmap,
         out float widthPt,
         out float heightPt,
@@ -417,6 +470,12 @@ public partial class MainWindow
             heightPt = cached.HeightPt;
             overlayName = cached.OverlayName;
             return true;
+        }
+
+        if (!allowRender)
+        {
+            error = "overlay is not cached yet.";
+            return false;
         }
 
         var layerStates = overlayPage.PdfLayers
@@ -459,6 +518,14 @@ public partial class MainWindow
         return true;
     }
 
+    private sealed record SheetOverlayBuildResult(
+        bool Ok,
+        SKBitmap? Bitmap,
+        float WidthPt,
+        float HeightPt,
+        string OverlayName,
+        string Error);
+
     private static string BuildSheetOverlayCacheKey(PageInfo page, PageInfo overlayPage, float renderScale)
     {
         var info = new FileInfo(overlayPage.PdfPath);
@@ -474,6 +541,23 @@ public partial class MainWindow
             string.Join(';', overlayPage.PdfLayers
                 .OrderBy(layer => layer.Number)
                 .Select(layer => $"{layer.Number}:{layer.IsOn}:{layer.Name}")));
+    }
+
+    private void TogglePageOverlayVisibility(PageInfo page)
+    {
+        bool visible = !page.OverlayVisible;
+        OurPlaneCoreJobStore.SavePageOverlayVisibility(page.FolderPath, visible);
+        PageInfo updated = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
+        {
+            _currentPage = updated;
+            LoadSheetOverlay(updated);
+        }
+
+        RefreshPageOverlayTreeNode(updated);
+        TxtStatus.Text = visible
+            ? $"Sheet overlay shown on {updated.Name}."
+            : $"Sheet overlay hidden on {updated.Name}.";
     }
 
     private bool ShowSheetOverlayTransformDialog(
@@ -647,6 +731,7 @@ public partial class MainWindow
     private sealed class SheetOverlayBitmapCache
     {
         private readonly int _maxEntries;
+        private readonly object _gate = new();
         private readonly Dictionary<string, Entry> _entries = [];
         private long _clock;
 
@@ -657,16 +742,19 @@ public partial class MainWindow
 
         public bool TryGet(string key, out Entry? entry)
         {
-            if (_entries.TryGetValue(key, out Entry? cached))
+            lock (_gate)
             {
-                cached.LastUsed = ++_clock;
-                entry = new Entry(
-                    cached.Bitmap.Copy(),
-                    cached.WidthPt,
-                    cached.HeightPt,
-                    cached.OverlayName,
-                    cached.LastUsed);
-                return true;
+                if (_entries.TryGetValue(key, out Entry? cached))
+                {
+                    cached.LastUsed = ++_clock;
+                    entry = new Entry(
+                        cached.Bitmap.Copy(),
+                        cached.WidthPt,
+                        cached.HeightPt,
+                        cached.OverlayName,
+                        cached.LastUsed);
+                    return true;
+                }
             }
 
             entry = null;
@@ -676,19 +764,22 @@ public partial class MainWindow
         public void Put(string key, SKBitmap bitmap, float widthPt, float heightPt, string overlayName)
         {
             SKBitmap copy = bitmap.Copy();
-            if (_entries.TryGetValue(key, out Entry? existing))
+            lock (_gate)
             {
-                existing.Bitmap.Dispose();
-                existing.Bitmap = copy;
-                existing.WidthPt = widthPt;
-                existing.HeightPt = heightPt;
-                existing.OverlayName = overlayName;
-                existing.LastUsed = ++_clock;
-                return;
-            }
+                if (_entries.TryGetValue(key, out Entry? existing))
+                {
+                    existing.Bitmap.Dispose();
+                    existing.Bitmap = copy;
+                    existing.WidthPt = widthPt;
+                    existing.HeightPt = heightPt;
+                    existing.OverlayName = overlayName;
+                    existing.LastUsed = ++_clock;
+                    return;
+                }
 
-            _entries[key] = new Entry(copy, widthPt, heightPt, overlayName, ++_clock);
-            Trim();
+                _entries[key] = new Entry(copy, widthPt, heightPt, overlayName, ++_clock);
+                Trim();
+            }
         }
 
         private void Trim()

@@ -112,6 +112,7 @@ public partial class MainWindow
             page.FolderPath,
             page.PdfLayersCached ? page.PdfLayers : null,
             restoreView);
+        ApplyViewportPageTakeoffVisibility(page);
         LoadSheetOverlay(page);
         _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath));
         RefreshAiMarkersOverlay();

@@ -159,6 +159,7 @@ public sealed partial class PdfViewport : SKElement
 
     private readonly List<Measurement> _measurements = [];
     private readonly Dictionary<string, List<Measurement>> _measurementsByPage = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _hiddenTakeoffFolders = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PageAnnotation> _annotations = [];
     private string _pageFolder = "";
     private Measurement? _selectedMeasurement;
@@ -222,6 +223,7 @@ public sealed partial class PdfViewport : SKElement
     private bool _repaintQueued;
     private bool _isFastNavigating;
     private bool _renderNavigationFastFrame;
+    private bool _showingPreviousPageDuringSwitch;
     private DateTime _lastPointerStatusAt = DateTime.MinValue;
     private DateTime _lastSlowFrameLogAt = DateTime.MinValue;
     private DateTime _lastSlowRenderLogAt = DateTime.MinValue;
@@ -372,6 +374,7 @@ public sealed partial class PdfViewport : SKElement
         _layerRenderVersion++;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
+        _showingPreviousPageDuringSwitch = false;
         _pageBitmap?.Dispose();
         _pageBitmap = null;
         ClearSheetOverlay();
@@ -439,8 +442,8 @@ public sealed partial class PdfViewport : SKElement
         _pageFolder = pageFolder;
         _cachedLayers = cachedLayers;
 
-        _pageBitmap?.Dispose();
-        _pageBitmap = null;
+        bool hadVisibleBitmap = _pageBitmap != null;
+        _showingPreviousPageDuringSwitch = hadVisibleBitmap;
         ClearSheetOverlay();
         _drawPts.Clear();
         _scalePts.Clear();
@@ -485,14 +488,33 @@ public sealed partial class PdfViewport : SKElement
         }
         else
         {
-            QueueDocnetRender(
-                previewScale,
-                restoreView,
-                fitAfter: !restoreView.HasValue,
-                queueLayerAfter: true,
-                resetLayerStates: true,
-                statusAfter: loadedStatus,
-                fireLayersAfter: true);
+            bool hasInstantPreview = TryRenderInstantPagePreview();
+            if (hasInstantPreview)
+            {
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (restoreView.HasValue)
+                        RestoreViewState(restoreView.Value);
+                    else
+                        ZoomFit();
+                    QueueLayerRender(
+                        resetLayerStates: true,
+                        renderScale: CurrentRenderScale(),
+                        statusAfter: loadedStatus,
+                        fireLayersAfter: true);
+                });
+            }
+            else
+            {
+                QueueDocnetRender(
+                    previewScale,
+                    restoreView,
+                    fitAfter: !restoreView.HasValue,
+                    queueLayerAfter: true,
+                    resetLayerStates: true,
+                    statusAfter: loadedStatus,
+                    fireLayersAfter: true);
+            }
         }
 
         PostStatus($"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
@@ -676,6 +698,19 @@ public sealed partial class PdfViewport : SKElement
     public void LoadMeasurements(IEnumerable<Measurement> measurements)
     {
         SetMeasurements(measurements);
+    }
+
+    public void SetHiddenTakeoffFolders(IEnumerable<string> takeoffFolders)
+    {
+        _hiddenTakeoffFolders.Clear();
+        foreach (string folder in takeoffFolders)
+        {
+            if (!string.IsNullOrWhiteSpace(folder))
+                _hiddenTakeoffFolders.Add(NormalizePageFolderForCompare(folder));
+        }
+
+        PruneHiddenMeasurementSelection();
+        RequestRepaint();
     }
 
     public void FocusMeasurement(Measurement measurement)

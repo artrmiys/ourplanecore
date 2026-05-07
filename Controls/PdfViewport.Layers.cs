@@ -65,6 +65,7 @@ public sealed partial class PdfViewport
         _layers = [];
         _usingLayerRenderer = false;
         _renderedScale = render.BitmapScale;
+        _showingPreviousPageDuringSwitch = false;
     }
 
     private void ApplyCachedBitmapRender(CachedBitmapRender render)
@@ -77,6 +78,22 @@ public sealed partial class PdfViewport
         _layers = [];
         _usingLayerRenderer = false;
         _renderedScale = render.BitmapScale;
+        _showingPreviousPageDuringSwitch = false;
+    }
+
+    private bool TryRenderInstantPagePreview()
+    {
+        try
+        {
+            RenderPageWithDocnet(ViewportRenderPolicy.InstantPagePreviewRenderScale);
+            RequestRepaint();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Instant PDF preview unavailable for {_pdfPath} page {_pdfIndex + 1}");
+            return false;
+        }
     }
 
     private void QueueDocnetRender(
@@ -252,6 +269,7 @@ public sealed partial class PdfViewport
 
         UpdateLayerSnapshot(render.Layers);
         _usingLayerRenderer = true;
+        _showingPreviousPageDuringSwitch = false;
         RequestRepaint();
         if (needsFit)
             Dispatcher.InvokeAsync(ZoomFit);

@@ -68,6 +68,12 @@ public sealed partial class PdfViewport
                 }
             }
 
+            if (_showingPreviousPageDuringSwitch)
+            {
+                DrawPageSwitchLoadingVeil(canvas, (float)e.Info.Width, (float)e.Info.Height);
+                return;
+            }
+
             // ── Measurement overlay (PDF-point coordinate system) ─────────────────
             {
                 var measMtx = SKMatrix.CreateScaleTranslation(
@@ -118,6 +124,17 @@ public sealed partial class PdfViewport
             $"Viewport slow frame {elapsedMs}ms; zoom={_zoom:0.###}; fast={_renderNavigationFastFrame}; " +
             $"page='{_pageFolder}'; activeMeasurements={ActivePageMeasurements().Count}; renderedScale={_renderedScale:0.###}; " +
             $"overlay={(_sheetOverlayBitmap != null)}");
+    }
+
+    private static void DrawPageSwitchLoadingVeil(SKCanvas canvas, float width, float height)
+    {
+        using var paint = new SKPaint
+        {
+            Color = new SKColor(255, 255, 255, 82),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+        canvas.DrawRect(new SKRect(0, 0, width, height), paint);
     }
 
 }

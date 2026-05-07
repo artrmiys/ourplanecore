@@ -849,7 +849,16 @@ public sealed partial class PdfViewport
     }
 
     private bool IsMeasurementOnActivePage(Measurement measurement) =>
-        IsSamePageFolder(measurement.PageFolder, _pageFolder);
+        IsSamePageFolder(measurement.PageFolder, _pageFolder) &&
+        IsMeasurementTakeoffVisible(measurement);
+
+    private bool IsMeasurementTakeoffVisible(Measurement measurement)
+    {
+        if (string.IsNullOrWhiteSpace(measurement.TakeoffFolder))
+            return true;
+
+        return !_hiddenTakeoffFolders.Contains(NormalizePageFolderForCompare(measurement.TakeoffFolder));
+    }
 
     private bool IsAnnotationOnActivePage(PageAnnotation annotation) =>
         IsSamePageFolder(annotation.PageFolder, _pageFolder);
@@ -866,9 +875,12 @@ public sealed partial class PdfViewport
             return _measurements;
 
         string key = NormalizePageFolderForCompare(_pageFolder);
-        return _measurementsByPage.TryGetValue(key, out List<Measurement>? measurements)
+        if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
+            return [];
+
+        return _hiddenTakeoffFolders.Count == 0
             ? measurements
-            : [];
+            : measurements.Where(IsMeasurementTakeoffVisible).ToList();
     }
 
     private void IndexMeasurementByPage(Measurement measurement)
@@ -917,6 +929,35 @@ public sealed partial class PdfViewport
             _dragMeasurementOriginalPoints.Clear();
             _dragMeasurementOriginalHoles.Clear();
         }
+    }
+
+    private void PruneHiddenMeasurementSelection()
+    {
+        var hiddenSelected = _selectedMeasurements
+            .Where(measurement => !IsMeasurementOnActivePage(measurement))
+            .ToList();
+        if (hiddenSelected.Count == 0)
+            return;
+
+        foreach (Measurement measurement in hiddenSelected)
+            ForgetMeasurementState(measurement);
+
+        if (_selectedMeasurements.Count == 0)
+        {
+            ClearSelection();
+            return;
+        }
+
+        if (_selectedMeasurement == null || !_selectedMeasurements.Contains(_selectedMeasurement))
+        {
+            _selectedMeasurement = _selectedMeasurements.LastOrDefault();
+            _selectedVertexIndex = -1;
+            ClearMeasurementVertexSelection();
+        }
+
+        MeasurementSelectionChanged?.Invoke(_selectedMeasurement);
+        MeasurementsSelectionChanged?.Invoke(_selectedMeasurements.ToList());
+        PublishTransformSelectionChanged();
     }
 
     private static bool IsSamePageFolder(string? left, string? right)
