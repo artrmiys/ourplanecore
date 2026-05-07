@@ -98,6 +98,7 @@ var tests = new List<(string Name, Action Run)>
     ("viewport LOD hides expensive layers during fast frames", ViewportLodHidesExpensiveLayersDuringFastFrames),
     ("pdf snap index finds nearest point", PdfSnapIndexFindsNearestPoint),
     ("pdf snap index prefers corner ties", PdfSnapIndexPrefersCornerTies),
+    ("pdf snap index snaps to line", PdfSnapIndexSnapsToLine),
 };
 
 int passed = 0;
@@ -1331,6 +1332,21 @@ static void PdfSnapIndexPrefersCornerTies()
         index.TryFind(new SKPoint(100, 100), tolerancePt: 4, out PdfGeometrySnapPoint snap),
         "same-location PDF snap candidates should be found");
     AssertEqual("pdf-corner", snap.Kind, "corner snap priority");
+}
+
+static void PdfSnapIndexSnapsToLine()
+{
+    var index = new PdfSnapPointIndex(
+        [],
+        [
+            new PdfGeometrySnapSegment(new SKPoint(10, 10), new SKPoint(110, 10), "pdf-line"),
+        ]);
+
+    AssertTrue(
+        index.TryFind(new SKPoint(64, 14), tolerancePt: 8, out PdfGeometrySnapPoint snap),
+        "nearby PDF segment should be found");
+    AssertEqual("64,10", $"{snap.Point.X:0},{snap.Point.Y:0}", "nearest point on line");
+    AssertEqual("pdf-line", snap.Kind, "line snap kind");
 }
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>

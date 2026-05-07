@@ -42,7 +42,7 @@ public sealed partial class PdfViewport
             }
             PostRecordPrompt();
             PostStatus(_pdfSnapEnabled
-                ? "PDF Snap on: current sheet and sheet overlay vector points."
+                ? "PDF Snap on: current sheet and sheet overlay vector points/lines."
                 : "PDF Snap off.");
         }
     }
@@ -131,10 +131,10 @@ public sealed partial class PdfViewport
                 return;
             }
 
-            _pdfSnapIndex = new PdfSnapPointIndex(result.Result.Points);
+            _pdfSnapIndex = new PdfSnapPointIndex(result.Result.Points, result.Result.Segments);
             _pdfSnapCacheKey = cacheKey;
             if (_pdfSnapEnabled)
-                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} points.");
+                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points/lines.");
         }
         catch (Exception ex)
         {
@@ -212,10 +212,10 @@ public sealed partial class PdfViewport
                 return;
             }
 
-            _overlayPdfSnapIndex = new PdfSnapPointIndex(result.Result.Points);
+            _overlayPdfSnapIndex = new PdfSnapPointIndex(result.Result.Points, result.Result.Segments);
             _overlayPdfSnapCacheKey = cacheKey;
             if (_pdfSnapEnabled)
-                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points, {_overlayPdfSnapIndex.Count} overlay points.");
+                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points/lines, {_overlayPdfSnapIndex.Count} overlay points/lines.");
         }
         catch (Exception ex)
         {
@@ -361,8 +361,9 @@ public sealed partial class PdfViewport
     private static string NormalizePdfSnapKind(string kind, bool overlay)
     {
         bool corner = string.Equals(kind, "pdf-corner", StringComparison.OrdinalIgnoreCase);
+        bool line = string.Equals(kind, "pdf-line", StringComparison.OrdinalIgnoreCase);
         if (overlay)
-            return corner ? "pdf-overlay-corner" : "pdf-overlay-point";
-        return corner ? "pdf-corner" : "pdf-point";
+            return corner ? "pdf-overlay-corner" : line ? "pdf-overlay-line" : "pdf-overlay-point";
+        return corner ? "pdf-corner" : line ? "pdf-line" : "pdf-point";
     }
 }

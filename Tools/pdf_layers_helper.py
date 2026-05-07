@@ -849,6 +849,35 @@ def _add_snap_point(
     }
 
 
+def _add_snap_segment(
+    segments: dict[tuple[tuple[float, float], tuple[float, float]], dict],
+    start: tuple[float, float] | None,
+    end: tuple[float, float] | None,
+    layer_name: str,
+    max_segments: int,
+) -> None:
+    if start is None or end is None or len(segments) >= max_segments:
+        return
+    segment = (start, end)
+    if _segment_length(segment) < 0.5:
+        return
+
+    a = (round(start[0], 1), round(start[1], 1))
+    b = (round(end[0], 1), round(end[1], 1))
+    key = tuple(sorted([a, b]))
+    if key in segments:
+        return
+
+    segments[key] = {
+        "x0": start[0],
+        "y0": start[1],
+        "x1": end[0],
+        "y1": end[1],
+        "kind": "pdf-line",
+        "layer_name": layer_name,
+    }
+
+
 def _add_snap_rect_points(
     points: dict[tuple[float, float], dict],
     rect: tuple[float, float, float, float] | None,
@@ -861,21 +890,41 @@ def _add_snap_rect_points(
         _add_snap_point(points, point, "pdf-corner", layer_name, max_points)
 
 
+def _add_snap_rect_geometry(
+    points: dict[tuple[float, float], dict],
+    segments: dict[tuple[tuple[float, float], tuple[float, float]], dict],
+    rect: tuple[float, float, float, float] | None,
+    layer_name: str,
+    max_points: int,
+    max_segments: int,
+) -> None:
+    if rect is None:
+        return
+    _add_snap_rect_points(points, rect, layer_name, max_points)
+    for start, end in _rect_segments(rect):
+        _add_snap_segment(segments, start, end, layer_name, max_segments)
+
+
 def _add_snap_points_from_item(
     points: dict[tuple[float, float], dict],
+    segments: dict[tuple[tuple[float, float], tuple[float, float]], dict],
     item,
     layer_name: str,
     max_points: int,
+    max_segments: int,
 ) -> None:
     if not item:
         return
 
     command = str(item[0])
     if command == "l" and len(item) >= 3:
-        _add_snap_point(points, _point_xy(item[1]), "pdf-point", layer_name, max_points)
-        _add_snap_point(points, _point_xy(item[2]), "pdf-point", layer_name, max_points)
+        start = _point_xy(item[1])
+        end = _point_xy(item[2])
+        _add_snap_point(points, start, "pdf-point", layer_name, max_points)
+        _add_snap_point(points, end, "pdf-point", layer_name, max_points)
+        _add_snap_segment(segments, start, end, layer_name, max_segments)
     elif command == "re" and len(item) >= 2:
-        _add_snap_rect_points(points, _rect_xyxy(item[1]), layer_name, max_points)
+        _add_snap_rect_geometry(points, segments, _rect_xyxy(item[1]), layer_name, max_points, max_segments)
     elif command == "qu" and len(item) >= 2:
         try:
             quad_points = [_point_xy(point) for point in item[1]]
@@ -883,15 +932,28 @@ def _add_snap_points_from_item(
             quad_points = []
         for point in quad_points:
             _add_snap_point(points, point, "pdf-corner", layer_name, max_points)
+        quad_points = [point for point in quad_points if point is not None]
+        if len(quad_points) >= 4:
+            for start, end in [
+                (quad_points[0], quad_points[1]),
+                (quad_points[1], quad_points[2]),
+                (quad_points[2], quad_points[3]),
+                (quad_points[3], quad_points[0]),
+            ]:
+                _add_snap_segment(segments, start, end, layer_name, max_segments)
     elif command == "c" and len(item) >= 3:
-        _add_snap_point(points, _point_xy(item[1]), "pdf-point", layer_name, max_points)
-        _add_snap_point(points, _point_xy(item[-1]), "pdf-point", layer_name, max_points)
+        start = _point_xy(item[1])
+        end = _point_xy(item[-1])
+        _add_snap_point(points, start, "pdf-point", layer_name, max_points)
+        _add_snap_point(points, end, "pdf-point", layer_name, max_points)
+        _add_snap_segment(segments, start, end, layer_name, max_segments)
 
 
 def pdf_snap_data(req: dict) -> dict:
     pdf_path = req["pdf"]
     page_index = int(req.get("page", 0))
     max_points = max(100, min(int(req.get("max_points", 30000)), 100000))
+    max_segments = max(100, min(int(req.get("max_segments", 50000)), 150000))
     visible_layers = _visible_layer_map(_cached_layers(req.get("visible_layers")))
 
     doc = fitz.open(pdf_path)
@@ -906,24 +968,36 @@ def pdf_snap_data(req: dict) -> dict:
                 drawings = []
 
         points: dict[tuple[float, float], dict] = {}
+        segments: dict[tuple[tuple[float, float], tuple[float, float]], dict] = {}
         for drawing in drawings:
             layer_name = str(drawing.get("layer") or "").strip()
             if not _is_snap_layer_visible(layer_name, visible_layers):
                 continue
 
-            before_count = len(points)
+            before_count = len(points) + len(segments)
             for item in drawing.get("items") or []:
-                _add_snap_points_from_item(points, item, layer_name, max_points)
-                if len(points) >= max_points:
+                _add_snap_points_from_item(points, segments, item, layer_name, max_points, max_segments)
+                if len(points) >= max_points and len(segments) >= max_segments:
                     break
 
-            if len(points) == before_count:
-                _add_snap_rect_points(points, _rect_xyxy(drawing.get("rect")), layer_name, max_points)
+            if len(points) + len(segments) == before_count:
+                _add_snap_rect_geometry(
+                    points,
+                    segments,
+                    _rect_xyxy(drawing.get("rect")),
+                    layer_name,
+                    max_points,
+                    max_segments,
+                )
 
-            if len(points) >= max_points:
+            if len(points) >= max_points and len(segments) >= max_segments:
                 break
 
-        return {"ok": True, "points": list(points.values())[:max_points]}
+        return {
+            "ok": True,
+            "points": list(points.values())[:max_points],
+            "segments": list(segments.values())[:max_segments],
+        }
     finally:
         doc.close()
 
