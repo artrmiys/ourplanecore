@@ -405,6 +405,7 @@ public sealed partial class PdfViewport
             ScaleMetersPerPt = ScaleMetersPerPt,
         };
         _measurements.Add(m);
+        IndexMeasurementByPage(m);
         PushAddedMeasurementsUndo([m], $"remove added {EntryTitle(m.MType)}");
         _drawPts.Clear();
         _rubberEnd = null;

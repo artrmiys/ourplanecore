@@ -293,6 +293,7 @@ public sealed partial class PdfViewport
                 if (!_measurements.Remove(added.Target))
                     continue;
 
+                RemoveMeasurementFromPageIndex(added.Target);
                 if (ReferenceEquals(_selectedMeasurement, added.Target))
                     ClearSelection();
                 MeasurementRemoved?.Invoke(added.Target);
@@ -316,6 +317,7 @@ public sealed partial class PdfViewport
                     continue;
 
                 _measurements.Insert(Math.Clamp(removed.Index, 0, _measurements.Count), removed.Target);
+                IndexMeasurementByPage(removed.Target);
                 MeasurementAdded?.Invoke(removed.Target);
                 changed = true;
             }

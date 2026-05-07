@@ -158,6 +158,7 @@ public sealed partial class PdfViewport : SKElement
     }
 
     private readonly List<Measurement> _measurements = [];
+    private readonly Dictionary<string, List<Measurement>> _measurementsByPage = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PageAnnotation> _annotations = [];
     private string _pageFolder = "";
     private Measurement? _selectedMeasurement;
@@ -458,7 +459,7 @@ public sealed partial class PdfViewport : SKElement
         bool hasPreview = false;
         try
         {
-            RenderPageWithDocnet(Math.Clamp(CurrentRenderScale(), 0.50f, 1.25f));
+            RenderPageWithDocnet(ViewportRenderPolicy.InitialPagePreviewRenderScale);
             hasPreview = true;
         }
         catch (Exception ex)
@@ -644,6 +645,7 @@ public sealed partial class PdfViewport : SKElement
         foreach (var m in toRemove.ToList())
         {
             _measurements.Remove(m);
+            RemoveMeasurementFromPageIndex(m);
             ForgetMeasurementState(m);
         }
         if (_selectedMeasurement == null && _selectedMeasurements.Count > 0)
@@ -835,7 +837,10 @@ public sealed partial class PdfViewport : SKElement
     public void SetMeasurements(IEnumerable<Measurement> measurements)
     {
         _measurements.Clear();
+        _measurementsByPage.Clear();
         _measurements.AddRange(measurements);
+        foreach (Measurement measurement in _measurements)
+            IndexMeasurementByPage(measurement);
         ClearViewportUndoStack();
         ClearSelection();
         RequestRepaint();

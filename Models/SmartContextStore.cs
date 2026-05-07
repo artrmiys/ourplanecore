@@ -486,6 +486,8 @@ public sealed class SmartAiCropBookmark
 
 public static class SmartContextStore
 {
+    public const string GlobalRootEnvironmentVariable = "OURPLANECORE_GLOBAL_ROOT";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -495,6 +497,10 @@ public static class SmartContextStore
     {
         get
         {
+            string configuredRoot = Environment.GetEnvironmentVariable(GlobalRootEnvironmentVariable) ?? "";
+            if (!string.IsNullOrWhiteSpace(configuredRoot))
+                return Path.GetFullPath(configuredRoot);
+
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             return Path.Combine(localAppData, "OurPlaneCore");
         }

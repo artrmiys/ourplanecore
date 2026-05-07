@@ -21,13 +21,18 @@ public sealed partial class PdfViewport
 
     private void DrawMeasurements(SKCanvas canvas, SKRect visiblePdf)
     {
-        foreach (var m in _measurements)
+        IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
+        bool drawDetails = ViewportRenderPolicy.ShouldDrawMeasurementDetails(
+            _zoom,
+            activeMeasurements.Count,
+            _renderNavigationFastFrame);
+
+        foreach (var m in activeMeasurements)
         {
-            if (!IsMeasurementOnActivePage(m)) continue;
             bool selected = IsMeasurementSelected(m);
             if (!selected && !IsMeasurementVisible(m, visiblePdf))
                 continue;
-            DrawMeasurement(canvas, m, selected, drawLabels: false);
+            DrawMeasurement(canvas, m, selected, drawLabels: false, drawDetails: drawDetails);
             if (!_renderNavigationFastFrame && selected && !ReferenceEquals(m, _selectedMeasurement))
                 DrawSelectionBounds(canvas, m);
             if (!_renderNavigationFastFrame && ShouldDrawMeasurementHandles(m))
@@ -36,7 +41,7 @@ public sealed partial class PdfViewport
 
     }
 
-    private void DrawMeasurement(SKCanvas canvas, Measurement m, bool selected, bool drawLabels)
+    private void DrawMeasurement(SKCanvas canvas, Measurement m, bool selected, bool drawLabels, bool drawDetails = true)
     {
         SKColor color = GetCachedColor(m.Color, SKColors.Red);
         using var stroke = new SKPaint
@@ -89,7 +94,7 @@ public sealed partial class PdfViewport
                 }
                 canvas.DrawPath(poly, stroke);
                 }
-                if (!_renderNavigationFastFrame)
+                if (drawDetails)
                     DrawJoistLayout(canvas, m, color, drawLabels);
                 var cen = Centroid(pts);
                 if (drawLabels && ShouldDrawMeasurementLabel("area"))
@@ -100,13 +105,17 @@ public sealed partial class PdfViewport
 
     private void DrawMeasurementLabels(SKCanvas canvas, SKRect visiblePdf)
     {
-        if (_renderNavigationFastFrame)
-            return;
-
-        foreach (var measurement in _measurements)
+        IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
+        if (!ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+                _zoom,
+                activeMeasurements.Count,
+                _renderNavigationFastFrame))
         {
-            if (!IsMeasurementOnActivePage(measurement))
-                continue;
+            return;
+        }
+
+        foreach (var measurement in activeMeasurements)
+        {
             if (!IsMeasurementSelected(measurement) && !IsMeasurementVisible(measurement, visiblePdf))
                 continue;
 

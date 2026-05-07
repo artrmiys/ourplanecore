@@ -3,7 +3,10 @@ param(
     [switch]$KeepAppOpen,
     [int]$TimeoutSeconds = 30,
     [int]$WheelEvents = 42,
-    [int]$Cycles = 5
+    [int]$Cycles = 5,
+    [string]$JobPath = "",
+    [string]$PagePath = "",
+    [switch]$CopyJob
 )
 
 $ErrorActionPreference = "Stop"
@@ -170,6 +173,56 @@ function New-ZoomSmokeJob {
         Root = $root
         Job = $job
         Page = $page
+    }
+}
+
+function New-ZoomSmokeJobFromExisting {
+    param(
+        [Parameter(Mandatory)] [string]$ExistingJobPath,
+        [Parameter(Mandatory)] [string]$ExistingPagePath,
+        [switch]$Copy
+    )
+
+    $resolvedJob = (Resolve-Path -LiteralPath $ExistingJobPath).Path
+    $resolvedPage = (Resolve-Path -LiteralPath $ExistingPagePath).Path
+    $jobPrefix = [System.IO.Path]::GetFullPath($resolvedJob).TrimEnd('\')
+    $pageFullPath = [System.IO.Path]::GetFullPath($resolvedPage)
+    if (-not $pageFullPath.StartsWith($jobPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "PagePath must be inside JobPath."
+    }
+
+    if (-not $Copy) {
+        return [pscustomobject]@{
+            Root = $null
+            Job = $resolvedJob
+            Page = $resolvedPage
+            DisplayName = (Split-Path -Leaf $resolvedPage)
+            Copied = $false
+        }
+    }
+
+    $root = Join-Path $env:TEMP ("opc_viewport_zoom_realjob_" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $root | Out-Null
+    Copy-Item -LiteralPath $resolvedJob -Destination $root -Recurse -Force
+
+    $copiedJob = Join-Path $root (Split-Path -Leaf $resolvedJob)
+    $lockPath = Join-Path $copiedJob ".~lock"
+    if (Test-Path -LiteralPath $lockPath) {
+        Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $relativePage = $pageFullPath.Substring($jobPrefix.Length).TrimStart('\')
+    $copiedPage = Join-Path $copiedJob $relativePage
+    if (-not (Test-Path -LiteralPath $copiedPage)) {
+        throw "Copied page path was not found: $copiedPage"
+    }
+
+    return [pscustomobject]@{
+        Root = $root
+        Job = $copiedJob
+        Page = $copiedPage
+        DisplayName = (Split-Path -Leaf $copiedPage)
+        Copied = $true
     }
 }
 
@@ -377,7 +430,17 @@ $job = $null
 $settingsState = $null
 $proc = $null
 try {
-    $job = New-ZoomSmokeJob
+    if ([string]::IsNullOrWhiteSpace($JobPath)) {
+        $job = New-ZoomSmokeJob
+        $job | Add-Member -NotePropertyName DisplayName -NotePropertyValue "A101 Zoom Smoke" -Force
+        $job | Add-Member -NotePropertyName Copied -NotePropertyValue $false -Force
+    } else {
+        if ([string]::IsNullOrWhiteSpace($PagePath)) {
+            throw "PagePath is required when JobPath is provided."
+        }
+        $job = New-ZoomSmokeJobFromExisting -ExistingJobPath $JobPath -ExistingPagePath $PagePath -Copy:$CopyJob
+    }
+
     $settingsState = Set-ZoomSmokeSettings -JobPath $job.Job -PagePath $job.Page
 
     $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
@@ -391,8 +454,8 @@ try {
     $window = Wait-WindowForProcess -ProcessId $proc.Id
     Focus-Window $window
 
-    Wait-Until -TimeoutSeconds $TimeoutSeconds -Message "A101 Zoom Smoke page loaded" -Condition {
-        $null -ne (Find-DescendantByName -Root $window -Text "A101 Zoom Smoke")
+    Wait-Until -TimeoutSeconds $TimeoutSeconds -Message "$($job.DisplayName) page loaded" -Condition {
+        $null -ne (Find-DescendantByName -Root $window -Text $job.DisplayName)
     } | Out-Null
 
     $elapsedMs = Send-ViewportZoomPanBurst -Window $window
@@ -406,14 +469,18 @@ try {
         }
     } | Out-Null
 
-    Write-Host "PASS viewport zoom smoke: real PDF page accepted zoom in/out plus middle-button pan cycles and UI stayed responsive ($elapsedMs ms dispatch)." -ForegroundColor Green
+    if ($job.Copied) {
+        Write-Host "PASS viewport zoom smoke: copied real job page '$($job.DisplayName)' accepted zoom in/out plus middle-button pan cycles and UI stayed responsive ($elapsedMs ms dispatch)." -ForegroundColor Green
+    } else {
+        Write-Host "PASS viewport zoom smoke: PDF page '$($job.DisplayName)' accepted zoom in/out plus middle-button pan cycles and UI stayed responsive ($elapsedMs ms dispatch)." -ForegroundColor Green
+    }
 }
 finally {
     if ($proc -ne $null -and -not $KeepAppOpen) {
         try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
     }
     Restore-ZoomSmokeSettings $settingsState
-    if ($job -ne $null -and -not $KeepAppOpen) {
+    if ($job -ne $null -and -not $KeepAppOpen -and -not [string]::IsNullOrWhiteSpace($job.Root)) {
         try { Remove-Item -LiteralPath $job.Root -Recurse -Force -ErrorAction SilentlyContinue } catch {}
     }
 }

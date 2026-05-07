@@ -860,6 +860,47 @@ public sealed partial class PdfViewport
     private bool IsAnnotationSelected(PageAnnotation annotation) =>
         ReferenceEquals(_selectedAnnotation, annotation);
 
+    private IReadOnlyList<Measurement> ActivePageMeasurements()
+    {
+        if (string.IsNullOrWhiteSpace(_pageFolder))
+            return _measurements;
+
+        string key = NormalizePageFolderForCompare(_pageFolder);
+        return _measurementsByPage.TryGetValue(key, out List<Measurement>? measurements)
+            ? measurements
+            : [];
+    }
+
+    private void IndexMeasurementByPage(Measurement measurement)
+    {
+        if (string.IsNullOrWhiteSpace(measurement.PageFolder))
+            return;
+
+        string key = NormalizePageFolderForCompare(measurement.PageFolder);
+        if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
+        {
+            measurements = [];
+            _measurementsByPage[key] = measurements;
+        }
+
+        if (!measurements.Contains(measurement))
+            measurements.Add(measurement);
+    }
+
+    private void RemoveMeasurementFromPageIndex(Measurement measurement)
+    {
+        if (string.IsNullOrWhiteSpace(measurement.PageFolder))
+            return;
+
+        string key = NormalizePageFolderForCompare(measurement.PageFolder);
+        if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
+            return;
+
+        measurements.Remove(measurement);
+        if (measurements.Count == 0)
+            _measurementsByPage.Remove(key);
+    }
+
     private void ForgetMeasurementState(Measurement measurement)
     {
         _selectedMeasurements.Remove(measurement);

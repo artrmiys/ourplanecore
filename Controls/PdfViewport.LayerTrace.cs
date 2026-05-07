@@ -461,6 +461,7 @@ public sealed partial class PdfViewport
                 ScaleMetersPerPt = ScaleMetersPerPt,
             };
             _measurements.Add(measurement);
+            IndexMeasurementByPage(measurement);
             MeasurementAdded?.Invoke(measurement);
             if (_measurements.Contains(measurement))
                 added.Add(measurement);

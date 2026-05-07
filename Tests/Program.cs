@@ -2,6 +2,9 @@ using OurPlaneCore;
 using SkiaSharp;
 using System.Reflection;
 
+string testGlobalRoot = Path.Combine(Path.GetTempPath(), "opc_tests_global", Guid.NewGuid().ToString("N"));
+Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
+
 var tests = new List<(string Name, Action Run)>
 {
     ("measurement count value and label", MeasurementCountValueAndLabel),
@@ -84,6 +87,8 @@ var tests = new List<(string Name, Action Run)>
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport high zoom uses automatic fast navigation", ViewportHighZoomUsesAutomaticFastNavigation),
     ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
+    ("viewport measurement LOD skips distant labels", ViewportMeasurementLodSkipsDistantLabels),
+    ("viewport measurement LOD limits dense details", ViewportMeasurementLodLimitsDenseDetails),
 };
 
 int passed = 0;
@@ -98,7 +103,13 @@ foreach ((string name, Action run) in tests)
     }
     catch (Exception ex)
     {
-        failures.Add($"{name}: {ex.Message}");
+        string detail = string.Equals(
+            Environment.GetEnvironmentVariable("OURPLANECORE_TEST_VERBOSE_FAILURES"),
+            "1",
+            StringComparison.Ordinal)
+            ? ex.ToString()
+            : ex.Message;
+        failures.Add($"{name}: {detail}");
         Console.WriteLine($"FAIL {name}: {ex.Message}");
     }
 }
@@ -109,10 +120,29 @@ if (failures.Count > 0)
     Console.Error.WriteLine("Failures:");
     foreach (string failure in failures)
         Console.Error.WriteLine($"- {failure}");
+    CleanupTestGlobalRoot(testGlobalRoot);
     return 1;
 }
 
+CleanupTestGlobalRoot(testGlobalRoot);
 return 0;
+
+static void CleanupTestGlobalRoot(string path)
+{
+    TryDeleteDirectory(path);
+}
+
+static void TryDeleteDirectory(string path)
+{
+    try
+    {
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+    }
+    catch
+    {
+    }
+}
 
 static void MeasurementCountValueAndLabel()
 {
@@ -1110,6 +1140,33 @@ static void ViewportEditingBlocksFastNavigationFrame()
         "active edit interaction should keep the full render frame");
 }
 
+static void ViewportMeasurementLodSkipsDistantLabels()
+{
+    AssertFalse(
+        ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+            zoom: ViewportRenderPolicy.MeasurementLabelMinZoom - 0.01f,
+            activePageMeasurementCount: 1,
+            fastNavigationFrame: false),
+        "distant zoom should skip measurement labels");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+            zoom: ViewportRenderPolicy.MeasurementLabelMinZoom,
+            activePageMeasurementCount: 1,
+            fastNavigationFrame: false),
+        "near zoom should draw labels for small pages");
+}
+
+static void ViewportMeasurementLodLimitsDenseDetails()
+{
+    AssertFalse(
+        ViewportRenderPolicy.ShouldDrawMeasurementDetails(
+            zoom: 2.0f,
+            activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementDetailThreshold + 1,
+            fastNavigationFrame: false),
+        "dense pages should skip expensive measurement detail layer");
+}
+
 static List<Measurement> SectionMeasurements(params string[] ids) =>
     ids.Select(id => new Measurement { Id = id }).ToList();
 
@@ -1200,7 +1257,6 @@ static void WithTempJob(string name, Action<OurPlaneCoreJob> action)
     }
     finally
     {
-        if (Directory.Exists(root))
-            Directory.Delete(root, recursive: true);
+        TryDeleteDirectory(root);
     }
 }

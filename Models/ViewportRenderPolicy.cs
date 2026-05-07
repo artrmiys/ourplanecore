@@ -7,6 +7,12 @@ public static class ViewportRenderPolicy
 {
     public const float HighZoomFastFrameThreshold = 2.0f;
     public const float ResponsiveMaxRenderScale = 1.5f;
+    public const float InitialPagePreviewRenderScale = 0.75f;
+    public const float SheetOverlayViewportRenderScale = 1.0f;
+    public const float SheetOverlayExportRenderScale = 2.0f;
+    public const float MeasurementLabelMinZoom = 0.95f;
+    public const int DenseMeasurementLabelThreshold = 250;
+    public const int DenseMeasurementDetailThreshold = 400;
 
     public static bool ShouldUseFastNavigationFrame(
         bool simplifyNavigationRendering,
@@ -33,5 +39,25 @@ public static class ViewportRenderPolicy
         }
 
         return maxScale;
+    }
+
+    public static bool ShouldDrawMeasurementLabels(
+        float zoom,
+        int activePageMeasurementCount,
+        bool fastNavigationFrame)
+    {
+        return !fastNavigationFrame &&
+               zoom >= MeasurementLabelMinZoom &&
+               activePageMeasurementCount <= DenseMeasurementLabelThreshold;
+    }
+
+    public static bool ShouldDrawMeasurementDetails(
+        float zoom,
+        int activePageMeasurementCount,
+        bool fastNavigationFrame)
+    {
+        return !fastNavigationFrame &&
+               zoom >= MeasurementLabelMinZoom &&
+               activePageMeasurementCount <= DenseMeasurementDetailThreshold;
     }
 }

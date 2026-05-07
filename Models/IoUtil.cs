@@ -16,9 +16,21 @@ public static class IoUtil
         {
             File.WriteAllText(tempPath, contents);
             if (File.Exists(path))
-                File.Replace(tempPath, path, null);
+            {
+                try
+                {
+                    File.Replace(tempPath, path, null);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    File.Copy(tempPath, path, overwrite: true);
+                    File.Delete(tempPath);
+                }
+            }
             else
+            {
                 File.Move(tempPath, path);
+            }
         }
         catch
         {

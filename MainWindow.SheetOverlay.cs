@@ -309,6 +309,7 @@ public partial class MainWindow
 
         if (!TryBuildSheetOverlayBitmap(
                 page,
+                ViewportRenderPolicy.SheetOverlayViewportRenderScale,
                 out SKBitmap? bitmap,
                 out float widthPt,
                 out float heightPt,
@@ -344,6 +345,7 @@ public partial class MainWindow
         {
             if (!TryBuildSheetOverlayBitmap(
                     page,
+                    ViewportRenderPolicy.SheetOverlayExportRenderScale,
                     out bitmap,
                     out float overlayWidthPt,
                     out float overlayHeightPt,
@@ -375,6 +377,7 @@ public partial class MainWindow
 
     private bool TryBuildSheetOverlayBitmap(
         PageInfo page,
+        float renderScale,
         out SKBitmap? overlayBitmap,
         out float widthPt,
         out float heightPt,
@@ -410,7 +413,7 @@ public partial class MainWindow
         if (!PdfLayerRenderService.TryRender(
                 overlayPage.PdfPath,
                 overlayPage.PdfPage,
-                renderScale: 2.0,
+                renderScale: renderScale,
                 layerStates,
                 highlightedLayers: [],
                 overlayPage.PdfLayersCached ? overlayPage.PdfLayers : null,
