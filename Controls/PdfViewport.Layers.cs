@@ -254,6 +254,8 @@ public sealed partial class PdfViewport
         }
 
         UpdateLayerSnapshot(render.Layers);
+        if (_pdfSnapEnabled && resetLayerStates)
+            QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
         _showingPreviousPageDuringSwitch = false;
         RequestRepaint();
@@ -397,6 +399,8 @@ public sealed partial class PdfViewport
         }
 
         _layerStates[configNumber] = on;
+        ResetPdfSnapCache();
+        QueuePdfSnapPointLoad(force: true);
         UpdateLayerSnapshot(_layers);
         FireLayersChanged();
         QueueLayerRender(
@@ -429,6 +433,8 @@ public sealed partial class PdfViewport
         foreach (var layer in _layers)
             _layerStates[layer.Number] = on;
 
+        ResetPdfSnapCache();
+        QueuePdfSnapPointLoad(force: true);
         UpdateLayerSnapshot(_layers);
         FireLayersChanged();
         QueueLayerRender(

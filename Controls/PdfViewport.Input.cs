@@ -585,6 +585,10 @@ public sealed partial class PdfViewport
                 ZoomFit();
                 e.Handled = true;
                 break;
+            case Key.F3 when Keyboard.Modifiers == ModifierKeys.Control:
+                PdfSnapEnabled = !PdfSnapEnabled;
+                e.Handled = true;
+                break;
             case Key.F3:
                 SnapEnabled = !SnapEnabled;
                 e.Handled = true;

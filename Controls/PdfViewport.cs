@@ -496,11 +496,13 @@ public sealed partial class PdfViewport : SKElement
         _activePdfLayerTraceLayer = null;
         _activePdfLayerTraceLayerName = "";
         ClearPdfLayerTraceSession();
+        ResetPdfSnapCache();
         _usingLayerRenderer = false;
         _pendingLayerRender = null;
         _layerRenderVersion++;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
+        QueuePdfSnapPointLoad(force: true);
 
         float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
@@ -988,6 +990,7 @@ public sealed partial class PdfViewport : SKElement
         _activePdfLayerTraceLayer = null;
         _activePdfLayerTraceLayerName = "";
         ClearPdfLayerTraceSession();
+        ResetPdfSnapCache();
         _pageBitmap?.Dispose();
         _pageBitmap = null;
         ClearSheetOverlay();

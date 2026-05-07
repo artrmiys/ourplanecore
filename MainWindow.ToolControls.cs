@@ -133,6 +133,12 @@ public partial class MainWindow
     private void BtnSnap_Unchecked(object sender, RoutedEventArgs e) =>
         SetSnapMode(enabled: false);
 
+    private void BtnPdfSnap_Checked(object sender, RoutedEventArgs e) =>
+        SetPdfSnapMode(enabled: true);
+
+    private void BtnPdfSnap_Unchecked(object sender, RoutedEventArgs e) =>
+        SetPdfSnapMode(enabled: false);
+
     private void BtnOrtho_Checked(object sender, RoutedEventArgs e) =>
         SetOrthoMode(enabled: true);
 
@@ -151,6 +157,16 @@ public partial class MainWindow
             return;
 
         _viewport.SnapEnabled = enabled;
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
+    private void SetPdfSnapMode(bool enabled)
+    {
+        if (_updatingConstraintButtons)
+            return;
+
+        _viewport.PdfSnapEnabled = enabled;
         UpdateConstraintButtons();
         UpdateToolStatus();
     }
@@ -181,6 +197,12 @@ public partial class MainWindow
         UpdateToolStatus();
     }
 
+    private void OnViewportPdfSnapChanged(bool enabled)
+    {
+        UpdateConstraintButtons();
+        UpdateToolStatus();
+    }
+
     private void OnViewportOrthoChanged(bool enabled)
     {
         UpdateConstraintButtons();
@@ -200,6 +222,8 @@ public partial class MainWindow
         {
             BtnSnap.IsChecked = _viewport.SnapEnabled;
             BtnSnap.Content = _viewport.SnapEnabled ? "Snap On" : "Snap";
+            BtnPdfSnap.IsChecked = _viewport.PdfSnapEnabled;
+            BtnPdfSnap.Content = _viewport.PdfSnapEnabled ? "PDF Snap On" : "PDF Snap";
             BtnOrtho.IsChecked = _viewport.OrthoEnabled;
             BtnOrtho.Content = _viewport.OrthoEnabled ? "Ortho On" : "Ortho";
             BtnBoxMode.IsChecked = _viewport.BoxModeEnabled;

@@ -79,6 +79,7 @@ public partial class MainWindow
         Add("tool.area", "Area Tool", "Tools", "A", "Record area measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.toggleRecord", "Toggle Record", "Tools", "R", "Toggle digitizer record mode for the current drawing tool.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.toggleSnap", "Toggle Snap", "Tools", "F3", "Toggle snap to existing takeoff points.");
+        Add("tool.togglePdfSnap", "Toggle PDF Snap", "Tools", "Ctrl+F3", "Toggle snap to PDF vector corners and points.");
         Add("tool.toggleOrtho", "Toggle Ortho", "Tools", "F8", "Toggle 90/45-degree ortho constraint.");
 
         Add("edit.copyMeasurements", "Copy Selected Measurements", "Edit", "Ctrl+C", "Copy the selected measurements.", selectedMeasurementCount > 0, "Select one or more measurements first.");
@@ -174,6 +175,7 @@ public partial class MainWindow
                     _recordButton.IsChecked = _recordButton.IsChecked != true;
                 break;
             case "tool.toggleSnap": SetSnapMode(!_viewport.SnapEnabled); break;
+            case "tool.togglePdfSnap": SetPdfSnapMode(!_viewport.PdfSnapEnabled); break;
             case "tool.toggleOrtho": SetOrthoMode(!_viewport.OrthoEnabled); break;
 
             case "edit.copyMeasurements": CopyMeasurementsToClipboard(_viewport.GetSelectedMeasurements()); break;

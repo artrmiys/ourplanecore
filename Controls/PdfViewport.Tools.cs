@@ -625,6 +625,8 @@ public sealed partial class PdfViewport
         var modes = new List<string>();
         if (SnapEnabled)
             modes.Add("Snap F3");
+        if (PdfSnapEnabled)
+            modes.Add("PDF Snap Ctrl+F3");
         if (OrthoEnabled)
             modes.Add("Ortho F8");
         if (BoxModeEnabled)
@@ -670,7 +672,7 @@ public sealed partial class PdfViewport
 
     private SKPoint ResolveDigitizerPoint(SKPoint rawPdf, bool updatePreview)
     {
-        if (SnapEnabled && TryFindSnapPoint(rawPdf, out SKPoint snapped, out string snapKind))
+        if (TryFindDigitizerSnapPoint(rawPdf, out SKPoint snapped, out string snapKind))
         {
             if (updatePreview)
                 SetSnapPreview(snapped, snapKind);
@@ -686,6 +688,39 @@ public sealed partial class PdfViewport
         return TryGetOrthoAnchor(out SKPoint anchor) && IsOrthoActive()
             ? ApplyOrtho(anchor, rawPdf)
             : rawPdf;
+    }
+
+    private bool TryFindDigitizerSnapPoint(SKPoint rawPdf, out SKPoint snapped, out string snapKind)
+    {
+        float tolerance = ScreenToPdfDistance(SnapToleranceScreenPx);
+        float best = tolerance * tolerance;
+        SKPoint bestPoint = default;
+        string bestKind = "";
+        snapped = default;
+        snapKind = "";
+        bool found = false;
+
+        void Consider(SKPoint candidate, string kind)
+        {
+            float distance = DistanceSquared(rawPdf, candidate);
+            if (distance >= best)
+                return;
+
+            best = distance;
+            bestPoint = candidate;
+            bestKind = kind;
+            found = true;
+        }
+
+        if (SnapEnabled && TryFindSnapPoint(rawPdf, out SKPoint measurementSnap, out string measurementKind))
+            Consider(measurementSnap, measurementKind);
+
+        if (PdfSnapEnabled && TryFindPdfSnapPoint(rawPdf, tolerance, out SKPoint pdfSnap, out string pdfKind))
+            Consider(pdfSnap, pdfKind);
+
+        snapped = bestPoint;
+        snapKind = bestKind;
+        return found;
     }
 
     private bool IsOrthoActive()

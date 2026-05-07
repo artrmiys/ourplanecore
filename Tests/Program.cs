@@ -96,6 +96,8 @@ var tests = new List<(string Name, Action Run)>
     ("viewport measurement labels survive distant zoom", ViewportMeasurementLabelsSurviveDistantZoom),
     ("viewport measurement LOD limits dense details", ViewportMeasurementLodLimitsDenseDetails),
     ("viewport LOD hides expensive layers during fast frames", ViewportLodHidesExpensiveLayersDuringFastFrames),
+    ("pdf snap index finds nearest point", PdfSnapIndexFindsNearestPoint),
+    ("pdf snap index prefers corner ties", PdfSnapIndexPrefersCornerTies),
 };
 
 int passed = 0;
@@ -1297,6 +1299,38 @@ static void ViewportLodHidesExpensiveLayersDuringFastFrames()
             activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementGeometryThreshold + 1,
             fastNavigationFrame: true),
         "very dense takeoff pages should skip non-selected measurement geometry during navigation");
+}
+
+static void PdfSnapIndexFindsNearestPoint()
+{
+    var index = new PdfSnapPointIndex(
+    [
+        new PdfGeometrySnapPoint(new SKPoint(100, 100), "pdf-point"),
+        new PdfGeometrySnapPoint(new SKPoint(130, 100), "pdf-corner"),
+    ]);
+
+    AssertTrue(
+        index.TryFind(new SKPoint(103, 100), tolerancePt: 8, out PdfGeometrySnapPoint snap),
+        "nearby PDF snap point should be found");
+    AssertEqual("100,100", $"{snap.Point.X:0},{snap.Point.Y:0}", "nearest snap point");
+
+    AssertFalse(
+        index.TryFind(new SKPoint(160, 100), tolerancePt: 8, out _),
+        "distant PDF snap point should not be found");
+}
+
+static void PdfSnapIndexPrefersCornerTies()
+{
+    var index = new PdfSnapPointIndex(
+    [
+        new PdfGeometrySnapPoint(new SKPoint(100, 100), "pdf-point"),
+        new PdfGeometrySnapPoint(new SKPoint(100, 100), "pdf-corner"),
+    ]);
+
+    AssertTrue(
+        index.TryFind(new SKPoint(100, 100), tolerancePt: 4, out PdfGeometrySnapPoint snap),
+        "same-location PDF snap candidates should be found");
+    AssertEqual("pdf-corner", snap.Kind, "corner snap priority");
 }
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>

@@ -518,6 +518,7 @@ public partial class MainWindow
         TxtTool.Text =
             $"  Tool: {title}  |  Record: {(recording ? "On" : "Off")}" +
             $"  |  Snap: {(_viewport.SnapEnabled ? "On" : "Off")}" +
+            $"  |  PDF Snap: {(_viewport.PdfSnapEnabled ? "On" : "Off")}" +
             $"  |  Ortho: {(_viewport.OrthoEnabled ? "On" : "Off")}" +
             $"  |  Box: {(_viewport.BoxModeEnabled ? "On" : "Off")}{item}";
         UpdateActiveTakeoffTargetBar();

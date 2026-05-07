@@ -806,6 +806,128 @@ def _dedupe_segments(
     return output
 
 
+def _visible_layer_map(cached_layers: list[dict] | None) -> dict[str, bool] | None:
+    if not cached_layers:
+        return None
+    return {
+        str(layer.get("name") or "").strip(): bool(layer.get("on", True))
+        for layer in cached_layers
+        if str(layer.get("name") or "").strip()
+    }
+
+
+def _is_snap_layer_visible(layer_name: str, visible_layers: dict[str, bool] | None) -> bool:
+    clean = str(layer_name or "").strip()
+    if not clean or visible_layers is None:
+        return True
+    return visible_layers.get(clean, True)
+
+
+def _add_snap_point(
+    points: dict[tuple[float, float], dict],
+    point: tuple[float, float] | None,
+    kind: str,
+    layer_name: str,
+    max_points: int,
+) -> None:
+    if point is None or len(points) >= max_points:
+        return
+
+    x, y = point
+    key = (round(x, 1), round(y, 1))
+    current = points.get(key)
+    if current is not None and current.get("kind") == "pdf-corner":
+        return
+    if current is not None and kind != "pdf-corner":
+        return
+
+    points[key] = {
+        "x": x,
+        "y": y,
+        "kind": kind,
+        "layer_name": layer_name,
+    }
+
+
+def _add_snap_rect_points(
+    points: dict[tuple[float, float], dict],
+    rect: tuple[float, float, float, float] | None,
+    layer_name: str,
+    max_points: int,
+) -> None:
+    if rect is None:
+        return
+    for point in [(p["x"], p["y"]) for p in _rect_points(rect)]:
+        _add_snap_point(points, point, "pdf-corner", layer_name, max_points)
+
+
+def _add_snap_points_from_item(
+    points: dict[tuple[float, float], dict],
+    item,
+    layer_name: str,
+    max_points: int,
+) -> None:
+    if not item:
+        return
+
+    command = str(item[0])
+    if command == "l" and len(item) >= 3:
+        _add_snap_point(points, _point_xy(item[1]), "pdf-point", layer_name, max_points)
+        _add_snap_point(points, _point_xy(item[2]), "pdf-point", layer_name, max_points)
+    elif command == "re" and len(item) >= 2:
+        _add_snap_rect_points(points, _rect_xyxy(item[1]), layer_name, max_points)
+    elif command == "qu" and len(item) >= 2:
+        try:
+            quad_points = [_point_xy(point) for point in item[1]]
+        except Exception:
+            quad_points = []
+        for point in quad_points:
+            _add_snap_point(points, point, "pdf-corner", layer_name, max_points)
+    elif command == "c" and len(item) >= 3:
+        _add_snap_point(points, _point_xy(item[1]), "pdf-point", layer_name, max_points)
+        _add_snap_point(points, _point_xy(item[-1]), "pdf-point", layer_name, max_points)
+
+
+def pdf_snap_data(req: dict) -> dict:
+    pdf_path = req["pdf"]
+    page_index = int(req.get("page", 0))
+    max_points = max(100, min(int(req.get("max_points", 30000)), 100000))
+    visible_layers = _visible_layer_map(_cached_layers(req.get("visible_layers")))
+
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc.load_page(page_index)
+        try:
+            drawings = page.get_cdrawings(extended=True) or []
+        except Exception:
+            try:
+                drawings = page.get_cdrawings() or []
+            except Exception:
+                drawings = []
+
+        points: dict[tuple[float, float], dict] = {}
+        for drawing in drawings:
+            layer_name = str(drawing.get("layer") or "").strip()
+            if not _is_snap_layer_visible(layer_name, visible_layers):
+                continue
+
+            before_count = len(points)
+            for item in drawing.get("items") or []:
+                _add_snap_points_from_item(points, item, layer_name, max_points)
+                if len(points) >= max_points:
+                    break
+
+            if len(points) == before_count:
+                _add_snap_rect_points(points, _rect_xyxy(drawing.get("rect")), layer_name, max_points)
+
+            if len(points) >= max_points:
+                break
+
+        return {"ok": True, "points": list(points.values())[:max_points]}
+    finally:
+        doc.close()
+
+
 def _segment_measurement(
     segment: tuple[tuple[float, float], tuple[float, float]],
     layer_name: str,
@@ -1261,6 +1383,8 @@ def worker_loop() -> int:
                 response = list_layers_data(req)
             elif action == "layerprobe":
                 response = probe_layers_data(req)
+            elif action == "pdfsnap":
+                response = pdf_snap_data(req)
             elif action == "layertrace":
                 response = trace_layer_data(req)
             elif action == "sheetmeta":
@@ -1282,8 +1406,8 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "layertrace", "sheetmeta"}:
-        print("usage: pdf_layers_helper.py <render|layers|layerprobe|layertrace|sheetmeta|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
@@ -1292,6 +1416,8 @@ def main() -> int:
             list_layers(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "layerprobe":
             _write_json(sys.argv[3], probe_layers_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "pdfsnap":
+            _write_json(sys.argv[3], pdf_snap_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "layertrace":
             _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
         else:

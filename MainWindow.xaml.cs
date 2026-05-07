@@ -268,6 +268,7 @@ public partial class MainWindow : Window
         _viewport.ScaleChanged       += OnScaleChanged;
         _viewport.ToolChanged        += OnToolChanged;
         _viewport.SnapChanged        += OnViewportSnapChanged;
+        _viewport.PdfSnapChanged     += OnViewportPdfSnapChanged;
         _viewport.OrthoChanged       += OnViewportOrthoChanged;
         _viewport.BoxModeChanged     += OnViewportBoxModeChanged;
         _viewport.LayersChanged      += OnLayersChanged;

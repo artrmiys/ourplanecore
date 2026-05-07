@@ -267,6 +267,10 @@
                           ToolTip="Snap to existing takeoff points (F3)"
                           Checked="BtnSnap_Checked" Unchecked="BtnSnap_Unchecked"
                           Padding="6,2" MinWidth="48"/>
+            <ToggleButton x:Name="BtnPdfSnap" Content="PDF Snap"
+                          ToolTip="Snap to PDF vector corners and points (Ctrl+F3)"
+                          Checked="BtnPdfSnap_Checked" Unchecked="BtnPdfSnap_Unchecked"
+                          Padding="6,2" MinWidth="64"/>
             <ToggleButton x:Name="BtnOrtho" Content="Ortho"
                           ToolTip="Lock Line/Area to 90/45 degrees (F8, Shift temporarily toggles)"
                           Checked="BtnOrtho_Checked" Unchecked="BtnOrtho_Unchecked"

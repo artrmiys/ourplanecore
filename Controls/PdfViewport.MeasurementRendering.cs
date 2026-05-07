@@ -954,6 +954,8 @@ public sealed partial class PdfViewport
         if (_snapPreview.HasValue)
         {
             SKPoint point = _snapPreview.Value;
+            bool isPdfSnap = _snapPreviewKind.StartsWith("pdf-", StringComparison.OrdinalIgnoreCase);
+            SKColor snapColor = isPdfSnap ? new SKColor(0x00, 0x78, 0xD4) : new SKColor(0xE5, 0x39, 0x35);
             float half = ScreenToPdfDistance(SnapMarkerScreenPx);
             var rect = new SKRect(
                 point.X - half,
@@ -962,13 +964,13 @@ public sealed partial class PdfViewport
                 point.Y + half);
             using var snapFill = new SKPaint
             {
-                Color = new SKColor(0xE5, 0x39, 0x35, 80),
+                Color = snapColor.WithAlpha(80),
                 IsAntialias = true,
                 Style = SKPaintStyle.Fill,
             };
             using var snapStroke = new SKPaint
             {
-                Color = new SKColor(0xE5, 0x39, 0x35),
+                Color = snapColor,
                 StrokeWidth = ScreenToPdfDistance(2f),
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
@@ -1001,13 +1003,15 @@ public sealed partial class PdfViewport
             {
                 "midpoint" => "mid",
                 "intersection" => "int",
+                "pdf-corner" => "pdf corner",
+                "pdf-point" => "pdf point",
                 _ => "end",
             };
             string label = $"{labelKind} {point.X:F0},{point.Y:F0}";
             float textSize = ScreenToPdfDistance(10f);
             using var snapText = new SKPaint
             {
-                Color = new SKColor(0xE5, 0x39, 0x35),
+                Color = snapColor,
                 IsAntialias = true,
                 TextSize = textSize,
             };
