@@ -40,7 +40,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border CornerRadius="3"
+                        <Border CornerRadius="2"
                                 Background="{DynamicResource ScrollBarThumbBrush}"
                                 Margin="2"/>
                     </ControlTemplate>
@@ -59,7 +59,7 @@
         </Style>
 
         <ControlTemplate x:Key="VScrollBarTemplate" TargetType="ScrollBar">
-            <Border Background="{DynamicResource ScrollBarTrackBrush}" Width="8" CornerRadius="4">
+            <Border Background="{DynamicResource ScrollBarTrackBrush}" Width="8" CornerRadius="2">
                 <Track x:Name="PART_Track" IsDirectionReversed="True">
                     <Track.DecreaseRepeatButton>
                         <RepeatButton Style="{StaticResource ScrollBarPageStyle}"
@@ -77,7 +77,7 @@
         </ControlTemplate>
 
         <ControlTemplate x:Key="HScrollBarTemplate" TargetType="ScrollBar">
-            <Border Background="{DynamicResource ScrollBarTrackBrush}" Height="8" CornerRadius="4">
+            <Border Background="{DynamicResource ScrollBarTrackBrush}" Height="8" CornerRadius="2">
                 <Track x:Name="PART_Track">
                     <Track.DecreaseRepeatButton>
                         <RepeatButton Style="{StaticResource ScrollBarPageStyle}"
@@ -161,7 +161,7 @@
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="3"
+                                CornerRadius="2"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True"
                                 TextElement.Foreground="{TemplateBinding Foreground}">
@@ -188,7 +188,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="3"
+                                CornerRadius="2"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
@@ -286,7 +286,7 @@
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="3"
+                    CornerRadius="2"
                     SnapsToDevicePixels="True">
                 <ContentPresenter HorizontalAlignment="Center"
                                   VerticalAlignment="Center"
@@ -321,7 +321,7 @@
             <Setter Property="Background" Value="{DynamicResource ToolbarBandBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="CornerRadius" Value="2"/>
             <Setter Property="Padding" Value="7,5,7,1"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
         </Style>
@@ -384,7 +384,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="3"
+                                CornerRadius="2"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
@@ -444,7 +444,7 @@
                                                 Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="3"
+                                                CornerRadius="2"
                                                 SnapsToDevicePixels="True">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
