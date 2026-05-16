@@ -39,9 +39,15 @@ public partial class MainWindow
 
         using (UsePageMeasurementLookup())
         {
+            // FillPagesTree already builds every page header and its takeoff
+            // child nodes. RefreshPagesTakeoffIndicators() used to run right
+            // here and rebuild all of them a second time (identical output),
+            // doubling the page-tree build cost on every job open / reload.
+            // ClearDirtyPageTakeoffIndicators() + ApplyPagesMultiSelectionVisuals()
+            // (its only other effects) already run below.
             FillPagesTree(PagesTree.Items, _currentJob.PagesRoot);
-            RefreshPagesTakeoffIndicators();
         }
+        ClearDirtyPageTakeoffIndicators();
         RestoreExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
 
         if (!string.IsNullOrWhiteSpace(selectPath))

@@ -30,7 +30,7 @@ public partial class MainWindow
                 Header = BuildPageTakeoffHeader(page, takeoff, legendIndex),
                 Tag = node,
             };
-            child.ContextMenu = BuildPageTakeoffContextMenu(node);
+            AttachLazyPageTakeoffContextMenu(child, node);
             pageItem.Items.Add(child);
             legendIndex++;
         }
@@ -525,6 +525,18 @@ public partial class MainWindow
             return newPrefix.TrimEnd('/') + clean[(prefix.Length - 1)..];
 
         return clean;
+    }
+
+    // Building a full ContextMenu (many MenuItems) for every page-takeoff row
+    // up front was a large slice of the per-node cost when a 100+ page job
+    // opened. The real menu is built only when the row is actually invoked:
+    // the mouse path rebuilds fresh in PagesTree_PreviewMouseRightButtonDown,
+    // and the keyboard Menu key builds it here on first open.
+    private void AttachLazyPageTakeoffContextMenu(TreeViewItem child, PageTakeoffNode node)
+    {
+        child.ContextMenu = new ContextMenu();
+        child.ContextMenuOpening += (_, _) =>
+            child.ContextMenu = BuildPageTakeoffContextMenu(node);
     }
 
     private ContextMenu BuildPageTakeoffContextMenu(PageTakeoffNode node)
