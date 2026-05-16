@@ -35,6 +35,28 @@ public partial class MainWindow
         ApplyTakeoffPageHighlights();
     }
 
+    // Targeted equivalent of RefreshActiveTakeoffVisuals for the
+    // measurement-add path: only the edited takeoff's header changed (already
+    // rebuilt via RefreshTreeItem) and only its row's "measured on this page"
+    // highlight can flip. No selection/active change occurs on add, so the
+    // other rows are untouched — avoiding an O(all takeoff nodes) walk on
+    // every single measurement.
+    private void RefreshTakeoffRowVisualsForItems(IReadOnlyCollection<TakeoffItem> items)
+    {
+        if (items.Count > 0)
+        {
+            TakeoffTreeVisualBrushes brushes = CreateTakeoffTreeVisualBrushes();
+            HashSet<string> measuredOnCurrentPage = CurrentPageMeasuredTakeoffFolders();
+            foreach (TakeoffItem item in items)
+            {
+                if (FindTakeoffTreeItem(item) is { } tvi)
+                    ApplyTakeoffTreeItemVisual(tvi, measuredOnCurrentPage, brushes);
+            }
+        }
+
+        UpdateActiveTakeoffTargetBar();
+    }
+
     private void RefreshAllTotals()
     {
         RefreshTotalsRecursive(TakeoffsTree);

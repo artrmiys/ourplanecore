@@ -25,7 +25,7 @@ public partial class MainWindow
         RefreshTreeItem(item);
         using (UsePageMeasurementLookup())
         {
-            RefreshActiveTakeoffVisuals();
+            RefreshTakeoffRowVisualsForItems(new[] { item });
             RefreshPageTakeoffIndicatorsForFolder(m.PageFolder);
             RefreshSheetLegend();
         }
@@ -76,7 +76,7 @@ public partial class MainWindow
 
         using (UsePageMeasurementLookup())
         {
-            RefreshActiveTakeoffVisuals();
+            RefreshTakeoffRowVisualsForItems(changedItems);
             foreach (string pageFolder in unique.Select(m => m.PageFolder)
                          .Where(page => !string.IsNullOrWhiteSpace(page))
                          .Distinct(StringComparer.OrdinalIgnoreCase))
