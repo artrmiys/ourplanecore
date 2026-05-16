@@ -297,6 +297,7 @@ public partial class MainWindow
 
     private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)
     {
+        using PageOpenTrace? trace = BeginPageOpenTrace(page.Name);
         PageInfo viewportPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
         _currentPage = viewportPage;
         _currentPdfPath = viewportPage.PdfPath;
@@ -304,12 +305,14 @@ public partial class MainWindow
         _viewport.ScaleMetersPerPt = viewportPage.ScaleMetersPerPt;
         UpdateScaleUi(viewportPage.ScaleMetersPerPt);
         IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt);
+        trace?.Mark("read+scale");
         _viewport.LoadPage(
             viewportPage.PdfPath,
             viewportPage.PdfPage,
             viewportPage.FolderPath,
             viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
             restoreView);
+        trace?.Mark("decode");
         QueueNearbyPagePreviewPrefetch(viewportPage);
         ApplyViewportPageTakeoffVisibility(viewportPage);
         LoadSheetOverlay(viewportPage);
@@ -322,10 +325,12 @@ public partial class MainWindow
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
         SaveAppSettings();
+        trace?.Mark("overlays+settings");
 
         bool autoLoaded = _currentJob == null && _takeoffItems.Count == 0 && TryAutoLoad();
         if (!autoLoaded)
             RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems);
+        trace?.Mark("takeoff-refresh");
         RefreshFloatingPageSetup(viewportPage.FolderPath);
         ShowDuplicateSheetMeasurementHint(viewportPage);
     }
