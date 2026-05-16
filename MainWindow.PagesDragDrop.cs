@@ -12,12 +12,28 @@ public partial class MainWindow
 {
     private void PagesTree_MouseMove(object sender, MouseEventArgs e)
     {
-        if (_pagesDragStart == null || e.LeftButton != MouseButtonState.Pressed)
+        if (_pagesDragStart == null)
             return;
-        if (PagesTree.SelectedItem is not TreeViewItem item)
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            ResetPagesDragState();
+            return;
+        }
+
+        if (!_pagesDragArmed)
+        {
+            ResetPagesDragState();
+            return;
+        }
+
+        if ((_pagesDragItem ?? PagesTree.SelectedItem) is not TreeViewItem item)
             return;
         if (IsRootPagesNode(item))
+        {
+            ResetPagesDragState();
             return;
+        }
 
         Point pos = e.GetPosition(PagesTree);
         if (Math.Abs(pos.X - _pagesDragStart.Value.X) < SystemParameters.MinimumHorizontalDragDistance &&
@@ -34,7 +50,10 @@ public partial class MainWindow
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (takeoffFolders.Count == 0)
+            {
+                ResetPagesDragState();
                 return;
+            }
 
             var legendPayload = new PageTakeoffLegendDrag(pageTakeoff.Page.FolderPath, takeoffFolders);
             DoPagesDragDrop(legendPayload, DragDropEffects.Move);
@@ -43,7 +62,10 @@ public partial class MainWindow
 
         var entries = GetSelectedPageEntries(item);
         if (entries.Count == 0)
+        {
+            ResetPagesDragState();
             return;
+        }
 
         var payload = new PagesClipboard(entries, PagesClipboardMode.Cut);
         DoPagesDragDrop(payload, DragDropEffects.Move | DragDropEffects.Copy);
@@ -57,9 +79,16 @@ public partial class MainWindow
         }
         finally
         {
-            _pagesDragStart = null;
+            ResetPagesDragState();
             FlushPendingPagesTreeDropRefresh();
         }
+    }
+
+    private void ResetPagesDragState()
+    {
+        _pagesDragStart = null;
+        _pagesDragItem = null;
+        _pagesDragArmed = false;
     }
 
     private void PagesTree_DragOver(object sender, DragEventArgs e)
@@ -90,9 +119,18 @@ public partial class MainWindow
             return;
         }
 
-        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        TreeViewItem? targetItem = ResolvePagesClipboardDropTarget(
+            FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject));
         string? targetFolder = targetItem == null ? _currentJob?.PagesRoot : GetPasteTargetFolder(targetItem);
         bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
+
+        if (targetItem == null && !copy && CanDropPagesToRootBottom(payload))
+        {
+            UpdatePagesPositionDropCue(null, after: true, canDrop: true, RootBottomDropStatus(payload));
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
 
         if (TryGetPagesPositionDropCue(payload, targetItem, copy, e, out bool after, out bool canDropPosition, out string positionStatus))
         {
@@ -128,10 +166,19 @@ public partial class MainWindow
             return;
         }
 
-        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        TreeViewItem? targetItem = ResolvePagesClipboardDropTarget(
+            FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject));
         PagesClipboardMode mode = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey
             ? PagesClipboardMode.Copy
             : PagesClipboardMode.Cut;
+
+        if (targetItem == null && mode == PagesClipboardMode.Cut && CanDropPagesToRootBottom(payload))
+        {
+            DropPagesToRootBottom(payload);
+            ClearPagesPositionDropCue();
+            e.Handled = true;
+            return;
+        }
 
         if (TryGetPagesPositionDropCue(payload, targetItem, mode == PagesClipboardMode.Copy, e, out bool after, out bool canDropPosition, out _) &&
             canDropPosition &&
@@ -152,6 +199,35 @@ public partial class MainWindow
         e.Handled = true;
     }
 
+    private bool CanDropPagesToRootBottom(PagesClipboard payload)
+    {
+        if (_currentJob == null || payload.Entries.Count == 0 || !Directory.Exists(_currentJob.PagesRoot))
+            return false;
+
+        foreach (PagesClipboardEntry entry in payload.Entries)
+        {
+            if (!Directory.Exists(entry.SourcePath) ||
+                !IsPathInsidePagesRoot(entry.SourcePath, allowRoot: false))
+            {
+                return false;
+            }
+
+            string sourceParent = Path.GetDirectoryName(entry.SourcePath) ?? "";
+            if (string.Equals(sourceParent, _currentJob.PagesRoot, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!CanDropInto(new PagesClipboard([entry], PagesClipboardMode.Cut), _currentJob.PagesRoot, PagesClipboardMode.Cut))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static string RootBottomDropStatus(PagesClipboard payload) =>
+        payload.Entries.Count == 1
+            ? "Move 1 page/folder item to Pages root bottom."
+            : $"Move {payload.Entries.Count} page/folder items to Pages root bottom.";
+
     private void PagesTree_DragLeave(object sender, DragEventArgs e)
     {
         if (!PagesTree.IsMouseOver)
@@ -159,6 +235,16 @@ public partial class MainWindow
             ClearPageTakeoffLegendDropCue();
             ClearPagesPositionDropCue();
         }
+    }
+
+    private TreeViewItem? ResolvePagesClipboardDropTarget(TreeViewItem? targetItem)
+    {
+        return targetItem?.Tag switch
+        {
+            PageTakeoffNode node => FindPageTreeItemByFolder(node.Page.FolderPath) ?? targetItem,
+            PageOverlayNode overlay => FindPageTreeItemByFolder(overlay.Page.FolderPath) ?? targetItem,
+            _ => targetItem,
+        };
     }
 
     private bool TryGetPagesPositionDropCue(
@@ -352,6 +438,64 @@ public partial class MainWindow
             ShowOperationError("Reorder Pages", ex);
         }
     }
+
+    private void DropPagesToRootBottom(PagesClipboard payload)
+    {
+        if (_currentJob == null)
+            return;
+
+        string root = _currentJob.PagesRoot;
+        try
+        {
+            var changed = new List<string>();
+            bool reloadActiveTab = false;
+            bool movedIntoRoot = false;
+            foreach (PagesClipboardEntry entry in payload.Entries)
+            {
+                string source = entry.SourcePath;
+                if (!Directory.Exists(source))
+                    continue;
+
+                string sourceParent = Path.GetDirectoryName(source) ?? "";
+                if (string.Equals(sourceParent, root, StringComparison.OrdinalIgnoreCase))
+                {
+                    changed.Add(source);
+                    continue;
+                }
+
+                if (!CanDropInto(new PagesClipboard([entry], PagesClipboardMode.Cut), root, PagesClipboardMode.Cut))
+                    continue;
+
+                string moved = OurPlaneCoreJobStore.MoveNode(source, root);
+                reloadActiveTab = UpdatePageReferencesForMovedPath(source, moved) || reloadActiveTab;
+                movedIntoRoot = true;
+                changed.Add(moved);
+            }
+
+            if (changed.Count == 0)
+                return;
+
+            bool reordered = OurPlaneCoreJobStore.MoveSiblingsToEnd(changed, root);
+            _pagesClipboard = null;
+            _pagesMultiSelection.Clear();
+            foreach (string path in changed)
+                _pagesMultiSelection.Add(path);
+
+            QueuePagesTreeDropRefresh(changed[0], reloadActiveTab);
+            TxtStatus.Text = reordered || movedIntoRoot
+                ? RootBottomDroppedStatus(changed.Count)
+                : "Selected page/folder item(s) are already at Pages root bottom.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Move Pages to Root Bottom", ex);
+        }
+    }
+
+    private static string RootBottomDroppedStatus(int count) =>
+        count == 1
+            ? "Moved 1 page/folder item to Pages root bottom."
+            : $"Moved {count} page/folder items to Pages root bottom.";
 
     private void QueuePagesTreeDropRefresh(string selectPath, bool reloadActiveTab)
     {

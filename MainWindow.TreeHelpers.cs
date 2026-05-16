@@ -52,25 +52,29 @@ public partial class MainWindow
             return;
         }
 
-        var entries = VisibleOrderedTakeoffsForPage(_currentPage)
-            .Select(item =>
-            {
-                var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();
-                return pageMeasurements.Count == 0
-                    ? null
-                    : new SheetLegendEntry(
-                        item.Color,
-                        item.Name,
-                        SheetLegendQuantityText(item, pageMeasurements),
-                        SheetLegendTypeTitle(item),
-                        SheetLegendTypeSign(item),
-                        []);
-            })
-            .Where(entry => entry != null)
-            .Cast<SheetLegendEntry>()
-            .ToList();
+        using (UsePageMeasurementLookup())
+        {
+            var entries = VisibleOrderedTakeoffsForPage(_currentPage)
+                .Select(item =>
+                {
+                    var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();
+                    return pageMeasurements.Count == 0
+                        ? null
+                        : new SheetLegendEntry(
+                            item.Color,
+                            item.Name,
+                            SheetLegendQuantityText(item, pageMeasurements),
+                            SheetLegendTypeTitle(item),
+                            SheetLegendTypeSign(item),
+                            [],
+                            TakeoffGlyphKind(item));
+                })
+                .Where(entry => entry != null)
+                .Cast<SheetLegendEntry>()
+                .ToList();
 
-        _viewport.SetSheetLegend(entries);
+            _viewport.SetSheetLegend(entries);
+        }
     }
 
     private string SheetLegendQuantityText(TakeoffItem item, IReadOnlyList<Measurement> measurements)
@@ -126,77 +130,145 @@ public partial class MainWindow
 
     private void ApplyTakeoffPageHighlights()
     {
-        Brush? brushOrNull(string key) => Application.Current.Resources[key] as Brush;
-        Brush dropOk      = brushOrNull("RowDropOkBrush")      ?? new SolidColorBrush(Color.FromRgb(204, 245, 218));
-        Brush dropBad     = brushOrNull("RowDropBadBrush")     ?? new SolidColorBrush(Color.FromRgb(255, 214, 214));
-        Brush multiSel    = brushOrNull("RowMultiSelectBrush") ?? new SolidColorBrush(Color.FromRgb(205, 226, 255));
-        Brush onPageBg    = brushOrNull("RowOnPageBrush")      ?? new SolidColorBrush(Color.FromRgb(214, 245, 222));
-        Brush rowFg       = brushOrNull("RowFlagForegroundBrush") ?? Brushes.Black;
-        Brush activeAccent = brushOrNull("RowActiveAccentBrush")  ?? new SolidColorBrush(Color.FromRgb(31, 82, 166));
-
+        TakeoffTreeVisualBrushes brushes = CreateTakeoffTreeVisualBrushes();
+        HashSet<string> measuredOnCurrentPage = CurrentPageMeasuredTakeoffFolders();
         foreach (TreeViewItem item in EnumerateTakeoffTreeItems(TakeoffsTree))
-        {
-            item.ClearValue(Control.BorderBrushProperty);
-            item.ClearValue(Control.BorderThicknessProperty);
-            item.ClearValue(Control.FontWeightProperty);
+            ApplyTakeoffTreeItemVisual(item, measuredOnCurrentPage, brushes);
+    }
 
-            string? path = GetTakeoffNodePath(item);
-            string? sectionKey = GetTakeoffSectionSelectionKey(item);
-            bool sectionSelected = sectionKey != null && _takeoffSectionMultiSelection.Contains(sectionKey);
-            bool takeoffSelected = path != null && _takeoffsMultiSelection.Contains(path);
-            bool isActiveTakeoff = item.Tag is TakeoffItem activeTakeoff && IsActiveTakeoffItem(activeTakeoff);
-            bool isMeasuredOnPage = item.Tag is TakeoffItem takeoff && IsTakeoffMeasuredOnCurrentPage(takeoff);
-            if (ReferenceEquals(item, _takeoffSectionDropTarget))
+    private void RefreshTakeoffDropCueRows(params TreeViewItem?[] items)
+    {
+        TakeoffTreeVisualBrushes brushes = CreateTakeoffTreeVisualBrushes();
+        HashSet<string> measuredOnCurrentPage = CurrentPageMeasuredTakeoffFolders();
+        foreach (TreeViewItem item in items.Where(item => item != null).Distinct().Cast<TreeViewItem>())
+            ApplyTakeoffTreeItemVisual(item, measuredOnCurrentPage, brushes);
+    }
+
+    private void ApplyTakeoffTreeItemVisual(
+        TreeViewItem item,
+        HashSet<string> measuredOnCurrentPage,
+        TakeoffTreeVisualBrushes brushes)
+    {
+        item.ClearValue(Control.BorderBrushProperty);
+        item.ClearValue(Control.BorderThicknessProperty);
+        item.ClearValue(Control.FontWeightProperty);
+
+        string? path = GetTakeoffNodePath(item);
+        string? sectionKey = GetTakeoffSectionSelectionKey(item);
+        bool sectionSelected = sectionKey != null && _takeoffSectionMultiSelection.Contains(sectionKey);
+        bool takeoffSelected = path != null && _takeoffsMultiSelection.Contains(path);
+        bool isActiveTakeoff = item.Tag is TakeoffItem activeTakeoff && IsActiveTakeoffItem(activeTakeoff);
+        bool isMeasuredOnPage = item.Tag is TakeoffItem takeoff && IsTakeoffMeasuredOnCurrentPage(takeoff, measuredOnCurrentPage);
+        if (ReferenceEquals(item, _takeoffSectionDropTarget))
+        {
+            item.Background = _takeoffSectionDropAllowed ? brushes.DropOk : brushes.DropBad;
+            item.Foreground = brushes.RowForeground;
+            item.FontWeight = FontWeights.Normal;
+            item.BorderBrush = _takeoffSectionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+            item.BorderThickness = new Thickness(3, 0, 0, 0);
+        }
+        else if (ReferenceEquals(item, _takeoffPositionDropTarget))
+        {
+            item.ClearValue(Control.BackgroundProperty);
+            item.ClearValue(Control.ForegroundProperty);
+            item.FontWeight = FontWeights.Normal;
+            item.BorderBrush = _takeoffPositionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+            item.BorderThickness = _takeoffPositionDropAfter
+                ? new Thickness(0, 0, 0, 2)
+                : new Thickness(0, 2, 0, 0);
+        }
+        else if (ReferenceEquals(item, _takeoffFolderDropTarget))
+        {
+            item.Background = _takeoffFolderDropAllowed ? brushes.DropOk : brushes.DropBad;
+            item.Foreground = brushes.RowForeground;
+            item.FontWeight = FontWeights.Normal;
+            item.BorderBrush = _takeoffFolderDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+            item.BorderThickness = new Thickness(3, 0, 0, 0);
+        }
+        else
+        {
+            if (sectionSelected || takeoffSelected)
             {
-                item.Background = _takeoffSectionDropAllowed ? dropOk : dropBad;
-                item.Foreground = rowFg;
-                item.FontWeight = FontWeights.Normal;
-                item.BorderBrush = _takeoffSectionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
-                item.BorderThickness = new Thickness(0, 0, 0, 2);
+                item.Background = brushes.MultiSelect;
+                item.Foreground = brushes.RowForeground;
             }
-            else if (ReferenceEquals(item, _takeoffPositionDropTarget))
+            else if (isMeasuredOnPage)
             {
-                item.Background = _takeoffPositionDropAllowed ? dropOk : dropBad;
-                item.Foreground = rowFg;
-                item.FontWeight = FontWeights.Normal;
-                item.BorderBrush = _takeoffPositionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
-                item.BorderThickness = _takeoffPositionDropAfter
-                    ? new Thickness(0, 0, 0, 2)
-                    : new Thickness(0, 2, 0, 0);
+                item.Background = brushes.OnPageBackground;
+                item.Foreground = brushes.RowForeground;
             }
             else
             {
-                if (sectionSelected || takeoffSelected)
-                {
-                    item.Background = multiSel;
-                    item.Foreground = rowFg;
-                }
-                else if (isMeasuredOnPage)
-                {
-                    item.Background = onPageBg;
-                    item.Foreground = rowFg;
-                }
-                else
-                {
-                    item.ClearValue(Control.BackgroundProperty);
-                    item.ClearValue(Control.ForegroundProperty);
-                }
+                item.ClearValue(Control.BackgroundProperty);
+                item.ClearValue(Control.ForegroundProperty);
+            }
 
-                if (isActiveTakeoff)
-                {
-                    item.Foreground = rowFg;
-                    item.FontWeight = FontWeights.Normal;
-                    item.BorderBrush = activeAccent;
-                    item.BorderThickness = new Thickness(3, 0, 0, 0);
-                }
+            if (isActiveTakeoff)
+            {
+                item.Foreground = brushes.RowForeground;
+                item.FontWeight = FontWeights.Normal;
+                item.BorderBrush = brushes.ActiveAccent;
+                item.BorderThickness = new Thickness(3, 0, 0, 0);
             }
         }
     }
 
-    private bool IsTakeoffMeasuredOnCurrentPage(TakeoffItem takeoff) =>
-        _currentPage != null &&
-        takeoff.Measurements.Any(m =>
-            IsSamePageFolder(m.PageFolder, _currentPage.FolderPath));
+    private static TakeoffTreeVisualBrushes CreateTakeoffTreeVisualBrushes()
+    {
+        Brush? brushOrNull(string key) => Application.Current.Resources[key] as Brush;
+        return new TakeoffTreeVisualBrushes(
+            brushOrNull("RowDropOkBrush") ?? new SolidColorBrush(Color.FromRgb(204, 245, 218)),
+            brushOrNull("RowDropBadBrush") ?? new SolidColorBrush(Color.FromRgb(255, 214, 214)),
+            brushOrNull("RowMultiSelectBrush") ?? new SolidColorBrush(Color.FromRgb(205, 226, 255)),
+            brushOrNull("RowOnPageBrush") ?? new SolidColorBrush(Color.FromRgb(214, 245, 222)),
+            brushOrNull("RowFlagForegroundBrush") ?? Brushes.Black,
+            brushOrNull("RowActiveAccentBrush") ?? new SolidColorBrush(Color.FromRgb(31, 82, 166)));
+    }
+
+    private readonly record struct TakeoffTreeVisualBrushes(
+        Brush DropOk,
+        Brush DropBad,
+        Brush MultiSelect,
+        Brush OnPageBackground,
+        Brush RowForeground,
+        Brush ActiveAccent);
+
+    private HashSet<string> CurrentPageMeasuredTakeoffFolders()
+    {
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_currentPage == null)
+            return folders;
+
+        if (TryGetIndexedTakeoffsForPage(_currentPage.FolderPath, out IReadOnlyList<TakeoffItem> indexedTakeoffs))
+        {
+            foreach (TakeoffItem item in indexedTakeoffs)
+            {
+                if (!string.IsNullOrWhiteSpace(item.FolderPath))
+                    folders.Add(NormalizePathForCompare(item.FolderPath));
+            }
+            return folders;
+        }
+
+        string pageKey = NormalizePathForCompare(_currentPage.FolderPath);
+        foreach (TakeoffItem item in _takeoffItems)
+        {
+            if (string.IsNullOrWhiteSpace(item.FolderPath))
+                continue;
+
+            if (item.Measurements.Any(measurement =>
+                    !string.IsNullOrWhiteSpace(measurement.PageFolder) &&
+                    string.Equals(NormalizePathForCompare(measurement.PageFolder), pageKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                folders.Add(NormalizePathForCompare(item.FolderPath));
+            }
+        }
+
+        return folders;
+    }
+
+    private static bool IsTakeoffMeasuredOnCurrentPage(TakeoffItem takeoff, HashSet<string> measuredTakeoffFolders) =>
+        !string.IsNullOrWhiteSpace(takeoff.FolderPath) &&
+        measuredTakeoffFolders.Contains(NormalizePathForCompare(takeoff.FolderPath));
 
     private static IEnumerable<TreeViewItem> EnumerateTakeoffTreeItems(ItemsControl parent)
     {
@@ -289,13 +361,17 @@ public partial class MainWindow
         // Glyph drawn in the takeoff color with a darker stroke — no separate
         // colored square, the glyph itself carries the color identity.
         return Controls.MeasurementGlyph.CreateWpf(
-            Controls.MeasurementGlyph.Parse(
-                OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
-                joist: item.IsJoistArea),
+            TakeoffGlyphKind(item),
             swatchBrush,
             size,
             new Thickness(0));
     }
+
+    private static MeasurementGlyphKind TakeoffGlyphKind(TakeoffItem item) =>
+        Controls.MeasurementGlyph.Parse(
+            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+            joist: item.IsJoistArea,
+            countSymbol: item.CountSymbol);
 
     private void SetFolderTreeItemHeader(TreeViewItem tvi, TakeoffFolderNode folder)
     {
@@ -420,6 +496,113 @@ public partial class MainWindow
         return IsValidWpfColor(fallback) ? fallback : "#FF4444";
     }
 
+    private string RandomTakeoffColor(string? avoidColor = null)
+    {
+        List<Color> colorsToAvoid = CurrentSheetTakeoffColors();
+        if (TryParseTakeoffColor(avoidColor, out Color avoided))
+            colorsToAvoid.Add(avoided);
+
+        for (int attempt = 0; attempt < 96; attempt++)
+        {
+            string candidate = RandomVividTakeoffColor();
+            if (!TryParseTakeoffColor(candidate, out Color color))
+                continue;
+
+            if (IsDistinctTakeoffColor(color, colorsToAvoid))
+                return candidate;
+        }
+
+        return RandomVividTakeoffColor();
+    }
+
+    private List<Color> CurrentSheetTakeoffColors()
+    {
+        string pageFolder = _currentPage?.FolderPath ?? "";
+        if (string.IsNullOrWhiteSpace(pageFolder))
+            return [];
+
+        var colors = new List<Color>();
+        foreach (TakeoffItem item in _takeoffItems)
+        {
+            if (!item.Measurements.Any(measurement => IsSamePageFolder(measurement.PageFolder, pageFolder)))
+                continue;
+
+            if (TryParseTakeoffColor(item.Color, out Color color))
+                colors.Add(color);
+        }
+
+        return colors;
+    }
+
+    private static bool TryParseTakeoffColor(string? value, out Color color)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            color = default;
+            return false;
+        }
+
+        try
+        {
+            color = (Color)ColorConverter.ConvertFromString(NormalizeTakeoffColor(value));
+            return true;
+        }
+        catch
+        {
+            color = default;
+            return false;
+        }
+    }
+
+    private static bool IsDistinctTakeoffColor(Color color, IEnumerable<Color> existingColors)
+    {
+        foreach (Color existing in existingColors)
+        {
+            int dr = color.R - existing.R;
+            int dg = color.G - existing.G;
+            int db = color.B - existing.B;
+            if (dr * dr + dg * dg + db * db < 48 * 48)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static string RandomVividTakeoffColor()
+    {
+        double hue = Random.Shared.NextDouble() * 360.0;
+        double saturation = 0.58 + Random.Shared.NextDouble() * 0.34;
+        double lightness = 0.38 + Random.Shared.NextDouble() * 0.24;
+        HslToRgb(hue, saturation, lightness, out byte r, out byte g, out byte b);
+        return $"#{r:X2}{g:X2}{b:X2}";
+    }
+
+    private static void HslToRgb(double hue, double saturation, double lightness, out byte r, out byte g, out byte b)
+    {
+        double c = (1.0 - Math.Abs(2.0 * lightness - 1.0)) * saturation;
+        double x = c * (1.0 - Math.Abs(hue / 60.0 % 2.0 - 1.0));
+        double m = lightness - c / 2.0;
+        double r1;
+        double g1;
+        double b1;
+        if (hue < 60.0)
+            (r1, g1, b1) = (c, x, 0.0);
+        else if (hue < 120.0)
+            (r1, g1, b1) = (x, c, 0.0);
+        else if (hue < 180.0)
+            (r1, g1, b1) = (0.0, c, x);
+        else if (hue < 240.0)
+            (r1, g1, b1) = (0.0, x, c);
+        else if (hue < 300.0)
+            (r1, g1, b1) = (x, 0.0, c);
+        else
+            (r1, g1, b1) = (c, 0.0, x);
+
+        r = (byte)Math.Round(Math.Clamp((r1 + m) * 255.0, 0.0, 255.0));
+        g = (byte)Math.Round(Math.Clamp((g1 + m) * 255.0, 0.0, 255.0));
+        b = (byte)Math.Round(Math.Clamp((b1 + m) * 255.0, 0.0, 255.0));
+    }
+
     private double? ResolveTakeoffFolderDefaultUnitPrice(string folderPath)
     {
         foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
@@ -493,7 +676,9 @@ public partial class MainWindow
     }
 
     private string CurrentToolMeasurementType() =>
-        _activeTool is "point" or "area" ? _activeTool : "line";
+        IsRecordTool(_activeTool) ? RecordMeasurementType(_activeTool) :
+        IsRecordTool(_lastDrawingTool) ? RecordMeasurementType(_lastDrawingTool) :
+        "line";
 
     private void UpdateToolStatus()
     {
@@ -502,16 +687,20 @@ public partial class MainWindow
             "point" => MeasurementTypeDisplay("point"),
             "line" => MeasurementTypeDisplay("line"),
             "area" => MeasurementTypeDisplay("area"),
+            "joistarea" => "J Area",
             "select" => "Select",
             "scale" => "Scale",
             "ruler" => "Ruler",
             "drawline" => "Draw Line",
             "drawarrow" => "Arrow",
             "drawrect" => "Box",
+            "drawcloud" => "Cloud",
+            "drawarea" => "Area Annotation",
+            "note" => "Note",
             "areacut" => "Area Cut",
             _ => "Pan",
         };
-        bool recording = _activeTool is "point" or "line" or "area";
+        bool recording = IsRecordTool(_activeTool);
         string item = recording && _activeItem != null
             ? $"  |  Item: {_activeItem.Name}"
             : "";
@@ -555,7 +744,7 @@ public partial class MainWindow
             ? "no measurements"
             : _activeItem.TotalLabel(_viewport.ScaleMetersPerPt, _viewport.UnitMode);
         string sheetTotal = ActiveTakeoffSheetTotalText(_activeItem);
-        bool recordingThis = _activeTool == measurementType;
+        bool recordingThis = IsRecordingTakeoffItem(_activeItem);
 
         TxtActiveTakeoffTarget.Text = _activeItem.Name;
         TxtActiveTakeoffTargetMeta.Text = $"{TakeoffTypeTitle(_activeItem)} | total: {total}{sheetTotal}";
@@ -645,10 +834,21 @@ public partial class MainWindow
         item.IsJoistArea ? "□╱" : MeasurementTypeSign(item.MeasurementType);
 
     private static string MeasurementTypeDisplay(string measurementType) =>
-        $"{MeasurementTypeSign(measurementType)} {MeasurementTypeTitle(measurementType)}";
+        MeasurementTypeTitle(measurementType);
 
     private static string TakeoffTypeDisplay(TakeoffItem item) =>
-        $"{TakeoffTypeSign(item)} {TakeoffTypeTitle(item)}";
+        TakeoffTypeTitle(item);
+
+    private bool IsRecordingTakeoffItem(TakeoffItem item)
+    {
+        if (!IsRecordTool(_activeTool))
+            return false;
+
+        if (RecordMeasurementType(_activeTool) != OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType))
+            return false;
+
+        return !item.IsJoistArea || IsJoistAreaTool(_activeTool);
+    }
 
     private static string SheetLegendTypeTitle(TakeoffItem item) =>
         item.IsJoistArea ? "Area" : TakeoffTypeTitle(item);
@@ -660,7 +860,8 @@ public partial class MainWindow
         Controls.MeasurementGlyph.CreateWpf(
             Controls.MeasurementGlyph.Parse(
                 OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
-                joist: item.IsJoistArea),
+                joist: item.IsJoistArea,
+                countSymbol: item.CountSymbol),
             BrushFromHex(item.Color, Brushes.Gray),
             size,
             margin);
@@ -669,6 +870,16 @@ public partial class MainWindow
         Controls.MeasurementGlyph.CreateWpf(
             Controls.MeasurementGlyph.Parse(OurPlaneCoreJobStore.NormalizeMeasurementType(kind),
                 joist: kind.Equals("joist", StringComparison.OrdinalIgnoreCase)),
+            brush,
+            size,
+            margin);
+
+    private static FrameworkElement CreateMeasurementTypeIcon(Measurement measurement, Brush brush, double size, Thickness margin) =>
+        Controls.MeasurementGlyph.CreateWpf(
+            Controls.MeasurementGlyph.Parse(
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
+                joist: measurement.JoistEnabled,
+                countSymbol: measurement.CountSymbol),
             brush,
             size,
             margin);
@@ -749,15 +960,16 @@ public partial class MainWindow
 
     private void ActivateTakeoffItem(TakeoffItem item)
     {
+        if (TryBlockTakeoffSwitchDuringRecord(item))
+            return;
+
         item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
         _viewport.ActiveTakeoffFolder = item.FolderPath;
-        if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
-            ApplyToolSelection(item.MeasurementType);
-        else
-            UpdateToolStatus();
+        _viewport.ActiveCountSymbol = item.CountSymbol;
+        SyncToolTypeForTakeoffItem(item);
     }
 
     private void SelectFirstTakeoffItemSilently(IReadOnlyList<TakeoffItem> items)
@@ -824,6 +1036,9 @@ public partial class MainWindow
 
     private void RevealPagesForTakeoffItems(IReadOnlyList<TakeoffItem> items, string? preferredPageFolder = null)
     {
+        HashSet<string> affectedPageKeys = PageTreePathKeysFromPageTakeoffSelection(_pageTakeoffMultiSelection);
+        affectedPageKeys.UnionWith(_pagesMultiSelection.Select(NormalizePathForCompare));
+
         _pageTakeoffMultiSelection.Clear();
         _pagesMultiSelection.Clear();
 
@@ -833,7 +1048,7 @@ public partial class MainWindow
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (selectedFolders.Count == 0)
         {
-            ApplyPagesMultiSelectionVisuals();
+            RefreshPageTreeRowsByFolderKeys(affectedPageKeys);
             return;
         }
 
@@ -851,22 +1066,22 @@ public partial class MainWindow
             if (matchedTakeoffs.Count == 0)
                 continue;
 
-            ExpandTreeItemAndAncestorsWithoutTracking(pageItem);
-            pageItem.IsExpanded = true;
+            string pageKey = NormalizePathForCompare(page.FolderPath);
+            affectedPageKeys.Add(pageKey);
             bool isPreferredPage = !string.IsNullOrWhiteSpace(preferredPageFolder) &&
                                    IsSamePageFolder(page.FolderPath, preferredPageFolder);
 
             foreach (TakeoffItem takeoff in matchedTakeoffs)
             {
                 _pageTakeoffMultiSelection.Add(PageTakeoffSelectionKey(new PageTakeoffNode(page, takeoff)));
-                TreeViewItem? linked = FindPageTakeoffTreeItem(page.FolderPath, takeoff.FolderPath);
+                TreeViewItem? linked = FindPageTakeoffTreeItem(pageItem, takeoff.FolderPath);
                 firstLinked ??= linked;
                 if (isPreferredPage)
                     preferredLinked ??= linked;
             }
         }
 
-        ApplyPagesMultiSelectionVisuals();
+        RefreshPageTreeRowsByFolderKeys(affectedPageKeys);
         preferredLinked ??= firstLinked;
 
         if (preferredLinked == null)
@@ -934,7 +1149,10 @@ public partial class MainWindow
     }
 
     private TreeViewItem? FindTakeoffTreeItem(TakeoffItem item) =>
-        FindTakeoffTreeItem(TakeoffsTree, item);
+        !string.IsNullOrWhiteSpace(item.FolderPath) &&
+        FindTakeoffTreeItemByFolder(item.FolderPath) is { } indexedItem
+            ? indexedItem
+            : FindTakeoffTreeItem(TakeoffsTree, item);
 
     private TreeViewItem? FindTakeoffTreeItem(ItemsControl parent, TakeoffItem item)
     {
@@ -965,7 +1183,7 @@ public partial class MainWindow
     }
 
     private TreeViewItem? FindTakeoffTreeItemByFolder(string folderPath) =>
-        FindTakeoffTreeItemByFolder(TakeoffsTree, folderPath);
+        FindTakeoffTreeItemByFolderIndexed(folderPath);
 
     private void SelectTakeoffNodeByFolder(string folderPath)
     {
@@ -1003,15 +1221,18 @@ public partial class MainWindow
         return null;
     }
 
-    private static void RemoveTreeItem(TreeViewItem tvi)
+    private void RemoveTreeItem(TreeViewItem tvi)
     {
+        UnregisterTakeoffTreeItemSubtree(tvi);
         ItemsControl? parent = ItemsControl.ItemsControlFromItemContainer(tvi);
         parent?.Items.Remove(tvi);
     }
 
-    private void UpdateTotalDisplay()
+    private void UpdateTotalDisplay(bool refreshEstimate = true)
     {
-        RefreshEstimateTable();
+        if (refreshEstimate)
+            RefreshEstimateTable();
+
         UpdateActiveTakeoffTargetBar();
         if (_activeItem == null || _activeItem.Measurements.Count == 0)
         {
@@ -1035,10 +1256,17 @@ public partial class MainWindow
                 continue;
 
             bool itemMatches = EstimateItemMatchesFilter(item, filter);
-            var visibleMeasurements = scopedMeasurements
-                .Where(m => itemMatches || EstimateMeasurementMatchesFilter(item, m, filter))
-                .ToList();
-            if (!itemMatches && visibleMeasurements.Count == 0)
+            var scopedSet = scopedMeasurements.ToHashSet();
+            var visibleSet = new HashSet<Measurement>();
+            for (int i = 0; i < item.Measurements.Count; i++)
+            {
+                Measurement measurement = item.Measurements[i];
+                if (!scopedSet.Contains(measurement))
+                    continue;
+                if (itemMatches || EstimateMeasurementMatchesFilter(item, measurement, i, filter))
+                    visibleSet.Add(measurement);
+            }
+            if (!itemMatches && visibleSet.Count == 0)
                 continue;
 
             rows.Add(new EstimateDisplayRow(
@@ -1055,12 +1283,12 @@ public partial class MainWindow
             for (int i = 0; i < item.Measurements.Count; i++)
             {
                 Measurement measurement = item.Measurements[i];
-                if (!scopedMeasurements.Contains(measurement) || !visibleMeasurements.Contains(measurement))
+                if (!visibleSet.Contains(measurement))
                     continue;
 
                 rows.Add(new EstimateDisplayRow(
                     $"  {SectionDisplayName(item, measurement, i)}",
-                    $"{(measurement.JoistEnabled ? "Joist" : MeasurementTypeSign(measurement.MType))} {SectionPageName(measurement)}".Trim(),
+                    $"{(measurement.JoistEnabled ? "Joist" : MeasurementTypeTitle(measurement.MType))} {SectionPageName(measurement)}".Trim(),
                     "",
                     QuantityText(measurement),
                     MeasurementUnitText(measurement),
@@ -1086,67 +1314,21 @@ public partial class MainWindow
         {
             string filter = _estimateFilterBox?.Text.Trim() ?? "";
             bool currentSheetOnly = _estimateCurrentSheetOnlyBox?.IsChecked == true && _currentPage != null;
-            _estimateList.Items.Clear();
-            EstimateDisplayRow? selectedRow = null;
-            int itemRows = 0;
-            int detailRows = 0;
-            double visibleCost = 0;
-            foreach (var item in _takeoffItems.Where(i => i.Measurements.Count > 0))
-            {
-                var scopedMeasurements = currentSheetOnly
-                    ? item.Measurements
-                        .Where(measurement => _currentPage != null && IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
-                        .ToList()
-                    : item.Measurements.ToList();
-                if (scopedMeasurements.Count == 0)
-                    continue;
+            var rows = BuildEstimateDisplayRows(filter, currentSheetOnly);
+            EstimateDisplayRow? selectedRow = selectedMeasurement == null
+                ? null
+                : rows.FirstOrDefault(row => ReferenceEquals(row.Measurement, selectedMeasurement));
+            int itemRows = rows.Count(row => row.Takeoff != null && row.Measurement == null);
+            int detailRows = rows.Count(row => row.Measurement != null);
+            double visibleCost = rows
+                .Where(row => row.Takeoff != null && row.Measurement == null)
+                .Select(row => double.TryParse(row.Cost, NumberStyles.Float, CultureInfo.InvariantCulture, out double cost)
+                    ? cost
+                    : 0)
+                .Sum();
 
-                bool itemMatches = EstimateItemMatchesFilter(item, filter);
-                var visibleMeasurements = scopedMeasurements
-                    .Where(m => itemMatches || EstimateMeasurementMatchesFilter(item, m, filter))
-                    .ToList();
-                if (!itemMatches && visibleMeasurements.Count == 0)
-                    continue;
-
-                string costText = currentSheetOnly ? CostText(item, scopedMeasurements) : CostText(item);
-                if (double.TryParse(costText, NumberStyles.Float, CultureInfo.InvariantCulture, out double cost))
-                    visibleCost += cost;
-
-                _estimateList.Items.Add(new EstimateDisplayRow(
-                    item.Name,
-                    currentSheetOnly ? $"{TakeoffTypeDisplay(item)} / {_currentPage?.Name}" : TakeoffTypeDisplay(item),
-                    scopedMeasurements.Count.ToString(CultureInfo.InvariantCulture),
-                    currentSheetOnly ? SheetLegendQuantityText(item, scopedMeasurements) : QuantityText(item),
-                    TakeoffUnitText(item),
-                    UnitPriceText(item),
-                    costText,
-                    "",
-                    item,
-                    null));
-                itemRows++;
-                for (int i = 0; i < item.Measurements.Count; i++)
-                {
-                    Measurement measurement = item.Measurements[i];
-                    if (!scopedMeasurements.Contains(measurement) || !visibleMeasurements.Contains(measurement))
-                        continue;
-
-                    var row = new EstimateDisplayRow(
-                        $"  {SectionDisplayName(item, measurement, i)}",
-                        $"{(measurement.JoistEnabled ? "□╱" : MeasurementTypeSign(measurement.MType))} {SectionPageName(measurement)}".Trim(),
-                        "",
-                        QuantityText(measurement),
-                        MeasurementUnitText(measurement),
-                        "",
-                        "",
-                        measurement.Notes,
-                        item,
-                        measurement);
-                    _estimateList.Items.Add(row);
-                    detailRows++;
-                    if (selectedMeasurement != null && ReferenceEquals(selectedMeasurement, measurement))
-                        selectedRow = row;
-                }
-            }
+            _estimateList.ItemsSource = null;
+            _estimateList.ItemsSource = rows;
 
             UpdateEstimateSummaryText(itemRows, detailRows, visibleCost, currentSheetOnly, filter);
 
@@ -1171,14 +1353,14 @@ public partial class MainWindow
                TextContains(TakeoffTypeTitle(item), filter);
     }
 
-    private static bool EstimateMeasurementMatchesFilter(TakeoffItem item, Measurement measurement, string filter)
+    private static bool EstimateMeasurementMatchesFilter(TakeoffItem item, Measurement measurement, int measurementIndex, string filter)
     {
         if (string.IsNullOrWhiteSpace(filter))
             return true;
 
         return TextContains(item.Name, filter) ||
                TextContains(MeasurementTypeTitle(measurement.MType), filter) ||
-               TextContains(SectionDisplayName(item, measurement, item.Measurements.IndexOf(measurement)), filter) ||
+               TextContains(SectionDisplayName(item, measurement, measurementIndex), filter) ||
                TextContains(SectionPageName(measurement), filter) ||
                TextContains(measurement.Notes, filter);
     }

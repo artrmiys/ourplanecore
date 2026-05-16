@@ -163,7 +163,7 @@ public static partial class PlanSwiftFolderTemplateService
         foreach (string folder in CollectFolders(job.PagesRoot))
         {
             string name = OurPlaneCoreJobStore.DisplayName(folder).Trim();
-            if (name is "Pages" or "00. imported" or "--------others")
+            if (name is "Pages" or "imported" or "00. imported" or "--------others")
                 continue;
             candidates.Add(name);
         }

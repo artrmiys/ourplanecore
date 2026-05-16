@@ -51,7 +51,7 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
-    private bool IsFastNavigationFrame()
+    private bool IsFastNavigationFrame(int activeMeasurementCount)
     {
         bool hasBlockingInteraction =
             _draggingMeasurement ||
@@ -69,7 +69,7 @@ public sealed partial class PdfViewport
             SimplifyNavigationRendering,
             _isFastNavigating,
             _zoom,
-            ActivePageMeasurements().Count,
+            activeMeasurementCount,
             hasBlockingInteraction);
     }
 
@@ -78,7 +78,7 @@ public sealed partial class PdfViewport
         if (_zoom <= 0)
             return 1.0f;
 
-        return ViewportRenderPolicy.SelectRenderScale(_zoom, RenderScaleSteps);
+        return ViewportRenderPolicy.SelectRenderScale(_zoom, RenderScaleSteps, _pdfW, _pdfH);
     }
 
     private void RerenderForZoomIfNeeded(bool force)

@@ -24,9 +24,6 @@ public partial class MainWindow
                 OurPlaneCoreJobStore.SaveTakeoffItem(item);
             }
 
-            if (!string.IsNullOrEmpty(_currentPdfPath))
-                ProjectFile.Save(_currentPdfPath, _viewport.ScaleMetersPerPt, _viewport.UnitMode, _takeoffItems);
-
             string? snapshotPath = SaveJobRecoverySnapshot("manual_save");
             string snapshotText = string.IsNullOrWhiteSpace(snapshotPath)
                 ? ""

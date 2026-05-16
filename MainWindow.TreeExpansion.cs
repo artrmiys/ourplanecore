@@ -99,8 +99,12 @@ public partial class MainWindow
         }
     }
 
-    private void PagesTreeItem_Expanded(object sender, RoutedEventArgs e) =>
+    private void PagesTreeItem_Expanded(object sender, RoutedEventArgs e)
+    {
         TrackTreeExpansion(e, _expandedPageTreePaths, GetPagesNodePath, expanded: true);
+        if (e.OriginalSource is TreeViewItem { Tag: PageInfo page })
+            TryRefreshDirtyPageTakeoffIndicator(page.FolderPath);
+    }
 
     private void PagesTreeItem_Collapsed(object sender, RoutedEventArgs e) =>
         TrackTreeExpansion(e, _expandedPageTreePaths, GetPagesNodePath, expanded: false);

@@ -15,7 +15,7 @@ internal static class TakeoffStore
         string targetParent = OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
             ? parentFolder
             : job.TakeoffsRoot;
-        string folder = OurPlaneCoreJobStore.CreateFolder(targetParent, name);
+        string folder = OurPlaneCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
         OurPlaneCoreJobStore.SetProperty(folder, "SmartNodeKind", "folder");
         return folder;
     }
@@ -33,16 +33,18 @@ internal static class TakeoffStore
         string targetParent = OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
             ? parentFolder
             : job.TakeoffsRoot;
-        string folder = OurPlaneCoreJobStore.CreateFolder(targetParent, name);
+        string folder = OurPlaneCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
         OurPlaneCoreJobStore.SetProperty(folder, "SmartNodeKind", "item");
         OurPlaneCoreJobStore.SetProperty(folder, "Color", color);
         OurPlaneCoreJobStore.SetProperty(folder, "MeasurementType", OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType));
+        OurPlaneCoreJobStore.SetProperty(folder, "CountSymbol", CountDisplaySymbol.Circle);
         return new TakeoffItem
         {
             Name = OurPlaneCoreJobStore.DisplayName(folder),
             Color = color,
             FolderPath = folder,
             MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType),
+            CountSymbol = CountDisplaySymbol.Circle,
         };
     }
 
@@ -74,12 +76,15 @@ internal static class TakeoffStore
             Color = OurPlaneCoreJobStore.ReadProperty(folder, "Color") ?? "#FF4444",
             FolderPath = folder,
             MeasurementType = measurementType,
+            CountSymbol = CountDisplaySymbol.Normalize(OurPlaneCoreJobStore.ReadProperty(folder, "CountSymbol")),
             UnitPrice = ParseDouble(OurPlaneCoreJobStore.ReadProperty(folder, "UnitPrice")),
             Notes = OurPlaneCoreJobStore.ReadProperty(folder, "Notes") ?? "",
             IsJoistTakeoff = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistEnabled")),
             JoistType = OurPlaneCoreJobStore.ReadProperty(folder, "JoistType") ?? "",
             JoistSpacingInches = ParsePositiveDouble(OurPlaneCoreJobStore.ReadProperty(folder, "JoistSpacingInches"), 16),
             JoistDirectionDegrees = ParseDouble(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDirectionDegrees")),
+            JoistDirectionFollowsAreaRotation = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDirectionFollowsAreaRotation"), fallback: true),
+            JoistAddEndJoist = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistAddEndJoist"), fallback: true),
             JoistPitch = JoistTakeoffCalculator.NormalizePitch(OurPlaneCoreJobStore.ReadProperty(folder, "JoistPitch")),
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(OurPlaneCoreJobStore.ReadProperty(folder, "JoistLengthRounding")),
             JoistShowLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabels")),
@@ -99,12 +104,16 @@ internal static class TakeoffStore
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "SmartNodeKind", "item");
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "Color", item.Color);
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "MeasurementType", OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType));
+        item.CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
+        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "CountSymbol", item.CountSymbol);
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture));
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "Notes", item.Notes);
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistEnabled", item.IsJoistArea.ToString(CultureInfo.InvariantCulture));
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistType", item.JoistType ?? "");
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistSpacingInches", Math.Max(0.001, item.JoistSpacingInches).ToString("G17", CultureInfo.InvariantCulture));
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistDirectionDegrees", item.JoistDirectionDegrees.ToString("G17", CultureInfo.InvariantCulture));
+        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistDirectionFollowsAreaRotation", item.JoistDirectionFollowsAreaRotation.ToString(CultureInfo.InvariantCulture));
+        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistAddEndJoist", item.JoistAddEndJoist.ToString(CultureInfo.InvariantCulture));
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch));
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding));
         OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture));
@@ -122,12 +131,20 @@ internal static class TakeoffStore
         foreach (Measurement measurement in item.Measurements)
         {
             measurement.TakeoffFolder = item.FolderPath;
+            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point")
+            {
+                measurement.CountSymbol = string.IsNullOrWhiteSpace(measurement.CountSymbol)
+                    ? CountDisplaySymbol.Normalize(item.CountSymbol)
+                    : CountDisplaySymbol.Normalize(measurement.CountSymbol);
+            }
             measurement.JoistEnabled = joistEnabled &&
                 OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
             measurement.JoistType = item.JoistType ?? "";
             measurement.JoistSpacingInches = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
             if (!measurement.JoistDirectionLocked)
                 measurement.JoistDirectionDegrees = item.JoistDirectionDegrees;
+            measurement.JoistDirectionFollowsAreaRotation = item.JoistDirectionFollowsAreaRotation;
+            measurement.JoistAddEndJoist = item.JoistAddEndJoist;
             measurement.JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch);
             measurement.JoistLengthRounding = rounding;
             measurement.JoistShowLabels = item.JoistShowLabels;
@@ -209,11 +226,16 @@ internal static class TakeoffStore
             Notes = dto.Notes ?? "",
             MType = OurPlaneCoreJobStore.NormalizeMeasurementType(dto.MType),
             Color = dto.Color,
+            CountSymbol = string.IsNullOrWhiteSpace(dto.CountSymbol)
+                ? ""
+                : CountDisplaySymbol.Normalize(dto.CountSymbol),
             PageFolder = dto.PageFolder,
             TakeoffFolder = takeoffFolder,
             ScaleMetersPerPt = scale,
             JoistDirectionDegrees = dto.JoistDirectionDegrees,
             JoistDirectionLocked = dto.JoistDirectionLocked,
+            JoistDirectionFollowsAreaRotation = dto.JoistDirectionFollowsAreaRotation,
+            JoistAddEndJoist = dto.JoistAddEndJoist,
             Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
             Holes = dto.HolesPdf
                 .Select(hole => hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
@@ -230,10 +252,13 @@ internal static class TakeoffStore
             Notes = measurement.Notes,
             MType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
             Color = measurement.Color,
+            CountSymbol = CountDisplaySymbol.Normalize(measurement.CountSymbol),
             PageFolder = measurement.PageFolder,
             ScaleMetersPerPt = measurement.ScaleMetersPerPt,
             JoistDirectionDegrees = measurement.JoistDirectionDegrees,
             JoistDirectionLocked = measurement.JoistDirectionLocked,
+            JoistDirectionFollowsAreaRotation = measurement.JoistDirectionFollowsAreaRotation,
+            JoistAddEndJoist = measurement.JoistAddEndJoist,
             PointsPdf = measurement.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
             HolesPdf = measurement.Holes
                 .Where(hole => hole.Count >= 3)

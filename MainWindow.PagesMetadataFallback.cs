@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
 namespace OurPlaneCore;
@@ -26,6 +27,18 @@ public partial class MainWindow
             },
             "AI Fill failed.",
             "AI Fill");
+    }
+
+    private async void BtnPdfMetadataCropHints_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () =>
+            {
+                ConfigurePdfMetadataCropHints();
+                return Task.CompletedTask;
+            },
+            "AI Fill crop hints failed.",
+            "AI Fill Crop Hints");
     }
 
     private async Task<bool> TryRunSheetManagerPdfMetadataFallbackAsync()
@@ -75,7 +88,12 @@ public partial class MainWindow
         }
 
         TxtStatus.Text = $"AI Fill running GPT metadata for {requests.Count} sheet(s)...";
-        var runResult = await RunAndSaveSheetMetadataFallbackRequestsAsync(requests, queueResult.Errors);
+        (int Ran, int Saved, List<string> Errors) runResult;
+        using (ShowBusyOverlay($"AI Fill running GPT metadata for {requests.Count} sheet(s)..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            runResult = await RunAndSaveSheetMetadataFallbackRequestsAsync(requests, queueResult.Errors);
+        }
 
         RefreshSheetManager();
 
@@ -199,6 +217,8 @@ public partial class MainWindow
         if (_currentJob == null || pages.Count == 0)
             return result;
 
+        PdfSheetMetadataCropTemplate? cropTemplate = LoadOrOfferPdfMetadataCropTemplate(pages);
+
         foreach (PageInfo page in pages)
         {
             try
@@ -222,24 +242,63 @@ public partial class MainWindow
                 }
 
                 string cropsRoot = Path.Combine(_currentJob.AIContextRoot, "crops");
-                string fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_sheetmeta_{SafeFileNamePart(page.Name)}.png";
-                string cropPath = Path.Combine(cropsRoot, fileName);
-                if (!PdfSheetMetadataService.TrySaveFallbackCrop(page, cropPath, out SKRect cropRect, out string error))
+                string filePrefix = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_sheetmeta_{SafeFileNamePart(page.Name)}";
+                string cropWarning = "";
+                IReadOnlyList<PdfSheetMetadataSavedCrop> savedCrops = [];
+                if (PdfSheetMetadataCropService.HasUsableTemplate(cropTemplate) &&
+                    !PdfSheetMetadataCropService.TrySaveManualFallbackCrops(
+                        page,
+                        cropTemplate!,
+                        cropsRoot,
+                        filePrefix,
+                        out savedCrops,
+                        out string manualCropError))
+                {
+                    cropWarning = $"Manual crop hints were skipped: {manualCropError}";
+                    savedCrops = [];
+                }
+
+                if (savedCrops.Count == 0)
+                {
+                    string cropPath = Path.Combine(cropsRoot, $"{filePrefix}.png");
+                    if (!PdfSheetMetadataService.TrySaveFallbackCrop(page, cropPath, out SKRect cropRect, out string error))
+                    {
+                        result.Failed++;
+                        result.Errors.Add(
+                            string.IsNullOrWhiteSpace(cropWarning)
+                                ? $"{page.Name}: {error}"
+                                : $"{page.Name}: {error}; {cropWarning}");
+                        continue;
+                    }
+
+                    savedCrops = [new PdfSheetMetadataSavedCrop("title_block", cropPath, cropRect)];
+                }
+
+                var promptCrops = savedCrops
+                    .Select(crop => (
+                        crop.Role,
+                        RelativePath: Path.GetRelativePath(_currentJob.AIContextRoot, crop.Path),
+                        crop.PdfRect))
+                    .ToList();
+
+                if (promptCrops.Count == 0)
                 {
                     result.Failed++;
-                    result.Errors.Add($"{page.Name}: {error}");
+                    result.Errors.Add($"{page.Name}: no AI crop was saved.");
                     continue;
                 }
 
-                string relativeCrop = Path.GetRelativePath(_currentJob.AIContextRoot, cropPath);
+                string relativeCrop = promptCrops[0].RelativePath;
                 string observationText =
                     "GPT fallback requested for PDF sheet metadata." + Environment.NewLine +
-                    $"- AI crop: {relativeCrop}" + Environment.NewLine +
-                    $"- PDF crop: {FormatPdfRect(cropRect)}" + Environment.NewLine +
+                    BuildPdfMetadataCropObservation(promptCrops) +
                     $"- Page folder: {Path.GetRelativePath(_currentJob.RootPath, page.FolderPath)}" + Environment.NewLine +
                     $"- Current page name: {page.Name}" + Environment.NewLine +
                     $"- Current PDF source: {page.PdfPath}" + Environment.NewLine +
                     $"- Current PDF page: {page.PdfPage + 1}" + Environment.NewLine;
+
+                if (!string.IsNullOrWhiteSpace(cropWarning))
+                    observationText += $"- Crop hint warning: {cropWarning}" + Environment.NewLine;
 
                 if (metadata != null)
                 {
@@ -259,9 +318,10 @@ public partial class MainWindow
                     page,
                     observation,
                     "pdf_sheet_metadata_fallback",
-                    BuildPdfMetadataFallbackPrompt(page, metadata),
+                    BuildPdfMetadataFallbackPrompt(page, metadata, promptCrops),
                     relativeCrop,
-                    "Read the sheet title block crop and return sheet metadata JSON only.");
+                    "Read the sheet metadata crops and return sheet metadata JSON only.",
+                    promptCrops.Skip(1).Select(crop => crop.RelativePath));
                 result.Requests.Add(request);
                 result.Queued++;
             }
@@ -284,6 +344,122 @@ public partial class MainWindow
 
         TxtStatus.Text = $"Queued GPT metadata fallback for {result.Queued} page(s).";
         return result;
+    }
+
+    private void ConfigurePdfMetadataCropHints()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before AI Fill crop hints.";
+            return;
+        }
+
+        PageInfo? page = SelectedSheetManagerPages().FirstOrDefault() ??
+                         _currentPage ??
+                         SheetManagerAiFillPages().FirstOrDefault();
+
+        if (page == null)
+        {
+            MessageBox.Show("Open or select a PDF sheet first.", "AI Fill Crop Hints",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        PdfSheetMetadataCropTemplate? template = ShowPdfMetadataCropTemplateDialog(page, showSavedMessage: true);
+        if (template != null)
+            TxtStatus.Text = $"AI Fill crop hints saved from {page.Name}.";
+    }
+
+    private PdfSheetMetadataCropTemplate? LoadOrOfferPdfMetadataCropTemplate(IReadOnlyList<PageInfo> pages)
+    {
+        if (_currentJob == null)
+            return null;
+
+        PdfSheetMetadataCropTemplate? template = PdfSheetMetadataCropService.LoadTemplate(_currentJob);
+        if (PdfSheetMetadataCropService.HasUsableTemplate(template))
+            return template;
+
+        List<PageInfo> fallbackPages = pages
+            .Where(PageNeedsPdfMetadataFallback)
+            .ToList();
+        if (fallbackPages.Count == 0)
+            return null;
+
+        MessageBoxResult answer = MessageBox.Show(
+            $"AI Fill still needs help on {fallbackPages.Count} sheet(s)." + Environment.NewLine +
+            "Do you want to pick one representative sheet and draw crop boxes for the sheet number and scale?",
+            "AI Fill Crop Hints",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes)
+            return null;
+
+        PageInfo sample = fallbackPages.FirstOrDefault(page =>
+            _currentPage != null &&
+            IsSamePageFolder(page.FolderPath, _currentPage.FolderPath)) ?? fallbackPages[0];
+
+        return ShowPdfMetadataCropTemplateDialog(sample, showSavedMessage: false);
+    }
+
+    private bool PageNeedsPdfMetadataFallback(PageInfo page)
+    {
+        if (_currentJob == null)
+            return false;
+
+        PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+        if (metadata == null)
+            PdfSheetMetadataService.TryAnalyzeAndSave(_currentJob, page, out metadata, out _);
+
+        return PdfSheetMetadataService.NeedsFallback(metadata);
+    }
+
+    private PdfSheetMetadataCropTemplate? ShowPdfMetadataCropTemplateDialog(PageInfo page, bool showSavedMessage)
+    {
+        if (_currentJob == null)
+            return null;
+
+        if (!PdfSheetMetadataCropService.TryRenderPage(page, out PdfLayerRenderResult render, out string error))
+        {
+            MessageBox.Show(error, "AI Fill Crop Hints", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
+
+        var dialog = new PdfMetadataCropTemplateDialog(
+            page,
+            render,
+            PdfSheetMetadataCropService.LoadTemplate(_currentJob))
+        {
+            Owner = this,
+        };
+
+        if (dialog.ShowDialog() != true)
+            return null;
+
+        dialog.CropTemplate.SourcePageFolder = Path.GetRelativePath(_currentJob.RootPath, page.FolderPath);
+        PdfSheetMetadataCropService.SaveTemplate(_currentJob, dialog.CropTemplate);
+        if (showSavedMessage)
+        {
+            MessageBox.Show(
+                $"Saved crop hints for AI Fill.{Environment.NewLine}{PdfSheetMetadataCropService.TemplatePath(_currentJob)}",
+                "AI Fill Crop Hints",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        return dialog.CropTemplate;
+    }
+
+    private static string BuildPdfMetadataCropObservation(
+        IReadOnlyList<(string Role, string RelativePath, SKRect PdfRect)> crops)
+    {
+        var sb = new StringBuilder();
+        foreach ((string role, string relativePath, SKRect rect) in crops)
+        {
+            sb.AppendLine($"- AI crop ({role}): {relativePath}");
+            sb.AppendLine($"- PDF crop ({role}): {FormatPdfRect(rect)}");
+        }
+
+        return sb.ToString();
     }
 
     private static string BuildPdfMetadataFallbackQueueMessage(PdfMetadataFallbackQueueResult result)
@@ -368,7 +544,10 @@ public partial class MainWindow
         return false;
     }
 
-    private static string BuildPdfMetadataFallbackPrompt(PageInfo page, PdfSheetMetadata? metadata)
+    private static string BuildPdfMetadataFallbackPrompt(
+        PageInfo page,
+        PdfSheetMetadata? metadata,
+        IReadOnlyList<(string Role, string RelativePath, SKRect PdfRect)> crops)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Read this construction sheet title-block crop.");
@@ -392,6 +571,15 @@ public partial class MainWindow
         sb.AppendLine("Allowed scales: 1/32\", 3/64\", 1/16\", 3/32\", 1/10\", 1/8\", 3/16\", 1/4\", 3/8\", 1/2\", 3/4\", 1\", 1-1/2\", 3\" = 1'0\", and 1\" = 1\".");
         sb.AppendLine("If unsure, leave fields empty and add a warning.");
         sb.AppendLine();
+        if (crops.Count > 0)
+        {
+            sb.AppendLine("Attached crop roles:");
+            foreach ((string role, string relativePath, SKRect rect) in crops)
+                sb.AppendLine($"- {role}: {relativePath}; {FormatPdfRect(rect)}");
+            sb.AppendLine("Use sheet_number for sheet_label/sheet_key. Use scale for selected_scale_text. Use title_block for title/suffix context when available.");
+            sb.AppendLine();
+        }
+
         sb.AppendLine($"Current page name: {page.Name}");
         if (metadata != null)
         {

@@ -25,6 +25,7 @@ public static class OpenAiRequestRunner
 {
     private const string Endpoint = "https://api.openai.com/v1/responses";
     public const string DefaultModel = "gpt-5-mini";
+    public const string QuickCropNoteModel = "gpt-5-mini";
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(2) };
     private static readonly string[] RoofRecognitionMarkerTypes =
     [
@@ -83,14 +84,14 @@ public static class OpenAiRequestRunner
                 "high");
         }
 
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            model = cleanModel,
-            instructions =
+            ["model"] = cleanModel,
+            ["instructions"] =
                 "You are an assistant inside a construction takeoff application. " +
                 "Use only the provided plan crop and JSON context. Be concise, " +
                 "call out uncertainty, and do not invent dimensions or quantities.",
-            input = new[]
+            ["input"] = new[]
             {
                 new
                 {
@@ -98,11 +99,10 @@ public static class OpenAiRequestRunner
                     content,
                 },
             },
-            store = false,
-            max_output_tokens = string.Equals(request.Type, "roof_recognition_request", StringComparison.OrdinalIgnoreCase)
-                ? 1800
-                : 1400,
+            ["store"] = false,
+            ["max_output_tokens"] = MaxOutputTokensForRequest(request.Type),
         };
+        AddReasoningOptions(payload, cleanModel);
 
         string requestJson = JsonSerializer.Serialize(payload, JsonOptions);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
@@ -114,23 +114,164 @@ public static class OpenAiRequestRunner
         using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
         string body = await response.Content.ReadAsStringAsync(cancellationToken);
         string rawPath = SaveRawResponse(job, request, body);
-        string providerResponseId = ExtractString(body, "id");
+        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
 
         if (!response.IsSuccessStatusCode)
         {
             return new SmartAiRunResult
             {
                 Success = false,
-                Error = ExtractError(body, response.ReasonPhrase ?? response.StatusCode.ToString()),
+                Error = OpenAiResponseParser.ExtractError(body, response.ReasonPhrase ?? response.StatusCode.ToString()),
                 Model = cleanModel,
                 ProviderResponseId = providerResponseId,
                 RawResponsePath = rawPath,
             };
         }
 
-        string output = ExtractOutputText(body);
+        string status = OpenAiResponseParser.ExtractString(body, "status");
+        if (string.Equals(status, "incomplete", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractIncompleteError(body),
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        string output = OpenAiResponseParser.ExtractOutputText(body);
         if (string.IsNullOrWhiteSpace(output))
-            output = "OpenAI returned no output text. See raw response JSON.";
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = "OpenAI returned no output text. See raw response JSON.",
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        return new SmartAiRunResult
+        {
+            Success = true,
+            OutputText = output.Trim(),
+            Model = cleanModel,
+            ProviderResponseId = providerResponseId,
+            RawResponsePath = rawPath,
+        };
+    }
+
+    public static async Task<SmartAiRunResult> RunStructuredJsonAsync(
+        OurPlaneCoreJob job,
+        string requestId,
+        string prompt,
+        object jsonSchema,
+        string schemaName,
+        string instructions,
+        string apiKey,
+        string model,
+        int maxOutputTokens,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = "OPENAI_API_KEY is not set.",
+                Model = CleanModel(model),
+            };
+        }
+
+        string cleanModel = CleanModel(model);
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = cleanModel,
+            ["instructions"] = string.IsNullOrWhiteSpace(instructions)
+                ? "Return only JSON that matches the requested schema."
+                : instructions.Trim(),
+            ["input"] = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new[]
+                    {
+                        new
+                        {
+                            type = "input_text",
+                            text = prompt,
+                        },
+                    },
+                },
+            },
+            ["text"] = new
+            {
+                format = new
+                {
+                    type = "json_schema",
+                    name = string.IsNullOrWhiteSpace(schemaName) ? "structured_output" : schemaName.Trim(),
+                    strict = true,
+                    schema = jsonSchema,
+                },
+            },
+            ["store"] = false,
+            ["max_output_tokens"] = Math.Clamp(maxOutputTokens, 512, 12000),
+        };
+        AddReasoningOptions(payload, cleanModel);
+
+        string requestJson = JsonSerializer.Serialize(payload, JsonOptions);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+        {
+            Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
+        };
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+
+        using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
+        string body = await response.Content.ReadAsStringAsync(cancellationToken);
+        string rawPath = SaveRawResponse(job, requestId, body);
+        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractError(body, response.ReasonPhrase ?? response.StatusCode.ToString()),
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        string status = OpenAiResponseParser.ExtractString(body, "status");
+        if (string.Equals(status, "incomplete", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractIncompleteError(body),
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
+
+        string output = OpenAiResponseParser.ExtractOutputText(body);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = "OpenAI returned no output text. See raw response JSON.",
+                Model = cleanModel,
+                ProviderResponseId = providerResponseId,
+                RawResponsePath = rawPath,
+            };
+        }
 
         return new SmartAiRunResult
         {
@@ -144,6 +285,34 @@ public static class OpenAiRequestRunner
 
     private static string CleanModel(string model) =>
         string.IsNullOrWhiteSpace(model) ? DefaultModel : model.Trim();
+
+    private static int MaxOutputTokensForRequest(string requestType)
+    {
+        return requestType switch
+        {
+            "quick_crop_note_request" => 4096,
+            "roof_recognition_request" => 4096,
+            "pdf_sheet_metadata_fallback" => 3000,
+            _ => 2400,
+        };
+    }
+
+    private static void AddReasoningOptions(Dictionary<string, object?> payload, string model)
+    {
+        if (!IsReasoningModel(model))
+            return;
+
+        payload["reasoning"] = new { effort = "low" };
+    }
+
+    private static bool IsReasoningModel(string model)
+    {
+        string clean = model.Trim();
+        return clean.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase) ||
+               clean.StartsWith("o1", StringComparison.OrdinalIgnoreCase) ||
+               clean.StartsWith("o3", StringComparison.OrdinalIgnoreCase) ||
+               clean.StartsWith("o4", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static void AddImageContent(List<object> content, string? path, string detail)
     {
@@ -173,6 +342,9 @@ public static class OpenAiRequestRunner
         if (string.Equals(request.Type, "roof_recognition_request", StringComparison.OrdinalIgnoreCase))
             return BuildRoofRecognitionPrompt(job, request);
 
+        if (string.Equals(request.Type, "quick_crop_note_request", StringComparison.OrdinalIgnoreCase))
+            return BuildQuickCropNotePrompt(job, request);
+
         var sb = new StringBuilder();
         sb.AppendLine("Analyze this takeoff request.");
         sb.AppendLine();
@@ -199,6 +371,36 @@ public static class OpenAiRequestRunner
         sb.AppendLine("  ]");
         sb.AppendLine("}");
         sb.AppendLine("Use PDF point coordinates only when visible enough; otherwise leave points empty.");
+        sb.AppendLine();
+        sb.AppendLine("Request JSON:");
+        sb.AppendLine(JsonSerializer.Serialize(request, JsonOptions));
+
+        string? layerPath = ResolveContextPath(job, request.LayerManifestPath, job.RootPath);
+        if (!string.IsNullOrWhiteSpace(layerPath) && File.Exists(layerPath))
+        {
+            sb.AppendLine();
+            sb.AppendLine("Page layers.json:");
+            sb.AppendLine(File.ReadAllText(layerPath));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string BuildQuickCropNotePrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Read the attached construction-plan crop and create note text for a visible sheet note.");
+        sb.AppendLine("Return only the note text. Do not include JSON, explanations, or markdown fences.");
+        sb.AppendLine();
+        sb.AppendLine("Formatting rules:");
+        sb.AppendLine("- Preserve the visible content as closely as possible.");
+        sb.AppendLine("- If the crop is a table or schedule, return a compact Markdown table with the same row/column meaning.");
+        sb.AppendLine("- If the crop is a callout, key note, dimension note, or title block fragment, keep the line breaks and labels.");
+        sb.AppendLine("- If there are abbreviations, keep them exactly as shown unless unreadable.");
+        sb.AppendLine("- If the crop is unreadable or empty, return: [unreadable]");
+        sb.AppendLine();
+        sb.AppendLine("Request:");
+        sb.AppendLine(request.Prompt);
         sb.AppendLine();
         sb.AppendLine("Request JSON:");
         sb.AppendLine(JsonSerializer.Serialize(request, JsonOptions));
@@ -607,80 +809,18 @@ public static class OpenAiRequestRunner
 
     private static string SaveRawResponse(OurPlaneCoreJob job, SmartAiRequest request, string body)
     {
-        string path = Path.Combine(job.AIContextRoot, "responses", $"{request.Id}.openai.raw.json");
+        return SaveRawResponse(job, request.Id, body);
+    }
+
+    private static string SaveRawResponse(OurPlaneCoreJob job, string requestId, string body)
+    {
+        string cleanRequestId = string.IsNullOrWhiteSpace(requestId)
+            ? $"openai_{DateTime.UtcNow:yyyyMMdd_HHmmss}"
+            : requestId.Trim();
+        string path = Path.Combine(job.AIContextRoot, "responses", $"{cleanRequestId}.openai.raw.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.AIContextRoot);
         IoUtil.WriteAllTextAtomic(path, body);
         return Path.GetRelativePath(job.RootPath, path);
     }
 
-    private static string ExtractOutputText(string json)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-            var parts = new List<string>();
-            CollectOutputText(doc.RootElement, parts);
-            return string.Join(Environment.NewLine, parts.Where(part => !string.IsNullOrWhiteSpace(part)));
-        }
-        catch
-        {
-            return "";
-        }
-    }
-
-    private static void CollectOutputText(JsonElement element, List<string> parts)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            if (element.TryGetProperty("type", out JsonElement type) &&
-                string.Equals(type.GetString(), "output_text", StringComparison.Ordinal) &&
-                element.TryGetProperty("text", out JsonElement text))
-            {
-                parts.Add(text.GetString() ?? "");
-            }
-
-            foreach (JsonProperty prop in element.EnumerateObject())
-                CollectOutputText(prop.Value, parts);
-        }
-        else if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (JsonElement child in element.EnumerateArray())
-                CollectOutputText(child, parts);
-        }
-    }
-
-    private static string ExtractError(string json, string fallback)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("error", out JsonElement error) &&
-                error.ValueKind == JsonValueKind.Object &&
-                error.TryGetProperty("message", out JsonElement message))
-            {
-                return message.GetString() ?? fallback;
-            }
-        }
-        catch
-        {
-            // Fall through to the HTTP reason phrase.
-        }
-
-        return fallback;
-    }
-
-    private static string ExtractString(string json, string propertyName)
-    {
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-            return doc.RootElement.TryGetProperty(propertyName, out JsonElement value)
-                ? value.GetString() ?? ""
-                : "";
-        }
-        catch
-        {
-            return "";
-        }
-    }
 }

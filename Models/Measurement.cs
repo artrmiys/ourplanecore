@@ -17,6 +17,7 @@ public sealed class Measurement
     public List<SKPoint>  Points     { get; set; }  = [];
     public List<List<SKPoint>> Holes { get; set; } = [];
     public string         Color      { get; set; }  = "#FF4444";
+    public string         CountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public string         PageFolder { get; set; }  = "";
     public string         TakeoffFolder { get; set; } = "";
     public double         ScaleMetersPerPt { get; set; }
@@ -25,6 +26,8 @@ public sealed class Measurement
     public double         JoistSpacingInches { get; set; } = 16;
     public double         JoistDirectionDegrees { get; set; }
     public bool           JoistDirectionLocked { get; set; }
+    public bool           JoistDirectionFollowsAreaRotation { get; set; } = true;
+    public bool           JoistAddEndJoist { get; set; } = true;
     public string         JoistPitch { get; set; } = "";
     public string         JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool           JoistShowLabels { get; set; }

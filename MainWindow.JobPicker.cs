@@ -30,7 +30,7 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath);
+        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath, dialog.SelectedJobsRootPath);
     }
 
     private void ShowStartupJobPickerIfUseful()
@@ -124,7 +124,7 @@ public partial class MainWindow
             rootPath));
     }
 
-    private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath)
+    private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath, string selectedJobsRootPath = "")
     {
         switch (action)
         {
@@ -138,7 +138,7 @@ public partial class MainWindow
                 OpenJobFromJobsRootDialog();
                 break;
             case JobPickerAction.NewJob:
-                CreateJobFromDialog();
+                CreateJobFromDialog(selectedJobsRootPath);
                 break;
             case JobPickerAction.CreateSample:
                 CreateSampleJob();
@@ -190,12 +190,13 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath);
+        HandleJobPickerAction(dialog.SelectedAction, dialog.SelectedJobPath, dialog.SelectedJobsRootPath);
     }
 
-    private void CreateJobFromDialog()
+    private void CreateJobFromDialog(string? preferredParent = null)
     {
-        string? parent = SelectFolder("Choose parent folder for the new job", _settings.JobsRootPath);
+        string? parent = ResolveNewJobParent(preferredParent);
+        parent ??= SelectFolder("Choose parent folder for the new job", NewJobInitialFolder(preferredParent));
         if (parent == null)
             return;
 
@@ -210,11 +211,75 @@ public partial class MainWindow
             SaveAppSettings();
             var job = OurPlaneCoreJobStore.CreateJob(parent, name);
             OpenJob(job.RootPath);
+            QueuePdfImportForNewJob();
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Cannot create job:\n{ex.Message}", "New Job",
                             MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void QueuePdfImportForNewJob()
+    {
+        TxtStatus.Text = "New job created. Select PDF file(s) to import.";
+        Dispatcher.BeginInvoke(
+            new Action(() => BtnImport_Click(this, new RoutedEventArgs())),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private string? ResolveNewJobParent(string? preferredParent)
+    {
+        foreach (string candidate in NewJobParentCandidates(preferredParent))
+        {
+            if (Directory.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private string? NewJobInitialFolder(string? preferredParent)
+    {
+        foreach (string candidate in NewJobParentCandidates(preferredParent))
+        {
+            if (Directory.Exists(candidate))
+                return candidate;
+        }
+
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        return Directory.Exists(desktop) ? desktop : null;
+    }
+
+    private IEnumerable<string> NewJobParentCandidates(string? preferredParent)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredParent))
+            yield return preferredParent.Trim();
+
+        if (_currentJob != null)
+        {
+            string? currentParent = Path.GetDirectoryName(_currentJob.RootPath);
+            if (!string.IsNullOrWhiteSpace(currentParent))
+                yield return currentParent;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_settings.JobsRootPath))
+            yield return _settings.JobsRootPath.Trim();
+
+        foreach (string root in AppSettingsStore.CurrentJobsRootPaths(_settings))
+        {
+            if (!string.IsNullOrWhiteSpace(root))
+                yield return root.Trim();
+        }
+
+        foreach (var recent in _settings.RecentJobs ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(recent.Path))
+                continue;
+
+            string? recentParent = Path.GetDirectoryName(recent.Path);
+            if (!string.IsNullOrWhiteSpace(recentParent))
+                yield return recentParent;
         }
     }
 

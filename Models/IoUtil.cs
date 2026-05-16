@@ -11,7 +11,9 @@ public static class IoUtil
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
-        string tempPath = path + ".tmp";
+        string tempPath = string.IsNullOrWhiteSpace(directory)
+            ? $"{path}.{Guid.NewGuid():N}.tmp"
+            : Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
             File.WriteAllText(tempPath, contents);

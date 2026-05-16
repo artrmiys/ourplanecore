@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -42,6 +43,17 @@ public sealed partial class PdfViewport
                 break;
             case ViewerTool.DrawRect:
                 AddTwoPointAnnotation(pdf, "rectangle");
+                break;
+            case ViewerTool.DrawCloud:
+                AddTwoPointAnnotation(pdf, "cloud");
+                break;
+            case ViewerTool.DrawArea:
+                _drawPts.Add(pdf);
+                RequestRepaint();
+                PostRecordPrompt();
+                break;
+            case ViewerTool.Note:
+                AddNoteAnnotation(pdf);
                 break;
             case ViewerTool.Point:
                 _drawPts.Add(pdf);
@@ -136,7 +148,7 @@ public sealed partial class PdfViewport
 
         SKPoint center = new((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
         Measurement? target = _areaCutMeasurement;
-        if (target == null || !_measurements.Contains(target) || !PointInMeasurementFill(target, center))
+        if (target == null || !_measurementSet.Contains(target) || !PointInMeasurementFill(target, center))
         {
             TryResolveAreaCutTarget(center, out target, out _);
         }
@@ -165,7 +177,7 @@ public sealed partial class PdfViewport
         }
 
         Measurement? target = _areaCutMeasurement;
-        if (target == null || !_measurements.Contains(target))
+        if (target == null || !_measurementSet.Contains(target))
             TryResolveAreaCutTarget(Centroid(_drawPts), out target, out _);
 
         if (target == null)
@@ -200,7 +212,7 @@ public sealed partial class PdfViewport
         _rubberEnd = null;
         _areaCutMeasurement = null;
         SelectMeasurement(target, -1);
-        MeasurementChanged?.Invoke(target);
+        NotifyMeasurementsChanged([target]);
         RequestRepaint();
         PostStatus($"Area Cut: subtracted {shapeName}. New area {target.Label(ScaleMetersPerPt, UnitMode)}.");
         PostRecordPrompt();
@@ -218,11 +230,12 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        for (int i = _measurements.Count - 1; i >= 0; i--)
+        SKRect pointRect = SKRect.Create(point.X, point.Y, 0, 0);
+        IReadOnlyList<Measurement> candidates = ActivePageMeasurementsNear(pointRect);
+        for (int i = candidates.Count - 1; i >= 0; i--)
         {
-            Measurement candidate = _measurements[i];
+            Measurement candidate = candidates[i];
             if (candidate.MType == "area" &&
-                IsMeasurementOnActivePage(candidate) &&
                 PointInMeasurementFill(candidate, point))
             {
                 target = candidate;
@@ -400,11 +413,13 @@ public sealed partial class PdfViewport
             MType      = _tool.ToString().ToLower(),
             Points     = new List<SKPoint>(_drawPts),
             Color      = ActiveColor,
+            CountSymbol = _tool == ViewerTool.Point ? CountDisplaySymbol.Normalize(ActiveCountSymbol) : CountDisplaySymbol.Circle,
             PageFolder = _pageFolder,
             TakeoffFolder = ActiveTakeoffFolder,
             ScaleMetersPerPt = ScaleMetersPerPt,
         };
         _measurements.Add(m);
+        _measurementSet.Add(m);
         IndexMeasurementByPage(m);
         PushAddedMeasurementsUndo([m], $"remove added {EntryTitle(m.MType)}");
         _drawPts.Clear();
@@ -426,7 +441,8 @@ public sealed partial class PdfViewport
         {
             Kind = normalizedKind,
             Points = _drawPts.Take(2).ToList(),
-            Color = normalizedKind == "dimension" ? "#1565C0" : ActiveColor,
+            Color = normalizedKind == "dimension" ? "#1565C0" : ActiveAnnotationColor,
+            StrokeWidth = ActiveAnnotationStrokeWidth,
             PageFolder = _pageFolder,
             ScaleMetersPerPt = ScaleMetersPerPt,
         };
@@ -441,6 +457,126 @@ public sealed partial class PdfViewport
             : $"Added {ToolTitle(normalizedKind)} markup.");
         PageAnnotationAdded?.Invoke(annotation);
         PostRecordPrompt();
+    }
+
+    private void FinalizeAreaAnnotation()
+    {
+        if (_drawPts.Count < 3)
+        {
+            CancelDrawing();
+            PostStatus("Area annotation cancelled.");
+            return;
+        }
+
+        var annotation = new PageAnnotation
+        {
+            Kind = "area",
+            Points = _drawPts.ToList(),
+            Color = ActiveAnnotationColor,
+            StrokeWidth = ActiveAnnotationStrokeWidth,
+            PageFolder = _pageFolder,
+            ScaleMetersPerPt = ScaleMetersPerPt,
+        };
+        _annotations.Add(annotation);
+        PushAddedAnnotationsUndo([annotation], "remove added Area annotation");
+        _drawPts.Clear();
+        _rubberEnd = null;
+        SetSnapPreview(null);
+        RequestRepaint();
+        PostStatus("Added Area annotation.");
+        PageAnnotationAdded?.Invoke(annotation);
+        PostRecordPrompt();
+    }
+
+    private void AddNoteAnnotation(SKPoint pdf)
+    {
+        string? text = PageAnnotationTextRequested?.Invoke(
+            "Note text:",
+            "",
+            "Sheet Note");
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            PostStatus("Note cancelled.");
+            return;
+        }
+
+        var annotation = new PageAnnotation
+        {
+            Kind = "note",
+            Text = text.Trim(),
+            Points = DefaultNoteBounds(pdf),
+            Color = ActiveAnnotationColor,
+            StrokeWidth = ActiveAnnotationStrokeWidth,
+            PageFolder = _pageFolder,
+            ScaleMetersPerPt = ScaleMetersPerPt,
+        };
+        _annotations.Add(annotation);
+        PushAddedAnnotationsUndo([annotation], "remove added Note markup");
+        ClearAnnotationSelection();
+        SelectAnnotation(annotation, -1);
+        RequestRepaint();
+        PostStatus("Added Note markup. Drag body to move; blue handles reshape; orange handle rotates/scales.");
+        PageAnnotationAdded?.Invoke(annotation);
+        PostRecordPrompt();
+    }
+
+    public PageAnnotation AddNoteAnnotationAt(
+        SKPoint pdf,
+        string text,
+        string color = "#F9A825",
+        float widthScreenPx = 340f,
+        float heightScreenPx = 190f)
+    {
+        string clean = string.IsNullOrWhiteSpace(text) ? "Note" : text.Trim();
+        var annotation = new PageAnnotation
+        {
+            Kind = "note",
+            Text = clean,
+            Points = NoteBounds(pdf, widthScreenPx, heightScreenPx),
+            Color = string.IsNullOrWhiteSpace(color) ? "#F9A825" : color,
+            StrokeWidth = ActiveAnnotationStrokeWidth,
+            PageFolder = _pageFolder,
+            ScaleMetersPerPt = ScaleMetersPerPt,
+        };
+        _annotations.Add(annotation);
+        PushAddedAnnotationsUndo([annotation], "remove added AI Note markup");
+        ClearAnnotationSelection();
+        SelectAnnotation(annotation, -1);
+        RequestRepaint();
+        PostStatus("Added AI Note markup. Drag body to move; blue handles reshape; orange handle rotates/scales.");
+        PageAnnotationAdded?.Invoke(annotation);
+        return annotation;
+    }
+
+    private List<SKPoint> DefaultNoteBounds(SKPoint origin)
+    {
+        return NoteBounds(origin, 190f, 78f);
+    }
+
+    private List<SKPoint> NoteBounds(SKPoint origin, float widthScreenPx, float heightScreenPx)
+    {
+        float width = ScreenToPdfDistance(Math.Clamp(widthScreenPx, 120f, 620f));
+        float height = ScreenToPdfDistance(Math.Clamp(heightScreenPx, 70f, 440f));
+        float right = origin.X + width;
+        float bottom = origin.Y + height;
+        if (_pdfW > 0 && right > _pdfW)
+        {
+            origin.X = Math.Max(0, _pdfW - width);
+            right = Math.Min(_pdfW, origin.X + width);
+        }
+        if (_pdfH > 0 && bottom > _pdfH)
+        {
+            origin.Y = Math.Max(0, _pdfH - height);
+            bottom = Math.Min(_pdfH, origin.Y + height);
+        }
+
+        return
+        [
+            origin,
+            new SKPoint(right, origin.Y),
+            new SKPoint(right, bottom),
+            new SKPoint(origin.X, bottom),
+        ];
     }
 
     private void CompleteOrCancelDrawing()
@@ -473,6 +609,19 @@ public sealed partial class PdfViewport
 
             CancelDrawing(clearSelection: false);
             PostStatus("Area Cut cancelled.");
+            return;
+        }
+
+        if (_tool == ViewerTool.DrawArea)
+        {
+            if (_drawPts.Count >= 3)
+            {
+                FinalizeAreaAnnotation();
+                return;
+            }
+
+            CancelDrawing();
+            PostStatus("Area annotation cancelled.");
             return;
         }
 
@@ -614,6 +763,23 @@ public sealed partial class PdfViewport
                     ? $"Box: click the first corner.{modes}"
                     : $"Box: click the opposite corner.{modes}");
                 break;
+            case ViewerTool.DrawCloud:
+                PostStatus(_drawPts.Count == 0
+                    ? $"Cloud: click the first corner.{modes}"
+                    : $"Cloud: click the opposite corner.{modes}");
+                break;
+            case ViewerTool.DrawArea:
+                PostStatus(_drawPts.Count switch
+                {
+                    0 => $"Area annotation: click the first corner.{modes}",
+                    1 => $"Area annotation: click the next corner. Backspace/Ctrl+Z undo.{modes}",
+                    2 => $"Area annotation: click at least one more corner, then C / Esc / double-click to finish.{modes}",
+                    _ => $"Area annotation: click next corner, or C / Esc / double-click to finish.{modes}",
+                });
+                break;
+            case ViewerTool.Note:
+                PostStatus($"Note: click the sheet to place a text note.{modes}");
+                break;
             case ViewerTool.Select:
                 PostStatus("Select: left-drag a box to select measurements. Ctrl+click toggles, Ctrl+C copies, Ctrl+V pastes.");
                 break;
@@ -644,6 +810,8 @@ public sealed partial class PdfViewport
             "dimension" => "Ruler",
             "arrow" => "Arrow",
             "rectangle" => "Box",
+            "cloud" => "Cloud",
+            "note" => "Note",
             "select" => "Select",
             _ => type,
         };
@@ -734,6 +902,7 @@ public sealed partial class PdfViewport
 
     private bool ShouldPreviewAsBox() =>
         _tool == ViewerTool.DrawRect ||
+        _tool == ViewerTool.DrawCloud ||
         _tool == ViewerTool.AreaCut && BoxModeEnabled ||
         BoxModeEnabled && _tool is (ViewerTool.Line or ViewerTool.Area);
 
@@ -745,7 +914,7 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect &&
+        if (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea &&
             _drawPts.Count > 0)
         {
             anchor = _drawPts[^1];
@@ -780,15 +949,30 @@ public sealed partial class PdfViewport
 
     private bool TryFindSnapPoint(SKPoint rawPdf, out SKPoint snapped, out string snapKind)
     {
+        Stopwatch snapWatch = Stopwatch.StartNew();
         float tolerance = ScreenToPdfDistance(SnapToleranceScreenPx);
         float best = tolerance * tolerance;
         SKPoint bestPoint = default;
         string bestKind = "";
         bool found = false;
         var segments = new List<SnapSegment>();
+        int consideredSnapPoints = 0;
+        int candidateMeasurements = 0;
+        int skippedMeasurements = 0;
+        int candidateAnnotations = 0;
+
+        SKRect searchRect = SKRect.Create(
+            rawPdf.X - tolerance,
+            rawPdf.Y - tolerance,
+            tolerance * 2,
+            tolerance * 2);
 
         void Consider(SKPoint candidate, string kind)
         {
+            if (!RectContains(searchRect, candidate))
+                return;
+
+            consideredSnapPoints++;
             float distance = DistanceSquared(rawPdf, candidate);
             if (distance >= best)
                 return;
@@ -798,9 +982,26 @@ public sealed partial class PdfViewport
             bestKind = kind;
             found = true;
         }
+        IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
+        int activeMeasurementCount = activeMeasurements.Count;
+        IReadOnlyList<ViewportMeasurementVertexCandidate> measurementVertices =
+            ActivePageMeasurementVerticesNear(searchRect);
+        IReadOnlyList<ViewportMeasurementSegmentCandidate> measurementSegments =
+            ActivePageMeasurementSegmentsNear(searchRect);
+        var candidateMeasurementSet = new HashSet<Measurement>();
 
-        void ConsiderPolyline(IReadOnlyList<SKPoint> points, bool closed, bool includeEndpoints)
+        void ConsiderPolyline(
+            IReadOnlyList<SKPoint> points,
+            bool closed,
+            bool includeEndpoints,
+            bool boundsAlreadyChecked = false)
         {
+            if (points.Count == 0)
+                return;
+
+            if (!boundsAlreadyChecked && !RectsIntersect(PointsBounds(points), searchRect))
+                return;
+
             if (includeEndpoints)
             {
                 foreach (SKPoint point in points)
@@ -809,14 +1010,26 @@ public sealed partial class PdfViewport
 
             for (int i = 1; i < points.Count; i++)
             {
-                Consider(Midpoint(points[i - 1], points[i]), "midpoint");
-                segments.Add(new SnapSegment(points[i - 1], points[i]));
+                SKPoint start = points[i - 1];
+                SKPoint end = points[i];
+                if (!SegmentBoundsIntersectRect(start, end, searchRect) ||
+                    !SegmentIntersectsRect(start, end, searchRect))
+                    continue;
+
+                Consider(Midpoint(start, end), "midpoint");
+                segments.Add(new SnapSegment(start, end));
             }
 
             if (closed && points.Count > 2)
             {
-                Consider(Midpoint(points[^1], points[0]), "midpoint");
-                segments.Add(new SnapSegment(points[^1], points[0]));
+                SKPoint start = points[^1];
+                SKPoint end = points[0];
+                if (SegmentBoundsIntersectRect(start, end, searchRect) &&
+                    SegmentIntersectsRect(start, end, searchRect))
+                {
+                    Consider(Midpoint(start, end), "midpoint");
+                    segments.Add(new SnapSegment(start, end));
+                }
             }
         }
 
@@ -832,29 +1045,36 @@ public sealed partial class PdfViewport
         foreach (SKPoint point in _scalePts)
             Consider(point, "endpoint");
 
-        foreach (Measurement measurement in _measurements)
+        foreach (ViewportMeasurementVertexCandidate vertex in measurementVertices)
         {
-            if (!IsMeasurementOnActivePage(measurement))
+            candidateMeasurementSet.Add(vertex.Measurement);
+            Consider(vertex.Point, "endpoint");
+        }
+
+        foreach (ViewportMeasurementSegmentCandidate segment in measurementSegments)
+        {
+            if (!SegmentIntersectsRect(segment.Start, segment.End, searchRect))
                 continue;
 
-            if (measurement.MType is "line" or "area")
-            {
-                ConsiderPolyline(measurement.Points, measurement.MType == "area", includeEndpoints: true);
-                if (measurement.MType == "area")
-                    foreach (var hole in measurement.Holes)
-                        ConsiderPolyline(hole, closed: true, includeEndpoints: true);
-            }
-            else
-                foreach (SKPoint point in measurement.Points)
-                    Consider(point, "endpoint");
+            candidateMeasurementSet.Add(segment.Measurement);
+            Consider(Midpoint(segment.Start, segment.End), "midpoint");
+            segments.Add(new SnapSegment(segment.Start, segment.End));
         }
+
+        candidateMeasurements = candidateMeasurementSet.Count;
+        skippedMeasurements = Math.Max(0, activeMeasurementCount - candidateMeasurements);
 
         foreach (PageAnnotation annotation in _annotations)
         {
-            if (!IsAnnotationOnActivePage(annotation) || annotation.Points.Count < 2)
+            if (!IsAnnotationVisibleOnActivePage(annotation) || annotation.Points.Count < 2)
                 continue;
 
-            ConsiderPolyline(AnnotationSnapPoints(annotation), closed: false, includeEndpoints: true);
+            IReadOnlyList<SKPoint> points = AnnotationSnapPoints(annotation);
+            if (!RectsIntersect(PointsBounds(points), searchRect))
+                continue;
+
+            candidateAnnotations++;
+            ConsiderPolyline(points, closed: false, includeEndpoints: true);
         }
 
         for (int i = 0; i < segments.Count; i++)
@@ -873,7 +1093,41 @@ public sealed partial class PdfViewport
 
         snapped = bestPoint;
         snapKind = bestKind;
+        ReportSlowSnapSearch(
+            snapWatch.ElapsedMilliseconds,
+            activeMeasurementCount,
+            candidateMeasurements,
+            skippedMeasurements,
+            candidateAnnotations,
+            consideredSnapPoints,
+            segments.Count,
+            found);
         return found;
+    }
+
+    private void ReportSlowSnapSearch(
+        long elapsedMs,
+        int activeMeasurementCount,
+        int candidateMeasurements,
+        int skippedMeasurements,
+        int candidateAnnotations,
+        int consideredSnapPoints,
+        int segmentCandidateCount,
+        bool found)
+    {
+        if (elapsedMs < ViewportRenderPolicy.SlowSnapLogMs)
+            return;
+
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastSlowSnapLogAt).TotalSeconds < 2)
+            return;
+
+        _lastSlowSnapLogAt = now;
+        AppLog.Info(
+            $"Viewport slow snap {elapsedMs}ms; tool={_tool}; zoom={_zoom:0.###}; page='{_pageFolder}'; " +
+            $"activeMeasurements={activeMeasurementCount}; candidateMeasurements={candidateMeasurements}; " +
+            $"skippedMeasurements={skippedMeasurements}; candidateAnnotations={candidateAnnotations}; " +
+            $"snapPoints={consideredSnapPoints}; segments={segmentCandidateCount}; found={found}; pdfSnap={PdfSnapEnabled}");
     }
 
     private void SetSnapPreview(SKPoint? point, string kind = "")
@@ -891,27 +1145,28 @@ public sealed partial class PdfViewport
     private static SKPoint Midpoint(SKPoint a, SKPoint b) =>
         new((a.X + b.X) / 2f, (a.Y + b.Y) / 2f);
 
+    private static bool SegmentBoundsIntersectRect(SKPoint start, SKPoint end, SKRect rect) =>
+        Math.Min(start.X, end.X) <= rect.Right &&
+        Math.Max(start.X, end.X) >= rect.Left &&
+        Math.Min(start.Y, end.Y) <= rect.Bottom &&
+        Math.Max(start.Y, end.Y) >= rect.Top;
+
     private static IReadOnlyList<SKPoint> AnnotationSnapPoints(PageAnnotation annotation)
     {
         if (annotation.Points.Count < 2)
             return annotation.Points;
 
         string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
-        if (kind != "rectangle")
-            return annotation.Points.Take(2).ToList();
-
-        if (annotation.Points.Count >= 4)
+        if (kind == "area")
             return annotation.Points.Append(annotation.Points[0]).ToList();
 
-        SKRect rect = NormalizeRect(annotation.Points[0], annotation.Points[1]);
-        return
-        [
-            new SKPoint(rect.Left, rect.Top),
-            new SKPoint(rect.Right, rect.Top),
-            new SKPoint(rect.Right, rect.Bottom),
-            new SKPoint(rect.Left, rect.Bottom),
-            new SKPoint(rect.Left, rect.Top),
-        ];
+        if (kind != "rectangle" && kind != "note" && kind != "cloud")
+            return annotation.Points.Take(2).ToList();
+
+        IReadOnlyList<SKPoint> corners = AnnotationRectangleCorners(annotation.Points);
+        return corners
+            .Append(corners[0])
+            .ToList();
     }
 
     private static bool SharesEndpoint(SnapSegment left, SnapSegment right) =>

@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using Docnet.Core;
+using Docnet.Core.Models;
 using OurPlaneCore.Controls;
 using SkiaSharp;
 
@@ -13,7 +16,15 @@ public sealed record PdfExportOptions(
     bool IncludeLegend,
     UnitMode UnitMode,
     string LegendAnchor,
-    double LegendScale);
+    double LegendScale,
+    double HeaderScale,
+    bool ShowMeasurementLabels,
+    bool ShowLineLabels,
+    bool ShowAreaLabels,
+    bool ShowCountLabels,
+    double MeasurementStrokeScale,
+    double PointSizeScale,
+    double MeasurementLabelScale);
 
 public sealed record PdfExportPageInput(
     PageInfo Page,
@@ -34,6 +45,7 @@ public static class PdfExporter
 {
     public const string ExportPaperColorHex = "#FFFFFF";
     private static readonly SKColor ExportPaperColor = SKColors.White;
+    private const float BaseExportLabelScale = 1.5f;
 
     public static (bool Ok, string Error) TryExport(
         IReadOnlyList<PdfExportPageInput> pages,
@@ -41,73 +53,225 @@ public static class PdfExporter
         PdfExportOptions options,
         PdfSheetOverlayExportRenderer? overlayRenderer = null)
     {
+        string? tempPath = null;
+        bool committed = false;
+        var warnings = new List<string>();
         try
         {
             string? dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrWhiteSpace(dir))
                 Directory.CreateDirectory(dir);
 
-            using var stream = File.Create(outputPath);
-            using var document = SKDocument.CreatePdf(stream);
-            if (document == null)
-                return (false, "Could not create PDF document.");
+            string outputDirectory = string.IsNullOrWhiteSpace(dir)
+                ? Directory.GetCurrentDirectory()
+                : dir;
+            tempPath = Path.Combine(
+                outputDirectory,
+                $".{Path.GetFileName(outputPath)}.{Guid.NewGuid():N}.tmp");
 
-            foreach (PdfExportPageInput input in pages)
+            using (var stream = File.Create(tempPath))
             {
-                PageInfo page = input.Page;
-                if (!File.Exists(page.PdfPath))
-                    return (false, $"Source PDF not found for sheet '{page.Name}': {page.PdfPath}");
+                using var document = SKDocument.CreatePdf(stream);
+                if (document == null)
+                    return (false, "Could not create PDF document.");
 
-                var layerStates = page.PdfLayers
-                    .GroupBy(layer => layer.Number)
-                    .ToDictionary(group => group.Key, group => group.First().IsOn);
-                if (!PdfLayerRenderService.TryRender(
-                        page.PdfPath,
-                        page.PdfPage,
-                        renderScale: 2.0,
-                        layerStates,
-                        highlightedLayers: [],
-                        page.PdfLayersCached ? page.PdfLayers : null,
-                        out PdfLayerRenderResult render,
-                        out string renderError))
+                foreach (PdfExportPageInput input in pages)
                 {
-                    return (false, $"Could not render sheet '{page.Name}': {renderError}");
+                    PageInfo page = input.Page;
+                    if (!TryRenderExportPage(page, warnings, out ExportRenderedPage renderedPage, out string renderError))
+                        return (false, renderError);
+
+                    using (renderedPage)
+                    {
+                        SKCanvas canvas = document.BeginPage(renderedPage.WidthPt, renderedPage.HeightPt);
+                        canvas.Clear(ExportPaperColor);
+                        DrawExportPaperUnderlay(canvas, renderedPage.WidthPt, renderedPage.HeightPt);
+                        canvas.DrawBitmap(renderedPage.Bitmap, new SKRect(0, 0, renderedPage.WidthPt, renderedPage.HeightPt));
+
+                        if (overlayRenderer != null)
+                        {
+                            (bool overlayOk, string overlayError) = overlayRenderer(canvas, page, renderedPage.WidthPt, renderedPage.HeightPt);
+                            if (!overlayOk)
+                            {
+                                string warning = $"Overlay skipped on '{page.Name}': {overlayError}";
+                                warnings.Add(warning);
+                                AppLog.Warn($"Skipping overlay during PDF export for '{page.Name}': {overlayError}");
+                            }
+                        }
+
+                    if (options.IncludeMeasurements)
+                        DrawMeasurements(canvas, input.Takeoffs, page, options);
+                    if (options.IncludeAnnotations)
+                        DrawAnnotations(canvas, input.Annotations, page.ScaleMetersPerPt, options);
+                        if (options.IncludeLegend)
+                        {
+                            DrawSheetHeader(canvas, renderedPage.WidthPt, renderedPage.HeightPt, page, options);
+                            DrawLegend(canvas, renderedPage.WidthPt, renderedPage.HeightPt, input.Takeoffs, page, options);
+                        }
+
+                        document.EndPage();
+                    }
                 }
 
-                using SKBitmap? bitmap = SKBitmap.Decode(render.ImageBytes);
-                if (bitmap == null)
-                    return (false, $"Could not decode rendered sheet '{page.Name}'.");
-
-                SKCanvas canvas = document.BeginPage(render.WidthPt, render.HeightPt);
-                canvas.Clear(ExportPaperColor);
-                DrawExportPaperUnderlay(canvas, render.WidthPt, render.HeightPt);
-                canvas.DrawBitmap(bitmap, new SKRect(0, 0, render.WidthPt, render.HeightPt));
-
-                if (overlayRenderer != null)
-                {
-                    (bool overlayOk, string overlayError) = overlayRenderer(canvas, page, render.WidthPt, render.HeightPt);
-                    if (!overlayOk)
-                        return (false, overlayError);
-                }
-
-                if (options.IncludeMeasurements)
-                    DrawMeasurements(canvas, input.Takeoffs, page, options.UnitMode);
-                if (options.IncludeAnnotations)
-                    DrawAnnotations(canvas, input.Annotations, page.ScaleMetersPerPt, options.UnitMode);
-                if (options.IncludeLegend)
-                    DrawLegend(canvas, render.WidthPt, render.HeightPt, input.Takeoffs, page, options);
-
-                document.EndPage();
+                document.Close();
             }
-
-            document.Close();
-            return (true, "");
+            CommitExportFile(tempPath, outputPath);
+            committed = true;
+            return (true, FormatExportWarnings(warnings));
         }
         catch (Exception ex)
         {
             AppLog.Error(ex, "PDF export failed.");
             return (false, ex.Message);
         }
+        finally
+        {
+            if (!committed &&
+                !string.IsNullOrWhiteSpace(tempPath) &&
+                File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); }
+                catch (Exception cleanupEx)
+                {
+                    AppLog.Warn(cleanupEx, $"Could not remove failed PDF export temp file: {tempPath}");
+                }
+            }
+        }
+    }
+
+    private static bool TryRenderExportPage(
+        PageInfo page,
+        List<string> warnings,
+        out ExportRenderedPage renderedPage,
+        out string error)
+    {
+        renderedPage = ExportRenderedPage.Empty();
+        error = "";
+
+        if (!File.Exists(page.PdfPath))
+        {
+            error = $"Source PDF not found for sheet '{page.Name}': {page.PdfPath}";
+            return false;
+        }
+
+        string layerError = "";
+        var layerStates = page.PdfLayers
+            .GroupBy(layer => layer.Number)
+            .ToDictionary(group => group.Key, group => group.First().IsOn);
+        if (PdfLayerRenderService.TryRender(
+                page.PdfPath,
+                page.PdfPage,
+                renderScale: 2.0,
+                layerStates,
+                highlightedLayers: [],
+                page.PdfLayersCached ? page.PdfLayers : null,
+                out PdfLayerRenderResult render,
+                out string renderError))
+        {
+            SKBitmap? bitmap = SKBitmap.Decode(render.ImageBytes);
+            if (bitmap != null)
+            {
+                renderedPage = new ExportRenderedPage(bitmap, render.WidthPt, render.HeightPt);
+                return true;
+            }
+
+            layerError = "layer renderer returned an unreadable image.";
+        }
+        else
+        {
+            layerError = string.IsNullOrWhiteSpace(renderError)
+                ? "layer renderer returned no image."
+                : renderError;
+        }
+
+        if (TryRenderExportPageWithDocnet(page, out renderedPage, out string docnetError))
+        {
+            string warning = $"Layer render fallback on '{page.Name}': {layerError}";
+            warnings.Add(warning);
+            AppLog.Warn(warning);
+            return true;
+        }
+
+        error = $"Could not render sheet '{page.Name}': {layerError}; Docnet fallback failed: {docnetError}";
+        return false;
+    }
+
+    private static bool TryRenderExportPageWithDocnet(
+        PageInfo page,
+        out ExportRenderedPage renderedPage,
+        out string error)
+    {
+        renderedPage = ExportRenderedPage.Empty();
+        error = "";
+
+        try
+        {
+            const float renderScale = 2.0f;
+            using var docReader = DocLib.Instance.GetDocReader(page.PdfPath, new PageDimensions(renderScale));
+            using var pageReader = docReader.GetPageReader(page.PdfPage);
+
+            int bitmapWidth = pageReader.GetPageWidth();
+            int bitmapHeight = pageReader.GetPageHeight();
+            byte[] bytes = pageReader.GetImage();
+
+            var info = new SKImageInfo(bitmapWidth, bitmapHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+            var bitmap = new SKBitmap(info);
+            Marshal.Copy(bytes, 0, bitmap.GetPixels(), bytes.Length);
+
+            renderedPage = new ExportRenderedPage(
+                bitmap,
+                bitmapWidth / renderScale,
+                bitmapHeight / renderScale);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            AppLog.Warn(ex, $"Docnet PDF export fallback failed for {page.PdfPath} page {page.PdfPage}");
+            return false;
+        }
+    }
+
+    private static void CommitExportFile(string tempPath, string outputPath)
+    {
+        if (File.Exists(outputPath))
+        {
+            string backupPath = tempPath + ".bak";
+            File.Replace(tempPath, outputPath, backupPath, ignoreMetadataErrors: true);
+            try
+            {
+                if (File.Exists(backupPath))
+                    File.Delete(backupPath);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn(ex, $"Could not remove PDF export backup file: {backupPath}");
+            }
+            return;
+        }
+
+        File.Move(tempPath, outputPath);
+    }
+
+    private static string FormatExportWarnings(IReadOnlyList<string> warnings)
+    {
+        if (warnings.Count == 0)
+            return "";
+
+        string text = string.Join(Environment.NewLine, warnings.Take(8));
+        if (warnings.Count > 8)
+            text += $"{Environment.NewLine}...and {warnings.Count - 8} more.";
+        return text;
+    }
+
+    private sealed class ExportRenderedPage(SKBitmap bitmap, float widthPt, float heightPt) : IDisposable
+    {
+        public static ExportRenderedPage Empty() => new(new SKBitmap(), 0, 0);
+        public SKBitmap Bitmap { get; } = bitmap;
+        public float WidthPt { get; } = widthPt;
+        public float HeightPt { get; } = heightPt;
+
+        public void Dispose() => Bitmap.Dispose();
     }
 
     private static void DrawExportPaperUnderlay(SKCanvas canvas, float widthPt, float heightPt)
@@ -125,21 +289,28 @@ public static class PdfExporter
         SKCanvas canvas,
         IReadOnlyList<PdfExportTakeoffInput> takeoffs,
         PageInfo page,
-        UnitMode unitMode)
+        PdfExportOptions options)
     {
-        foreach (PdfExportTakeoffInput takeoff in takeoffs)
-        {
-            SKColor color = ParseSkColor(takeoff.Item.Color, SKColors.Red);
-            foreach (Measurement measurement in takeoff.Measurements)
-                DrawMeasurement(canvas, measurement, color, page.ScaleMetersPerPt, unitMode);
-        }
+        var measurements = takeoffs
+            .SelectMany(takeoff =>
+            {
+                SKColor color = ParseSkColor(takeoff.Item.Color, SKColors.Red);
+                return takeoff.Measurements.Select(measurement => (Measurement: measurement, Color: color));
+            })
+            .ToList();
+
+        foreach ((Measurement measurement, SKColor color) in measurements)
+            DrawMeasurementGeometry(canvas, measurement, color, options);
+
+        foreach ((Measurement measurement, SKColor color) in measurements)
+            DrawMeasurementLabels(canvas, measurement, color, page.ScaleMetersPerPt, options);
     }
 
     private static void DrawAnnotations(
         SKCanvas canvas,
         IReadOnlyList<PageAnnotation> annotations,
         double pageScaleMetersPerPt,
-        UnitMode unitMode)
+        PdfExportOptions options)
     {
         foreach (PageAnnotation annotation in annotations)
         {
@@ -153,16 +324,46 @@ public static class PdfExporter
                 IsAntialias = true,
                 Color = color,
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = 1.35f,
+                StrokeWidth = ExportAnnotationStrokeWidth(annotation),
                 StrokeCap = SKStrokeCap.Round,
                 StrokeJoin = SKStrokeJoin.Round,
             };
 
             SKPoint start = annotation.Points[0];
             SKPoint end = annotation.Points[1];
+            if (kind == "note")
+            {
+                DrawNoteAnnotation(canvas, annotation, color, options);
+                continue;
+            }
+
             if (kind == "rectangle")
             {
-                canvas.DrawRect(MeasurementGeometry.NormalizeRect(start, end), stroke);
+                using SKPath path = BuildClosedAnnotationPath(AnnotationRectangleCorners(annotation.Points));
+                canvas.DrawPath(path, stroke);
+                continue;
+            }
+
+            if (kind == "cloud")
+            {
+                DrawCloudAnnotation(canvas, annotation, stroke);
+                continue;
+            }
+
+            if (kind == "area")
+            {
+                if (annotation.Points.Count < 3)
+                    continue;
+
+                using var fill = new SKPaint
+                {
+                    IsAntialias = true,
+                    Color = color.WithAlpha(55),
+                    Style = SKPaintStyle.Fill,
+                };
+                using SKPath path = BuildClosedAnnotationPath(annotation.Points);
+                canvas.DrawPath(path, fill);
+                canvas.DrawPath(path, stroke);
                 continue;
             }
 
@@ -180,16 +381,241 @@ public static class PdfExporter
                     ? annotation.ScaleMetersPerPt
                     : pageScaleMetersPerPt;
                 string label = string.IsNullOrWhiteSpace(annotation.Text)
-                    ? FormatAnnotationLength(start, end, scale, unitMode)
+                    ? FormatAnnotationLength(start, end, scale, options.UnitMode)
                     : annotation.Text;
                 DrawMeasurementLabel(
                     canvas,
                     new SKPoint((start.X + end.X) / 2f, (start.Y + end.Y) / 2f),
                     label,
                     color,
-                    centered: true);
+                    centered: true,
+                    ExportLabelScale(options));
             }
         }
+    }
+
+    private static float ExportAnnotationStrokeWidth(PageAnnotation annotation)
+    {
+        double value = annotation.StrokeWidth is >= 0.75 and <= 12.0
+            ? annotation.StrokeWidth
+            : 1.8;
+        return (float)Math.Clamp(value * 0.75, 0.75, 9.0);
+    }
+
+    private static void DrawCloudAnnotation(SKCanvas canvas, PageAnnotation annotation, SKPaint stroke)
+    {
+        IReadOnlyList<SKPoint> corners = AnnotationRectangleCorners(annotation.Points);
+        if (corners.Count < 4 ||
+            !TryGetAnnotationLocalFrame(corners, out SKMatrix localToPdf, out float width, out float height))
+        {
+            return;
+        }
+
+        using var saved = new SKAutoCanvasRestore(canvas, true);
+        canvas.Concat(ref localToPdf);
+        using SKPath path = BuildCloudPath(width, height);
+        canvas.DrawPath(path, stroke);
+    }
+
+    private static SKPath BuildCloudPath(float width, float height)
+    {
+        var path = new SKPath();
+        if (width <= 0 || height <= 0)
+            return path;
+
+        float bump = Math.Clamp(Math.Min(width, height) / 7f, 5f, Math.Max(5f, Math.Min(width, height) / 3f));
+        path.MoveTo(bump, 0);
+        AddCloudEdge(path, bump, 0, width - bump, 0, 0, -bump);
+        AddCloudEdge(path, width, bump, width, height - bump, bump, 0);
+        AddCloudEdge(path, width - bump, height, bump, height, 0, bump);
+        AddCloudEdge(path, 0, height - bump, 0, bump, -bump, 0);
+        path.Close();
+        return path;
+    }
+
+    private static void AddCloudEdge(
+        SKPath path,
+        float startX,
+        float startY,
+        float endX,
+        float endY,
+        float controlOffsetX,
+        float controlOffsetY)
+    {
+        float length = MathF.Sqrt(MathF.Pow(endX - startX, 2) + MathF.Pow(endY - startY, 2));
+        int segments = Math.Max(2, (int)MathF.Ceiling(length / 42f));
+        for (int i = 1; i <= segments; i++)
+        {
+            float t0 = (i - 1f) / segments;
+            float t1 = i / (float)segments;
+            float mid = (t0 + t1) / 2f;
+            var control = new SKPoint(
+                startX + (endX - startX) * mid + controlOffsetX,
+                startY + (endY - startY) * mid + controlOffsetY);
+            var end = new SKPoint(
+                startX + (endX - startX) * t1,
+                startY + (endY - startY) * t1);
+            path.QuadTo(control, end);
+        }
+    }
+
+    private static void DrawNoteAnnotation(
+        SKCanvas canvas,
+        PageAnnotation annotation,
+        SKColor color,
+        PdfExportOptions options)
+    {
+        IReadOnlyList<SKPoint> corners = AnnotationRectangleCorners(annotation.Points);
+        if (corners.Count < 4)
+            return;
+
+        using var fill = new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(0xFF, 0xF8, 0xC6, 235),
+            Style = SKPaintStyle.Fill,
+        };
+        using var stroke = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.15f * ExportLabelScale(options),
+        };
+        using SKPath path = BuildClosedAnnotationPath(corners);
+        canvas.DrawPath(path, fill);
+        canvas.DrawPath(path, stroke);
+
+        float labelScale = ExportLabelScale(options);
+        float pad = 4.5f * labelScale;
+        if (!TryGetAnnotationLocalFrame(corners, out SKMatrix localToPdf, out float width, out float height))
+            return;
+
+        var textRect = new SKRect(pad, pad, width - pad, height - pad);
+        if (textRect.Width <= 1 || textRect.Height <= 1)
+            return;
+
+        using var saved = new SKAutoCanvasRestore(canvas, true);
+        canvas.Concat(ref localToPdf);
+        using var textPaint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.Black.WithAlpha(220),
+            TextSize = 8.0f * labelScale,
+            Typeface = SKTypeface.FromFamilyName("Segoe UI") ?? SKTypeface.Default,
+        };
+        float lineHeight = textPaint.TextSize * 1.22f;
+        int maxLines = Math.Max(1, (int)(textRect.Height / lineHeight));
+        IReadOnlyList<string> lines = WrapAnnotationText(annotation.Text, textPaint, textRect.Width, maxLines);
+        float baseline = textRect.Top - textPaint.FontMetrics.Ascent;
+        foreach (string line in lines)
+        {
+            if (baseline + textPaint.FontMetrics.Descent > textRect.Bottom)
+                break;
+
+            canvas.DrawText(line, textRect.Left, baseline, textPaint);
+            baseline += lineHeight;
+        }
+    }
+
+    private static IReadOnlyList<SKPoint> AnnotationRectangleCorners(IReadOnlyList<SKPoint> points)
+    {
+        if (points.Count >= 4)
+            return points.Take(4).ToList();
+
+        if (points.Count < 2)
+            return points;
+
+        SKRect rect = MeasurementGeometry.NormalizeRect(points[0], points[1]);
+        return
+        [
+            new SKPoint(rect.Left, rect.Top),
+            new SKPoint(rect.Right, rect.Top),
+            new SKPoint(rect.Right, rect.Bottom),
+            new SKPoint(rect.Left, rect.Bottom),
+        ];
+    }
+
+    private static SKPath BuildClosedAnnotationPath(IReadOnlyList<SKPoint> points)
+    {
+        var path = new SKPath();
+        if (points.Count == 0)
+            return path;
+
+        path.MoveTo(points[0]);
+        for (int i = 1; i < points.Count; i++)
+            path.LineTo(points[i]);
+        path.Close();
+        return path;
+    }
+
+    private static bool TryGetAnnotationLocalFrame(
+        IReadOnlyList<SKPoint> corners,
+        out SKMatrix localToPdf,
+        out float width,
+        out float height)
+    {
+        localToPdf = SKMatrix.CreateIdentity();
+        width = 0;
+        height = 0;
+        if (corners.Count < 4)
+            return false;
+
+        SKPoint origin = corners[0];
+        SKPoint xAxis = new(corners[1].X - origin.X, corners[1].Y - origin.Y);
+        SKPoint yAxis = new(corners[3].X - origin.X, corners[3].Y - origin.Y);
+        width = MeasurementGeometry.Distance(corners[0], corners[1]);
+        height = MeasurementGeometry.Distance(corners[0], corners[3]);
+        if (width <= ViewportConstants.ZeroLengthEpsilon ||
+            height <= ViewportConstants.ZeroLengthEpsilon)
+        {
+            return false;
+        }
+
+        localToPdf = new SKMatrix
+        {
+            ScaleX = xAxis.X / width,
+            SkewX = yAxis.X / height,
+            TransX = origin.X,
+            SkewY = xAxis.Y / width,
+            ScaleY = yAxis.Y / height,
+            TransY = origin.Y,
+            Persp0 = 0,
+            Persp1 = 0,
+            Persp2 = 1,
+        };
+        return true;
+    }
+
+    private static IReadOnlyList<string> WrapAnnotationText(string text, SKPaint paint, float maxWidth, int maxLines)
+    {
+        text = string.IsNullOrWhiteSpace(text) ? "Note" : text.Trim();
+        var result = new List<string>();
+        foreach (string paragraph in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            string current = "";
+            foreach (string word in paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string candidate = string.IsNullOrWhiteSpace(current) ? word : $"{current} {word}";
+                if (paint.MeasureText(candidate) <= maxWidth || string.IsNullOrWhiteSpace(current))
+                {
+                    current = candidate;
+                    continue;
+                }
+
+                result.Add(current);
+                if (result.Count >= maxLines)
+                    return result;
+                current = word;
+            }
+
+            if (!string.IsNullOrWhiteSpace(current))
+                result.Add(current);
+            if (result.Count >= maxLines)
+                return result;
+        }
+
+        return result.Count == 0 ? ["Note"] : result;
     }
 
     private static string FormatAnnotationLength(SKPoint start, SKPoint end, double scaleMetersPerPt, UnitMode unitMode)
@@ -198,23 +624,24 @@ public static class PdfExporter
         return AnnotationGlyphRenderer.FormatLength(lengthPt, (float)scaleMetersPerPt, unitMode);
     }
 
-    private static void DrawMeasurement(
+    private static void DrawMeasurementGeometry(
         SKCanvas canvas,
         Measurement measurement,
         SKColor color,
-        double pageScaleMetersPerPt,
-        UnitMode unitMode)
+        PdfExportOptions options)
     {
         string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
         if (measurement.Points.Count == 0)
             return;
 
+        float strokeScale = ExportStrokeScale(options);
+        float pointScale = ExportPointScale(options);
         using var stroke = new SKPaint
         {
             IsAntialias = true,
             Color = color,
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = 1.4f,
+            StrokeWidth = 1.4f * strokeScale,
             StrokeCap = SKStrokeCap.Round,
             StrokeJoin = SKStrokeJoin.Round,
         };
@@ -231,8 +658,7 @@ public static class PdfExporter
             };
             canvas.DrawPath(path, fill);
             canvas.DrawPath(path, stroke);
-            DrawJoistLayout(canvas, measurement, color);
-            DrawMeasurementLabel(canvas, MeasurementLabelPoint(measurement), measurement.Label(pageScaleMetersPerPt, unitMode), color, centered: true);
+            DrawJoistLayout(canvas, measurement, color, options, drawSegments: true, drawLabels: false);
             return;
         }
 
@@ -240,29 +666,81 @@ public static class PdfExporter
         {
             for (int i = 1; i < measurement.Points.Count; i++)
                 canvas.DrawLine(measurement.Points[i - 1], measurement.Points[i], stroke);
-            DrawMeasurementLabel(canvas, measurement.Points[^1], measurement.Label(pageScaleMetersPerPt, unitMode), color, centered: false);
             return;
         }
 
-        using var pointFill = new SKPaint
-        {
-            IsAntialias = true,
-            Color = color,
-            Style = SKPaintStyle.Fill,
-        };
-        using var pointStroke = new SKPaint
-        {
-            IsAntialias = true,
-            Color = SKColors.White,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 0.9f,
-        };
         foreach (SKPoint point in measurement.Points)
         {
-            canvas.DrawCircle(point, 3.8f, pointFill);
-            canvas.DrawCircle(point, 3.8f, pointStroke);
+            float size = 7.6f * pointScale;
+            var box = new SKRect(
+                point.X - size / 2f,
+                point.Y - size / 2f,
+                point.X + size / 2f,
+                point.Y + size / 2f);
+            MeasurementGlyph.DrawSkia(canvas, MeasurementGlyph.CountKind(measurement.CountSymbol), color, box);
         }
     }
+
+    private static void DrawMeasurementLabels(
+        SKCanvas canvas,
+        Measurement measurement,
+        SKColor color,
+        double pageScaleMetersPerPt,
+        PdfExportOptions options)
+    {
+        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
+        if (measurement.Points.Count == 0)
+            return;
+
+        if (type == "area" && measurement.Points.Count >= 3)
+        {
+            DrawJoistLayout(canvas, measurement, color, options, drawSegments: false, drawLabels: true);
+            if (ShouldExportMeasurementLabel(measurement.MType, options))
+            {
+                DrawMeasurementLabel(
+                    canvas,
+                    MeasurementLabelPoint(measurement),
+                    measurement.Label(pageScaleMetersPerPt, options.UnitMode),
+                    color,
+                    centered: true,
+                    ExportLabelScale(options));
+            }
+            return;
+        }
+
+        if (!ShouldExportMeasurementLabel(measurement.MType, options))
+            return;
+
+        DrawMeasurementLabel(
+            canvas,
+            measurement.Points[^1],
+            measurement.Label(pageScaleMetersPerPt, options.UnitMode),
+            color,
+            centered: false,
+            ExportLabelScale(options));
+    }
+
+    private static bool ShouldExportMeasurementLabel(string measurementType, PdfExportOptions options)
+    {
+        if (!options.ShowMeasurementLabels)
+            return false;
+
+        return OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        {
+            "point" => options.ShowCountLabels,
+            "area" => options.ShowAreaLabels,
+            _ => options.ShowLineLabels,
+        };
+    }
+
+    private static float ExportStrokeScale(PdfExportOptions options) =>
+        (float)Math.Clamp(options.MeasurementStrokeScale, 0.25, AppSettingsStore.PdfExportScaleMax);
+
+    private static float ExportPointScale(PdfExportOptions options) =>
+        (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);
+
+    private static float ExportLabelScale(PdfExportOptions options) =>
+        BaseExportLabelScale * (float)Math.Clamp(options.MeasurementLabelScale, 0.50, AppSettingsStore.PdfExportScaleMax);
 
     private static SKPath BuildPdfExportAreaPath(Measurement measurement)
     {
@@ -320,7 +798,8 @@ public static class PdfExporter
         SKPoint point,
         string label,
         SKColor color,
-        bool centered)
+        bool centered,
+        float labelScale)
     {
         if (string.IsNullOrWhiteSpace(label))
             return;
@@ -332,9 +811,9 @@ public static class PdfExporter
         if (lines.Length == 0)
             return;
 
-        const float textSize = 7.5f;
-        const float padX = 2.8f;
-        const float padY = 1.8f;
+        float textSize = 7.5f * labelScale;
+        float padX = 2.8f * labelScale;
+        float padY = 1.8f * labelScale;
         using var textPaint = new SKPaint
         {
             IsAntialias = true,
@@ -348,8 +827,9 @@ public static class PdfExporter
 
         float lineHeight = textSize * 1.22f;
         float height = lineHeight * lines.Length;
-        float left = centered ? point.X - width / 2f - padX : point.X + 4f;
-        float top = centered ? point.Y - height / 2f - padY : point.Y + 4f;
+        float offset = 4f * labelScale;
+        float left = centered ? point.X - width / 2f - padX : point.X + offset;
+        float top = centered ? point.Y - height / 2f - padY : point.Y + offset;
         var box = new SKRect(left, top, left + width + padX * 2, top + height + padY * 2);
 
         using var background = new SKPaint
@@ -363,7 +843,7 @@ public static class PdfExporter
             IsAntialias = true,
             Color = color.WithAlpha(230),
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = 0.7f,
+            StrokeWidth = 0.7f * labelScale,
         };
         canvas.DrawRoundRect(box, 2.2f, 2.2f, background);
         canvas.DrawRoundRect(box, 2.2f, 2.2f, border);
@@ -376,7 +856,13 @@ public static class PdfExporter
         }
     }
 
-    private static void DrawJoistLayout(SKCanvas canvas, Measurement measurement, SKColor color)
+    private static void DrawJoistLayout(
+        SKCanvas canvas,
+        Measurement measurement,
+        SKColor color,
+        PdfExportOptions options,
+        bool drawSegments,
+        bool drawLabels)
     {
         if (!measurement.JoistEnabled)
             return;
@@ -385,25 +871,29 @@ public static class PdfExporter
         if (!layout.HasScale || layout.Count == 0)
             return;
 
-        using var joistStroke = new SKPaint
+        if (drawSegments)
         {
-            IsAntialias = true,
-            Color = color.WithAlpha(225),
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 0.85f,
-            StrokeCap = SKStrokeCap.Round,
-        };
-        foreach (JoistSegment segment in layout.Segments)
-            canvas.DrawLine(segment.Start, segment.End, joistStroke);
+            using var joistStroke = new SKPaint
+            {
+                IsAntialias = true,
+                Color = color.WithAlpha(225),
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 0.85f * ExportStrokeScale(options),
+                StrokeCap = SKStrokeCap.Round,
+            };
+            foreach (JoistSegment segment in layout.Segments)
+                canvas.DrawLine(segment.Start, segment.End, joistStroke);
+        }
 
-        if (!measurement.JoistShowLabels || layout.Count > 180)
+        if (!drawLabels || !measurement.JoistShowLabels || layout.Count > 180)
             return;
 
+        float labelScale = ExportLabelScale(options);
         using var labelPaint = new SKPaint
         {
             IsAntialias = true,
             Color = SKColors.Black.WithAlpha(220),
-            TextSize = 5.2f,
+            TextSize = 5.2f * labelScale,
             Typeface = SKTypeface.FromFamilyName("Consolas"),
         };
         using var labelBg = new SKPaint
@@ -419,13 +909,14 @@ public static class PdfExporter
                 (segment.Start.Y + segment.End.Y) / 2f);
             var bounds = new SKRect();
             labelPaint.MeasureText(label, ref bounds);
+            float joistPad = 1.2f * labelScale;
             var bg = new SKRect(
-                mid.X - bounds.Width / 2f - 1.2f,
-                mid.Y - bounds.Height / 2f - 1.2f,
-                mid.X + bounds.Width / 2f + 1.2f,
-                mid.Y + bounds.Height / 2f + 1.2f);
+                mid.X - bounds.Width / 2f - joistPad,
+                mid.Y - bounds.Height / 2f - joistPad,
+                mid.X + bounds.Width / 2f + joistPad,
+                mid.Y + bounds.Height / 2f + joistPad);
             canvas.DrawRect(bg, labelBg);
-            canvas.DrawText(label, bg.Left + 1.2f, bg.Bottom - 1.2f, labelPaint);
+            canvas.DrawText(label, bg.Left + joistPad, bg.Bottom - joistPad, labelPaint);
         }
     }
 
@@ -450,112 +941,65 @@ public static class PdfExporter
                     SheetLegendQuantityTextForPage(item, takeoff.Measurements, page, options.UnitMode),
                     SheetLegendTypeTitle(item),
                     SheetLegendTypeSign(item),
-                    []);
+                    [],
+                    TakeoffGlyphKind(item));
             })
             .Where(entry => entry != null)
             .Cast<SheetLegendEntry>()
             .ToList();
-        if (entries.Count == 0)
-            return;
-
-        float scale = (float)Math.Clamp(options.LegendScale, 0.65, 2.0) * 2f;
-        float textSize = 7.5f * scale;
-        int maxDetailLines = Math.Max(0, entries.Max(entry => entry.Details?.Count ?? 0));
-        float rowHeight = 11.0f * scale * (1 + Math.Min(maxDetailLines, 6) * 0.82f);
-        float titleHeight = 13.0f * scale;
-        float padding = 6.0f * scale;
-        float swatch = 6.5f * scale;
-        float maxBoxWidth = Math.Min(width * 0.58f, 310.0f * scale);
-        float columnWidth = Math.Max(120.0f * scale, Math.Min(maxBoxWidth, 190.0f * scale));
-        int columns = Math.Max(1, Math.Min(entries.Count, (int)Math.Floor(maxBoxWidth / columnWidth)));
-        int rowsPerColumn = Math.Max(1, (int)Math.Ceiling(entries.Count / (double)columns));
-        float boxWidth = padding * 2 + columns * columnWidth;
-        float boxHeight = padding * 2 + titleHeight + rowsPerColumn * rowHeight;
-        (float x, float y) = LegendBoxOrigin(width, height, boxWidth, boxHeight, options.LegendAnchor);
-
-        using var background = new SKPaint
-        {
-            IsAntialias = true,
-            Color = SKColors.White.WithAlpha(226),
-            Style = SKPaintStyle.Fill,
-        };
-        using var border = new SKPaint
-        {
-            IsAntialias = true,
-            Color = new SKColor(30, 41, 59, 185),
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 0.8f,
-        };
-        canvas.DrawRoundRect(new SKRect(x, y, x + boxWidth, y + boxHeight), 3, 3, background);
-        canvas.DrawRoundRect(new SKRect(x, y, x + boxWidth, y + boxHeight), 3, 3, border);
-
-        using var titlePaint = new SKPaint
-        {
-            IsAntialias = true,
-            Color = new SKColor(15, 23, 42),
-            TextSize = textSize,
-        };
-        using var textPaint = new SKPaint
-        {
-            IsAntialias = true,
-            Color = new SKColor(15, 23, 42),
-            TextSize = textSize,
-        };
-        canvas.DrawText(entries.Count > 1 ? $"Legend ({entries.Count})" : "Legend", x + padding, y + padding + textSize, titlePaint);
-
-        for (int i = 0; i < entries.Count; i++)
-        {
-            int column = i / rowsPerColumn;
-            int row = i % rowsPerColumn;
-            SheetLegendEntry entry = entries[i];
-            float rowX = x + padding + column * columnWidth;
-            float rowY = y + padding + titleHeight + row * rowHeight;
-            using var swatchPaint = new SKPaint
-            {
-                IsAntialias = true,
-                Color = ParseSkColor(entry.Color, SKColors.Red),
-                Style = SKPaintStyle.Fill,
-            };
-            canvas.DrawRect(new SKRect(rowX, rowY + 2, rowX + swatch, rowY + 2 + swatch), swatchPaint);
-            float sign = 7.5f * scale;
-            float signX = rowX + swatch + 4 * scale;
-            DrawLegendSignIcon(canvas, entry.Sign, new SKRect(signX, rowY + 1.8f * scale, signX + sign, rowY + 1.8f * scale + sign), textPaint.Color);
-            string text = $"{entry.Name}  {entry.Quantity}";
-            canvas.DrawText(TrimLegendText(text, columnWidth - sign - 7 * scale, textPaint), signX + sign + 4 * scale, rowY + textSize, textPaint);
-            if (entry.Details is { Count: > 0 } details)
-            {
-                float detailY = rowY + textSize * 2.05f;
-                foreach (string detail in details.Take(6))
-                {
-                    canvas.DrawText(
-                        TrimLegendText(detail, columnWidth - swatch - 4 * scale, textPaint),
-                        signX + sign + 4 * scale,
-                        detailY,
-                        textPaint);
-                    detailY += textSize * 1.15f;
-                }
-            }
-        }
+        SheetOverlayRenderer.DrawLegend(
+            canvas,
+            entries,
+            0,
+            0,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            options.LegendAnchor,
+            (float)Math.Clamp(options.LegendScale, 0.25, AppSettingsStore.PdfExportScaleMax));
     }
 
-    private static void DrawLegendSignIcon(SKCanvas canvas, string sign, SKRect box, SKColor color)
+    private static void DrawSheetHeader(
+        SKCanvas canvas,
+        float width,
+        float height,
+        PageInfo page,
+        PdfExportOptions options)
     {
-        using var stroke = new SKPaint
-        {
-            IsAntialias = true,
-            Color = color,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = Math.Max(0.7f, box.Width / 7f),
-            StrokeCap = SKStrokeCap.Round,
-            StrokeJoin = SKStrokeJoin.Round,
-        };
+        SheetOverlayRenderer.DrawHeader(
+            canvas,
+            0,
+            0,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            FormatSheetScale(page.ScaleMetersPerPt),
+            FormatSheetSize(width, height),
+            (float)Math.Clamp(options.HeaderScale, 0.25, AppSettingsStore.PdfExportScaleMax));
+    }
 
-        if (sign.Contains("в—‹", StringComparison.Ordinal))
-            canvas.DrawOval(box, stroke);
-        if (sign.Contains("в–Ў", StringComparison.Ordinal))
-            canvas.DrawRect(box, stroke);
-        if (sign.Contains("в•±", StringComparison.Ordinal))
-            canvas.DrawLine(box.Left, box.Bottom, box.Right, box.Top, stroke);
+    private static string FormatSheetScale(double scaleMetersPerPt)
+    {
+        if (scaleMetersPerPt <= 0)
+            return "Scale: not set";
+
+        string scale = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
+        return string.IsNullOrWhiteSpace(scale)
+            ? "Scale: not set"
+            : $"Scale: {scale}";
+    }
+
+    private static string FormatSheetSize(float widthPt, float heightPt)
+    {
+        double widthIn = widthPt / 72.0;
+        double heightIn = heightPt / 72.0;
+        return $"{widthIn:F2} x {heightIn:F2}";
     }
 
     private static string SheetLegendQuantityTextForPage(
@@ -601,6 +1045,12 @@ public static class PdfExporter
     private static string SheetLegendTypeSign(TakeoffItem item) =>
         item.IsJoistArea ? MeasurementTypeSign("area") : TakeoffTypeSign(item);
 
+    private static MeasurementGlyphKind TakeoffGlyphKind(TakeoffItem item) =>
+        MeasurementGlyph.Parse(
+            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+            joist: item.IsJoistArea,
+            countSymbol: item.CountSymbol);
+
     private static string TakeoffTypeTitle(TakeoffItem item) =>
         item.IsJoistArea ? "Joist" : MeasurementTypeTitle(item.MeasurementType);
 
@@ -622,50 +1072,6 @@ public static class PdfExporter
             "area" => "в–Ў",
             _ => "в•±",
         };
-
-    private static (float X, float Y) LegendBoxOrigin(float pageWidth, float pageHeight, float boxWidth, float boxHeight, string anchor)
-    {
-        const float margin = 18.0f;
-        string normalized = NormalizeLegendAnchor(anchor);
-        float x = normalized switch
-        {
-            "TopCenter" or "Center" or "BottomCenter" => (pageWidth - boxWidth) / 2,
-            "TopRight" or "RightCenter" or "BottomRight" => pageWidth - boxWidth - margin,
-            _ => margin,
-        };
-        float y = normalized switch
-        {
-            "TopLeft" or "TopCenter" or "TopRight" => margin,
-            "LeftCenter" or "Center" or "RightCenter" => (pageHeight - boxHeight) / 2,
-            _ => pageHeight - boxHeight - margin,
-        };
-        return (Math.Clamp(x, margin, Math.Max(margin, pageWidth - boxWidth - margin)),
-                Math.Clamp(y, margin, Math.Max(margin, pageHeight - boxHeight - margin)));
-    }
-
-    private static string NormalizeLegendAnchor(string? anchor)
-    {
-        string clean = (anchor ?? "").Trim();
-        return clean switch
-        {
-            "TopLeft" or "TopCenter" or "TopRight" or
-            "LeftCenter" or "Center" or "RightCenter" or
-            "BottomLeft" or "BottomCenter" or "BottomRight" => clean,
-            _ => "BottomRight",
-        };
-    }
-
-    private static string TrimLegendText(string text, float maxWidth, SKPaint paint)
-    {
-        if (paint.MeasureText(text) <= maxWidth)
-            return text;
-
-        const string ellipsis = "...";
-        string clean = text.Trim();
-        while (clean.Length > 0 && paint.MeasureText(clean + ellipsis) > maxWidth)
-            clean = clean[..^1].TrimEnd();
-        return clean.Length == 0 ? ellipsis : clean + ellipsis;
-    }
 
     private static SKColor ParseSkColor(string value, SKColor fallback)
     {

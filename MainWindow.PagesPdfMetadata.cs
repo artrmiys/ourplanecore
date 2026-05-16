@@ -88,19 +88,24 @@ public partial class MainWindow
         TxtStatus.Text = $"Analyzing PDF metadata for {pages.Count} page(s)...";
 
         OurPlaneCoreJob job = _currentJob;
-        List<PdfMetadataPageResult> results = await Task.Run(() =>
+        List<PdfMetadataPageResult> results;
+        using (ShowBusyOverlay($"Analyzing PDF metadata for {pages.Count} page(s)..."))
         {
-            var analyzed = new List<PdfMetadataPageResult>();
-            foreach (PageInfo page in pages)
+            await WaitForBusyOverlayRenderAsync();
+            results = await Task.Run(() =>
             {
-                if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
-                    analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                else
-                    analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-            }
+                var analyzed = new List<PdfMetadataPageResult>();
+                foreach (PageInfo page in pages)
+                {
+                    if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
+                        analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
+                    else
+                        analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
+                }
 
-            return analyzed;
-        });
+                return analyzed;
+            });
+        }
 
         int okCount = results.Count(result => result.Ok);
         int failCount = results.Count - okCount;
@@ -144,7 +149,7 @@ public partial class MainWindow
         ApplyPdfMetadataResults(job, results, dialog.Rows);
     }
 
-    private void ApplyPdfMetadataResults(
+    private PdfMetadataApplySummary ApplyPdfMetadataResults(
         OurPlaneCoreJob job,
         IReadOnlyList<PdfMetadataPageResult> results,
         IReadOnlyList<PdfMetadataPreviewRow> rows)
@@ -256,6 +261,7 @@ public partial class MainWindow
         _currentPdfPath = "";
         ReloadPagesTree(selectAfter ?? _currentJob?.PagesRoot);
         TxtStatus.Text = $"PDF metadata applied: {renamed} renamed, {scaled} scaled, {failed} failed.";
+        return new PdfMetadataApplySummary(renamed, scaled, failed);
     }
 
     private static PdfSheetMetadata CreateManualSheetMetadata(PageInfo page) =>

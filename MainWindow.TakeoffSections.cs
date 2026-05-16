@@ -35,7 +35,16 @@ public partial class MainWindow
 
     private void AttachTakeoffSectionContextMenu(TreeViewItem tvi, TakeoffItem item, Measurement measurement)
     {
-        tvi.ContextMenu = BuildTakeoffSectionContextMenu(new TakeoffMeasurementNode(item, measurement));
+        tvi.ContextMenu = new ContextMenu();
+        tvi.ContextMenuOpening += TakeoffSection_ContextMenuOpening;
+    }
+
+    private void TakeoffSection_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not TreeViewItem { Tag: TakeoffMeasurementNode node } item)
+            return;
+
+        item.ContextMenu = BuildTakeoffSectionContextMenu(node);
     }
 
     private ContextMenu BuildTakeoffSectionContextMenu(TakeoffMeasurementNode anchor)
@@ -51,6 +60,7 @@ public partial class MainWindow
             selectedCount > 1 ? $"Set Notes for {selectedCount} Rows..." : "Set Notes...",
             true,
             () => EditTakeoffSectionNotes(anchor)));
+        menu.Items.Add(BuildTakeoffSectionCountDisplayMenu(anchor));
         menu.Items.Add(MakeMenuItem($"Rename {title}", singleSelection, () => RenameSection(item, measurement)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
@@ -61,6 +71,17 @@ public partial class MainWindow
             selectedCount > 1 ? $"Select {selectedCount} on Canvas" : "Select on Canvas",
             true,
             () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true))));
+        bool isAreaSection =
+            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+        menu.Items.Add(MakeMenuItem(
+            "Set / Reset Joist Direction",
+            isAreaSection,
+            () => SetJoistDirectionForSection(item, measurement)));
+        menu.Items.Add(MakeMenuItem(
+            "Set Direction for All Areas",
+            isAreaSection,
+            () => SetJoistDirectionForAllAreas(item, measurement)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
             selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
@@ -82,7 +103,7 @@ public partial class MainWindow
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         panel.Children.Add(CreateMeasurementTypeIcon(
-            measurement.JoistEnabled ? "joist" : OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
+            measurement,
             BrushFromHex(measurement.Color, Brushes.Gray),
             12,
             new Thickness(0, 0, 7, 0)));
@@ -186,11 +207,12 @@ public partial class MainWindow
         _activeItem = item;
         _viewport.ActiveColor = item.Color;
         _viewport.ActiveTakeoffFolder = item.FolderPath;
-        SetTool(item.MeasurementType);
+        _viewport.ActiveCountSymbol = item.CountSymbol;
+        SetTool(ToolForTakeoffItem(item));
         RefreshActiveTakeoffVisuals();
-        if (_activeTool == item.MeasurementType)
+        if (IsRecordingTakeoffItem(item))
             TxtStatus.Text = item.MeasurementType == "point"
                 ? $"Add counts for {item.Name}."
-                : $"New {MeasurementTypeTitle(item.MeasurementType)} section for {item.Name}.";
+                : $"New {TakeoffTypeTitle(item)} section for {item.Name}.";
     }
 }

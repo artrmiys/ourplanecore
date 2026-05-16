@@ -337,7 +337,7 @@ public static class PdfSheetMetadataService
         var candidatePdfs = ResolveSourcePdfCandidates(job).ToList();
         if (candidatePdfs.Count == 0)
         {
-            error = $"Source PDF is missing and no E-Wood/source candidate folder was found: {page.PdfPath}";
+            error = $"Source PDF is missing and no source candidate folder was found: {page.PdfPath}";
             return false;
         }
 
@@ -406,9 +406,9 @@ public static class PdfSheetMetadataService
         if (Directory.Exists(jobSources))
             roots.Add(jobSources);
 
-        string? ewoodSource = ResolveEWoodSourceRoot(job.RootPath);
-        if (!string.IsNullOrWhiteSpace(ewoodSource) && Directory.Exists(ewoodSource))
-            roots.Add(ewoodSource);
+        string? projectSource = ResolveProjectSourceRoot(job.RootPath);
+        if (!string.IsNullOrWhiteSpace(projectSource) && Directory.Exists(projectSource))
+            roots.Add(projectSource);
 
         return roots
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -427,7 +427,7 @@ public static class PdfSheetMetadataService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static string? ResolveEWoodSourceRoot(string jobRoot)
+    private static string? ResolveProjectSourceRoot(string jobRoot)
     {
         string full = Path.GetFullPath(jobRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string marker = Path.Combine("3.Final_for_check", "---", "Jobs");
@@ -445,7 +445,7 @@ public static class PdfSheetMetadataService
 
     private static string ExtractSheetKey(string value)
     {
-        Match match = Regex.Match(value ?? "", @"\b([A-Za-z]{1,3})-?(\d{1,4}[A-Za-z]?)\b");
+        Match match = Regex.Match(value ?? "", @"\b([A-Za-z]{1,3})-?(\d{1,4}(?:\.\d+)?[A-Za-z]?)\b");
         if (!match.Success)
             return "";
         return (match.Groups[1].Value + match.Groups[2].Value).ToLowerInvariant();
@@ -621,6 +621,10 @@ public static class PdfSheetMetadataService
     private static string NormalizeSheetKey(string value, string sheetLabel)
     {
         string source = string.IsNullOrWhiteSpace(value) ? sheetLabel : value;
+        string compact = Regex.Replace(source.Trim(), @"\s+", "").Replace("-", "");
+        if (Regex.IsMatch(compact, @"^[A-Za-z]{1,3}\d{1,4}(?:\.\d+)?[A-Za-z]?$"))
+            return compact;
+
         return new string(source
             .ToLowerInvariant()
             .Where(char.IsLetterOrDigit)

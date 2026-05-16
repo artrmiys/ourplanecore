@@ -10,12 +10,15 @@ public sealed class TakeoffItem
     public string Color { get; set; } = "#FF4444";
     public string FolderPath { get; set; } = "";
     public string MeasurementType { get; set; } = "line";
+    public string CountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public double UnitPrice { get; set; }
     public string Notes { get; set; } = "";
     public bool IsJoistTakeoff { get; set; }
     public string JoistType { get; set; } = "";
     public double JoistSpacingInches { get; set; } = 16;
     public double JoistDirectionDegrees { get; set; }
+    public bool JoistDirectionFollowsAreaRotation { get; set; } = true;
+    public bool JoistAddEndJoist { get; set; } = true;
     public string JoistPitch { get; set; } = "";
     public string JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
     public bool JoistShowLabels { get; set; }

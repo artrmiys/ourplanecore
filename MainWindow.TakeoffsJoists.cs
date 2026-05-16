@@ -7,6 +7,8 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private List<Measurement>? _pendingJoistDirectionApplyTargets;
+
     private void SetJoistDirectionFromSelectedLine(TreeViewItem tvi, TakeoffItem item)
     {
         if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
@@ -18,16 +20,111 @@ public partial class MainWindow
         Measurement? area = SelectedJoistAreaMeasurement(item);
         if (area == null)
         {
-            string message = "Select one Area measurement on the sheet first, then run this joist direction command.";
+            string message = "Select one Area on the sheet, or right-click an Area row and choose Set / Reset Joist Direction.";
             TxtStatus.Text = message;
+            return;
+        }
+
+        SetJoistDirectionForSection(item, area);
+    }
+
+    private void SetJoistDirectionForSection(TakeoffItem item, Measurement area)
+    {
+        StartJoistDirectionCapture(item, area, applyTargets: null);
+    }
+
+    private void SetJoistDirectionForAllAreasFromSelectedLine(TreeViewItem tvi, TakeoffItem item)
+    {
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        {
+            TxtStatus.Text = "Joist direction can only be set on Area takeoff items.";
+            return;
+        }
+
+        Measurement? area = SelectedJoistAreaMeasurement(item);
+        if (area == null)
+        {
+            TxtStatus.Text = "Select or right-click one Area as the direction guide, then run Set Direction for All Areas.";
+            return;
+        }
+
+        SetJoistDirectionForAllAreas(item, area);
+    }
+
+    private void SetJoistDirectionForAllAreas(TakeoffItem item, Measurement guideArea)
+    {
+        var targets = item.Measurements
+            .Where(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .Distinct()
+            .ToList();
+        if (targets.Count == 0)
+        {
+            TxtStatus.Text = "This takeoff item has no Area measurements to update.";
+            return;
+        }
+
+        StartJoistDirectionCapture(item, guideArea, targets);
+    }
+
+    private void StartJoistDirectionCapture(TakeoffItem item, Measurement area, IReadOnlyList<Measurement>? applyTargets)
+    {
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
+            OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area")
+        {
+            TxtStatus.Text = "Joist direction can only be set on Area measurements.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(area.PageFolder))
+        {
+            TxtStatus.Text = "This Area is not linked to a sheet, so joist direction cannot be set from the tree.";
             return;
         }
 
         item.IsJoistTakeoff = true;
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         OurPlaneCoreJobStore.SaveTakeoffItem(item);
-        _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
-        BeginJoistDirectionCapture(item, area);
+
+        void StartCapture()
+        {
+            _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
+            _viewport.SelectMeasurements([area]);
+            _pendingJoistDirectionApplyTargets = NormalizeJoistDirectionApplyTargets(item, applyTargets);
+            if (!BeginJoistDirectionCapture(item, area))
+                _pendingJoistDirectionApplyTargets = null;
+        }
+
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, area.PageFolder))
+        {
+            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(area.PageFolder);
+            if (page == null)
+            {
+                TxtStatus.Text = "Cannot open the sheet for this Area, so joist direction was not started.";
+                return;
+            }
+
+            OpenPageInActiveTab(page);
+            Dispatcher.InvokeAsync(StartCapture);
+            return;
+        }
+
+        StartCapture();
+    }
+
+    private static List<Measurement>? NormalizeJoistDirectionApplyTargets(
+        TakeoffItem item,
+        IReadOnlyList<Measurement>? applyTargets)
+    {
+        if (applyTargets == null)
+            return null;
+
+        var targets = applyTargets
+            .Where(measurement =>
+                item.Measurements.Contains(measurement) &&
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .Distinct()
+            .ToList();
+        return targets.Count == 0 ? null : targets;
     }
 
     private Measurement? SelectedJoistAreaMeasurement(TakeoffItem item)
@@ -39,6 +136,19 @@ public partial class MainWindow
             .ToList();
         if (selected.Count == 1)
             return selected[0];
+
+        var selectedTreeAreas = EnumerateTakeoffTreeItems(TakeoffsTree)
+            .Select(treeItem => treeItem.Tag as TakeoffMeasurementNode)
+            .Where(node =>
+                node != null &&
+                ReferenceEquals(node.Item, item) &&
+                _takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(node)) &&
+                OurPlaneCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) == "area")
+            .Select(node => node!.Measurement)
+            .Distinct()
+            .ToList();
+        if (selectedTreeAreas.Count == 1)
+            return selectedTreeAreas[0];
 
         if (_currentPage != null)
         {
@@ -54,13 +164,20 @@ public partial class MainWindow
         return null;
     }
 
-    private void BeginJoistDirectionCapture(TakeoffItem item, Measurement area)
+    private bool BeginJoistDirectionCapture(TakeoffItem item, Measurement area)
     {
         item.IsJoistTakeoff = true;
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        area.JoistDirectionLocked = false;
-        _viewport.BeginJoistDirectionCapture(area);
-        TxtStatus.Text = $"Joist direction for {item.Name}: draw a two-point line parallel to the joists on the selected area.";
+        bool started = _viewport.BeginJoistDirectionCapture(area);
+        if (started)
+        {
+            string scope = _pendingJoistDirectionApplyTargets is { Count: > 1 } targets
+                ? $" for {targets.Count} areas"
+                : "";
+            TxtStatus.Text = $"Joist direction{scope} in {item.Name}: draw a two-point line parallel to the joists on the selected area.";
+        }
+
+        return started;
     }
 
     private void OnJoistDirectionCaptured(Measurement area, SKPoint start, SKPoint end)
@@ -75,12 +192,22 @@ public partial class MainWindow
             return;
         }
 
+        List<Measurement>? applyTargets = _pendingJoistDirectionApplyTargets;
+        _pendingJoistDirectionApplyTargets = null;
+
         item.IsJoistTakeoff = true;
-        area.JoistDirectionDegrees = directionDegrees;
-        area.JoistDirectionLocked = true;
+        item.JoistDirectionDegrees = directionDegrees;
+        List<Measurement> updatedAreas = applyTargets is { Count: > 0 }
+            ? applyTargets
+            : [area];
+        foreach (Measurement target in updatedAreas)
+        {
+            target.JoistDirectionDegrees = directionDegrees;
+            target.JoistDirectionLocked = true;
+        }
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         OurPlaneCoreJobStore.SaveTakeoffItem(item);
-        _viewport.SelectMeasurements([area]);
+        _viewport.SelectMeasurements(updatedAreas);
         RefreshTreeItem(item);
         RefreshActiveTakeoffVisuals();
         RefreshEstimateTable();
@@ -88,11 +215,18 @@ public partial class MainWindow
         ApplyTakeoffPageHighlights();
         RefreshSheetLegend();
         UpdateTotalDisplay();
-        if (BeginNextPendingJoistDirectionCapture(item, area))
+        if (applyTargets == null && BeginNextPendingJoistDirectionCapture(item, area))
             return;
 
-        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(area, _viewport.ScaleMetersPerPt);
-        TxtStatus.Text = $"Joists generated for {item.Name}: direction {directionDegrees:0.#} deg, {JoistTakeoffCalculator.FormatDiagnostics(layout, _viewport.UnitMode)}{FormatJoistScaleSuffix(area)}.";
+        if (updatedAreas.Count > 1)
+        {
+            JoistLayoutSummary summary = JoistTakeoffCalculator.Summarize(updatedAreas, _viewport.ScaleMetersPerPt);
+            TxtStatus.Text = $"Joist direction {directionDegrees:0.#} deg applied to {updatedAreas.Count} areas in {item.Name}: {JoistTakeoffCalculator.FormatSummary(summary, _viewport.UnitMode)}.";
+            return;
+        }
+
+        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(updatedAreas[0], _viewport.ScaleMetersPerPt);
+        TxtStatus.Text = $"Joists generated for {item.Name}: direction {directionDegrees:0.#} deg, {JoistTakeoffCalculator.FormatDiagnostics(layout, _viewport.UnitMode)}{FormatJoistScaleSuffix(updatedAreas[0])}.";
     }
 
     private bool BeginNextPendingJoistDirectionCapture(TakeoffItem item, Measurement? skip = null)
@@ -108,7 +242,8 @@ public partial class MainWindow
         if (next == null)
             return false;
 
-        _viewport.BeginJoistDirectionCapture(next);
+        if (!_viewport.BeginJoistDirectionCapture(next))
+            return false;
         TxtStatus.Text = $"Set joist direction for next area in {item.Name}: click two points parallel to the joists.";
         return true;
     }

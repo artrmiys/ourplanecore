@@ -1,5 +1,326 @@
 ﻿# Development Log
 
+## 2026-05-15 Ruler, Notes, Takeoffs Bulk Controls, Search
+
+- Changed Ruler hide-on-sheet to snapshot behavior. Pressing the Ruler dot now
+  marks the currently visible ruler annotations on the active sheet as hidden;
+  ruler annotations created afterward stay visible. Turning the dot off shows
+  all ruler annotations again, and turning it on again hides the current set.
+- Added multi-select/delete support for sheet markups in the viewport. Ruler
+  and Note annotations can be selected with a box or Ctrl-add selection and
+  deleted together with `Delete`.
+- Added a Count default-shape control beside the Count tool. New Count takeoffs
+  can start as circle, cross, or square; copied takeoffs keep their stored
+  Count symbol because the property remains on the takeoff item and
+  measurements.
+- Changed new takeoff color fallback to generate vivid random colors, avoiding
+  colors already used on the current sheet and avoiding black/gray. The manual
+  preset color menu remains available.
+- Made the right Takeoffs tree handle group deletion from keyboard `Delete`
+  through preview key handling and a multi-selection fallback anchor.
+- Added bulk hide/show actions for selected linked takeoffs in the left Pages
+  tree page legend rows.
+- Added search boxes above the Pages tree and Takeoffs tree. Pages search
+  filters by sheet/folder name; Takeoffs search filters by takeoff/folder/row
+  name and expands matching ancestors.
+- Fixed the startup error caused by the new Takeoffs search wrapper. The
+  estimating setup now moves the full `TakeoffsTreeHost` into the right-side
+  Takeoffs tab instead of trying to re-parent the already-parented
+  `TakeoffsTree`.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  with 0 warnings and 0 errors, and
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj /p:OutDir=.\cache\test_run\ /p:UseAppHost=false`
+  with `194/194` tests passed.
+- Update package workflow passed: `194/194` tests during packaging, Release
+  publish to `publish\ourplanecore-working-single-20260515-0341`, copied to
+  `C:\Users\User\Desktop\updates\OurPlaneCore`, Desktop shortcut retargeted to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `6DD3494D331869A9BF80137CCFCAADDAC7EF9092B295199CAA825DA2AC56DCB4`.
+- Manual launch check passed from the update package: PID `15064` stayed alive
+  and responsive after startup, loaded the real job Takeoffs tree with 516
+  item(s), and no new `Unhandled UI exception` was logged.
+
+## 2026-05-14 Takeoffs Tree Large-Job Smoke Optimization
+
+- Expanded the Takeoffs tree smoke into a large temporary job: 160 Pages,
+  300 measured takeoffs, 120 bulk-copy takeoffs, and 3 measurements per
+  generated takeoff.
+- Found the mass-copy bottleneck in the left Pages linked-takeoff refresh, not
+  in filesystem copy. Copying 120 nodes spent only about 300 ms in file work,
+  while rebuilding linked rows for all 160 sheets cost about 6.7 seconds.
+- Added deferred Pages linked-takeoff refresh for large copy/move updates.
+  Big copy operations now update the right Takeoffs tree immediately and mark
+  many touched Pages rows dirty; the current/opened sheet refreshes immediately,
+  and other page-linked rows rebuild when the sheet is selected or expanded.
+- Changed active-takeoff selection refresh to repaint touched Pages rows only.
+  Selection no longer rebuilds page-linked child nodes because no measurement
+  data changes on selection.
+- Updated `RevealPagesForTakeoffItems(...)` so normal takeoff selection no
+  longer expands every measured sheet for that takeoff. It still keeps linked
+  rows and selection state correct, but avoids growing the visible Pages tree
+  during ordinary clicks.
+- Enabled the page-measurement lookup for large tree refresh paths and kept the
+  broader disabled move/reorder fast refresh guarded off.
+- Latest large smoke passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\ui_takeoffs_tree_drag_smoke.ps1 -TimeoutSeconds 240 -KeepAppOpen`.
+  Result: 160 pages, 423 takeoff items, selection average 8.5 ms, max 38 ms,
+  folder create 96 ms, bulk copy 120 nodes in 3647 ms, bulk Pages refresh
+  58 ms, estimate refresh 121 ms.
+- Verification passed: `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj`
+  (`193/193`), `git diff --check` with only LF/CRLF warnings, no conflict/
+  `NotImplementedException` scan hits, and
+  `dotnet build .\ourplanecore.sln /p:RestoreIgnoreFailedSources=true /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  with 0 warnings and 0 errors.
+- Release publish is staged at
+  `publish\ourplanecore-working-single-20260514-2322`, SHA256
+  `2A9D30222CC8FB64E16FF07FCF1C1047EF75D52C0049C0AA8EF213BFBA8BB123`.
+  It was copied to `C:\Users\User\Desktop\updates\OurPlaneCore` after the
+  running update exe closed, and the Desktop shortcut was retargeted to that
+  update package.
+
+## 2026-05-14 Takeoffs Tree Selection and Copy Performance
+
+- Investigated the 2-3 second lag when clicking in the right Takeoffs tree and
+  the left Pages linked-takeoff tree.
+- Root cause: ordinary takeoff selection was doing data-refresh work even
+  though no data changed. `TakeoffsTree_SelectedItemChanged(...)` rebuilt page
+  takeoff indicators for every sheet through `RefreshPagesTakeoffIndicators()`,
+  then `UpdateTotalDisplay()` rebuilt the full estimate table.
+- Kept the previous risky fast tree refresh disabled:
+  `FastTakeoffsTreeRefreshEnabled = false`. The safe copy/move/delete paths
+  still use the proven full refresh or targeted post-data-change refreshes.
+- Changed ordinary selection to refresh only page rows touched by the previous
+  or newly selected takeoff via
+  `RefreshPageTakeoffIndicatorsForActiveChange(...)`.
+- Changed `UpdateTotalDisplay(...)` so selection-only updates can skip
+  `RefreshEstimateTable()`; estimate rows still refresh on measurement,
+  property, page, and takeoff data changes.
+- Follow-up root cause for the user's mass-copy/folder-create complaint:
+  takeoff copy/paste and duplicate were still calling `LoadTakeoffsForJob()`
+  after storage copy, forcing a full right-tree rebuild and full post-load
+  totals/Pages refresh.
+- Added a safer incremental copy refresh:
+  `TryApplyTakeoffStructureCopyFast(...)` reads only the copied folder/item
+  subtrees, appends those new UI nodes, registers the path index, updates
+  `_takeoffItems`, then refreshes only the affected Pages rows plus sheet
+  legend and estimate data. The storage copy path itself is unchanged.
+- Added regression coverage:
+  `takeoff tree regression selection uses targeted ui refresh` and
+  `takeoff tree regression copy uses incremental tree refresh`.
+- Expanded the app-side smoke to cover move in/out, folder create, and bulk
+  copy. The smoke opens a temporary job in the app and verified creating a
+  folder in 26 ms and copying 60 takeoff nodes into a folder in 890 ms.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln` (0 warnings, 0 errors),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`193/193`),
+  `.\run-takeoffs-tree-smoke.cmd -TimeoutSeconds 60`, and the update-package
+  workflow (`193/193` during package build).
+- Latest package: Release publish to
+  `publish\ourplanecore-working-single-20260514-2215`, update-folder
+  replacement at `C:\Users\User\Desktop\updates\OurPlaneCore`, final Desktop
+  shortcut retarget to the update package, and SHA256
+  `4A553A76684B7759F0A664CED1CDB970F234145110C11D17A0FE89121424250D`.
+
+## 2026-05-14 Copy and Duplicate Keep Visible Names
+
+- Changed the shared node-copy storage path so copy/paste and duplicate keep
+  the exact visible page/takeoff name. The app may still create a unique hidden
+  folder path on disk, but `Data.xml`, `PageInfo.Name`, and `TakeoffItem.Name`
+  stay one-for-one with the original name.
+- Removed the old `- Copy` / `- Copy 2` display-name generation from
+  `Models/Storage/NodeStore.cs`.
+- The fix applies to Pages copy/paste, Page duplicate, Takeoffs copy/paste,
+  Takeoffs duplicate, and drag/drop copy paths that use the shared
+  `CopyNode(...)` route.
+- Extended regression coverage so repeated copies of the same Page or Takeoff
+  use different hidden folders but still display the same exact name in the
+  program, with no `Copy`, no `(2)`, and no visible suffix.
+- Cleaned the currently active job
+  `C:\Users\User\Desktop\Takeof_desctop\76. NP United residences_Bliffert`:
+  removed existing visible `Copy` suffixes from 25 live `Data.xml` records
+  under `Pages` and `Takeoffs` (8 Pages, 17 Takeoffs), without renaming hidden
+  folders. Backup of the changed files:
+  `C:\tmp\ourplanecore-visible-name-cleanup-20260514-184934`.
+- Fixed the remaining measurement-paste path: choosing `No = create new copied
+  takeoff items` now preserves the source takeoff name instead of appending
+  `Copy`.
+- After the follow-up repro, cleaned 9 newly created visible `Copy` suffixes
+  from live Takeoffs in the active job. Backup:
+  `C:\tmp\ourplanecore-visible-name-cleanup-20260514-185647`.
+- Verification passed:
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`191/191`), then
+  update-package workflow with build 0 warnings / 0 errors, `190/190` tests,
+  Release publish to `publish\ourplanecore-working-single-20260514-1850`,
+  update-folder replacement at `C:\Users\User\Desktop\updates\OurPlaneCore`,
+  final Desktop shortcut retarget to the update package, and SHA256
+  `1CC8ED751F3FA7BC4900BF2112EC5A593EF9110D72115103012A619D83564D4F`.
+- Latest package after the measurement-paste fix: build 0 warnings / 0 errors,
+  tests `191/191`, Release publish to
+  `publish\ourplanecore-working-single-20260514-1857`, update-folder
+  replacement at `C:\Users\User\Desktop\updates\OurPlaneCore`, final Desktop
+  shortcut retarget to the update package, and SHA256
+  `539BA9283E16834CA26BB0FD6562E67958BDA6D03578E9EBD8F4A237F952FFF2`.
+
+## 2026-05-14 Ruler Visibility and Count Display Symbols
+
+- Added a sheet-level Ruler visibility dot that behaves like the page-linked
+  takeoff visibility dot: filled means visible on the current sheet, empty
+  means all Ruler markups on that sheet are hidden.
+- The Ruler visibility state is persisted in page metadata and is respected by
+  viewport rendering, selection/editing, and PDF export.
+- Added Count display symbols: Circle, Cross, and Square. The canonical values
+  live in `Models/CountDisplaySymbol.cs`, with persistence on both
+  `TakeoffItem.CountSymbol` and `Measurement.CountSymbol`.
+- Count display can be changed from the right Takeoffs tree item menu,
+  Takeoffs section/count row menu, left Pages linked-takeoff row menu, and the
+  viewport measurement context menu. Multi-selected Count rows or canvas
+  measurements are updated together.
+- The chosen Count symbol is rendered consistently in the viewport, right
+  Takeoffs tree, left Pages linked rows, sheet legend overlay, PDF legend, and
+  exported PDF measurement marks.
+- Added storage regression coverage:
+  `count display symbol persists on takeoff and measurements`.
+- The Desktop shortcut now targets the packaged update build at
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, with working
+  directory `C:\Users\User\Desktop\updates\OurPlaneCore`.
+- Detailed handoff:
+  `docs/RULER_AND_COUNT_DISPLAY_HANDOFF_2026_05_14.md`.
+- Verification and package refresh passed:
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`190/190`), then
+  the update-package workflow with `dotnet build .\ourplanecore.sln`
+  (0 warnings, 0 errors), `190/190` tests, Release publish to
+  `publish\ourplanecore-working-single-20260514-1539`, update-folder
+  replacement at `C:\Users\User\Desktop\updates\OurPlaneCore`, final Desktop
+  shortcut retarget to the update package, and SHA256
+  `1E738BC6F87009A2749475E1F62B882B55DAC6D6C902D80FFAB9D9A6B5A368DE`.
+
+## 2026-05-13 Takeoffs Tree Stale RF UI Fix
+
+- Investigated RF takeoffs that appeared outside folders in the open UI even though they had already moved on disk under `Takeoffs\sqfts`.
+- Root cause: stale in-memory Takeoffs tree rows pointed at old folder paths that no longer existed, so drag/drop built invalid payloads and appeared to do nothing.
+- Added stale row detection/reload in `MainWindow.TakeoffsSelectionHelpers.cs` and wired it into Takeoffs mouse-down and drag-start paths.
+- Hardened Takeoffs drag cleanup so aborted drags reset state and clear drop cues.
+- Added regression checks for stale-row reload and drag-state reset behavior.
+- Detailed handoff: `docs/TAKEOFF_TREE_STALE_RF_UI_FIX_2026_05_13.md`.
+- Verification passed: isolated build/test (`185/185`), then normal Debug build/test (`185/185`) after closing the running app.
+
+## 2026-05-13 New Job Flow and Crop Note Output Fix
+
+- Changed `New Job` so it uses the existing job-folder context before asking
+  for a parent folder. It now checks the selected Job Picker root, selected or
+  recent job parent, current job parent, and saved job roots.
+- After a new job is created and opened, the app immediately opens the existing
+  `Import PDF(s)` picker so the user can load PDFs without a second manual
+  command.
+- Diagnosed `AI crop here -> note` responses with placeholder text. The crop
+  images were saved correctly, but the raw OpenAI response was `incomplete`
+  because `max_output_tokens` was consumed by reasoning before any
+  `output_text` was produced.
+- Updated `OpenAiRequestRunner` to send low reasoning effort for reasoning
+  models, give crop-note requests a larger output budget, and treat
+  incomplete/no-text Responses API results as failed instead of saving fake
+  `done` responses.
+- Added `OpenAiResponseParser` plus regression coverage for normal
+  `output_text` extraction and `max_output_tokens` incomplete responses.
+- Detailed handoff:
+  `docs/JOB_CREATION_AND_CROP_NOTE_HANDOFF_2026_05_13.md`.
+- Verification:
+  - `dotnet build .\ourplanecore.sln` passed with 0 warnings and 0 errors;
+  - `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` passed
+    `182/182`.
+
+## 2026-05-07 Report Builder Template View
+
+- Kept the colored takeoff glyph icons in the Takeoffs tree, viewport legend,
+  and PDF legend. Removed only the old text-style type prefixes from display
+  labels, so rows now say `Line`, `Area`, `Count`, or `Joist` without extra
+  square/diagonal text markers.
+- Removed the temporary `Excel Blocks` workflow. It was the wrong direction for
+  this task because it created takeoff items instead of building the editable
+  report surface.
+- Added a separate `4 Report Builder` workspace tab. It is independent from all
+  export commands; CSV/TXT/Excel/PDF export behavior is unchanged.
+- `Report Builder` reads
+  `Desktop\03_Excel_Templates_Macros\Templates\TemplateCom.xlsm`, sheet
+  `Detailed Frame List`, directly from the workbook package even when Excel has
+  the file open.
+- Added `ReportTemplateService`:
+  - shows the Excel-like report table with columns `A-H` and `J-L`;
+  - uses the template's column widths as the first sizing pass;
+  - loads rows from the template so rows `1-10` form the initial header area;
+  - highlights header/table-header/section/yellow input-block rows separately;
+  - keeps cells editable in the app so mapping rules can be added gradually.
+- Added regression tests for loading a synthetic Detailed Frame List workbook
+  and for reading the local `TemplateCom.xlsm` when it exists.
+- Traced the real Excel `A3_Walls_Calc_AllGroup` macro on a copied
+  `TemplateCom.xlsm` using the sample wall source:
+  `1 / corners 22 EA / ext 2x6 9.00 207.38 FT / corr 2x6 9.00 212.14 FT /
+  dem 2x6 9.00 168.43 FT`.
+- Recreated the first A3 wall block in `Report Builder`:
+  - source rows are selected in `J:K` just like the macro selection;
+  - `Apply Walls` writes the same target block values observed from Excel:
+    `Q38=22`, `O40=9,00`, `P40=207,38`, `T40=212,14`, `W40=168,43`;
+  - the table now shows through `AB` so the wall output columns are visible.
+- Added a regression test that applies the A3 wall block rule and asserts those
+  exact target cells.
+- Verification:
+  - `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+    passed with 0 warnings and 0 errors;
+  - `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` passed `99/99`;
+  - `git diff --check` exited with code 0, with only Git LF-to-CRLF warnings.
+- Published and launched the working desktop shortcut build from
+  `publish\ourplanecore-working-single-20260507-1530\ourplanecore.exe`.
+
+## 2026-05-07 Record Mode, Live Dimensions, and Joist Area Shortcut
+
+- Hardened Record mode so the active takeoff target stays locked while Record
+  is on. Accidental clicks on another takeoff, section, page-linked takeoff, or
+  estimating row no longer switch the recording target; the status text tells
+  the user to stop Record first.
+- Added viewport cursor guidance: while the pointer is over a rendered sheet,
+  the canvas draws very faint horizontal/vertical guide rays through the cursor.
+- Expanded takeoff color presets and changed automatic new-takeoff color
+  selection to prefer the least-used visible color, avoiding immediate reuse of
+  the active color when possible.
+- Added faint live dimension text while drawing:
+  - Line and Area Record show per-segment ft labels and a live total while the
+    rubber-band point is moving;
+  - Ruler now shows the current endpoint-to-endpoint distance on the temporary
+    ruler line before the second click.
+- Added a toolbar `J Area` button beside `Area`.
+  - `J Area` creates a new Area takeoff item with joist layout enabled, then
+    starts Area Record immediately.
+  - Default joist settings for this quick path are `Round Up Foot` and
+    `Detailed area label` off.
+  - Hotkey `J` invokes the same J Area tool from the viewport; Command Palette
+    also lists `J Area Tool`.
+- Preserved joist Area behavior through measurement copy/paste:
+  - copying an Area with joists now carries both the measurement's joist state
+    and the source takeoff item's joist settings;
+  - pasting into `new takeoff item(s)` creates a new Area item with the same
+    joist settings instead of downgrading the pasted shape to a plain Area.
+- Fixed top-menu TXT export so it exports the full job takeoff root instead of
+  only the currently selected/first tree item. Excel export still uses the
+  existing selected-root behavior; no segment/edge details were added to
+  CSV/TXT/XLSX export.
+- Added `Export to Current Excel`:
+  - the Takeoffs export menu and Takeoff Manager toolbar can write the selected
+    takeoff folder/item directly into an already open Excel workbook;
+  - the command uses Excel's active workbook and active cell as the insertion
+    point, writes `Name | Value | Unit` rows downward from that cell, formats
+    group headers bold, and does not auto-save the workbook;
+  - it requires an existing Excel instance and reports a clear status if Excel,
+    a workbook, or an active worksheet cell is not available.
+- Published the working desktop shortcut build to:
+  `publish\ourplanecore-working-single-20260507-1530\ourplanecore.exe`.
+- Verification:
+  - `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+    passed with 0 warnings and 0 errors;
+  - `dotnet test .\Tests\OurPlaneCore.Tests.csproj --no-restore` exited with
+    code 0;
+  - `git diff --check` exited with code 0, with only Git LF-to-CRLF warnings.
+
 ## 2026-05-07 Viewport Paper Rendering, Export Paper Color, and PDF Snap
 
 - Hardened sheet opening/switching so the viewport does not flash or remain
@@ -1760,3 +2081,680 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 - Verification:
   `dotnet build .\ourplanecore.sln /p:OutDir=.\\cache\\verify_build\\ /p:UseAppHost=false`
   passed with 0 warnings and 0 errors.
+
+## 2026-05-08 Export Legend Parity, Auto Routing, Detached Sheets, 3D Marker Selection
+
+- Export sheet legend now uses the same Skia overlay renderer as the viewport
+  legend (`Controls/SheetOverlayRenderer.cs`). The intent is visual parity:
+  same glyphs, rows, columns, colors, quantities, anchoring, and fit behavior.
+- PDF export now also draws the sheet scale / sheet-size block with the same
+  shared renderer, so exported sheets include the viewport-style header plus
+  the viewport-style legend when legend export is enabled.
+- Output sizing remains independent from viewport sizing. Viewport controls
+  still drive on-screen legend/header sizes; `PDF Output -> Leg.` drives export
+  legend size, and `PDF Output -> Hdr.` drives export scale/sheet-size header
+  size. Both export defaults are `0.70x` and both can be edited separately in
+  the `0.25x` to `3.0x` range.
+- Added `Models/TakeoffAutoRoutingService.cs` for deterministic E-Wood takeoff
+  label routing and sorting. Area labels such as `base`, `1st`, `2nd`,
+  `deck`, `porch`, `blcny`, `cant`, `flat`, and `rf` route into
+  `Takeoffs/sqfts`. Line labels such as `corners`, `ext`, `cor/corr`, `dem`,
+  `2x8`, `2x6`, `2x4`, and `half` route into `Takeoffs/walls/{level} floor
+  walls` when the active sheet/folder reveals a level.
+- The same auto-sort order now applies to new routed items and to sheet-linked
+  takeoff rows in the Pages tree. Page and linked-takeoff context menus now
+  include `Sort Sheet Legend Auto` while preserving manual order and A-Z sort.
+- The left Pages tree now exposes the same legend sorting rules as batch
+  actions. Page-folder context menus can apply auto/A-Z/reset legend ordering
+  to every sheet under that folder, and multi-selected sheets can be sorted or
+  reset together from the page context menu. The actual auto order is shared
+  through `TakeoffAutoRoutingService.SortPageLegendItems`, so left legend rows,
+  viewport legends, and exported legends use the same label rules.
+- Sheet legends now default to live auto ordering in the left Pages tree, the
+  viewport legend, and PDF legend export. `Sort Sheet Legend Auto` clears the
+  sheet back to auto mode instead of saving another fixed order list. Manual
+  moves, drag/drop, and A-Z sort mark the sheet legend as `manual`; otherwise
+  new `corners/ext/cor/dem/2x8` and `base/1st/2nd/deck/porch` rows insert in
+  the right place without clicking `Legend Auto`.
+- The right Takeoffs tree is not auto-sorted during normal creation or editing.
+  Auto-routing can still choose the correct folder for a new label, but it no
+  longer reorders existing right-side items. Legend/export ordering is computed
+  separately so estimate/report/tree workflows keep their existing item order.
+- Selected sheet workflows were extended: Pages context menu can open up to
+  64 selected sheets in new tabs, detach selected sheets into separate
+  read-only sheet windows, or tile those detached windows on monitor 2 when a
+  second monitor is available. Detached sheet windows reuse `PdfViewport`,
+  measurements, page annotations, hidden takeoff state, and sheet legend data.
+- Sheet Manager now exposes the same selected-sheet open workflow from its
+  multi-select table: `Open Tabs`, `Detach`, and `Tile M2` operate on the
+  selected rows and reuse the same 64-sheet cap. Page tabs also have a context
+  menu to detach the current tab or detach/tile all open page tabs. Tiled
+  detached windows now shrink to the computed grid cell so a 64-window layout
+  stays evenly distributed inside the selected monitor work area instead of
+  overflowing because of the default window minimum size.
+- The left Pages panel now also has visible `Tabs`, `Detach`, and `Tile M2`
+  buttons above the Pages tree, so selected sheets can be opened or detached
+  without discovering the right-click context menu first. The Desktop shortcut
+  `C:\Users\User\Desktop\OurPlaneCore.lnk` was repointed to the fresh published
+  build `publish/ourplanecore-working-single-20260508-1846/ourplanecore.exe`.
+- The left Pages tree linked-takeoff rows now ignore saved manual legend order
+  and always use the automatic E-Wood legend sort. This makes the left-side
+  sheet legend fully automatic even for older jobs that had a stored manual
+  legend order.
+- 3D Massing marker selection was made more explicit. 3D marker pins are larger
+  in both the main Massing preview and the separate 3D window; selected marker
+  ids survive preview redraws; and footprint dots / labels in the 2D Massing
+  preview can be clicked to select the source marker row.
+- 3D Massing from takeoffs now recognizes the auto-routed `Takeoffs/sqfts`
+  folder and direct floor-label items under it. Area takeoffs named `1st`,
+  `2nd`, `3rd`, etc. now become separate draft footprint levels instead of
+  being collapsed into level 1. Wall folders such as `4th floor walls` through
+  higher numeric floors also parse into the matching 3D level.
+- Takeoff-based 3D drafts now seed roof guides instead of stopping at a generic
+  fallback cap. The top footprint creates an eave outline and candidate roof
+  axis, which produces reviewable candidate roof planes until roof markers or
+  manual roof review refine the roof type/pitch. The Massing summary now also
+  shows a simple build system: source takeoffs/markers -> levels -> wall
+  extrusion -> roof guides/planes. Takeoff measurement sources are shown as
+  `takeoff` sources in the marker/source table instead of looking like missing
+  AI marker JSON.
+- Roof takeoff linking is now deterministic for common E-Wood folder/item
+  names. `sqft`, `sqfts`, `sft`, `sf`, and square-foot variants can provide
+  floor plates; `walls`/wall level folders can provide wall footprints; and
+  `eave`/`eve`, `rake`, `gable`, and `gables` takeoffs are linked to the top
+  footprint by source page or level context. The measured eave/rake/gable lines
+  are converted into the same 3D coordinate space as the footprint and shown as
+  reviewable roof guides. OpenAI remains a future fallback only for ambiguous
+  naming/classification, not a hidden geometry solver.
+- Added the first OpenAI-assisted `AI 3D Sort` workflow. It collects compact
+  page, takeoff, measurement, folder, scale, and bounds metadata, sends that to
+  OpenAI through a strict structured JSON schema, and expects a classification
+  plan with roles such as `floor_plate`, `wall`, `eave`, `rake`, `gable`,
+  `opening`, `ignore`, plus floor levels and confidence/reason text.
+- `AI 3D Sort` is available from both the Massing panel and the `3D` manager.
+  The workflow saves the request input, structured plan, and raw OpenAI
+  response under `AI_Context/3d_massing/ai_takeoff_sort/` and
+  `AI_Context/responses/`, then builds `AI_Context/3d_massing/model.json` with
+  the same deterministic takeoff-based 3D draft service.
+- The AI boundary is explicit: OpenAI sorts and explains takeoff roles/levels
+  only. It does not create coordinates, hidden dimensions, geometry, or trusted
+  estimating quantities. Ambiguous folders such as `misc` or combined
+  `eve rake` can now be used when the model returns a reviewable plan, while
+  the actual 3D model still comes from saved Area/Line measurements.
+- Limitations kept explicit: detached sheet windows are viewer windows, not a
+  second editing surface. 3D roof/wall generation is still reviewable draft
+  geometry, not trusted estimating geometry; the next pass should keep improving
+  the simple marker-to-draft workflow instead of hiding decisions in AI.
+- Verification:
+  `dotnet build .\ourplanecore.sln`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj`
+  passed with 108/108 tests.
+
+## 2026-05-08 Legacy 3D Massing Disabled
+
+- Archived the old 3D/Massing implementation before turning it off. Readable
+  `.cs.txt` copies are in `docs/archive/3d_massing_legacy_2026_05_08/`, and
+  the behavior map is in `docs/ARCHIVED_3D_MASSING_LOGIC_2026_05_08.md`.
+- Removed the visible legacy 3D entry points from AI Manager, AI Inbox,
+  command palette, the right-side workspace tabs, and the shared `6 3D`
+  workspace tab.
+- Replaced the shared `6 3D` tab with a clean embedded WPF `Viewport3D`
+  surface and basic camera controls. This viewer does not read
+  `AI_Context/3d_massing/model.json` and does not call the old massing draft
+  service.
+- Left the old implementation files in place as reference for now, but legacy
+  handlers return through `StopLegacy3DMassingWorkflow(...)` so stale calls do
+  not build drafts, run AI 3D sort, auto-detect roofs, open the old detached
+  window, or accept old drafts.
+- Blocked saved legacy `roof_recognition_request` AI Inbox actions from
+  running, previewing, or reviewing, so the old Auto Roof branch cannot
+  re-enter the disabled 3D workflow through existing queued requests.
+
+## 2026-05-08 3D Auto Walls and Slabs
+
+- Added a new `Auto` build path in the right-side `3D` tab and shared `6 3D`
+  workspace. It scans saved takeoff folders such as `walls/1st`, `walls/2nd`,
+  `walls/3rd`, etc., builds line takeoffs into wall prisms, and stacks levels
+  by using each floor's maximum parsed wall height as the next floor base.
+- Added sqft slab display. Area takeoffs under `sqft` / `sqfts` are converted
+  into horizontal floor plates and placed on the matching level elevation.
+- Saved the generated/editable 3D model to `3D_Context/walls_model.json` inside
+  the job, then reload it when the job opens so the 3D result does not vanish
+  during normal tab refreshes.
+- Added a compact 3D wall editor beside the viewport. Clicking a wall fills
+  editable `height ft` and `width in` fields; values can be applied to just the
+  selected segment or to its whole takeoff group. Level bases are then reflowed
+  from the current maximum wall heights.
+- Made the 3D viewport easier to orbit by handling drag/zoom from the whole
+  viewport surface instead of only when the pointer is directly over geometry.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 113/113 tests.
+
+## 2026-05-08 3D Slab Mesh and View Controls Fix
+
+- Replaced the simple fan triangulation used for sqft slabs with a dedicated
+  ear-clipping polygon triangulator. Concave area takeoffs now render as their
+  actual outline instead of drawing long diagonal artifacts from the first
+  point to distant points.
+- Added validation for crossing/self-intersecting slab outlines. Those are not
+  rendered as misleading filled slabs; the 3D log now reports that the area
+  point order should be checked.
+- Added right-mouse panning to both the full `6 3D` viewport and the smaller
+  right-side `3D` viewport. Left drag still orbits, wheel still zooms, and
+  `Fit` recenters the target.
+- Added a compact 3D log box under the right-side `3D` editor. It records model
+  load/save/build messages and slab cleanup/skip messages without covering the
+  viewport.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 115/115 tests.
+
+## 2026-05-08 3D Roof Guide Mode MVP
+
+- Added a new reviewable roof workflow on top of the new `3D_Context` model,
+  without re-enabling the archived legacy Massing workflow.
+- Added right-click viewport entry under `3D > Roof Mode`, plus roof guide
+  types for `Ridge`, `Hip`, `Valley`, `Eave`, `Rake`, and `Pitch`. In Roof
+  Mode the normal sheet viewport records two-point guide lines with the same
+  snap/ortho behavior used by takeoff drawing.
+- Persisted roof guides and preview roof planes in `3D_Context/walls_model.json`
+  next to the current wall/slab model. Auto wall/slab rebuilds now preserve
+  the saved roof guide state instead of clearing it.
+- Added roof controls to the right-side `3D` tab and the shared `6 3D` tab:
+  `Roof`, `Build Roof`, and `Clear Roof`. The compact 3D log records saved
+  guides and preview-build assumptions.
+- Added 3D rendering for roof guide lines and a first preview builder. If a
+  ridge guide exists, the preview builds two draft roof planes from the highest
+  slab/wall boundary using a default 6:12 slope. If no ridge exists, it shows
+  a flat cap preview and logs the missing guide.
+- Kept limitations explicit: this is the first guided review surface, not the
+  final roof solver. Hip/valley/eave/rake/pitch guides are saved and displayed
+  now; the next pass should use them to split true roof planes and resolve
+  intersections/collisions.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 117/117 tests.
+
+## 2026-05-08 3D Roof Guide Cleanup and Issue Markers
+
+- Added deterministic cleanup before `Build Roof`: guide lines are treated as
+  user hints, then snapped/straightened where safe. Endpoints can snap to the
+  roof boundary, guide intersections, and nearby guide connections; lines
+  outside the boundary are clipped when possible.
+- Boundary snapping now prefers the boundary edge that matches the guide
+  direction, so an eave drawn near a corner snaps to the eave edge instead of
+  jumping to the nearest perpendicular side edge.
+- Added persisted `RoofIssues` in `3D_Context/walls_model.json`. The cleanup
+  reports crossing guide lines, outside-boundary lines, too-short guides, and
+  dangling endpoints that do not connect to another guide or boundary.
+- Added visible issue markers in the normal viewport and in the 3D viewer.
+  Red markers are errors, yellow markers are warnings, and the compact 3D log
+  reports how many guides were adjusted and how many issues remain.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 121/121 tests.
+
+## 2026-05-09 3D Roof Build Safety Fix
+
+- Made `Build Roof` conservative when guides are incomplete or contradictory.
+  If cleanup finds red roof-guide issues, the app now keeps the adjusted guide
+  lines and visible issue markers, clears preview planes, and does not build
+  misleading roof geometry.
+- Removed the earlier fake flat-cap fallback when no `Ridge` guide exists.
+  Missing ridge data now blocks plane generation with an explicit message
+  instead of drawing a roof shape that looks valid but is not solved.
+- Added a small `ThreeDRoofBuildService` pipeline so cleanup, blocking, issue
+  preservation, and preview generation are testable outside the UI.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 123/123 tests.
+
+## 2026-05-09 3D Roof Guide Auto-Repair
+
+- Relaxed the previous roof-build block. `Build Roof` now still generates the
+  ridge preview planes when non-fatal guide markers remain, so one bad helper
+  line no longer makes the whole roof disappear.
+- Ridge guides now auto-extend to the roof footprint boundary during cleanup,
+  so a ridge line that was not drawn all the way to the edge is completed
+  before preview geometry is generated.
+- Hip, valley, rake, and pitch guide branches that cross a ridge are trimmed
+  to the ridge connection instead of being treated as a fatal crossing.
+  Other mid-line guide crossings remain visible as review warnings.
+- `rf` / `roof` area takeoffs under `sqfts` are now included in the 3D auto
+  model as a `roof` slab at the top elevation. When present, this gives the
+  roof preview a real roof footprint boundary instead of relying only on the
+  highest floor slab.
+- Multi-piece `RF` footprints are kept separate during `Build Roof`. Guide
+  lines are assigned to the roof footprint polygon that contains them, or to
+  the nearest roof polygon on the same page, so separate roof chunks and
+  separate houses in one project do not get merged into one overlapping roof
+  boundary.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 125/125 tests.
+
+## 2026-05-09 3D Auto Roof Button
+
+- Added `Auto Roof` to both the right-side 3D panel and the shared `6 3D`
+  workspace toolbar. It is the quick path: use existing `RF` / `roof` area
+  takeoffs, create auto ridge guides, build the preview, and save the result.
+- Auto roof guides are marked with `Status = auto_roof`, so pressing
+  `Auto Roof` again replaces only the previous auto-generated ridge guides and
+  leaves manually drawn ridge/hip/valley/eave/rake/pitch guides in place.
+- Added `ThreeDRoofAutoGuideService`. It creates one center ridge per
+  `RF`/`roof` footprint piece, falls back to the highest sqft slab when no roof
+  area exists, and can fall back to wall extents if the model only has walls.
+- Updated roof-region assignment so one guide can serve multiple nearby RF
+  pieces. The builder now clones and clips that guide per roof piece, which
+  lets split RF chunks belong to the same roof while still preventing far-away
+  houses from being merged into one roof boundary.
+- Verification:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll`
+  passed with 127/127 tests.
+
+## 2026-05-09 PlanSwift Project Import MVP Slice
+
+- Added the first read-only PlanSwift project import path. The importer scans
+  PlanSwift `Pages/**/Data.xml` and `Takeoff/**/Data.xml`, reads page GUIDs,
+  `ScaleX`/`ScaleY`, `Scale Units`, item classes, colors, `PageGUID`, and
+  `DigitizerData`, then creates a new OurPlaneCore job instead of modifying the
+  original PlanSwift folder.
+- Added `Models/Import/PlanSwiftProjectScanner.cs`,
+  `PlanSwiftProjectImporter.cs`, `PlanSwiftImportModels.cs`,
+  `PlanSwiftGeometryConverter.cs`, `PlanSwiftPagePdfWriter.cs`, and
+  `PlanSwiftXml.cs`.
+- Added `Tools/PlanSwiftImportTool` with `scan` and `import` commands so the
+  migration can be run before a WPF UI is wired.
+- The page path converts PlanSwift page images into single-page PDFs with the
+  same bitmap dimensions, allowing existing `source.json`, PDF viewport, and
+  `points_pdf` measurement rendering to be reused.
+- Added `Tests/PlanSwiftImportTests.cs`, registered it in `Tests/Program.cs`,
+  and kept the CLI project out of the WPF app compile in `ourplanecore.csproj`.
+- Real scan proof on
+  `C:\Program Files (x86)\PlanSwift10\Data\Storages\Local\Jobs\71. Mallory View_Rid`:
+  187 pages, 412 measured takeoff items, 1676 measured sections, 18 warnings.
+- Smoke imports proved one-page TIFF conversion, full page GUID mapping with
+  placeholder pages, real measurement creation, and generated
+  `import_reports/planswift_import_report.md`.
+- Next queued work: wire `Import > PlanSwift Job...` in WPF, show scanner
+  preview counts, let the user pick destination/name, run the importer with
+  status, open the new job automatically, and surface the import report.
+- Handoff details and exact resume commands are in
+  `docs/PLANSWIFT_PROJECT_IMPORT_PLAN.md`.
+- Verification:
+  `dotnet build .\ourplanecore.sln`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet C:\Users\User\Desktop\ourplanecore\Tests\bin\Debug\net9.0-windows\OurPlaneCore.Tests.dll`
+  passed with 121/121 tests.
+
+## 2026-05-09 Current 3D Status and Joist Area Rotation
+
+- Wrote the current clean 3D roof state into
+  `docs/THREE_D_ROOF_SYSTEM_MAP.md`: walls, sqft slabs, RF/roof footprints,
+  manual roof guides, `Build Roof`, `Auto Roof`, visible roof issues, saved
+  `3D_Context/walls_model.json`, and the current limit that roof output is a
+  reviewable candidate rather than a trusted final solver.
+- Added a Joist Area setting, enabled by default, to rotate the saved joist
+  direction when the area is rotated. This keeps joist lines visually aligned
+  with the area after viewport rotate operations.
+- Added `Joist Properties...` / `Use Area As Joists...` to the viewport
+  right-click menu when the clicked measurement is an Area.
+- Persisted the rotate-with-area flag on takeoff items and measurements, and
+  copied it through measurement clipboard/new takeoff paste paths.
+- Updated viewport transform undo so Ctrl+Z restores both the area geometry
+  and the previous joist direction angle.
+- Verification:
+  `dotnet build .\ourplanecore.sln`
+  passed with 0 warnings and 0 errors.
+- Verification:
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj`
+  passed with 135/135 tests.
+
+## 2026-05-10 Takeoffs Tree Move Performance Handoff
+
+- Continued optimizing the right-side Takeoffs tree drag/drop and bulk move
+  workflow: fast UI subtree moves, path-indexed tree lookup, stable Pages-style
+  drop stripes, targeted selection repaint, skipped pure-reorder legend refresh,
+  and batch page-legend rebasing for multi-node moves.
+- Latest verification during the slice:
+  `dotnet build .\ourplanecore.sln` passed clean and
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` passed `145/145`.
+- Resume details, exact files, next optimization targets, and approval-noise
+  note are in `docs/TAKEOFF_TREE_PERFORMANCE_HANDOFF_2026_05_10.md`.
+
+## 2026-05-10 Sheet Notes and Viewport Smoke Handoff
+
+- Paused the current code pass to write down the requested scope before further
+  editing: add a sheet `Note` markup tool and smoke-test high-zoom Area/drag
+  responsiveness.
+- The user clarified that Select itself works normally; the lag investigation
+  should focus on high-zoom interaction cost, not a broken Select command.
+- Added the `Note` markup tool: toolbar button, `N` shortcut, command palette
+  entry, multiline note prompt, wrapped sheet rendering, move/resize, right-click
+  `Edit Note...`, `annotations.json` persistence, undo text restore, and PDF
+  export rendering.
+- Reduced high-zoom live interaction cost by hiding expensive overlay
+  labels/details during drag/draw frames and limiting snap intersection
+  candidate segments to the pointer search rectangle.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`145/145`),
+  and `dotnet build .\ourplanecore.sln`.
+- UI smoke opened current LastPage `A1.00-A base`, performed wheel zoom and
+  middle-button pan, and confirmed the app stayed responsive. The stock
+  `run-viewport-zoom-smoke.cmd` was blocked in this sandbox because it writes
+  `%APPDATA%` settings during setup.
+- Shortcut `C:\Users\User\Desktop\OurPlaneCore.lnk` was updated to the fresh
+  Debug exe.
+- Scope, touched files, suspected lag cause, and verification details are in
+  `docs/SHEET_NOTES_AND_VIEWPORT_SMOKE_HANDOFF_2026_05_10.md`.
+
+## 2026-05-10 Takeoffs Tree Post-Drop Optimization
+
+- Removed the next post-drop cost in the right-side Takeoffs tree: fast
+  move/reorder now restores selection silently instead of re-entering the full
+  `TakeoffsTree_SelectedItemChanged` path.
+- The fast path now updates only moved/active takeoff rows, active target state,
+  and, for real folder-path rebases, only page takeoff indicator rows for sheets
+  that contain measurements from the moved takeoffs.
+- Page takeoff linked-selection keys are rebased with moved takeoff paths, so
+  page-side linked highlights do not retain stale source paths after drag/drop.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`145/145`), and
+  `dotnet build .\ourplanecore.sln`.
+- Shortcut `C:\Users\User\Desktop\OurPlaneCore.lnk` was updated to the fresh
+  Debug exe.
+
+## 2026-05-10 Takeoffs Move Smoke and Settings Isolation
+
+- Added an app-side Takeoffs move smoke hook and `run-takeoffs-tree-smoke.cmd`.
+  The smoke creates a temp job, opens it through an isolated settings file,
+  moves `Smoke Wall B` into `Smoke Target Folder`, moves it back to the
+  Takeoffs root, and verifies filesystem plus UI tree state.
+- Added `OURPLANECORE_SETTINGS_PATH` so smoke runs do not overwrite the user's
+  real `%APPDATA%\OurPlaneCore\settings.json`.
+- Made atomic writes use unique temp files and made the global AI project
+  registry update non-blocking, so a locked shared index cannot prevent a job
+  from opening.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`147/147`), and
+  `.\run-takeoffs-tree-smoke.cmd -TimeoutSeconds 45`.
+
+## 2026-05-10 Rotatable Notes and Snap Prefilter
+
+- Made sheet `Note` markups use four persisted corner points for new notes.
+  Existing two-point notes stay readable and convert to real corner geometry
+  when transformed.
+- Rotation/scale/mirror now preserves note/box corners instead of collapsing
+  them back to an axis-aligned bounding box.
+- Viewport drawing and PDF export render note bodies and wrapped note text in
+  the note's transformed local frame, so rotated notes remain visible on sheet
+  and in exported PDFs.
+- Added a snap prefilter for Line/Area interaction: measurement and markup
+  geometry outside the small pointer search rectangle is skipped before midpoint
+  and segment-intersection candidates are considered.
+- Made measurement visibility culling screen-relative instead of using a fixed
+  PDF-point padding. At high zoom, the viewport now keeps roughly the same
+  off-screen screen margin instead of drawing a much wider PDF-space region.
+- Added throttled AppLog diagnostics for real-job viewport hitches: slow frames
+  now include timing buckets for PDF bitmap, overlay, measurements, markups,
+  live drawing, labels, and chrome; slow snap searches include candidate and
+  skipped measurement/annotation counts.
+- Tightened normal snap search so endpoint and midpoint candidates outside the
+  pointer search rectangle are ignored before distance checks, and segment
+  intersection work starts with a cheap segment-bounds test. This keeps Select,
+  Line, and Area hover/placement lighter on dense sheets and large polygons.
+- Added an active-page measurement spatial index. Normal Snap, Select box,
+  measurement body hit-test, editable vertex hit-test, and Area Cut target
+  lookup now query nearby measurement bounds first instead of walking every
+  visible takeoff on every pointer action. Measurement add/remove/change paths
+  invalidate the index so edits keep current geometry.
+- Routed measurement rendering through the same active-page spatial index. At
+  high zoom the draw pass now asks for measurements near the visible PDF rect
+  plus the configured screen-relative padding instead of walking the full
+  active-sheet list before visibility culling. Selected measurements are still
+  preserved in the render candidate set.
+- Extended the spatial index with measurement vertex and segment cells. Normal
+  Snap now pulls nearby vertices/segments directly, and body/vertex hit-testing
+  uses nearby geometry candidates before falling back to Area fill checks. This
+  avoids walking every segment inside large Line/Area takeoffs when only a tiny
+  pointer rectangle is relevant.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  and `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`150/150`).
+
+## 2026-05-10 Future Online / Web Companion Idea
+
+- Captured the future idea of making an online/browser version after the
+  Android discussion.
+- Preferred direction: build a web companion before attempting a full mobile or
+  SaaS replacement.
+- First useful slice: browser project/sheet viewer with PDF.js, zoom/pan, and
+  read-only takeoff/measurement display.
+- Next slice: browser takeoff MVP with Count, Linear, Area, scale handling, and
+  save-back to the shared project format.
+- Keep the Windows WPF app as the primary production tool while this is
+  explored; leave report builder, complex import/export, AI review, and 3D
+  massing on desktop until the web surface proves useful.
+- Also added the idea to `docs/OURPLANECORE_TASK_ROADMAP.md` under `Future
+  Online / Web Companion Idea`.
+
+## 2026-05-11 PDF Output, PlanSwift Import, and Materials Recovery
+
+- Raised all PDF Output scale controls and export clamps to allow values up to
+  `10`: Stroke, Point, Label, Legend, and Header. The export dialog and PDF
+  renderer now accept the same upper limit instead of silently clamping lower.
+- Fixed PlanSwift import page-size normalization for oversized raster sheets:
+  imported TIFF/PNG sheet images are written into PDF space using their physical
+  DPI size, while measurement coordinates and `ScaleMetersPerPt` are adjusted
+  together so measured lengths/areas stay unchanged.
+- Added regression coverage for oversized PlanSwift raster imports so a sheet
+  such as a 100 x 66.67 raster can normalize back to a 36 x 24 PDF page without
+  losing measurement value correctness.
+- Added Takeoffs tree regression coverage around disappearing tree items and
+  importer-created content, including nested mixed items, corrupt measurement
+  recovery, page lookup safety, and exact-only page repair behavior.
+- Updated PlanSwift import to skip PlanSwift pages that have no real takeoff
+  sections or segment sections with points. Empty sheets no longer enter the
+  Pages tree just because they exist in the source job.
+- Cleaned the generated Materials Report output so the visible report no longer
+  prints the technical quality/input-PDF/detected-schedule summary page.
+- Fixed dotted sheet metadata such as `A5.03` and `S2.01`: both the Python PDF
+  metadata extractor and C# normalization now preserve the dotted sheet label
+  instead of collapsing it to the base label such as `A5`.
+- Removed automatic Materials Report creation from both PDF import and
+  PlanSwift import. Import still keeps sheet auto naming/scaling behavior where
+  applicable, but Materials report generation now happens only from the manual
+  `Materials -> Report Sheet` command.
+- Verification during the recovered session reached:
+  `dotnet build .\ourplanecore.sln`,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj`, and
+  `python -m py_compile Tools\pdf_layers_helper.py`, with the final test count
+  reported as `176/176`.
+
+## 2026-05-12 Interrupted Session Recovery
+
+- Recovered the interrupted 2026-05-11/2026-05-12 context from session logs and
+  the current working tree. The active uncommitted scope is broad and includes
+  PlanSwift import, PDF import, material extraction/reporting, takeoff tree
+  regression tests, viewport rendering/indexing, Report Builder, and 3D roof/
+  wall work.
+- Found a still-running `ourplanecore.exe` process after the interruption and
+  closed it before verification so the debug build output would not be locked.
+- Current verification after recovery passed:
+  `git diff --check`,
+  conflict-marker/`NotImplementedException` scan,
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`176/176`), and
+  `python -m py_compile Tools\pdf_layers_helper.py Tools\material_extractor.py`.
+- Remaining repo hygiene issue: the working tree still has many untracked
+  bundled runtime/tool files under `Tools/python`, `Tools/python_deps`,
+  `Tools/tesseract`, and `Tools/PlanSwiftImportTool`. These are referenced by
+  the project file for packaging, but should be reviewed before staging so
+  generated `bin`/`obj`/`cache` output and bulky runtime payload are handled
+  intentionally.
+
+## 2026-05-12 AI Fill Crop Hints and Quick Crop Notes
+
+- Extended Sheet Manager / AI Fill fallback for unresolved sheet metadata. If
+  deterministic PDF text/layer extraction cannot find sheet number or scale and
+  no saved crop template exists, AI Fill offers to open a representative sheet
+  and let the user draw crop boxes for `Sheet #` and `Scale`.
+- Added `Dialogs/PdfMetadataCropTemplateDialog.cs`, a WPF image preview dialog
+  for drawing reusable crop regions on one sheet.
+- Added job-local crop-template persistence in
+  `Models/PdfSheetMetadataCropService.cs`. The template is saved under
+  `AI_Context/sheet_metadata_crop_template.json` and is applied to every target
+  sheet during metadata fallback.
+- Metadata fallback requests can now attach separate crop roles:
+  `sheet_number`, `scale`, and `title_block`. The prompt tells the model which
+  crop to use for `sheet_label` / `sheet_key`, which crop to use for
+  `selected_scale_text`, and how to use the title-block crop for title/suffix
+  context.
+- Kept the old bottom-title-block crop as fallback when no manual crop hints
+  exist or the template crop cannot be saved for a page.
+- Added visible `Crop Hints` commands in the top PDF toolbar and Sheet Manager
+  toolbar.
+- Added right-click `AI crop here -> note` for blank sheet context and
+  measurement context. It saves a context crop, queues a
+  `quick_crop_note_request`, runs it with `gpt-5-mini` when an OpenAI key is
+  available, and places a visible `Note` markup next to the clicked crop.
+- The quick crop-note prompt preserves readable sheet content: tables/schedules
+  as compact Markdown tables, callouts/key notes with line breaks, and
+  `[unreadable]` for bad crops.
+- Added `PdfViewport.AddNoteAnnotationAt` so AI workflows can create a real
+  persisted note annotation without going through the manual note dialog.
+- Added `Tests/PdfSheetMetadataCropServiceTests.cs` and registered template
+  persistence/usability coverage.
+- Detailed handoff:
+  `docs/AI_FILL_CROP_HINTS_AND_NOTES_HANDOFF_2026_05_12.md`.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  and `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`178/178`).
+- Manual GUI smoke was not run in this slice because the previous local session
+  froze the machine. The next UI check should be small: one known PDF job, one
+  AI Fill crop-template save, and one `AI crop here -> note` test.
+
+## 2026-05-12 Future AI Auto Trace / Facade Detection Idea
+
+- Captured the future idea of using the cheapest practical vision model for
+  reviewable auto-tracing tasks such as finding facade windows, wall runs,
+  openings, doors, repeated labels, and rough area outlines.
+- Preferred cost-first model plan:
+  `gpt-5.4-nano` for first-pass vision candidate detection,
+  optional `gpt-5-nano` for cheapest acceptable mode, and `gpt-5.4-mini` only
+  for difficult or low-confidence crops.
+- Boundary decision: the model should return structured candidate JSON with
+  boxes/polygons/confidence, not trusted final takeoff geometry. Local PDF
+  vector geometry, snapping, OpenCV/edge detection, and existing viewport
+  tools should refine contours before the user accepts them.
+- Added the implementation idea and open questions to
+  `docs/OURPLANECORE_TASK_ROADMAP.md` under
+  `Future AI Auto Trace / Facade Detection Idea`.
+
+## 2026-05-12 Auto Trace Areas and Walls Spec
+
+- Wrote the full planning spec for a reviewable area/wall/opening trace system:
+  `docs/AUTO_TRACE_AREAS_AND_WALLS_SPEC_2026_05_12.md`.
+- Scope covers manual trace assist, seeded vector area trace, seeded wall-run
+  trace, plan wall area from length x height, facade/elevation area trace,
+  opening detection, and cross-sheet batch trace.
+- The core design keeps accepted output as normal `Measurement` records while
+  introducing review-only `TraceBatch` / `TraceCandidate` data before anything
+  is applied.
+- The spec separates vector trace, layer trace, raster trace, and AI trace.
+  AI is scoped to candidate classification/boxes/rough points; local geometry
+  and user review remain responsible for final takeoff geometry.
+- Recommended implementation order is candidate/review/apply infrastructure
+  first, then vector geometry, seeded area trace, wall trace, raster crop
+  trace, AI opening detection, batch trace, and feedback learning.
+- Linked the spec from `docs/OURPLANECORE_TASK_ROADMAP.md` under the future AI
+  auto trace/facade detection section.
+
+## 2026-05-13 Page Folder Scoped Sort and Notes Move Fix
+
+- Added folder-scoped Pages context-menu organization commands:
+  `Sort A/S in This Folder` and `Sort D/Sec/WT in This Folder`.
+- Folder-scoped A/S sorting now creates/reuses `Arch`, `Struct`, and
+  `--------others` inside the selected Pages folder and moves only sheets under
+  that folder/branch.
+- Folder-scoped D/Sec/WT sorting now creates/reuses `details struct`,
+  `details arch`, `units`, and `sections` inside the selected Pages folder and
+  moves only sheets under that folder/branch.
+- Fixed page note/markup annotations disappearing after moving a sheet. The
+  annotation sidecar still lives beside the page, but load/save now treats the
+  current page folder as authoritative instead of trusting stale serialized
+  `PageFolder` values inside `annotations.json`.
+- Added storage regression coverage:
+  `PageAnnotationsFollowMovedPageFolder`.
+- Updated the local user-facing package and Desktop shortcut after verification.
+- Detailed handoff:
+  `docs/PAGE_FOLDER_SORT_AND_NOTES_HANDOFF_2026_05_13.md`.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
+  `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`183/183`),
+  then the package-refresh workflow with normal `dotnet build`,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`183/183`), Release publish, update-folder replacement, Desktop shortcut
+  refresh, and SHA256 match.
+
+## 2026-05-16 PDF Render and Layers Performance Pass
+
+- Investigated severe page/viewport lag in the live packaged app and compared
+  the behavior against public PlanSwift docs. PlanSwift exposes PDF-to-TIF
+  conversion with DPI/grayscale options and import-time conversion settings, so
+  the practical direction is to keep expensive PDF conversion/analysis explicit
+  instead of running it on every page open.
+- Removed automatic PDF layer discovery from the normal page-open path.
+  `Controls/PdfViewport.Layers.cs` now treats layers as unloaded by default and
+  exposes `DiscoverPdfLayersOnDemand()`.
+- Added a `Load` button in the PDF Layers tab and wired it through
+  `MainWindow.PdfLayers.cs`, so the active page's PDF layers are scanned only
+  when the user asks for them.
+- Changed PDF import so it no longer scans layer metadata for every imported
+  page by default; the import status now explains that PDF layers load on
+  demand from the PDF Layers tab.
+- Reduced viewport render-cache pressure in
+  `Controls/PdfViewport.RenderCache.cs` by bounding the shared docnet bitmap
+  cache to 8 entries and about 220 MB.
+- Made future Page Tools raster PDF output lighter in
+  `Models/PageImageOperationService.cs` by reducing render scale to `1.5f` and
+  setting PDF encoding quality to `72`.
+- Detailed handoff:
+  `docs/PERFORMANCE_RENDER_AND_LAYERS_HANDOFF_2026_05_16.md`.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj /p:OutDir=.\cache\test_run\ /p:UseAppHost=false`,
+  then the package-refresh workflow with normal `dotnet build`,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`195/195`), Release publish, update-folder replacement, Desktop shortcut
+  retargeting to `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`,
+  and SHA256 match
+  `826A6231C146B69867BFA2579F2FED7EE4D0655751DCE2B6439B62063518235C`.

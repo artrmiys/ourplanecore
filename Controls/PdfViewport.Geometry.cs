@@ -45,6 +45,12 @@ public sealed partial class PdfViewport
         a.Top <= b.Bottom &&
         a.Bottom >= b.Top;
 
+    private static bool RectContainsRect(SKRect outer, SKRect inner) =>
+        inner.Left >= outer.Left &&
+        inner.Right <= outer.Right &&
+        inner.Top >= outer.Top &&
+        inner.Bottom <= outer.Bottom;
+
     private static bool SegmentIntersectsRect(SKPoint a, SKPoint b, SKRect rect)
     {
         if (RectContains(rect, a) || RectContains(rect, b))
@@ -115,12 +121,14 @@ public sealed partial class PdfViewport
     private static bool PointInPolygon(SKPoint point, IReadOnlyList<SKPoint> polygon)
         => MeasurementGeometry.PointInPolygon(point, polygon);
 
-    private static bool IsMeasurementVisible(Measurement measurement, SKRect visiblePdf)
+    private bool IsMeasurementVisible(Measurement measurement, SKRect visiblePdf)
     {
         if (measurement.Points.Count == 0)
             return false;
 
-        SKRect bounds = MeasurementBounds(measurement);
+        SKRect bounds = MeasurementBounds(
+            measurement,
+            ViewportRenderPolicy.VisibleGeometryPaddingPdf(_zoom));
         return bounds.Left <= visiblePdf.Right &&
                bounds.Right >= visiblePdf.Left &&
                bounds.Top <= visiblePdf.Bottom &&
@@ -175,6 +183,14 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private static bool MeasurementContainedInRect(Measurement measurement, SKRect rect)
+    {
+        if (measurement.Points.Count == 0)
+            return false;
+
+        return RectContainsRect(rect, RawMeasurementBounds(measurement));
+    }
+
     private static bool AnnotationIntersectsRect(PageAnnotation annotation, SKRect rect)
     {
         IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);
@@ -204,27 +220,64 @@ public sealed partial class PdfViewport
         return false;
     }
 
-    private static SKRect RawMeasurementBounds(Measurement measurement) =>
-        PointsBounds(MeasurementGeometryPoints(measurement).ToList());
+    private static bool AnnotationContainedInRect(PageAnnotation annotation, SKRect rect)
+    {
+        IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);
+        if (points.Count == 0)
+            return false;
 
-    private static SKRect MeasurementBounds(Measurement measurement)
+        return RectContainsRect(rect, PointsBounds(points));
+    }
+
+    private static SKRect RawMeasurementBounds(Measurement measurement) =>
+        MeasurementBounds(measurement, inflate: 0f);
+
+    private static SKRect MeasurementBounds(Measurement measurement) =>
+        MeasurementBounds(measurement, inflate: 96f);
+
+    private static SKRect MeasurementBounds(Measurement measurement, float inflate)
     {
         float left = float.PositiveInfinity;
         float top = float.PositiveInfinity;
         float right = float.NegativeInfinity;
         float bottom = float.NegativeInfinity;
+        bool hasPoint = false;
 
-        foreach (var point in MeasurementGeometryPoints(measurement))
+        foreach (SKPoint point in measurement.Points)
         {
-            left = Math.Min(left, point.X);
-            top = Math.Min(top, point.Y);
-            right = Math.Max(right, point.X);
-            bottom = Math.Max(bottom, point.Y);
+            IncludePointInBounds(point, ref left, ref top, ref right, ref bottom);
+            hasPoint = true;
         }
 
+        foreach (var hole in measurement.Holes)
+        {
+            foreach (SKPoint point in hole)
+            {
+                IncludePointInBounds(point, ref left, ref top, ref right, ref bottom);
+                hasPoint = true;
+            }
+        }
+
+        if (!hasPoint)
+            return SKRect.Empty;
+
         var bounds = new SKRect(left, top, right, bottom);
-        bounds.Inflate(96f, 96f);
+        if (inflate > 0)
+            bounds.Inflate(inflate, inflate);
         return bounds;
+    }
+
+    private static void IncludePointInBounds(
+        SKPoint point,
+        ref float left,
+        ref float top,
+        ref float right,
+        ref float bottom)
+    {
+        left = Math.Min(left, point.X);
+        top = Math.Min(top, point.Y);
+        right = Math.Max(right, point.X);
+        bottom = Math.Max(bottom, point.Y);
     }
 
     private static SKPoint Centroid(List<SKPoint> pts)
@@ -239,15 +292,6 @@ public sealed partial class PdfViewport
             return false;
 
         return !measurement.Holes.Any(hole => hole.Count >= 3 && PointInPolygon(point, hole));
-    }
-
-    private static IEnumerable<SKPoint> MeasurementGeometryPoints(Measurement measurement)
-    {
-        foreach (SKPoint point in measurement.Points)
-            yield return point;
-        foreach (var hole in measurement.Holes)
-            foreach (SKPoint point in hole)
-                yield return point;
     }
 
 }

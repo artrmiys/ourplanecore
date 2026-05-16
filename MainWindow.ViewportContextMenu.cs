@@ -34,6 +34,10 @@ public partial class MainWindow
 
     private void AddPdfAiMenuItems(ContextMenu menu, ViewportContextRequest request)
     {
+        menu.Items.Add(MakeMenuItem("AI crop here -> note", true, () =>
+            _viewport.BeginAiCropNoteSelection(new SKPoint(request.PdfX, request.PdfY))));
+        menu.Items.Add(MakeMenuItem("AI quick box here -> note", true, async () =>
+            await ReadAiCropIntoNoteAsync(request)));
         menu.Items.Add(MakeMenuItem("Save AI crop here", true, () =>
             SaveAiCropObservation(request)));
         menu.Items.Add(MakeMenuItem("Save AI marker here", true, () =>
@@ -106,6 +110,22 @@ public partial class MainWindow
             $"{entryTitle} Properties...",
             hasItem,
             () => EditSectionProperties(item, measurement)));
+        AddViewportCountDisplayMenuItem(menu, request);
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+        {
+            menu.Items.Add(MakeMenuItem(
+                hasItem && item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
+                hasItem,
+                () => EditViewportJoistProperties(item)));
+            menu.Items.Add(MakeMenuItem(
+                "Set / Reset Joist Direction",
+                hasItem,
+                () => SetJoistDirectionForSection(item, measurement)));
+            menu.Items.Add(MakeMenuItem(
+                "Set Direction for All Areas",
+                hasItem,
+                () => SetJoistDirectionForAllAreas(item, measurement)));
+        }
         menu.Items.Add(MakeMenuItem(
             $"Rename {entryTitle}",
             hasItem,
@@ -127,10 +147,29 @@ public partial class MainWindow
             () => DeleteSection(item, measurement)));
     }
 
+    private void EditViewportJoistProperties(TakeoffItem item)
+    {
+        if (FindTakeoffTreeItem(item) is not { } tvi)
+        {
+            TxtStatus.Text = "Takeoff item is not visible in the Takeoffs tree.";
+            return;
+        }
+
+        EditTakeoffItemProperties(tvi, item);
+    }
+
     private void AddAnnotationEditMenuItems(ContextMenu menu, ViewportContextRequest request)
     {
         PageAnnotation annotation = request.Annotation!;
         string title = MarkupTitle(annotation);
+        if (OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) == "note")
+        {
+            menu.Items.Add(MakeMenuItem(
+                "Edit Note...",
+                true,
+                () => EditPageNoteAnnotation(annotation)));
+        }
+
         menu.Items.Add(MakeMenuItem(
             $"Delete {title}",
             true,
@@ -141,11 +180,22 @@ public partial class MainWindow
             }));
     }
 
+    private void EditPageNoteAnnotation(PageAnnotation annotation)
+    {
+        string? text = ShowMultilineInputDialog("Note text:", annotation.Text, "Edit Sheet Note");
+        if (text == null)
+            return;
+
+        if (_viewport.UpdatePageAnnotationText(annotation, text))
+            SaveCurrentPageAnnotations();
+    }
+
     private static string MarkupTitle(PageAnnotation annotation)
     {
         string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         return kind switch
         {
+            "note" => "Note Markup",
             "dimension" => "Dimension Markup",
             "arrow" => "Arrow Markup",
             "rectangle" => "Box Markup",
@@ -156,6 +206,8 @@ public partial class MainWindow
     private void AddMeasurementAiMenuItems(ContextMenu menu, ViewportContextRequest request)
     {
         Measurement measurement = request.Measurement!;
+        menu.Items.Add(MakeMenuItem("AI crop here -> note", true, async () =>
+            await ReadAiCropIntoNoteAsync(request)));
         menu.Items.Add(MakeMenuItem("Save measurement AI crop", true, () =>
             SaveAiCropObservation(request)));
         menu.Items.Add(MakeMenuItem("Save measurement as AI marker", true, () =>

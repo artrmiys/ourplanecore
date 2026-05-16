@@ -37,7 +37,8 @@ public static class JoistTakeoffCalculator
             measurement.JoistSpacingInches,
             measurement.JoistDirectionDegrees,
             measurement.JoistLengthRounding,
-            measurement.JoistPitch);
+            measurement.JoistPitch,
+            measurement.JoistAddEndJoist);
     }
 
     public static JoistLayoutResult Calculate(
@@ -46,7 +47,8 @@ public static class JoistTakeoffCalculator
         double spacingInches,
         double directionDegrees,
         string lengthRounding,
-        string pitch = "")
+        string pitch = "",
+        bool addEndJoist = true)
     {
         return Calculate(
             polygon,
@@ -55,7 +57,8 @@ public static class JoistTakeoffCalculator
             spacingInches,
             directionDegrees,
             lengthRounding,
-            pitch);
+            pitch,
+            addEndJoist);
     }
 
     public static JoistLayoutResult Calculate(
@@ -65,7 +68,8 @@ public static class JoistTakeoffCalculator
         double spacingInches,
         double directionDegrees,
         string lengthRounding,
-        string pitch = "")
+        string pitch = "",
+        bool addEndJoist = true)
     {
         if (polygon.Count < 3 || scaleMetersPerPt <= 0 || spacingInches <= 0)
             return Empty;
@@ -98,7 +102,7 @@ public static class JoistTakeoffCalculator
 
         var segments = new List<JoistSegment>();
         string normalizedRounding = NormalizeLengthRounding(lengthRounding);
-        var offsets = JoistOffsets(min, max, spacingPt);
+        var offsets = JoistOffsets(min, max, spacingPt, addEndJoist);
         var contours = AreaContours(polygon, holes);
         foreach (double offset in offsets)
         {
@@ -116,8 +120,8 @@ public static class JoistTakeoffCalculator
 
                 double flatMeters = lengthPt * scaleMetersPerPt;
                 double rawMeters = flatMeters * pitchFactor;
-                double flatFeet = flatMeters / MetersPerFoot;
-                double orderFeet = RoundLengthFeet(flatFeet, normalizedRounding);
+                double rawFeet = rawMeters / MetersPerFoot;
+                double orderFeet = RoundLengthFeet(rawFeet, normalizedRounding);
                 segments.Add(new JoistSegment(
                     a.Point,
                     b.Point,
@@ -147,7 +151,7 @@ public static class JoistTakeoffCalculator
             pitchFactor);
     }
 
-    private static IReadOnlyList<double> JoistOffsets(double min, double max, double spacingPt)
+    private static IReadOnlyList<double> JoistOffsets(double min, double max, double spacingPt, bool addEndJoist)
     {
         var offsets = new List<double>();
         int maxLines = Math.Min(8000, (int)Math.Ceiling((max - min) / spacingPt) + 2);
@@ -159,7 +163,7 @@ public static class JoistTakeoffCalculator
             offsets.Add(offset);
         }
 
-        if (offsets.Count == 0 || Math.Abs(offsets[^1] - max) > ProjectionEpsilon)
+        if (addEndJoist && (offsets.Count == 0 || Math.Abs(offsets[^1] - max) > ProjectionEpsilon))
             offsets.Add(max);
         return offsets;
     }
@@ -640,7 +644,7 @@ public static class JoistTakeoffCalculator
     private static double Dot(SKPoint point, double x, double y) =>
         point.X * x + point.Y * y;
 
-    private static double NormalizeDirectionDegrees(double degrees)
+    public static double NormalizeDirectionDegrees(double degrees)
     {
         double normalized = degrees % 180.0;
         if (normalized < 0)

@@ -115,6 +115,7 @@ public partial class MainWindow
         _activePageTab = null;
         RefreshPageTabs(null);
         _viewport.ClearPage();
+        ApplyRulerVisibilityToViewport();
         TxtStatusPage.Text = "—";
     }
 

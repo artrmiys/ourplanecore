@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -12,7 +13,7 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private void BtnExportCsv_Click(object sender, RoutedEventArgs e)
+    private async void BtnExportCsv_Click(object sender, RoutedEventArgs e)
     {
         if (_currentJob == null)
         {
@@ -41,8 +42,12 @@ public partial class MainWindow
 
         try
         {
-            SaveCurrentPageScale();
-            File.WriteAllText(dlg.FileName, BuildTakeoffCsv(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            using (ShowBusyOverlay("Exporting CSV..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                SaveCurrentPageScale();
+                File.WriteAllText(dlg.FileName, BuildTakeoffCsv(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            }
             TxtStatus.Text = $"Exported CSV -> {dlg.FileName}";
         }
         catch (Exception ex)
@@ -52,17 +57,61 @@ public partial class MainWindow
         }
     }
 
-    private void BtnExportTxt_Click(object sender, RoutedEventArgs e)
+    private async void BtnExportTxt_Click(object sender, RoutedEventArgs e)
     {
-        ExportPlanSwiftTakeoffs("txt");
+        await ExportPlanSwiftTakeoffsAsync("txt", exportWholeJob: true);
     }
 
-    private void BtnExportExcel_Click(object sender, RoutedEventArgs e)
+    private async void BtnExportExcel_Click(object sender, RoutedEventArgs e)
     {
-        ExportPlanSwiftTakeoffs("xlsx");
+        await ExportPlanSwiftTakeoffsAsync("xlsx", exportWholeJob: false);
     }
 
-    private void ExportPlanSwiftTakeoffs(string format)
+    private async void BtnExportCurrentExcel_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open or create a job before exporting to Excel.";
+            return;
+        }
+
+        IReadOnlyList<string> roots = SelectedCurrentExcelExportRoots();
+        if (roots.Count == 0)
+        {
+            TxtStatus.Text = "Select a takeoff folder or item before exporting to current Excel.";
+            return;
+        }
+
+        IReadOnlyList<PlanSwiftExportRow> rows;
+        using (ShowBusyOverlay("Preparing active Excel export..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            SaveCurrentPageScale();
+            rows = PlanSwiftTakeoffExporter.BuildRows(_currentJob, _takeoffItems, roots, _viewport.UnitMode);
+        }
+        if (rows.Count == 0)
+        {
+            TxtStatus.Text = "Selected takeoff folder has no measured rows to export.";
+            return;
+        }
+
+        ActiveExcelExportResult result;
+        using (ShowBusyOverlay("Writing to active Excel..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            result = ActiveExcelTakeoffExportService.ExportRows(rows);
+        }
+        TxtStatus.Text = result.Message;
+        if (!result.Success)
+        {
+            MessageBox.Show(result.Message, "Export to Current Excel", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        RefreshTakeoffManager();
+    }
+
+    private async Task ExportPlanSwiftTakeoffsAsync(string format, bool exportWholeJob)
     {
         if (_currentJob == null)
         {
@@ -70,7 +119,7 @@ public partial class MainWindow
             return;
         }
 
-        var rows = BuildPlanSwiftExportRows();
+        var rows = BuildPlanSwiftExportRows(exportWholeJob);
         if (rows.Count == 0)
         {
             TxtStatus.Text = "No measured takeoffs to export.";
@@ -93,16 +142,20 @@ public partial class MainWindow
 
         try
         {
-            SaveCurrentPageScale();
-            if (excel)
+            using (ShowBusyOverlay(excel ? "Exporting Excel..." : "Exporting TXT..."))
             {
-                int written = PlanSwiftTakeoffExporter.WriteXlsx(dlg.FileName, rows);
-                TxtStatus.Text = $"Exported Excel ({written} row(s)) -> {dlg.FileName}";
-            }
-            else
-            {
-                PlanSwiftTakeoffExporter.WriteTxt(dlg.FileName, rows);
-                TxtStatus.Text = $"Exported TXT ({rows.Count} row(s)) -> {dlg.FileName}";
+                await WaitForBusyOverlayRenderAsync();
+                SaveCurrentPageScale();
+                if (excel)
+                {
+                    int written = PlanSwiftTakeoffExporter.WriteXlsx(dlg.FileName, rows);
+                    TxtStatus.Text = $"Exported Excel ({written} row(s)) -> {dlg.FileName}";
+                }
+                else
+                {
+                    PlanSwiftTakeoffExporter.WriteTxt(dlg.FileName, rows);
+                    TxtStatus.Text = $"Exported TXT ({rows.Count} row(s)) -> {dlg.FileName}";
+                }
             }
         }
         catch (Exception ex)
@@ -112,12 +165,14 @@ public partial class MainWindow
         }
     }
 
-    private IReadOnlyList<PlanSwiftExportRow> BuildPlanSwiftExportRows()
+    private IReadOnlyList<PlanSwiftExportRow> BuildPlanSwiftExportRows(bool exportWholeJob)
     {
         if (_currentJob == null)
             return [];
 
-        IReadOnlyList<string> roots = SelectedTakeoffExportRoots();
+        IReadOnlyList<string> roots = exportWholeJob
+            ? [_currentJob.TakeoffsRoot]
+            : SelectedTakeoffExportRoots();
         return PlanSwiftTakeoffExporter.BuildRows(_currentJob, _takeoffItems, roots, _viewport.UnitMode);
     }
 
@@ -141,6 +196,40 @@ public partial class MainWindow
         }
 
         return [_currentJob.TakeoffsRoot];
+    }
+
+    private IReadOnlyList<string> SelectedCurrentExcelExportRoots()
+    {
+        if (_currentJob == null)
+            return [];
+
+        if (WorkspaceTabs.SelectedItem is TabItem { Tag: not null } tab &&
+            string.Equals(tab.Tag.ToString(), "TakeoffManager", StringComparison.OrdinalIgnoreCase))
+        {
+            var managerRoots = TakeoffManagerGrid.SelectedItems
+                .OfType<TakeoffManagerRow>()
+                .Select(row => row.Item.FolderPath)
+                .Where(Directory.Exists)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (managerRoots.Count > 0)
+                return managerRoots;
+        }
+
+        if (TakeoffsTree.SelectedItem is not TreeViewItem anchor)
+            return [];
+
+        var entries = GetSelectedTakeoffEntries(anchor);
+        if (entries.Count > 0)
+            return entries.Select(entry => entry.SourcePath).ToList();
+
+        return anchor.Tag switch
+        {
+            TakeoffItem item when Directory.Exists(item.FolderPath) => [item.FolderPath],
+            TakeoffMeasurementNode node when Directory.Exists(node.Item.FolderPath) => [node.Item.FolderPath],
+            TakeoffFolderNode folder when Directory.Exists(folder.FolderPath) => [folder.FolderPath],
+            _ => [],
+        };
     }
 
     private string BuildTakeoffCsv()
@@ -184,7 +273,7 @@ public partial class MainWindow
                     "",
                     measurement.Id,
                     SectionDisplayName(item, measurement, i),
-                    measurement.Notes,
+                    PlanSwiftTakeoffExporter.CleanExportNotes(measurement.Notes),
                     (i + 1).ToString(CultureInfo.InvariantCulture),
                     measurement.Value(_viewport.ScaleMetersPerPt).ToString("G17", CultureInfo.InvariantCulture),
                     measurement.Label(_viewport.ScaleMetersPerPt, _viewport.UnitMode),

@@ -57,15 +57,18 @@ public partial class MainWindow
                 !string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
             {
                 string oldPath = item.FolderPath;
-                item.FolderPath = OurPlaneCoreJobStore.RenameNode(item.FolderPath, name);
+                string newPath = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, name);
+                UnregisterTakeoffTreeItemPath(oldPath, tvi);
+                item.FolderPath = newPath;
                 RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
                 item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
+                RegisterTakeoffTreeItemSubtree(tvi);
             }
             else
             {
-                item.Name = OurPlaneCoreJobStore.SanitizeName(name, 120);
+                item.Name = OurPlaneCoreJobStore.NormalizeDisplayName(name, 120);
             }
 
             item.Color = color;
@@ -84,6 +87,8 @@ public partial class MainWindow
                     JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                     JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding),
                     StringComparison.OrdinalIgnoreCase) ||
+                item.JoistDirectionFollowsAreaRotation != joistEdit.DirectionFollowsAreaRotation ||
+                item.JoistAddEndJoist != joistEdit.AddEndJoist ||
                 item.JoistShowLabels != joistEdit.ShowLabels ||
                 item.JoistDetailedLabels != joistEdit.DetailedLabels;
             bool wasJoistArea = item.IsJoistArea;
@@ -91,6 +96,8 @@ public partial class MainWindow
             item.JoistType = joistEdit.JoistType.Trim();
             item.JoistSpacingInches = joistEdit.SpacingInches > 0 ? joistEdit.SpacingInches : 16;
             item.JoistDirectionDegrees = joistEdit.DirectionDegrees;
+            item.JoistDirectionFollowsAreaRotation = joistEdit.DirectionFollowsAreaRotation;
+            item.JoistAddEndJoist = joistEdit.AddEndJoist;
             item.JoistPitch = JoistTakeoffCalculator.NormalizePitch(joistEdit.Pitch);
             item.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding);
             item.JoistShowLabels = joistEdit.ShowLabels;
@@ -139,6 +146,8 @@ public partial class MainWindow
             item.JoistType,
             item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16,
             item.JoistDirectionDegrees,
+            item.JoistDirectionFollowsAreaRotation,
+            item.JoistAddEndJoist,
             JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
             JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
             item.JoistShowLabels,
@@ -182,7 +191,7 @@ public partial class MainWindow
         };
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
         joistPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < 9; i++)
             joistPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         AddLabeledTextBox(joistPanel, 0, "Joist type:", out TextBox joistTypeBox, item.JoistType);
@@ -264,6 +273,28 @@ public partial class MainWindow
         Grid.SetColumn(roundingBox, 1);
         joistPanel.Children.Add(roundingBox);
 
+        var joistDirectionFollowsBox = new CheckBox
+        {
+            Content = "Rotate direction with area",
+            IsChecked = item.JoistDirectionFollowsAreaRotation,
+            Margin = new Thickness(0, 3, 0, 3),
+            ToolTip = "When on, rotating a joist area rotates the saved joist direction with it.",
+        };
+        Grid.SetRow(joistDirectionFollowsBox, 5);
+        Grid.SetColumn(joistDirectionFollowsBox, 1);
+        joistPanel.Children.Add(joistDirectionFollowsBox);
+
+        var joistAddEndBox = new CheckBox
+        {
+            Content = "Add end joist",
+            IsChecked = item.JoistAddEndJoist,
+            Margin = new Thickness(0, 3, 0, 3),
+            ToolTip = "When on, add one joist at the far edge if the spacing pattern does not land there.",
+        };
+        Grid.SetRow(joistAddEndBox, 6);
+        Grid.SetColumn(joistAddEndBox, 1);
+        joistPanel.Children.Add(joistAddEndBox);
+
         var joistLabelsBox = new CheckBox
         {
             Content = "Label each joist",
@@ -271,7 +302,7 @@ public partial class MainWindow
             Margin = new Thickness(0, 3, 0, 3),
             ToolTip = "When off, the area label still shows count and order length.",
         };
-        Grid.SetRow(joistLabelsBox, 5);
+        Grid.SetRow(joistLabelsBox, 7);
         Grid.SetColumn(joistLabelsBox, 1);
         joistPanel.Children.Add(joistLabelsBox);
 
@@ -282,7 +313,7 @@ public partial class MainWindow
             Margin = new Thickness(0, 3, 0, 3),
             ToolTip = "On: show order/raw/flat lengths. Off: use the old compact count / length format.",
         };
-        Grid.SetRow(joistDetailedLabelsBox, 6);
+        Grid.SetRow(joistDetailedLabelsBox, 8);
         Grid.SetColumn(joistDetailedLabelsBox, 1);
         joistPanel.Children.Add(joistDetailedLabelsBox);
 
@@ -442,6 +473,8 @@ public partial class MainWindow
                 joistTypeBox.Text.Trim(),
                 joistSpacing,
                 joistDirection,
+                joistDirectionFollowsBox.IsChecked == true,
+                joistAddEndBox.IsChecked == true,
                 joistPitch,
                 joistRounding,
                 joistLabelsBox.IsChecked == true,

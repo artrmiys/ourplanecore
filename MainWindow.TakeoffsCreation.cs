@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using OurPlaneCore.Controls;
@@ -22,7 +23,7 @@ public partial class MainWindow
         string measurementType = ResolveTakeoffFolderDefaultMeasurementType(
             parentFolder,
             CurrentToolMeasurementType());
-        string defaultColor = ResolveTakeoffFolderDefaultColor(parentFolder, "#FF4444");
+        string defaultColor = ResolveTakeoffFolderDefaultColor(parentFolder, RandomTakeoffColor(_viewport.ActiveColor));
         var dlg = new NewItemDialog(
             measurementType,
             DefaultTakeoffNameForFolder(measurementType, parentFolder),
@@ -32,22 +33,34 @@ public partial class MainWindow
         };
         if (dlg.ShowDialog() != true) return;
 
+        TakeoffAutoRouteResult route = TakeoffAutoRoutingService.ResolveRoute(
+            _currentJob,
+            parentFolder,
+            dlg.ItemName,
+            dlg.ItemType,
+            _currentPage?.Name ?? "",
+            _currentPage?.FolderPath ?? "");
+        parentFolder = route.ParentFolder;
+
         var item = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, dlg.ItemType, parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
-        _takeoffItems.Add(item);
-        var parent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
-        var tvi = AddTakeoffTreeItem(item, parent);
-        if (parent is TreeViewItem parentTvi)
-            parentTvi.IsExpanded = true;
+        ApplyNewCountSymbolToItemIfNeeded(item, dlg.ItemType);
+        LoadTakeoffsForJob();
 
-        _activeItem = item;
-        _activeTakeoffParentFolder = parentFolder;
-        _viewport.ActiveColor = item.Color;
-        _viewport.ActiveTakeoffFolder = item.FolderPath;
-        tvi.IsSelected = true;
+        TakeoffItem activeItem = _takeoffItems.FirstOrDefault(t =>
+            string.Equals(t.FolderPath, item.FolderPath, StringComparison.OrdinalIgnoreCase)) ?? item;
+        _activeItem = activeItem;
+        _activeTakeoffParentFolder = Path.GetDirectoryName(activeItem.FolderPath) ?? parentFolder;
+        _viewport.ActiveColor = activeItem.Color;
+        _viewport.ActiveTakeoffFolder = activeItem.FolderPath;
+        _viewport.ActiveCountSymbol = activeItem.CountSymbol;
+        SelectTakeoffNodeByFolder(activeItem.FolderPath);
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
+        TxtStatus.Text = route.Routed
+            ? $"New item: {activeItem.Name}. {route.Message}"
+            : $"New item: {activeItem.Name}.";
     }
 
     private void BtnNewTakeoffFolder_Click(object sender, RoutedEventArgs e)
@@ -212,19 +225,6 @@ public partial class MainWindow
 
         string parent = string.IsNullOrWhiteSpace(parentFolder) ? _currentJob.TakeoffsRoot : parentFolder;
         string baseName = string.IsNullOrWhiteSpace(name) ? "Item" : name.Trim();
-        for (int i = 0; i < 1000; i++)
-        {
-            string candidate = i == 0 ? baseName : $"{baseName} - Copy {i + 1}";
-            try
-            {
-                return OurPlaneCoreJobStore.CreateTakeoffItem(_currentJob, parent, candidate, color, measurementType);
-            }
-            catch (IOException) when (i < 999)
-            {
-                // Try the next suffix.
-            }
-        }
-
-        throw new IOException($"Could not create a unique takeoff item named '{baseName}'.");
+        return OurPlaneCoreJobStore.CreateTakeoffItem(_currentJob, parent, baseName, color, measurementType);
     }
 }

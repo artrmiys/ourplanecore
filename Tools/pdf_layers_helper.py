@@ -139,9 +139,14 @@ def _sheet_key(label: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "", (label or "").lower())
 
 
+def _sheet_display_key(label: str | None) -> str:
+    compact = re.sub(r"\s+", "", (label or "").strip())
+    return compact.replace("-", "")
+
+
 def _extract_sheet_label_from_text(text: str) -> str | None:
     prefixes = {"a", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g"}
-    for raw in re.findall(r"\b([A-Z]{1,3}-?\d{1,4}[A-Z]?)\b", (text or "").upper()):
+    for raw in re.findall(r"\b([A-Z]{1,3}-?\d{1,4}(?:\.\d+)?[A-Z]?)\b", (text or "").upper()):
         prefix = re.match(r"[A-Z]+", raw.replace("-", ""))
         if prefix and prefix.group(0).lower() in prefixes:
             return raw
@@ -1369,6 +1374,7 @@ def sheetmeta_data(req: dict) -> dict:
     bottom_text = _words_text(bottom_words)
     sheet_label = _extract_sheet_label_from_text(bottom_text) or _extract_sheet_label_from_text(text)
     sheet_key = _sheet_key(sheet_label)
+    sheet_display_key = _sheet_display_key(sheet_label)
     sheet_title = _extract_pdf_title(words, text, sheet_label, bottom_y0, max_x, max_y)
 
     title_scale, title_scale_raw = _extract_title_block_scale(words, bottom_y0, max_y)
@@ -1414,7 +1420,7 @@ def sheetmeta_data(req: dict) -> dict:
         "width_pt": max_x,
         "height_pt": max_y,
         "sheet_label": sheet_label or "",
-        "sheet_key": sheet_key,
+        "sheet_key": sheet_display_key,
         "normalized_sheet_name": sheet_key,
         "sheet_title": sheet_title,
         "suffix": suffix or "",
@@ -1427,7 +1433,7 @@ def sheetmeta_data(req: dict) -> dict:
         "scale_text": selected_scale or "",
         "selected_scale_ratio": ratio or 0.0,
         "selected_scale_m_per_pt": selected_scale_m_per_pt,
-        "rename_candidate": _rename_candidate(sheet_key, suffix),
+        "rename_candidate": _rename_candidate(sheet_display_key, suffix),
         "has_details": has_details,
         "has_schedule": has_schedule,
         "layers": _metadata_layers(doc, doc_key, page_index),

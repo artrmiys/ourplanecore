@@ -50,11 +50,15 @@ public partial class MainWindow : Window
     private readonly TreeExpansionState _expandedPageTreePaths = new();
     private readonly TreeExpansionState _expandedTakeoffTreePaths = new();
     private readonly HashSet<string> _hiddenAiMarkerTypes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _pagesWithHiddenRulers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<GeometryModel3D, Massing3DObjectInfo> _massing3DObjectInfo = [];
     private readonly List<PageTabState> _pageTabs = [];
+    private readonly List<DetachedSheetWindow> _detachedSheetWindows = [];
     private int _lastMeasurementPageFolderRepairCount;
     private int _lastMeasurementPageFolderUnresolvedCount;
     private Point? _pagesDragStart;
+    private TreeViewItem? _pagesDragItem;
+    private bool _pagesDragArmed;
     private string? _pagesRangeAnchorPath;
     private string? _pageTakeoffRangeAnchorKey;
     private string? _takeoffsRangeAnchorPath;
@@ -66,9 +70,16 @@ public partial class MainWindow : Window
     {
         Interval = TimeSpan.FromMilliseconds(ViewportConstants.AutosaveDebounceMs),
     };
+    private readonly System.Windows.Threading.DispatcherTimer _sheetLegendAutoSortTimer = new()
+    {
+        Interval = TimeSpan.FromMinutes(5),
+    };
 
     private readonly Dictionary<string, RadioButton> _toolBtns;
+    private string _annotationColor = "#FF4444";
+    private double _annotationStrokeWidth = 1.8;
     private ToggleButton? _recordButton;
+    private bool _updatingRulerVisibilityButton;
     private ListView? _estimateList;
     private TextBox? _estimateFilterBox;
     private CheckBox? _estimateCurrentSheetOnlyBox;
@@ -91,6 +102,7 @@ public partial class MainWindow : Window
     private Point? _massing3DMouseDown;
     private bool _massing3DMouseMoved;
     private string _selectedMassing3DObjectId = "";
+    private string _selectedMassingMarkerId = "";
     private TextBox? _massingMarkerDetailsTextBox;
     private Button? _massingOpenDraftButton;
     private Button? _massingReviewRoofButton;
@@ -100,7 +112,7 @@ public partial class MainWindow : Window
     private Button? _massingOpenMarkerButton;
     private Button? _massingOpenMarkerCropButton;
     private TabControl? _rightWorkspaceTabs;
-    private TabItem? _massingTab;
+    private TabItem? _massingTab = null;
     private SmartMassingDraft? _currentMassingDraft;
     private Point3D _massing3DTarget = new(0, 0, 0);
     private double _massing3DSceneRadius = 20;
@@ -135,6 +147,7 @@ public partial class MainWindow : Window
     private bool _takeoffPositionDropAllowed;
     private string _takeoffPositionDropStatus = "";
     private string _lastDrawingTool = "point";
+    private string _newCountSymbol = CountDisplaySymbol.Circle;
     private bool _inboxExpanded = false;
     private double _inboxExpandedHeight = 170.0;
     // Clipboard support types moved to MainWindow.SupportTypes.cs
@@ -253,16 +266,26 @@ public partial class MainWindow : Window
         ("Cyan", "#00BCD4"),
         ("Yellow", "#FFC107"),
         ("Pink", "#E91E63"),
+        ("Gray", "#808080"),
+        ("Teal", "#009688"),
+        ("Indigo", "#3F51B5"),
+        ("Lime", "#8BC34A"),
+        ("Brown", "#795548"),
+        ("Navy", "#0D47A1"),
+        ("Black", "#212121"),
     ];
 
     public MainWindow()
     {
         InitializeComponent();
+        InitializeThreeDViewer();
 
         _viewport = new PdfViewport
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
+            ActiveAnnotationColor = _annotationColor,
+            ActiveAnnotationStrokeWidth = _annotationStrokeWidth,
         };
         _viewport.StatusChanged      += msg => TxtStatus.Text = msg;
         _viewport.ScaleChanged       += OnScaleChanged;
@@ -276,16 +299,23 @@ public partial class MainWindow : Window
         _viewport.PdfLayerTraceStateChanged += RefreshPdfLayerTraceControls;
         _viewport.MeasurementAdded   += OnMeasurementAdded;
         _viewport.MeasurementRemoved += OnMeasurementRemoved;
+        _viewport.MeasurementsAdded += OnMeasurementsAdded;
+        _viewport.MeasurementsRemoved += OnMeasurementsRemoved;
         _viewport.MeasurementChanged += OnMeasurementChanged;
+        _viewport.MeasurementsChanged += OnMeasurementsChanged;
         _viewport.MeasurementSelectionChanged += OnViewportMeasurementSelectionChanged;
         _viewport.MeasurementsSelectionChanged += OnViewportMeasurementsSelectionChanged;
         _viewport.PageAnnotationAdded += OnPageAnnotationChanged;
         _viewport.PageAnnotationRemoved += OnPageAnnotationChanged;
         _viewport.PageAnnotationChanged += OnPageAnnotationChanged;
+        _viewport.PageAnnotationTextRequested += RequestPageAnnotationText;
         _viewport.TransformSelectionChanged += OnViewportTransformSelectionChanged;
         _viewport.CopyMeasurementsRequested += CopyMeasurementsToClipboard;
         _viewport.PasteMeasurementsRequested += PasteMeasurementsFromClipboard;
         _viewport.ContextRequested   += OnViewportContextRequested;
+        _viewport.AiCropNoteSelectionCompleted += OnAiCropNoteSelectionCompleted;
+        _viewport.ThreeDRoofGuideAdded += OnThreeDRoofGuideAdded;
+        _viewport.ThreeDRoofGuideSelectionRequested += OnThreeDRoofGuideSelectionRequested;
         _viewport.JoistDirectionCaptured += OnJoistDirectionCaptured;
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChanged;
         ViewportSurfaceHost.Children.Add(_viewport);
@@ -299,16 +329,37 @@ public partial class MainWindow : Window
             ["drawline"] = BtnDrawLine,
             ["drawarrow"] = BtnDrawArrow,
             ["drawrect"] = BtnDrawRect,
+            ["drawcloud"] = BtnDrawCloud,
+            ["drawarea"] = BtnDrawAreaAnnot,
+            ["note"] = BtnNote,
             ["point"] = BtnPoint,
             ["line"]  = BtnLine,
             ["area"]  = BtnArea,
+            ["joistarea"] = BtnJoistArea,
             ["areacut"] = BtnAreaCut,
         };
         SetupToolButtonContent();
-        BtnPoint.ToolTip = "Count item (P)";
+        BtnPan.ToolTip = $"Pan ({KeyboardShortcutKeys.EnglishLayoutDisplay("v")})";
+        BtnSelect.ToolTip = $"Select ({KeyboardShortcutKeys.EnglishLayoutDisplay("e")})";
+        BtnScale.ToolTip = $"Scale ({KeyboardShortcutKeys.EnglishLayoutDisplay("s")})";
+        BtnRuler.ToolTip = $"Ruler ({KeyboardShortcutKeys.EnglishLayoutDisplay("r")})";
+        BtnDrawLine.ToolTip = $"Draw line ({KeyboardShortcutKeys.EnglishLayoutDisplay("d")})";
+        BtnDrawRect.ToolTip = $"Draw box ({KeyboardShortcutKeys.EnglishLayoutDisplay("b")})";
+        BtnDrawCloud.ToolTip = "Cloud annotation";
+        BtnDrawAreaAnnot.ToolTip = "Filled area annotation";
+        BtnNote.ToolTip = $"Sheet note ({KeyboardShortcutKeys.EnglishLayoutDisplay("n")})";
+        BtnPoint.ToolTip = $"Count item ({KeyboardShortcutKeys.EnglishLayoutDisplay("p")})";
+        BtnLine.ToolTip = $"Line item ({KeyboardShortcutKeys.EnglishLayoutDisplay("l")})";
+        BtnArea.ToolTip = $"Area item ({KeyboardShortcutKeys.EnglishLayoutDisplay("a")})";
+        BtnJoistArea.ToolTip = $"Joist area ({KeyboardShortcutKeys.EnglishLayoutDisplay("j")})";
+        BtnAreaCut.ToolTip = $"Area cut ({KeyboardShortcutKeys.EnglishLayoutDisplay("x")})";
         SetupRecordButton();
         SetupEstimateTable();
+        InstallOutputSettingsTab();
+        InitializeBookmarksTab();
         ApplyToolSelection("select");
+        ApplyRulerVisibilityToViewport();
+        UpdateDefaultCountSymbolButton();
         UpdateTransformEditControls();
 
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (_, _) => BtnOpen_Click(null!, null!)));
@@ -337,7 +388,7 @@ public partial class MainWindow : Window
         TakeoffsTree.DragOver += TakeoffsTree_DragOver;
         TakeoffsTree.DragLeave += TakeoffsTree_DragLeave;
         TakeoffsTree.Drop += TakeoffsTree_Drop;
-        TakeoffsTree.KeyDown += TakeoffsTree_KeyDown;
+        TakeoffsTree.PreviewKeyDown += TakeoffsTree_KeyDown;
         TakeoffsTree.ContextMenuOpening += TakeoffsTree_ContextMenuOpening;
         TakeoffsTree.RequestBringIntoView += TreeView_RequestBringIntoViewKeepLeft;
         TakeoffsTree.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TakeoffsTreeItem_Expanded));
@@ -348,6 +399,8 @@ public partial class MainWindow : Window
         ObservationsListView.ContextMenu = BuildObservationsContextMenu();
         InitializeMarkerFilterControls();
         _takeoffAutosaveTimer.Tick += (_, _) => FlushTakeoffAutosaves();
+        _sheetLegendAutoSortTimer.Tick += (_, _) => RunSheetLegendAutoSortSweep();
+        _sheetLegendAutoSortTimer.Start();
         TakeoffsTree.ContextMenu = BuildTakeoffsRootContextMenu();
         BtnLayersOn.IsEnabled = false;
         BtnLayersOff.IsEnabled = false;
@@ -368,6 +421,7 @@ public partial class MainWindow : Window
         {
             TryOpenLastJobFromSettings();
             await TryRunViewportPageStressSmokeAsync();
+            await TryRunTakeoffsMoveSmokeAsync();
         }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
@@ -397,6 +451,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _sheetLegendAutoSortTimer.Stop();
         SaveSidePanelWidths();
         SaveCurrentPageAnnotations();
         base.OnClosed(e);

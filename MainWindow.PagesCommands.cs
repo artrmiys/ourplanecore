@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -11,15 +12,16 @@ public partial class MainWindow
     private void PagesTree_KeyDown(object sender, KeyEventArgs e)
     {
         if (PagesTree.SelectedItem is not TreeViewItem item) return;
+        Key key = KeyboardShortcutKeys.EffectiveKey(e);
 
         if (item.Tag is PageTakeoffNode node)
         {
-            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Up)
+            if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
             {
                 MovePageTakeoffLegendNodes(node, -1);
                 e.Handled = true;
             }
-            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Down)
+            else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
             {
                 MovePageTakeoffLegendNodes(node, 1);
                 e.Handled = true;
@@ -27,42 +29,42 @@ public partial class MainWindow
             return;
         }
 
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.C)
+        if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.C)
         {
             CopyCutPagesNode(item, PagesClipboardMode.Copy);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.X)
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.X)
         {
             CopyCutPagesNode(item, PagesClipboardMode.Cut);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.V)
         {
             PasteIntoSelectedTarget(item);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.D)
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.D)
         {
             DuplicatePageNode(item);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Up)
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
         {
             MovePagesNodes(item, -1);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Down)
+        else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
         {
             MovePagesNodes(item, 1);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Delete)
+        else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.Delete)
         {
             DeletePagesNode(item);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.F2)
+        else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.F2)
         {
             RenamePagesNode(item);
             e.Handled = true;
@@ -80,6 +82,7 @@ public partial class MainWindow
             bool canPaste = CanPasteInto(folder.FolderPath);
             bool hasChildren = Directory.Exists(folder.FolderPath) &&
                                Directory.EnumerateDirectories(folder.FolderPath).Any();
+            IReadOnlyList<PageInfo> folderLegendPages = LegendPagesInFolder(folder.FolderPath);
 
             menu.Items.Add(MakeMenuItem("New Folder", true, () => NewPageFolder(item)));
             menu.Items.Add(MakeMenuItem("Rename Folder", !isRoot && selectedCount <= 1, () => RenamePagesNode(item)));
@@ -97,8 +100,11 @@ public partial class MainWindow
                 MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
                 MakeMenuItem("Sort Children A-Z", hasChildren, () => SortFolderChildren(item, descending: false)),
                 MakeMenuItem("Sort Children Z-A", hasChildren, () => SortFolderChildren(item, descending: true)),
-                MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct),
-                MakeMenuItem("Sort D/Sec/WT by Suffix", true, SortPagesBySuffix),
+                MakeMenuItem("Sort Sheet Legends Auto in Folder", CanSortPageLegends(folderLegendPages), () => SortPageLegendsAuto(folderLegendPages)),
+                MakeMenuItem("Sort Sheet Legends A-Z in Folder", CanSortPageLegends(folderLegendPages), () => SortPageLegendsByName(folderLegendPages)),
+                MakeMenuItem("Reset Sheet Legend Orders in Folder", HasCustomPageLegendOrders(folderLegendPages), () => ResetPageLegendOrders(folderLegendPages)),
+                MakeMenuItem("Sort A/S in This Folder", true, () => SortPagesIntoArchStruct(folder.FolderPath)),
+                MakeMenuItem("Sort D/Sec/WT in This Folder", true, () => SortPagesBySuffix(folder.FolderPath)),
                 MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
             menu.Items.Add(MakeSubmenu(
                 "PDF Metadata",
@@ -118,8 +124,24 @@ public partial class MainWindow
         else if (item.Tag is PageInfo page)
         {
             int selectedCount = PageSelectionCount(item);
+            int selectedPageCount = GetSelectedPageEntries(item).Count(entry => entry.IsPage);
+            IReadOnlyList<PageInfo> selectedLegendPages = SelectedLegendPages(item);
+            int selectedLegendPageCount = selectedLegendPages.Count;
+            bool multiLegendPages = selectedLegendPageCount > 1;
             string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
             menu.Items.Add(MakeMenuItem("Open in New Tab", true, () => OpenPageInNewTab(page)));
+            menu.Items.Add(MakeMenuItem(
+                selectedPageCount > 1 ? $"Open {selectedPageCount} Selected in New Tabs" : "Open Selected in New Tabs",
+                selectedPageCount > 1,
+                () => OpenSelectedPagesInNewTabs(item)));
+            menu.Items.Add(MakeMenuItem(
+                selectedPageCount > 1 ? $"Detach {selectedPageCount} Selected to Windows" : "Detach Sheet to Window",
+                selectedPageCount >= 1,
+                () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: false)));
+            menu.Items.Add(MakeMenuItem(
+                selectedPageCount > 1 ? $"Tile {Math.Min(64, selectedPageCount)} Selected on Monitor 2" : "Tile Sheet on Monitor 2",
+                selectedPageCount >= 1,
+                () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: true)));
             menu.Items.Add(BuildSheetOverlayMenu(page));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
@@ -136,8 +158,18 @@ public partial class MainWindow
                 MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up", CanMovePagesNodes(item, -1), () => MovePagesNodes(item, -1)),
                 MakeMenuItem(selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down", CanMovePagesNodes(item, 1), () => MovePagesNodes(item, 1)),
                 MakeMenuItem("Move to Folder...", selectedCount <= 1, () => MovePageToFolder(item)),
-                MakeMenuItem("Sort Sheet Legend A-Z", CanSortPageLegend(page), () => SortPageLegendByName(page)),
-                MakeMenuItem("Reset Sheet Legend Order", HasCustomPageLegendOrder(page), () => ResetPageLegendOrder(page)),
+                MakeMenuItem(
+                    multiLegendPages ? $"Sort {selectedLegendPageCount} Selected Sheet Legends Auto" : "Sort Sheet Legend Auto",
+                    multiLegendPages ? CanSortPageLegends(selectedLegendPages) : CanSortPageLegend(page),
+                    () => { if (multiLegendPages) SortPageLegendsAuto(selectedLegendPages); else SortPageLegendAuto(page); }),
+                MakeMenuItem(
+                    multiLegendPages ? $"Sort {selectedLegendPageCount} Selected Sheet Legends A-Z" : "Sort Sheet Legend A-Z",
+                    multiLegendPages ? CanSortPageLegends(selectedLegendPages) : CanSortPageLegend(page),
+                    () => { if (multiLegendPages) SortPageLegendsByName(selectedLegendPages); else SortPageLegendByName(page); }),
+                MakeMenuItem(
+                    multiLegendPages ? $"Reset {selectedLegendPageCount} Sheet Legend Orders" : "Reset Sheet Legend Order",
+                    multiLegendPages ? HasCustomPageLegendOrders(selectedLegendPages) : HasCustomPageLegendOrder(page),
+                    () => { if (multiLegendPages) ResetPageLegendOrders(selectedLegendPages); else ResetPageLegendOrder(page); }),
                 MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct),
                 MakeMenuItem("Sort D/Sec/WT by Suffix", true, SortPagesBySuffix),
                 MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));

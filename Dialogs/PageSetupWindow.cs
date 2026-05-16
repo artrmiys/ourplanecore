@@ -25,7 +25,7 @@ public sealed class PageSetupWindow : Window
         Title = "Page Setup";
         Width = 340;
         SizeToContent = SizeToContent.Height;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        WindowStartupLocation = WindowStartupLocation.Manual;
         ResizeMode = ResizeMode.NoResize;
         WindowStyle = WindowStyle.ToolWindow;
         ShowInTaskbar = false;
@@ -164,7 +164,19 @@ public sealed class PageSetupWindow : Window
     {
         if (e.Key is Key.Enter or Key.Return)
         {
-            NavigateRequested?.Invoke(this, new PageSetupNavigateEventArgs(1));
+            if (_pageNameBox.IsKeyboardFocusWithin)
+            {
+                SelectScaleText();
+            }
+            else if (_scaleBox.IsKeyboardFocusWithin)
+            {
+                NavigateRequested?.Invoke(this, new PageSetupNavigateEventArgs(1));
+            }
+            else
+            {
+                SelectPageNameText();
+            }
+
             e.Handled = true;
             return;
         }
@@ -186,6 +198,19 @@ public sealed class PageSetupWindow : Window
             _pageNameBox.Focus();
             Keyboard.Focus(_pageNameBox);
             _pageNameBox.SelectAll();
+        }), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void SelectScaleText()
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!IsVisible)
+                return;
+
+            _scaleBox.Focus();
+            Keyboard.Focus(_scaleBox);
+            _scaleBox.SelectAll();
         }), System.Windows.Threading.DispatcherPriority.Input);
     }
 }

@@ -30,20 +30,25 @@ public partial class MainWindow
         PagesTree.Items.Clear();
         _pageTakeoffMultiSelection.Clear();
         _pageTakeoffRangeAnchorKey = null;
+        ClearDirtyPageTakeoffIndicators();
         if (_currentJob == null)
         {
             _expandedPageTreePaths.Clear();
             return;
         }
 
-        FillPagesTree(PagesTree.Items, _currentJob.PagesRoot);
-        RefreshPagesTakeoffIndicators();
+        using (UsePageMeasurementLookup())
+        {
+            FillPagesTree(PagesTree.Items, _currentJob.PagesRoot);
+            RefreshPagesTakeoffIndicators();
+        }
         RestoreExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
 
         if (!string.IsNullOrWhiteSpace(selectPath))
             SelectNodeByFolder(selectPath);
         PrunePagesMultiSelection();
         ApplyPagesMultiSelectionVisuals();
+        ApplyPagesTreeSearchFilter();
     }
 
     private void FillPagesTree(ItemCollection items, string folder)
@@ -146,17 +151,130 @@ public partial class MainWindow
 
     private void RefreshPagesTakeoffIndicators()
     {
-        foreach (TreeViewItem item in EnumeratePageTreeItems().ToList())
+        using (UsePageMeasurementLookup())
         {
-            if (item.Tag is PageInfo page)
+            foreach (TreeViewItem item in EnumeratePageTreeItems().ToList())
             {
+                if (item.Tag is PageInfo page)
+                {
+                    bool wasExpanded = item.IsExpanded;
+                    item.Header = BuildPageHeader(page);
+                    RebuildPageTakeoffNodes(item, page);
+                    item.IsExpanded = wasExpanded;
+                }
+            }
+        }
+
+        ClearDirtyPageTakeoffIndicators();
+        ApplyPagesMultiSelectionVisuals();
+    }
+
+    private void RefreshPageTakeoffIndicatorsForFolder(string? pageFolder)
+    {
+        if (string.IsNullOrWhiteSpace(pageFolder))
+        {
+            RefreshPagesTakeoffIndicators();
+            return;
+        }
+
+        using (UsePageMeasurementLookup())
+        {
+            if (FindPageTreeItemByFolder(pageFolder) is not { Tag: PageInfo page } item)
+            {
+                RefreshPagesTakeoffIndicators();
+                return;
+            }
+
+            bool wasExpanded = item.IsExpanded;
+            item.Header = BuildPageHeader(page);
+            RebuildPageTakeoffNodes(item, page);
+            item.IsExpanded = wasExpanded;
+            RefreshPageTreeRowsByFolderKeys(new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                NormalizePathForCompare(page.FolderPath),
+            });
+        }
+    }
+
+    private void RefreshPageTakeoffIndicatorsForFolders(IEnumerable<string> pageFolders)
+    {
+        var folderKeys = pageFolders
+            .Where(folder => !string.IsNullOrWhiteSpace(folder))
+            .Select(NormalizePathForCompare)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (folderKeys.Count == 0)
+            return;
+
+        var remaining = folderKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var refreshed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (UsePageMeasurementLookup())
+        {
+            foreach (TreeViewItem item in EnumeratePageTreeItems().ToList())
+            {
+                if (item.Tag is not PageInfo page)
+                    continue;
+
+                string pageKey = NormalizePathForCompare(page.FolderPath);
+                if (!remaining.Remove(pageKey))
+                    continue;
+
                 bool wasExpanded = item.IsExpanded;
                 item.Header = BuildPageHeader(page);
                 RebuildPageTakeoffNodes(item, page);
                 item.IsExpanded = wasExpanded;
+                refreshed.Add(pageKey);
             }
         }
-        ApplyPagesMultiSelectionVisuals();
+
+        if (remaining.Count > 0)
+        {
+            RefreshPagesTakeoffIndicators();
+            return;
+        }
+
+        RefreshPageTreeRowsByFolderKeys(refreshed);
+    }
+
+    private void RefreshPageTakeoffIndicatorsForActiveChange(
+        string? previousActiveTakeoffFolder,
+        IReadOnlyList<TakeoffItem> selectedTakeoffs)
+    {
+        var pageFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddPageFoldersForTakeoffFolder(previousActiveTakeoffFolder, pageFolders);
+        foreach (TakeoffItem takeoff in selectedTakeoffs)
+            AddPageFoldersForTakeoff(takeoff, pageFolders);
+
+        if (pageFolders.Count == 0)
+        {
+            return;
+        }
+
+        RefreshPageTreeRowsByFolderKeys(pageFolders
+            .Select(NormalizePathForCompare)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private void AddPageFoldersForTakeoffFolder(string? takeoffFolder, HashSet<string> pageFolders)
+    {
+        if (string.IsNullOrWhiteSpace(takeoffFolder))
+            return;
+
+        TakeoffItem? item = _takeoffItems.FirstOrDefault(candidate =>
+            string.Equals(candidate.FolderPath, takeoffFolder, StringComparison.OrdinalIgnoreCase));
+        AddPageFoldersForTakeoff(item, pageFolders);
+    }
+
+    private static void AddPageFoldersForTakeoff(TakeoffItem? takeoff, HashSet<string> pageFolders)
+    {
+        if (takeoff == null)
+            return;
+
+        foreach (Measurement measurement in takeoff.Measurements)
+        {
+            if (!string.IsNullOrWhiteSpace(measurement.PageFolder))
+                pageFolders.Add(measurement.PageFolder);
+        }
     }
 
     private void PagesTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -166,6 +284,7 @@ public partial class MainWindow
 
         if (e.NewValue is TreeViewItem { Tag: PageInfo page })
         {
+            TryRefreshDirtyPageTakeoffIndicator(page.FolderPath);
             OpenPageInActiveTab(page);
         }
         else if (e.NewValue is TreeViewItem { Tag: PageTakeoffNode node })
@@ -182,14 +301,6 @@ public partial class MainWindow
     {
         if (_currentJob == null)
             throw new InvalidOperationException("No job is open.");
-
-        if (PagesTree.SelectedItem is TreeViewItem tvi)
-        {
-            if (tvi.Tag is PageFolderNode folder)
-                return folder.FolderPath;
-            if (tvi.Tag is PageInfo page)
-                return Path.GetDirectoryName(page.FolderPath) ?? _currentJob.PagesRoot;
-        }
 
         return OurPlaneCoreJobStore.DefaultImportFolder(_currentJob);
     }
@@ -362,8 +473,13 @@ public partial class MainWindow
     private void PagesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _pagesDragStart = e.GetPosition(PagesTree);
+        _pagesDragItem = null;
+        _pagesDragArmed = false;
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
             return;
+
+        _pagesDragItem = item;
+        _pagesDragArmed = CanArmPagesTreeDrag(item, e.OriginalSource as DependencyObject);
 
         if (item.Tag is PageTakeoffNode pageTakeoff)
         {
@@ -434,6 +550,22 @@ public partial class MainWindow
         _pagesRangeAnchorPath = path;
         _pageTakeoffMultiSelection.Clear();
         ApplyPagesMultiSelectionVisuals();
+    }
+
+    private bool CanArmPagesTreeDrag(TreeViewItem item, DependencyObject? source)
+    {
+        if (FindAncestor<ToggleButton>(source) != null)
+            return false;
+        if (IsPageOverlayVisibilityToggleSource(source))
+            return false;
+        if (item.Tag is PageTakeoffNode)
+            return true;
+
+        string? path = GetPagesNodePath(item);
+        return path != null &&
+               !IsRootPagesNode(item) &&
+               Directory.Exists(path) &&
+               IsPathInsidePagesRoot(path, allowRoot: false);
     }
 
     private static bool IsPageOverlayVisibilityToggleSource(DependencyObject? source)

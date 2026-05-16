@@ -296,6 +296,7 @@ public partial class MainWindow
         RebuildPageTakeoffNodes(item, page);
         item.IsExpanded = wasExpanded;
         ApplyPagesMultiSelectionVisuals();
+        ApplyPagesTreeSearchFilter();
     }
 
     private void ReloadCurrentSheetOverlay(string status)

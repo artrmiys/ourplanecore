@@ -37,6 +37,7 @@ public sealed class PageInfo
     public bool PdfLayersCached { get; init; }
     public IReadOnlyList<PdfLayerInfo> PdfLayers { get; init; } = [];
     public List<string> LegendTakeoffOrder { get; set; } = [];
+    public string LegendTakeoffOrderMode { get; set; } = "auto";
     public List<string> HiddenTakeoffs { get; set; } = [];
     public string OverlayPageFolder { get; init; } = "";
     public bool OverlayVisible { get; init; } = true;
@@ -66,6 +67,9 @@ public sealed class SourceInfo
 
     [JsonPropertyName("legend_takeoff_order")]
     public List<string> LegendTakeoffOrder { get; set; } = [];
+
+    [JsonPropertyName("legend_takeoff_order_mode")]
+    public string LegendTakeoffOrderMode { get; set; } = "auto";
 
     [JsonPropertyName("hidden_takeoffs")]
     public List<string> HiddenTakeoffs { get; set; } = [];

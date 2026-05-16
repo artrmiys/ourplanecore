@@ -9,14 +9,18 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private void SetActiveTakeoffTarget(TreeViewItem? tvi, TakeoffItem item, bool selectCanvasMeasurements = true)
+    private bool SetActiveTakeoffTarget(TreeViewItem? tvi, TakeoffItem item, bool selectCanvasMeasurements = true)
     {
+        if (TryBlockTakeoffSwitchDuringRecord(item))
+            return false;
+
         CancelPendingTakeoffSelectionSync();
         item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
         _viewport.ActiveTakeoffFolder = item.FolderPath;
+        _viewport.ActiveCountSymbol = item.CountSymbol;
 
         if (tvi != null)
         {
@@ -27,10 +31,7 @@ public partial class MainWindow
             tvi.BringIntoView();
         }
 
-        if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
-            ApplyToolSelection(item.MeasurementType);
-        else
-            UpdateToolStatus();
+        SyncToolTypeForTakeoffItem(item);
 
         RefreshPagesTakeoffIndicators();
         RefreshActiveTakeoffVisuals();
@@ -39,13 +40,103 @@ public partial class MainWindow
             ScheduleTakeoffSelectionSync(() => SelectCurrentPageTakeoffMeasurementsOnCanvas(item));
         UpdateTotalDisplay();
         TxtStatus.Text = $"Active takeoff target: {item.Name}.";
+        return true;
+    }
+
+    private bool IsTakeoffRecordActive() =>
+        IsRecordTool(_activeTool);
+
+    private bool CanChangeActiveTakeoffTarget(TakeoffItem item) =>
+        !IsTakeoffRecordActive() ||
+        _activeItem == null ||
+        IsActiveTakeoffItem(item);
+
+    private bool TryBlockTakeoffSwitchDuringRecord(TakeoffItem? requestedItem)
+    {
+        if (!IsTakeoffRecordActive() || _activeItem == null)
+            return false;
+
+        if (requestedItem != null && IsActiveTakeoffItem(requestedItem))
+            return false;
+
+        string lockedName = _activeItem.Name;
+        RestoreActiveTakeoffTargetAfterBlockedRecordSwitch();
+        TxtStatus.Text = requestedItem == null
+            ? $"Record stays on {lockedName}. Stop Record before selecting another takeoff target."
+            : $"Record stays on {lockedName}. Stop Record before switching to {requestedItem.Name}.";
+        return true;
+    }
+
+    private bool TryBlockTakeoffTreeSelectionDuringRecord(TreeViewItem item)
+    {
+        TakeoffItem? requestedItem = item.Tag switch
+        {
+            TakeoffItem takeoff => takeoff,
+            TakeoffMeasurementNode section => section.Item,
+            _ => null,
+        };
+
+        return TryBlockTakeoffSwitchDuringRecord(requestedItem);
+    }
+
+    private bool TryBlockMeasurementTakeoffSwitchDuringRecord(Measurement measurement)
+    {
+        TakeoffItem? requestedItem = FindTakeoffItemForMeasurement(measurement);
+        return requestedItem != null && TryBlockTakeoffSwitchDuringRecord(requestedItem);
+    }
+
+    private bool TryBlockMeasurementSelectionDuringRecord(IEnumerable<Measurement> measurements)
+    {
+        if (!IsTakeoffRecordActive() || _activeItem == null)
+            return false;
+
+        foreach (Measurement measurement in measurements)
+        {
+            TakeoffItem? requestedItem = FindTakeoffItemForMeasurement(measurement);
+            if (requestedItem != null && !IsActiveTakeoffItem(requestedItem))
+                return TryBlockTakeoffSwitchDuringRecord(requestedItem);
+        }
+
+        return false;
+    }
+
+    private void RestoreActiveTakeoffTargetAfterBlockedRecordSwitch()
+    {
+        CancelPendingTakeoffSelectionSync();
+        TakeoffItem? lockedItem = _activeItem;
+        if (lockedItem == null)
+            return;
+
+        _viewport.ActiveColor = lockedItem.Color;
+        _viewport.ActiveTakeoffFolder = lockedItem.FolderPath;
+        _viewport.ActiveCountSymbol = lockedItem.CountSymbol;
+        _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        if (!string.IsNullOrWhiteSpace(lockedItem.FolderPath))
+            _takeoffsMultiSelection.Add(lockedItem.FolderPath);
+        ApplyTakeoffPageHighlights();
+        RefreshActiveTakeoffVisuals();
+        UpdateToolStatus();
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (!IsTakeoffRecordActive() ||
+                _activeItem == null ||
+                !IsActiveTakeoffItem(lockedItem))
+            {
+                return;
+            }
+
+            SelectTakeoffItemSilently(lockedItem);
+            ApplyTakeoffPageHighlights();
+        });
     }
 
     private void BtnActiveTakeoffRecord_Click(object sender, RoutedEventArgs e)
     {
-        if (_activeTool is "point" or "line" or "area")
+        if (IsRecordTool(_activeTool))
         {
-            string recordType = MeasurementTypeTitle(_activeTool);
+            string recordType = RecordToolTitle(_activeTool);
             SetTool("select");
             TxtStatus.Text = $"Record stopped: {recordType}.";
             return;
@@ -76,8 +167,10 @@ public partial class MainWindow
             return;
         }
 
-        SetActiveTakeoffTarget(null, _activeItem, selectCanvasMeasurements: false);
-        SetTool(OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType));
+        if (!SetActiveTakeoffTarget(null, _activeItem, selectCanvasMeasurements: false))
+            return;
+
+        SetTool(ToolForTakeoffItem(_activeItem));
     }
 
     private void BtnActiveTakeoffMore_Click(object sender, RoutedEventArgs e)
@@ -133,7 +226,9 @@ public partial class MainWindow
             return;
         }
 
-        SetActiveTakeoffTarget(tvi, _activeItem, selectCanvasMeasurements: false);
+        if (!SetActiveTakeoffTarget(tvi, _activeItem, selectCanvasMeasurements: false))
+            return;
+
         EditTakeoffItemProperties(tvi, _activeItem);
     }
 
@@ -162,8 +257,8 @@ public partial class MainWindow
             ? (offset < 0 ? targets.Count - 1 : 0)
             : (currentIndex + offset + targets.Count) % targets.Count;
         TakeoffItem next = targets[nextIndex];
-        SetActiveTakeoffTarget(FindTakeoffTreeItem(next), next);
-        TxtStatus.Text = $"Active takeoff target {nextIndex + 1}/{targets.Count}: {next.Name}.";
+        if (SetActiveTakeoffTarget(FindTakeoffTreeItem(next), next))
+            TxtStatus.Text = $"Active takeoff target {nextIndex + 1}/{targets.Count}: {next.Name}.";
     }
 
     private List<TakeoffItem> ActiveTakeoffTargetCycleItems() =>
@@ -189,8 +284,8 @@ public partial class MainWindow
             ? (offset < 0 ? targets.Count - 1 : 0)
             : (currentIndex + offset + targets.Count) % targets.Count;
         TakeoffItem next = targets[nextIndex];
-        SetActiveTakeoffTarget(FindTakeoffTreeItem(next), next);
-        TxtStatus.Text = $"Sheet takeoff target {nextIndex + 1}/{targets.Count}: {next.Name}.";
+        if (SetActiveTakeoffTarget(FindTakeoffTreeItem(next), next))
+            TxtStatus.Text = $"Sheet takeoff target {nextIndex + 1}/{targets.Count}: {next.Name}.";
     }
 
     private List<TakeoffItem> ActiveSheetTakeoffTargetCycleItems() =>
@@ -232,8 +327,8 @@ public partial class MainWindow
 
     private void SelectActiveSheetTakeoffTarget(TakeoffItem target, int index, int count)
     {
-        SetActiveTakeoffTarget(FindTakeoffTreeItem(target), target);
-        TxtStatus.Text = $"Sheet takeoff target {index + 1}/{count}: {target.Name}.";
+        if (SetActiveTakeoffTarget(FindTakeoffTreeItem(target), target))
+            TxtStatus.Text = $"Sheet takeoff target {index + 1}/{count}: {target.Name}.";
     }
 
     private string ActiveSheetTakeoffTargetQuantity(TakeoffItem item)

@@ -108,7 +108,7 @@ public sealed partial class PdfViewport
     private bool TryDeleteSelectedMeasurementVertices()
     {
         var groups = _selectedMeasurementVertexIndices
-            .Where(pair => _measurements.Contains(pair.Key) &&
+            .Where(pair => _measurementSet.Contains(pair.Key) &&
                            IsMeasurementOnActivePage(pair.Key) &&
                            CanEditMeasurementVertices(pair.Key))
             .Select(pair => new
@@ -141,11 +141,8 @@ public sealed partial class PdfViewport
             "delete-vertices");
         int deletedCount = 0;
         foreach (var group in groups)
-        {
             deletedCount += DeleteMeasurementVertices(group.Measurement, group.Indices);
-
-            MeasurementChanged?.Invoke(group.Measurement);
-        }
+        NotifyMeasurementsChanged(groups.Select(group => group.Measurement).ToList());
 
         ClearMeasurementVertexSelection();
         _selectedVertexIndex = -1;
@@ -157,7 +154,7 @@ public sealed partial class PdfViewport
 
     private IEnumerable<Measurement> ActiveVertexMeasurements() =>
         _selectedMeasurementVertexIndices
-            .Where(pair => _measurements.Contains(pair.Key) &&
+            .Where(pair => _measurementSet.Contains(pair.Key) &&
                            IsMeasurementOnActivePage(pair.Key) &&
                            pair.Value.Count > 0)
             .Select(pair => pair.Key)

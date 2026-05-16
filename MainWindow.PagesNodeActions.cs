@@ -9,9 +9,52 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private void BtnNewPageFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "New Page Folder",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string targetFolder = PageFolderCreationTarget(PagesTree.SelectedItem as TreeViewItem) ??
+                              _currentJob.PagesRoot;
+        CreatePageFolder(targetFolder);
+    }
+
     private void NewPageFolder(TreeViewItem item)
     {
-        if (item.Tag is not PageFolderNode folder || !IsPathInsidePagesRoot(folder.FolderPath))
+        string? targetFolder = PageFolderCreationTarget(item);
+        if (targetFolder == null)
+            return;
+
+        CreatePageFolder(targetFolder);
+    }
+
+    private string? PageFolderCreationTarget(TreeViewItem? item)
+    {
+        if (_currentJob == null || item == null)
+            return null;
+
+        string? folderPath = item.Tag switch
+        {
+            PageFolderNode folder => folder.FolderPath,
+            PageInfo page => Path.GetDirectoryName(page.FolderPath),
+            PageTakeoffNode node => Path.GetDirectoryName(node.Page.FolderPath),
+            PageOverlayNode overlay => Path.GetDirectoryName(overlay.Page.FolderPath),
+            _ => null,
+        };
+
+        return !string.IsNullOrWhiteSpace(folderPath) &&
+               IsPathInsidePagesRoot(folderPath)
+            ? folderPath
+            : null;
+    }
+
+    private void CreatePageFolder(string parentFolder)
+    {
+        if (!IsPathInsidePagesRoot(parentFolder))
             return;
 
         string? name = ShowInputDialog("Folder name:", "New Folder", "New Folder");
@@ -19,7 +62,7 @@ public partial class MainWindow
 
         try
         {
-            string created = OurPlaneCoreJobStore.CreateFolder(folder.FolderPath, name);
+            string created = OurPlaneCoreJobStore.CreateFolder(parentFolder, name);
             ReloadPagesTree(created);
             TxtStatus.Text = $"Created folder: {OurPlaneCoreJobStore.DisplayName(created)}";
         }
@@ -345,6 +388,8 @@ public partial class MainWindow
         {
             PageFolderNode folder => folder.FolderPath,
             PageInfo page => Path.GetDirectoryName(page.FolderPath),
+            PageTakeoffNode node => Path.GetDirectoryName(node.Page.FolderPath),
+            PageOverlayNode overlay => Path.GetDirectoryName(overlay.Page.FolderPath),
             _ => null,
         };
     }

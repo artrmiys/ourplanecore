@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -42,19 +44,28 @@ public sealed class PdfExportDialog : Window
     private readonly CheckBox _includeMeasurementsBox;
     private readonly CheckBox _includeAnnotationsBox;
     private readonly CheckBox _includeLegendBox;
+    private readonly TextBox _measurementStrokeBox;
     private readonly Button _exportButton;
+    private const double MinMeasurementStrokeScale = 0.25;
+    private const double MaxMeasurementStrokeScale = 10.0;
 
     public IReadOnlyList<PdfExportPageRow> Rows => _rows;
     public bool IncludeMeasurements => _includeMeasurementsBox.IsChecked == true;
     public bool IncludeAnnotations => _includeAnnotationsBox.IsChecked == true;
     public bool IncludeLegend => _includeLegendBox.IsChecked == true;
+    public double MeasurementStrokeScale => ReadScale(
+        _measurementStrokeBox,
+        fallback: 1.5,
+        MinMeasurementStrokeScale,
+        MaxMeasurementStrokeScale);
 
     public PdfExportDialog(
         IEnumerable<PageInfo> pages,
         ISet<string> initiallySelected,
         bool includeMeasurements = true,
         bool includeAnnotations = true,
-        bool includeLegend = true)
+        bool includeLegend = true,
+        double measurementStrokeScale = 1.5)
     {
         var selectedFolders = initiallySelected
             .Select(NormalizePathForCompare)
@@ -64,7 +75,7 @@ public sealed class PdfExportDialog : Window
         _rows = new ObservableCollection<PdfExportPageRow>(
             pages.Select(page => new PdfExportPageRow
             {
-                IsSelected = selectedFolders.Count == 0 || selectedFolders.Contains(NormalizePathForCompare(page.FolderPath)),
+                IsSelected = selectedFolders.Contains(NormalizePathForCompare(page.FolderPath)),
                 PageFolder = page.FolderPath,
                 Name = page.Name,
                 Source = System.IO.Path.GetFileName(page.PdfPath),
@@ -125,12 +136,34 @@ public sealed class PdfExportDialog : Window
             Content = "Legend",
             IsChecked = includeLegend,
             VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+        var strokeLabel = new TextBlock
+        {
+            Text = "Stroke",
+            ToolTip = "Exported measurement line thickness.",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0),
+        };
+        _measurementStrokeBox = new TextBox
+        {
+            Width = 52,
+            Height = 24,
+            Text = ClampScale(
+                measurementStrokeScale,
+                fallback: 1.5,
+                MinMeasurementStrokeScale,
+                MaxMeasurementStrokeScale).ToString("0.##", CultureInfo.InvariantCulture),
+            ToolTip = "Measurement line thickness multiplier, 0.25 - 10. Press Export to save it.",
+            VerticalContentAlignment = VerticalAlignment.Center,
         };
         toolbar.Children.Add(allButton);
         toolbar.Children.Add(noneButton);
         toolbar.Children.Add(_includeMeasurementsBox);
         toolbar.Children.Add(_includeAnnotationsBox);
         toolbar.Children.Add(_includeLegendBox);
+        toolbar.Children.Add(strokeLabel);
+        toolbar.Children.Add(_measurementStrokeBox);
 
         var footer = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
         DockPanel.SetDock(footer, Dock.Bottom);
@@ -188,6 +221,19 @@ public sealed class PdfExportDialog : Window
                 return;
             }
 
+            if (!TryReadScale(_measurementStrokeBox, MinMeasurementStrokeScale, MaxMeasurementStrokeScale, out double strokeScale))
+            {
+                MessageBox.Show(
+                    "Stroke must be a number from 0.25 to 10.",
+                    "Export PDF",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                _measurementStrokeBox.Focus();
+                _measurementStrokeBox.SelectAll();
+                return;
+            }
+
+            _measurementStrokeBox.Text = strokeScale.ToString("0.##", CultureInfo.InvariantCulture);
             DialogResult = true;
         };
 
@@ -205,6 +251,35 @@ public sealed class PdfExportDialog : Window
     private void UpdateExportButton()
     {
         _exportButton.IsEnabled = _rows.Any(row => row.IsSelected);
+    }
+
+    private static bool TryReadScale(TextBox box, double min, double max, out double scale)
+    {
+        string raw = box.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out scale) ||
+            double.IsNaN(scale) ||
+            double.IsInfinity(scale) ||
+            scale < min ||
+            scale > max)
+        {
+            scale = 0;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static double ReadScale(TextBox box, double fallback, double min, double max) =>
+        TryReadScale(box, min, max, out double scale)
+            ? scale
+            : ClampScale(fallback, fallback, min, max);
+
+    private static double ClampScale(double value, double fallback, double min, double max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+            return fallback;
+
+        return System.Math.Clamp(value, min, max);
     }
 
     private static string NormalizePathForCompare(string? path)

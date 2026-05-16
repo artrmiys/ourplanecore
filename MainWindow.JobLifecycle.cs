@@ -4,12 +4,10 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Microsoft.Win32;
 using OurPlaneCore.Controls;
 
 namespace OurPlaneCore;
@@ -30,9 +28,13 @@ public partial class MainWindow
         BtnDrawLine.Content = "Draw";
         BtnDrawArrow.Content = "Arrow";
         BtnDrawRect.Content = "Box";
+        BtnDrawCloud.Content = "Cloud";
+        BtnDrawAreaAnnot.Content = "Area";
+        BtnNote.Content = "Note";
         BtnPoint.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Count", glyphBrush);
         BtnLine.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Line, "Line", glyphBrush);
         BtnArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Area, "Area", glyphBrush);
+        BtnJoistArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Joist, "J Area", glyphBrush);
     }
 
     private static FrameworkElement CreateToolGlyphLabel(
@@ -133,6 +135,7 @@ public partial class MainWindow
         _expandedPageTreePaths.Clear();
         _expandedTakeoffTreePaths.Clear();
         _hiddenAiMarkerTypes.Clear();
+        _pagesWithHiddenRulers.Clear();
         _pageTabs.Clear();
         _activePageTab = null;
         RefreshPageTabs(null);
@@ -140,11 +143,17 @@ public partial class MainWindow
         _activeItem = null;
         _activeTakeoffParentFolder = "";
         TakeoffsTree.Items.Clear();
+        ResetTakeoffTreeItemIndex();
         _viewport.SetMeasurements([]);
         _viewport.ClearPage();
+        ApplyRulerVisibilityToViewport();
+        RefreshJobHeaderLabels();
         Title = $"OurPlaneCore — {_currentJob.Name}";
         ReloadPagesTree(_currentJob.PagesRoot);
+        LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
+        LoadThreeDModelForCurrentJob();
+        RunSheetLegendAutoSortSweep();
         _settings.LastJobPath = _currentJob.RootPath;
         _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
         AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
@@ -153,13 +162,12 @@ public partial class MainWindow
         HandleOpenedJobRecovery();
         QueueRecentJobThumbnailGeneration(_currentJob);
         LoadPersistedMarkerVisibility();
-        if (ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
+        if (!IsTruthyEnvironment(TakeoffsMoveSmokeEnv) &&
+            ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);
         ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
-        TxtStatusJob.Text  = _currentJob.Name;
-        TxtJobName.Text    = _currentJob.Name;
-        TxtStatusPage.Text = _currentPage?.Name ?? "—";
+        RefreshJobHeaderLabels();
         TxtStatus.Text = BuildMeasurementRepairStatus($"Loaded job: {_currentJob.Name}");
         LoadObservationsInbox();
         RefreshMassingDraftPanel();
@@ -197,6 +205,16 @@ public partial class MainWindow
             parts.Add($"{_lastMeasurementPageFolderUnresolvedCount} unresolved stale page link(s)");
 
         return $"{prefix}; {string.Join("; ", parts)}.";
+    }
+
+    private void RefreshJobHeaderLabels()
+    {
+        if (_currentJob == null)
+            return;
+
+        TxtStatusJob.Text = _currentJob.Name;
+        TxtJobName.Text = _currentJob.Name;
+        TxtStatusPage.Text = _currentPage?.Name ?? "—";
     }
 
     private string? ResolveInitialPageToOpen(string? initialPageFolder)
@@ -238,14 +256,18 @@ public partial class MainWindow
         SmartContextStore.SaveHiddenMarkerTypes(_currentJob, _hiddenAiMarkerTypes);
     }
 
-    private void TryAutoLoad()
+    private bool TryAutoLoad()
     {
+        if (_currentJob != null || string.IsNullOrWhiteSpace(_currentPdfPath))
+            return false;
+
         var (scale, _, items) = ProjectFile.Restore(_currentPdfPath);
-        if (items.Count == 0) return;
+        if (items.Count == 0) return false;
 
         // Clear any stale in-session state first
         _takeoffItems.Clear();
         TakeoffsTree.Items.Clear();
+        ResetTakeoffTreeItemIndex();
         _activeItem = null;
 
         _takeoffItems.AddRange(items);
@@ -273,22 +295,24 @@ public partial class MainWindow
 
         RefreshAllTotals();
         TxtStatus.Text = $"Loaded {items.Count} item(s) from saved project.";
+        return true;
     }
 
     private void LoadTakeoffsForJob()
     {
         TakeoffsTreeSelectionSnapshot selectionSnapshot = CaptureTakeoffsTreeSelectionState();
-        _takeoffItems.Clear();
-        TakeoffsTree.Items.Clear();
-        _takeoffsRangeAnchorPath = null;
-        _takeoffsMultiSelection.Clear();
-        _takeoffSectionMultiSelection.Clear();
-        _takeoffSectionRangeAnchorKey = null;
-        _activeItem = null;
-        _activeTakeoffParentFolder = _currentJob?.TakeoffsRoot ?? "";
 
         if (_currentJob == null)
         {
+            _takeoffItems.Clear();
+            TakeoffsTree.Items.Clear();
+            ResetTakeoffTreeItemIndex();
+            _takeoffsRangeAnchorPath = null;
+            _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
+            _takeoffSectionRangeAnchorKey = null;
+            _activeItem = null;
+            _activeTakeoffParentFolder = "";
             _lastMeasurementPageFolderRepairCount = 0;
             _lastMeasurementPageFolderUnresolvedCount = 0;
             _expandedTakeoffTreePaths.Clear();
@@ -297,30 +321,67 @@ public partial class MainWindow
             return;
         }
 
-        LoadTakeoffChildren(_currentJob.TakeoffsRoot, TakeoffsTree);
-        _lastMeasurementPageFolderRepairCount = RepairMeasurementPageFolderReferences();
-        RestoreExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
-
-        _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));
-
-        bool restoredSelection = RestoreTakeoffsTreeSelectionState(selectionSnapshot);
-        if (!restoredSelection)
+        var loadedItems = new List<TakeoffItem>();
+        List<TreeViewItem> rootNodes;
+        try
         {
-            if (FindFirstTakeoffTreeItem(TakeoffsTree) is { } firstItem)
-            {
-                firstItem.IsSelected = true;
-            }
-            else
-            {
-                _viewport.ActiveColor = "#FF4444";
-                _viewport.ActiveTakeoffFolder = "";
-            }
+            rootNodes = BuildTakeoffChildren(_currentJob.TakeoffsRoot, loadedItems);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, $"Load takeoffs tree failed for {_currentJob.TakeoffsRoot}; keeping existing tree.");
+            TxtStatus.Text = "Takeoffs tree reload failed; existing tree was kept. See app log.";
+            return;
         }
 
-        PruneTakeoffsMultiSelection();
-        PruneTakeoffSectionMultiSelection();
-        ApplyTakeoffPageHighlights();
-        RefreshAllTotals();
+        _takeoffItems.Clear();
+        _takeoffItems.AddRange(loadedItems);
+        TakeoffsTree.Items.Clear();
+        ResetTakeoffTreeItemIndex();
+        foreach (TreeViewItem node in rootNodes)
+            TakeoffsTree.Items.Add(node);
+        RebuildTakeoffTreeItemIndex();
+
+        _takeoffsRangeAnchorPath = null;
+        _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        _takeoffSectionRangeAnchorKey = null;
+        _activeItem = null;
+        _activeTakeoffParentFolder = _currentJob.TakeoffsRoot;
+
+        try
+        {
+            _lastMeasurementPageFolderRepairCount = RepairMeasurementPageFolderReferences();
+            RestoreExpandedTreeState(TakeoffsTree, _expandedTakeoffTreePaths, GetTakeoffNodePath);
+
+            _viewport.SetMeasurements(_takeoffItems.SelectMany(i => i.Measurements));
+
+            bool restoredSelection = RestoreTakeoffsTreeSelectionState(selectionSnapshot);
+            if (!restoredSelection)
+            {
+                if (FindFirstTakeoffTreeItem(TakeoffsTree) is { } firstItem)
+                {
+                    firstItem.IsSelected = true;
+                }
+                else
+                {
+                    _viewport.ActiveColor = "#FF4444";
+                    _viewport.ActiveTakeoffFolder = "";
+                }
+            }
+
+            PruneTakeoffsMultiSelection();
+            PruneTakeoffSectionMultiSelection();
+            ApplyTakeoffPageHighlights();
+            ApplyTakeoffsTreeSearchFilter();
+            RefreshAllTotals();
+            AppLog.Info($"Loaded takeoffs tree with {_takeoffItems.Count} item(s) from {_currentJob.TakeoffsRoot}.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, $"Takeoffs tree post-load refresh failed for {_currentJob.TakeoffsRoot}.");
+            TxtStatus.Text = "Takeoffs loaded, but a refresh step failed. See app log.";
+        }
     }
 
     private int RepairMeasurementPageFolderReferences()
@@ -381,12 +442,7 @@ public partial class MainWindow
                 }
 
                 string oldPath = NormalizePageReferencePath(measurement.PageFolder);
-                matchedPage = ResolveMeasurementPage(
-                    oldPath,
-                    pagesByPath,
-                    pagesByLeaf,
-                    pagesByPdfPage);
-                if (matchedPage == null)
+                if (!pagesByPath.TryGetValue(oldPath, out matchedPage))
                 {
                     if (!Directory.Exists(oldPath))
                         unresolved++;
@@ -511,14 +567,15 @@ public partial class MainWindow
         return true;
     }
 
-    private void LoadTakeoffChildren(string parentFolder, ItemsControl parent)
+    private List<TreeViewItem> BuildTakeoffChildren(string parentFolder, List<TakeoffItem> loadedItems)
     {
+        var nodes = new List<TreeViewItem>();
         foreach (string folder in OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder))
         {
             if (OurPlaneCoreJobStore.TryReadTakeoffItem(folder) is { } item)
             {
-                _takeoffItems.Add(item);
-                AddTakeoffTreeItem(item, parent);
+                loadedItems.Add(item);
+                nodes.Add(CreateTakeoffTreeItem(item));
             }
             else
             {
@@ -527,10 +584,14 @@ public partial class MainWindow
                     Name = OurPlaneCoreJobStore.DisplayName(folder),
                     FolderPath = folder,
                 };
-                var tvi = AddTakeoffFolderTreeItem(node, parent);
-                LoadTakeoffChildren(folder, tvi);
+                var tvi = CreateTakeoffFolderTreeItem(node);
+                foreach (TreeViewItem child in BuildTakeoffChildren(folder, loadedItems))
+                    tvi.Items.Add(child);
+                nodes.Add(tvi);
             }
         }
+
+        return nodes;
     }
 
     private TreeViewItem AddTakeoffTreeItem(TakeoffItem item) =>
@@ -538,122 +599,35 @@ public partial class MainWindow
 
     private TreeViewItem AddTakeoffTreeItem(TakeoffItem item, ItemsControl parent)
     {
+        var tvi = CreateTakeoffTreeItem(item);
+        parent.Items.Add(tvi);
+        RegisterTakeoffTreeItemSubtree(tvi);
+        return tvi;
+    }
+
+    private TreeViewItem CreateTakeoffTreeItem(TakeoffItem item)
+    {
         var tvi = new TreeViewItem { Tag = item };
         SetTreeItemHeader(tvi, item);
         AttachContextMenu(tvi, item);
         RefreshTakeoffSectionNodes(tvi, item);
-        parent.Items.Add(tvi);
         return tvi;
     }
 
     private TreeViewItem AddTakeoffFolderTreeItem(TakeoffFolderNode node, ItemsControl parent)
     {
-        var tvi = new TreeViewItem { Tag = node };
-        SetFolderTreeItemHeader(tvi, node);
-        AttachFolderContextMenu(tvi, node);
+        var tvi = CreateTakeoffFolderTreeItem(node);
         parent.Items.Add(tvi);
+        RegisterTakeoffTreeItemSubtree(tvi);
         return tvi;
     }
 
-    private async void BtnImport_Click(object sender, RoutedEventArgs e)
+    private TreeViewItem CreateTakeoffFolderTreeItem(TakeoffFolderNode node)
     {
-        await RunAsyncUiHandler(
-            () => ImportPdfAsync(sender),
-            "Import PDF failed.",
-            "Import PDF");
+        var tvi = new TreeViewItem { Tag = node };
+        SetFolderTreeItemHeader(tvi, node);
+        AttachFolderContextMenu(tvi, node);
+        return tvi;
     }
 
-    private async Task ImportPdfAsync(object sender)
-    {
-        if (_currentJob == null)
-        {
-            MessageBox.Show("Open or create a job first.", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        var dlg = new OpenFileDialog
-        {
-            Title = "Import PDF",
-            Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
-        };
-        if (dlg.ShowDialog() != true) return;
-
-        int pageCount = _viewport.GetPageCount(dlg.FileName);
-        if (pageCount <= 0)
-        {
-            MessageBox.Show("Could not read any pages from this PDF.", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        string defaultNames = string.Join(Environment.NewLine, Enumerable.Range(1, pageCount).Select(i => $"Page {i}"));
-        string? rawNames = ShowMultilineInputDialog(
-            $"PDF has {pageCount} page(s). Edit page names, one per line:",
-            defaultNames,
-            "Page Names");
-        if (rawNames == null) return;
-
-        string[] names = rawNames
-            .Split(["\r\n", "\n"], StringSplitOptions.None)
-            .Select(s => s.Trim())
-            .Where(s => s.Length > 0)
-            .ToArray();
-
-        if (names.Length != pageCount)
-        {
-            MessageBox.Show($"Expected {pageCount} page name(s), got {names.Length}.",
-                            "Import PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        string destFolder = GetSelectedImportFolder();
-        Button? importButton = sender as Button;
-        try
-        {
-            if (importButton != null) importButton.IsEnabled = false;
-            TxtStatus.Text = "Scanning PDF layer cache...";
-            var progress = new Progress<string>(msg => TxtStatus.Text = msg);
-            Dictionary<int, IReadOnlyList<PdfLayerInfo>> pdfLayerCache = await Task.Run(
-                () => BuildPdfLayerCache(dlg.FileName, pageCount, progress));
-
-            bool hadUserPageExpansion = _expandedPageTreePaths.Count > 0;
-            var created = OurPlaneCoreJobStore.ImportPdf(_currentJob, dlg.FileName, names, destFolder, pdfLayerCache);
-            ReloadPagesTree();
-            if (created.Count > 0)
-                SelectPageByFolder(created[0].FolderPath);
-            if (!hadUserPageExpansion)
-                CollapseTreeAndExpansionState(PagesTree, _expandedPageTreePaths);
-            int cachedCount = pdfLayerCache.Count;
-            TxtStatus.Text = $"Imported {created.Count} page(s), cached PDF layers for {cachedCount} page(s).";
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error(ex, "Import PDF failed.");
-            MessageBox.Show($"Import failed:\n{ex.Message}", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            if (importButton != null) importButton.IsEnabled = true;
-        }
-    }
-
-    private static Dictionary<int, IReadOnlyList<PdfLayerInfo>> BuildPdfLayerCache(
-        string pdfPath,
-        int pageCount,
-        IProgress<string>? progress)
-    {
-        var cache = new Dictionary<int, IReadOnlyList<PdfLayerInfo>>();
-        for (int pageIndex = 0; pageIndex < pageCount; pageIndex++)
-        {
-            progress?.Report($"Scanning PDF layers {pageIndex + 1}/{pageCount}...");
-            if (PdfLayerRenderService.TryReadVisibleLayers(pdfPath, pageIndex, out var layers, out _) &&
-                layers.Count > 0)
-            {
-                cache[pageIndex] = layers;
-            }
-        }
-        return cache;
-    }
 }

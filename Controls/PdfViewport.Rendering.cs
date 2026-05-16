@@ -33,8 +33,18 @@ public sealed partial class PdfViewport
             DrawBlankPageLoadingSurface(canvas, (float)e.Info.Width, (float)e.Info.Height);
             return;
         }
+
+        long pageBitmapMs = 0;
+        long overlayMs = 0;
+        long measurementMs = 0;
+        long markupMs = 0;
+        long inProgressMs = 0;
+        long labelMs = 0;
+        long screenOverlayMs = 0;
+        int visibleMeasurementCount = 0;
+        IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
         bool previousFastFrame = _renderNavigationFastFrame;
-        _renderNavigationFastFrame = IsFastNavigationFrame();
+        _renderNavigationFastFrame = IsFastNavigationFrame(activeMeasurements.Count);
         try
         {
             SKRect visiblePdf = GetVisiblePdfRect();
@@ -45,6 +55,7 @@ public sealed partial class PdfViewport
             //   sy = (py - panY) * zoom
             // bitmap pixel (bx,by) → screen pixel:
             //   sx = bx * zoom/bitmapScale - panX*zoom
+            long sectionStart = frameWatch.ElapsedMilliseconds;
             {
                 using var bitmapPaint = new SKPaint
                 {
@@ -73,10 +84,13 @@ public sealed partial class PdfViewport
                     DrawPdfLayerTraceGhost(canvas, dst);
                 }
             }
+            pageBitmapMs += frameWatch.ElapsedMilliseconds - sectionStart;
 
             if (_showingPreviousPageDuringSwitch)
             {
+                sectionStart = frameWatch.ElapsedMilliseconds;
                 DrawPageSwitchLoadingVeil(canvas, (float)e.Info.Width, (float)e.Info.Height);
+                screenOverlayMs += frameWatch.ElapsedMilliseconds - sectionStart;
                 return;
             }
 
@@ -86,34 +100,73 @@ public sealed partial class PdfViewport
                     _zoom, _zoom, -_panX * _zoom, -_panY * _zoom);
                 using var saved = new SKAutoCanvasRestore(canvas, true);
                 canvas.SetMatrix(measMtx);
+                sectionStart = frameWatch.ElapsedMilliseconds;
                 if (ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
                     DrawSheetOverlay(canvas);
                 DrawSheetOverlayEditGuides(canvas);
+                DrawCursorGuide(canvas, visiblePdf);
                 if (!_renderNavigationFastFrame)
                     DrawTransformOverlay(canvas);
-                DrawMeasurements(canvas, visiblePdf);
+                overlayMs += frameWatch.ElapsedMilliseconds - sectionStart;
+
+                sectionStart = frameWatch.ElapsedMilliseconds;
+                IReadOnlyList<Measurement> visibleMeasurements = DrawMeasurements(canvas, visiblePdf, activeMeasurements);
+                visibleMeasurementCount = visibleMeasurements.Count;
+                measurementMs += frameWatch.ElapsedMilliseconds - sectionStart;
+
+                sectionStart = frameWatch.ElapsedMilliseconds;
                 if (!_renderNavigationFastFrame)
                 {
                     DrawPageAnnotations(canvas, visiblePdf);
                     DrawAiActionDraftPreview(canvas, visiblePdf);
                     DrawAiMarkers(canvas, visiblePdf);
                 }
+                DrawThreeDRoofGuides(canvas, visiblePdf);
+                markupMs += frameWatch.ElapsedMilliseconds - sectionStart;
+
+                sectionStart = frameWatch.ElapsedMilliseconds;
                 DrawInProgress(canvas);
-                DrawMeasurementLabels(canvas, visiblePdf);
+                inProgressMs += frameWatch.ElapsedMilliseconds - sectionStart;
+
+                sectionStart = frameWatch.ElapsedMilliseconds;
+                DrawMeasurementLabels(canvas, visiblePdf, activeMeasurements, visibleMeasurements);
+                labelMs += frameWatch.ElapsedMilliseconds - sectionStart;
             }
 
+            sectionStart = frameWatch.ElapsedMilliseconds;
             DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
             DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
+            screenOverlayMs += frameWatch.ElapsedMilliseconds - sectionStart;
         }
         finally
         {
             frameWatch.Stop();
-            ReportSlowViewportFrame(frameWatch.ElapsedMilliseconds);
+            ReportSlowViewportFrame(
+                frameWatch.ElapsedMilliseconds,
+                activeMeasurements.Count,
+                visibleMeasurementCount,
+                pageBitmapMs,
+                overlayMs,
+                measurementMs,
+                markupMs,
+                inProgressMs,
+                labelMs,
+                screenOverlayMs);
             _renderNavigationFastFrame = previousFastFrame;
         }
     }
 
-    private void ReportSlowViewportFrame(long elapsedMs)
+    private void ReportSlowViewportFrame(
+        long elapsedMs,
+        int activeMeasurementCount,
+        int visibleMeasurementCount,
+        long pageBitmapMs,
+        long overlayMs,
+        long measurementMs,
+        long markupMs,
+        long inProgressMs,
+        long labelMs,
+        long screenOverlayMs)
     {
         if (elapsedMs < ViewportRenderPolicy.SlowFrameLogMs)
             return;
@@ -125,8 +178,43 @@ public sealed partial class PdfViewport
         _lastSlowFrameLogAt = now;
         AppLog.Info(
             $"Viewport slow frame {elapsedMs}ms; zoom={_zoom:0.###}; fast={_renderNavigationFastFrame}; " +
-            $"page='{_pageFolder}'; activeMeasurements={ActivePageMeasurements().Count}; renderedScale={_renderedScale:0.###}; " +
-            $"overlay={(_sheetOverlayBitmap != null)}");
+            $"page='{_pageFolder}'; activeMeasurements={activeMeasurementCount}; visibleMeasurements={visibleMeasurementCount}; " +
+            $"renderedScale={_renderedScale:0.###}; overlay={(_sheetOverlayBitmap != null)}; " +
+            $"timings=page:{pageBitmapMs} overlay:{overlayMs} measurements:{measurementMs} markups:{markupMs} " +
+            $"inProgress:{inProgressMs} labels:{labelMs} chrome:{screenOverlayMs}ms");
+    }
+
+    private void DrawCursorGuide(SKCanvas canvas, SKRect visiblePdf)
+    {
+        if (!_cursorGuideVisible || !_lastPointerPdf.HasValue || _zoom <= 0)
+            return;
+
+        SKPoint point = _lastPointerPdf.Value;
+        if (point.X < visiblePdf.Left ||
+            point.X > visiblePdf.Right ||
+            point.Y < visiblePdf.Top ||
+            point.Y > visiblePdf.Bottom)
+        {
+            return;
+        }
+
+        float gap = ScreenToPdfDistance(5f);
+        using var guide = new SKPaint
+        {
+            Color = new SKColor(0, 0, 0, 24),
+            StrokeWidth = ScreenToPdfDistance(1f),
+            IsAntialias = false,
+            Style = SKPaintStyle.Stroke,
+        };
+
+        if (point.X - gap > visiblePdf.Left)
+            canvas.DrawLine(visiblePdf.Left, point.Y, point.X - gap, point.Y, guide);
+        if (point.X + gap < visiblePdf.Right)
+            canvas.DrawLine(point.X + gap, point.Y, visiblePdf.Right, point.Y, guide);
+        if (point.Y - gap > visiblePdf.Top)
+            canvas.DrawLine(point.X, visiblePdf.Top, point.X, point.Y - gap, guide);
+        if (point.Y + gap < visiblePdf.Bottom)
+            canvas.DrawLine(point.X, point.Y + gap, point.X, visiblePdf.Bottom, guide);
     }
 
     private static void DrawPageSwitchLoadingVeil(SKCanvas canvas, float width, float height)

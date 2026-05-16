@@ -15,7 +15,7 @@ public partial class MainWindow
 {
     private void SetupEstimateTable()
     {
-        TakeoffsPanel.Children.Remove(TakeoffsTree);
+        TakeoffsPanel.Children.Remove(TakeoffsTreeHost);
 
         _estimateList = new ListView
         {
@@ -101,8 +101,6 @@ public partial class MainWindow
         estimatePanel.Children.Add(_estimateSummaryText);
         estimatePanel.Children.Add(_estimateList);
 
-        var massingPanel = BuildMassingDraftPanel();
-
         var tabs = new TabControl
         {
             Margin = new Thickness(2),
@@ -114,25 +112,24 @@ public partial class MainWindow
         tabs.Items.Add(new TabItem
         {
             Header = "Takeoffs",
-            Content = TakeoffsTree,
+            Content = TakeoffsTreeHost,
         });
         tabs.Items.Add(new TabItem
         {
             Header = "Estimating",
             Content = estimatePanel,
         });
-        _massingTab = new TabItem
+        _threeDTab = new TabItem
         {
-            Header = "3D Massing",
-            Content = massingPanel,
+            Header = "3D",
+            Content = BuildThreeDSidePanel(),
         };
-        tabs.Items.Add(_massingTab);
+        tabs.Items.Add(_threeDTab);
         tabs.SelectedIndex = 0;
 
         TakeoffsPanel.Children.Add(tabs);
         RefreshEstimateTable();
         UpdateEstimateActionButtons();
-        RefreshMassingDraftPanel();
     }
 
     private static Button EstimateActionButton(string text, string tooltip, Action action)
@@ -322,6 +319,9 @@ public partial class MainWindow
             return;
         }
 
+        if (TryBlockMeasurementSelectionDuringRecord(nodes.Select(node => node.Measurement)))
+            return;
+
         SelectTakeoffSectionNodesSilently(nodes);
         SelectTakeoffSectionMeasurementsOnCanvas(nodes);
     }
@@ -335,6 +335,9 @@ public partial class MainWindow
             TxtStatus.Text = "Selected estimate rows do not have a source page.";
             return;
         }
+
+        if (TryBlockMeasurementSelectionDuringRecord(nodes.Select(node => node.Measurement)))
+            return;
 
         GoToMeasurementPage(target.Measurement);
         SelectTakeoffSectionNodesSilently(nodes);
@@ -415,6 +418,9 @@ public partial class MainWindow
 
     private void SelectSectionOnCanvas(Measurement measurement, bool suppressTakeoffSync = false)
     {
+        if (TryBlockMeasurementTakeoffSwitchDuringRecord(measurement))
+            return;
+
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder) &&
             (_currentPage == null ||
              !IsSamePageFolder(_currentPage.FolderPath, measurement.PageFolder)))
@@ -445,6 +451,9 @@ public partial class MainWindow
             .Distinct()
             .ToList();
         if (measurements.Count == 0)
+            return;
+
+        if (TryBlockMeasurementSelectionDuringRecord(measurements))
             return;
 
         Measurement target = measurements.FirstOrDefault(measurement =>
@@ -509,6 +518,9 @@ public partial class MainWindow
 
             if (row.Takeoff != null)
             {
+                if (TryBlockTakeoffSwitchDuringRecord(row.Takeoff))
+                    return;
+
                 SelectTakeoffItem(row.Takeoff);
                 SelectCurrentPageTakeoffMeasurementsOnCanvas(row.Takeoff);
             }
@@ -536,6 +548,9 @@ public partial class MainWindow
                 _estimateList.SelectedItem = null;
                 return;
             }
+
+            if (TryBlockMeasurementTakeoffSwitchDuringRecord(measurement))
+                return;
 
             EstimateDisplayRow? row = _estimateList.Items
                 .OfType<EstimateDisplayRow>()
@@ -566,6 +581,9 @@ public partial class MainWindow
 
     private void SelectTakeoffItemsForViewportMeasurements(IReadOnlyList<Measurement> measurements)
     {
+        if (TryBlockMeasurementSelectionDuringRecord(measurements))
+            return;
+
         var selectedItems = measurements
             .Select(FindTakeoffItemForMeasurement)
             .Where(item => item != null)
@@ -576,6 +594,12 @@ public partial class MainWindow
 
         if (selectedItems.Count == 0)
         {
+            if (IsTakeoffRecordActive())
+            {
+                RestoreActiveTakeoffTargetAfterBlockedRecordSwitch();
+                return;
+            }
+
             _takeoffsMultiSelection.Clear();
             _takeoffSectionMultiSelection.Clear();
             ApplyTakeoffPageHighlights();
@@ -665,15 +689,16 @@ public partial class MainWindow
         if (item == null)
             return null;
 
+        if (TryBlockTakeoffSwitchDuringRecord(item))
+            return null;
+
         item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
         _viewport.ActiveTakeoffFolder = item.FolderPath;
-        if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
-            ApplyToolSelection(item.MeasurementType);
-        else
-            UpdateToolStatus();
+        _viewport.ActiveCountSymbol = item.CountSymbol;
+        SyncToolTypeForTakeoffItem(item);
         RefreshPagesTakeoffIndicators();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();

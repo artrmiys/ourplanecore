@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -25,23 +27,37 @@ public partial class MainWindow
         SaveCurrentPageScale();
         UpdateScaleUi(scale);
         RefreshFloatingPageSetup(_currentPage?.FolderPath);
-        RefreshPagesTakeoffIndicators();
-        RefreshAllTotals();
+        RefreshTotalsRecursive(TakeoffsTree);
+        using (UsePageMeasurementLookup())
+        {
+            RefreshPageTakeoffIndicatorsForFolder(_currentPage?.FolderPath);
+            ApplyTakeoffPageHighlights();
+            RefreshSheetLegend();
+        }
+        UpdateTotalDisplay();
     }
 
-    private void ApplyScaleToCurrentPageMeasurements(double scale)
+    private IReadOnlyList<TakeoffItem> ApplyScaleToCurrentPageMeasurements(double scale)
     {
         if (_currentPage == null || scale <= 0)
-            return;
+            return [];
 
-        foreach (var measurement in _takeoffItems.SelectMany(i => i.Measurements))
+        var changedItems = new HashSet<TakeoffItem>();
+        foreach (TakeoffItem item in _takeoffItems)
+        foreach (Measurement measurement in item.Measurements)
         {
             if (IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+            {
+                if (Math.Abs(measurement.ScaleMetersPerPt - scale) > 0.0000001)
+                    changedItems.Add(item);
                 measurement.ScaleMetersPerPt = scale;
+            }
         }
+
+        return changedItems.ToList();
     }
 
-    private void OnToolChanged(string tool) => SetTool(tool);
+    private void OnToolChanged(string tool) => SetTool(tool, forceNewTakeoff: IsRecordTool(tool));
 
     private void OnViewportContextRequested(ViewportContextRequest request)
     {
@@ -60,16 +76,18 @@ public partial class MainWindow
         string point = $"PDF {request.PdfX:F0}, {request.PdfY:F0}";
         menu.Items.Add(new MenuItem
         {
-            Header = request.Measurement != null
-                ? $"Measurement AI - {request.Measurement.MType} @ {point}"
-                : request.Annotation != null
-                    ? $"Markup - {MarkupTitle(request.Annotation)} @ {point}"
-                    : $"AI Assist - {_currentPage.Name} @ {point}",
+            Header = ViewportContextMenuTitle(request, point),
             IsEnabled = false,
         });
         menu.Items.Add(new Separator());
 
-        AddSheetOverlayMenuItems(menu);
+        if (request.OverlayHit != ViewportOverlayHitKind.None)
+        {
+            AddSheetOverlayMenuItems(menu);
+            menu.Items.Add(new Separator());
+        }
+
+        AddViewportThreeDMenuItems(menu, request);
         menu.Items.Add(new Separator());
 
         AddMeasurementClipboardMenuItems(menu, request);
@@ -96,6 +114,30 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Open Project Context", true, OpenProjectContextMarkdown));
         menu.IsOpen = true;
     }
+
+    private async void OnAiCropNoteSelectionCompleted(ViewportAiCropSelectionRequest selection)
+    {
+        var request = new ViewportContextRequest(
+            0,
+            0,
+            selection.AnchorPdf.X,
+            selection.AnchorPdf.Y,
+            selection.PageFolder,
+            null);
+        await ReadAiCropIntoNoteAsync(request, selection.CropRect);
+    }
+
+    private string ViewportContextMenuTitle(ViewportContextRequest request, string point) =>
+        request.OverlayHit switch
+        {
+            ViewportOverlayHitKind.SheetLegend => $"Sheet Legend @ {point}",
+            ViewportOverlayHitKind.SheetHeader => $"Scale / Sheet Size Label @ {point}",
+            _ => request.Measurement != null
+                ? $"Measurement AI - {request.Measurement.MType} @ {point}"
+                : request.Annotation != null
+                    ? $"Markup - {MarkupTitle(request.Annotation)} @ {point}"
+                    : $"AI Assist - {_currentPage?.Name ?? "Sheet"} @ {point}",
+        };
 
     private void SaveViewportObservation(ViewportContextRequest request, string type, string title, string initialText)
     {
@@ -160,6 +202,181 @@ public partial class MainWindow
         var observation = SmartContextStore.AddObservation(_currentJob, _currentPage, "crop_context", details);
         TxtStatus.Text = $"Saved AI crop {observation.Id} -> {_currentJob.AIContextRoot}";
         LoadObservationsInbox();
+    }
+
+    private async Task ReadAiCropIntoNoteAsync(ViewportContextRequest request, SKRect? selectedCropRect = null)
+    {
+        if (_currentJob == null || _currentPage == null)
+            return;
+
+        if (_isRunningAiRequest)
+        {
+            TxtStatus.Text = "AI request is already running.";
+            return;
+        }
+
+        if (!TrySaveAiCrop(request, "quick_crop_note", out string cropPath, out SKRect cropRect, out string error, selectedCropRect))
+        {
+            TxtStatus.Text = $"AI crop note skipped: {error}";
+            MessageBox.Show(
+                $"Cannot save AI crop:\n{error}",
+                "AI Crop Note",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        string measurementSummary = request.Measurement != null
+            ? FormatMeasurementSummary(request.Measurement)
+            : "";
+        string prompt = BuildQuickCropNoteUserPrompt(request, cropRect);
+        string details =
+            "AI crop note requested." + Environment.NewLine + Environment.NewLine +
+            "Context:" + Environment.NewLine +
+            $"- Page: {_currentPage.Name}" + Environment.NewLine +
+            $"- PDF point: {request.PdfX:F1}, {request.PdfY:F1}" + Environment.NewLine +
+            $"- AI crop: {cropPath}" + Environment.NewLine +
+            $"- PDF crop: {FormatPdfRect(cropRect)}" + Environment.NewLine;
+        if (!string.IsNullOrWhiteSpace(measurementSummary))
+            details += $"- Measurement: {measurementSummary}" + Environment.NewLine;
+
+        SmartObservation observation = SmartContextStore.AddObservation(
+            _currentJob,
+            _currentPage,
+            "quick_crop_note_request",
+            details);
+        SmartAiRequest aiRequest = SmartContextStore.AddAiRequest(
+            _currentJob,
+            _currentPage,
+            observation,
+            "quick_crop_note_request",
+            prompt,
+            cropPath,
+            measurementSummary);
+
+        string apiKey = ReadOpenAiApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            TxtStatus.Text = $"Queued AI crop note {aiRequest.Id}; set OPENAI_API_KEY to run it.";
+            LoadObservationsInbox();
+            return;
+        }
+
+        _isRunningAiRequest = true;
+        try
+        {
+            aiRequest.Status = "running";
+            SmartContextStore.SaveAiRequest(_currentJob, aiRequest);
+            TxtStatus.Text = $"Reading crop into note with {OpenAiRequestRunner.QuickCropNoteModel}...";
+            LoadObservationsInbox();
+
+            SmartAiRunResult result;
+            using (ShowBusyOverlay("AI reading crop into note..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                result = await OpenAiRequestRunner.RunAsync(
+                    _currentJob,
+                    aiRequest,
+                    apiKey,
+                    OpenAiRequestRunner.QuickCropNoteModel,
+                    CancellationToken.None);
+            }
+
+            if (!result.Success)
+            {
+                SmartContextStore.SaveAiResponse(
+                    _currentJob,
+                    aiRequest,
+                    "failed",
+                    "",
+                    result.Error,
+                    "openai",
+                    result.Model,
+                    result.ProviderResponseId,
+                    result.RawResponsePath);
+                TxtStatus.Text = $"AI crop note failed: {result.Error}";
+                return;
+            }
+
+            SmartContextStore.SaveAiResponse(
+                _currentJob,
+                aiRequest,
+                "done",
+                result.OutputText,
+                "",
+                "openai",
+                result.Model,
+                result.ProviderResponseId,
+                result.RawResponsePath);
+
+            string noteText = CleanQuickCropNoteText(result.OutputText);
+            SKPoint noteOrigin = AiCropNoteOrigin(request, cropRect);
+            int lineCount = noteText.Replace("\r\n", "\n").Split('\n').Length;
+            float height = Math.Clamp(120f + lineCount * 17f, 170f, 360f);
+            _viewport.AddNoteAnnotationAt(noteOrigin, noteText, "#F9A825", 380f, height);
+            TxtStatus.Text = $"AI crop note added on {_currentPage.Name}.";
+        }
+        catch (Exception ex)
+        {
+            SmartContextStore.SaveAiResponse(
+                _currentJob,
+                aiRequest,
+                "failed",
+                "",
+                ex.Message,
+                "openai",
+                OpenAiRequestRunner.QuickCropNoteModel,
+                "",
+                "");
+            TxtStatus.Text = $"AI crop note failed: {ex.Message}";
+        }
+        finally
+        {
+            _isRunningAiRequest = false;
+            LoadObservationsInbox();
+        }
+    }
+
+    private string BuildQuickCropNoteUserPrompt(ViewportContextRequest request, SKRect cropRect)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Create a sheet note from this crop.");
+        sb.AppendLine($"Page: {_currentPage?.Name ?? ""}");
+        sb.AppendLine($"Clicked PDF point: {request.PdfX:F1}, {request.PdfY:F1}");
+        sb.AppendLine($"Crop: {FormatPdfRect(cropRect)}");
+        sb.AppendLine("Keep tables/schedules in table form and keep callout text line breaks.");
+        if (request.Measurement != null)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Clicked measurement:");
+            sb.AppendLine(FormatMeasurementSummary(request.Measurement));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string CleanQuickCropNoteText(string outputText)
+    {
+        string clean = (outputText ?? "").Trim();
+        if (clean.StartsWith("```", StringComparison.Ordinal))
+        {
+            int firstLineEnd = clean.IndexOf('\n');
+            int fenceEnd = clean.LastIndexOf("```", StringComparison.Ordinal);
+            if (firstLineEnd >= 0 && fenceEnd > firstLineEnd)
+                clean = clean[(firstLineEnd + 1)..fenceEnd].Trim();
+        }
+
+        if (clean.Length > 3000)
+            clean = clean[..3000].TrimEnd() + "...";
+
+        return string.IsNullOrWhiteSpace(clean) ? "[unreadable]" : clean;
+    }
+
+    private static SKPoint AiCropNoteOrigin(ViewportContextRequest request, SKRect cropRect)
+    {
+        float x = cropRect.Right > cropRect.Left ? cropRect.Right + 8f : request.PdfX + 8f;
+        float y = cropRect.Top < cropRect.Bottom ? cropRect.Top : request.PdfY + 8f;
+        return new SKPoint(x, y);
     }
 
     private void SaveAiMarker(ViewportContextRequest request)
@@ -442,7 +659,8 @@ public partial class MainWindow
         string type,
         out string relativePath,
         out SKRect cropRect,
-        out string error)
+        out string error,
+        SKRect? selectedCropRect = null)
     {
         relativePath = "";
         cropRect = SKRect.Empty;
@@ -461,7 +679,9 @@ public partial class MainWindow
             $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{SafeFileNamePart(type)}_{SafeFileNamePart(_currentPage.Name)}_{x}_{y}.png";
         string cropPath = Path.Combine(cropsRoot, fileName);
 
-        bool saved = request.Measurement == null
+        bool saved = selectedCropRect.HasValue
+            ? _viewport.TrySaveCropRect(selectedCropRect.Value, cropPath, out cropRect, out error)
+            : request.Measurement == null
             ? _viewport.TrySaveContextCrop(request.PdfX, request.PdfY, 240f, cropPath, out cropRect, out error)
             : _viewport.TrySaveMeasurementCrop(request.Measurement, 96f, cropPath, out cropRect, out error);
 

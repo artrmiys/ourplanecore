@@ -50,7 +50,13 @@ internal static class StorageSupport
     {
         var invalid = Path.GetInvalidFileNameChars().ToHashSet();
         char[] chars = name.Select(c => invalid.Contains(c) ? '_' : c).ToArray();
-        string cleaned = new string(chars).Trim().TrimEnd('.');
+        string cleaned = NormalizeDisplayName(new string(chars), maxLength);
+        return cleaned.Length <= maxLength ? cleaned : cleaned[..maxLength].TrimEnd();
+    }
+
+    public static string NormalizeDisplayName(string name, int maxLength)
+    {
+        string cleaned = (name ?? "").Trim().TrimEnd('.');
         if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "Untitled";
         return cleaned.Length <= maxLength ? cleaned : cleaned[..maxLength].TrimEnd();
     }
@@ -100,9 +106,16 @@ internal static class StorageSupport
         XElement? root = doc.Root;
         if (root == null) return;
 
-        root.SetAttributeValue("Name", name);
-        SetProperty(root, "Name", name);
-        doc.Save(path);
+        bool changed = false;
+        if (!string.Equals(root.Attribute("Name")?.Value, name, StringComparison.Ordinal))
+        {
+            root.SetAttributeValue("Name", name);
+            changed = true;
+        }
+
+        changed = SetProperty(root, "Name", name) || changed;
+        if (changed)
+            doc.Save(path);
     }
 
     public static void SetProperty(string folder, string propertyName, string value)
@@ -114,8 +127,8 @@ internal static class StorageSupport
         XElement? root = doc.Root;
         if (root == null) return;
 
-        SetProperty(root, propertyName, value);
-        doc.Save(path);
+        if (SetProperty(root, propertyName, value))
+            doc.Save(path);
     }
 
     public static string? ReadProperty(string folder, string propertyName)
@@ -187,7 +200,7 @@ internal static class StorageSupport
         }
     }
 
-    private static void SetProperty(XElement root, string propertyName, string value)
+    private static bool SetProperty(XElement root, string propertyName, string value)
     {
         XElement props = root.Element("Properties") ?? new XElement("Properties");
         if (props.Parent == null)
@@ -200,8 +213,13 @@ internal static class StorageSupport
             prop = new XElement("Property", new XAttribute("Name", propertyName));
             props.Add(prop);
         }
+        else if (string.Equals(prop.Attribute("Value")?.Value, value, StringComparison.Ordinal))
+        {
+            return false;
+        }
 
         prop.SetAttributeValue("Value", value);
+        return true;
     }
 
     private static XElement? ReadDataRoot(string folder)

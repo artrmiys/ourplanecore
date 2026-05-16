@@ -23,8 +23,10 @@ internal static class PageAnnotationStore
                 Kind = NormalizePageAnnotationKind(dto.Kind),
                 Text = dto.Text ?? "",
                 Color = string.IsNullOrWhiteSpace(dto.Color) ? "#1565C0" : dto.Color,
-                PageFolder = string.IsNullOrWhiteSpace(dto.PageFolder) ? pageFolder : dto.PageFolder,
+                StrokeWidth = NormalizeStrokeWidth(dto.StrokeWidth),
+                PageFolder = pageFolder,
                 ScaleMetersPerPt = dto.ScaleMetersPerPt,
+                Hidden = dto.Hidden,
                 Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
             }).ToList();
         }
@@ -49,8 +51,10 @@ internal static class PageAnnotationStore
             Kind = NormalizePageAnnotationKind(annotation.Kind),
             Text = annotation.Text ?? "",
             Color = string.IsNullOrWhiteSpace(annotation.Color) ? "#1565C0" : annotation.Color,
-            PageFolder = string.IsNullOrWhiteSpace(annotation.PageFolder) ? pageFolder : annotation.PageFolder,
+            StrokeWidth = NormalizeStrokeWidth(annotation.StrokeWidth),
+            PageFolder = pageFolder,
             ScaleMetersPerPt = annotation.ScaleMetersPerPt,
+            Hidden = annotation.Hidden,
             PointsPdf = annotation.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
         }).ToList();
 
@@ -77,7 +81,13 @@ internal static class PageAnnotationStore
             "dimension" or "ruler" => "dimension",
             "arrow" => "arrow",
             "rectangle" or "rect" or "box" => "rectangle",
+            "cloud" or "calloutcloud" or "callout_cloud" => "cloud",
+            "area" or "highlight" or "fill" => "area",
+            "note" or "text" => "note",
             _ => "line",
         };
     }
+
+    private static double NormalizeStrokeWidth(double value) =>
+        value is >= 0.75 and <= 12.0 ? value : 1.8;
 }

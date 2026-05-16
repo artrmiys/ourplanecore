@@ -121,6 +121,7 @@ internal static class PageStore
             PdfLayersCached = src.PdfLayersCached,
             PdfLayers = src.PdfLayers,
             LegendTakeoffOrder = src.LegendTakeoffOrder ?? [],
+            LegendTakeoffOrderMode = NormalizeLegendTakeoffOrderMode(src.LegendTakeoffOrderMode),
             HiddenTakeoffs = NormalizeStringList(src.HiddenTakeoffs),
             OverlayPageFolder = ResolveRelativePagePath(pageFolder, src.OverlayPageFolder),
             OverlayVisible = src.OverlayVisible,
@@ -146,6 +147,7 @@ internal static class PageStore
             src.PdfLayers,
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
             src.OverlayPageFolder,
             src.OverlayVisible,
             src.OverlayColor,
@@ -156,12 +158,18 @@ internal static class PageStore
             src.HiddenTakeoffs);
     }
 
-    public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder)
+    public static void SavePageLegendTakeoffOrder(
+        string pageFolder,
+        IReadOnlyList<string> legendTakeoffOrder,
+        string legendTakeoffOrderMode = "")
     {
         SourceInfo? src = ReadSource(pageFolder);
         if (src == null) return;
 
         string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        string mode = string.IsNullOrWhiteSpace(legendTakeoffOrderMode)
+            ? (legendTakeoffOrder.Count == 0 ? "auto" : "manual")
+            : NormalizeLegendTakeoffOrderMode(legendTakeoffOrderMode);
         WriteSource(
             pageFolder,
             pdfAbs,
@@ -170,6 +178,7 @@ internal static class PageStore
             src.PdfLayers,
             src.PdfLayersCached,
             legendTakeoffOrder,
+            mode,
             src.OverlayPageFolder,
             src.OverlayVisible,
             src.OverlayColor,
@@ -194,6 +203,7 @@ internal static class PageStore
             src.PdfLayers,
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
             src.OverlayPageFolder,
             src.OverlayVisible,
             src.OverlayColor,
@@ -202,6 +212,30 @@ internal static class PageStore
             src.OverlayOffsetYPt,
             src.OverlayScale,
             hiddenTakeoffs);
+    }
+
+    public static void ReplacePagePdf(string pageFolder, string pdfAbsPath, int pageIndex = 0)
+    {
+        SourceInfo? src = ReadSource(pageFolder);
+        if (src == null) return;
+
+        WriteSource(
+            pageFolder,
+            pdfAbsPath,
+            pageIndex,
+            src.ScaleMetersPerPt,
+            pdfLayers: [],
+            pdfLayersCached: false,
+            src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
+            src.OverlayPageFolder,
+            src.OverlayVisible,
+            src.OverlayColor,
+            src.OverlayOpacity,
+            src.OverlayOffsetXPt,
+            src.OverlayOffsetYPt,
+            src.OverlayScale,
+            src.HiddenTakeoffs);
     }
 
     public static void SavePageOverlay(
@@ -222,6 +256,7 @@ internal static class PageStore
             src.PdfLayers,
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
             overlayPageFolder,
             src.OverlayVisible,
             string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
@@ -246,6 +281,7 @@ internal static class PageStore
             src.PdfLayers,
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
             src.OverlayPageFolder,
             isVisible,
             src.OverlayColor,
@@ -277,6 +313,7 @@ internal static class PageStore
             src.PdfLayers,
             src.PdfLayersCached,
             src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
             src.OverlayPageFolder,
             src.OverlayVisible,
             src.OverlayColor,
@@ -301,6 +338,7 @@ internal static class PageStore
             pdfLayers,
             pdfLayersCached: true,
             src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
             src.OverlayPageFolder,
             src.OverlayVisible,
             src.OverlayColor,
@@ -440,6 +478,7 @@ internal static class PageStore
         IReadOnlyList<PdfLayerInfo>? pdfLayers = null,
         bool pdfLayersCached = false,
         IReadOnlyList<string>? legendTakeoffOrder = null,
+        string legendTakeoffOrderMode = "auto",
         string overlayPageFolder = "",
         bool overlayVisible = true,
         string overlayColor = "#E53935",
@@ -460,6 +499,7 @@ internal static class PageStore
                 .Where(entry => !string.IsNullOrWhiteSpace(entry))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList() ?? [],
+            LegendTakeoffOrderMode = NormalizeLegendTakeoffOrderMode(legendTakeoffOrderMode),
             HiddenTakeoffs = NormalizeStringList(hiddenTakeoffs),
             OverlayPageFolder = MakeRelativePageReference(pageFolder, overlayPageFolder),
             OverlayVisible = overlayVisible,
@@ -579,6 +619,11 @@ internal static class PageStore
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
+
+    private static string NormalizeLegendTakeoffOrderMode(string? mode) =>
+        string.Equals(mode?.Trim(), "manual", StringComparison.OrdinalIgnoreCase)
+            ? "manual"
+            : "auto";
 }
 
 internal sealed record PageSourceSnapshot(

@@ -27,11 +27,36 @@ public partial class MainWindow
         string JoistType,
         double SpacingInches,
         double DirectionDegrees,
+        bool DirectionFollowsAreaRotation,
+        bool AddEndJoist,
         string Pitch,
         string LengthRounding,
         bool ShowLabels,
         bool DetailedLabels);
     private enum MeasurementPasteMode { SameTakeoffs, NewTakeoffs }
+    private sealed record MeasurementJoistClipboard(
+        bool Enabled,
+        string JoistType,
+        double SpacingInches,
+        double DirectionDegrees,
+        bool DirectionLocked,
+        bool DirectionFollowsAreaRotation,
+        bool AddEndJoist,
+        string Pitch,
+        string LengthRounding,
+        bool ShowLabels,
+        bool DetailedLabels);
+    private sealed record TakeoffJoistClipboard(
+        bool Enabled,
+        string JoistType,
+        double SpacingInches,
+        double DirectionDegrees,
+        bool DirectionFollowsAreaRotation,
+        bool AddEndJoist,
+        string Pitch,
+        string LengthRounding,
+        bool ShowLabels,
+        bool DetailedLabels);
     private sealed record MeasurementClipboardEntry(
         string MeasurementType,
         string MeasurementName,
@@ -45,7 +70,9 @@ public partial class MainWindow
         string SourceTakeoffName,
         string SourceTakeoffColor,
         double SourceTakeoffUnitPrice,
-        string SourceTakeoffNotes);
+        string SourceTakeoffNotes,
+        MeasurementJoistClipboard MeasurementJoist,
+        TakeoffJoistClipboard SourceTakeoffJoist);
     private sealed record MeasurementClipboard(IReadOnlyList<MeasurementClipboardEntry> Entries);
 
     private sealed record TakeoffMeasurementNode(TakeoffItem Item, Measurement Measurement);
@@ -53,9 +80,17 @@ public partial class MainWindow
     private sealed record PageTakeoffNode(PageInfo Page, TakeoffItem Takeoff);
     private sealed record PageOverlayNode(PageInfo Page, string OverlayName);
     private sealed record PageTakeoffLegendDrag(string PageFolder, IReadOnlyList<string> TakeoffFolders);
+    private sealed record PageBookmarkRow(
+        string Name,
+        string Page,
+        string View,
+        int Order,
+        PageBookmark Bookmark);
     private sealed record AiMarkerInput(string MarkerType, string SampleKind, string Value, string Note);
     private sealed record MarkerSetInput(string Name, string Description);
     private sealed record PdfMetadataPageResult(PageInfo Page, bool Ok, PdfSheetMetadata? Metadata, string Error);
+    private sealed record PdfMetadataApplySummary(int Renamed, int Scaled, int Failed);
+    private sealed record MaterialReportSheetMetadataSummary(int Analyzed, int Renamed, int Scaled, int Failed);
 
     private sealed class PageTabState(string pageFolder, string pageName)
     {

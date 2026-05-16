@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Media;
 using OurPlaneCore.Controls;
 
 namespace OurPlaneCore;
@@ -33,6 +34,7 @@ public partial class MainWindow
         if (_pageSetupWindow != null)
         {
             RefreshFloatingPageSetup();
+            PositionFloatingPageSetup();
             _pageSetupWindow.Activate();
             return;
         }
@@ -46,6 +48,7 @@ public partial class MainWindow
         _pageSetupWindow.Closed += (_, _) => _pageSetupWindow = null;
         RefreshFloatingPageSetup();
         _pageSetupWindow.Show();
+        PositionFloatingPageSetup();
     }
 
     private void PageSetupWindow_ApplyRequested(object? sender, EventArgs e)
@@ -203,6 +206,28 @@ public partial class MainWindow
             PdfSheetMetadataService.FormatImperialScale(page.ScaleMetersPerPt),
             index,
             pages.Count);
+    }
+
+    private void PositionFloatingPageSetup()
+    {
+        if (_pageSetupWindow == null)
+            return;
+
+        try
+        {
+            Point screenPoint = ViewportSurfaceHost.PointToScreen(new Point(14, 14));
+            PresentationSource? source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget != null)
+                screenPoint = source.CompositionTarget.TransformFromDevice.Transform(screenPoint);
+
+            _pageSetupWindow.Left = screenPoint.X;
+            _pageSetupWindow.Top = screenPoint.Y;
+        }
+        catch
+        {
+            _pageSetupWindow.Left = Left + 260;
+            _pageSetupWindow.Top = Top + 120;
+        }
     }
 
     private static int PageSetupPageIndex(IReadOnlyList<PageInfo> pages, string pageFolder)

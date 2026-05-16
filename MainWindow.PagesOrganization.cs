@@ -105,59 +105,111 @@ public partial class MainWindow
             string arch = OurPlaneCoreJobStore.EnsureFolder(imported, "Arch");
             string struc = OurPlaneCoreJobStore.EnsureFolder(imported, "Struct");
             string others = OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "--------others");
-
-            IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot)
-                .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .ToList();
-
-            int movedArch = 0;
-            int movedStruct = 0;
-            int movedOthers = 0;
-            int skipped = 0;
-            bool reloadActiveTab = false;
-            string? selectAfter = null;
-
-            foreach (PageInfo page in pages)
-            {
-                string target = ClassifyArchStructPageTarget(page, arch, struc, others);
-                if (string.IsNullOrWhiteSpace(target))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
-                if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                string oldPath = page.FolderPath;
-                string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
-                reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
-                selectAfter ??= movedPath;
-
-                if (string.Equals(target, arch, StringComparison.OrdinalIgnoreCase))
-                    movedArch++;
-                else if (string.Equals(target, struc, StringComparison.OrdinalIgnoreCase))
-                    movedStruct++;
-                else
-                    movedOthers++;
-            }
-
-            OurPlaneCoreJobStore.SortChildren(arch, descending: false);
-            OurPlaneCoreJobStore.SortChildren(struc, descending: false);
-            OurPlaneCoreJobStore.SortChildren(others, descending: false);
-            ReloadPagesTree(selectAfter ?? imported);
-            ReloadActivePageTabAfterPathChange(reloadActiveTab);
-            TxtStatus.Text = $"Sort A/S: Arch {movedArch}, Struct {movedStruct}, Others {movedOthers}, skipped {skipped}.";
+            SortPagesIntoArchStructScope(
+                _currentJob.PagesRoot,
+                arch,
+                struc,
+                others,
+                imported,
+                "");
         }
         catch (Exception ex)
         {
             ShowOperationError("Sort A/S Pages", ex);
         }
+    }
+
+    private void SortPagesIntoArchStruct(string scopeFolder)
+    {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "Sort A/S Pages",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(scopeFolder) ||
+            !Directory.Exists(scopeFolder) ||
+            !IsPathInsidePagesRoot(scopeFolder))
+        {
+            return;
+        }
+
+        try
+        {
+            string arch = EnsurePagesChildFolder(scopeFolder, "Arch");
+            string struc = EnsurePagesChildFolder(scopeFolder, "Struct");
+            string others = EnsurePagesChildFolder(scopeFolder, "--------others");
+            string scopeLabel = $" in {OurPlaneCoreJobStore.DisplayName(scopeFolder)}";
+            SortPagesIntoArchStructScope(
+                scopeFolder,
+                arch,
+                struc,
+                others,
+                scopeFolder,
+                scopeLabel);
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Sort A/S Pages", ex);
+        }
+    }
+
+    private void SortPagesIntoArchStructScope(
+        string scopeFolder,
+        string arch,
+        string struc,
+        string others,
+        string fallbackSelection,
+        string statusScopeLabel)
+    {
+        IReadOnlyList<PageInfo> pages = CollectPagesUnder(scopeFolder)
+            .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        int movedArch = 0;
+        int movedStruct = 0;
+        int movedOthers = 0;
+        int skipped = 0;
+        bool reloadActiveTab = false;
+        string? selectAfter = null;
+
+        foreach (PageInfo page in pages)
+        {
+            string target = ClassifyArchStructPageTarget(page, arch, struc, others);
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                skipped++;
+                continue;
+            }
+
+            string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
+            if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
+            {
+                skipped++;
+                continue;
+            }
+
+            string oldPath = page.FolderPath;
+            string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
+            reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
+            selectAfter ??= movedPath;
+
+            if (string.Equals(target, arch, StringComparison.OrdinalIgnoreCase))
+                movedArch++;
+            else if (string.Equals(target, struc, StringComparison.OrdinalIgnoreCase))
+                movedStruct++;
+            else
+                movedOthers++;
+        }
+
+        OurPlaneCoreJobStore.SortChildren(arch, descending: false);
+        OurPlaneCoreJobStore.SortChildren(struc, descending: false);
+        OurPlaneCoreJobStore.SortChildren(others, descending: false);
+        ReloadPagesTree(selectAfter ?? fallbackSelection);
+        ReloadActivePageTabAfterPathChange(reloadActiveTab);
+        TxtStatus.Text = $"Sort A/S{statusScopeLabel}: Arch {movedArch}, Struct {movedStruct}, Others {movedOthers}, skipped {skipped}.";
     }
 
     private static string ClassifyArchStructPageTarget(PageInfo page, string arch, string struc, string others)
@@ -192,69 +244,8 @@ public partial class MainWindow
 
         try
         {
-            string detailsStruct = EnsurePagesRootFolder("details struct");
-            string detailsArch = EnsurePagesRootFolder("details arch");
-            string units = EnsurePagesRootFolder("units");
-            string sections = EnsurePagesRootFolder("sections");
-
-            IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot)
-                .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .ToList();
-
-            int movedTop = 0;
-            int movedDetailsStruct = 0;
-            int movedDetailsArch = 0;
-            int movedUnits = 0;
-            int movedSections = 0;
-            int skipped = 0;
-            bool reloadActiveTab = false;
-            string? selectAfter = null;
-
-            foreach (PageInfo page in pages)
-            {
-                string target = ClassifySuffixPageTarget(page, detailsStruct, detailsArch, units, sections);
-                if (string.IsNullOrWhiteSpace(target))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
-                if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                string oldPath = page.FolderPath;
-                string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
-                reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
-                selectAfter ??= movedPath;
-
-                if (string.Equals(target, _currentJob.PagesRoot, StringComparison.OrdinalIgnoreCase))
-                    movedTop++;
-                else if (string.Equals(target, detailsStruct, StringComparison.OrdinalIgnoreCase))
-                    movedDetailsStruct++;
-                else if (string.Equals(target, detailsArch, StringComparison.OrdinalIgnoreCase))
-                    movedDetailsArch++;
-                else if (string.Equals(target, units, StringComparison.OrdinalIgnoreCase))
-                    movedUnits++;
-                else if (string.Equals(target, sections, StringComparison.OrdinalIgnoreCase))
-                    movedSections++;
-            }
-
-            OurPlaneCoreJobStore.SortChildren(detailsStruct, descending: false);
-            OurPlaneCoreJobStore.SortChildren(detailsArch, descending: false);
-            OurPlaneCoreJobStore.SortChildren(units, descending: false);
-            OurPlaneCoreJobStore.SortChildren(sections, descending: false);
-            int reorderedTop = ReorderRootSuffixPagesToTop(_currentJob.PagesRoot);
-
-            ReloadPagesTree(selectAfter ?? _currentJob.PagesRoot);
-            ReloadActivePageTabAfterPathChange(reloadActiveTab);
-            TxtStatus.Text =
-                $"Sort D/Sec/WT: top {movedTop}, details struct {movedDetailsStruct}, details arch {movedDetailsArch}, " +
-                $"units {movedUnits}, sections {movedSections}, reordered {reorderedTop}, skipped {skipped}.";
+            string scopeFolder = CurrentSelectedPagesFolderOrRoot(out bool scopedToSelectedFolder);
+            SortPagesBySuffix(scopeFolder, scopedToSelectedFolder);
         }
         catch (Exception ex)
         {
@@ -262,12 +253,130 @@ public partial class MainWindow
         }
     }
 
-    private string EnsurePagesRootFolder(string displayName)
+    private void SortPagesBySuffix(string scopeFolder)
     {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "Sort D/Sec/WT Pages",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(scopeFolder) ||
+            !Directory.Exists(scopeFolder) ||
+            !IsPathInsidePagesRoot(scopeFolder))
+        {
+            return;
+        }
+
+        try
+        {
+            SortPagesBySuffix(scopeFolder, scopedToSelectedFolder: true);
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Sort D/Sec/WT Pages", ex);
+        }
+    }
+
+    private void SortPagesBySuffix(string scopeFolder, bool scopedToSelectedFolder)
+    {
+        string detailsStruct = EnsurePagesChildFolder(scopeFolder, "details struct");
+        string detailsArch = EnsurePagesChildFolder(scopeFolder, "details arch");
+        string units = EnsurePagesChildFolder(scopeFolder, "units");
+        string sections = EnsurePagesChildFolder(scopeFolder, "sections");
+
+        IReadOnlyList<PageInfo> pages = CollectPagesUnder(scopeFolder)
+            .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        int movedTop = 0;
+        int movedDetailsStruct = 0;
+        int movedDetailsArch = 0;
+        int movedUnits = 0;
+        int movedSections = 0;
+        int skipped = 0;
+        bool reloadActiveTab = false;
+        string? selectAfter = null;
+
+        foreach (PageInfo page in pages)
+        {
+            string target = ClassifySuffixPageTarget(page, scopeFolder, detailsStruct, detailsArch, units, sections);
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                skipped++;
+                continue;
+            }
+
+            string parent = Path.GetDirectoryName(page.FolderPath) ?? "";
+            if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
+            {
+                skipped++;
+                continue;
+            }
+
+            string oldPath = page.FolderPath;
+            string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
+            reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
+            selectAfter ??= movedPath;
+
+            if (string.Equals(target, scopeFolder, StringComparison.OrdinalIgnoreCase))
+                movedTop++;
+            else if (string.Equals(target, detailsStruct, StringComparison.OrdinalIgnoreCase))
+                movedDetailsStruct++;
+            else if (string.Equals(target, detailsArch, StringComparison.OrdinalIgnoreCase))
+                movedDetailsArch++;
+            else if (string.Equals(target, units, StringComparison.OrdinalIgnoreCase))
+                movedUnits++;
+            else if (string.Equals(target, sections, StringComparison.OrdinalIgnoreCase))
+                movedSections++;
+        }
+
+        OurPlaneCoreJobStore.SortChildren(detailsStruct, descending: false);
+        OurPlaneCoreJobStore.SortChildren(detailsArch, descending: false);
+        OurPlaneCoreJobStore.SortChildren(units, descending: false);
+        OurPlaneCoreJobStore.SortChildren(sections, descending: false);
+        int reorderedTop = ReorderSuffixPagesToTop(scopeFolder);
+
+        ReloadPagesTree(selectAfter ?? scopeFolder);
+        ReloadActivePageTabAfterPathChange(reloadActiveTab);
+        string scopeLabel = scopedToSelectedFolder
+            ? $" in {OurPlaneCoreJobStore.DisplayName(scopeFolder)}"
+            : "";
+        TxtStatus.Text =
+            $"Sort D/Sec/WT{scopeLabel}: top {movedTop}, details struct {movedDetailsStruct}, details arch {movedDetailsArch}, " +
+            $"units {movedUnits}, sections {movedSections}, reordered {reorderedTop}, skipped {skipped}.";
+    }
+
+    private string CurrentSelectedPagesFolderOrRoot(out bool scopedToSelectedFolder)
+    {
+        scopedToSelectedFolder = false;
         if (_currentJob == null)
             return "";
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(_currentJob.PagesRoot))
+        if (PagesTree.SelectedItem is TreeViewItem { Tag: PageFolderNode folder } &&
+            !string.IsNullOrWhiteSpace(folder.FolderPath) &&
+            IsPathInsidePagesRoot(folder.FolderPath))
+        {
+            scopedToSelectedFolder = true;
+            return folder.FolderPath;
+        }
+
+        return _currentJob.PagesRoot;
+    }
+
+    private string EnsurePagesChildFolder(string parentFolder, string displayName)
+    {
+        if (_currentJob == null ||
+            string.IsNullOrWhiteSpace(parentFolder) ||
+            !Directory.Exists(parentFolder) ||
+            !IsPathInsidePagesRoot(parentFolder))
+        {
+            return "";
+        }
+
+        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder))
         {
             if (!OurPlaneCoreJobStore.IsPageFolder(child) &&
                 string.Equals(OurPlaneCoreJobStore.DisplayName(child), displayName, StringComparison.OrdinalIgnoreCase))
@@ -276,11 +385,12 @@ public partial class MainWindow
             }
         }
 
-        return OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, displayName);
+        return OurPlaneCoreJobStore.EnsureFolder(parentFolder, displayName);
     }
 
     private string ClassifySuffixPageTarget(
         PageInfo page,
+        string topFolder,
         string detailsStruct,
         string detailsArch,
         string units,
@@ -291,7 +401,7 @@ public partial class MainWindow
 
         (string suffix, char first) = DetectPageSuffixSortInfo(page);
         if (PageSuffixTopOrder.Contains(suffix, StringComparer.OrdinalIgnoreCase))
-            return _currentJob.PagesRoot;
+            return topFolder;
         if (string.Equals(suffix, "d", StringComparison.OrdinalIgnoreCase) && first == 's')
             return detailsStruct;
         if (string.Equals(suffix, "d", StringComparison.OrdinalIgnoreCase) && first == 'a')
@@ -326,9 +436,9 @@ public partial class MainWindow
         return (suffix, first);
     }
 
-    private int ReorderRootSuffixPagesToTop(string pagesRoot)
+    private int ReorderSuffixPagesToTop(string parentFolder)
     {
-        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(pagesRoot).ToList();
+        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder).ToList();
         var topPages = new List<string>();
         foreach (string suffix in PageSuffixTopOrder)
         {

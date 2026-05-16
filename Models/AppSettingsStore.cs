@@ -29,6 +29,20 @@ public sealed class AppSettings
     public bool ScaleMeasurementLabelsWithPage { get; set; } = false;
     public bool ScaleSheetHeaderWithPage { get; set; } = false;
     public bool SimplifyViewportNavigation { get; set; } = false;
+    public double ViewportMeasurementStrokeScale { get; set; } = 1.0;
+    public double ViewportPointSizeScale { get; set; } = 1.0;
+    public bool PdfExportIncludeMeasurements { get; set; } = true;
+    public bool PdfExportIncludeAnnotations { get; set; } = true;
+    public bool PdfExportShowSheetLegend { get; set; } = true;
+    public bool PdfExportShowMeasurementLabels { get; set; } = true;
+    public bool PdfExportShowLineLabels { get; set; } = true;
+    public bool PdfExportShowAreaLabels { get; set; } = true;
+    public bool PdfExportShowCountLabels { get; set; }
+    public double PdfExportMeasurementStrokeScale { get; set; } = 1.5;
+    public double PdfExportPointSizeScale { get; set; } = 1.0;
+    public double PdfExportMeasurementLabelScale { get; set; } = 1.0;
+    public double PdfExportSheetLegendScale { get; set; } = 0.70;
+    public double PdfExportSheetHeaderScale { get; set; } = 0.70;
     public double MassingFloorAssemblyFeet { get; set; } = SmartMassingDraftService.DefaultFloorAssemblyFeet;
     public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
     public double LeftPanelWidth { get; set; } = 200.0;
@@ -62,6 +76,9 @@ public sealed class OpenAiModelStatus
 
 public static class AppSettingsStore
 {
+    public const string SettingsPathEnvironmentVariable = "OURPLANECORE_SETTINGS_PATH";
+    public const double PdfExportScaleMax = 10.0;
+
     public static readonly string[] SuggestedOpenAiModels =
     [
         OpenAiRequestRunner.DefaultModel,
@@ -83,6 +100,10 @@ public static class AppSettingsStore
     {
         get
         {
+            string? overridePath = Environment.GetEnvironmentVariable(SettingsPathEnvironmentVariable);
+            if (!string.IsNullOrWhiteSpace(overridePath))
+                return Path.GetFullPath(overridePath.Trim());
+
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             return Path.Combine(appData, "OurPlaneCore", "settings.json");
         }
@@ -99,6 +120,7 @@ public static class AppSettingsStore
                 ?? new AppSettings();
             NormalizeJobsRoots(settings);
             NormalizeRecentJobs(settings);
+            NormalizeOutputSettings(settings);
             return settings;
         }
         catch (Exception ex)
@@ -111,6 +133,7 @@ public static class AppSettingsStore
     public static void Save(AppSettings settings)
     {
         NormalizeJobsRoots(settings);
+        NormalizeOutputSettings(settings);
         string? dir = Path.GetDirectoryName(SettingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
@@ -284,6 +307,45 @@ public static class AppSettingsStore
         settings.RecentJobs = TrimRecentJobsPreservingPinned(unique);
     }
 
+    public static void NormalizeOutputSettings(AppSettings settings)
+    {
+        settings.ViewportMeasurementStrokeScale = NormalizeScale(
+            settings.ViewportMeasurementStrokeScale,
+            fallback: 1.0,
+            min: 0.25,
+            max: 4.0);
+        settings.ViewportPointSizeScale = NormalizeScale(
+            settings.ViewportPointSizeScale,
+            fallback: 1.0,
+            min: 0.25,
+            max: 4.0);
+        settings.PdfExportMeasurementStrokeScale = NormalizeScale(
+            settings.PdfExportMeasurementStrokeScale,
+            fallback: 1.5,
+            min: 0.25,
+            max: PdfExportScaleMax);
+        settings.PdfExportPointSizeScale = NormalizeScale(
+            settings.PdfExportPointSizeScale,
+            fallback: 1.0,
+            min: 0.25,
+            max: PdfExportScaleMax);
+        settings.PdfExportMeasurementLabelScale = NormalizeScale(
+            settings.PdfExportMeasurementLabelScale,
+            fallback: 1.0,
+            min: 0.50,
+            max: PdfExportScaleMax);
+        settings.PdfExportSheetLegendScale = NormalizeScale(
+            settings.PdfExportSheetLegendScale,
+            fallback: 0.70,
+            min: 0.25,
+            max: PdfExportScaleMax);
+        settings.PdfExportSheetHeaderScale = NormalizeScale(
+            settings.PdfExportSheetHeaderScale,
+            fallback: 0.70,
+            min: 0.25,
+            max: PdfExportScaleMax);
+    }
+
     public static void NormalizeJobsRoots(AppSettings settings)
     {
         var roots = new List<string>();
@@ -335,6 +397,14 @@ public static class AppSettingsStore
         {
             return path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
+    }
+
+    private static double NormalizeScale(double value, double fallback, double min, double max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+            return fallback;
+
+        return Math.Clamp(value, min, max);
     }
 
     public static OpenAiKeyStatus GetOpenAiKeyStatus()

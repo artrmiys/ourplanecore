@@ -25,10 +25,12 @@ public partial class MainWindow
             return;
         }
 
+        var itemByMeasurement = BuildTakeoffItemByMeasurementLookup();
         var entries = new List<MeasurementClipboardEntry>();
         foreach (Measurement measurement in unique)
         {
-            TakeoffItem? item = FindTakeoffItemForMeasurement(measurement);
+            itemByMeasurement.TryGetValue(measurement, out TakeoffItem? item);
+            item ??= FindTakeoffItemByFolder(measurement.TakeoffFolder, measurement.MType);
             entries.Add(new MeasurementClipboardEntry(
                 OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
                 measurement.Name,
@@ -44,11 +46,13 @@ public partial class MainWindow
                 item?.Name ?? "",
                 item?.Color ?? measurement.Color,
                 item?.UnitPrice ?? 0,
-                item?.Notes ?? ""));
+                item?.Notes ?? "",
+                CaptureMeasurementJoistClipboard(measurement),
+                CaptureTakeoffJoistClipboard(item, measurement)));
         }
 
         _measurementClipboard = new MeasurementClipboard(entries);
-        TxtStatus.Text = $"Copied {entries.Count} measurement(s). Open another sheet and press Ctrl+V or right-click Paste.";
+        TxtStatus.Text = $"Copied {entries.Count} measurement(s). Paste uses the copied set's top-left corner as the cursor anchor.";
     }
 
     private void PasteMeasurementsFromClipboard(SKPoint? pasteAtPdf)
@@ -108,14 +112,17 @@ public partial class MainWindow
                 _suppressCanvasFocusFromTakeoffSelection = previousSuppressFocus;
             }
 
-            _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements));
+            _viewport.SetMeasurements(_takeoffItems.SelectMany(item => item.Measurements), clearUndoStack: false);
+            _viewport.RegisterAddedMeasurementsUndo(pasted, $"remove pasted {pasted.Count} measurement(s)");
             _viewport.RestoreViewState(viewBeforePaste);
             SelectTakeoffSectionNodesSilently(pastedNodes);
             SelectTakeoffSectionMeasurementsOnCanvas(pastedNodes);
-            RefreshEstimateTable();
-            RefreshPagesTakeoffIndicators();
-            ApplyTakeoffPageHighlights();
-            RefreshSheetLegend();
+            using (UsePageMeasurementLookup())
+            {
+                RefreshPageTakeoffIndicatorsForFolder(_currentPage.FolderPath);
+                ApplyTakeoffPageHighlights();
+                RefreshSheetLegend();
+            }
             UpdateTotalDisplay();
 
             string modeLabel = pasteMode.Value == MeasurementPasteMode.SameTakeoffs
@@ -199,17 +206,14 @@ public partial class MainWindow
         if (createdTargets.TryGetValue(key, out TakeoffItem? created))
             return created;
 
-        string baseName = string.IsNullOrWhiteSpace(entry.SourceTakeoffName)
-            ? $"{MeasurementTypeTitle(measurementType)} Paste"
-            : mode == MeasurementPasteMode.NewTakeoffs
-                ? $"{entry.SourceTakeoffName} Copy"
-                : entry.SourceTakeoffName;
+        string baseName = MeasurementPasteTargetDisplayName(entry.SourceTakeoffName, measurementType);
         string color = IsValidWpfColor(entry.SourceTakeoffColor)
             ? entry.SourceTakeoffColor
             : entry.MeasurementColor;
         var target = CreateUniqueTakeoffItem(baseName, color, measurementType, NewTakeoffItemParentFolder());
         target.UnitPrice = entry.SourceTakeoffUnitPrice;
         target.Notes = entry.SourceTakeoffNotes;
+        ApplyTakeoffJoistClipboard(target, entry.SourceTakeoffJoist, measurementType);
         _takeoffItems.Add(target);
 
         ItemsControl parent = FindTakeoffTreeItemByFolder(Path.GetDirectoryName(target.FolderPath) ?? "") ?? (ItemsControl)TakeoffsTree;
@@ -220,6 +224,11 @@ public partial class MainWindow
         createdTargets[key] = target;
         return target;
     }
+
+    private static string MeasurementPasteTargetDisplayName(string sourceTakeoffName, string measurementType) =>
+        string.IsNullOrWhiteSpace(sourceTakeoffName)
+            ? MeasurementTypeTitle(measurementType)
+            : sourceTakeoffName.Trim();
 
     private Measurement CloneClipboardMeasurement(MeasurementClipboardEntry entry, TakeoffItem target, SKPoint pasteOffset)
     {
@@ -241,6 +250,17 @@ public partial class MainWindow
             PageFolder = _currentPage?.FolderPath ?? "",
             TakeoffFolder = target.FolderPath,
             ScaleMetersPerPt = scale,
+            JoistEnabled = entry.MeasurementJoist.Enabled,
+            JoistType = entry.MeasurementJoist.JoistType,
+            JoistSpacingInches = entry.MeasurementJoist.SpacingInches > 0 ? entry.MeasurementJoist.SpacingInches : 16,
+            JoistDirectionDegrees = entry.MeasurementJoist.DirectionDegrees,
+            JoistDirectionLocked = entry.MeasurementJoist.DirectionLocked,
+            JoistDirectionFollowsAreaRotation = entry.MeasurementJoist.DirectionFollowsAreaRotation,
+            JoistAddEndJoist = entry.MeasurementJoist.AddEndJoist,
+            JoistPitch = JoistTakeoffCalculator.NormalizePitch(entry.MeasurementJoist.Pitch),
+            JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(entry.MeasurementJoist.LengthRounding),
+            JoistShowLabels = entry.MeasurementJoist.ShowLabels,
+            JoistDetailedLabels = entry.MeasurementJoist.DetailedLabels,
         };
     }
 
@@ -251,12 +271,10 @@ public partial class MainWindow
         if (!pasteAtPdf.HasValue || !TryGetClipboardBounds(entries, out SKRect bounds))
             return new SKPoint(0, 0);
 
-        var sourceCenter = new SKPoint(
-            (bounds.Left + bounds.Right) / 2f,
-            (bounds.Top + bounds.Bottom) / 2f);
+        var sourceAnchor = new SKPoint(bounds.Left, bounds.Top);
         return new SKPoint(
-            pasteAtPdf.Value.X - sourceCenter.X,
-            pasteAtPdf.Value.Y - sourceCenter.Y);
+            pasteAtPdf.Value.X - sourceAnchor.X,
+            pasteAtPdf.Value.Y - sourceAnchor.Y);
     }
 
     private static bool TryGetClipboardBounds(
@@ -308,9 +326,71 @@ public partial class MainWindow
     private static string MeasurementClipboardTargetKey(MeasurementClipboardEntry entry)
     {
         string source = string.IsNullOrWhiteSpace(entry.SourceTakeoffFolder)
-            ? $"{entry.SourceTakeoffName}|{entry.MeasurementType}|{entry.SourceTakeoffColor}"
+            ? $"{entry.SourceTakeoffName}|{entry.MeasurementType}|{entry.SourceTakeoffColor}|joist:{entry.SourceTakeoffJoist.Enabled}"
             : entry.SourceTakeoffFolder;
         return source.Trim();
+    }
+
+    private static MeasurementJoistClipboard CaptureMeasurementJoistClipboard(Measurement measurement) =>
+        new(
+            measurement.JoistEnabled,
+            measurement.JoistType,
+            measurement.JoistSpacingInches,
+            measurement.JoistDirectionDegrees,
+            measurement.JoistDirectionLocked,
+            measurement.JoistDirectionFollowsAreaRotation,
+            measurement.JoistAddEndJoist,
+            JoistTakeoffCalculator.NormalizePitch(measurement.JoistPitch),
+            JoistTakeoffCalculator.NormalizeLengthRounding(measurement.JoistLengthRounding),
+            measurement.JoistShowLabels,
+            measurement.JoistDetailedLabels);
+
+    private static TakeoffJoistClipboard CaptureTakeoffJoistClipboard(TakeoffItem? item, Measurement measurement)
+    {
+        if (item != null)
+        {
+            return new TakeoffJoistClipboard(
+                item.IsJoistArea,
+                item.JoistType,
+                item.JoistSpacingInches,
+                item.JoistDirectionDegrees,
+                item.JoistDirectionFollowsAreaRotation,
+                item.JoistAddEndJoist,
+                JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
+                JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
+                item.JoistShowLabels,
+                item.JoistDetailedLabels);
+        }
+
+        return new TakeoffJoistClipboard(
+            measurement.JoistEnabled,
+            measurement.JoistType,
+            measurement.JoistSpacingInches,
+            measurement.JoistDirectionDegrees,
+            measurement.JoistDirectionFollowsAreaRotation,
+            measurement.JoistAddEndJoist,
+            JoistTakeoffCalculator.NormalizePitch(measurement.JoistPitch),
+            JoistTakeoffCalculator.NormalizeLengthRounding(measurement.JoistLengthRounding),
+            measurement.JoistShowLabels,
+            measurement.JoistDetailedLabels);
+    }
+
+    private static void ApplyTakeoffJoistClipboard(
+        TakeoffItem target,
+        TakeoffJoistClipboard joist,
+        string measurementType)
+    {
+        bool canBeJoist = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
+        target.IsJoistTakeoff = canBeJoist && joist.Enabled;
+        target.JoistType = joist.JoistType;
+        target.JoistSpacingInches = joist.SpacingInches > 0 ? joist.SpacingInches : 16;
+        target.JoistDirectionDegrees = joist.DirectionDegrees;
+        target.JoistDirectionFollowsAreaRotation = joist.DirectionFollowsAreaRotation;
+        target.JoistAddEndJoist = joist.AddEndJoist;
+        target.JoistPitch = JoistTakeoffCalculator.NormalizePitch(joist.Pitch);
+        target.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joist.LengthRounding);
+        target.JoistShowLabels = joist.ShowLabels;
+        target.JoistDetailedLabels = joist.DetailedLabels;
     }
 
     private TakeoffItem? FindTakeoffItemForMeasurement(Measurement measurement)
@@ -320,6 +400,15 @@ public partial class MainWindow
             return item;
 
         return FindTakeoffItemByFolder(measurement.TakeoffFolder, measurement.MType);
+    }
+
+    private Dictionary<Measurement, TakeoffItem> BuildTakeoffItemByMeasurementLookup()
+    {
+        var lookup = new Dictionary<Measurement, TakeoffItem>();
+        foreach (TakeoffItem item in _takeoffItems)
+        foreach (Measurement measurement in item.Measurements)
+            lookup.TryAdd(measurement, item);
+        return lookup;
     }
 
     private TakeoffItem? FindTakeoffItemByFolder(string? folderPath, string? measurementType = null)

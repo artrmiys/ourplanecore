@@ -54,8 +54,6 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Create Marker Set", _currentJob != null, () => BtnCreateMarkerSet_Click(sender, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Manage Marker Sets...", CanManageMarkerSets(), () => BtnManageMarkerSets_Click(sender, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Export Marker Context", _currentJob != null, () => BtnExportMarkers_Click(sender, new RoutedEventArgs())));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Build 3D Draft", _currentJob != null, () => BtnBuildMassingDraft_Click(sender, new RoutedEventArgs())));
 
         menu.IsOpen = true;
     }

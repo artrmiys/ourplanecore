@@ -276,6 +276,84 @@ public partial class MainWindow
         TxtStatus.Text = $"Viewport value label size: {_settings.MeasurementLabelScale:0.##}x.";
     }
 
+    private void BtnMeasurementStrokeApply_Click(object sender, RoutedEventArgs e) =>
+        ApplyMeasurementStrokeScaleFromText();
+
+    private void TxtMeasurementStrokeScale_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyMeasurementStrokeScaleFromText();
+        e.Handled = true;
+    }
+
+    private void TxtMeasurementStrokeScale_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyMeasurementStrokeScaleFromText();
+
+    private void ApplyMeasurementStrokeScaleFromText()
+    {
+        string raw = TxtMeasurementStrokeScale.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.25 ||
+            scale > 4.00)
+        {
+            TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtStatus.Text = "Viewport line thickness must be 0.25 - 4.0.";
+            return;
+        }
+
+        SetMeasurementStrokeScale(scale);
+    }
+
+    private void SetMeasurementStrokeScale(double scale)
+    {
+        _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(scale);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"Viewport line thickness: {_settings.ViewportMeasurementStrokeScale:0.##}x.";
+    }
+
+    private void BtnMeasurementPointApply_Click(object sender, RoutedEventArgs e) =>
+        ApplyMeasurementPointScaleFromText();
+
+    private void TxtMeasurementPointScale_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyMeasurementPointScaleFromText();
+        e.Handled = true;
+    }
+
+    private void TxtMeasurementPointScale_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyMeasurementPointScaleFromText();
+
+    private void ApplyMeasurementPointScaleFromText()
+    {
+        string raw = TxtMeasurementPointScale.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.25 ||
+            scale > 4.00)
+        {
+            TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtStatus.Text = "Viewport point size must be 0.25 - 4.0.";
+            return;
+        }
+
+        SetMeasurementPointScale(scale);
+    }
+
+    private void SetMeasurementPointScale(double scale)
+    {
+        _settings.ViewportPointSizeScale = NormalizePointScale(scale);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"Viewport point size: {_settings.ViewportPointSizeScale:0.##}x.";
+    }
+
     private void BtnLegendSizeMenu_Click(object sender, RoutedEventArgs e)
     {
         ShowOverlaySizePopup(sender, "Legend Size", _settings.SheetLegendScale, SetSheetLegendScale);
@@ -286,6 +364,90 @@ public partial class MainWindow
 
     private void BtnLabelSizePresets_Click(object sender, RoutedEventArgs e) =>
         ShowOverlaySizePopup(sender, "Label Size", _settings.MeasurementLabelScale, SetMeasurementLabelScale);
+
+    private void BtnStrokeSizePresets_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement target)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        foreach (var (label, scale) in StrokeSizeOptions())
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = Math.Abs(NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale) - scale) < 0.001,
+            };
+            item.Click += (_, _) => SetMeasurementStrokeScale(scale);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Custom...", true, PromptMeasurementStrokeScale));
+        menu.IsOpen = true;
+    }
+
+    private void BtnPointSizePresets_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement target)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        foreach (var (label, scale) in PointSizeOptions())
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = Math.Abs(NormalizePointScale(_settings.ViewportPointSizeScale) - scale) < 0.001,
+            };
+            item.Click += (_, _) => SetMeasurementPointScale(scale);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Custom...", true, PromptMeasurementPointScale));
+        menu.IsOpen = true;
+    }
+
+    private void PromptMeasurementStrokeScale()
+    {
+        string? raw = ShowInputDialog(
+            "Scale multiplier (0.25 - 4.0):",
+            NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale).ToString("0.##", CultureInfo.InvariantCulture),
+            "Line Thickness");
+        if (raw == null)
+            return;
+
+        if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.25 ||
+            scale > 4.0)
+        {
+            MessageBox.Show("Enter a value from 0.25 to 4.0.", "Line Thickness", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        SetMeasurementStrokeScale(scale);
+    }
+
+    private void PromptMeasurementPointScale()
+    {
+        string? raw = ShowInputDialog(
+            "Scale multiplier (0.25 - 4.0):",
+            NormalizePointScale(_settings.ViewportPointSizeScale).ToString("0.##", CultureInfo.InvariantCulture),
+            "Point Size");
+        if (raw == null)
+            return;
+
+        if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.25 ||
+            scale > 4.0)
+        {
+            MessageBox.Show("Enter a value from 0.25 to 4.0.", "Point Size", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        SetMeasurementPointScale(scale);
+    }
 
     private void ShowOverlaySizePopup(object sender, string title, double currentScale, Action<double> apply)
     {
@@ -401,12 +563,17 @@ public partial class MainWindow
 
     private void ApplyDisplaySettingsToViewport()
     {
+        AppSettingsStore.NormalizeOutputSettings(_settings);
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
+        _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale);
+        _settings.ViewportPointSizeScale = NormalizePointScale(_settings.ViewportPointSizeScale);
         _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = _settings.ShowLineLabels;
         _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
         _viewport.ShowCountLabels = _settings.ShowCountLabels;
         _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
+        _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
+        _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
         _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
         _viewport.SimplifyNavigationRendering = _settings.SimplifyViewportNavigation;
@@ -436,6 +603,9 @@ public partial class MainWindow
             ComboDisplayViewportBackground.SelectedIndex = ViewportBackgroundSelectedIndex(_settings.ViewportBackground);
             ComboDisplayPageBackground.SelectedIndex = PageBackgroundSelectedIndex(_settings.PageBackground);
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            SyncOutputSettingsControls();
         }
         finally
         {
@@ -449,6 +619,7 @@ public partial class MainWindow
         _settings.SheetLegendScale = NormalizeOverlayScale(_settings.SheetLegendScale);
         _settings.SheetHeaderScale = NormalizeOverlayScale(_settings.SheetHeaderScale);
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
+        AppSettingsStore.NormalizeOutputSettings(_settings);
         _viewport.SheetLegendAnchor = _settings.SheetLegendAnchor;
         _viewport.SheetLegendScale = _settings.SheetLegendScale;
         _viewport.SheetHeaderScale = _settings.SheetHeaderScale;
@@ -461,6 +632,8 @@ public partial class MainWindow
         _viewport.ShowLineLabels = _settings.ShowLineLabels;
         _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
         _viewport.ShowCountLabels = _settings.ShowCountLabels;
+        _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
+        _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
         SyncDisplaySettingsControls();
         RefreshSheetLegend();
         _viewport.InvalidateVisual();
@@ -473,6 +646,40 @@ public partial class MainWindow
 
         return Math.Clamp(scale, 0.50, 3.00);
     }
+
+    private static double NormalizeStrokeScale(double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+            return 1.0;
+
+        return Math.Clamp(scale, 0.25, 4.00);
+    }
+
+    private static double NormalizePointScale(double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+            return 1.0;
+
+        return Math.Clamp(scale, 0.25, 4.00);
+    }
+
+    private static IReadOnlyList<(string Label, double Scale)> StrokeSizeOptions() =>
+    [
+        ("Thin", 0.75),
+        ("Normal", 1.00),
+        ("Thick", 1.50),
+        ("Heavy", 2.00),
+        ("XL", 3.00),
+    ];
+
+    private static IReadOnlyList<(string Label, double Scale)> PointSizeOptions() =>
+    [
+        ("Small", 0.65),
+        ("Normal", 1.00),
+        ("Large", 1.40),
+        ("XL", 2.00),
+        ("XXL", 3.00),
+    ];
 
     private static string NormalizeSheetLegendAnchor(string? anchor)
     {

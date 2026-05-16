@@ -31,13 +31,12 @@ public static class SampleJobService
         try
         {
             WriteSamplePdf(tempPdf);
-            string archFolder = Path.Combine(job.PagesRoot, "00. imported", "Arch");
-            Directory.CreateDirectory(archFolder);
+            string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
             PageInfo page = OurPlaneCoreJobStore.CreatePageFromPdf(
                 job,
                 tempPdf,
                 "A101 Sample Plan",
-                archFolder,
+                importFolder,
                 pdfPage: 0,
                 scaleMetersPerPt: SampleScaleMetersPerPt);
 

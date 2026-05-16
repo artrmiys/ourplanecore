@@ -227,15 +227,26 @@ public partial class MainWindow
         return dot;
     }
 
-    private IEnumerable<TakeoffItem> TakeoffsForPage(string pageFolder) =>
-        _takeoffItems
+    private IEnumerable<TakeoffItem> TakeoffsForPage(string pageFolder)
+    {
+        if (TryGetIndexedTakeoffsForPage(pageFolder, out IReadOnlyList<TakeoffItem> indexedTakeoffs))
+            return indexedTakeoffs;
+
+        return _takeoffItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.FolderPath))
             .Where(item => item.Measurements.Any(m =>
                 IsSamePageFolder(m.PageFolder, pageFolder)))
             .GroupBy(TakeoffLegendOrderKey, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First());
+    }
 
-    private IEnumerable<Measurement> MeasurementsForTakeoffOnPage(TakeoffItem item, string pageFolder) =>
-        item.Measurements.Where(measurement => IsSamePageFolder(measurement.PageFolder, pageFolder));
+    private IEnumerable<Measurement> MeasurementsForTakeoffOnPage(TakeoffItem item, string pageFolder)
+    {
+        if (TryGetIndexedMeasurementsForTakeoffOnPage(item, pageFolder, out IReadOnlyList<Measurement> indexedMeasurements))
+            return indexedMeasurements;
+
+        return item.Measurements.Where(measurement => IsSamePageFolder(measurement.PageFolder, pageFolder));
+    }
 
     private IReadOnlyList<TakeoffItem> OrderedTakeoffsForPage(PageInfo page)
     {
@@ -243,29 +254,11 @@ public partial class MainWindow
         if (takeoffs.Count <= 1)
             return takeoffs;
 
-        var byKey = takeoffs
-            .GroupBy(TakeoffLegendOrderKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var ordered = new List<TakeoffItem>();
-
-        foreach (string storedKey in page.LegendTakeoffOrder.Select(NormalizeTakeoffLegendOrderKey))
-        {
-            if (string.IsNullOrWhiteSpace(storedKey) || !byKey.TryGetValue(storedKey, out TakeoffItem? takeoff))
-                continue;
-            if (!used.Add(storedKey))
-                continue;
-
-            ordered.Add(takeoff);
-        }
-
-        ordered.AddRange(takeoffs
-            .Where(takeoff => !used.Contains(TakeoffLegendOrderKey(takeoff)))
-            .OrderBy(takeoff => MeasurementTypeTitle(takeoff.MeasurementType), StringComparer.OrdinalIgnoreCase)
-            .ThenBy(takeoff => takeoff.Name, StringComparer.OrdinalIgnoreCase));
-
-        return ordered;
+        return AutoOrderTakeoffs(takeoffs);
     }
+
+    private static List<TakeoffItem> AutoOrderTakeoffs(IEnumerable<TakeoffItem> takeoffs) =>
+        TakeoffAutoRoutingService.SortPageLegendItems(takeoffs).ToList();
 
     private IReadOnlyList<TakeoffItem> VisibleOrderedTakeoffsForPage(PageInfo page) =>
         OrderedTakeoffsForPage(page)
@@ -338,6 +331,9 @@ public partial class MainWindow
     private string TakeoffLegendOrderKey(TakeoffItem item) =>
         NormalizeTakeoffLegendOrderKey(item.FolderPath);
 
+    private static bool IsPageLegendManual(PageInfo page) =>
+        string.Equals(page.LegendTakeoffOrderMode, "manual", StringComparison.OrdinalIgnoreCase);
+
     private string NormalizeTakeoffLegendOrderKey(string value)
     {
         string clean = (value ?? "").Trim();
@@ -363,37 +359,62 @@ public partial class MainWindow
             .ToList();
 
         page.LegendTakeoffOrder = order;
+        page.LegendTakeoffOrderMode = "manual";
         if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+        {
             _currentPage.LegendTakeoffOrder = order.ToList();
-        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order);
+            _currentPage.LegendTakeoffOrderMode = "manual";
+        }
+        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order, "manual");
     }
 
     private void RebasePageLegendTakeoffOrderReferences(string oldPath, string newPath)
     {
-        RebaseExpandedTreePaths(_expandedTakeoffTreePaths, oldPath, newPath);
+        RebasePageLegendTakeoffOrderReferences([(oldPath, newPath)]);
+    }
+
+    private void RebasePageLegendTakeoffOrderReferences(IReadOnlyList<(string OldPath, string NewPath)> movedPaths)
+    {
+        if (movedPaths.Count == 0)
+            return;
+
+        foreach (var (oldPath, newPath) in movedPaths)
+            RebaseExpandedTreePaths(_expandedTakeoffTreePaths, oldPath, newPath);
+        RebasePageTakeoffSelectionReferences(movedPaths);
 
         if (_currentJob == null)
             return;
 
-        string oldKey = NormalizeTakeoffLegendOrderKey(oldPath);
-        string newKey = NormalizeTakeoffLegendOrderKey(newPath);
-        if (string.IsNullOrWhiteSpace(oldKey) ||
-            string.IsNullOrWhiteSpace(newKey) ||
-            string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase))
-        {
+        var rebases = movedPaths
+            .Select(move => (
+                OldKey: NormalizeTakeoffLegendOrderKey(move.OldPath),
+                NewKey: NormalizeTakeoffLegendOrderKey(move.NewPath)))
+            .Where(move =>
+                !string.IsNullOrWhiteSpace(move.OldKey) &&
+                !string.IsNullOrWhiteSpace(move.NewKey) &&
+                !string.Equals(move.OldKey, move.NewKey, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(move => move.OldKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .OrderByDescending(move => move.OldKey.Length)
+            .ToList();
+        if (rebases.Count == 0)
             return;
-        }
 
         foreach (PageInfo page in CollectPagesUnder(_currentJob.PagesRoot))
         {
             if (page.LegendTakeoffOrder.Count == 0)
                 continue;
 
-            var updated = page.LegendTakeoffOrder
-                .Select(key => RebaseTakeoffLegendOrderKey(key, oldKey, newKey))
-                .Where(key => !string.IsNullOrWhiteSpace(key))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var updated = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string key in page.LegendTakeoffOrder)
+            {
+                string rebased = RebaseTakeoffLegendOrderKey(key, rebases);
+                if (string.IsNullOrWhiteSpace(rebased) || !seen.Add(rebased))
+                    continue;
+
+                updated.Add(rebased);
+            }
 
             bool changed = updated.Count != page.LegendTakeoffOrder.Count ||
                            updated.Where((key, index) => !string.Equals(
@@ -404,10 +425,93 @@ public partial class MainWindow
                 continue;
 
             page.LegendTakeoffOrder = updated;
-            OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated);
+            OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated, page.LegendTakeoffOrderMode);
             if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            {
                 _currentPage.LegendTakeoffOrder = updated.ToList();
+                _currentPage.LegendTakeoffOrderMode = page.LegendTakeoffOrderMode;
+            }
         }
+    }
+
+    private void RebasePageTakeoffSelectionReferences(IReadOnlyList<(string OldPath, string NewPath)> movedPaths)
+    {
+        if (_pageTakeoffMultiSelection.Count == 0 || movedPaths.Count == 0)
+            return;
+
+        var rebases = movedPaths
+            .Select(move => (
+                OldKey: NormalizeSelectionPath(move.OldPath),
+                NewKey: NormalizeSelectionPath(move.NewPath)))
+            .Where(move =>
+                !string.IsNullOrWhiteSpace(move.OldKey) &&
+                !string.IsNullOrWhiteSpace(move.NewKey) &&
+                !string.Equals(move.OldKey, move.NewKey, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(move => move.OldKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .OrderByDescending(move => move.OldKey.Length)
+            .ToList();
+        if (rebases.Count == 0)
+            return;
+
+        var updated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool changed = false;
+        foreach (string key in _pageTakeoffMultiSelection)
+        {
+            int separator = key.IndexOf('|');
+            if (separator < 0)
+            {
+                updated.Add(key);
+                continue;
+            }
+
+            string pageKey = key[..separator];
+            string takeoffKey = key[(separator + 1)..];
+            string rebasedTakeoff = RebaseNormalizedPathKey(takeoffKey, rebases);
+            string next = $"{pageKey}|{rebasedTakeoff}";
+            changed |= !string.Equals(key, next, StringComparison.OrdinalIgnoreCase);
+            updated.Add(next);
+        }
+
+        if (!changed)
+            return;
+
+        _pageTakeoffMultiSelection.Clear();
+        foreach (string key in updated)
+            _pageTakeoffMultiSelection.Add(key);
+    }
+
+    private static string RebaseNormalizedPathKey(
+        string key,
+        IReadOnlyList<(string OldKey, string NewKey)> rebases)
+    {
+        foreach (var (oldKey, newKey) in rebases)
+        {
+            if (string.Equals(key, oldKey, StringComparison.OrdinalIgnoreCase))
+                return newKey;
+
+            string prefix = oldKey.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                            Path.DirectorySeparatorChar;
+            if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return newKey.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + key[(prefix.Length - 1)..];
+        }
+
+        return key;
+    }
+
+    private string RebaseTakeoffLegendOrderKey(
+        string key,
+        IReadOnlyList<(string OldKey, string NewKey)> rebases)
+    {
+        string rebased = NormalizeTakeoffLegendOrderKey(key);
+        foreach (var (oldKey, newKey) in rebases)
+        {
+            string next = RebaseTakeoffLegendOrderKey(rebased, oldKey, newKey);
+            if (!string.Equals(next, rebased, StringComparison.OrdinalIgnoreCase))
+                return next;
+        }
+
+        return rebased;
     }
 
     private string RebaseTakeoffLegendOrderKey(string key, string oldPrefix, string newPrefix)
@@ -435,6 +539,15 @@ public partial class MainWindow
             IsPageTakeoffVisible(node.Page, node.Takeoff) ? "Hide on This Sheet" : "Show on This Sheet",
             true,
             () => TogglePageTakeoffVisibility(node.Page, node.Takeoff)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Hide {selectedCount} Selected on This Sheet" : "Hide Selected on This Sheet",
+            selectedCount > 0,
+            () => SetSelectedPageTakeoffVisibility(node, visible: false)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Show {selectedCount} Selected on This Sheet" : "Show Selected on This Sheet",
+            selectedCount > 0,
+            () => SetSelectedPageTakeoffVisibility(node, visible: true)));
+        menu.Items.Add(BuildPageTakeoffCountDisplayMenu(node));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
             selectedCount > 1 ? $"Move {selectedCount} Up in Legend" : "Move Up in Legend",
@@ -445,6 +558,7 @@ public partial class MainWindow
             CanMovePageTakeoffLegendNodes(node, 1),
             () => MovePageTakeoffLegendNodes(node, 1)));
         menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Sort Sheet Legend Auto", CanSortPageLegend(node.Page), () => SortPageLegendAuto(node.Page, node.Takeoff.FolderPath)));
         menu.Items.Add(MakeMenuItem("Sort Sheet Legend A-Z", CanSortPageLegend(node.Page), () => SortPageLegendByName(node.Page, node.Takeoff.FolderPath)));
         menu.Items.Add(MakeMenuItem("Reset Sheet Legend Order", HasCustomPageLegendOrder(node.Page), () => ResetPageLegendOrder(node.Page, node.Takeoff.FolderPath)));
         return menu;
@@ -453,8 +567,47 @@ public partial class MainWindow
     private int SelectedPageTakeoffContextCount(PageTakeoffNode anchor) =>
         SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true).Count;
 
+    private void SetSelectedPageTakeoffVisibility(PageTakeoffNode anchor, bool visible)
+    {
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true);
+        if (selectedNodes.Count == 0)
+            return;
+
+        var hidden = anchor.Page.HiddenTakeoffs
+            .Select(NormalizeTakeoffLegendOrderKey)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (PageTakeoffNode node in selectedNodes)
+        {
+            string key = TakeoffLegendOrderKey(node.Takeoff);
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            if (visible)
+                hidden.RemoveAll(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase));
+            else if (!hidden.Contains(key, StringComparer.OrdinalIgnoreCase))
+                hidden.Add(key);
+        }
+
+        anchor.Page.HiddenTakeoffs = hidden;
+        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, anchor.Page.FolderPath))
+            _currentPage.HiddenTakeoffs = hidden.ToList();
+        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(anchor.Page.FolderPath, hidden);
+        RefreshPageOverlayTreeNode(anchor.Page);
+        ApplyViewportPageTakeoffVisibility(anchor.Page);
+        RefreshSheetLegend();
+        TxtStatus.Text = visible
+            ? $"Shown {selectedNodes.Count} selected takeoff(s) on {anchor.Page.Name}."
+            : $"Hidden {selectedNodes.Count} selected takeoff(s) on {anchor.Page.Name}.";
+    }
+
     private void SelectLinkedPageTakeoff(PageTakeoffNode node)
     {
+        if (TryBlockTakeoffSwitchDuringRecord(node.Takeoff))
+            return;
+
         if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath))
             OpenPageInActiveTab(node.Page);
 
@@ -487,7 +640,16 @@ public partial class MainWindow
 
     private List<PageTakeoffNode> SelectedPageTakeoffNodes(PageTakeoffNode anchor, bool fallbackToAnchor)
     {
+        if (string.IsNullOrWhiteSpace(anchor.Page.FolderPath) ||
+            string.IsNullOrWhiteSpace(anchor.Takeoff.FolderPath))
+        {
+            return [];
+        }
+
         string anchorKey = PageTakeoffSelectionKey(anchor);
+        if (string.IsNullOrWhiteSpace(anchorKey))
+            return [];
+
         IEnumerable<string> keys = _pageTakeoffMultiSelection.Contains(anchorKey)
             ? _pageTakeoffMultiSelection
             : fallbackToAnchor
@@ -501,6 +663,8 @@ public partial class MainWindow
         return EnumeratePageTreeItems()
             .Select(item => item.Tag as PageTakeoffNode)
             .Where(node => node != null &&
+                           !string.IsNullOrWhiteSpace(node.Page.FolderPath) &&
+                           !string.IsNullOrWhiteSpace(node.Takeoff.FolderPath) &&
                            IsSamePageFolder(node.Page.FolderPath, anchor.Page.FolderPath) &&
                            keySet.Contains(PageTakeoffSelectionKey(node)))
             .Select(node => node!)
@@ -721,7 +885,7 @@ public partial class MainWindow
         TakeoffsForPage(page.FolderPath).Skip(1).Any();
 
     private static bool HasCustomPageLegendOrder(PageInfo page) =>
-        page.LegendTakeoffOrder.Count > 0;
+        IsPageLegendManual(page) && page.LegendTakeoffOrder.Count > 0;
 
     private void SortPageLegendByName(PageInfo page, string? selectTakeoffFolder = null)
     {
@@ -739,12 +903,22 @@ public partial class MainWindow
         TxtStatus.Text = $"Sorted {page.Name} legend A-Z.";
     }
 
+    private void SortPageLegendAuto(PageInfo page, string? selectTakeoffFolder = null)
+    {
+        var ordered = AutoOrderTakeoffs(TakeoffsForPage(page.FolderPath));
+        if (ordered.Count <= 1)
+            return;
+
+        ClearPageLegendOrder(page);
+        RefreshPagesTakeoffIndicators();
+        RefreshSheetLegend();
+        SelectLegendOrderResult(page, selectTakeoffFolder);
+        TxtStatus.Text = $"Set {page.Name} legend to live auto sorting.";
+    }
+
     private void ResetPageLegendOrder(PageInfo page, string? selectTakeoffFolder = null)
     {
-        page.LegendTakeoffOrder = [];
-        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
-            _currentPage.LegendTakeoffOrder = [];
-        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, []);
+        ClearPageLegendOrder(page);
         RefreshPagesTakeoffIndicators();
         RefreshSheetLegend();
         SelectLegendOrderResult(page, selectTakeoffFolder);
@@ -907,6 +1081,20 @@ public partial class MainWindow
                 continue;
 
             if (IsSamePageFolder(node.Page.FolderPath, pageFolder) &&
+                string.Equals(node.Takeoff.FolderPath, takeoffFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    private static TreeViewItem? FindPageTakeoffTreeItem(TreeViewItem pageItem, string takeoffFolder)
+    {
+        foreach (TreeViewItem item in pageItem.Items.OfType<TreeViewItem>())
+        {
+            if (item.Tag is PageTakeoffNode node &&
                 string.Equals(node.Takeoff.FolderPath, takeoffFolder, StringComparison.OrdinalIgnoreCase))
             {
                 return item;

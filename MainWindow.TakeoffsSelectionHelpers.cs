@@ -31,6 +31,33 @@ public partial class MainWindow
         return NormalizeSelectedTakeoffEntries(entries);
     }
 
+    private bool TryRefreshStaleTakeoffTreeNode(TreeViewItem item)
+    {
+        if (_currentJob == null)
+            return false;
+
+        string? path = TakeoffTreeNodeStoragePath(item);
+        if (string.IsNullOrWhiteSpace(path) || Directory.Exists(path))
+            return false;
+
+        if (!OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path))
+            return false;
+
+        AppLog.Warn($"Takeoffs tree row referenced missing path '{path}'. Reloading tree from disk.");
+        LoadTakeoffsForJob();
+        TxtStatus.Text = "Takeoffs tree was out of sync after a move and was refreshed. Drag again.";
+        return true;
+    }
+
+    private static string? TakeoffTreeNodeStoragePath(TreeViewItem item) =>
+        item.Tag switch
+        {
+            TakeoffItem takeoff => takeoff.FolderPath,
+            TakeoffFolderNode folder => folder.IsRoot ? null : folder.FolderPath,
+            TakeoffMeasurementNode node => node.Item.FolderPath,
+            _ => null,
+        };
+
     private static string? GetTakeoffNodePath(TreeViewItem item) =>
         item.Tag switch
         {
@@ -39,8 +66,22 @@ public partial class MainWindow
             _ => null,
         };
 
-    private static string TakeoffSectionSelectionKey(TakeoffMeasurementNode node) =>
-        $"{NormalizePath(node.Item.FolderPath)}|{node.Measurement.Id}";
+    private static string TakeoffSectionSelectionKey(TakeoffMeasurementNode node)
+    {
+        string itemKey = string.IsNullOrWhiteSpace(node.Item.FolderPath)
+            ? $"legacy:{TakeoffSectionLegacyItemKey(node.Item)}"
+            : NormalizePath(node.Item.FolderPath);
+        return $"{itemKey}|{node.Measurement.Id}";
+    }
+
+    private static string TakeoffSectionLegacyItemKey(TakeoffItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Id))
+            return item.Id;
+        if (!string.IsNullOrWhiteSpace(item.Name))
+            return item.Name;
+        return "unfiled";
+    }
 
     private static string? GetTakeoffSectionSelectionKey(TreeViewItem item) =>
         item.Tag is TakeoffMeasurementNode node ? TakeoffSectionSelectionKey(node) : null;
@@ -138,6 +179,65 @@ public partial class MainWindow
         ApplyTakeoffPageHighlights();
     }
 
+    private bool TrySetTakeoffMultiSelectionFast(IEnumerable<string> paths)
+    {
+        if (_takeoffSectionMultiSelection.Count > 0)
+            return false;
+
+        var cleanPaths = paths
+            .Where(Directory.Exists)
+            .Select(NormalizePath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var affectedPaths = _takeoffsMultiSelection
+            .Concat(cleanPaths)
+            .Select(NormalizePath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _takeoffsMultiSelection.Clear();
+        foreach (string path in cleanPaths)
+            _takeoffsMultiSelection.Add(path);
+
+        RefreshTakeoffTreeRowsByPath(affectedPaths);
+        return true;
+    }
+
+    private void RefreshTakeoffTreeRowsByPath(IEnumerable<string> paths)
+    {
+        TreeViewItem?[] items = paths
+            .Select(FindTakeoffTreeItemByFolder)
+            .Where(item => item != null)
+            .Distinct()
+            .ToArray();
+        RefreshTakeoffDropCueRows(items);
+    }
+
+    private void RefreshActiveTakeoffVisualsForPaths(IEnumerable<string?> paths)
+    {
+        var cleanPaths = paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => NormalizePath(path!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (cleanPaths.Count > 0)
+        {
+            RefreshTakeoffHeadersByPath(cleanPaths);
+            RefreshTakeoffTreeRowsByPath(cleanPaths);
+        }
+
+        UpdateActiveTakeoffTargetBar();
+    }
+
+    private static IEnumerable<string?> TakeoffVisualPathsForActiveChange(
+        string? previousActiveTakeoffFolder,
+        IEnumerable<TakeoffItem> selectedTakeoffs)
+    {
+        yield return previousActiveTakeoffFolder;
+        foreach (TakeoffItem takeoff in selectedTakeoffs)
+            yield return takeoff.FolderPath;
+    }
+
     private void SelectFirstTakeoffPath(IReadOnlyList<string> paths)
     {
         foreach (string path in paths)
@@ -149,6 +249,44 @@ public partial class MainWindow
                 return;
             }
         }
+    }
+
+    private TreeViewItem? SelectFirstTakeoffPathForMoveFast(IReadOnlyList<string> paths)
+    {
+        var pathSet = paths
+            .Where(Directory.Exists)
+            .Select(NormalizePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (pathSet.Count == 0)
+            return null;
+
+        if (TakeoffsTree.SelectedItem is TreeViewItem selectedItem &&
+            GetTakeoffNodePath(selectedItem) is { } selectedPath &&
+            pathSet.Contains(NormalizePath(selectedPath)))
+        {
+            selectedItem.BringIntoView();
+            return selectedItem;
+        }
+
+        foreach (string path in paths)
+        {
+            if (FindTakeoffTreeItemByFolder(path) is not { } selected)
+                continue;
+
+            _syncingTakeoffTreeSelection = true;
+            try
+            {
+                selected.IsSelected = true;
+                selected.BringIntoView();
+            }
+            finally
+            {
+                _syncingTakeoffTreeSelection = false;
+            }
+            return selected;
+        }
+
+        return null;
     }
 
     private void PruneTakeoffsMultiSelection()

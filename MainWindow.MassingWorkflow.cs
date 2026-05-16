@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -19,28 +21,62 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private static bool Legacy3DMassingWorkflowEnabled => false;
+
+    private bool StopLegacy3DMassingWorkflow(string operation)
+    {
+        if (Legacy3DMassingWorkflowEnabled)
+            return false;
+
+        TxtStatus.Text = $"{operation}: legacy 3D massing is archived and disabled. Use the 3D viewer tab while this feature is rebuilt.";
+        return true;
+    }
+
     private void BtnBuildMassingDraft_Click(object sender, RoutedEventArgs e)
     {
+        if (StopLegacy3DMassingWorkflow("Build 3D Draft"))
+            return;
+
         BuildMassingDraftFromMarkers();
+    }
+
+    private async void Btn3dManagerAiSortTakeoffs_Click(object sender, RoutedEventArgs e)
+    {
+        if (StopLegacy3DMassingWorkflow("AI 3D Sort"))
+            return;
+
+        await BuildMassingDraftFromAiSortedTakeoffsAsync();
     }
 
     private void BtnDetectRoof_Click(object sender, RoutedEventArgs e)
     {
+        if (StopLegacy3DMassingWorkflow("Auto Roof"))
+            return;
+
         QueueRoofRecognitionRequest();
     }
 
     private void BtnReviewRoof_Click(object sender, RoutedEventArgs e)
     {
+        if (StopLegacy3DMassingWorkflow("Review Roof"))
+            return;
+
         ReviewMassingRoof();
     }
 
     private void BtnReviewOpenings_Click(object sender, RoutedEventArgs e)
     {
+        if (StopLegacy3DMassingWorkflow("Review Openings"))
+            return;
+
         ReviewMassingOpenings();
     }
 
     private void BtnAcceptMassingDraft_Click(object sender, RoutedEventArgs e)
     {
+        if (StopLegacy3DMassingWorkflow("Accept 3D Draft"))
+            return;
+
         AcceptMassingDraft();
     }
 
@@ -567,6 +603,9 @@ public partial class MainWindow
 
     private void BuildMassingDraftFromMarkers()
     {
+        if (StopLegacy3DMassingWorkflow("Build 3D Draft"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before building a 3D draft.";
@@ -593,6 +632,9 @@ public partial class MainWindow
 
     private void BuildMassingDraftFromWallTakeoffs()
     {
+        if (StopLegacy3DMassingWorkflow("3D From Takeoffs"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before building a 3D draft from takeoffs.";
@@ -637,8 +679,100 @@ public partial class MainWindow
         }
     }
 
+    private async Task BuildMassingDraftFromAiSortedTakeoffsAsync()
+    {
+        if (StopLegacy3DMassingWorkflow("AI 3D Sort"))
+            return;
+
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before running AI 3D Sort.";
+            return;
+        }
+
+        string apiKey = AppSettingsStore.ReadOpenAiApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            TxtStatus.Text = "OPENAI_API_KEY is missing. Open AI Settings before running AI 3D Sort.";
+            MessageBox.Show(
+                "OPENAI_API_KEY is missing. Save it in AI Settings first.",
+                "AI 3D Sort",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        double currentLevelSpacing = _settings.MassingLevelSpacingFeet > 0
+            ? _settings.MassingLevelSpacingFeet
+            : SmartMassingDraftService.DefaultLevelSpacingFeet;
+        string? rawLevelSpacing = ShowInputDialog(
+            "Default level spacing and roof step, feet (OpenAI sorts roles/levels only):",
+            currentLevelSpacing.ToString("G", CultureInfo.InvariantCulture),
+            "AI 3D Sort");
+        if (rawLevelSpacing == null)
+            return;
+        if (!double.TryParse(rawLevelSpacing.Replace(",", "."), NumberStyles.Float, CultureInfo.InvariantCulture, out double levelSpacingFeet) ||
+            levelSpacingFeet <= 0 ||
+            levelSpacingFeet > 40)
+        {
+            MessageBox.Show("Enter a level spacing value between 1 and 40 feet.", "AI 3D Sort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            _settings.MassingLevelSpacingFeet = levelSpacingFeet;
+            SaveAppSettings();
+            string model = AppSettingsStore.ResolveOpenAiModel(_settings);
+            TxtStatus.Text = $"AI 3D Sort running with {model}...";
+
+            SmartMassingAiTakeoffBuildResult result;
+            using (ShowBusyOverlay($"AI 3D Sort running with {model}..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                result = await SmartMassingTakeoffAiPlanner.BuildDraftAsync(
+                    _currentJob,
+                    levelSpacingFeet,
+                    apiKey,
+                    model,
+                    CancellationToken.None);
+            }
+            if (!result.Success || result.Draft == null)
+            {
+                TxtStatus.Text = $"AI 3D Sort failed: {result.Error}";
+                MessageBox.Show(
+                    $"AI 3D Sort failed:\n{result.Error}\n\nInput: {result.InputPath}\nRaw: {result.RawResponsePath}",
+                    "AI 3D Sort",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            string path = SmartMassingDraftService.ModelPath(_currentJob);
+            RefreshMassingDraftPanel(result.Draft, path);
+            Refresh3dManagerSummary();
+            if (_rightWorkspaceTabs != null && _massingTab != null)
+                _rightWorkspaceTabs.SelectedItem = _massingTab;
+
+            string summary = BuildMassingDraftSummary(result.Draft, path);
+            TxtStatus.Text = $"AI 3D Sort saved draft -> {Path.GetRelativePath(_currentJob.RootPath, path)}";
+            MessageBox.Show(
+                $"{summary}\nAI sort files:\n- Input: {result.InputPath}\n- Plan: {result.PlanPath}\n- Raw: {result.RawResponsePath}",
+                "AI 3D Sort",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("AI 3D Sort", ex);
+        }
+    }
+
     private void OpenMassingDraftJson()
     {
+        if (StopLegacy3DMassingWorkflow("Open 3D JSON"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before opening the 3D draft.";
@@ -650,6 +784,9 @@ public partial class MainWindow
 
     private void OpenMassing3DWindow()
     {
+        if (StopLegacy3DMassingWorkflow("Open 3D Window"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before opening the 3D viewport.";
@@ -1004,7 +1141,7 @@ public partial class MainWindow
         Color color,
         double modelHeight)
     {
-        double size = Math.Max(0.25, Math.Min(_massing3DSceneRadius * 0.025, Math.Max(0.35, modelHeight * 0.06)));
+        double size = Math.Max(0.45, Math.Min(_massing3DSceneRadius * 0.045, Math.Max(0.55, modelHeight * 0.095)));
         var points = new List<Point3D>
         {
             new(center.X - size, center.Y, center.Z - size),
@@ -1102,7 +1239,9 @@ public partial class MainWindow
             return true;
         }
 
-        string selectedMarkerId = SelectedMassingMarkerRow()?.MarkerId ?? "";
+        string selectedMarkerId = _selectedMassingMarkerId;
+        if (string.IsNullOrWhiteSpace(selectedMarkerId))
+            selectedMarkerId = SelectedMassingMarkerRow()?.MarkerId ?? "";
         return !string.IsNullOrWhiteSpace(selectedMarkerId) &&
                info.SourceMarkerIds.Contains(selectedMarkerId, StringComparer.OrdinalIgnoreCase);
     }
@@ -1306,18 +1445,9 @@ public partial class MainWindow
         if (_massingMarkerList == null || sourceMarkerIds.Count == 0)
             return;
 
-        foreach (object item in _massingMarkerList.Items)
-        {
-            if (item is not MassingMarkerReviewRow row)
-                continue;
-
-            if (!sourceMarkerIds.Contains(row.MarkerId, StringComparer.OrdinalIgnoreCase))
-                continue;
-
-            _massingMarkerList.SelectedItem = row;
-            _massingMarkerList.ScrollIntoView(row);
-            return;
-        }
+        foreach (string markerId in sourceMarkerIds)
+            if (SelectMassingMarkerById(markerId))
+                return;
     }
 
     private void MassingViewport3D_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -1385,7 +1515,9 @@ public partial class MainWindow
         Brush footprintFill = new SolidColorBrush(Color.FromArgb(42, 96, 165, 250));
         Brush footprintStroke = new SolidColorBrush(Color.FromRgb(96, 165, 250));
         Brush selectedStroke = new SolidColorBrush(Color.FromRgb(255, 183, 77));
-        string selectedMarkerId = SelectedMassingMarkerRow()?.MarkerId ?? "";
+        string selectedMarkerId = _selectedMassingMarkerId;
+        if (string.IsNullOrWhiteSpace(selectedMarkerId))
+            selectedMarkerId = SelectedMassingMarkerRow()?.MarkerId ?? "";
 
         List<SmartMassingFootprint> previewFootprints = draft.Footprints
             .Where(footprint => footprint.Points.Count > 0)
@@ -1583,6 +1715,15 @@ public partial class MainWindow
                 ? $"Footprint point {index}"
                 : $"Footprint point {index}: {sourceMarkerId}",
         };
+        if (!string.IsNullOrWhiteSpace(sourceMarkerId))
+        {
+            dot.Cursor = Cursors.Hand;
+            dot.MouseLeftButtonDown += (_, e) =>
+            {
+                SelectMassingMarkerById(sourceMarkerId);
+                e.Handled = true;
+            };
+        }
         Canvas.SetLeft(dot, point.X - radius);
         Canvas.SetTop(dot, point.Y - radius);
         _massingPreviewCanvas.Children.Add(dot);
@@ -1594,6 +1735,15 @@ public partial class MainWindow
             FontWeight = FontWeights.Normal,
             Foreground = selected ? selectedStroke : PreviewForegroundBrush(),
         };
+        if (!string.IsNullOrWhiteSpace(sourceMarkerId))
+        {
+            label.Cursor = Cursors.Hand;
+            label.MouseLeftButtonDown += (_, e) =>
+            {
+                SelectMassingMarkerById(sourceMarkerId);
+                e.Handled = true;
+            };
+        }
         Canvas.SetLeft(label, point.X + 6);
         Canvas.SetTop(label, point.Y - 10);
         _massingPreviewCanvas.Children.Add(label);
@@ -1607,15 +1757,34 @@ public partial class MainWindow
         if (_massingMarkerList == null)
             return;
 
+        string selectedMarkerId = _selectedMassingMarkerId;
+        if (string.IsNullOrWhiteSpace(selectedMarkerId))
+            selectedMarkerId = SelectedMassingMarkerRow()?.MarkerId ?? "";
         _massingMarkerList.Items.Clear();
         if (_currentJob == null || draft == null)
         {
+            _selectedMassingMarkerId = "";
             UpdateMassingMarkerActionButtons();
             return;
         }
 
+        MassingMarkerReviewRow? restoreSelection = null;
         foreach (MassingMarkerReviewRow row in BuildMassingMarkerRows(draft))
+        {
             _massingMarkerList.Items.Add(row);
+            if (!string.IsNullOrWhiteSpace(selectedMarkerId) &&
+                string.Equals(row.MarkerId, selectedMarkerId, StringComparison.OrdinalIgnoreCase))
+            {
+                restoreSelection = row;
+            }
+        }
+
+        if (restoreSelection != null)
+        {
+            _massingMarkerList.SelectedItem = restoreSelection;
+            _massingMarkerList.ScrollIntoView(restoreSelection);
+        }
+
         UpdateMassingMarkerActionButtons();
     }
 
@@ -1668,11 +1837,12 @@ public partial class MainWindow
             .Select(markerId =>
             {
                 SmartAiMarker? marker = SmartContextStore.LoadAiMarker(_currentJob, markerId);
+                bool isTakeoffSource = IsMassingTakeoffSourceId(markerId);
                 string role = roles.TryGetValue(markerId, out SortedSet<string>? markerRoles)
                     ? string.Join(", ", markerRoles)
                     : "Source";
                 string status = marker == null
-                    ? "missing"
+                    ? isTakeoffSource ? "takeoff" : "missing"
                     : _hiddenAiMarkerTypes.Contains(marker.Type)
                         ? "hidden"
                         : marker.SampleKind;
@@ -1681,8 +1851,8 @@ public partial class MainWindow
                 {
                     MarkerId = markerId,
                     Role = role,
-                    Type = marker?.Type ?? "",
-                    Page = marker?.Page ?? "",
+                    Type = marker?.Type ?? (isTakeoffSource ? "takeoff" : ""),
+                    Page = marker?.Page ?? (isTakeoffSource ? "measured takeoff" : ""),
                     PdfPoint = marker == null ? "" : $"{marker.PdfPoint.X:F0}, {marker.PdfPoint.Y:F0}",
                     DraftPoint = draftPoints.TryGetValue(markerId, out string? draftPoint) ? draftPoint : "",
                     Status = status,
@@ -1696,6 +1866,10 @@ public partial class MainWindow
     private void UpdateMassingMarkerActionButtons()
     {
         MassingMarkerReviewRow? row = SelectedMassingMarkerRow();
+        if (row != null)
+            _selectedMassingMarkerId = row.MarkerId;
+        else if (_massingMarkerList?.Items.Count == 0)
+            _selectedMassingMarkerId = "";
         bool hasMarker = row?.Marker != null;
         if (_massingJumpMarkerButton != null)
             _massingJumpMarkerButton.IsEnabled = hasMarker;
@@ -1728,7 +1902,9 @@ public partial class MainWindow
 
         if (row.Marker is not { } marker)
         {
-            sb.AppendLine("Marker JSON is missing, so this draft source needs review.");
+            sb.AppendLine(IsMassingTakeoffSourceId(row.MarkerId)
+                ? "Source is a measured takeoff, not an AI marker JSON file. Use the Takeoffs tree or sheet legend to review the source measurement."
+                : "Marker JSON is missing, so this draft source needs review.");
             _massingMarkerDetailsTextBox.Text = sb.ToString();
             return;
         }
@@ -1758,6 +1934,32 @@ public partial class MainWindow
 
     private MassingMarkerReviewRow? SelectedMassingMarkerRow() =>
         _massingMarkerList?.SelectedItem as MassingMarkerReviewRow;
+
+    private static bool IsMassingTakeoffSourceId(string sourceId) =>
+        sourceId.StartsWith("takeoff:", StringComparison.OrdinalIgnoreCase);
+
+    private bool SelectMassingMarkerById(string markerId)
+    {
+        if (_massingMarkerList == null || string.IsNullOrWhiteSpace(markerId))
+            return false;
+
+        foreach (object item in _massingMarkerList.Items)
+        {
+            if (item is not MassingMarkerReviewRow row ||
+                !string.Equals(row.MarkerId, markerId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            _selectedMassingMarkerId = row.MarkerId;
+            _massingMarkerList.SelectedItem = row;
+            _massingMarkerList.ScrollIntoView(row);
+            UpdateMassingMarkerActionButtons();
+            return true;
+        }
+
+        return false;
+    }
 
     private void JumpToSelectedMassingMarker()
     {
@@ -1861,6 +2063,22 @@ public partial class MainWindow
         sb.AppendLine($"- Roof planes: {draft.Roof.Planes.Count}");
         sb.AppendLine($"- Assumptions: {draft.Assumptions.Count}");
         sb.AppendLine($"- Unresolved questions: {draft.UnresolvedQuestions.Count}");
+        sb.AppendLine();
+        sb.AppendLine("Build System");
+        if (string.Equals(draft.Status, "draft_from_takeoffs", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine("- Source: measured takeoff Area/Line items under sqfts, walls, areas, floors, or slabs.");
+            sb.AppendLine("- Levels: floor labels and level folders become separate footprints.");
+            sb.AppendLine("- Walls: each footprint edge extrudes vertically by the resolved/default wall height.");
+            sb.AppendLine("- Roof: top footprint creates eave outline and candidate roof-axis guides until roof markers/review refine it.");
+        }
+        else
+        {
+            sb.AppendLine("- Source: reviewed AI markers and their crop/JSON evidence.");
+            sb.AppendLine("- Levels: exterior corner markers become footprint levels.");
+            sb.AppendLine("- Walls: each footprint edge extrudes vertically by reviewed/default wall height.");
+            sb.AppendLine("- Roof: roof markers create reviewable eave, ridge, hip, valley, edge, or slope guides.");
+        }
 
         foreach (SmartMassingFootprint footprint in draft.Footprints)
         {

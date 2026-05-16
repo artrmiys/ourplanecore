@@ -23,6 +23,9 @@ public static class OurPlaneCoreJobStore
     public static string CreateFolder(string parentFolder, string name) =>
         JobLayout.CreateFolder(parentFolder, name);
 
+    internal static string CreateFolderAllowDuplicateName(string parentFolder, string name) =>
+        JobLayout.CreateFolderAllowDuplicateName(parentFolder, name);
+
     public static string DefaultImportFolder(OurPlaneCoreJob job) =>
         JobLayout.DefaultImportFolder(job);
 
@@ -52,11 +55,17 @@ public static class OurPlaneCoreJobStore
     public static void SavePageScale(string pageFolder, double scaleMetersPerPt) =>
         PageStore.SavePageScale(pageFolder, scaleMetersPerPt);
 
-    public static void SavePageLegendTakeoffOrder(string pageFolder, IReadOnlyList<string> legendTakeoffOrder) =>
-        PageStore.SavePageLegendTakeoffOrder(pageFolder, legendTakeoffOrder);
+    public static void SavePageLegendTakeoffOrder(
+        string pageFolder,
+        IReadOnlyList<string> legendTakeoffOrder,
+        string legendTakeoffOrderMode = "") =>
+        PageStore.SavePageLegendTakeoffOrder(pageFolder, legendTakeoffOrder, legendTakeoffOrderMode);
 
     public static void SavePageHiddenTakeoffs(string pageFolder, IReadOnlyList<string> hiddenTakeoffs) =>
         PageStore.SavePageHiddenTakeoffs(pageFolder, hiddenTakeoffs);
+
+    public static void ReplacePagePdf(string pageFolder, string pdfAbsPath, int pageIndex = 0) =>
+        PageStore.ReplacePagePdf(pageFolder, pdfAbsPath, pageIndex);
 
     public static void SavePageOverlay(
         string pageFolder,
@@ -111,6 +120,12 @@ public static class OurPlaneCoreJobStore
     public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations) =>
         PageAnnotationStore.SavePageAnnotations(pageFolder, annotations);
 
+    public static List<PageBookmark> LoadPageBookmarks(OurPlaneCoreJob job) =>
+        PageBookmarkStore.LoadPageBookmarks(job);
+
+    public static void SavePageBookmarks(OurPlaneCoreJob job, IEnumerable<PageBookmark> bookmarks) =>
+        PageBookmarkStore.SavePageBookmarks(job, bookmarks);
+
     public static bool IsPageFolder(string folder) =>
         StorageSupport.IsPageFolder(folder);
 
@@ -119,6 +134,9 @@ public static class OurPlaneCoreJobStore
 
     public static string PageAnnotationsJsonPath(string pageFolder) =>
         PageAnnotationStore.PageAnnotationsJsonPath(pageFolder);
+
+    public static string PageBookmarksJsonPath(OurPlaneCoreJob job) =>
+        PageBookmarkStore.PageBookmarksJsonPath(job);
 
     public static string NormalizePageAnnotationKind(string value) =>
         PageAnnotationStore.NormalizePageAnnotationKind(value);
@@ -141,11 +159,23 @@ public static class OurPlaneCoreJobStore
     public static string RenamePageAllowDuplicateName(string folder, string requestedName) =>
         NodeStore.RenamePageAllowDuplicateName(folder, requestedName);
 
+    public static string RenameNodeAllowDuplicateName(string folder, string requestedName) =>
+        NodeStore.RenameNodeAllowDuplicateName(folder, requestedName);
+
     public static string CopyNode(string sourcePath, string targetFolder) =>
         NodeStore.CopyNode(sourcePath, targetFolder);
 
+    public static string CopyNodePreserveDisplayName(string sourcePath, string targetFolder) =>
+        NodeStore.CopyNodePreserveDisplayName(sourcePath, targetFolder);
+
+    public static IReadOnlyList<string> CopyNodesPreserveDisplayName(IEnumerable<string> sourcePaths, string targetFolder) =>
+        NodeStore.CopyNodesPreserveDisplayName(sourcePaths, targetFolder);
+
     public static string MoveNode(string sourcePath, string targetFolder) =>
         NodeStore.MoveNode(sourcePath, targetFolder);
+
+    public static IReadOnlyList<(string SourcePath, string MovedPath)> MoveNodes(IEnumerable<string> sourcePaths, string targetFolder) =>
+        NodeStore.MoveNodes(sourcePaths, targetFolder);
 
     public static string DuplicatePage(string pageFolder) =>
         NodeStore.DuplicatePage(pageFolder);
@@ -165,6 +195,9 @@ public static class OurPlaneCoreJobStore
     public static bool MoveSiblingsToPosition(IEnumerable<string> folders, string targetFolder, bool after) =>
         NodeStore.MoveSiblingsToPosition(folders, targetFolder, after);
 
+    public static bool MoveSiblingsToEnd(IEnumerable<string> folders, string parentFolder) =>
+        NodeStore.MoveSiblingsToEnd(folders, parentFolder);
+
     public static void SortChildren(string parentFolder, bool descending) =>
         NodeStore.SortChildren(parentFolder, descending);
 
@@ -179,6 +212,9 @@ public static class OurPlaneCoreJobStore
 
     public static string SanitizeName(string name, int maxLength) =>
         StorageSupport.SanitizeName(name, maxLength);
+
+    public static string NormalizeDisplayName(string name, int maxLength) =>
+        StorageSupport.NormalizeDisplayName(name, maxLength);
 
     public static bool IsSameOrDescendant(string possibleParent, string possibleChild) =>
         StorageSupport.IsSameOrDescendant(possibleParent, possibleChild);

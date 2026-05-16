@@ -44,7 +44,8 @@ public sealed partial class PdfViewport
             point => RotatePoint(point, center, cos, sin),
             $"Rotated selection {degrees:0.#} deg.",
             "rotate-slider",
-            coalesceUndo: true);
+            coalesceUndo: true,
+            rotationDegrees: degrees);
     }
 
     public bool ScaleSelectedBy(double factor)
@@ -67,7 +68,8 @@ public sealed partial class PdfViewport
         Func<SKPoint, SKPoint> transform,
         string status,
         string undoKey,
-        bool coalesceUndo)
+        bool coalesceUndo,
+        double? rotationDegrees = null)
     {
         var measurements = SelectedTransformMeasurements();
         var annotations = SelectedTransformAnnotations();
@@ -82,13 +84,13 @@ public sealed partial class PdfViewport
         {
             ApplyTransform(measurement.Points, transform);
             ApplyTransformToHoles(measurement.Holes, transform);
+            ApplyJoistDirectionRotation(measurement, rotationDegrees);
         }
         foreach (PageAnnotation annotation in annotations)
             ApplyAnnotationTransform(annotation, transform);
 
         RequestRepaint();
-        foreach (Measurement measurement in measurements)
-            MeasurementChanged?.Invoke(measurement);
+        NotifyMeasurementsChanged(measurements);
         foreach (PageAnnotation annotation in annotations)
             PageAnnotationChanged?.Invoke(annotation);
         PostStatus(status);
@@ -156,11 +158,13 @@ public sealed partial class PdfViewport
 
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
+        _transformMeasurementOriginalJoistDirections.Clear();
         _transformAnnotationOriginalPoints.Clear();
         foreach (Measurement measurement in measurements)
         {
             _transformMeasurementOriginalPoints[measurement] = measurement.Points.ToList();
             _transformMeasurementOriginalHoles[measurement] = CloneHoles(measurement.Holes);
+            _transformMeasurementOriginalJoistDirections[measurement] = measurement.JoistDirectionDegrees;
         }
         foreach (PageAnnotation annotation in annotations)
             _transformAnnotationOriginalPoints[annotation] = annotation.Points.ToList();
@@ -188,14 +192,17 @@ public sealed partial class PdfViewport
             float delta = angle - _transformStartAngle;
             float cos = MathF.Cos(delta);
             float sin = MathF.Sin(delta);
-            ApplyTransformFromOriginal(point => RotatePoint(point, _transformCenter, cos, sin));
+            double deltaDegrees = delta * 180.0 / Math.PI;
+            ApplyTransformFromOriginal(
+                point => RotatePoint(point, _transformCenter, cos, sin),
+                rotationDegrees: deltaDegrees);
             PostStatus($"Rotating selection: {delta * 180f / MathF.PI:0.#} deg.");
         }
 
         RequestRepaint();
     }
 
-    private void ApplyTransformFromOriginal(Func<SKPoint, SKPoint> transform)
+    private void ApplyTransformFromOriginal(Func<SKPoint, SKPoint> transform, double? rotationDegrees = null)
     {
         foreach (var (measurement, originalPoints) in _transformMeasurementOriginalPoints)
         {
@@ -204,6 +211,7 @@ public sealed partial class PdfViewport
 
             if (_transformMeasurementOriginalHoles.TryGetValue(measurement, out var originalHoles))
                 RestoreTransformedHoles(measurement.Holes, originalHoles, transform);
+            ApplyJoistDirectionRotationFromOriginal(measurement, rotationDegrees);
         }
 
         foreach (var (annotation, originalPoints) in _transformAnnotationOriginalPoints)
@@ -222,6 +230,7 @@ public sealed partial class PdfViewport
             PushGeometryUndoSnapshotFromOriginals(
                 _transformMeasurementOriginalPoints,
                 _transformMeasurementOriginalHoles,
+                _transformMeasurementOriginalJoistDirections,
                 _transformAnnotationOriginalPoints,
                 "canvas transform",
                 "canvas-transform");
@@ -230,14 +239,14 @@ public sealed partial class PdfViewport
         _draggingTransformRotate = false;
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
+        _transformMeasurementOriginalJoistDirections.Clear();
         _transformAnnotationOriginalPoints.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
 
         if (changed)
         {
-            foreach (Measurement measurement in changedMeasurements)
-                MeasurementChanged?.Invoke(measurement);
+            NotifyMeasurementsChanged(changedMeasurements);
             foreach (PageAnnotation annotation in changedAnnotations)
                 PageAnnotationChanged?.Invoke(annotation);
         }
@@ -250,7 +259,9 @@ public sealed partial class PdfViewport
         foreach (var (measurement, originalPoints) in _transformMeasurementOriginalPoints)
             if (!SamePoints(measurement.Points, originalPoints) ||
                 _transformMeasurementOriginalHoles.TryGetValue(measurement, out var holes) &&
-                !SameHoles(measurement.Holes, holes))
+                !SameHoles(measurement.Holes, holes) ||
+                _transformMeasurementOriginalJoistDirections.TryGetValue(measurement, out double direction) &&
+                Math.Abs(measurement.JoistDirectionDegrees - direction) > 0.0001)
             {
                 return true;
             }
@@ -357,9 +368,9 @@ public sealed partial class PdfViewport
             .ToList();
 
     private IReadOnlyList<PageAnnotation> SelectedTransformAnnotations() =>
-        _selectedAnnotation != null && IsAnnotationOnActivePage(_selectedAnnotation)
-            ? [_selectedAnnotation]
-            : [];
+        _selectedAnnotations
+            .Where(annotation => IsAnnotationVisibleOnActivePage(annotation))
+            .ToList();
 
     private IEnumerable<SKPoint> SelectedTransformPoints()
     {
@@ -380,19 +391,48 @@ public sealed partial class PdfViewport
     private bool HasSelectedTransformTargets() =>
         SelectedTransformMeasurements().Count > 0 || SelectedTransformAnnotations().Count > 0;
 
+    private static void ApplyJoistDirectionRotation(Measurement measurement, double? rotationDegrees)
+    {
+        if (!rotationDegrees.HasValue || !ShouldRotateJoistDirection(measurement))
+            return;
+
+        measurement.JoistDirectionDegrees = JoistTakeoffCalculator.NormalizeDirectionDegrees(
+            measurement.JoistDirectionDegrees + rotationDegrees.Value);
+    }
+
+    private void ApplyJoistDirectionRotationFromOriginal(Measurement measurement, double? rotationDegrees)
+    {
+        if (!rotationDegrees.HasValue || !ShouldRotateJoistDirection(measurement))
+            return;
+
+        double original = _transformMeasurementOriginalJoistDirections.TryGetValue(measurement, out double value)
+            ? value
+            : measurement.JoistDirectionDegrees;
+        measurement.JoistDirectionDegrees = JoistTakeoffCalculator.NormalizeDirectionDegrees(
+            original + rotationDegrees.Value);
+    }
+
+    private static bool ShouldRotateJoistDirection(Measurement measurement) =>
+        measurement.JoistEnabled &&
+        measurement.JoistDirectionLocked &&
+        measurement.JoistDirectionFollowsAreaRotation &&
+        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+
     private static IReadOnlyList<SKPoint> AnnotationTransformPoints(PageAnnotation annotation)
     {
-        if (!IsRectangleAnnotation(annotation) || annotation.Points.Count != 2)
+        if (!IsRectangularAnnotation(annotation))
             return annotation.Points;
 
-        return RectangleCorners(annotation.Points);
+        return AnnotationRectangleCorners(annotation.Points);
     }
 
     private static void ApplyAnnotationTransform(PageAnnotation annotation, Func<SKPoint, SKPoint> transform)
     {
-        if (IsRectangleAnnotation(annotation) && annotation.Points.Count == 2)
+        if (IsRectangularAnnotation(annotation))
         {
-            StoreRectangleFromTransformedCorners(annotation.Points, RectangleCorners(annotation.Points).Select(transform));
+            StoreTransformedAnnotationCorners(
+                annotation.Points,
+                AnnotationRectangleCorners(annotation.Points).Select(transform));
             return;
         }
 
@@ -404,9 +444,11 @@ public sealed partial class PdfViewport
         IReadOnlyList<SKPoint> originalPoints,
         Func<SKPoint, SKPoint> transform)
     {
-        if (IsRectangleAnnotation(annotation) && originalPoints.Count == 2)
+        if (IsRectangularAnnotation(annotation))
         {
-            StoreRectangleFromTransformedCorners(annotation.Points, RectangleCorners(originalPoints).Select(transform));
+            StoreTransformedAnnotationCorners(
+                annotation.Points,
+                AnnotationRectangleCorners(originalPoints).Select(transform));
             return;
         }
 
@@ -414,25 +456,26 @@ public sealed partial class PdfViewport
             annotation.Points[i] = transform(originalPoints[i]);
     }
 
-    private static void StoreRectangleFromTransformedCorners(
+    private static void StoreTransformedAnnotationCorners(
         List<SKPoint> target,
         IEnumerable<SKPoint> transformedCorners)
     {
         var corners = transformedCorners.ToList();
-        if (corners.Count == 0)
+        if (corners.Count < 4)
             return;
 
-        SKRect bounds = PointsBounds(corners);
         target.Clear();
-        target.Add(new SKPoint(bounds.Left, bounds.Top));
-        target.Add(new SKPoint(bounds.Right, bounds.Bottom));
+        target.AddRange(corners.Take(4));
     }
 
-    private static bool IsRectangleAnnotation(PageAnnotation annotation) =>
-        OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) == "rectangle";
+    private static bool IsRectangularAnnotation(PageAnnotation annotation) =>
+        OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) is "rectangle" or "note" or "cloud";
 
-    private static IReadOnlyList<SKPoint> RectangleCorners(IReadOnlyList<SKPoint> points)
+    private static IReadOnlyList<SKPoint> AnnotationRectangleCorners(IReadOnlyList<SKPoint> points)
     {
+        if (points.Count >= 4)
+            return points.Take(4).ToList();
+
         if (points.Count < 2)
             return points;
 

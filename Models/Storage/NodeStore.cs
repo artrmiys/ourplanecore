@@ -30,30 +30,37 @@ internal static class NodeStore
 
     public static string RenameNode(string folder, string requestedName)
     {
-        string cleanName = OurPlaneCoreJobStore.SanitizeName(requestedName, 120);
+        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(requestedName, 120);
+        string folderName = OurPlaneCoreJobStore.SanitizeName(displayName, 120);
         string parent = Path.GetDirectoryName(folder)
             ?? throw new InvalidOperationException("Cannot rename a root folder.");
-        string target = Path.Combine(parent, cleanName);
+        string target = Path.Combine(parent, folderName);
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase) &&
             Directory.Exists(target))
         {
-            throw new IOException($"'{cleanName}' already exists in this folder.");
+            throw new IOException($"'{displayName}' already exists in this folder.");
         }
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
             Directory.Move(folder, target);
 
-        OurPlaneCoreJobStore.UpdateItemName(target, cleanName);
+        OurPlaneCoreJobStore.UpdateItemName(target, displayName);
         return target;
     }
 
     public static string RenamePageAllowDuplicateName(string folder, string requestedName)
     {
-        string cleanName = OurPlaneCoreJobStore.SanitizeName(requestedName, 120);
+        return RenameNodeAllowDuplicateName(folder, requestedName);
+    }
+
+    public static string RenameNodeAllowDuplicateName(string folder, string requestedName)
+    {
+        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(requestedName, 120);
+        string folderName = OurPlaneCoreJobStore.SanitizeName(displayName, 120);
         string parent = Path.GetDirectoryName(folder)
             ?? throw new InvalidOperationException("Cannot rename a root folder.");
-        string desiredTarget = Path.Combine(parent, cleanName);
+        string desiredTarget = Path.Combine(parent, folderName);
         string target = string.Equals(folder, desiredTarget, StringComparison.OrdinalIgnoreCase)
             ? folder
             : OurPlaneCoreJobStore.UniqueDirectoryPath(desiredTarget);
@@ -61,23 +68,54 @@ internal static class NodeStore
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
             Directory.Move(folder, target);
 
-        OurPlaneCoreJobStore.UpdateItemName(target, cleanName);
+        OurPlaneCoreJobStore.UpdateItemName(target, displayName);
         return target;
     }
 
     public static string CopyNode(string sourcePath, string targetFolder)
     {
+        return CopyNodePreserveDisplayName(sourcePath, targetFolder);
+    }
+
+    public static string CopyNodePreserveDisplayName(string sourcePath, string targetFolder)
+    {
         string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
-        string copyName = UniqueCopyDisplayName(targetFolder, displayName);
-        string destPath = Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(copyName, 120));
+        string destPath = UniqueDestinationPath(targetFolder, displayName);
+        return CopyNodeCore(sourcePath, destPath, displayName, GetNextOrderIndex(targetFolder));
+    }
+
+    public static IReadOnlyList<string> CopyNodesPreserveDisplayName(IEnumerable<string> sourcePaths, string targetFolder)
+    {
+        var sources = sourcePaths
+            .Where(Directory.Exists)
+            .Select(NormalizeFolderPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (sources.Count == 0)
+            return [];
+
+        var results = new List<string>();
+        int nextOrder = GetNextOrderIndex(targetFolder);
+        foreach (string sourcePath in sources)
+        {
+            string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
+            string destPath = UniqueDestinationPath(targetFolder, displayName);
+            results.Add(CopyNodeCore(sourcePath, destPath, displayName, nextOrder++));
+        }
+
+        return results;
+    }
+
+    private static string CopyNodeCore(string sourcePath, string destPath, string displayName, int orderIndex)
+    {
         var pageSources = PageStore.CollectPageSources(sourcePath);
 
         CopyDirectory(sourcePath, destPath);
         PageStore.RewritePageSources(destPath, pageSources);
         RegenerateGuidsRecursively(destPath);
         RegenerateMeasurementIdsRecursively(destPath);
-        OurPlaneCoreJobStore.UpdateItemName(destPath, copyName);
-        SetOrderIndex(destPath, GetNextOrderIndex(targetFolder));
+        OurPlaneCoreJobStore.UpdateItemName(destPath, displayName);
+        SetOrderIndex(destPath, orderIndex);
         return destPath;
     }
 
@@ -87,20 +125,50 @@ internal static class NodeStore
         if (string.Equals(sourceParent, targetFolder, StringComparison.OrdinalIgnoreCase))
             return sourcePath;
 
-        string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
-        string targetName = Directory.Exists(Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(displayName, 120)))
-            ? UniqueCopyDisplayName(targetFolder, displayName)
-            : displayName;
-        string destPath = Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(targetName, 120));
-        var pageSources = PageStore.CollectPageSources(sourcePath);
-
-        Directory.Move(sourcePath, destPath);
-        PageStore.RewritePageSources(destPath, pageSources);
-        if (!string.Equals(displayName, targetName, StringComparison.Ordinal))
-            OurPlaneCoreJobStore.UpdateItemName(destPath, targetName);
-        SetOrderIndex(destPath, GetNextOrderIndex(targetFolder));
+        int nextOrder = GetNextOrderIndex(targetFolder);
+        string destPath = MoveNodeCore(sourcePath, targetFolder, ref nextOrder);
         NormalizeOrder(sourceParent);
         return destPath;
+    }
+
+    public static IReadOnlyList<(string SourcePath, string MovedPath)> MoveNodes(
+        IEnumerable<string> sourcePaths,
+        string targetFolder)
+    {
+        var sources = sourcePaths
+            .Where(Directory.Exists)
+            .Select(NormalizeFolderPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (sources.Count == 0)
+            return [];
+
+        var results = new List<(string SourcePath, string MovedPath)>();
+        var affectedSourceParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int nextOrder = GetNextOrderIndex(targetFolder);
+
+        foreach (string sourcePath in sources)
+        {
+            string sourceParent = Path.GetDirectoryName(sourcePath) ?? "";
+            if (string.Equals(sourceParent, targetFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add((sourcePath, sourcePath));
+                continue;
+            }
+
+            string movedPath = MoveNodeCore(sourcePath, targetFolder, ref nextOrder);
+            if (!string.IsNullOrWhiteSpace(sourceParent))
+                affectedSourceParents.Add(sourceParent);
+            results.Add((sourcePath, movedPath));
+        }
+
+        foreach (string sourceParent in affectedSourceParents)
+        {
+            if (!string.Equals(sourceParent, targetFolder, StringComparison.OrdinalIgnoreCase))
+                NormalizeOrder(sourceParent);
+        }
+
+        return results;
     }
 
     public static string DuplicatePage(string pageFolder)
@@ -109,7 +177,7 @@ internal static class NodeStore
             throw new InvalidOperationException("Only page nodes can be duplicated.");
         string parent = Path.GetDirectoryName(pageFolder)
             ?? throw new InvalidOperationException("Cannot duplicate this page.");
-        return CopyNode(pageFolder, parent);
+        return CopyNodePreserveDisplayName(pageFolder, parent);
     }
 
     public static bool MoveSibling(string folder, int offset)
@@ -149,6 +217,15 @@ internal static class NodeStore
         return true;
     }
 
+    public static bool MoveSiblingsToEnd(IEnumerable<string> folders, string parentFolder)
+    {
+        if (!TryBuildSiblingEndMove(folders, parentFolder, out var siblings))
+            return false;
+
+        ApplySiblingOrder(siblings);
+        return true;
+    }
+
     public static void SortChildren(string parentFolder, bool descending)
     {
         var children = Directory.EnumerateDirectories(parentFolder)
@@ -176,6 +253,19 @@ internal static class NodeStore
                 max = Math.Max(max, order);
         }
         return max + 1;
+    }
+
+    private static string MoveNodeCore(string sourcePath, string targetFolder, ref int nextOrder)
+    {
+        string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
+        string destPath = UniqueDestinationPath(targetFolder, displayName);
+        var pageSources = PageStore.CollectPageSources(sourcePath);
+
+        Directory.Move(sourcePath, destPath);
+        PageStore.RewritePageSources(destPath, pageSources);
+        OurPlaneCoreJobStore.UpdateItemName(destPath, displayName);
+        SetOrderIndex(destPath, nextOrder++);
+        return destPath;
     }
 
     private static bool TryBuildSiblingMove(IEnumerable<string> folders, int offset, out List<string> siblings)
@@ -290,6 +380,42 @@ internal static class NodeStore
         return !orderedSiblings.SequenceEqual(siblings, StringComparer.OrdinalIgnoreCase);
     }
 
+    private static bool TryBuildSiblingEndMove(
+        IEnumerable<string> folders,
+        string parentFolder,
+        out List<string> siblings)
+    {
+        siblings = [];
+
+        var selected = folders
+            .Where(Directory.Exists)
+            .Select(NormalizeFolderPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (selected.Count == 0 || !Directory.Exists(parentFolder))
+            return false;
+
+        string parent = NormalizeFolderPath(parentFolder);
+        if (selected.Any(path => !string.Equals(Path.GetDirectoryName(path) ?? "", parent, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var orderedSiblings = GetOrderedChildDirectories(parent)
+            .Select(NormalizeFolderPath)
+            .ToList();
+        var selectedSet = selected.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedSet.Any(path => !orderedSiblings.Contains(path, StringComparer.OrdinalIgnoreCase)))
+            return false;
+
+        var moving = orderedSiblings
+            .Where(path => selectedSet.Contains(path))
+            .ToList();
+        var remaining = orderedSiblings
+            .Where(path => !selectedSet.Contains(path))
+            .ToList();
+        siblings = remaining.Concat(moving).ToList();
+        return !orderedSiblings.SequenceEqual(siblings, StringComparer.OrdinalIgnoreCase);
+    }
+
     private static string NormalizeFolderPath(string folder) =>
         Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
@@ -359,19 +485,9 @@ internal static class NodeStore
         prop.SetAttributeValue("Value", value);
     }
 
-    private static string UniqueCopyDisplayName(string targetFolder, string displayName)
-    {
-        string first = $"{displayName} - Copy";
-        if (!Directory.Exists(Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(first, 120))))
-            return first;
-
-        for (int i = 2; ; i++)
-        {
-            string candidate = $"{displayName} - Copy {i}";
-            if (!Directory.Exists(Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(candidate, 120))))
-                return candidate;
-        }
-    }
+    private static string UniqueDestinationPath(string targetFolder, string displayName) =>
+        OurPlaneCoreJobStore.UniqueDirectoryPath(
+            Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(displayName, 120)));
 
     private static void CopyDirectory(string sourceDir, string destDir)
     {

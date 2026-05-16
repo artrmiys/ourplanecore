@@ -581,9 +581,10 @@ public static class PdfLayerRenderService
             return false;
         }
 
+        string pythonExecutable = BundledPythonRuntime.ResolveExecutable();
         var psi = new ProcessStartInfo
         {
-            FileName = "python",
+            FileName = pythonExecutable,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -593,6 +594,7 @@ public static class PdfLayerRenderService
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        BundledPythonRuntime.ConfigureEnvironment(psi, pythonExecutable);
         psi.ArgumentList.Add("-u");
         psi.ArgumentList.Add(helperPath);
         psi.ArgumentList.Add("worker");
@@ -673,9 +675,10 @@ public static class PdfLayerRenderService
         if (helperPath.Length == 0)
             return (false, default, "PyMuPDF layer helper was not found.");
 
+        string pythonExecutable = BundledPythonRuntime.ResolveExecutable();
         var psi = new ProcessStartInfo
         {
-            FileName = "python",
+            FileName = pythonExecutable,
             UseShellExecute = false,
             RedirectStandardError = true,
             RedirectStandardOutput = true,
@@ -683,6 +686,7 @@ public static class PdfLayerRenderService
             StandardErrorEncoding = Encoding.UTF8,
             StandardOutputEncoding = Encoding.UTF8,
         };
+        BundledPythonRuntime.ConfigureEnvironment(psi, pythonExecutable);
         psi.ArgumentList.Add(helperPath);
         psi.ArgumentList.Add(action);
         psi.ArgumentList.Add(inputPath);
@@ -726,21 +730,12 @@ public static class PdfLayerRenderService
 
     private static string ResolveHelperPath()
     {
-        string[] candidates =
-        [
-            Path.Combine(AppContext.BaseDirectory, "Tools", "pdf_layers_helper.py"),
-            Path.Combine(AppContext.BaseDirectory, "pdf_layers_helper.py"),
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Tools", "pdf_layers_helper.py"),
-        ];
-
-        foreach (string candidate in candidates)
-        {
-            string full = Path.GetFullPath(candidate);
-            if (File.Exists(full))
-                return full;
-        }
-
-        return "";
+        return BundledToolPathResolver.ResolveFile(
+            Path.Combine("Tools", "pdf_layers_helper.py"),
+            [
+                "pdf_layers_helper.py",
+                Path.Combine("..", "..", "..", "Tools", "pdf_layers_helper.py"),
+            ]);
     }
 
     private sealed class RenderRequest

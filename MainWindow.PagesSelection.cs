@@ -21,7 +21,12 @@ public partial class MainWindow
     }
 
     private static string PageTakeoffSelectionKey(PageTakeoffNode node) =>
-        $"{NormalizePath(node.Page.FolderPath)}|{NormalizePath(node.Takeoff.FolderPath)}";
+        $"{NormalizeSelectionPath(node.Page.FolderPath)}|{NormalizeSelectionPath(node.Takeoff.FolderPath)}";
+
+    private static string NormalizeSelectionPath(string? path) =>
+        string.IsNullOrWhiteSpace(path)
+            ? ""
+            : NormalizePathForCompare(path);
 
     private static string? GetPageTakeoffSelectionKey(TreeViewItem item) =>
         item.Tag is PageTakeoffNode node ? PageTakeoffSelectionKey(node) : null;
@@ -138,68 +143,121 @@ public partial class MainWindow
 
     private void ApplyPagesMultiSelectionVisuals()
     {
-        Brush? brushOrNull(string key) => Application.Current.Resources[key] as Brush;
-        Brush dropOk = brushOrNull("RowDropOkBrush") ?? new SolidColorBrush(Color.FromRgb(204, 245, 218));
-        Brush activeLinked = brushOrNull("RowSelectionBrush") ?? new SolidColorBrush(Color.FromRgb(204, 229, 255));
-        Brush multiLinked = brushOrNull("RowMultiSelectBrush") ?? new SolidColorBrush(Color.FromRgb(205, 226, 255));
-        Brush measuredByActive = brushOrNull("RowActiveBrush") ?? new SolidColorBrush(Color.FromRgb(255, 236, 190));
-        Brush rowFg = brushOrNull("RowFlagForegroundBrush") ?? Brushes.Black;
+        PageTreeVisualBrushes brushes = CreatePageTreeVisualBrushes();
 
         foreach (TreeViewItem item in EnumeratePageTreeItems())
-        {
-            string? path = GetPagesNodePath(item);
-            bool selected = path != null && !IsRootPagesNode(item) && _pagesMultiSelection.Contains(path);
-            string? pageTakeoffKey = GetPageTakeoffSelectionKey(item);
-            bool linkedSelected = pageTakeoffKey != null && _pageTakeoffMultiSelection.Contains(pageTakeoffKey);
-            item.ClearValue(Control.BorderBrushProperty);
-            item.ClearValue(Control.BorderThicknessProperty);
+            ApplyPageTreeItemVisual(item, brushes);
+    }
 
-            if (ReferenceEquals(item, _pagesPositionDropTarget))
+    private void RefreshPageTreeRowsByFolderKeys(IReadOnlySet<string> folderKeys)
+    {
+        if (folderKeys.Count == 0)
+            return;
+
+        PageTreeVisualBrushes brushes = CreatePageTreeVisualBrushes();
+        foreach (TreeViewItem item in EnumeratePageTreeItems())
+        {
+            string? itemPath = GetPagesNodePath(item);
+            if (!string.IsNullOrWhiteSpace(itemPath) &&
+                folderKeys.Contains(NormalizePathForCompare(itemPath)))
             {
-                item.ClearValue(Control.BackgroundProperty);
-                item.ClearValue(Control.ForegroundProperty);
-                item.FontWeight = FontWeights.Normal;
-                item.BorderBrush = _pagesPositionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
-                item.BorderThickness = _pagesPositionDropAfter
-                    ? new Thickness(0, 0, 0, 2)
-                    : new Thickness(0, 2, 0, 0);
-            }
-            else if (ReferenceEquals(item, _pageTakeoffLegendDropTarget))
-            {
-                item.Background = dropOk;
-                item.Foreground = rowFg;
-                item.FontWeight = FontWeights.Normal;
-                item.BorderBrush = Brushes.SeaGreen;
-                item.BorderThickness = _pageTakeoffLegendDropAfter
-                    ? new Thickness(0, 0, 0, 2)
-                    : new Thickness(0, 2, 0, 0);
-            }
-            else if (IsActivePageTakeoffNode(item))
-            {
-                item.Background = activeLinked;
-                item.Foreground = rowFg;
-                item.FontWeight = FontWeights.Normal;
-            }
-            else if (selected || linkedSelected)
-            {
-                item.Background = multiLinked;
-                item.Foreground = rowFg;
-                item.ClearValue(Control.FontWeightProperty);
-            }
-            else if (IsPageMeasuredByActiveTakeoff(item))
-            {
-                item.Background = measuredByActive;
-                item.Foreground = rowFg;
-                item.ClearValue(Control.FontWeightProperty);
-            }
-            else
-            {
-                item.ClearValue(Control.BackgroundProperty);
-                item.ClearValue(Control.ForegroundProperty);
-                item.ClearValue(Control.FontWeightProperty);
+                ApplyPageTreeItemVisualRecursive(item, brushes);
             }
         }
     }
+
+    private static HashSet<string> PageTreePathKeysFromPageTakeoffSelection(IEnumerable<string> selectionKeys)
+    {
+        var pageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string key in selectionKeys)
+        {
+            int separator = key.IndexOf('|');
+            if (separator > 0)
+                pageKeys.Add(key[..separator]);
+        }
+
+        return pageKeys;
+    }
+
+    private void ApplyPageTreeItemVisualRecursive(TreeViewItem item, PageTreeVisualBrushes brushes)
+    {
+        ApplyPageTreeItemVisual(item, brushes);
+        foreach (TreeViewItem child in item.Items.OfType<TreeViewItem>())
+            ApplyPageTreeItemVisualRecursive(child, brushes);
+    }
+
+    private void ApplyPageTreeItemVisual(TreeViewItem item, PageTreeVisualBrushes brushes)
+    {
+        string? path = GetPagesNodePath(item);
+        bool selected = path != null && !IsRootPagesNode(item) && _pagesMultiSelection.Contains(path);
+        string? pageTakeoffKey = GetPageTakeoffSelectionKey(item);
+        bool linkedSelected = pageTakeoffKey != null && _pageTakeoffMultiSelection.Contains(pageTakeoffKey);
+        item.ClearValue(Control.BorderBrushProperty);
+        item.ClearValue(Control.BorderThicknessProperty);
+
+        if (ReferenceEquals(item, _pagesPositionDropTarget))
+        {
+            item.ClearValue(Control.BackgroundProperty);
+            item.ClearValue(Control.ForegroundProperty);
+            item.FontWeight = FontWeights.Normal;
+            item.BorderBrush = _pagesPositionDropAllowed ? Brushes.SeaGreen : Brushes.IndianRed;
+            item.BorderThickness = _pagesPositionDropAfter
+                ? new Thickness(0, 0, 0, 2)
+                : new Thickness(0, 2, 0, 0);
+        }
+        else if (ReferenceEquals(item, _pageTakeoffLegendDropTarget))
+        {
+            item.Background = brushes.DropOk;
+            item.Foreground = brushes.RowForeground;
+            item.FontWeight = FontWeights.Normal;
+            item.BorderBrush = Brushes.SeaGreen;
+            item.BorderThickness = _pageTakeoffLegendDropAfter
+                ? new Thickness(0, 0, 0, 2)
+                : new Thickness(0, 2, 0, 0);
+        }
+        else if (IsActivePageTakeoffNode(item))
+        {
+            item.Background = brushes.ActiveLinked;
+            item.Foreground = brushes.RowForeground;
+            item.FontWeight = FontWeights.Normal;
+        }
+        else if (selected || linkedSelected)
+        {
+            item.Background = brushes.MultiLinked;
+            item.Foreground = brushes.RowForeground;
+            item.ClearValue(Control.FontWeightProperty);
+        }
+        else if (IsPageMeasuredByActiveTakeoff(item))
+        {
+            item.Background = brushes.MeasuredByActive;
+            item.Foreground = brushes.RowForeground;
+            item.ClearValue(Control.FontWeightProperty);
+        }
+        else
+        {
+            item.ClearValue(Control.BackgroundProperty);
+            item.ClearValue(Control.ForegroundProperty);
+            item.ClearValue(Control.FontWeightProperty);
+        }
+    }
+
+    private PageTreeVisualBrushes CreatePageTreeVisualBrushes()
+    {
+        Brush? brushOrNull(string key) => Application.Current.Resources[key] as Brush;
+        return new PageTreeVisualBrushes(
+            brushOrNull("RowDropOkBrush") ?? new SolidColorBrush(Color.FromRgb(204, 245, 218)),
+            brushOrNull("RowSelectionBrush") ?? new SolidColorBrush(Color.FromRgb(204, 229, 255)),
+            brushOrNull("RowMultiSelectBrush") ?? new SolidColorBrush(Color.FromRgb(205, 226, 255)),
+            brushOrNull("RowActiveBrush") ?? new SolidColorBrush(Color.FromRgb(255, 236, 190)),
+            brushOrNull("RowFlagForegroundBrush") ?? Brushes.Black);
+    }
+
+    private readonly record struct PageTreeVisualBrushes(
+        Brush DropOk,
+        Brush ActiveLinked,
+        Brush MultiLinked,
+        Brush MeasuredByActive,
+        Brush RowForeground);
 
     private IEnumerable<TreeViewItem> EnumeratePageTreeItems()
     {
@@ -224,6 +282,9 @@ public partial class MainWindow
     {
         foreach (TreeViewItem child in parent.Items.OfType<TreeViewItem>())
         {
+            if (child.Visibility != Visibility.Visible)
+                continue;
+
             yield return child;
             if (!child.IsExpanded)
                 continue;

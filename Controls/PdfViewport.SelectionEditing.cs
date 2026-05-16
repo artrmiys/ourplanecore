@@ -20,7 +20,7 @@ public sealed partial class PdfViewport
     private bool TryBeginMeasurementEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
     {
         if (TryHitSelectedVertex(pdf, out Measurement selectedVertexMeasurement, out int selectedVertexIndex) ||
-            TryHitVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex))
+            TryHitEditableVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex))
         {
             BeginVertexEdit(selectedVertexMeasurement, selectedVertexIndex, screen);
             return true;
@@ -138,8 +138,7 @@ public sealed partial class PdfViewport
                 _dragSelectionOriginalHoles,
                 "move selected vertices",
                 "vertex-drag");
-            foreach (Measurement measurement in _dragMeasurementVertexOriginalPoints.Keys.ToList())
-                MeasurementChanged?.Invoke(measurement);
+            NotifyMeasurementsChanged(_dragMeasurementVertexOriginalPoints.Keys.ToList());
         }
         else if (_dragMeasurementChanged && _dragSelectionOriginalPoints.Count > 0)
         {
@@ -148,8 +147,7 @@ public sealed partial class PdfViewport
                 _dragSelectionOriginalHoles,
                 "move selected measurements",
                 "measurement-drag");
-            foreach (Measurement measurement in _dragSelectionOriginalPoints.Keys.ToList())
-                MeasurementChanged?.Invoke(measurement);
+            NotifyMeasurementsChanged(_dragSelectionOriginalPoints.Keys.ToList());
         }
         else if (_dragMeasurementChanged && _selectedMeasurement != null)
         {
@@ -159,7 +157,7 @@ public sealed partial class PdfViewport
                 _dragMeasurementOriginalHoles,
                 wasVertexDrag ? "move vertex" : "move measurement",
                 wasVertexDrag ? "vertex-drag" : "measurement-drag");
-            MeasurementChanged?.Invoke(_selectedMeasurement);
+            NotifyMeasurementsChanged([_selectedMeasurement]);
         }
 
         _draggingVertex = false;
@@ -224,7 +222,7 @@ public sealed partial class PdfViewport
         _dragAnnotationOriginalPoints = annotation.Points.ToList();
         CaptureMouse();
         SelectAnnotation(annotation, -1);
-        PostStatus($"Moving {ToolTitle(annotation.Kind)} markup. Drag body to move; drag blue handles to reshape.");
+        PostStatus($"Moving {ToolTitle(annotation.Kind)} markup. Drag body to move; blue handles reshape; orange handle rotates/scales.");
     }
 
     private void FinishAnnotationDrag()
@@ -323,6 +321,13 @@ public sealed partial class PdfViewport
                     RequestRepaint();
                     return;
                 }
+
+                if (TryHitAnnotation(_boxSelectStartPdf, out PageAnnotation toggledAnnotation))
+                {
+                    ToggleAnnotationSelection(toggledAnnotation);
+                    RequestRepaint();
+                    return;
+                }
             }
 
             if (!_boxSelectAdditive)
@@ -338,39 +343,64 @@ public sealed partial class PdfViewport
             return;
         }
 
-        var hits = _measurements
-            .Where(m => IsMeasurementOnActivePage(m) && MeasurementIntersectsRect(m, rect))
+        bool selectTouched = _boxSelectEndPdf.X >= _boxSelectStartPdf.X;
+        var hits = ActivePageMeasurementsNear(rect)
+            .Where(m => selectTouched
+                ? MeasurementIntersectsRect(m, rect)
+                : MeasurementContainedInRect(m, rect))
             .ToList();
-        PageAnnotation? annotationHit = hits.Count == 0
-            ? _annotations.LastOrDefault(annotation =>
-                IsAnnotationOnActivePage(annotation) &&
-                AnnotationIntersectsRect(annotation, rect))
-            : null;
+        var annotationHits = hits.Count == 0
+            ? _annotations.Where(annotation =>
+                IsAnnotationVisibleOnActivePage(annotation) &&
+                (selectTouched
+                    ? AnnotationIntersectsRect(annotation, rect)
+                    : AnnotationContainedInRect(annotation, rect)))
+                .ToList()
+            : new List<PageAnnotation>();
 
         if (_boxSelectAdditive)
         {
-            var combined = GetSelectedMeasurements().ToList();
-            foreach (Measurement hit in hits)
+            if (hits.Count > 0)
             {
-                if (!combined.Contains(hit))
-                    combined.Add(hit);
+                var combined = GetSelectedMeasurements().ToList();
+                foreach (Measurement hit in hits)
+                {
+                    if (!combined.Contains(hit))
+                        combined.Add(hit);
+                }
+                SetSelectedMeasurements(combined, hits.LastOrDefault() ?? combined.LastOrDefault(), -1);
             }
-            SetSelectedMeasurements(combined, hits.LastOrDefault() ?? combined.LastOrDefault(), -1);
+            else if (annotationHits.Count > 0)
+            {
+                var combinedAnnotations = GetSelectedAnnotations().ToList();
+                foreach (PageAnnotation hit in annotationHits)
+                {
+                    if (!combinedAnnotations.Contains(hit))
+                        combinedAnnotations.Add(hit);
+                }
+                SetSelectedAnnotations(combinedAnnotations, annotationHits.LastOrDefault() ?? combinedAnnotations.LastOrDefault(), -1);
+            }
         }
         else
         {
-            if (annotationHit != null)
-                SelectAnnotation(annotationHit, -1);
+            if (annotationHits.Count > 0)
+                SetSelectedAnnotations(annotationHits, annotationHits.LastOrDefault(), -1);
             else
                 SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
         }
 
         RequestRepaint();
-        PostStatus(annotationHit != null
-            ? $"Selected {ToolTitle(annotationHit.Kind)} markup."
+        PostStatus(annotationHits.Count > 0
+            ? annotationHits.Count == 1
+                ? $"Selected {ToolTitle(annotationHits[0].Kind)} markup."
+                : $"Selected {annotationHits.Count} markups. Delete removes them."
             : hits.Count == 0
-            ? "Select: no measurements inside box."
-            : $"Selected {GetSelectedMeasurements().Count} measurement(s). Ctrl+C copies, Ctrl+V pastes.");
+            ? selectTouched
+                ? "Select touched: no measurements touched by box."
+                : "Select inside: no measurements fully inside box."
+            : selectTouched
+                ? $"Selected {GetSelectedMeasurements().Count} touched measurement(s). Ctrl+C copies, Ctrl+V pastes."
+                : $"Selected {GetSelectedMeasurements().Count} enclosed measurement(s). Ctrl+C copies, Ctrl+V pastes.");
     }
 
     private void CancelBoxSelection()
@@ -390,7 +420,10 @@ public sealed partial class PdfViewport
 
         _lastPointerStatusAt = now;
         SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
-        PostStatus($"Select box: {PdfToScreenDistance(rect.Width):F0}px x {PdfToScreenDistance(rect.Height):F0}px.");
+        string mode = _boxSelectEndPdf.X >= _boxSelectStartPdf.X
+            ? "touched"
+            : "inside only";
+        PostStatus($"Select box ({mode}): {PdfToScreenDistance(rect.Width):F0}px x {PdfToScreenDistance(rect.Height):F0}px.");
     }
 
     private bool TryHitSelectedVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
@@ -413,16 +446,33 @@ public sealed partial class PdfViewport
 
     private bool TryHitVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
     {
-        for (int i = _measurements.Count - 1; i >= 0; i--)
+        SKRect searchRect = MeasurementHitSearchRect(pdf, VertexHitToleranceScreenPx);
+        IReadOnlyList<ViewportMeasurementVertexCandidate> candidates =
+            ActivePageMeasurementVerticesNear(searchRect);
+        float tol = VertexHitToleranceScreenPx / Math.Max(_zoom, 0.01f);
+        float tolSq = tol * tol;
+        for (int i = candidates.Count - 1; i >= 0; i--)
         {
-            Measurement m = _measurements[i];
-            if (!IsMeasurementOnActivePage(m)) continue;
-
-            if (TryHitVertexOnMeasurement(m, pdf, VertexHitToleranceScreenPx, out vertexIndex))
+            ViewportMeasurementVertexCandidate candidate = candidates[i];
+            if (DistanceSquared(pdf, candidate.Point) <= tolSq)
             {
-                measurement = m;
+                measurement = candidate.Measurement;
+                vertexIndex = candidate.GlobalIndex;
                 return true;
             }
+        }
+
+        measurement = null!;
+        vertexIndex = -1;
+        return false;
+    }
+
+    private bool TryHitEditableVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
+    {
+        if (TryHitVertex(pdf, out measurement, out vertexIndex) &&
+            CanEditMeasurementVertices(measurement))
+        {
+            return true;
         }
 
         measurement = null!;
@@ -451,7 +501,7 @@ public sealed partial class PdfViewport
     private bool TryHitSelectedAnnotationVertex(SKPoint pdf, out PageAnnotation annotation, out int vertexIndex)
     {
         if (_selectedAnnotation != null &&
-            IsAnnotationOnActivePage(_selectedAnnotation) &&
+            IsAnnotationVisibleOnActivePage(_selectedAnnotation) &&
             TryHitVertexOnAnnotation(_selectedAnnotation, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
         {
             annotation = _selectedAnnotation;
@@ -468,7 +518,7 @@ public sealed partial class PdfViewport
         for (int i = _annotations.Count - 1; i >= 0; i--)
         {
             PageAnnotation candidate = _annotations[i];
-            if (!IsAnnotationOnActivePage(candidate))
+            if (!IsAnnotationVisibleOnActivePage(candidate))
                 continue;
 
             if (TryHitVertexOnAnnotation(candidate, pdf, VertexHitToleranceScreenPx, out vertexIndex))
@@ -503,31 +553,41 @@ public sealed partial class PdfViewport
 
     private bool TryHitSelectedMeasurement(SKPoint pdf, out Measurement measurement)
     {
-        for (int i = _measurements.Count - 1; i >= 0; i--)
-        {
-            Measurement m = _measurements[i];
-            if (!_selectedMeasurements.Contains(m) || !IsMeasurementOnActivePage(m))
-                continue;
-
-            if (IsMeasurementHit(m, pdf, SelectedMeasurementHitToleranceScreenPx))
-            {
-                measurement = m;
-                return true;
-            }
-        }
-
-        measurement = null!;
-        return false;
+        return TryHitMeasurementWithSpatialIndex(
+            pdf,
+            SelectedMeasurementHitToleranceScreenPx,
+            m => _selectedMeasurements.Contains(m),
+            out measurement);
     }
 
     private bool TryHitMeasurement(SKPoint pdf, out Measurement measurement)
     {
-        for (int i = _measurements.Count - 1; i >= 0; i--)
-        {
-            Measurement m = _measurements[i];
-            if (!IsMeasurementOnActivePage(m)) continue;
+        return TryHitMeasurementWithSpatialIndex(
+            pdf,
+            MeasurementHitToleranceScreenPx,
+            predicate: null,
+            out measurement);
+    }
 
-            if (IsMeasurementHit(m, pdf, MeasurementHitToleranceScreenPx))
+    private bool TryHitMeasurementWithSpatialIndex(
+        SKPoint pdf,
+        float screenTolerancePx,
+        Func<Measurement, bool>? predicate,
+        out Measurement measurement)
+    {
+        SKRect searchRect = MeasurementHitSearchRect(pdf, screenTolerancePx);
+        IReadOnlyList<Measurement> candidates = ActivePageMeasurementsNear(searchRect);
+        HashSet<Measurement> pointHits = MeasurementPointHits(pdf, searchRect, screenTolerancePx);
+        HashSet<Measurement> segmentHits = MeasurementSegmentHits(pdf, searchRect, screenTolerancePx);
+        for (int i = candidates.Count - 1; i >= 0; i--)
+        {
+            Measurement m = candidates[i];
+            if (predicate != null && !predicate(m))
+                continue;
+
+            if (pointHits.Contains(m) ||
+                segmentHits.Contains(m) ||
+                m.MType == "area" && PointInMeasurementFill(m, pdf))
             {
                 measurement = m;
                 return true;
@@ -538,14 +598,54 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private HashSet<Measurement> MeasurementPointHits(
+        SKPoint pdf,
+        SKRect searchRect,
+        float screenTolerancePx)
+    {
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        float tolSq = tol * tol;
+        var hits = new HashSet<Measurement>();
+        foreach (ViewportMeasurementVertexCandidate vertex in ActivePageMeasurementVerticesNear(searchRect))
+        {
+            if (DistanceSquared(pdf, vertex.Point) <= tolSq)
+                hits.Add(vertex.Measurement);
+        }
+
+        return hits;
+    }
+
+    private HashSet<Measurement> MeasurementSegmentHits(
+        SKPoint pdf,
+        SKRect searchRect,
+        float screenTolerancePx)
+    {
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        var hits = new HashSet<Measurement>();
+        foreach (ViewportMeasurementSegmentCandidate segment in ActivePageMeasurementSegmentsNear(searchRect))
+        {
+            if (DistanceToSegment(pdf, segment.Start, segment.End) <= tol)
+                hits.Add(segment.Measurement);
+        }
+
+        return hits;
+    }
+
     private bool TryHitSelectedAnnotation(SKPoint pdf, out PageAnnotation annotation)
     {
-        if (_selectedAnnotation != null &&
-            IsAnnotationOnActivePage(_selectedAnnotation) &&
-            IsAnnotationHit(_selectedAnnotation, pdf, SelectedMeasurementHitToleranceScreenPx))
+        foreach (PageAnnotation candidate in _annotations.AsEnumerable().Reverse())
         {
-            annotation = _selectedAnnotation;
-            return true;
+            if (!_selectedAnnotations.Contains(candidate) ||
+                !IsAnnotationVisibleOnActivePage(candidate))
+            {
+                continue;
+            }
+
+            if (IsAnnotationHit(candidate, pdf, SelectedMeasurementHitToleranceScreenPx))
+            {
+                annotation = candidate;
+                return true;
+            }
         }
 
         annotation = null!;
@@ -557,7 +657,7 @@ public sealed partial class PdfViewport
         for (int i = _annotations.Count - 1; i >= 0; i--)
         {
             PageAnnotation candidate = _annotations[i];
-            if (!IsAnnotationOnActivePage(candidate))
+            if (!IsAnnotationVisibleOnActivePage(candidate))
                 continue;
 
             if (IsAnnotationHit(candidate, pdf, MeasurementHitToleranceScreenPx))
@@ -615,7 +715,7 @@ public sealed partial class PdfViewport
         SKPoint start = annotation.Points[0];
         SKPoint end = annotation.Points[1];
         string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
-        if (kind == "rectangle")
+        if (kind is "rectangle" or "note" or "cloud")
         {
             IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);
             if (points.Count < 2)
@@ -637,6 +737,19 @@ public sealed partial class PdfViewport
                    PointInPolygon(pdf, points);
         }
 
+        if (kind == "area")
+        {
+            if (annotation.Points.Count < 3)
+                return false;
+
+            for (int i = 1; i < annotation.Points.Count; i++)
+                if (DistanceToSegment(pdf, annotation.Points[i - 1], annotation.Points[i]) <= tol)
+                    return true;
+
+            return DistanceToSegment(pdf, annotation.Points[^1], annotation.Points[0]) <= tol ||
+                   PointInPolygon(pdf, annotation.Points);
+        }
+
         return DistanceToSegment(pdf, start, end) <= tol;
     }
 
@@ -648,7 +761,7 @@ public sealed partial class PdfViewport
     private void SetSelectedMeasurements(IReadOnlyList<Measurement> measurements, Measurement? primary, int vertexIndex)
     {
         var next = measurements
-            .Where(m => _measurements.Contains(m) && IsMeasurementOnActivePage(m))
+            .Where(m => _measurementSet.Contains(m) && IsMeasurementOnActivePage(m))
             .Distinct()
             .ToList();
 
@@ -685,7 +798,7 @@ public sealed partial class PdfViewport
 
     private void ToggleMeasurementSelection(Measurement measurement)
     {
-        if (!_measurements.Contains(measurement) || !IsMeasurementOnActivePage(measurement))
+        if (!_measurementSet.Contains(measurement) || !IsMeasurementOnActivePage(measurement))
             return;
 
         var selected = GetSelectedMeasurements().ToList();
@@ -702,9 +815,7 @@ public sealed partial class PdfViewport
 
     private void SelectAllActivePageMeasurements()
     {
-        var selected = _measurements
-            .Where(IsMeasurementOnActivePage)
-            .ToList();
+        var selected = ActivePageMeasurements().ToList();
         SetSelectedMeasurements(selected, selected.LastOrDefault(), -1);
         PostStatus(selected.Count == 0
             ? "No measurements on this sheet."
@@ -713,10 +824,31 @@ public sealed partial class PdfViewport
 
     private void SelectAnnotation(PageAnnotation annotation, int vertexIndex)
     {
-        if (!_annotations.Contains(annotation) || !IsAnnotationOnActivePage(annotation))
-            return;
+        SetSelectedAnnotations([annotation], annotation, vertexIndex);
+    }
 
-        if (_selectedMeasurements.Count > 0 || _selectedMeasurement != null)
+    private IReadOnlyList<PageAnnotation> GetSelectedAnnotations() =>
+        _selectedAnnotations
+            .Where(annotation => _annotations.Contains(annotation) && IsAnnotationVisibleOnActivePage(annotation))
+            .ToList();
+
+    private void SetSelectedAnnotations(IReadOnlyList<PageAnnotation> annotations, PageAnnotation? primary, int vertexIndex)
+    {
+        var next = annotations
+            .Where(annotation => _annotations.Contains(annotation) && IsAnnotationVisibleOnActivePage(annotation))
+            .Distinct()
+            .ToList();
+        PageAnnotation? nextPrimary = primary != null && next.Contains(primary)
+            ? primary
+            : next.LastOrDefault();
+
+        bool setChanged = _selectedAnnotations.Count != next.Count ||
+                          next.Any(annotation => !_selectedAnnotations.Contains(annotation));
+        bool primaryChanged = !ReferenceEquals(_selectedAnnotation, nextPrimary);
+        bool vertexChanged = _selectedAnnotationVertexIndex != vertexIndex;
+
+        if (next.Count > 0 &&
+            (_selectedMeasurements.Count > 0 || _selectedMeasurement != null))
         {
             _selectedMeasurements.Clear();
             _selectedMeasurement = null;
@@ -726,13 +858,32 @@ public sealed partial class PdfViewport
             MeasurementsSelectionChanged?.Invoke(Array.Empty<Measurement>());
         }
 
-        bool changed = !ReferenceEquals(_selectedAnnotation, annotation) ||
-                       _selectedAnnotationVertexIndex != vertexIndex;
-        _selectedAnnotation = annotation;
-        _selectedAnnotationVertexIndex = vertexIndex;
-        if (changed)
+        _selectedAnnotations.Clear();
+        foreach (PageAnnotation annotation in next)
+            _selectedAnnotations.Add(annotation);
+
+        _selectedAnnotation = nextPrimary;
+        _selectedAnnotationVertexIndex = nextPrimary == null ? -1 : vertexIndex;
+        if (primaryChanged || setChanged || vertexChanged)
             RequestRepaint();
         PublishTransformSelectionChanged();
+    }
+
+    private void ToggleAnnotationSelection(PageAnnotation annotation)
+    {
+        if (!_annotations.Contains(annotation) || !IsAnnotationVisibleOnActivePage(annotation))
+            return;
+
+        var selected = GetSelectedAnnotations().ToList();
+        if (selected.Contains(annotation))
+            selected.Remove(annotation);
+        else
+            selected.Add(annotation);
+
+        SetSelectedAnnotations(selected, selected.Contains(annotation) ? annotation : selected.LastOrDefault(), -1);
+        PostStatus(selected.Count == 0
+            ? "Selection cleared."
+            : $"Selected {selected.Count} markup(s). Delete removes them.");
     }
 
     private void CenterOnMeasurement(Measurement measurement)
@@ -767,7 +918,8 @@ public sealed partial class PdfViewport
     {
         bool changed = _selectedMeasurement != null ||
                        _selectedMeasurements.Count > 0 ||
-                       _selectedAnnotation != null;
+                       _selectedAnnotation != null ||
+                       _selectedAnnotations.Count > 0;
         _selectedMeasurement = null;
         _selectedMeasurements.Clear();
         _selectedVertexIndex = -1;
@@ -789,6 +941,7 @@ public sealed partial class PdfViewport
         _dragAnnotationOriginalPoints.Clear();
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
+        _transformMeasurementOriginalJoistDirections.Clear();
         _transformAnnotationOriginalPoints.Clear();
         if (changed)
         {
@@ -801,6 +954,7 @@ public sealed partial class PdfViewport
     private void ClearAnnotationSelection()
     {
         _selectedAnnotation = null;
+        _selectedAnnotations.Clear();
         _selectedAnnotationVertexIndex = -1;
     }
 
@@ -828,6 +982,8 @@ public sealed partial class PdfViewport
         foreach (Measurement removed in selected)
         {
             _measurements.Remove(removed);
+            _measurementSet.Remove(removed);
+            RemoveMeasurementFromPageIndex(removed);
             ForgetMeasurementState(removed);
         }
         ClearSelection();
@@ -835,17 +991,18 @@ public sealed partial class PdfViewport
         PostStatus(selected.Count == 1
             ? $"Deleted {selected[0].MType}."
             : $"Deleted {selected.Count} selected measurements.");
-        foreach (Measurement removed in selected)
-            MeasurementRemoved?.Invoke(removed);
+        NotifyMeasurementsRemoved(selected);
     }
 
     private void DeleteSelectedAnnotation()
     {
-        if (_selectedAnnotation == null)
+        var selected = GetSelectedAnnotations();
+        if (selected.Count == 0 && _selectedAnnotation != null)
+            selected = [_selectedAnnotation];
+        if (selected.Count == 0)
             return;
 
-        PageAnnotation annotation = _selectedAnnotation;
-        DeletePageAnnotation(annotation);
+        DeletePageAnnotations(selected);
     }
 
     private bool IsMeasurementOnActivePage(Measurement measurement) =>
@@ -863,11 +1020,36 @@ public sealed partial class PdfViewport
     private bool IsAnnotationOnActivePage(PageAnnotation annotation) =>
         IsSamePageFolder(annotation.PageFolder, _pageFolder);
 
+    private bool IsAnnotationVisibleOnActivePage(PageAnnotation annotation) =>
+        IsAnnotationOnActivePage(annotation) &&
+        (!_hideRulerAnnotations || !IsRulerAnnotation(annotation) || !annotation.Hidden);
+
+    private static bool IsRulerAnnotation(PageAnnotation annotation) =>
+        string.Equals(
+            OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind),
+            "dimension",
+            StringComparison.OrdinalIgnoreCase);
+
     private bool IsMeasurementSelected(Measurement measurement) =>
         _selectedMeasurements.Contains(measurement);
 
     private bool IsAnnotationSelected(PageAnnotation annotation) =>
-        ReferenceEquals(_selectedAnnotation, annotation);
+        _selectedAnnotations.Contains(annotation);
+
+    private void PruneHiddenAnnotationSelection()
+    {
+        if (_selectedAnnotations.Count == 0 && _selectedAnnotation == null)
+            return;
+
+        var visible = GetSelectedAnnotations();
+        if (visible.Count == _selectedAnnotations.Count &&
+            (_selectedAnnotation == null || visible.Contains(_selectedAnnotation)))
+        {
+            return;
+        }
+
+        SetSelectedAnnotations(visible, visible.Contains(_selectedAnnotation) ? _selectedAnnotation : visible.LastOrDefault(), -1);
+    }
 
     private IReadOnlyList<Measurement> ActivePageMeasurements()
     {
@@ -876,17 +1058,109 @@ public sealed partial class PdfViewport
 
         string key = NormalizePageFolderForCompare(_pageFolder);
         if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
-            return [];
+            return Array.Empty<Measurement>();
 
-        return _hiddenTakeoffFolders.Count == 0
-            ? measurements
-            : measurements.Where(IsMeasurementTakeoffVisible).ToList();
+        if (_hiddenTakeoffFolders.Count == 0)
+            return measurements;
+
+        int folderHash = TakeoffFolderHash(measurements);
+        if (_visibleActivePageMeasurementsIndexVersion == _measurementIndexVersion &&
+            _visibleActivePageMeasurementsHiddenVersion == _hiddenTakeoffFoldersVersion &&
+            _visibleActivePageMeasurementsFolderHash == folderHash &&
+            string.Equals(_visibleActivePageMeasurementsPageKey, key, StringComparison.OrdinalIgnoreCase))
+        {
+            return _visibleActivePageMeasurements;
+        }
+
+        _visibleActivePageMeasurements.Clear();
+        foreach (Measurement measurement in measurements)
+        {
+            if (IsMeasurementTakeoffVisible(measurement))
+                _visibleActivePageMeasurements.Add(measurement);
+        }
+
+        _visibleActivePageMeasurementsPageKey = key;
+        _visibleActivePageMeasurementsIndexVersion = _measurementIndexVersion;
+        _visibleActivePageMeasurementsHiddenVersion = _hiddenTakeoffFoldersVersion;
+        _visibleActivePageMeasurementsFolderHash = folderHash;
+        return _visibleActivePageMeasurements;
+    }
+
+    private IReadOnlyList<Measurement> ActivePageMeasurementsNear(SKRect rect) =>
+        ActivePageMeasurementSpatialIndex().Query(rect);
+
+    private IReadOnlyList<ViewportMeasurementVertexCandidate> ActivePageMeasurementVerticesNear(SKRect rect) =>
+        ActivePageMeasurementSpatialIndex().QueryVertices(rect);
+
+    private IReadOnlyList<ViewportMeasurementSegmentCandidate> ActivePageMeasurementSegmentsNear(SKRect rect) =>
+        ActivePageMeasurementSpatialIndex().QuerySegments(rect);
+
+    private ViewportMeasurementSpatialIndex ActivePageMeasurementSpatialIndex()
+    {
+        IReadOnlyList<Measurement> activeMeasurements = ActivePageMeasurements();
+        string key = string.IsNullOrWhiteSpace(_pageFolder)
+            ? ""
+            : NormalizePageFolderForCompare(_pageFolder);
+        int folderHash = TakeoffFolderHash(activeMeasurements);
+
+        if (_activePageMeasurementSpatialIndex != null &&
+            _activePageMeasurementSpatialIndexVersion == _measurementIndexVersion &&
+            _activePageMeasurementSpatialIndexGeometryVersion == _measurementGeometryVersion &&
+            _activePageMeasurementSpatialIndexHiddenVersion == _hiddenTakeoffFoldersVersion &&
+            _activePageMeasurementSpatialIndexFolderHash == folderHash &&
+            string.Equals(_activePageMeasurementSpatialIndexPageKey, key, StringComparison.OrdinalIgnoreCase))
+        {
+            return _activePageMeasurementSpatialIndex;
+        }
+
+        _activePageMeasurementSpatialIndex = new ViewportMeasurementSpatialIndex(activeMeasurements);
+        _activePageMeasurementSpatialIndexPageKey = key;
+        _activePageMeasurementSpatialIndexVersion = _measurementIndexVersion;
+        _activePageMeasurementSpatialIndexGeometryVersion = _measurementGeometryVersion;
+        _activePageMeasurementSpatialIndexHiddenVersion = _hiddenTakeoffFoldersVersion;
+        _activePageMeasurementSpatialIndexFolderHash = folderHash;
+        return _activePageMeasurementSpatialIndex;
+    }
+
+    private void InvalidateActivePageMeasurementSpatialIndex()
+    {
+        _measurementGeometryVersion++;
+        _activePageMeasurementSpatialIndex = null;
+        _activePageMeasurementSpatialIndexPageKey = "";
+        _activePageMeasurementSpatialIndexVersion = -1;
+        _activePageMeasurementSpatialIndexGeometryVersion = -1;
+        _activePageMeasurementSpatialIndexHiddenVersion = -1;
+        _activePageMeasurementSpatialIndexFolderHash = 0;
+    }
+
+    private SKRect MeasurementHitSearchRect(SKPoint pdf, float screenTolerancePx)
+    {
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        return SKRect.Create(pdf.X - tol, pdf.Y - tol, tol * 2f, tol * 2f);
+    }
+
+    private static int TakeoffFolderHash(IReadOnlyList<Measurement> measurements)
+    {
+        unchecked
+        {
+            int hash = 17;
+            for (int i = 0; i < measurements.Count; i++)
+            {
+                hash = hash * 31 + StringComparer.OrdinalIgnoreCase.GetHashCode(
+                    measurements[i].TakeoffFolder ?? string.Empty);
+            }
+
+            return hash;
+        }
     }
 
     private void IndexMeasurementByPage(Measurement measurement)
     {
         if (string.IsNullOrWhiteSpace(measurement.PageFolder))
+        {
+            InvalidateActivePageMeasurementCache();
             return;
+        }
 
         string key = NormalizePageFolderForCompare(measurement.PageFolder);
         if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
@@ -897,20 +1171,50 @@ public sealed partial class PdfViewport
 
         if (!measurements.Contains(measurement))
             measurements.Add(measurement);
+        InvalidateActivePageMeasurementCache();
     }
 
     private void RemoveMeasurementFromPageIndex(Measurement measurement)
     {
         if (string.IsNullOrWhiteSpace(measurement.PageFolder))
+        {
+            InvalidateActivePageMeasurementCache();
             return;
+        }
 
         string key = NormalizePageFolderForCompare(measurement.PageFolder);
         if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
+        {
+            InvalidateActivePageMeasurementCache();
             return;
+        }
 
         measurements.Remove(measurement);
         if (measurements.Count == 0)
             _measurementsByPage.Remove(key);
+        InvalidateActivePageMeasurementCache();
+    }
+
+    private void InvalidateActivePageMeasurementCache()
+    {
+        _measurementIndexVersion++;
+        _visibleActivePageMeasurements.Clear();
+        _visibleActivePageMeasurementsPageKey = "";
+        _visibleActivePageMeasurementsIndexVersion = -1;
+        _visibleActivePageMeasurementsHiddenVersion = -1;
+        _visibleActivePageMeasurementsFolderHash = 0;
+        InvalidateActivePageMeasurementSpatialIndex();
+    }
+
+    private void InvalidateHiddenTakeoffFolderCache()
+    {
+        _hiddenTakeoffFoldersVersion++;
+        _visibleActivePageMeasurements.Clear();
+        _visibleActivePageMeasurementsPageKey = "";
+        _visibleActivePageMeasurementsIndexVersion = -1;
+        _visibleActivePageMeasurementsHiddenVersion = -1;
+        _visibleActivePageMeasurementsFolderHash = 0;
+        InvalidateActivePageMeasurementSpatialIndex();
     }
 
     private void ForgetMeasurementState(Measurement measurement)

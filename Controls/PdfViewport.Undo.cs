@@ -24,15 +24,16 @@ public sealed partial class PdfViewport
         }
 
         var measurementSnapshots = measurements
-            .Where(measurement => _measurements.Contains(measurement))
+            .Where(measurement => _measurementSet.Contains(measurement))
             .Select(measurement => new MeasurementPointUndo(
                 measurement,
                 measurement.Points.ToList(),
-                CloneHoles(measurement.Holes)))
+                CloneHoles(measurement.Holes),
+                measurement.JoistDirectionDegrees))
             .ToList();
         var annotationSnapshots = annotations
             .Where(annotation => _annotations.Contains(annotation))
-            .Select(annotation => new AnnotationPointUndo(annotation, annotation.Points.ToList()))
+            .Select(annotation => new AnnotationPointUndo(annotation, annotation.Points.ToList(), annotation.Text))
             .ToList();
         PushUndoAction(new ViewportUndoAction(
             key,
@@ -66,13 +67,17 @@ public sealed partial class PdfViewport
         string status,
         string key = "")
     {
-        if (_applyingViewportUndo || !_measurements.Contains(measurement))
+        if (_applyingViewportUndo || !_measurementSet.Contains(measurement))
             return;
 
         PushUndoAction(new ViewportUndoAction(
             key,
             status,
-            [new MeasurementPointUndo(measurement, beforePoints.ToList(), CloneHoles(beforeHoles))],
+            [new MeasurementPointUndo(
+                measurement,
+                beforePoints.ToList(),
+                CloneHoles(beforeHoles),
+                measurement.JoistDirectionDegrees)],
             [],
             [],
             [],
@@ -93,7 +98,23 @@ public sealed partial class PdfViewport
             key,
             status,
             [],
-            [new AnnotationPointUndo(annotation, beforePoints.ToList())],
+            [new AnnotationPointUndo(annotation, beforePoints.ToList(), annotation.Text)],
+            [],
+            [],
+            [],
+            []), coalesce: false);
+    }
+
+    private void PushAnnotationTextUndoSnapshot(PageAnnotation annotation, string beforeText, string status)
+    {
+        if (_applyingViewportUndo || !_annotations.Contains(annotation))
+            return;
+
+        PushUndoAction(new ViewportUndoAction(
+            "",
+            status,
+            [],
+            [new AnnotationPointUndo(annotation, annotation.Points.ToList(), beforeText)],
             [],
             [],
             [],
@@ -118,13 +139,14 @@ public sealed partial class PdfViewport
             return;
 
         var snapshots = beforePoints
-            .Where(pair => _measurements.Contains(pair.Key))
+            .Where(pair => _measurementSet.Contains(pair.Key))
             .Select(pair => new MeasurementPointUndo(
                 pair.Key,
                 pair.Value.ToList(),
                 beforeHoles.TryGetValue(pair.Key, out var holes)
                     ? CloneHoles(holes)
-                    : CloneHoles(pair.Key.Holes)))
+                    : CloneHoles(pair.Key.Holes),
+                pair.Key.JoistDirectionDegrees))
             .ToList();
         if (snapshots.Count == 0)
             return;
@@ -149,6 +171,7 @@ public sealed partial class PdfViewport
         PushGeometryUndoSnapshotFromOriginals(
             measurementBeforePoints,
             new Dictionary<Measurement, List<List<SKPoint>>>(),
+            new Dictionary<Measurement, double>(),
             annotationBeforePoints,
             status,
             key);
@@ -157,6 +180,7 @@ public sealed partial class PdfViewport
     private void PushGeometryUndoSnapshotFromOriginals(
         IReadOnlyDictionary<Measurement, List<SKPoint>> measurementBeforePoints,
         IReadOnlyDictionary<Measurement, List<List<SKPoint>>> measurementBeforeHoles,
+        IReadOnlyDictionary<Measurement, double> measurementBeforeJoistDirections,
         IReadOnlyDictionary<PageAnnotation, List<SKPoint>> annotationBeforePoints,
         string status,
         string key = "")
@@ -168,17 +192,20 @@ public sealed partial class PdfViewport
         }
 
         var measurementSnapshots = measurementBeforePoints
-            .Where(pair => _measurements.Contains(pair.Key))
+            .Where(pair => _measurementSet.Contains(pair.Key))
             .Select(pair => new MeasurementPointUndo(
                 pair.Key,
                 pair.Value.ToList(),
                 measurementBeforeHoles.TryGetValue(pair.Key, out var holes)
                     ? CloneHoles(holes)
-                    : CloneHoles(pair.Key.Holes)))
+                    : CloneHoles(pair.Key.Holes),
+                measurementBeforeJoistDirections.TryGetValue(pair.Key, out double direction)
+                    ? direction
+                    : pair.Key.JoistDirectionDegrees))
             .ToList();
         var annotationSnapshots = annotationBeforePoints
             .Where(pair => _annotations.Contains(pair.Key))
-            .Select(pair => new AnnotationPointUndo(pair.Key, pair.Value.ToList()))
+            .Select(pair => new AnnotationPointUndo(pair.Key, pair.Value.ToList(), pair.Key.Text))
             .ToList();
         if (measurementSnapshots.Count == 0 && annotationSnapshots.Count == 0)
             return;
@@ -194,15 +221,33 @@ public sealed partial class PdfViewport
             []), coalesce: false);
     }
 
+    public void RegisterAddedMeasurementsUndo(IEnumerable<Measurement> added, string status)
+    {
+        PushAddedMeasurementsUndo(added, status);
+    }
+
     private void PushAddedMeasurementsUndo(IEnumerable<Measurement> added, string status)
     {
         if (_applyingViewportUndo)
             return;
 
-        var snapshots = added
-            .Where(measurement => _measurements.Contains(measurement))
-            .Select(measurement => new MeasurementPresenceUndo(measurement, _measurements.IndexOf(measurement)))
-            .ToList();
+        var indexByMeasurement = new Dictionary<Measurement, int>();
+        for (int i = 0; i < _measurements.Count; i++)
+            indexByMeasurement.TryAdd(_measurements[i], i);
+
+        var seen = new HashSet<Measurement>();
+        var snapshots = new List<MeasurementPresenceUndo>();
+        foreach (Measurement measurement in added)
+        {
+            if (!seen.Add(measurement) ||
+                !_measurementSet.Contains(measurement) ||
+                !indexByMeasurement.TryGetValue(measurement, out int index))
+            {
+                continue;
+            }
+
+            snapshots.Add(new MeasurementPresenceUndo(measurement, index));
+        }
         if (snapshots.Count == 0)
             return;
 
@@ -229,10 +274,23 @@ public sealed partial class PdfViewport
         if (_applyingViewportUndo)
             return;
 
-        var snapshots = removed
-            .Where(measurement => _measurements.Contains(measurement))
-            .Select(measurement => new MeasurementPresenceUndo(measurement, _measurements.IndexOf(measurement)))
-            .ToList();
+        var indexByMeasurement = new Dictionary<Measurement, int>();
+        for (int i = 0; i < _measurements.Count; i++)
+            indexByMeasurement.TryAdd(_measurements[i], i);
+
+        var seen = new HashSet<Measurement>();
+        var snapshots = new List<MeasurementPresenceUndo>();
+        foreach (Measurement measurement in removed)
+        {
+            if (!seen.Add(measurement) ||
+                !_measurementSet.Contains(measurement) ||
+                !indexByMeasurement.TryGetValue(measurement, out int index))
+            {
+                continue;
+            }
+
+            snapshots.Add(new MeasurementPresenceUndo(measurement, index));
+        }
         if (snapshots.Count == 0)
             return;
 
@@ -288,15 +346,30 @@ public sealed partial class PdfViewport
         _applyingViewportUndo = true;
         try
         {
-            foreach (MeasurementPresenceUndo added in action.AddedMeasurements)
+            var removedAddedMeasurements = action.AddedMeasurements
+                .Select(added => added.Target)
+                .Where(target => _measurementSet.Contains(target))
+                .Distinct()
+                .ToList();
+            if (removedAddedMeasurements.Count > 0)
             {
-                if (!_measurements.Remove(added.Target))
-                    continue;
+                var removedSet = new HashSet<Measurement>(removedAddedMeasurements);
+                _measurements.RemoveAll(measurement => removedSet.Contains(measurement));
+                foreach (Measurement measurement in removedAddedMeasurements)
+                {
+                    _measurementSet.Remove(measurement);
+                    RemoveMeasurementFromPageIndex(measurement);
+                    ForgetMeasurementState(measurement);
+                }
 
-                RemoveMeasurementFromPageIndex(added.Target);
-                if (ReferenceEquals(_selectedMeasurement, added.Target))
+                if (removedAddedMeasurements.Any(measurement =>
+                        ReferenceEquals(_selectedMeasurement, measurement) ||
+                        _selectedMeasurements.Contains(measurement)))
+                {
                     ClearSelection();
-                MeasurementRemoved?.Invoke(added.Target);
+                }
+
+                NotifyMeasurementsRemoved(removedAddedMeasurements);
                 changed = true;
             }
 
@@ -305,22 +378,28 @@ public sealed partial class PdfViewport
                 if (!_annotations.Remove(added.Target))
                     continue;
 
-                if (ReferenceEquals(_selectedAnnotation, added.Target))
+                if (ReferenceEquals(_selectedAnnotation, added.Target) ||
+                    _selectedAnnotations.Contains(added.Target))
+                {
                     ClearAnnotationSelection();
+                }
                 PageAnnotationRemoved?.Invoke(added.Target);
                 changed = true;
             }
 
-            foreach (MeasurementPresenceUndo removed in action.RemovedMeasurements)
+            var restoredMeasurements = new List<Measurement>();
+            foreach (MeasurementPresenceUndo removed in action.RemovedMeasurements.OrderBy(snapshot => snapshot.Index))
             {
-                if (_measurements.Contains(removed.Target))
+                if (_measurementSet.Contains(removed.Target))
                     continue;
 
                 _measurements.Insert(Math.Clamp(removed.Index, 0, _measurements.Count), removed.Target);
+                _measurementSet.Add(removed.Target);
                 IndexMeasurementByPage(removed.Target);
-                MeasurementAdded?.Invoke(removed.Target);
+                restoredMeasurements.Add(removed.Target);
                 changed = true;
             }
+            NotifyMeasurementsAdded(restoredMeasurements);
 
             foreach (AnnotationPresenceUndo removed in action.RemovedAnnotations)
             {
@@ -332,17 +411,20 @@ public sealed partial class PdfViewport
                 changed = true;
             }
 
+            var changedMeasurements = new List<Measurement>();
             foreach (MeasurementPointUndo snapshot in action.MeasurementPoints)
             {
-                if (!_measurements.Contains(snapshot.Target))
+                if (!_measurementSet.Contains(snapshot.Target))
                     continue;
 
                 RestorePoints(snapshot.Target.Points, snapshot.Points);
                 RestoreHoles(snapshot.Target.Holes, snapshot.Holes);
+                snapshot.Target.JoistDirectionDegrees = snapshot.JoistDirectionDegrees;
                 PruneMeasurementVertexSelection(snapshot.Target);
-                MeasurementChanged?.Invoke(snapshot.Target);
+                changedMeasurements.Add(snapshot.Target);
                 changed = true;
             }
+            NotifyMeasurementsChanged(changedMeasurements);
 
             foreach (AnnotationPointUndo snapshot in action.AnnotationPoints)
             {
@@ -350,6 +432,7 @@ public sealed partial class PdfViewport
                     continue;
 
                 RestorePoints(snapshot.Target.Points, snapshot.Points);
+                snapshot.Target.Text = snapshot.Text;
                 PageAnnotationChanged?.Invoke(snapshot.Target);
                 changed = true;
             }
@@ -366,6 +449,54 @@ public sealed partial class PdfViewport
         PublishTransformSelectionChanged();
         PostStatus($"Undo: {action.Status}.");
         return true;
+    }
+
+    private void NotifyMeasurementsAdded(IReadOnlyList<Measurement> measurements)
+    {
+        if (measurements.Count == 0)
+            return;
+
+        InvalidateActivePageMeasurementSpatialIndex();
+        if (measurements.Count == 1 || MeasurementsAdded == null)
+        {
+            foreach (Measurement measurement in measurements)
+                MeasurementAdded?.Invoke(measurement);
+            return;
+        }
+
+        MeasurementsAdded.Invoke(measurements);
+    }
+
+    private void NotifyMeasurementsRemoved(IReadOnlyList<Measurement> measurements)
+    {
+        if (measurements.Count == 0)
+            return;
+
+        InvalidateActivePageMeasurementSpatialIndex();
+        if (measurements.Count == 1 || MeasurementsRemoved == null)
+        {
+            foreach (Measurement measurement in measurements)
+                MeasurementRemoved?.Invoke(measurement);
+            return;
+        }
+
+        MeasurementsRemoved.Invoke(measurements);
+    }
+
+    private void NotifyMeasurementsChanged(IReadOnlyList<Measurement> measurements)
+    {
+        if (measurements.Count == 0)
+            return;
+
+        InvalidateActivePageMeasurementSpatialIndex();
+        if (measurements.Count == 1 || MeasurementsChanged == null)
+        {
+            foreach (Measurement measurement in measurements)
+                MeasurementChanged?.Invoke(measurement);
+            return;
+        }
+
+        MeasurementsChanged.Invoke(measurements);
     }
 
     private static void RestorePoints(List<SKPoint> target, IReadOnlyList<SKPoint> points)
@@ -410,9 +541,13 @@ public sealed partial class PdfViewport
         List<MeasurementPresenceUndo> RemovedMeasurements,
         List<AnnotationPresenceUndo> RemovedAnnotations);
 
-    private sealed record MeasurementPointUndo(Measurement Target, List<SKPoint> Points, List<List<SKPoint>> Holes);
+    private sealed record MeasurementPointUndo(
+        Measurement Target,
+        List<SKPoint> Points,
+        List<List<SKPoint>> Holes,
+        double JoistDirectionDegrees);
 
-    private sealed record AnnotationPointUndo(PageAnnotation Target, List<SKPoint> Points);
+    private sealed record AnnotationPointUndo(PageAnnotation Target, List<SKPoint> Points, string Text);
 
     private sealed record MeasurementPresenceUndo(Measurement Target, int Index);
 

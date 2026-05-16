@@ -10,15 +10,24 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private TreeViewItem? _takeoffFolderDropTarget;
+    private bool _takeoffFolderDropAllowed;
+    private string _takeoffFolderDropStatus = "";
+
     private void TakeoffsTree_MouseMove(object sender, MouseEventArgs e)
     {
-        if (_takeoffsDragStart == null || e.LeftButton != MouseButtonState.Pressed)
+        if (_takeoffsDragStart == null)
             return;
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            ResetTakeoffsDragState();
+            return;
+        }
 
         if (!_takeoffsDragArmed)
         {
-            _takeoffsDragStart = null;
-            _takeoffsDragItem = null;
+            ResetTakeoffsDragState();
             return;
         }
 
@@ -30,38 +39,54 @@ public partial class MainWindow
         if ((_takeoffsDragItem ?? TakeoffsTree.SelectedItem) is not TreeViewItem item)
             return;
 
+        if (TryRefreshStaleTakeoffTreeNode(item))
+        {
+            ResetTakeoffsDragState();
+            return;
+        }
+
         if (item.Tag is TakeoffMeasurementNode sectionNode)
         {
             var nodes = SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true);
             if (nodes.Count == 0)
             {
-                _takeoffsDragStart = null;
-                _takeoffsDragItem = null;
+                ResetTakeoffsDragState();
                 return;
             }
 
             var sectionPayload = new TakeoffSectionDrag(nodes);
-            DragDrop.DoDragDrop(TakeoffsTree, sectionPayload, DragDropEffects.Move | DragDropEffects.Copy);
-            ClearTakeoffSectionDropCue();
-            ClearTakeoffPositionDropCue();
-            _takeoffsDragStart = null;
-            _takeoffsDragItem = null;
-            _takeoffsDragArmed = false;
+            DoTakeoffsDragDrop(sectionPayload, DragDropEffects.Move | DragDropEffects.Copy);
             return;
         }
 
         var entries = GetSelectedTakeoffEntries(item);
         if (entries.Count == 0)
         {
-            _takeoffsDragStart = null;
-            _takeoffsDragItem = null;
-            _takeoffsDragArmed = false;
+            ResetTakeoffsDragState();
             return;
         }
 
         var payload = new TakeoffsClipboard(entries, TakeoffsClipboardMode.Cut);
-        DragDrop.DoDragDrop(TakeoffsTree, payload, DragDropEffects.Move | DragDropEffects.Copy);
-        ClearTakeoffPositionDropCue();
+        DoTakeoffsDragDrop(payload, DragDropEffects.Move | DragDropEffects.Copy);
+    }
+
+    private void DoTakeoffsDragDrop(object payload, DragDropEffects effects)
+    {
+        try
+        {
+            DragDrop.DoDragDrop(TakeoffsTree, payload, effects);
+        }
+        finally
+        {
+            ClearTakeoffSectionDropCue();
+            ClearTakeoffPositionDropCue();
+            ClearTakeoffFolderDropCue();
+            ResetTakeoffsDragState();
+        }
+    }
+
+    private void ResetTakeoffsDragState()
+    {
         _takeoffsDragStart = null;
         _takeoffsDragItem = null;
         _takeoffsDragArmed = false;
@@ -70,13 +95,14 @@ public partial class MainWindow
     private void TakeoffsTree_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
-        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        TreeViewItem? rawTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
         bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
         if (e.Data.GetData(typeof(TakeoffSectionDrag)) is TakeoffSectionDrag sectionDrag)
         {
             ClearTakeoffPositionDropCue();
-            bool canDropSection = CanDropTakeoffSections(sectionDrag, targetItem, copy);
-            UpdateTakeoffSectionDropCue(sectionDrag, targetItem, copy, canDropSection);
+            ClearTakeoffFolderDropCue();
+            bool canDropSection = CanDropTakeoffSections(sectionDrag, rawTargetItem, copy);
+            UpdateTakeoffSectionDropCue(sectionDrag, rawTargetItem, copy, canDropSection);
             if (canDropSection)
                 e.Effects = copy ? DragDropEffects.Copy : DragDropEffects.Move;
             e.Handled = true;
@@ -87,8 +113,19 @@ public partial class MainWindow
         if (e.Data.GetData(typeof(TakeoffsClipboard)) is not TakeoffsClipboard payload)
             return;
 
+        TreeViewItem? targetItem = ResolveTakeoffsClipboardDropTarget(rawTargetItem);
+        if (targetItem == null && !copy && CanDropTakeoffsToRootBottom(payload))
+        {
+            ClearTakeoffFolderDropCue();
+            UpdateTakeoffPositionDropCue(null, after: true, canDrop: true, TakeoffsRootBottomDropStatus(payload));
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
+
         if (TryGetTakeoffPositionDropCue(payload, targetItem, copy, e, out bool after, out bool canDropPosition, out string positionStatus))
         {
+            ClearTakeoffFolderDropCue();
             UpdateTakeoffPositionDropCue(targetItem, after, canDropPosition, positionStatus);
             if (canDropPosition)
                 e.Effects = DragDropEffects.Move;
@@ -98,20 +135,27 @@ public partial class MainWindow
 
         ClearTakeoffPositionDropCue();
         string? targetFolder = targetItem == null ? _currentJob?.TakeoffsRoot : GetTakeoffPasteTargetFolder(targetItem);
-        if (CanDropTakeoffsInto(payload, targetFolder, copy ? TakeoffsClipboardMode.Copy : TakeoffsClipboardMode.Cut))
+        TakeoffsClipboardMode dragMode = copy ? TakeoffsClipboardMode.Copy : TakeoffsClipboardMode.Cut;
+        bool canDropInto = CanDropTakeoffsInto(payload, targetFolder, dragMode);
+        if (targetItem?.Tag is TakeoffFolderNode && targetFolder != null)
+            UpdateTakeoffFolderDropCue(payload, targetItem, copy, canDropInto);
+        else
+            ClearTakeoffFolderDropCue();
+        if (canDropInto)
             e.Effects = copy ? DragDropEffects.Copy : DragDropEffects.Move;
         e.Handled = true;
     }
 
     private void TakeoffsTree_Drop(object sender, DragEventArgs e)
     {
-        TreeViewItem? targetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        TreeViewItem? rawTargetItem = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
         bool copy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
         if (e.Data.GetData(typeof(TakeoffSectionDrag)) is TakeoffSectionDrag sectionDrag)
         {
             ClearTakeoffPositionDropCue();
-            if (CanDropTakeoffSections(sectionDrag, targetItem, copy))
-                DropTakeoffSections(sectionDrag, targetItem!, copy);
+            ClearTakeoffFolderDropCue();
+            if (CanDropTakeoffSections(sectionDrag, rawTargetItem, copy))
+                DropTakeoffSections(sectionDrag, rawTargetItem!, copy);
             ClearTakeoffSectionDropCue();
             e.Handled = true;
             return;
@@ -121,10 +165,12 @@ public partial class MainWindow
         if (e.Data.GetData(typeof(TakeoffsClipboard)) is not TakeoffsClipboard payload)
             return;
 
+        TreeViewItem? targetItem = ResolveTakeoffsClipboardDropTarget(rawTargetItem);
         if (TryGetTakeoffPositionDropCue(payload, targetItem, copy, e, out bool after, out bool canDropPosition, out _) &&
             canDropPosition &&
             targetItem != null)
         {
+            ClearTakeoffFolderDropCue();
             DropTakeoffPosition(payload, targetItem, after);
             ClearTakeoffPositionDropCue();
             e.Handled = true;
@@ -136,8 +182,18 @@ public partial class MainWindow
         TakeoffsClipboardMode mode = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey
             ? TakeoffsClipboardMode.Copy
             : TakeoffsClipboardMode.Cut;
+        if (targetItem == null && mode == TakeoffsClipboardMode.Cut && CanDropTakeoffsToRootBottom(payload))
+        {
+            ClearTakeoffFolderDropCue();
+            DropTakeoffsToRootBottom(payload);
+            ClearTakeoffPositionDropCue();
+            e.Handled = true;
+            return;
+        }
+
         if (CanDropTakeoffsInto(payload, targetFolder, mode))
             RunTakeoffDrop(payload, targetFolder!, mode);
+        ClearTakeoffFolderDropCue();
         e.Handled = true;
     }
 
@@ -147,8 +203,118 @@ public partial class MainWindow
         {
             ClearTakeoffSectionDropCue();
             ClearTakeoffPositionDropCue();
+            ClearTakeoffFolderDropCue();
         }
     }
+
+    private TreeViewItem? ResolveTakeoffsClipboardDropTarget(TreeViewItem? targetItem)
+    {
+        return targetItem?.Tag switch
+        {
+            TakeoffMeasurementNode node => FindTakeoffTreeItemByFolder(node.Item.FolderPath) ?? targetItem,
+            _ => targetItem,
+        };
+    }
+
+    private bool CanDropTakeoffsToRootBottom(TakeoffsClipboard payload)
+    {
+        if (_currentJob == null || payload.Entries.Count == 0 || !Directory.Exists(_currentJob.TakeoffsRoot))
+            return false;
+
+        foreach (TakeoffsClipboardEntry entry in payload.Entries)
+        {
+            if (!Directory.Exists(entry.SourcePath) ||
+                !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
+                string.Equals(entry.SourcePath, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string sourceParent = Path.GetDirectoryName(entry.SourcePath) ?? "";
+            if (string.Equals(sourceParent, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!CanDropTakeoffsInto(new TakeoffsClipboard([entry], TakeoffsClipboardMode.Cut), _currentJob.TakeoffsRoot, TakeoffsClipboardMode.Cut))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static string TakeoffsRootBottomDropStatus(TakeoffsClipboard payload) =>
+        payload.Entries.Count == 1
+            ? "Move 1 takeoff node to Takeoffs root bottom."
+            : $"Move {payload.Entries.Count} takeoff nodes to Takeoffs root bottom.";
+
+    private void DropTakeoffsToRootBottom(TakeoffsClipboard payload)
+    {
+        if (_currentJob == null)
+            return;
+
+        string root = _currentJob.TakeoffsRoot;
+        try
+        {
+            FlushTakeoffAutosaves();
+            var changed = new List<string>();
+            var entriesToMove = new List<TakeoffsClipboardEntry>();
+            var rebasedLegendPaths = new List<(string OldPath, string NewPath)>();
+
+            foreach (TakeoffsClipboardEntry entry in payload.Entries)
+            {
+                string sourceParent = Path.GetDirectoryName(entry.SourcePath) ?? "";
+                if (string.Equals(sourceParent, root, StringComparison.OrdinalIgnoreCase))
+                {
+                    changed.Add(entry.SourcePath);
+                    continue;
+                }
+
+                if (CanDropTakeoffsInto(new TakeoffsClipboard([entry], TakeoffsClipboardMode.Cut), root, TakeoffsClipboardMode.Cut))
+                    entriesToMove.Add(entry);
+            }
+
+            foreach (var moved in OurPlaneCoreJobStore.MoveNodes(entriesToMove.Select(entry => entry.SourcePath), root))
+            {
+                changed.Add(moved.MovedPath);
+                rebasedLegendPaths.Add((moved.SourcePath, moved.MovedPath));
+            }
+
+            if (changed.Count == 0)
+                return;
+
+            bool reordered = OurPlaneCoreJobStore.MoveSiblingsToEnd(changed, root);
+            _takeoffsClipboard = null;
+            RebasePageLegendTakeoffOrderReferences(rebasedLegendPaths);
+
+            if (rebasedLegendPaths.Count > 0)
+            {
+                if (!TryApplyTakeoffStructureMoveFast(rebasedLegendPaths, root, changed))
+                {
+                    LoadTakeoffsForJob();
+                    SetTakeoffMultiSelection(changed);
+                    SelectFirstTakeoffPath(changed);
+                }
+            }
+            else if (!TryRefreshTakeoffTreeParentOrderFast(root, changed))
+            {
+                LoadTakeoffsForJob();
+                SetTakeoffMultiSelection(changed);
+                SelectFirstTakeoffPath(changed);
+            }
+
+            TxtStatus.Text = reordered || entriesToMove.Count > 0
+                ? TakeoffsRootBottomDroppedStatus(changed.Count)
+                : "Selected takeoff node(s) are already at Takeoffs root bottom.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Move Takeoffs to Root Bottom", ex);
+        }
+    }
+
+    private static string TakeoffsRootBottomDroppedStatus(int count) =>
+        count == 1
+            ? "Moved 1 takeoff node to Takeoffs root bottom."
+            : $"Moved {count} takeoff nodes to Takeoffs root bottom.";
 
     private bool TryGetTakeoffPositionDropCue(
         TakeoffsClipboard payload,
@@ -171,18 +337,33 @@ public partial class MainWindow
             return false;
 
         Point targetPoint = e.GetPosition(targetItem);
-        if (targetItem.Tag is TakeoffFolderNode && !IsTakeoffPositionEdgeDrop(targetItem, targetPoint))
+        bool dropOutOfTargetFolder = targetItem.Tag is TakeoffFolderNode && AreDirectTakeoffChildren(payload, targetPath);
+        if (targetItem.Tag is TakeoffFolderNode && !dropOutOfTargetFolder && !IsTakeoffPositionEdgeDrop(targetItem, targetPoint))
             return false;
 
-        after = IsTakeoffPositionDropAfter(targetItem, targetPoint);
+        after = dropOutOfTargetFolder || IsTakeoffPositionDropAfter(targetItem, targetPoint);
         var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
         canDrop = CanDropTakeoffsToPosition(payload, targetPath, after);
         string targetName = OurPlaneCoreJobStore.DisplayName(targetPath);
         string position = after ? "after" : "before";
         status = canDrop
-            ? $"Move {paths.Count} takeoff node(s) {position} {targetName}."
+            ? dropOutOfTargetFolder
+                ? $"Move {paths.Count} takeoff node(s) out after {targetName}."
+                : $"Move {paths.Count} takeoff node(s) {position} {targetName}."
             : $"Cannot reorder here. Drag onto another sibling position in the same folder.";
         return true;
+    }
+
+    private static bool AreDirectTakeoffChildren(TakeoffsClipboard payload, string folderPath)
+    {
+        if (payload.Entries.Count == 0)
+            return false;
+
+        return payload.Entries.All(entry =>
+            string.Equals(
+                Path.GetDirectoryName(entry.SourcePath) ?? "",
+                folderPath,
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private bool CanDropTakeoffsToPosition(TakeoffsClipboard payload, string targetPath, bool after)
@@ -217,7 +398,7 @@ public partial class MainWindow
         if (targetPoint.Y < 0 || targetPoint.Y > height)
             return false;
 
-        double edge = Math.Min(8.0, Math.Max(5.0, height * 0.25));
+        double edge = Math.Min(5.0, Math.Max(3.0, height * 0.18));
         return targetPoint.Y <= edge || targetPoint.Y >= height - edge;
     }
 
@@ -240,11 +421,12 @@ public partial class MainWindow
             return;
         }
 
+        TreeViewItem? oldTarget = _takeoffPositionDropTarget;
         _takeoffPositionDropTarget = targetItem;
         _takeoffPositionDropAfter = after;
         _takeoffPositionDropAllowed = canDrop;
         _takeoffPositionDropStatus = status;
-        ApplyTakeoffPageHighlights();
+        RefreshTakeoffDropCueRows(oldTarget, targetItem);
         if (!string.IsNullOrWhiteSpace(status))
             TxtStatus.Text = status;
     }
@@ -254,11 +436,68 @@ public partial class MainWindow
         if (_takeoffPositionDropTarget == null && string.IsNullOrEmpty(_takeoffPositionDropStatus))
             return;
 
+        TreeViewItem? oldTarget = _takeoffPositionDropTarget;
         _takeoffPositionDropTarget = null;
         _takeoffPositionDropAfter = false;
         _takeoffPositionDropAllowed = false;
         _takeoffPositionDropStatus = "";
-        ApplyTakeoffPageHighlights();
+        RefreshTakeoffDropCueRows(oldTarget);
+    }
+
+    private string TakeoffFolderDropStatus(TakeoffsClipboard payload, TreeViewItem targetItem, bool copy, bool canDrop)
+    {
+        if (payload.Entries.Count == 0)
+            return "Select takeoff node(s) before dragging.";
+        if (targetItem.Tag is not TakeoffFolderNode)
+            return "Drop on a Takeoffs folder, or on row edges to reorder.";
+
+        string? targetFolder = GetTakeoffPasteTargetFolder(targetItem);
+        string targetName = string.IsNullOrWhiteSpace(targetFolder)
+            ? "Takeoffs root"
+            : OurPlaneCoreJobStore.DisplayName(targetFolder);
+        string action = copy ? "Copy" : "Move";
+        if (canDrop)
+            return $"{action} {payload.Entries.Count} takeoff node(s) into {targetName}.";
+
+        if (!copy &&
+            !string.IsNullOrWhiteSpace(targetFolder) &&
+            payload.Entries.Any(entry => OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder)))
+        {
+            return "Cannot move a takeoff folder into itself or its child.";
+        }
+
+        return $"Cannot {action.ToLowerInvariant()} selected takeoff node(s) into {targetName}.";
+    }
+
+    private void UpdateTakeoffFolderDropCue(TakeoffsClipboard payload, TreeViewItem targetItem, bool copy, bool canDrop)
+    {
+        string status = TakeoffFolderDropStatus(payload, targetItem, copy, canDrop);
+        if (ReferenceEquals(_takeoffFolderDropTarget, targetItem) &&
+            _takeoffFolderDropAllowed == canDrop &&
+            string.Equals(_takeoffFolderDropStatus, status, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        TreeViewItem? oldTarget = _takeoffFolderDropTarget;
+        _takeoffFolderDropTarget = targetItem;
+        _takeoffFolderDropAllowed = canDrop;
+        _takeoffFolderDropStatus = status;
+        RefreshTakeoffDropCueRows(oldTarget, targetItem);
+        if (!string.IsNullOrWhiteSpace(status))
+            TxtStatus.Text = status;
+    }
+
+    private void ClearTakeoffFolderDropCue()
+    {
+        if (_takeoffFolderDropTarget == null && string.IsNullOrEmpty(_takeoffFolderDropStatus))
+            return;
+
+        TreeViewItem? oldTarget = _takeoffFolderDropTarget;
+        _takeoffFolderDropTarget = null;
+        _takeoffFolderDropAllowed = false;
+        _takeoffFolderDropStatus = "";
+        RefreshTakeoffDropCueRows(oldTarget);
     }
 
     private void DropTakeoffPosition(TakeoffsClipboard payload, TreeViewItem targetItem, bool after)
@@ -288,6 +527,7 @@ public partial class MainWindow
             }
             else
             {
+                var entriesToMove = new List<TakeoffsClipboardEntry>();
                 foreach (var entry in payload.Entries)
                 {
                     if (string.Equals(Path.GetDirectoryName(entry.SourcePath) ?? "", targetParent, StringComparison.OrdinalIgnoreCase))
@@ -299,9 +539,13 @@ public partial class MainWindow
                     if (!CanDropTakeoffsInto(new TakeoffsClipboard([entry], TakeoffsClipboardMode.Cut), targetParent, TakeoffsClipboardMode.Cut))
                         continue;
 
-                    string changedPath = OurPlaneCoreJobStore.MoveNode(entry.SourcePath, targetParent);
-                    changed.Add(changedPath);
-                    rebasedLegendPaths.Add((entry.SourcePath, changedPath));
+                    entriesToMove.Add(entry);
+                }
+
+                foreach (var moved in OurPlaneCoreJobStore.MoveNodes(entriesToMove.Select(entry => entry.SourcePath), targetParent))
+                {
+                    changed.Add(moved.MovedPath);
+                    rebasedLegendPaths.Add((moved.SourcePath, moved.MovedPath));
                 }
 
                 if (changed.Count == 0 ||
@@ -311,13 +555,19 @@ public partial class MainWindow
                 }
 
                 _takeoffsClipboard = null;
-                foreach (var (oldPath, newPath) in rebasedLegendPaths)
-                    RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
+                RebasePageLegendTakeoffOrderReferences(rebasedLegendPaths);
             }
 
-            LoadTakeoffsForJob();
-            SetTakeoffMultiSelection(changed);
-            SelectFirstTakeoffPath(changed);
+            bool fastRefreshed = rebasedLegendPaths.Count > 0
+                ? TryApplyTakeoffStructureMoveFast(rebasedLegendPaths, targetParent, changed)
+                : TryRefreshTakeoffTreeParentOrderFast(targetParent, changed);
+            if (!fastRefreshed)
+            {
+                LoadTakeoffsForJob();
+                SetTakeoffMultiSelection(changed);
+                SelectFirstTakeoffPath(changed);
+            }
+
             TxtStatus.Text = changed.Count == 1
                 ? $"Moved takeoff node {(after ? "after" : "before")} {OurPlaneCoreJobStore.DisplayName(targetPath)}."
                 : $"Moved {changed.Count} takeoff nodes {(after ? "after" : "before")} {OurPlaneCoreJobStore.DisplayName(targetPath)}.";
@@ -394,10 +644,11 @@ public partial class MainWindow
             return;
         }
 
+        TreeViewItem? oldTarget = _takeoffSectionDropTarget;
         _takeoffSectionDropTarget = targetItem;
         _takeoffSectionDropAllowed = canDrop;
         _takeoffSectionDropStatus = status;
-        ApplyTakeoffPageHighlights();
+        RefreshTakeoffDropCueRows(oldTarget, targetItem);
         if (!string.IsNullOrWhiteSpace(status))
             TxtStatus.Text = status;
     }
@@ -407,10 +658,11 @@ public partial class MainWindow
         if (_takeoffSectionDropTarget == null && string.IsNullOrEmpty(_takeoffSectionDropStatus))
             return;
 
+        TreeViewItem? oldTarget = _takeoffSectionDropTarget;
         _takeoffSectionDropTarget = null;
         _takeoffSectionDropAllowed = false;
         _takeoffSectionDropStatus = "";
-        ApplyTakeoffPageHighlights();
+        RefreshTakeoffDropCueRows(oldTarget);
     }
 
     private void DropTakeoffSections(TakeoffSectionDrag payload, TreeViewItem targetItem, bool copy)

@@ -27,6 +27,13 @@ public sealed class TakeoffFolderPropertiesDialog : Window
         ("Cyan",   "#00BCD4"),
         ("Yellow", "#FFC107"),
         ("Pink",   "#E91E63"),
+        ("Gray",   "#808080"),
+        ("Teal",   "#009688"),
+        ("Indigo", "#3F51B5"),
+        ("Lime",   "#8BC34A"),
+        ("Brown",  "#795548"),
+        ("Navy",   "#0D47A1"),
+        ("Black",  "#212121"),
     ];
 
     private sealed record TypeOption(string Label, string Value);

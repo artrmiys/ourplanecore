@@ -14,13 +14,14 @@ internal static class StorageTests
             AssertEqual("Layout Job", loaded.Name, "loaded job name");
             AssertTrue(File.Exists(Path.Combine(created.RootPath, "Data.xml")), "root Data.xml should exist");
             AssertTrue(Directory.Exists(Path.Combine(created.RootPath, "sources")), "sources folder should exist");
-            AssertTrue(Directory.Exists(Path.Combine(created.PagesRoot, "00. imported", "Arch")), "Arch import folder should exist");
-            AssertTrue(Directory.Exists(Path.Combine(created.PagesRoot, "00. imported", "Struct")), "Struct import folder should exist");
+            AssertFalse(Directory.Exists(Path.Combine(created.PagesRoot, "00. imported")), "import folder should not be created on job load");
+            AssertFalse(Directory.Exists(Path.Combine(created.PagesRoot, "imported")), "plain imported folder should not be created");
             AssertTrue(Directory.Exists(Path.Combine(created.PagesRoot, "--------others")), "others folder should exist");
             AssertTrue(Directory.Exists(created.TakeoffsRoot), "takeoffs root should exist");
 
-            string expectedImport = Path.Combine(created.PagesRoot, "00. imported", "Arch");
+            string expectedImport = Path.Combine(created.PagesRoot, "00. imported");
             AssertEqual(FullPath(expectedImport), FullPath(OurPlaneCoreJobStore.DefaultImportFolder(loaded)), "default import folder");
+            AssertTrue(Directory.Exists(expectedImport), "default import folder is created on demand");
         });
     }
 
@@ -75,6 +76,49 @@ internal static class StorageTests
         });
     }
 
+    public static void PageImportKeepsMultiplePdfSourcesInOneFolder()
+    {
+        WithTempJob("Multi PDF Import", job =>
+        {
+            string archPdf = CreateSourcePdf(job, "arch.pdf");
+            string structPdf = CreateSourcePdf(job, "struct.pdf");
+
+            IReadOnlyList<PageInfo> archPages = OurPlaneCoreJobStore.ImportPdf(
+                job,
+                archPdf,
+                ["A101", "A102"],
+                job.PagesRoot);
+            IReadOnlyList<PageInfo> structPages = OurPlaneCoreJobStore.ImportPdf(
+                job,
+                structPdf,
+                ["S101"],
+                job.PagesRoot);
+
+            AssertEqual("2", archPages.Count.ToString(), "arch page count");
+            AssertEqual("1", structPages.Count.ToString(), "struct page count");
+            AssertEqual(
+                "3",
+                Directory.EnumerateDirectories(job.PagesRoot)
+                    .Count(folder => OurPlaneCoreJobStore.TryReadPage(folder) != null)
+                    .ToString(),
+                "total imported page folder count");
+
+            SourceInfo archFirstSource = OurPlaneCoreJobStore.ReadSource(archPages[0].FolderPath)
+                ?? throw new InvalidOperationException("arch first source missing");
+            SourceInfo archSecondSource = OurPlaneCoreJobStore.ReadSource(archPages[1].FolderPath)
+                ?? throw new InvalidOperationException("arch second source missing");
+            SourceInfo structSource = OurPlaneCoreJobStore.ReadSource(structPages[0].FolderPath)
+                ?? throw new InvalidOperationException("struct source missing");
+
+            AssertTrue(archFirstSource.Pdf.EndsWith("arch.pdf", StringComparison.OrdinalIgnoreCase), "arch first source pdf");
+            AssertTrue(archSecondSource.Pdf.EndsWith("arch.pdf", StringComparison.OrdinalIgnoreCase), "arch second source pdf");
+            AssertTrue(structSource.Pdf.EndsWith("struct.pdf", StringComparison.OrdinalIgnoreCase), "struct source pdf");
+            AssertEqual("0", archFirstSource.Page.ToString(), "arch first source page");
+            AssertEqual("1", archSecondSource.Page.ToString(), "arch second source page");
+            AssertEqual("0", structSource.Page.ToString(), "struct source page");
+        });
+    }
+
     public static void PageCopyAndMovePreserveSourceOverlayAndLayers()
     {
         WithTempJob("Page Copy Move", job =>
@@ -91,7 +135,18 @@ internal static class StorageTests
 
             string copyParent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Copies");
             string copiedPath = OurPlaneCoreJobStore.CopyNode(basePage.FolderPath, copyParent);
+            string secondCopiedPath = OurPlaneCoreJobStore.CopyNode(basePage.FolderPath, copyParent);
+            PageInfo copiedPage = OurPlaneCoreJobStore.TryReadPage(copiedPath)
+                ?? throw new InvalidOperationException("copied page missing");
+            PageInfo secondCopiedPage = OurPlaneCoreJobStore.TryReadPage(secondCopiedPath)
+                ?? throw new InvalidOperationException("second copied page missing");
+            AssertFalse(string.Equals(copiedPath, secondCopiedPath, StringComparison.OrdinalIgnoreCase), "second copied page should use another hidden folder");
+            AssertEqual("S101", OurPlaneCoreJobStore.DisplayName(copiedPath), "copied page display name");
+            AssertEqual("S101", copiedPage.Name, "copied page info name");
+            AssertEqual("S101", OurPlaneCoreJobStore.DisplayName(secondCopiedPath), "second copied page display name");
+            AssertEqual("S101", secondCopiedPage.Name, "second copied page info name");
             AssertPageSourceState(copiedPath, overlayPage.FolderPath);
+            AssertPageSourceState(secondCopiedPath, overlayPage.FolderPath);
 
             string moveParent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Moved");
             string movedPath = OurPlaneCoreJobStore.MoveNode(copiedPath, moveParent);
@@ -126,9 +181,17 @@ internal static class StorageTests
             var annotation = new PageAnnotation
             {
                 Kind = "rect",
+                Text = "Field note",
                 Color = "",
                 ScaleMetersPerPt = 0.25,
-                Points = [new SKPoint(0, 0), new SKPoint(10, 10)],
+                Hidden = true,
+                Points =
+                [
+                    new SKPoint(0, 0),
+                    new SKPoint(10, 0),
+                    new SKPoint(10, 10),
+                    new SKPoint(0, 10),
+                ],
             };
 
             OurPlaneCoreJobStore.SavePageAnnotations(page.FolderPath, [annotation]);
@@ -136,10 +199,46 @@ internal static class StorageTests
 
             AssertEqual("1", loaded.Count.ToString(), "loaded annotation count");
             AssertEqual("rectangle", loaded[0].Kind, "annotation kind normalized");
+            AssertEqual("Field note", loaded[0].Text, "annotation text preserved");
             AssertEqual("#1565C0", loaded[0].Color, "annotation default color");
             AssertEqual(page.FolderPath, loaded[0].PageFolder, "annotation page default");
             AssertClose(0.25, loaded[0].ScaleMetersPerPt, "annotation scale");
+            AssertTrue(loaded[0].Hidden, "annotation hidden flag preserved");
+            AssertEqual("4", loaded[0].Points.Count.ToString(), "annotation corner count preserved");
+            AssertClose(10, loaded[0].Points[1].X, "annotation second corner x");
             AssertEqual("dimension", OurPlaneCoreJobStore.NormalizePageAnnotationKind("ruler"), "ruler alias");
+            AssertEqual("note", OurPlaneCoreJobStore.NormalizePageAnnotationKind("text"), "text note alias");
+        });
+    }
+
+    public static void PageAnnotationsFollowMovedPageFolder()
+    {
+        WithTempJob("Page Annotation Move", job =>
+        {
+            PageInfo page = CreatePageItem(job, "A202");
+            var annotation = new PageAnnotation
+            {
+                Kind = "note",
+                Text = "Move me",
+                PageFolder = page.FolderPath,
+                Points =
+                [
+                    new SKPoint(1, 1),
+                    new SKPoint(20, 1),
+                    new SKPoint(20, 12),
+                    new SKPoint(1, 12),
+                ],
+            };
+
+            OurPlaneCoreJobStore.SavePageAnnotations(page.FolderPath, [annotation]);
+            string targetParent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Moved");
+            string movedPath = OurPlaneCoreJobStore.MoveNode(page.FolderPath, targetParent);
+
+            List<PageAnnotation> loaded = OurPlaneCoreJobStore.LoadPageAnnotations(movedPath);
+
+            AssertEqual("1", loaded.Count.ToString(), "moved annotation count");
+            AssertEqual("Move me", loaded[0].Text, "moved annotation text");
+            AssertEqual(FullPath(movedPath), FullPath(loaded[0].PageFolder), "moved annotation page folder");
         });
     }
 
@@ -159,6 +258,56 @@ internal static class StorageTests
             AssertFalse(File.Exists(path), "corrupt annotations should be moved away");
             AssertEqual("1", Directory.GetFiles(page.FolderPath, "annotations.json.corrupt-*").Length.ToString(), "corrupt annotations count");
             AssertTrue(quarantined.Any(entry => entry.Contains("annotations.json", StringComparison.OrdinalIgnoreCase)), "quarantine report");
+        });
+    }
+
+    public static void PageBookmarksSaveLoadUseJobRelativePageFolders()
+    {
+        WithTempJob("Page Bookmarks", job =>
+        {
+            PageInfo page = CreatePageItem(job, "A300");
+            var bookmark = new PageBookmark
+            {
+                Id = "bookmark-1",
+                Name = "Lobby detail",
+                PageFolder = page.FolderPath,
+                PageName = page.Name,
+                Zoom = 1.75f,
+                PanX = 12.5f,
+                PanY = -3.25f,
+                CreatedAtUtc = "2026-01-01T00:00:00.0000000Z",
+                UpdatedAtUtc = "2026-01-01T00:00:00.0000000Z",
+            };
+
+            OurPlaneCoreJobStore.SavePageBookmarks(job, [bookmark]);
+            string json = File.ReadAllText(OurPlaneCoreJobStore.PageBookmarksJsonPath(job));
+            List<PageBookmark> loaded = OurPlaneCoreJobStore.LoadPageBookmarks(job);
+
+            AssertTrue(json.Contains("Pages/", StringComparison.Ordinal), "bookmark page path should be job-relative");
+            AssertEqual("1", loaded.Count.ToString(), "loaded bookmark count");
+            AssertEqual("Lobby detail", loaded[0].Name, "loaded bookmark name");
+            AssertEqual(FullPath(page.FolderPath), FullPath(loaded[0].PageFolder), "loaded bookmark page path");
+            AssertClose(1.75, loaded[0].Zoom, "loaded bookmark zoom");
+            AssertClose(12.5, loaded[0].PanX, "loaded bookmark pan x");
+            AssertClose(-3.25, loaded[0].PanY, "loaded bookmark pan y");
+        });
+    }
+
+    public static void PageCorruptBookmarksJsonIsQuarantined()
+    {
+        WithTempJob("Corrupt Bookmarks", job =>
+        {
+            string path = OurPlaneCoreJobStore.PageBookmarksJsonPath(job);
+            File.WriteAllText(path, "{ bad json");
+            _ = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+
+            List<PageBookmark> bookmarks = OurPlaneCoreJobStore.LoadPageBookmarks(job);
+            IReadOnlyList<string> quarantined = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+
+            AssertEqual("0", bookmarks.Count.ToString(), "corrupt bookmarks should load empty");
+            AssertFalse(File.Exists(path), "corrupt bookmarks should be moved away");
+            AssertEqual("1", Directory.GetFiles(job.RootPath, "bookmarks.json.corrupt-*").Length.ToString(), "corrupt bookmarks count");
+            AssertTrue(quarantined.Any(entry => entry.Contains("bookmarks.json", StringComparison.OrdinalIgnoreCase)), "quarantine report");
         });
     }
 
@@ -190,6 +339,31 @@ internal static class StorageTests
             AssertEqual("1", ReadDataProperty(item.FolderPath, "MeasuredPageCount"), "measured page count property");
             AssertEqual("2", loaded.Measurements.Count.ToString(), "loaded measurement count");
             AssertClose(0.5, loaded.Measurements[0].ScaleMetersPerPt, "fallback page scale");
+        });
+    }
+
+    public static void CountDisplaySymbolPersistsOnTakeoffAndMeasurements()
+    {
+        WithTempJob("Count Symbol", job =>
+        {
+            PageInfo page = CreatePageItem(job, "A101");
+            TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Holdowns", "#00AA44", "point");
+            item.CountSymbol = CountDisplaySymbol.Cross;
+            item.Measurements.Add(new Measurement
+            {
+                MType = "point",
+                PageFolder = page.FolderPath,
+                CountSymbol = CountDisplaySymbol.Cross,
+                Points = [new SKPoint(4, 6)],
+            });
+
+            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+                ?? throw new InvalidOperationException("takeoff item missing");
+
+            AssertEqual(CountDisplaySymbol.Cross, loaded.CountSymbol, "takeoff count symbol");
+            AssertEqual("1", loaded.Measurements.Count.ToString(), "loaded count measurement count");
+            AssertEqual(CountDisplaySymbol.Cross, loaded.Measurements[0].CountSymbol, "measurement count symbol");
         });
     }
 
@@ -236,12 +410,20 @@ internal static class StorageTests
         {
             PageInfo page = CreatePageItem(job, "D100");
             string duplicatedPath = OurPlaneCoreJobStore.DuplicatePage(page.FolderPath);
+            string secondDuplicatedPath = OurPlaneCoreJobStore.DuplicatePage(page.FolderPath);
             PageInfo duplicate = OurPlaneCoreJobStore.TryReadPage(duplicatedPath)
                 ?? throw new InvalidOperationException("duplicate page missing");
+            PageInfo secondDuplicate = OurPlaneCoreJobStore.TryReadPage(secondDuplicatedPath)
+                ?? throw new InvalidOperationException("second duplicate page missing");
 
             AssertFalse(string.Equals(page.FolderPath, duplicatedPath, StringComparison.OrdinalIgnoreCase), "duplicate should use new folder");
-            AssertEqual("D100 - Copy", OurPlaneCoreJobStore.DisplayName(duplicatedPath), "duplicate display name");
+            AssertFalse(string.Equals(duplicatedPath, secondDuplicatedPath, StringComparison.OrdinalIgnoreCase), "second duplicate should use another hidden folder");
+            AssertEqual("D100", OurPlaneCoreJobStore.DisplayName(duplicatedPath), "duplicate display name");
+            AssertEqual("D100", duplicate.Name, "duplicate page info name");
+            AssertEqual("D100", OurPlaneCoreJobStore.DisplayName(secondDuplicatedPath), "second duplicate display name");
+            AssertEqual("D100", secondDuplicate.Name, "second duplicate page info name");
             AssertTrue(File.Exists(duplicate.PdfPath), "duplicate pdf should resolve");
+            AssertTrue(File.Exists(secondDuplicate.PdfPath), "second duplicate pdf should resolve");
 
             string folder = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Folder Only");
             bool rejected = false;

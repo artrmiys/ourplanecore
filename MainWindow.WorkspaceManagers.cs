@@ -39,11 +39,17 @@ public partial class MainWindow
             case "TakeoffManager":
                 RefreshTakeoffManager();
                 break;
+            case "ReportBuilder":
+                RefreshReportBuilder();
+                break;
+            case "MaterialsManager":
+                RefreshMaterialsManager();
+                break;
             case "AiManager":
                 RefreshAiManager();
                 break;
             case "3DManager":
-                Refresh3dManagerSummary();
+                RefreshThreeDViewer();
                 break;
         }
     }
@@ -260,19 +266,24 @@ public partial class MainWindow
         TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
 
         OurPlaneCoreJob job = _currentJob;
-        List<PdfMetadataPageResult> results = await Task.Run(() =>
+        List<PdfMetadataPageResult> results;
+        using (ShowBusyOverlay($"Sheet Manager analyzing {pages.Count} sheet(s)..."))
         {
-            var analyzed = new List<PdfMetadataPageResult>();
-            foreach (PageInfo page in pages)
+            await WaitForBusyOverlayRenderAsync();
+            results = await Task.Run(() =>
             {
-                if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
-                    analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                else
-                    analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-            }
+                var analyzed = new List<PdfMetadataPageResult>();
+                foreach (PageInfo page in pages)
+                {
+                    if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
+                        analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
+                    else
+                        analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
+                }
 
-            return analyzed;
-        });
+                return analyzed;
+            });
+        }
 
         _sheetManagerMetadataResults = results;
         var rows = BuildPdfMetadataPreviewRows(results, defaultRename, defaultScale).ToList();
@@ -373,6 +384,39 @@ public partial class MainWindow
         WorkspaceTabs.SelectedIndex = 0;
     }
 
+    private void BtnSheetManagerOpenTabs_Click(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<PageInfo> pages = SelectedSheetManagerPagesForOpen();
+        OpenPagesInNewTabs(pages, "Sheet Manager");
+        if (pages.Count > 0)
+            WorkspaceTabs.SelectedIndex = 0;
+    }
+
+    private void BtnSheetManagerDetach_Click(object sender, RoutedEventArgs e)
+    {
+        OpenPagesInDetachedWindows(SelectedSheetManagerPagesForOpen(), false, "Sheet Manager");
+    }
+
+    private void BtnSheetManagerTileSecondMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        OpenPagesInDetachedWindows(SelectedSheetManagerPagesForOpen(), true, "Sheet Manager");
+    }
+
+    private IReadOnlyList<PageInfo> SelectedSheetManagerPagesForOpen()
+    {
+        IReadOnlyList<PageInfo> selected = SelectedSheetManagerPages();
+        if (selected.Count > 0)
+            return selected;
+
+        if (SheetManagerGrid.SelectedItem is PdfMetadataPreviewRow row &&
+            OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } page)
+        {
+            return [page];
+        }
+
+        return [];
+    }
+
     private void BtnSheetManagerOpenJson_Click(object sender, RoutedEventArgs e)
     {
         if (SheetManagerGrid.SelectedItem is PdfMetadataPreviewRow row)
@@ -410,8 +454,8 @@ public partial class MainWindow
         if (SelectedTakeoffManagerRow() is not { Item: { } item })
             return;
 
-        SetActiveTakeoffTarget(FindTakeoffTreeItem(item), item);
-        WorkspaceTabs.SelectedIndex = 0;
+        if (SetActiveTakeoffTarget(FindTakeoffTreeItem(item), item))
+            WorkspaceTabs.SelectedIndex = 0;
     }
 
     private void BtnTakeoffManagerProperties_Click(object sender, RoutedEventArgs e)
@@ -467,34 +511,14 @@ public partial class MainWindow
 
     private void Btn3dManagerBuildFromTakeoffs_Click(object sender, RoutedEventArgs e)
     {
-        BuildMassingDraftFromWallTakeoffs();
-        Refresh3dManagerSummary();
+        StopLegacy3DMassingWorkflow("3D From Takeoffs");
     }
 
-    private void Btn3dManagerOpenWindow_Click(object sender, RoutedEventArgs e) => OpenMassing3DWindow();
-    private void Btn3dManagerOpenJson_Click(object sender, RoutedEventArgs e) => OpenMassingDraftJson();
+    private void Btn3dManagerOpenWindow_Click(object sender, RoutedEventArgs e) => StopLegacy3DMassingWorkflow("Open 3D Window");
+    private void Btn3dManagerOpenJson_Click(object sender, RoutedEventArgs e) => StopLegacy3DMassingWorkflow("Open 3D JSON");
 
     private void Refresh3dManagerSummary()
     {
-        if (_currentJob == null)
-        {
-            Txt3dManagerSummary.Text = "Open a job to use the 3D manager.";
-            return;
-        }
-
-        try
-        {
-            string path = SmartMassingDraftService.ModelPath(_currentJob);
-            SmartMassingDraft? draft = _currentMassingDraft;
-            if (draft == null && File.Exists(path))
-                draft = SmartMassingDraftService.LoadDraft(_currentJob);
-            Txt3dManagerSummary.Text = draft == null
-                ? $"No 3D draft found at {Path.GetRelativePath(_currentJob.RootPath, path)}."
-                : BuildMassingDraftSummary(draft, path);
-        }
-        catch (Exception ex)
-        {
-            Txt3dManagerSummary.Text = ex.Message;
-        }
+        RefreshThreeDViewer();
     }
 }

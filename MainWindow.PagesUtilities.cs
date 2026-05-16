@@ -21,10 +21,8 @@ public partial class MainWindow
 
         _currentPage = null;
         _currentPdfPath = "";
-        _takeoffItems.Clear();
-        _activeItem = null;
-        TakeoffsTree.Items.Clear();
         _viewport.ClearPage();
+        ApplyRulerVisibilityToViewport();
     }
 
     private static void DeleteDirectoryToRecycle(string path)

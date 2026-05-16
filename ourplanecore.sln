@@ -1,10 +1,12 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ourplanecore", "ourplanecore.csproj", "{148ACBC1-F40C-9D16-330C-F257BF90FCED}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OurPlaneCore.Tests", "Tests\OurPlaneCore.Tests.csproj", "{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlanSwiftImportTool", "Tools\PlanSwiftImportTool\PlanSwiftImportTool.csproj", "{197213BE-2A1B-47E0-B147-506DB4784F35}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -20,6 +22,10 @@ Global
 		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C91B97E0-7A5F-4C99-9DA8-2D2BB2C5E5E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{197213BE-2A1B-47E0-B147-506DB4784F35}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{197213BE-2A1B-47E0-B147-506DB4784F35}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{197213BE-2A1B-47E0-B147-506DB4784F35}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{197213BE-2A1B-47E0-B147-506DB4784F35}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -28,4 +34,3 @@ Global
 		SolutionGuid = {CD33D6B3-4146-43A5-9843-4C440CA6F4B2}
 	EndGlobalSection
 EndGlobal
-

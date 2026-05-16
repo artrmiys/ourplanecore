@@ -164,7 +164,7 @@ public sealed partial class PdfViewport
 
         if (request.QueueLayerAfter)
         {
-            QueueLayerRender(
+            QueueInitialLayerDiscoveryOrRender(
                 request.ResetLayerStates,
                 CurrentRenderScale(),
                 request.StatusAfter,
@@ -288,6 +288,133 @@ public sealed partial class PdfViewport
             fireLayersAfter);
 
         _ = StartNextLayerRenderAsync();
+    }
+
+    private void QueueInitialLayerDiscoveryOrRender(
+        bool resetLayerStates,
+        float renderScale,
+        string? statusAfter,
+        bool fireLayersAfter)
+    {
+        if (_cachedLayers != null)
+        {
+            if (_cachedLayers.Count > 0)
+            {
+                QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter);
+                return;
+            }
+
+            CompleteLayerlessRender(statusAfter, fireLayersAfter);
+            return;
+        }
+
+        _cachedLayers = [];
+        CompleteLayerlessRender(statusAfter, fireLayersAfter);
+    }
+
+    public void DiscoverPdfLayersOnDemand()
+    {
+        if (string.IsNullOrWhiteSpace(_pdfPath))
+        {
+            PostStatus("PDF Layers: open a page first.");
+            return;
+        }
+
+        _cachedLayers = null;
+        DiscoverLayersThenRender(
+            resetLayerStates: true,
+            renderScale: CurrentRenderScale(),
+            statusAfter: "PDF Layers loaded.",
+            fireLayersAfter: true);
+    }
+
+    private void DiscoverLayersThenRender(
+        bool resetLayerStates,
+        float renderScale,
+        string? statusAfter,
+        bool fireLayersAfter)
+    {
+        int version = ++_layerRenderVersion;
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        string pageFolder = _pageFolder;
+        PostStatus("PDF Layers: scanning page layers...");
+        _ = DiscoverLayersThenRenderAsync(
+            version,
+            pdfPath,
+            pdfIndex,
+            pageFolder,
+            resetLayerStates,
+            Math.Clamp(renderScale, 0.20f, 4.0f),
+            statusAfter,
+            fireLayersAfter);
+    }
+
+    private async Task DiscoverLayersThenRenderAsync(
+        int version,
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        bool resetLayerStates,
+        float renderScale,
+        string? statusAfter,
+        bool fireLayersAfter)
+    {
+        if (string.IsNullOrWhiteSpace(pdfPath))
+            return;
+
+        try
+        {
+            var layerResult = await PdfLayerRenderService.TryReadVisibleLayersAsync(pdfPath, pdfIndex);
+            if (version != _layerRenderVersion ||
+                !string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) ||
+                pdfIndex != _pdfIndex ||
+                !string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!layerResult.Ok)
+            {
+                _cachedLayers = [];
+                CompleteLayerlessRender(statusAfter, fireLayersAfter);
+                if (!string.IsNullOrWhiteSpace(layerResult.Error))
+                    PostStatus($"PDF layer discovery unavailable: {layerResult.Error}");
+                return;
+            }
+
+            _cachedLayers = layerResult.Layers;
+            PdfLayersDiscovered?.Invoke(_cachedLayers);
+            if (_cachedLayers.Count == 0)
+            {
+                CompleteLayerlessRender(statusAfter, fireLayersAfter);
+                return;
+            }
+
+            QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"PDF layer discovery failed for {pdfPath} page {pdfIndex + 1}");
+            if (version != _layerRenderVersion)
+                return;
+
+            _cachedLayers = [];
+            CompleteLayerlessRender(statusAfter, fireLayersAfter);
+            PostStatus($"PDF layer discovery failed: {ex.Message}");
+        }
+    }
+
+    private void CompleteLayerlessRender(string? statusAfter, bool fireLayersAfter)
+    {
+        _layers = [];
+        _usingLayerRenderer = false;
+        _showingPreviousPageDuringSwitch = false;
+        if (fireLayersAfter)
+            FireLayersChanged();
+        if (!string.IsNullOrWhiteSpace(statusAfter))
+            PostStatus(statusAfter);
+        RequestRepaint();
     }
 
     private async Task StartNextLayerRenderAsync()

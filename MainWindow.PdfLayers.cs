@@ -14,6 +14,7 @@ public partial class MainWindow
     private void OnLayersChanged(IReadOnlyList<PdfLayer> layers)
     {
         LayersPanel.Children.Clear();
+        BtnLayersLoad.IsEnabled = _currentPage != null;
         BtnLayersOn.IsEnabled = layers.Count > 0;
         BtnLayersOff.IsEnabled = layers.Count > 0;
         BtnLayersClearHi.IsEnabled = layers.Count > 0;
@@ -302,6 +303,11 @@ public partial class MainWindow
     private void BtnLayersOn_Click(object sender, RoutedEventArgs e)
     {
         _viewport.SetAllLayers(true);
+    }
+
+    private void BtnLayersLoad_Click(object sender, RoutedEventArgs e)
+    {
+        _viewport.DiscoverPdfLayersOnDemand();
     }
 
     private void BtnLayersOff_Click(object sender, RoutedEventArgs e)

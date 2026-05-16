@@ -14,7 +14,7 @@ public partial class MainWindow
 
         var activeTarget = new MenuItem { Header = IsActiveTakeoffItem(item) ? "Active Target" : "Set Active Target" };
         activeTarget.Click += (_, _) => SetActiveTakeoffTarget(tvi, item);
-        activeTarget.IsEnabled = singleSelection;
+        activeTarget.IsEnabled = singleSelection && CanChangeActiveTakeoffTarget(item);
         menu.Items.Add(activeTarget);
         menu.Items.Add(new Separator());
 
@@ -22,20 +22,31 @@ public partial class MainWindow
         properties.Click += (_, _) => EditTakeoffItemProperties(tvi, item);
         properties.IsEnabled = singleSelection;
         menu.Items.Add(properties);
+        int roofBaseAreaCount = RoofBaseAreaSelectionCount(tvi);
+        menu.Items.Add(MakeMenuItem(
+            roofBaseAreaCount > 1 ? $"Roof Base from Areas ({roofBaseAreaCount})" : "Roof Base from Area",
+            CanBuildRoofBaseFromTakeoffSelection(tvi),
+            () => BuildRoofFromRfAreas(tvi, switchTo3DTab: true)));
         menu.Items.Add(MakeMenuItem(
             item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
             singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
             () => EditTakeoffItemProperties(tvi, item)));
         menu.Items.Add(MakeMenuItem(
-            "Generate Joists / Draw Direction",
+            "Set / Reset Joist Direction",
             singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
             () => SetJoistDirectionFromSelectedLine(tvi, item)));
+        menu.Items.Add(MakeMenuItem(
+            "Set Direction for All Areas",
+            singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
+            () => SetJoistDirectionForAllAreasFromSelectedLine(tvi, item)));
 
         int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
         menu.Items.Add(MakeMenuItem(
             selectedItemsCount > 1 ? $"Bulk Properties ({selectedItemsCount} Items)..." : "Bulk Properties...",
             selectedItemsCount > 1,
             () => EditSelectedTakeoffProperties(tvi)));
+        menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
+        menu.Items.Add(BuildTakeoff3DMenu(tvi));
 
         var rename = new MenuItem { Header = "Rename..." };
         rename.Click += (_, _) => RenameItem(tvi, item);
@@ -131,6 +142,8 @@ public partial class MainWindow
             nestedTakeoffCount > 1 ? $"Bulk Item Properties ({nestedTakeoffCount})..." : "Bulk Item Properties...",
             nestedTakeoffCount > 0,
             () => EditSelectedTakeoffProperties(tvi)));
+        menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
+        menu.Items.Add(BuildTakeoff3DMenu(tvi));
 
         rename.Click += (_, _) => RenameTakeoffFolder(tvi, folder);
         rename.IsEnabled = canEditFolder;
@@ -241,6 +254,35 @@ public partial class MainWindow
 
         return menu;
     }
+
+    private MenuItem BuildTakeoff3DMenu(TreeViewItem anchor)
+    {
+        int selectedItems = TakeoffItemsForSelection(anchor).Count;
+        var menu = new MenuItem
+        {
+            Header = "3D",
+            IsEnabled = selectedItems > 0,
+        };
+
+        var wall = new MenuItem
+        {
+            Header = selectedItems > 1 ? $"Wall from Selected ({selectedItems})" : "Wall",
+            IsEnabled = CanBuild3DWallsFromTakeoffSelection(anchor),
+        };
+        wall.Click += (_, _) => Build3DWallsFromTakeoffSelection(anchor, switchTo3DTab: true);
+        menu.Items.Add(wall);
+        var roof = new MenuItem
+        {
+            Header = selectedItems > 1 ? $"Roof Base from Selected Areas ({selectedItems})" : "Roof Base from Area",
+            IsEnabled = CanBuildRoofBaseFromTakeoffSelection(anchor),
+        };
+        roof.Click += (_, _) => BuildRoofFromRfAreas(anchor, switchTo3DTab: true);
+        menu.Items.Add(roof);
+        return menu;
+    }
+
+    private int RoofBaseAreaSelectionCount(TreeViewItem anchor) =>
+        TakeoffItemsForSelection(anchor).Count(item => ThreeDRoofFootprintBuildService.IsAreaTakeoff(item));
 
     private void RefreshTakeoffNodeContextMenu(TreeViewItem item)
     {

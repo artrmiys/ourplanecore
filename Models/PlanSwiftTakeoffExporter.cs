@@ -21,6 +21,12 @@ public static class PlanSwiftTakeoffExporter
     private const int HeaderLineLength = 60;
     private const int ExcelStartRow = 10;
     private const int ExcelStartColumn = 10; // J
+    private static readonly string[] HiddenImportNotePrefixes =
+    [
+        "Imported from PlanSwift:",
+        "Imported from PlanSwift Segment Section:",
+        "Imported generated PlanSwift Segment geometry from ",
+    ];
 
     public static IReadOnlyList<PlanSwiftExportRow> BuildRows(
         OurPlaneCoreJob job,
@@ -169,6 +175,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static void EmitItem(List<PlanSwiftExportRow> rows, TakeoffItem item, UnitMode unitMode)
     {
+        var noteLines = ExportNotes(item).ToList();
         if (item.IsJoistArea)
         {
             var joistLabelLines = JoistLabelLines(item, 0, unitMode).ToList();
@@ -180,10 +187,10 @@ public static class PlanSwiftTakeoffExporter
                         ? new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, "")
                         : new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
 
-                foreach (string line in ExportNotes(item))
+                foreach (string line in noteLines)
                     rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
 
-                if (joistLabelLines.Count > 1 || ExportNotes(item).Any())
+                if (joistLabelLines.Count > 1 || noteLines.Count > 0)
                     rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
                 return;
             }
@@ -192,25 +199,34 @@ public static class PlanSwiftTakeoffExporter
         var (value, unit) = QuantityValueAndUnit(item, unitMode);
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Item, item.Name, value, unit));
 
-        foreach (string line in ExportNotes(item))
+        foreach (string line in noteLines)
             rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Note, line));
 
-        if (ExportNotes(item).Any())
+        if (noteLines.Count > 0)
             rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
     }
+
+    public static string CleanExportNotes(string notes) =>
+        string.Join(Environment.NewLine, SplitExportNoteLines(notes));
 
     private static IEnumerable<string> ExportNotes(TakeoffItem item)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string line in SplitNoteLines(item.Notes))
+        foreach (string line in SplitExportNoteLines(item.Notes))
             if (seen.Add(line))
                 yield return line;
 
         foreach (Measurement measurement in item.Measurements)
-            foreach (string line in SplitNoteLines(measurement.Notes))
+            foreach (string line in SplitExportNoteLines(measurement.Notes))
                 if (seen.Add(line))
                     yield return line;
     }
+
+    private static IEnumerable<string> SplitExportNoteLines(string notes) =>
+        SplitNoteLines(notes).Where(line => !IsHiddenImportNoteLine(line));
+
+    private static bool IsHiddenImportNoteLine(string line) =>
+        HiddenImportNotePrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<string> SplitNoteLines(string notes) =>
         (notes ?? "")

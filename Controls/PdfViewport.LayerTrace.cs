@@ -371,14 +371,18 @@ public sealed partial class PdfViewport
 
     private IReadOnlyList<PdfLayerInfo>? LayerRenderCachedLayers()
     {
-        List<PdfLayerInfo>? layers = _cachedLayers?.ToList()
-            ?? _layers
+        List<PdfLayerInfo>? layers = _cachedLayers?.ToList();
+        if (layers == null && _layers.Count > 0)
+        {
+            layers = _layers
                 .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
                 .ToList();
+        }
 
         if (_pdfLayerTracePreviewLayer.HasValue &&
-            !layers.Any(layer => layer.Number == _pdfLayerTracePreviewLayer.Value))
+            (layers == null || !layers.Any(layer => layer.Number == _pdfLayerTracePreviewLayer.Value)))
         {
+            layers ??= [];
             layers.Add(new PdfLayerInfo
             {
                 Number = _pdfLayerTracePreviewLayer.Value,
@@ -461,11 +465,15 @@ public sealed partial class PdfViewport
                 ScaleMetersPerPt = ScaleMetersPerPt,
             };
             _measurements.Add(measurement);
+            _measurementSet.Add(measurement);
             IndexMeasurementByPage(measurement);
-            MeasurementAdded?.Invoke(measurement);
-            if (_measurements.Contains(measurement))
-                added.Add(measurement);
+            added.Add(measurement);
         }
+
+        NotifyMeasurementsAdded(added);
+        added = added
+            .Where(measurement => _measurementSet.Contains(measurement))
+            .ToList();
 
         if (added.Count == 0)
         {

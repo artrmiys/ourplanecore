@@ -78,6 +78,7 @@ public sealed class JobPickerDialog : Window
 
     public JobPickerAction SelectedAction { get; private set; } = JobPickerAction.None;
     public string SelectedJobPath { get; private set; } = "";
+    public string SelectedJobsRootPath { get; private set; } = "";
 
     public JobPickerDialog(
         IEnumerable<JobPickerItem> items,
@@ -201,7 +202,7 @@ public sealed class JobPickerDialog : Window
         _openButton.Click += (_, _) => AcceptOpen();
         browseJobButton.Click += (_, _) => AcceptAction(JobPickerAction.BrowseJob);
         browseRootButton.Click += (_, _) => AcceptAction(JobPickerAction.BrowseJobsFolder);
-        newJobButton.Click += (_, _) => AcceptAction(JobPickerAction.NewJob);
+        newJobButton.Click += (_, _) => AcceptAction(JobPickerAction.NewJob, ResolveSelectedJobsRootPath());
         sampleJobButton.Click += (_, _) => AcceptAction(JobPickerAction.CreateSample);
 
         Loaded += (_, _) =>
@@ -373,13 +374,41 @@ public sealed class JobPickerDialog : Window
 
         SelectedAction = JobPickerAction.OpenSelected;
         SelectedJobPath = item.Path;
+        SelectedJobsRootPath = item.RootPath;
         DialogResult = true;
     }
 
-    private void AcceptAction(JobPickerAction action)
+    private void AcceptAction(JobPickerAction action, string selectedJobsRootPath = "")
     {
         SelectedAction = action;
+        SelectedJobsRootPath = selectedJobsRootPath;
         DialogResult = true;
+    }
+
+    private string ResolveSelectedJobsRootPath()
+    {
+        if (_rootFilter.SelectedIndex > 0 &&
+            _rootFilter.SelectedItem is string selectedRoot &&
+            IsUsableRoot(selectedRoot))
+        {
+            return NormalizePath(selectedRoot);
+        }
+
+        if (_list.SelectedItem is JobPickerItem item)
+        {
+            if (IsUsableRoot(item.RootPath))
+                return NormalizePath(item.RootPath);
+
+            string? itemParent = Path.GetDirectoryName(item.Path);
+            if (IsUsableRoot(itemParent))
+                return NormalizePath(itemParent!);
+        }
+
+        if (_jobsRootPaths.Count == 1 && IsUsableRoot(_jobsRootPaths[0]))
+            return NormalizePath(_jobsRootPaths[0]);
+
+        string? firstUsableRoot = _jobsRootPaths.FirstOrDefault(IsUsableRoot);
+        return firstUsableRoot == null ? "" : NormalizePath(firstUsableRoot);
     }
 
     private void SetPinned(JobPickerItem item, bool pinned)
@@ -479,6 +508,9 @@ public sealed class JobPickerDialog : Window
 
         return result;
     }
+
+    private static bool IsUsableRoot(string? rootPath) =>
+        !string.IsNullOrWhiteSpace(rootPath) && Directory.Exists(rootPath);
 
     private static string NormalizePath(string path)
     {

@@ -22,6 +22,8 @@ internal sealed class ProjectFile
         public string          JoistType { get; set; } = "";
         public double          JoistSpacingInches { get; set; } = 16;
         public double          JoistDirectionDegrees { get; set; }
+        public bool            JoistDirectionFollowsAreaRotation { get; set; } = true;
+        public bool            JoistAddEndJoist { get; set; } = true;
         public string          JoistPitch { get; set; } = "";
         public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
         public bool            JoistShowLabels { get; set; }
@@ -38,6 +40,8 @@ internal sealed class ProjectFile
         public double       ScaleMetersPerPt { get; set; }
         public double       JoistDirectionDegrees { get; set; }
         public bool         JoistDirectionLocked { get; set; }
+        public bool         JoistDirectionFollowsAreaRotation { get; set; } = true;
+        public bool         JoistAddEndJoist { get; set; } = true;
         public List<PtDto>  Points     { get; set; } = [];
         public List<List<PtDto>> Holes { get; set; } = [];
     }
@@ -69,6 +73,8 @@ internal sealed class ProjectFile
                 JoistType = item.JoistType,
                 JoistSpacingInches = item.JoistSpacingInches,
                 JoistDirectionDegrees = item.JoistDirectionDegrees,
+                JoistDirectionFollowsAreaRotation = item.JoistDirectionFollowsAreaRotation,
+                JoistAddEndJoist = item.JoistAddEndJoist,
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                 JoistShowLabels = item.JoistShowLabels,
@@ -85,6 +91,8 @@ internal sealed class ProjectFile
                     ScaleMetersPerPt = m.ScaleMetersPerPt,
                     JoistDirectionDegrees = m.JoistDirectionDegrees,
                     JoistDirectionLocked = m.JoistDirectionLocked,
+                    JoistDirectionFollowsAreaRotation = m.JoistDirectionFollowsAreaRotation,
+                    JoistAddEndJoist = m.JoistAddEndJoist,
                     Points     = m.Points.Select(p => new PtDto(p.X, p.Y)).ToList(),
                     Holes      = m.Holes
                         .Where(hole => hole.Count >= 3)
@@ -133,6 +141,8 @@ internal sealed class ProjectFile
                 JoistType = dto.JoistType,
                 JoistSpacingInches = dto.JoistSpacingInches > 0 ? dto.JoistSpacingInches : 16,
                 JoistDirectionDegrees = dto.JoistDirectionDegrees,
+                JoistDirectionFollowsAreaRotation = dto.JoistDirectionFollowsAreaRotation,
+                JoistAddEndJoist = dto.JoistAddEndJoist,
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(dto.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(dto.JoistLengthRounding),
                 JoistShowLabels = dto.JoistShowLabels,
@@ -149,6 +159,8 @@ internal sealed class ProjectFile
                     ScaleMetersPerPt = md.ScaleMetersPerPt > 0 ? md.ScaleMetersPerPt : pf.Scale,
                     JoistDirectionDegrees = md.JoistDirectionDegrees,
                     JoistDirectionLocked = md.JoistDirectionLocked,
+                    JoistDirectionFollowsAreaRotation = md.JoistDirectionFollowsAreaRotation,
+                    JoistAddEndJoist = md.JoistAddEndJoist,
                     Points     = md.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                     Holes      = md.Holes
                         .Select(hole => hole.Select(p => new SKPoint(p.X, p.Y)).ToList())

@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using OurPlaneCore;
 using SkiaSharp;
 using WpfShapes = System.Windows.Shapes;
 
@@ -11,22 +12,32 @@ namespace OurPlaneCore.Controls;
 // Glyph is drawn filled in the takeoff color with a darker stroke around it,
 // so it works equally on any panel background — no separate colored swatch.
 // Identical layout in WPF (tree, toolbar, active-target bar) and Skia (on-canvas legend).
-public enum MeasurementGlyphKind { Point, Line, Area, Joist, Count }
+public enum MeasurementGlyphKind { Point, Line, Area, Joist, Count, CountCross, CountSquare }
 
 public static class MeasurementGlyph
 {
-    public static MeasurementGlyphKind Parse(string? kind, bool joist = false)
+    public static MeasurementGlyphKind Parse(string? kind, bool joist = false, string countSymbol = "")
     {
         if (joist) return MeasurementGlyphKind.Joist;
         return (kind ?? "").Trim().ToLowerInvariant() switch
         {
-            "point" => MeasurementGlyphKind.Point,
-            "count" => MeasurementGlyphKind.Count,
+            "point" => CountKind(countSymbol),
+            "count" => string.IsNullOrWhiteSpace(countSymbol)
+                ? MeasurementGlyphKind.Count
+                : CountKind(countSymbol),
             "area"  => MeasurementGlyphKind.Area,
             "joist" => MeasurementGlyphKind.Joist,
             _       => MeasurementGlyphKind.Line,
         };
     }
+
+    public static MeasurementGlyphKind CountKind(string? countSymbol) =>
+        CountDisplaySymbol.Normalize(countSymbol) switch
+        {
+            CountDisplaySymbol.Cross => MeasurementGlyphKind.CountCross,
+            CountDisplaySymbol.Square => MeasurementGlyphKind.CountSquare,
+            _ => MeasurementGlyphKind.Point,
+        };
 
     // ── WPF rendering ─────────────────────────────────────────────────────────
     // brush = the takeoff color. Glyph fills with it; the stroke is a darker
@@ -78,6 +89,35 @@ public static class MeasurementGlyph
                     Canvas.SetLeft(dot, (s - dot.Width) / 2.0);
                     Canvas.SetTop(dot, (s - dot.Height) / 2.0);
                 }
+                break;
+            }
+
+            case MeasurementGlyphKind.CountCross:
+            {
+                double left = pad + stroke;
+                double right = s - pad - stroke;
+                AddLine(canvas, strokeBrush, Math.Max(2.0, stroke * 2.0), left, left, right, right);
+                AddLine(canvas, strokeBrush, Math.Max(2.0, stroke * 2.0), right, left, left, right);
+                AddLine(canvas, fillBrush, Math.Max(1.4, stroke * 1.25), left, left, right, right);
+                AddLine(canvas, fillBrush, Math.Max(1.4, stroke * 1.25), right, left, left, right);
+                break;
+            }
+
+            case MeasurementGlyphKind.CountSquare:
+            {
+                var rect = new WpfShapes.Rectangle
+                {
+                    Width = s - pad * 2,
+                    Height = s - pad * 2,
+                    Stroke = strokeBrush,
+                    StrokeThickness = stroke,
+                    Fill = fillBrush,
+                    RadiusX = Math.Max(0.5, s * 0.04),
+                    RadiusY = Math.Max(0.5, s * 0.04),
+                };
+                canvas.Children.Add(rect);
+                Canvas.SetLeft(rect, pad);
+                Canvas.SetTop(rect, pad);
                 break;
             }
 
@@ -183,6 +223,21 @@ public static class MeasurementGlyph
         Canvas.SetTop(dot, cy - r);
     }
 
+    private static void AddLine(Canvas host, Brush stroke, double strokeWidth, double x1, double y1, double x2, double y2)
+    {
+        host.Children.Add(new WpfShapes.Line
+        {
+            X1 = x1,
+            Y1 = y1,
+            X2 = x2,
+            Y2 = y2,
+            Stroke = stroke,
+            StrokeThickness = strokeWidth,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+        });
+    }
+
     private static Brush DarkerBrush(Brush source, int amount)
     {
         if (source is SolidColorBrush scb)
@@ -248,6 +303,42 @@ public static class MeasurementGlyph
                     };
                     canvas.DrawCircle(cx, cy, Math.Max(1f, s * 0.08f), hole);
                 }
+                break;
+            }
+
+            case MeasurementGlyphKind.CountCross:
+            {
+                float left = inner.Left + stroke;
+                float right = inner.Right - stroke;
+                float top = inner.Top + stroke;
+                float bottom = inner.Bottom - stroke;
+                using var outline = new SKPaint
+                {
+                    Color = strokeColor,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = Math.Max(2.0f, stroke * 1.95f),
+                    StrokeCap = SKStrokeCap.Round,
+                    IsAntialias = true,
+                };
+                using var mark = new SKPaint
+                {
+                    Color = color,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = Math.Max(1.2f, stroke * 1.2f),
+                    StrokeCap = SKStrokeCap.Round,
+                    IsAntialias = true,
+                };
+                canvas.DrawLine(left, top, right, bottom, outline);
+                canvas.DrawLine(right, top, left, bottom, outline);
+                canvas.DrawLine(left, top, right, bottom, mark);
+                canvas.DrawLine(right, top, left, bottom, mark);
+                break;
+            }
+
+            case MeasurementGlyphKind.CountSquare:
+            {
+                canvas.DrawRect(inner, fillPaint);
+                canvas.DrawRect(inner, strokePaint);
                 break;
             }
 

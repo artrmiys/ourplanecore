@@ -58,6 +58,14 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            AppLog.Error(ex, "Last job open failed.");
+            if (_currentJob != null)
+            {
+                RefreshJobHeaderLabels();
+                TxtStatus.Text = $"Last job opened with warning: {ex.Message}";
+                return;
+            }
+
             TxtStatus.Text = $"Last job could not be opened: {ex.Message}";
             ShowStartupJobPickerIfUseful();
         }

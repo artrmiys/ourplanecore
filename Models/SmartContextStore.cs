@@ -1527,46 +1527,53 @@ public static class SmartContextStore
 
     private static void RegisterProject(SmartProjectContext context)
     {
-        Directory.CreateDirectory(GlobalRoot);
-
-        var record = new Dictionary<string, string>
+        try
         {
-            ["project_id"] = context.ProjectId,
-            ["project_name"] = context.ProjectName,
-            ["root_path"] = context.RootPath,
-            ["updated_at_utc"] = context.UpdatedAtUtc,
-        };
+            Directory.CreateDirectory(GlobalRoot);
 
-        var records = new List<Dictionary<string, string>>();
-        if (File.Exists(GlobalRegistryPath))
-        {
-            foreach (string line in File.ReadLines(GlobalRegistryPath))
+            var record = new Dictionary<string, string>
             {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
+                ["project_id"] = context.ProjectId,
+                ["project_name"] = context.ProjectName,
+                ["root_path"] = context.RootPath,
+                ["updated_at_utc"] = context.UpdatedAtUtc,
+            };
 
-                try
+            var records = new List<Dictionary<string, string>>();
+            if (File.Exists(GlobalRegistryPath))
+            {
+                foreach (string line in File.ReadLines(GlobalRegistryPath))
                 {
-                    var existing = JsonSerializer.Deserialize<Dictionary<string, string>>(line);
-                    if (existing != null &&
-                        existing.TryGetValue("project_id", out string? id) &&
-                        !string.Equals(id, context.ProjectId, StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+
+                    try
                     {
-                        records.Add(existing);
+                        var existing = JsonSerializer.Deserialize<Dictionary<string, string>>(line);
+                        if (existing != null &&
+                            existing.TryGetValue("project_id", out string? id) &&
+                            !string.Equals(id, context.ProjectId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            records.Add(existing);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Warn(ex, $"Project registry row could not be read from {GlobalRegistryPath}");
+                        // Keep the registry usable even if an older line was edited by hand.
                     }
                 }
-                catch (Exception ex)
-                {
-                    AppLog.Warn(ex, $"Project registry row could not be read from {GlobalRegistryPath}");
-                    // Keep the registry usable even if an older line was edited by hand.
-                }
             }
-        }
 
-        records.Add(record);
-        IoUtil.WriteAllTextAtomic(
-            GlobalRegistryPath,
-            string.Join(Environment.NewLine, records.ConvertAll(r => JsonSerializer.Serialize(r))) + Environment.NewLine);
+            records.Add(record);
+            IoUtil.WriteAllTextAtomic(
+                GlobalRegistryPath,
+                string.Join(Environment.NewLine, records.ConvertAll(r => JsonSerializer.Serialize(r))) + Environment.NewLine);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Project registry update skipped for {GlobalRegistryPath}");
+        }
     }
 
     private static string BuildMarkdownObservation(SmartObservation observation)

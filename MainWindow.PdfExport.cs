@@ -34,16 +34,25 @@ public partial class MainWindow
             return;
         }
 
+        AppSettingsStore.NormalizeOutputSettings(_settings);
+        ISet<string> initialSelection;
+        using (UsePageMeasurementLookup())
+            initialSelection = InitialPdfExportSelection(allPages);
+        bool includeMeasurements = DefaultPdfExportIncludeMeasurements(allPages, initialSelection);
+
         var dialog = new PdfExportDialog(
             allPages,
-            InitialPdfExportSelection(allPages),
-            includeMeasurements: true,
-            includeLegend: _settings.ShowSheetLegend)
+            initialSelection,
+            includeMeasurements: includeMeasurements,
+            includeAnnotations: _settings.PdfExportIncludeAnnotations,
+            includeLegend: _settings.PdfExportShowSheetLegend,
+            measurementStrokeScale: _settings.PdfExportMeasurementStrokeScale)
         {
             Owner = this,
         };
         if (dialog.ShowDialog() != true)
             return;
+        PersistPdfExportDialogOptions(dialog);
 
         var pages = SelectedPdfExportPages(allPages, dialog);
         if (pages.Count == 0)
@@ -68,25 +77,53 @@ public partial class MainWindow
         try
         {
             if (button != null) button.IsEnabled = false;
-            SaveCurrentPageScale();
-            SaveCurrentPageAnnotations();
-            TxtStatus.Text = $"Exporting {pages.Count} sheet(s) to PDF with white paper...";
-
             var options = new PdfExportOptions(
                 dialog.IncludeMeasurements,
                 dialog.IncludeAnnotations,
                 dialog.IncludeLegend,
                 _viewport.UnitMode,
                 _settings.SheetLegendAnchor,
-                _settings.SheetLegendScale);
+                _settings.PdfExportSheetLegendScale,
+                _settings.PdfExportSheetHeaderScale,
+                _settings.PdfExportShowMeasurementLabels,
+                _settings.PdfExportShowLineLabels,
+                _settings.PdfExportShowAreaLabels,
+                _settings.PdfExportShowCountLabels,
+                dialog.MeasurementStrokeScale,
+                _settings.PdfExportPointSizeScale,
+                _settings.PdfExportMeasurementLabelScale);
             string outputPath = save.FileName;
-            var exportPages = BuildPdfExportPages(pages);
-            (bool ok, string error) = await Task.Run(() =>
-                PdfExporter.TryExport(exportPages, outputPath, options, DrawPdfExportSheetOverlay));
+            (bool ok, string error) exportResult;
+            using (ShowBusyOverlay($"Exporting {pages.Count} sheet(s) to PDF..."))
+            {
+                await WaitForBusyOverlayRenderAsync();
+                SaveCurrentPageScale();
+                SaveCurrentPageAnnotations();
+                TxtStatus.Text = $"Exporting {pages.Count} sheet(s) to PDF with white paper...";
+
+                IReadOnlyList<PdfExportPageInput> exportPages;
+                using (UsePageMeasurementLookup())
+                    exportPages = BuildPdfExportPages(pages);
+                exportResult = await Task.Run(() =>
+                    PdfExporter.TryExport(exportPages, outputPath, options, DrawPdfExportSheetOverlay));
+            }
+
+            (bool ok, string error) = exportResult;
             if (!ok)
             {
                 MessageBox.Show(error, "Export PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
                 TxtStatus.Text = "PDF export failed.";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                MessageBox.Show(
+                    $"PDF exported, but some sheets had warnings:\n{error}",
+                    "Export PDF",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                TxtStatus.Text = $"Exported PDF ({pages.Count} sheet(s)); warning -> {outputPath}";
                 return;
             }
 
@@ -107,7 +144,14 @@ public partial class MainWindow
 
     private ISet<string> InitialPdfExportSelection(IReadOnlyList<PageInfo> allPages)
     {
-        var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var selected = allPages
+            .Where(PageHasVisibleExportMeasurements)
+            .Select(page => page.FolderPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (selected.Count > 0)
+            return selected;
+
         if (PagesTree.SelectedItem is TreeViewItem selectedItem)
         {
             foreach (PageInfo page in GetPagesForMetadata(selectedItem))
@@ -118,7 +162,46 @@ public partial class MainWindow
             selected.Add(_currentPage.FolderPath);
 
         selected.RemoveWhere(path => allPages.All(page => !IsSamePageFolder(path, page.FolderPath)));
+        if (selected.Count == 0)
+        {
+            foreach (PageInfo page in allPages)
+                selected.Add(page.FolderPath);
+        }
+
         return selected;
+    }
+
+    private bool PageHasVisibleExportMeasurements(PageInfo page) =>
+        VisibleOrderedTakeoffsForPage(page)
+            .Any(item => MeasurementsForTakeoffOnPage(item, page.FolderPath).Any());
+
+    private bool DefaultPdfExportIncludeMeasurements(
+        IReadOnlyList<PageInfo> allPages,
+        ISet<string> selectedFolders)
+    {
+        if (_settings.PdfExportIncludeMeasurements)
+            return true;
+
+        var selected = selectedFolders
+            .Select(NormalizePathForCompare)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selected.Count == 0)
+            return false;
+
+        return allPages.Any(page =>
+            selected.Contains(NormalizePathForCompare(page.FolderPath)) &&
+            PageHasVisibleExportMeasurements(page));
+    }
+
+    private void PersistPdfExportDialogOptions(PdfExportDialog dialog)
+    {
+        _settings.PdfExportIncludeMeasurements = dialog.IncludeMeasurements;
+        _settings.PdfExportIncludeAnnotations = dialog.IncludeAnnotations;
+        _settings.PdfExportShowSheetLegend = dialog.IncludeLegend;
+        _settings.PdfExportMeasurementStrokeScale = dialog.MeasurementStrokeScale;
+        SaveAppSettings();
+        SyncOutputSettingsControls();
     }
 
     private static IReadOnlyList<PageInfo> SelectedPdfExportPages(

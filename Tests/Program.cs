@@ -1,6 +1,11 @@
+using Docnet.Core;
+using Docnet.Core.Models;
 using OurPlaneCore;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Xml.Linq;
 
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "opc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
@@ -13,6 +18,10 @@ var tests = new List<(string Name, Action Run)>
     ("measurement area subtracts holes", MeasurementAreaSubtractsHoles),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
+    ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
+    ("pdf export writes selected sheets", PdfExportWritesSelectedSheets),
+    ("pdf export writes measurement lines", PdfExportWritesMeasurementLines),
+    ("pdf export defaults measurements on for measured sheets", TakeoffsTreeRegressionTests.PdfExportDefaultsMeasurementsOnForMeasuredSheets),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
@@ -37,10 +46,71 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree order moves before target", TakeoffTreeOrderMovesBeforeTarget),
     ("takeoff tree order moves after target", TakeoffTreeOrderMovesAfterTarget),
     ("takeoff tree order appends moved node into folder", TakeoffTreeOrderAppendsMovedNodeIntoFolder),
+    ("takeoff tree order moves direct children out below folder", TakeoffTreeOrderMovesDirectChildrenOutBelowFolder),
+    ("takeoff tree order stress moves large selection to end", TakeoffTreeOrderStressMovesLargeSelectionToEnd),
+    ("takeoff tree order stress batch moves into folder", TakeoffTreeOrderStressBatchMovesIntoFolder),
+    ("takeoff create allows duplicate display names", TakeoffCreateAllowsDuplicateDisplayNames),
+    ("takeoff rename allows duplicate display names", TakeoffRenameAllowsDuplicateDisplayNames),
+    ("takeoff tree regression job save avoids legacy pdf sidecar", TakeoffsTreeRegressionTests.JobSaveDoesNotWriteLegacyPdfSidecar),
+    ("takeoff tree regression job page load gates legacy autoload", TakeoffsTreeRegressionTests.JobPageLoadGatesLegacyAutoLoad),
+    ("takeoff tree regression section key handles legacy unfiled item", TakeoffsTreeRegressionTests.SectionSelectionKeyHandlesLegacyUnfiledItem),
+    ("takeoff tree regression job load builds before clearing tree", TakeoffsTreeRegressionTests.JobLoadBuildsTakeoffsBeforeClearingTree),
+    ("takeoff tree regression page clear keeps loaded takeoffs", TakeoffsTreeRegressionTests.PageClearDoesNotClearLoadedTakeoffs),
+    ("takeoff tree regression section menus build lazily", TakeoffsTreeRegressionTests.TakeoffSectionMenusAreBuiltLazily),
+    ("takeoff tree regression joist direction resets from section menu", TakeoffsTreeRegressionTests.JoistDirectionCanBeResetFromSectionMenu),
+    ("takeoff tree regression fast refresh disabled for data safety", TakeoffsTreeRegressionTests.FastRefreshDisabledForDataSafety),
+    ("takeoff tree regression selection uses targeted ui refresh", TakeoffsTreeRegressionTests.TakeoffSelectionUsesTargetedUiRefresh),
+    ("takeoff tree regression copy uses incremental tree refresh", TakeoffsTreeRegressionTests.TakeoffCopyUsesIncrementalTreeRefresh),
+    ("takeoff tree regression stale drag row reloads tree", TakeoffsTreeRegressionTests.StaleDragRowReloadsTakeoffsTree),
+    ("takeoff tree regression drag state resets on release", TakeoffsTreeRegressionTests.TakeoffDragStateResetsOnRelease),
+    ("takeoff tree regression loads nested mixed items", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsNestedMixedTreeItems),
+    ("takeoff tree regression keeps siblings after corrupt measurements", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsSiblingsWhenMeasurementsJsonIsCorrupt),
+    ("takeoff tree regression page lookup enabled for large tree refresh", TakeoffsTreeRegressionTests.PageMeasurementLookupEnabledForLargeTreeRefresh),
+    ("takeoff tree regression page repair exact only", TakeoffsTreeRegressionTests.PageRepairDoesNotLeafRebaseNonEmptyReferences),
+    ("takeoff tree regression drag uses mouse down anchor", TakeoffsTreeRegressionTests.TreeDragUsesMouseDownAnchor),
+    ("takeoff tree regression nested rows resolve drop target", TakeoffsTreeRegressionTests.NestedTreeRowsResolveToOwningDropTargets),
+    ("takeoff tree regression measurement paste keeps source name", TakeoffsTreeRegressionTests.MeasurementPasteNewTakeoffKeepsSourceName),
+    ("takeoff tree search bulk visibility and markup selection are wired", TakeoffsTreeRegressionTests.TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired),
+    ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
+    ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
+    ("takeoff auto routing sorts page legend labels", TakeoffAutoRoutingSortsPageLegendLabels),
+    ("sheet legend live auto ignores stored auto order", SheetLegendLiveAutoIgnoresStoredAutoOrder),
+    ("massing direct sqfts uses floor labels", MassingDirectSqftsUsesFloorLabels),
+    ("massing walls parses upper floor folders", MassingWallsParsesUpperFloorFolders),
+    ("massing roof takeoffs link eave rake gable", MassingRoofTakeoffsLinkEaveRakeGable),
+    ("massing ai plan classifies ambiguous takeoffs", MassingAiPlanClassifiesAmbiguousTakeoffs),
+    ("3d wall parser handles default and 2x sizes", ThreeDWallParserHandlesDefaultAndSizes),
+    ("3d wall builder creates segments from scaled lines", ThreeDWallBuilderCreatesSegmentsFromScaledLines),
+    ("3d auto builder stacks floors by max wall height", ThreeDAutoBuilderStacksFloorsByMaxWallHeight),
+    ("3d auto builder adds sqft slabs at floor levels", ThreeDAutoBuilderAddsSqftSlabsAtFloorLevels),
+    ("3d auto builder adds rf area as roof slab", ThreeDAutoBuilderAddsRfAreaAsRoofSlab),
+    ("3d roof footprint builder creates rake edges from rf areas", ThreeDRoofFootprintBuilderCreatesRakeEdgesFromRfAreas),
+    ("3d auto roof selects opposite eaves", ThreeDAutoRoofSelectsOppositeEaves),
+    ("3d auto roof preserves manual eaves", ThreeDAutoRoofPreservesManualEaves),
+    ("3d model store persists generated model", ThreeDModelStorePersistsGeneratedModel),
+    ("3d model store persists roof guides", ThreeDModelStorePersistsRoofGuides),
+    ("3d roof base builder unions adjacent rf areas", ThreeDRoofBaseBuilderUnionsAdjacentRfAreas),
+    ("3d roof generation requires eave edges", ThreeDRoofGenerationRequiresEaveEdges),
+    ("3d roof eave pitch generates complex footprint mesh", ThreeDRoofEavePitchGeneratesComplexFootprintMesh),
+    ("3d roof eave pitch generates rake gable triangles", ThreeDRoofEavePitchGeneratesRakeGableTriangles),
+    ("3d roof parallel eaves offset ridge by pitch", RoofProbeTests.ParallelEavesOffsetRidgeByPitch),
+    ("3d roof l shape mixed eave rake probe", RoofProbeTests.LShapeMixedEaveRakeBuilds),
+    ("3d roof u shape multiple valleys probe", RoofProbeTests.UShapeMultipleValleysBuilds),
+    ("3d roof stepped zig zag valleys probe", RoofProbeTests.SteppedZigZagValleysBuilds),
+    ("3d roof skewed gable diagonal rake probe", RoofProbeTests.SkewedGableDiagonalRakeBuilds),
+    ("3d roof separate islands probe", RoofProbeTests.SeparateGableIslandsBuild),
+    ("3d roof crossing footprint blocks probe", RoofProbeTests.CrossingFootprintDoesNotBuild),
+    ("3d roof noisy clockwise footprint probe", RoofProbeTests.NoisyClockwiseFootprintBuilds),
+    ("3d slab triangulator handles concave areas", ThreeDSlabTriangulatorHandlesConcaveAreas),
+    ("3d slab triangulator rejects crossing areas", ThreeDSlabTriangulatorRejectsCrossingAreas),
     ("page tree order moves sheet before folder", PageTreeOrderMovesSheetBeforeFolder),
     ("page tree order moves folder before folder", PageTreeOrderMovesFolderBeforeFolder),
+    ("page tree order moves selected items to end", PageTreeOrderMovesSelectedItemsToEnd),
     ("page tree order moves nested folder out below parent", PageTreeOrderMovesNestedFolderOutBelowParent),
     ("page rename allows duplicate display names", PageRenameAllowsDuplicateDisplayNames),
+    ("takeoff display names preserve slash", TakeoffDisplayNamesPreserveSlash),
+    ("takeoff copy keeps display name", TakeoffCopyKeepsDisplayName),
+    ("takeoff move collision keeps display name", TakeoffMoveCollisionKeepsDisplayName),
     ("job store sanitizes unsafe names", JobStoreSanitizesUnsafeNames),
     ("node sort uses natural page order", StorageTests.NodeSortUsesNaturalPageOrder),
     ("duplicate page clones page and rejects folder", StorageTests.DuplicatePageClonesPageAndRejectsFolder),
@@ -49,15 +119,31 @@ var tests = new List<(string Name, Action Run)>
     ("tree expansion rebases moved descendants", TreeExpansionStateTests.RebasesMovedDescendants),
     ("job layout create and load ensures base folders", StorageTests.JobLayoutCreateAndLoadEnsuresBaseFolders),
     ("page import writes layer manifest and metadata", StorageTests.PageImportWritesLayerManifestAndMetadata),
+    ("page import keeps multiple pdf sources in one folder", StorageTests.PageImportKeepsMultiplePdfSourcesInOneFolder),
+    ("material extraction writes rows and summary csvs", MaterialExtractionServiceTests.WritesRowsAndSummaryCsvs),
+    ("material report first page uses page detail format", MaterialExtractionServiceTests.MaterialReportFirstPageUsesPageDetailFormat),
+    ("material report builds schedule legends", MaterialExtractionServiceTests.MaterialReportBuildsScheduleLegends),
+    ("material report builds copyable note annotation", MaterialExtractionServiceTests.MaterialReportBuildsCopyableNoteAnnotation),
+    ("material extraction writes report pdf", MaterialExtractionServiceTests.WritesMaterialReportPdf),
+    ("material extraction skips generated report sources", MaterialExtractionServiceTests.UniqueSourcePdfsSkipsGeneratedMaterialReports),
+    ("bundled tool resolver finds extracted nested files", MaterialExtractionServiceTests.BundledToolResolverFindsExtractedNestedFiles),
+    ("bundled python runtime resolves packaged python", MaterialExtractionServiceTests.BundledPythonRuntimeResolvesPackagedPython),
     ("page copy and move preserve source overlay and layers", StorageTests.PageCopyAndMovePreserveSourceOverlayAndLayers),
     ("page corrupt source json is quarantined", StorageTests.PageCorruptSourceJsonIsQuarantined),
     ("page annotations save load normalize defaults", StorageTests.PageAnnotationsSaveLoadNormalizeDefaults),
+    ("page annotations follow moved page folder", StorageTests.PageAnnotationsFollowMovedPageFolder),
     ("page corrupt annotations json is quarantined", StorageTests.PageCorruptAnnotationsJsonIsQuarantined),
+    ("page bookmarks save load use job-relative page folders", StorageTests.PageBookmarksSaveLoadUseJobRelativePageFolders),
+    ("page corrupt bookmarks json is quarantined", StorageTests.PageCorruptBookmarksJsonIsQuarantined),
     ("takeoff save writes counters and reloads fallback scale", StorageTests.TakeoffSaveWritesCountersAndReloadsFallbackScale),
+    ("count display symbol persists on takeoff and measurements", StorageTests.CountDisplaySymbolPersistsOnTakeoffAndMeasurements),
     ("takeoff corrupt measurements json is quarantined", StorageTests.TakeoffCorruptMeasurementsJsonIsQuarantined),
     ("pdf metadata page name and scale gate", PdfMetadataPageNameAndScaleGate),
+    ("pdf metadata preserves dotted sheet labels", PdfMetadataPreservesDottedSheetLabels),
     ("pdf scale parser handles architectural scale", PdfScaleParserHandlesArchitecturalScale),
     ("pdf scale parser handles mixed fraction scale", PdfScaleParserHandlesMixedFractionScale),
+    ("pdf metadata crop template save load round trips", PdfSheetMetadataCropServiceTests.CropTemplateSaveLoadRoundTrips),
+    ("pdf metadata crop template usable when either region exists", PdfSheetMetadataCropServiceTests.CropTemplateUsableWhenEitherRegionExists),
     ("joist rounding aliases normalize", JoistRoundingAliasesNormalize),
     ("joist pitch normalizes common input", JoistPitchNormalizesCommonInput),
     ("joist pitch flat input normalizes empty", JoistPitchFlatInputNormalizesEmpty),
@@ -65,6 +151,7 @@ var tests = new List<(string Name, Action Run)>
     ("joist pitch factor matches rise run", JoistPitchFactorMatchesRiseRun),
     ("joist pitch accepts single rise over twelve", JoistPitchAcceptsSingleRiseOverTwelve),
     ("joist layout subtracts area cut holes", JoistLayoutSubtractsAreaCutHoles),
+    ("joist layout can skip end joist", JoistLayoutCanSkipEndJoist),
     ("joist pitch length applies slope factor", JoistPitchLengthAppliesSlopeFactor),
     ("joist pitch rounding applies per segment", JoistPitchRoundingAppliesPerSegment),
     ("joist pitch label shows indicator", JoistPitchLabelShowsIndicator),
@@ -72,6 +159,18 @@ var tests = new List<(string Name, Action Run)>
     ("joist length label can use standard format", JoistLengthLabelCanUseStandardFormat),
     ("joist pitch label explains flat slope and order lengths", JoistPitchLabelExplainsFlatSlopeAndOrderLengths),
     ("joist export uses visible label lines", JoistExportUsesVisibleLabelLines),
+    ("report template loads synthetic detailed frame list", ReportTemplateServiceTests.LoadsSyntheticDetailedFrameList),
+    ("report template loads local template if present", ReportTemplateServiceTests.LoadsLocalTemplateIfPresent),
+    ("report builder applies A3 wall block like macro", ReportTemplateServiceTests.AppliesA3WallBlockLikeMacro),
+    ("planswift import creates job pages and measurements", PlanSwiftImportTests.ImportCreatesJobPagesAndMeasurements),
+    ("planswift import normalizes oversized raster pages", PlanSwiftImportTests.ImportNormalizesOversizedRasterPageWithoutChangingMeasurements),
+    ("planswift import skips pages without takeoffs", PlanSwiftImportTests.ImportSkipsPlanSwiftPagesWithoutTakeoffs),
+    ("planswift import preserves holes box and containers", PlanSwiftImportTests.ImportPreservesPlanSwiftHolesBoxAndContainers),
+    ("planswift import preserves segments and source metadata", PlanSwiftImportTests.ImportPreservesSegmentsAndSourceMetadata),
+    ("planswift import copies existing ourplanecore job takeoffs", PlanSwiftImportTests.ImportCopiesExistingOurPlaneCoreJobTakeoffs),
+    ("planswift txt export writes every root item", PlanSwiftTxtExportWritesEveryRootItem),
+    ("planswift export hides generated import notes", PlanSwiftExportHidesGeneratedImportNotes),
+    ("active excel export matrix keeps numbers", ActiveExcelExportMatrixKeepsNumbers),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
     ("page overlay persists through source rewrites", PageOverlayPersistsThroughSourceRewrites),
@@ -81,8 +180,13 @@ var tests = new List<(string Name, Action Run)>
     ("job recovery snapshot copies metadata only", JobRecoverySnapshotCopiesMetadataOnly),
     ("job recovery snapshot pruning keeps newest", JobRecoverySnapshotPruningKeepsNewest),
     ("app settings job roots dedupe", AppSettingsJobRootsDedupe),
+    ("app settings path can use env override", AppSettingsPathCanUseEnvOverride),
+    ("atomic write ignores stale fixed temp path", AtomicWriteIgnoresStaleFixedTempPath),
     ("app settings recent job preserves pin and thumbnail", AppSettingsRecentPreservesPinAndThumbnail),
     ("app settings removes recent job by path", AppSettingsRemovesRecentJobByPath),
+    ("openai response parser extracts output text", OpenAiResponseParserExtractsOutputText),
+    ("openai response parser reports incomplete max tokens", OpenAiResponseParserReportsIncompleteMaxTokens),
+    ("keyboard shortcut keys use english display text", KeyboardShortcutKeysUseEnglishDisplayText),
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
@@ -93,9 +197,13 @@ var tests = new List<(string Name, Action Run)>
     ("viewport far zoom respects fast navigation toggle", ViewportFarZoomRespectsFastNavigationToggle),
     ("viewport dense page respects fast navigation toggle", ViewportDensePageRespectsFastNavigationToggle),
     ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
+    ("viewport visible geometry padding is screen relative", ViewportVisibleGeometryPaddingIsScreenRelative),
     ("viewport measurement labels survive distant zoom", ViewportMeasurementLabelsSurviveDistantZoom),
     ("viewport measurement LOD limits dense details", ViewportMeasurementLodLimitsDenseDetails),
     ("viewport LOD hides expensive layers during fast frames", ViewportLodHidesExpensiveLayersDuringFastFrames),
+    ("viewport measurement spatial index filters by bounds", ViewportMeasurementSpatialIndexFiltersByBounds),
+    ("viewport measurement spatial index preserves draw order", ViewportMeasurementSpatialIndexPreservesDrawOrder),
+    ("viewport pasted batch undo removes many measurements in one callback", ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback),
     ("pdf snap index finds nearest point", PdfSnapIndexFindsNearestPoint),
     ("pdf snap index prefers corner ties", PdfSnapIndexPrefersCornerTies),
     ("pdf snap index snaps to line", PdfSnapIndexSnapsToLine),
@@ -262,6 +370,199 @@ static void PdfExportAreaPathCutsHoles()
 static void PdfExportAlwaysUsesWhitePaper()
 {
     AssertEqual("#FFFFFF", PdfExporter.ExportPaperColorHex, "export paper color must stay white");
+}
+
+static void OutputSettingsDefaultExportAppearance()
+{
+    var settings = new AppSettings();
+    AppSettingsStore.NormalizeOutputSettings(settings);
+
+    AssertClose(1.5, settings.PdfExportMeasurementStrokeScale, "export measurements should default 50 percent thicker");
+    AssertClose(0.70, settings.PdfExportSheetLegendScale, "export legend should default 30 percent smaller");
+    AssertClose(0.70, settings.PdfExportSheetHeaderScale, "export header should match export legend default");
+    AssertClose(1.0, settings.ViewportMeasurementStrokeScale, "viewport stroke should keep normal default");
+    AssertClose(1.0, settings.ViewportPointSizeScale, "viewport point size should keep normal default");
+    AssertClose(1.0, settings.PdfExportPointSizeScale, "export point size should keep normal default");
+
+    settings.PdfExportMeasurementStrokeScale = 6.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(6.0, settings.PdfExportMeasurementStrokeScale, "PDF stroke can be made heavier than the old 4x cap");
+
+    settings.PdfExportMeasurementStrokeScale = 12.0;
+    settings.PdfExportPointSizeScale = 12.0;
+    settings.PdfExportMeasurementLabelScale = 12.0;
+    settings.PdfExportSheetLegendScale = 12.0;
+    settings.PdfExportSheetHeaderScale = 12.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(10.0, settings.PdfExportMeasurementStrokeScale, "PDF stroke should clamp at the export maximum");
+    AssertClose(10.0, settings.PdfExportPointSizeScale, "PDF point should clamp at the export maximum");
+    AssertClose(10.0, settings.PdfExportMeasurementLabelScale, "PDF label should clamp at the export maximum");
+    AssertClose(10.0, settings.PdfExportSheetLegendScale, "PDF legend should clamp at the export maximum");
+    AssertClose(10.0, settings.PdfExportSheetHeaderScale, "PDF header should clamp at the export maximum");
+}
+
+static void PdfExportWritesSelectedSheets()
+{
+    string dir = Path.Combine(Path.GetTempPath(), "opc_pdf_export_smoke", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    try
+    {
+        string sourcePdf = Path.Combine(dir, "source.pdf");
+        using (var stream = File.Create(sourcePdf))
+        using (var document = SKDocument.CreatePdf(stream))
+        {
+            SKCanvas canvas = document.BeginPage(120, 80);
+            canvas.Clear(SKColors.White);
+            using var paint = new SKPaint
+            {
+                Color = SKColors.Black,
+                IsAntialias = true,
+                StrokeWidth = 2,
+            };
+            canvas.DrawLine(10, 10, 110, 70, paint);
+            document.EndPage();
+            document.Close();
+        }
+
+        string outputPdf = Path.Combine(dir, "export.pdf");
+        var page = new PageInfo
+        {
+            Name = "Smoke",
+            FolderPath = dir,
+            PdfPath = sourcePdf,
+            PdfPage = 0,
+            ScaleMetersPerPt = 1,
+        };
+        var options = new PdfExportOptions(
+            IncludeMeasurements: false,
+            IncludeAnnotations: false,
+            IncludeLegend: false,
+            UnitMode: UnitMode.Imperial,
+            LegendAnchor: "BottomLeft",
+            LegendScale: 1,
+            HeaderScale: 1,
+            ShowMeasurementLabels: true,
+            ShowLineLabels: true,
+            ShowAreaLabels: true,
+            ShowCountLabels: true,
+            MeasurementStrokeScale: 1.5,
+            PointSizeScale: 1.0,
+            MeasurementLabelScale: 1.0);
+
+        (bool ok, string error) = PdfExporter.TryExport(
+            [new PdfExportPageInput(page, [], [])],
+            outputPdf,
+            options);
+
+        AssertTrue(ok, $"PDF export should succeed: {error}");
+        AssertTrue(File.Exists(outputPdf), "PDF export should write the output file");
+        AssertTrue(new FileInfo(outputPdf).Length > 16, "PDF export should not be empty");
+        byte[] header = File.ReadAllBytes(outputPdf).Take(5).ToArray();
+        AssertEqual("%PDF-", System.Text.Encoding.ASCII.GetString(header), "PDF export header");
+    }
+    finally
+    {
+        TryDeleteDirectory(dir);
+    }
+}
+
+static void PdfExportWritesMeasurementLines()
+{
+    string dir = Path.Combine(Path.GetTempPath(), "opc_pdf_export_measurements", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    try
+    {
+        string sourcePdf = Path.Combine(dir, "source.pdf");
+        using (var stream = File.Create(sourcePdf))
+        using (var document = SKDocument.CreatePdf(stream))
+        {
+            SKCanvas canvas = document.BeginPage(120, 80);
+            canvas.Clear(SKColors.White);
+            document.EndPage();
+            document.Close();
+        }
+
+        string outputPdf = Path.Combine(dir, "export.pdf");
+        var page = new PageInfo
+        {
+            Name = "Measured",
+            FolderPath = dir,
+            PdfPath = sourcePdf,
+            PdfPage = 0,
+            ScaleMetersPerPt = 1,
+        };
+        var item = new TakeoffItem
+        {
+            Name = "Red Line",
+            Color = "#FF0000",
+            MeasurementType = "line",
+        };
+        var measurement = new Measurement
+        {
+            MType = "line",
+            Points = [new SKPoint(15, 40), new SKPoint(105, 40)],
+        };
+        var options = new PdfExportOptions(
+            IncludeMeasurements: true,
+            IncludeAnnotations: false,
+            IncludeLegend: false,
+            UnitMode: UnitMode.Imperial,
+            LegendAnchor: "BottomLeft",
+            LegendScale: 1,
+            HeaderScale: 1,
+            ShowMeasurementLabels: false,
+            ShowLineLabels: false,
+            ShowAreaLabels: false,
+            ShowCountLabels: false,
+            MeasurementStrokeScale: 4.0,
+            PointSizeScale: 1.0,
+            MeasurementLabelScale: 1.0);
+
+        (bool ok, string error) = PdfExporter.TryExport(
+            [new PdfExportPageInput(page, [new PdfExportTakeoffInput(item, [measurement])], [])],
+            outputPdf,
+            options);
+
+        AssertTrue(ok, $"PDF export with measurements should succeed: {error}");
+        using SKBitmap bitmap = RenderPdfPage(outputPdf);
+        int redPixels = CountPixels(bitmap, color =>
+            color.Red > 180 &&
+            color.Green < 90 &&
+            color.Blue < 90);
+        AssertTrue(redPixels > 20, "PDF export should contain visible red measurement geometry");
+    }
+    finally
+    {
+        TryDeleteDirectory(dir);
+    }
+}
+
+static SKBitmap RenderPdfPage(string path)
+{
+    const float renderScale = 2.0f;
+    using var docReader = DocLib.Instance.GetDocReader(path, new PageDimensions(renderScale));
+    using var pageReader = docReader.GetPageReader(0);
+    int width = pageReader.GetPageWidth();
+    int height = pageReader.GetPageHeight();
+    byte[] bytes = pageReader.GetImage();
+    var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+    Marshal.Copy(bytes, 0, bitmap.GetPixels(), bytes.Length);
+    return bitmap;
+}
+
+static int CountPixels(SKBitmap bitmap, Func<SKColor, bool> predicate)
+{
+    int count = 0;
+    for (int y = 0; y < bitmap.Height; y++)
+    {
+        for (int x = 0; x < bitmap.Width; x++)
+        {
+            if (predicate(bitmap.GetPixel(x, y)))
+                count++;
+        }
+    }
+
+    return count;
 }
 
 static void JobStorePersistsMeasurementHoles()
@@ -561,6 +862,760 @@ static void TakeoffTreeOrderAppendsMovedNodeIntoFolder()
     });
 }
 
+static void TakeoffTreeOrderMovesDirectChildrenOutBelowFolder()
+{
+    WithTempJob("tree_order_out_below_folder", job =>
+    {
+        string folder = CreateTakeoffFolder(job, "Folder");
+        TakeoffItem child = CreateNestedTakeoffItem(job, folder, "X");
+        CreateNestedTakeoffItem(job, folder, "Y");
+        CreateRootTakeoffItem(job, "B");
+
+        var moved = OurPlaneCoreJobStore.MoveNodes([child.FolderPath], job.TakeoffsRoot).Single();
+
+        AssertTrue(
+            OurPlaneCoreJobStore.MoveSiblingsToPosition([moved.MovedPath], folder, after: true),
+            "moved child should reorder after its old parent folder");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "Folder,X,B", "child moved out below folder");
+        AssertTakeoffChildOrder(folder, "Y", "old parent keeps remaining child");
+    });
+}
+
+static void TakeoffTreeOrderStressMovesLargeSelectionToEnd()
+{
+    WithTempJob("tree_order_stress_end", job =>
+    {
+        var items = Enumerable.Range(1, 260)
+            .Select(index => CreateRootTakeoffItem(job, $"T{index:000}"))
+            .ToList();
+        var selected = items
+            .Skip(40)
+            .Take(80)
+            .Select(item => item.FolderPath)
+            .ToList();
+
+        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToEnd(selected, job.TakeoffsRoot), "large selection should move to end");
+
+        IReadOnlyList<string> names = TakeoffChildNames(job.TakeoffsRoot);
+        AssertEqual("260", names.Count.ToString(), "stress node count");
+        AssertEqual("T040", names[39], "last untouched before moved block");
+        AssertEqual("T121", names[40], "first item after moved block gap");
+        AssertEqual("T041", names[180], "moved block first at end");
+        AssertEqual("T120", names[^1], "moved block last at end");
+    });
+}
+
+static void TakeoffTreeOrderStressBatchMovesIntoFolder()
+{
+    WithTempJob("tree_order_stress_batch_folder", job =>
+    {
+        var items = Enumerable.Range(1, 180)
+            .Select(index => CreateRootTakeoffItem(job, $"T{index:000}"))
+            .ToList();
+        string targetFolder = CreateTakeoffFolder(job, "Target");
+        var selected = items
+            .Skip(60)
+            .Take(60)
+            .Select(item => item.FolderPath)
+            .ToList();
+
+        IReadOnlyList<(string SourcePath, string MovedPath)> moved = OurPlaneCoreJobStore.MoveNodes(selected, targetFolder);
+
+        IReadOnlyList<string> targetNames = TakeoffChildNames(targetFolder);
+        IReadOnlyList<string> rootNames = TakeoffChildNames(job.TakeoffsRoot);
+        AssertEqual("60", moved.Count.ToString(), "batch moved count");
+        AssertEqual("60", targetNames.Count.ToString(), "target child count");
+        AssertEqual("T061", targetNames[0], "batch move preserves first selected order");
+        AssertEqual("T120", targetNames[^1], "batch move preserves last selected order");
+        AssertEqual("121", rootNames.Count.ToString(), "root count after batch move");
+    });
+}
+
+static void TakeoffAutoRoutingSendsSqftAreasToSqfts()
+{
+    WithTempJob("auto_route_sqfts", job =>
+    {
+        TakeoffAutoRouteResult baseRoute = TakeoffAutoRoutingService.ResolveRoute(
+            job,
+            job.TakeoffsRoot,
+            "base",
+            "area",
+            "A001",
+            "");
+        TakeoffAutoRouteResult firstRoute = TakeoffAutoRoutingService.ResolveRoute(
+            job,
+            job.TakeoffsRoot,
+            "1st",
+            "area",
+            "A101 1st",
+            "");
+        TakeoffAutoRouteResult porchRoute = TakeoffAutoRoutingService.ResolveRoute(
+            job,
+            job.TakeoffsRoot,
+            "porch",
+            "area",
+            "A101 1st",
+            "");
+
+        AssertTrue(baseRoute.Routed, "base area should route");
+        AssertEqual("sqfts", OurPlaneCoreJobStore.DisplayName(baseRoute.ParentFolder), "sqft parent");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, porchRoute.ParentFolder, "porch", "#FF4444", "area");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, firstRoute.ParentFolder, "1st", "#FF4444", "area");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, baseRoute.ParentFolder, "base", "#FF4444", "area");
+
+        AssertTrue(TakeoffAutoRoutingService.SortFolder(job, baseRoute.ParentFolder), "sqft folder should sort");
+        AssertTakeoffChildOrder(baseRoute.ParentFolder, "base,1st,porch", "sqft takeoff order");
+    });
+}
+
+static void TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls()
+{
+    WithTempJob("auto_route_walls", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A201 2nd");
+        TakeoffAutoRouteResult route = TakeoffAutoRoutingService.ResolveRoute(
+            job,
+            job.TakeoffsRoot,
+            "ext 9.98",
+            "line",
+            page.Name,
+            page.FolderPath);
+
+        AssertTrue(route.Routed, "wall line should route");
+        AssertEqual("2nd floor walls", OurPlaneCoreJobStore.DisplayName(route.ParentFolder), "wall floor parent");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x4 walls", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "dem 2x4", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x8 walls", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "corners", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "corr 2x6", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x6 walls", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "ext 9.98", "#FF4444", "line");
+
+        AssertTrue(TakeoffAutoRoutingService.SortFolder(job, route.ParentFolder), "wall folder should sort");
+        AssertTakeoffChildOrder(
+            route.ParentFolder,
+            "corners,ext 9.98,corr 2x6,dem 2x4,2x8 walls,2x6 walls,2x4 walls",
+            "wall takeoff order");
+    });
+}
+
+static void TakeoffAutoRoutingSortsPageLegendLabels()
+{
+    var items = new[]
+    {
+        new TakeoffItem { Name = "porch", MeasurementType = "area" },
+        new TakeoffItem { Name = "2x4 walls", MeasurementType = "line" },
+        new TakeoffItem { Name = "base", MeasurementType = "area" },
+        new TakeoffItem { Name = "ext 9.98", MeasurementType = "line" },
+        new TakeoffItem { Name = "2x8 walls", MeasurementType = "line" },
+        new TakeoffItem { Name = "corners", MeasurementType = "line" },
+        new TakeoffItem { Name = "1st", MeasurementType = "area" },
+    };
+
+    string order = string.Join(",",
+        TakeoffAutoRoutingService.SortPageLegendItems(items)
+            .Select(item => item.Name));
+
+    AssertEqual("corners,ext 9.98,2x8 walls,2x4 walls,base,1st,porch", order, "page legend label sort");
+}
+
+static void SheetLegendLiveAutoIgnoresStoredAutoOrder()
+{
+    WithTempJob("sheet_legend_live_auto", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A701");
+        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        TakeoffItem twoByFour = CreateMeasuredTakeoffItem(
+            job,
+            walls,
+            "2x4 walls",
+            "line",
+            page.FolderPath,
+            [new SKPoint(0, 0), new SKPoint(10, 0)]);
+        TakeoffItem corners = CreateMeasuredTakeoffItem(
+            job,
+            walls,
+            "corners",
+            "line",
+            page.FolderPath,
+            [new SKPoint(0, 0), new SKPoint(0, 10)]);
+        page.LegendTakeoffOrder =
+        [
+            Path.GetRelativePath(job.TakeoffsRoot, twoByFour.FolderPath),
+            Path.GetRelativePath(job.TakeoffsRoot, corners.FolderPath),
+        ];
+
+        page.LegendTakeoffOrderMode = "auto";
+        string autoOrder = string.Join(",",
+            SheetLegendBuilder.Build(job, page, [twoByFour, corners], UnitMode.Imperial)
+                .Select(entry => entry.Name));
+        AssertEqual("corners,2x4 walls", autoOrder, "auto mode should use label rules");
+
+        page.LegendTakeoffOrderMode = "manual";
+        string manualOrder = string.Join(",",
+            SheetLegendBuilder.Build(job, page, [twoByFour, corners], UnitMode.Imperial)
+                .Select(entry => entry.Name));
+        AssertEqual("2x4 walls,corners", manualOrder, "manual mode should keep saved order");
+    });
+}
+
+static void MassingDirectSqftsUsesFloorLabels()
+{
+    WithTempJob("massing_sqfts", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        CreateMeasuredTakeoffItem(job, sqfts, "1st", "area", page.FolderPath, RectPoints(0, 0, 10, 10));
+        CreateMeasuredTakeoffItem(job, sqfts, "2nd", "area", page.FolderPath, RectPoints(20, 0, 10, 10));
+
+        SmartMassingDraft draft = SmartMassingDraftService.BuildDraftFromWallTakeoffs(job, 10);
+
+        AssertEqual("draft_from_takeoffs", draft.Status, "direct sqfts draft status");
+        AssertEqual("2", draft.Footprints.Count.ToString(), "direct sqfts footprint count");
+        AssertEqual("1,2", string.Join(",", draft.Footprints.Select(footprint => footprint.Level)), "direct sqfts levels");
+        AssertClose(0, draft.Footprints.First(footprint => footprint.Level == 1).BaseElevation, "direct sqfts 1st base");
+        AssertClose(10, draft.Footprints.First(footprint => footprint.Level == 2).BaseElevation, "direct sqfts 2nd base");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "eave_outline"), "direct sqfts roof should include eave guide");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "axis_candidate"), "direct sqfts roof should include axis guide");
+        AssertTrue(draft.Roof.Planes.Count >= 2, "direct sqfts roof should build candidate planes");
+        AssertTrue(
+            draft.Roof.Guides.SelectMany(guide => guide.SourceMarkerIds).Any(id => id.StartsWith("takeoff:", StringComparison.OrdinalIgnoreCase)),
+            "direct sqfts roof guides should trace to takeoff measurements");
+    });
+}
+
+static void MassingWallsParsesUpperFloorFolders()
+{
+    WithTempJob("massing_walls_4th", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A401");
+        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string fourth = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "4th floor walls");
+        CreateMeasuredTakeoffItem(job, fourth, "ext 10", "line", page.FolderPath, RectPoints(0, 0, 10, 10));
+
+        SmartMassingDraft draft = SmartMassingDraftService.BuildDraftFromWallTakeoffs(job, 10);
+
+        AssertEqual("draft_from_takeoffs", draft.Status, "4th floor walls draft status");
+        AssertEqual("1", draft.Footprints.Count.ToString(), "4th floor walls footprint count");
+        AssertEqual("4", draft.Footprints[0].Level.ToString(), "4th floor walls parsed level");
+        AssertClose(30, draft.Footprints[0].BaseElevation, "4th floor walls base");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "axis_candidate"), "4th floor walls roof should include axis guide");
+        AssertTrue(draft.Roof.Planes.Count >= 2, "4th floor walls roof should build candidate planes");
+    });
+}
+
+static void MassingRoofTakeoffsLinkEaveRakeGable()
+{
+    WithTempJob("massing_roof_takeoffs", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
+        string sqft = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sft");
+        string roof = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "eve rake");
+        string gables = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "gables");
+        CreateMeasuredTakeoffItem(job, sqft, "1st", "area", page.FolderPath, RectPoints(10, 10, 30, 20));
+        CreateMeasuredTakeoffItem(job, roof, "eve", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(42, 8)]);
+        CreateMeasuredTakeoffItem(job, roof, "rake", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(25, 0), new SKPoint(42, 8)]);
+        CreateMeasuredTakeoffItem(job, gables, "gable", "area", page.FolderPath, RectPoints(8, 8, 34, 12));
+
+        SmartMassingDraft draft = SmartMassingDraftService.BuildDraftFromWallTakeoffs(job, 10);
+
+        AssertEqual("draft_from_takeoffs", draft.Status, "roof takeoff draft status");
+        AssertEqual("gable", draft.Roof.Type, "roof takeoffs should infer gable roof type");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "eave"), "roof takeoffs should include eave guide");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "rake"), "roof takeoffs should include rake guide");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "gable_area"), "roof takeoffs should include gable guide");
+        AssertTrue(draft.Roof.SourceMarkerIds.Any(id => id.StartsWith("takeoff:", StringComparison.OrdinalIgnoreCase)), "roof takeoff sources should be linked");
+        AssertTrue(draft.Roof.Planes.Count >= 2, "roof takeoffs should still build candidate planes");
+    });
+}
+
+static void MassingAiPlanClassifiesAmbiguousTakeoffs()
+{
+    WithTempJob("massing_ai_plan", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A601 Mixed");
+        string misc = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "misc");
+        TakeoffItem plate = CreateMeasuredTakeoffItem(job, misc, "poly A", "area", page.FolderPath, RectPoints(10, 10, 30, 20));
+        TakeoffItem edge = CreateMeasuredTakeoffItem(job, misc, "edge north", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(42, 8)]);
+        TakeoffItem slope = CreateMeasuredTakeoffItem(job, misc, "slope side", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(25, 0), new SKPoint(42, 8)]);
+        TakeoffItem end = CreateMeasuredTakeoffItem(job, misc, "end face", "area", page.FolderPath, RectPoints(8, 8, 34, 12));
+
+        var plan = new SmartMassingTakeoffAiPlan
+        {
+            Summary = "Ambiguous misc takeoffs classified for 3D.",
+            RoofType = "gable",
+            Assignments =
+            [
+                AiAssignment(job, plate, "floor_plate", 1),
+                AiAssignment(job, edge, "eave", 1),
+                AiAssignment(job, slope, "rake", 1),
+                AiAssignment(job, end, "gable", 1),
+            ],
+        };
+
+        SmartMassingDraft draft = SmartMassingDraftService.BuildDraftFromWallTakeoffs(job, 10, plan);
+
+        AssertEqual("draft_from_takeoffs", draft.Status, "ai plan draft status");
+        AssertEqual("1", draft.Footprints.Count.ToString(), "ai plan footprint count");
+        AssertEqual("gable", draft.Roof.Type, "ai plan roof type");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "eave"), "ai plan should link eave");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "rake"), "ai plan should link rake");
+        AssertTrue(draft.Roof.Guides.Any(guide => guide.Kind == "gable_area"), "ai plan should link gable area");
+    });
+}
+
+static void ThreeDWallParserHandlesDefaultAndSizes()
+{
+    ThreeDWallSpec ext = ThreeDWallTakeoffBuilder.ParseSpec(new TakeoffItem { Name = "ext 9.1" });
+    AssertClose(9.1, ext.HeightFeet, "ext height");
+    AssertClose(6.0, ext.ThicknessInches, "default wall thickness");
+
+    ThreeDWallSpec ext2x4 = ThreeDWallTakeoffBuilder.ParseSpec(new TakeoffItem { Name = "ext 2x4 9.1" });
+    AssertClose(9.1, ext2x4.HeightFeet, "2x4 height");
+    AssertClose(4.0, ext2x4.ThicknessInches, "2x4 wall thickness");
+
+    ThreeDWallSpec double2x4 = ThreeDWallTakeoffBuilder.ParseSpec(new TakeoffItem { Name = "dem (2) 2x4 10.8" });
+    AssertClose(10.8, double2x4.HeightFeet, "double 2x4 height");
+    AssertClose(8.0, double2x4.ThicknessInches, "double 2x4 wall thickness");
+    AssertEqual("2", double2x4.PlyCount.ToString(), "double 2x4 ply count");
+}
+
+static void ThreeDWallBuilderCreatesSegmentsFromScaledLines()
+{
+    var item = new TakeoffItem
+    {
+        Name = "ext 2x6 9.1",
+        Color = "#123456",
+        FolderPath = @"C:\job\Takeoffs\walls\ext",
+        MeasurementType = "line",
+    };
+    item.Measurements.Add(new Measurement
+    {
+        Id = "m1",
+        MType = "line",
+        ScaleMetersPerPt = 0.3048,
+        Points = [new SKPoint(0, 0), new SKPoint(10, 0), new SKPoint(10, 5)],
+    });
+
+    ThreeDWallBuildResult result = ThreeDWallTakeoffBuilder.BuildWalls([item], null, measurement => measurement.ScaleMetersPerPt);
+    AssertEqual("2", result.Walls.Count.ToString(), "polyline should produce wall segment per leg");
+    AssertClose(10.0, result.Walls[0].EndXFeet - result.Walls[0].StartXFeet, "first wall length");
+    AssertClose(9.1, result.Walls[0].HeightFeet, "wall height");
+    AssertClose(6.0, result.Walls[0].ThicknessInches, "wall thickness");
+    AssertEqual("ext 2x6 9.1", result.Walls[0].Label, "wall label");
+}
+
+static void ThreeDAutoBuilderStacksFloorsByMaxWallHeight()
+{
+    WithTempJob("3d_auto_wall_levels", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
+        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string first = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
+        string second = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "2nd");
+        CreateMeasuredTakeoffItem(job, first, "ext 2x6 9.1", "line", page.FolderPath, [new SKPoint(0, 0), new SKPoint(10, 0)]);
+        CreateMeasuredTakeoffItem(job, first, "dem (2) 2x4 10.8", "line", page.FolderPath, [new SKPoint(0, 2), new SKPoint(10, 2)]);
+        CreateMeasuredTakeoffItem(job, second, "ext 2x4 8.5", "line", page.FolderPath, [new SKPoint(0, 4), new SKPoint(10, 4)]);
+
+        ThreeDWallAutoBuildResult result = ThreeDWallAutoBuilder.Build(job, measurement => measurement.ScaleMetersPerPt);
+
+        AssertEqual("3", result.Model.Walls.Count.ToString(), "auto should build all floor wall segments");
+        AssertClose(0, result.Model.Walls.First(wall => wall.LevelKey == "1st").BaseElevationFeet, "first floor base");
+        AssertClose(10.8, result.Model.Walls.First(wall => wall.LevelKey == "2nd").BaseElevationFeet, "second floor base should use first floor max height");
+        AssertClose(10.8, result.Model.Levels.First(level => level.Label == "1st").HeightFeet, "first level height should be max wall height");
+    });
+}
+
+static void ThreeDAutoBuilderAddsSqftSlabsAtFloorLevels()
+{
+    WithTempJob("3d_auto_sqft_slabs", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
+        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string firstWalls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
+        CreateMeasuredTakeoffItem(job, firstWalls, "ext 10", "line", page.FolderPath, [new SKPoint(0, 0), new SKPoint(10, 0)]);
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        CreateMeasuredTakeoffItem(job, sqfts, "1st", "area", page.FolderPath, RectPoints(0, 0, 10, 10));
+        CreateMeasuredTakeoffItem(job, sqfts, "2nd", "area", page.FolderPath, RectPoints(20, 0, 10, 10));
+
+        ThreeDWallAutoBuildResult result = ThreeDWallAutoBuilder.Build(job, measurement => measurement.ScaleMetersPerPt);
+
+        AssertEqual("2", result.Model.Slabs.Count.ToString(), "auto should build sqft slabs");
+        AssertClose(0, result.Model.Slabs.First(slab => slab.LevelKey == "1st").ElevationFeet, "first slab elevation");
+        AssertClose(10, result.Model.Slabs.First(slab => slab.LevelKey == "2nd").ElevationFeet, "second slab elevation");
+    });
+}
+
+static void ThreeDAutoBuilderAddsRfAreaAsRoofSlab()
+{
+    WithTempJob("3d_auto_rf_roof_slab", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
+        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string firstWalls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
+        CreateMeasuredTakeoffItem(job, firstWalls, "ext 10", "line", page.FolderPath, [new SKPoint(0, 0), new SKPoint(10, 0)]);
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        CreateMeasuredTakeoffItem(job, sqfts, "1st", "area", page.FolderPath, RectPoints(0, 0, 10, 10));
+        CreateMeasuredTakeoffItem(job, sqfts, "rf", "area", page.FolderPath, RectPoints(2, 2, 12, 8));
+
+        ThreeDWallAutoBuildResult result = ThreeDWallAutoBuilder.Build(job, measurement => measurement.ScaleMetersPerPt);
+
+        ThreeDFloorSlab roof = result.Model.Slabs.First(slab => slab.LevelKey == "roof");
+        AssertEqual("2", result.Model.Slabs.Count.ToString(), "auto should include floor and roof slabs");
+        AssertClose(10, roof.ElevationFeet, "rf area should sit at the top level elevation");
+        AssertEqual("rf", roof.Label, "rf slab label");
+    });
+}
+
+static void ThreeDRoofFootprintBuilderCreatesRakeEdgesFromRfAreas()
+{
+    WithTempJob("3d_rf_roof_footprint", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        TakeoffItem rfA = CreateMeasuredTakeoffItem(job, sqfts, "rf A", "area", page.FolderPath, RectPoints(0, 0, 20, 10));
+        TakeoffItem rfB = CreateMeasuredTakeoffItem(job, sqfts, "rf B", "area", page.FolderPath, RectPoints(22, 0, 14, 12));
+
+        ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
+            ThreeDRoofFootprintBuildService.SourcesFromItems([rfA, rfB]),
+            measurement => measurement.ScaleMetersPerPt,
+            11,
+            0.5);
+
+        AssertEqual("2", footprint.Slabs.Count.ToString(), "rf roof footprint slab count");
+        AssertEqual("8", footprint.Guides.Count.ToString(), "rf roof boundary edge count");
+        AssertTrue(footprint.Guides.All(guide => guide.Kind == ThreeDRoofGuideKinds.Rake), "rf roof should default boundary edges to rake");
+        AssertTrue(footprint.Guides.All(guide => Math.Abs(guide.PitchRisePerFoot) < 0.0001), "rf roof should not apply pitch until an edge is marked eave");
+
+        foreach (ThreeDRoofGuide guide in footprint.Guides)
+        {
+            guide.Kind = ThreeDRoofGuideKinds.Eave;
+            guide.PitchRisePerFoot = 0.5;
+            guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+        }
+
+        var model = new ThreeDWallModel
+        {
+            Slabs = footprint.Slabs,
+            RoofGuides = footprint.Guides,
+        };
+        ThreeDRoofBuildResult roof = ThreeDRoofBuildService.Build(model);
+
+        AssertTrue(!roof.PlaneBuildBlocked, "marked rf roof eave edges should build roof surfaces");
+        AssertTrue(roof.Planes.Count > 2, "marked rf roof eaves should generate mesh faces");
+        AssertTrue(roof.Guides.Any(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus), "marked eaves should generate automatic roof seams");
+        AssertTrue(roof.Guides.Any(guide => guide.Kind == ThreeDRoofGuideKinds.Ridge), "marked opposite eaves should generate ridge seams");
+        AssertTrue(
+            roof.Guides
+                .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
+                .SelectMany(guide => guide.Points)
+                .Any(point => point.YFeet > 11.1),
+            "generated roof seams should carry 3D heights");
+    });
+}
+
+static void ThreeDAutoRoofSelectsOppositeEaves()
+{
+    WithTempJob("3d_auto_roof_eaves", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        TakeoffItem rf = CreateMeasuredTakeoffItem(job, sqfts, "rf", "area", page.FolderPath, RectPoints(0, 0, 30, 12));
+
+        ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
+            ThreeDRoofFootprintBuildService.SourcesFromItems([rf]),
+            measurement => measurement.ScaleMetersPerPt,
+            10,
+            0.5);
+
+        ThreeDRoofAutoGuideResult auto = ThreeDRoofAutoGuideService.ApplyAutoEaves(footprint.Guides, 0.5);
+        List<ThreeDRoofGuide> eaves = footprint.Guides
+            .Where(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave)
+            .ToList();
+
+        AssertEqual("1", auto.RoofRegionCount.ToString(), "auto roof should find one roof base region");
+        AssertEqual("2", auto.EaveGuideCount.ToString(), "auto roof should select two opposite eaves");
+        AssertEqual("2", eaves.Count.ToString(), "auto roof should mark two eave guides");
+        AssertTrue(eaves.All(guide => string.Equals(guide.AdjustmentStatus, ThreeDRoofAutoGuideService.AutoAdjustmentStatus, StringComparison.OrdinalIgnoreCase)), "auto eaves should be marked as auto");
+        AssertTrue(eaves.All(guide => Math.Abs(guide.PitchRisePerFoot - 0.5) < 0.0001), "auto eaves should receive pitch");
+
+        var model = new ThreeDWallModel
+        {
+            Slabs = footprint.Slabs,
+            RoofGuides = footprint.Guides,
+        };
+        ThreeDRoofBuildResult roof = ThreeDRoofBuildService.Build(model);
+        AssertTrue(!roof.PlaneBuildBlocked, "auto-selected eaves should generate roof surfaces");
+        AssertTrue(roof.Planes.Count > 0, "auto roof should create preview mesh faces");
+    });
+}
+
+static void ThreeDAutoRoofPreservesManualEaves()
+{
+    WithTempJob("3d_auto_roof_manual_eave", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        TakeoffItem rf = CreateMeasuredTakeoffItem(job, sqfts, "rf", "area", page.FolderPath, RectPoints(0, 0, 30, 12));
+
+        ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
+            ThreeDRoofFootprintBuildService.SourcesFromItems([rf]),
+            measurement => measurement.ScaleMetersPerPt,
+            10,
+            0.5);
+
+        footprint.Guides[0].Kind = ThreeDRoofGuideKinds.Eave;
+        footprint.Guides[0].Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+        footprint.Guides[0].PitchRisePerFoot = 0.25;
+        footprint.Guides[0].AdjustmentStatus = "manual";
+
+        ThreeDRoofAutoGuideResult auto = ThreeDRoofAutoGuideService.ApplyAutoEaves(footprint.Guides, 0.5);
+
+        AssertEqual("0", auto.EaveGuideCount.ToString(), "auto roof should not override manual eave region");
+        AssertEqual("1", auto.SkippedManualRegionCount.ToString(), "manual eave region should be reported");
+        AssertEqual("manual", footprint.Guides[0].AdjustmentStatus, "manual eave status should remain");
+        AssertClose(0.25, footprint.Guides[0].PitchRisePerFoot, "manual eave pitch should remain");
+    });
+}
+
+static void ThreeDRoofBaseBuilderUnionsAdjacentRfAreas()
+{
+    WithTempJob("3d_roof_base_union", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        TakeoffItem rfA = CreateMeasuredTakeoffItem(job, sqfts, "rf A", "area", page.FolderPath, RectPoints(0, 0, 20, 10));
+        TakeoffItem rfB = CreateMeasuredTakeoffItem(job, sqfts, "rf B", "area", page.FolderPath, RectPoints(20, 0, 10, 20));
+
+        ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
+            ThreeDRoofFootprintBuildService.SourcesFromItems([rfA, rfB]),
+            measurement => measurement.ScaleMetersPerPt,
+            11,
+            0.5);
+
+        AssertEqual("1", footprint.Slabs.Count.ToString(), "adjacent roof areas should become one roof base layer");
+        AssertEqual("6", footprint.Slabs[0].Points.Count.ToString(), "L-shaped roof base should keep the outer turn");
+        AssertEqual("6", footprint.Guides.Count.ToString(), "unified roof base should expose one edge per outer side");
+        AssertTrue(footprint.Guides.All(guide => guide.Kind == ThreeDRoofGuideKinds.Rake), "roof base edges default to rake");
+    });
+}
+
+static void ThreeDRoofGenerationRequiresEaveEdges()
+{
+    var model = new ThreeDWallModel
+    {
+        Slabs =
+        [
+            RoofSlab("roof base", 0, 0, 20, 10),
+        ],
+        RoofGuides =
+        [
+            RoofGuide(ThreeDRoofGuideKinds.Rake, 0, 0, 20, 0),
+            RoofGuide(ThreeDRoofGuideKinds.Rake, 20, 0, 20, 10),
+        ],
+    };
+
+    ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+
+    AssertTrue(result.PlaneBuildBlocked, "roof generation should wait for selected eave edges");
+    AssertEqual("0", result.Planes.Count.ToString(), "rake-only roof base should not generate a fake roof");
+    AssertTrue(result.Messages.Any(message => message.Contains("Eave", StringComparison.OrdinalIgnoreCase)), "missing eave selection should be explained");
+}
+
+static void ThreeDRoofEavePitchGeneratesComplexFootprintMesh()
+{
+    WithTempJob("3d_roof_complex_mesh", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
+        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        TakeoffItem rfA = CreateMeasuredTakeoffItem(job, sqfts, "rf A", "area", page.FolderPath, RectPoints(0, 0, 20, 10));
+        TakeoffItem rfB = CreateMeasuredTakeoffItem(job, sqfts, "rf B", "area", page.FolderPath, RectPoints(20, 0, 10, 20));
+
+        ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
+            ThreeDRoofFootprintBuildService.SourcesFromItems([rfA, rfB]),
+            measurement => measurement.ScaleMetersPerPt,
+            11,
+            0.5);
+        foreach (ThreeDRoofGuide guide in footprint.Guides)
+        {
+            guide.Kind = ThreeDRoofGuideKinds.Eave;
+            guide.PitchRisePerFoot = 0.5;
+            guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+        }
+
+        var model = new ThreeDWallModel
+        {
+            Slabs = footprint.Slabs,
+            RoofGuides = footprint.Guides,
+        };
+        ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+
+        AssertTrue(!result.PlaneBuildBlocked, "selected eave edges should generate a roof mesh");
+        AssertTrue(result.Planes.Count >= 4, "complex roof base should generate distinct roof faces");
+        AssertTrue(result.Planes.Any(plane => plane.Kind == "roof_face_envelope"), "roof should include generated envelope faces");
+        AssertTrue(
+            result.Planes.All(plane => plane.Kind is "roof_face_envelope" or "roof_rake_triangle" or "roof_rake_face"),
+            "roof should be face based, not a gridded height preview");
+        AssertTrue(result.Guides.Any(guide => guide.Kind == ThreeDRoofGuideKinds.Valley), "complex roof turns should generate valley seams");
+        AssertTrue(
+            result.Guides
+                .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
+                .SelectMany(guide => guide.Points)
+                .Any(point => point.YFeet > 11.1),
+            "complex generated seams should carry 3D heights");
+        AssertTrue(result.Planes.SelectMany(plane => plane.Points).Max(point => point.YFeet) > 12, "pitched roof should rise above base elevation");
+        AssertTrue(result.Messages.Any(message => message.Contains("eave", StringComparison.OrdinalIgnoreCase)), "generation should mention eave pitch source");
+    });
+}
+
+static void ThreeDRoofEavePitchGeneratesRakeGableTriangles()
+{
+    var model = new ThreeDWallModel
+    {
+        Slabs =
+        [
+            RoofSlab("roof base", 0, 0, 20, 10),
+        ],
+        RoofGuides =
+        [
+            RoofGuide(ThreeDRoofGuideKinds.Eave, 0, 0, 20, 0, 0.5),
+            RoofGuide(ThreeDRoofGuideKinds.Eave, 20, 10, 0, 10, 0.5),
+            RoofGuide(ThreeDRoofGuideKinds.Rake, 0, 10, 0, 0),
+            RoofGuide(ThreeDRoofGuideKinds.Rake, 20, 0, 20, 10),
+        ],
+    };
+
+    ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+    List<ThreeDRoofPlane> rakeTriangles = result.Planes
+        .Where(plane => plane.Kind == "roof_rake_triangle")
+        .ToList();
+
+    AssertTrue(!result.PlaneBuildBlocked, "opposite eaves should build a gable roof");
+    AssertEqual("2", rakeTriangles.Count.ToString(), "rake edges should close as two gable triangles");
+    AssertTrue(rakeTriangles.All(plane => plane.Points.Count == 3), "rake closure should be triangular for a simple gable");
+    AssertTrue(rakeTriangles.All(plane => plane.Points.Max(point => point.YFeet) > 12), "rake triangle should rise to the ridge");
+    AssertTrue(
+        result.Guides.Any(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus &&
+                                   guide.Kind == ThreeDRoofGuideKinds.Ridge),
+        "gable roof should still generate the ridge guide");
+}
+
+static void ThreeDModelStorePersistsGeneratedModel()
+{
+    WithTempJob("3d_model_store", job =>
+    {
+        var model = new ThreeDWallModel
+        {
+            Source = "test",
+            Levels =
+            [
+                new ThreeDFloorLevel { Label = "1st", Ordinal = 1, BaseElevationFeet = 0, HeightFeet = 9.1 },
+            ],
+            Walls =
+            [
+                new ThreeDWallSegment
+                {
+                    TakeoffName = "ext",
+                    StartXFeet = 0,
+                    StartZFeet = 0,
+                    EndXFeet = 10,
+                    EndZFeet = 0,
+                    HeightFeet = 9.1,
+                    ThicknessInches = 6,
+                    LevelKey = "1st",
+                    GroupKey = "1st|ext",
+                },
+            ],
+            Slabs =
+            [
+                new ThreeDFloorSlab
+                {
+                    Label = "1st",
+                    LevelKey = "1st",
+                    Points =
+                    [
+                        new ThreeDPoint { XFeet = 0, ZFeet = 0 },
+                        new ThreeDPoint { XFeet = 10, ZFeet = 0 },
+                        new ThreeDPoint { XFeet = 10, ZFeet = 8 },
+                    ],
+                },
+            ],
+        };
+
+        ThreeDModelStore.Save(job, model);
+        ThreeDWallModel? loaded = ThreeDModelStore.Load(job);
+
+        AssertTrue(loaded != null, "saved 3d model should load");
+        AssertEqual("1", loaded!.Walls.Count.ToString(), "loaded wall count");
+        AssertEqual("1", loaded.Slabs.Count.ToString(), "loaded slab count");
+        AssertClose(9.1, loaded.Levels[0].HeightFeet, "loaded level height");
+    });
+}
+
+static void ThreeDModelStorePersistsRoofGuides()
+{
+    WithTempJob("3d_model_store_roof", job =>
+    {
+        var model = new ThreeDWallModel
+        {
+            Source = "roof_test",
+            RoofGuides =
+            [
+                new ThreeDRoofGuide
+                {
+                    Kind = ThreeDRoofGuideKinds.Eave,
+                    Label = "Eave 1",
+                    PageFolder = @"C:\job\Pages\A101",
+                    ElevationFeet = 10,
+                    Points =
+                    [
+                        new ThreeDRoofGuidePoint { PdfX = 1, PdfY = 2, XFeet = 10, ZFeet = 20 },
+                        new ThreeDRoofGuidePoint { PdfX = 3, PdfY = 4, XFeet = 30, ZFeet = 20 },
+                    ],
+                },
+            ],
+        };
+
+        ThreeDModelStore.Save(job, model);
+        ThreeDWallModel? loaded = ThreeDModelStore.Load(job);
+
+        AssertTrue(loaded != null, "saved model should load");
+        AssertEqual("1", loaded!.RoofGuides.Count.ToString(), "loaded roof guide count");
+        AssertEqual(ThreeDRoofGuideKinds.Eave, loaded.RoofGuides[0].Kind, "loaded roof edge kind");
+        AssertClose(30, loaded.RoofGuides[0].Points[1].XFeet, "loaded roof guide x feet");
+    });
+}
+
+static void ThreeDSlabTriangulatorHandlesConcaveAreas()
+{
+    ThreeDPolygonTriangulation result = ThreeDPolygonTriangulator.Triangulate(
+    [
+        new ThreeDPoint { XFeet = 0, ZFeet = 0 },
+        new ThreeDPoint { XFeet = 6, ZFeet = 0 },
+        new ThreeDPoint { XFeet = 6, ZFeet = 2 },
+        new ThreeDPoint { XFeet = 3, ZFeet = 2 },
+        new ThreeDPoint { XFeet = 3, ZFeet = 5 },
+        new ThreeDPoint { XFeet = 0, ZFeet = 5 },
+    ]);
+
+    AssertTrue(result.Success, "concave slab should triangulate");
+    AssertEqual("12", result.TriangleIndices.Count.ToString(), "concave six-point polygon should produce four triangles");
+    AssertEqual("6", result.Points.Count.ToString(), "concave slab should preserve useful points");
+}
+
+static void ThreeDSlabTriangulatorRejectsCrossingAreas()
+{
+    ThreeDPolygonTriangulation result = ThreeDPolygonTriangulator.Triangulate(
+    [
+        new ThreeDPoint { XFeet = 0, ZFeet = 0 },
+        new ThreeDPoint { XFeet = 6, ZFeet = 6 },
+        new ThreeDPoint { XFeet = 0, ZFeet = 6 },
+        new ThreeDPoint { XFeet = 6, ZFeet = 0 },
+    ]);
+
+    AssertTrue(!result.Success, "crossing slab should not render with long artifact diagonals");
+}
+
 static void PageTreeOrderMovesSheetBeforeFolder()
 {
     WithTempJob("page_order_sheet_before_folder", job =>
@@ -588,6 +1643,24 @@ static void PageTreeOrderMovesFolderBeforeFolder()
         AssertPageChildOrder(parent, "Folder A,Folder B,Sheet C", "initial folder/folder order");
         AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([folderB], folderA, after: false), "folder before folder should apply");
         AssertPageChildOrder(parent, "Folder B,Folder A,Sheet C", "folder moved before folder");
+    });
+}
+
+static void PageTreeOrderMovesSelectedItemsToEnd()
+{
+    WithTempJob("page_order_selected_to_end", job =>
+    {
+        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        PageInfo sheetA = CreatePageItem(job, parent, "Sheet A");
+        PageInfo sheetB = CreatePageItem(job, parent, "Sheet B");
+        PageInfo sheetC = CreatePageItem(job, parent, "Sheet C");
+        PageInfo sheetD = CreatePageItem(job, parent, "Sheet D");
+
+        AssertPageChildOrder(parent, "Sheet A,Sheet B,Sheet C,Sheet D", "initial page order");
+        AssertTrue(
+            OurPlaneCoreJobStore.MoveSiblingsToEnd([sheetB.FolderPath, sheetD.FolderPath], parent),
+            "selected sheets should move to end");
+        AssertPageChildOrder(parent, "Sheet A,Sheet C,Sheet B,Sheet D", "selected sheets moved to end");
     });
 }
 
@@ -624,6 +1697,110 @@ static void PageRenameAllowsDuplicateDisplayNames()
     });
 }
 
+static void TakeoffCreateAllowsDuplicateDisplayNames()
+{
+    WithTempJob("takeoff_create_duplicate_names", job =>
+    {
+        TakeoffItem first = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
+        TakeoffItem second = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#00FF00", "area");
+
+        AssertTrue(Directory.Exists(first.FolderPath), "first duplicate-name takeoff should exist");
+        AssertTrue(Directory.Exists(second.FolderPath), "second duplicate-name takeoff should exist");
+        AssertFalse(string.Equals(first.FolderPath, second.FolderPath, StringComparison.OrdinalIgnoreCase), "duplicate-name takeoffs need unique folders");
+        AssertEqual("Walls", first.Name, "first takeoff display name");
+        AssertEqual("Walls", second.Name, "second takeoff display name");
+        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(first.FolderPath), "first stored display name");
+        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(second.FolderPath), "second stored display name");
+    });
+}
+
+static void TakeoffRenameAllowsDuplicateDisplayNames()
+{
+    WithTempJob("takeoff_rename_duplicate_names", job =>
+    {
+        TakeoffItem first = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
+        TakeoffItem second = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof", "#00FF00", "area");
+
+        string renamed = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(second.FolderPath, "Walls");
+        TakeoffItem? renamedItem = OurPlaneCoreJobStore.TryReadTakeoffItem(renamed);
+
+        AssertTrue(Directory.Exists(first.FolderPath), "first duplicate-name takeoff should remain");
+        AssertTrue(Directory.Exists(renamed), "renamed duplicate-name takeoff should exist");
+        AssertFalse(string.Equals(first.FolderPath, renamed, StringComparison.OrdinalIgnoreCase), "renamed duplicate-name takeoff needs unique folder");
+        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(first.FolderPath), "first takeoff display name");
+        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(renamed), "renamed takeoff display name");
+        AssertEqual("Walls", renamedItem?.Name ?? "", "renamed takeoff item name");
+    });
+}
+
+static void TakeoffDisplayNamesPreserveSlash()
+{
+    WithTempJob("takeoff_slash_names", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "ext 9.1 10/A502", "#FF0000", "line");
+        AssertEqual("ext 9.1 10/A502", item.Name, "created takeoff display name preserves slash");
+        AssertTrue(Path.GetFileName(item.FolderPath).Contains("_A502", StringComparison.Ordinal), "folder path still uses safe slash replacement");
+
+        string renamed = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, "corr 2x6 10.1 14/A502");
+        TakeoffItem? loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(renamed);
+        AssertEqual("corr 2x6 10.1 14/A502", OurPlaneCoreJobStore.DisplayName(renamed), "renamed takeoff display name preserves slash");
+        AssertEqual("corr 2x6 10.1 14/A502", loaded?.Name ?? "", "loaded takeoff item preserves slash");
+
+        loaded!.Measurements.Add(new Measurement
+        {
+            MType = "line",
+            ScaleMetersPerPt = 0.3048,
+            Points = [new SKPoint(0, 0), new SKPoint(1, 0)],
+        });
+        IReadOnlyList<PlanSwiftExportRow> rows = PlanSwiftTakeoffExporter.BuildRows(
+            job,
+            [loaded],
+            [job.TakeoffsRoot],
+            UnitMode.Imperial);
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Item && row.Name == "corr 2x6 10.1 14/A502"), "takeoff export preserves slash");
+    });
+}
+
+static void TakeoffCopyKeepsDisplayName()
+{
+    WithTempJob("takeoff_copy_name", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2. 3x6", "#FF0000", "line");
+        string sourceGuid = ReadDataGuid(item.FolderPath);
+        string copy = OurPlaneCoreJobStore.CopyNode(item.FolderPath, job.TakeoffsRoot);
+        string secondCopy = OurPlaneCoreJobStore.CopyNode(item.FolderPath, job.TakeoffsRoot);
+        TakeoffItem? copied = OurPlaneCoreJobStore.TryReadTakeoffItem(copy);
+        TakeoffItem? secondCopied = OurPlaneCoreJobStore.TryReadTakeoffItem(secondCopy);
+        string copyGuid = ReadDataGuid(copy);
+
+        AssertFalse(string.Equals(item.FolderPath, copy, StringComparison.OrdinalIgnoreCase), "copy should use a new folder");
+        AssertFalse(string.Equals(copy, secondCopy, StringComparison.OrdinalIgnoreCase), "second copy should use another hidden folder");
+        AssertEqual("2. 3x6", OurPlaneCoreJobStore.DisplayName(copy), "copy display name should not include Copy");
+        AssertEqual("2. 3x6", copied?.Name ?? "", "copied item name should not include Copy");
+        AssertEqual("2. 3x6", OurPlaneCoreJobStore.DisplayName(secondCopy), "second copy display name should not include a number");
+        AssertEqual("2. 3x6", secondCopied?.Name ?? "", "second copied item name should not include a number");
+        AssertFalse(string.Equals(sourceGuid, copyGuid, StringComparison.OrdinalIgnoreCase), "copied takeoff should get a new hidden guid");
+    });
+}
+
+static void TakeoffMoveCollisionKeepsDisplayName()
+{
+    WithTempJob("takeoff_move_collision_name", job =>
+    {
+        string targetFolder = CreateTakeoffFolder(job, "Target");
+        TakeoffItem existing = OurPlaneCoreJobStore.CreateTakeoffItem(job, targetFolder, "Ext Walls", "#FF0000", "line");
+        TakeoffItem moving = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Ext Walls", "#00FF00", "line");
+
+        string moved = OurPlaneCoreJobStore.MoveNode(moving.FolderPath, targetFolder);
+        TakeoffItem? loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(moved);
+
+        AssertFalse(string.Equals(existing.FolderPath, moved, StringComparison.OrdinalIgnoreCase), "move collision should use a unique folder path");
+        AssertFalse(OurPlaneCoreJobStore.DisplayName(moved).Contains("Copy", StringComparison.OrdinalIgnoreCase), "move collision should not add Copy");
+        AssertEqual("Ext Walls", OurPlaneCoreJobStore.DisplayName(moved), "move collision preserves display name");
+        AssertEqual("Ext Walls", loaded?.Name ?? "", "loaded moved item preserves display name");
+    });
+}
+
 static void JobStoreSanitizesUnsafeNames()
 {
     string clean = OurPlaneCoreJobStore.SanitizeName("  bad:name?.  ", 120);
@@ -647,6 +1824,41 @@ static void PdfMetadataPageNameAndScaleGate()
 
     metadata.SkipScale = true;
     AssertFalse(metadata.CanApplyScale(), "skip scale blocks scale apply");
+}
+
+static void PdfMetadataPreservesDottedSheetLabels()
+{
+    var page = new PageInfo
+    {
+        Name = "A5",
+        FolderPath = @"C:\job\Pages\A5",
+        PdfPath = @"C:\job\sources\plans.pdf",
+        PdfPage = 2,
+    };
+    var request = new SmartAiRequest { Id = "metadata-test" };
+    var response = new SmartAiResponse
+    {
+        OutputText =
+            """
+            {
+              "sheet_label": "A5.03",
+              "sheet_title": "WALL SECTIONS",
+              "selected_scale_text": "1/4\" = 1'0\"",
+              "confidence": "test"
+            }
+            """,
+    };
+
+    bool ok = PdfSheetMetadataService.TryBuildMetadataFromFallbackResponse(
+        page,
+        request,
+        response,
+        out PdfSheetMetadata metadata,
+        out string error);
+
+    AssertTrue(ok, $"metadata fallback should parse dotted sheet labels: {error}");
+    AssertEqual("A5.03", metadata.SheetLabel, "dotted sheet label");
+    AssertEqual("A5.03", metadata.ProposedPageName(), "dotted sheet label preserved in proposed name");
 }
 
 static void PdfScaleParserHandlesArchitecturalScale()
@@ -743,6 +1955,29 @@ static void JoistLayoutSubtractsAreaCutHoles()
     AssertClose(88.0, layout.AreaMetersSquared / (0.3048 * 0.3048), "joist area should subtract the hole");
 }
 
+static void JoistLayoutCanSkipEndJoist()
+{
+    JoistLayoutResult withEnd = JoistTakeoffCalculator.Calculate(
+        SimpleJoistAreaPolygon(),
+        0.3048,
+        120,
+        0,
+        JoistTakeoffCalculator.RoundingNone,
+        "",
+        addEndJoist: true);
+    JoistLayoutResult withoutEnd = JoistTakeoffCalculator.Calculate(
+        SimpleJoistAreaPolygon(),
+        0.3048,
+        120,
+        0,
+        JoistTakeoffCalculator.RoundingNone,
+        "",
+        addEndJoist: false);
+
+    AssertEqual("2", withEnd.Count.ToString(), "end joist should be included by default");
+    AssertEqual("1", withoutEnd.Count.ToString(), "end joist can be skipped");
+}
+
 static void JoistPitchLengthAppliesSlopeFactor()
 {
     JoistLayoutResult flat = JoistTakeoffCalculator.Calculate(
@@ -761,6 +1996,7 @@ static void JoistPitchLengthAppliesSlopeFactor()
 
     AssertTrue(JoistTakeoffCalculator.TryParsePitchFactor("3:12", out double factor), "pitch factor");
     AssertClose(flat.TotalRawLengthMeters * factor, pitched.TotalRawLengthMeters, "sloped raw length");
+    AssertClose(flat.TotalLengthMeters * factor, pitched.TotalLengthMeters, "sloped order length without rounding");
     AssertEqual("3:12", pitched.Pitch, "layout pitch");
 }
 
@@ -775,7 +2011,7 @@ static void JoistPitchRoundingAppliesPerSegment()
         "6:12");
 
     AssertEqual("2", rounded.Count.ToString(), "joist count");
-    AssertClose(16.0, rounded.TotalLengthMeters / 0.3048, "order length rounds the flat 8 ft joist length");
+    AssertClose(20.0, rounded.TotalLengthMeters / 0.3048, "order length rounds the sloped 8.94 ft joist length");
 }
 
 static void JoistPitchLabelShowsIndicator()
@@ -868,7 +2104,7 @@ static void JoistPitchLabelExplainsFlatSlopeAndOrderLengths()
 
     string label = measurement.Label(0, UnitMode.Imperial);
 
-    AssertTrue(label.Contains("2 pcs @ 12.00 FT order (flat 11.94, slope 12.59)", StringComparison.Ordinal), "label explains flat, slope, and order length");
+    AssertTrue(label.Contains("2 pcs @ 13.00 FT order (flat 11.94, slope 12.59)", StringComparison.Ordinal), "label explains flat, slope, and order length");
 }
 
 static void JoistExportUsesVisibleLabelLines()
@@ -900,6 +2136,94 @@ static void JoistExportUsesVisibleLabelLines()
     });
 }
 
+static void PlanSwiftTxtExportWritesEveryRootItem()
+{
+    WithTempJob("TXT Export", job =>
+    {
+        TakeoffItem first = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "First Item", "#FF0000", "line");
+        TakeoffItem second = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Second Item", "#00FF00", "line");
+
+        first.Measurements.Add(new Measurement
+        {
+            MType = "line",
+            ScaleMetersPerPt = 0.3048,
+            Points = [new SKPoint(0, 0), new SKPoint(1, 0)],
+        });
+        second.Measurements.Add(new Measurement
+        {
+            MType = "line",
+            ScaleMetersPerPt = 0.3048,
+            Points = [new SKPoint(0, 0), new SKPoint(2, 0)],
+        });
+
+        IReadOnlyList<PlanSwiftExportRow> rows = PlanSwiftTakeoffExporter.BuildRows(
+            job,
+            [first, second],
+            [job.TakeoffsRoot],
+            UnitMode.Imperial);
+        string path = Path.Combine(job.RootPath, "takeoffs.txt");
+        PlanSwiftTakeoffExporter.WriteTxt(path, rows);
+        string text = File.ReadAllText(path);
+
+        AssertEqual("2", rows.Count(row => row.Kind == PlanSwiftExportRowKind.Item).ToString(), "root export item rows");
+        AssertTrue(text.Contains("First Item\t", StringComparison.Ordinal), "txt includes first item");
+        AssertTrue(text.Contains("Second Item\t", StringComparison.Ordinal), "txt includes second item");
+    });
+}
+
+static void PlanSwiftExportHidesGeneratedImportNotes()
+{
+    WithTempJob("Import Notes Export", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Imported Area", "#FF0000", "area");
+        item.Notes = "Keep item note\nImported generated PlanSwift Segment geometry from Takeoff\\segments\\Deck";
+        item.Measurements.Add(new Measurement
+        {
+            MType = "area",
+            Notes = "Imported from PlanSwift: Takeoff\\sqfts\\4th\\Section\nKeep section note\nImported from PlanSwift Segment Section: Takeoff\\segments\\Deck\\Section",
+            ScaleMetersPerPt = 0.3048,
+            Points =
+            [
+                new SKPoint(0, 0),
+                new SKPoint(1, 0),
+                new SKPoint(1, 1),
+                new SKPoint(0, 1),
+            ],
+        });
+
+        IReadOnlyList<PlanSwiftExportRow> rows = PlanSwiftTakeoffExporter.BuildRows(
+            job,
+            [item],
+            [job.TakeoffsRoot],
+            UnitMode.Imperial);
+
+        AssertFalse(rows.Any(row => row.Name.Contains("Imported from PlanSwift:", StringComparison.OrdinalIgnoreCase)), "generated import source note hidden");
+        AssertFalse(rows.Any(row => row.Name.Contains("Imported generated PlanSwift Segment", StringComparison.OrdinalIgnoreCase)), "generated segment source note hidden");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Keep item note"), "manual item note exported");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Keep section note"), "manual section note exported");
+        AssertEqual("Manual note", PlanSwiftTakeoffExporter.CleanExportNotes("Imported from PlanSwift: Takeoff\\sqfts\\4th\\Section\nManual note"), "csv export note cleanup");
+    });
+}
+
+static void ActiveExcelExportMatrixKeepsNumbers()
+{
+    PlanSwiftExportRow[] rows =
+    [
+        new(PlanSwiftExportRowKind.Header, "Framing"),
+        new(PlanSwiftExportRowKind.Item, "2x10 Joists", "12,5", "FT"),
+        new(PlanSwiftExportRowKind.Note, "Note\twith\nbreak"),
+        new(PlanSwiftExportRowKind.Blank, ""),
+    ];
+
+    object[,] values = ActiveExcelTakeoffExportService.BuildValueMatrix(rows);
+
+    AssertEqual("Framing", values[0, 0]?.ToString() ?? "", "header first cell");
+    AssertTrue(values[1, 1] is double value && Math.Abs(value - 12.5) < 0.0001, "numeric value exported as number");
+    AssertEqual("FT", values[1, 2]?.ToString() ?? "", "unit first cell");
+    AssertEqual("Note with break", values[2, 0]?.ToString() ?? "", "note text is cell-safe");
+    AssertEqual("", values[3, 0]?.ToString() ?? "", "blank row first cell");
+}
+
 static void JoistPitchPersistsOnTakeoffItem()
 {
     WithTempJob("Joist Pitch", job =>
@@ -910,6 +2234,8 @@ static void JoistPitchPersistsOnTakeoffItem()
         item.JoistSpacingInches = 120;
         item.JoistLengthRounding = JoistTakeoffCalculator.RoundingNone;
         item.JoistDetailedLabels = false;
+        item.JoistDirectionFollowsAreaRotation = false;
+        item.JoistAddEndJoist = false;
         item.Measurements.Add(new Measurement
         {
             MType = "area",
@@ -926,6 +2252,10 @@ static void JoistPitchPersistsOnTakeoffItem()
         AssertEqual("3:12", loaded.Measurements[0].JoistPitch, "loaded measurement pitch");
         AssertFalse(loaded.JoistDetailedLabels, "loaded item label format");
         AssertFalse(loaded.Measurements[0].JoistDetailedLabels, "loaded measurement label format");
+        AssertFalse(loaded.JoistDirectionFollowsAreaRotation, "loaded item rotate direction flag");
+        AssertFalse(loaded.Measurements[0].JoistDirectionFollowsAreaRotation, "loaded measurement rotate direction flag");
+        AssertFalse(loaded.JoistAddEndJoist, "loaded item end joist flag");
+        AssertFalse(loaded.Measurements[0].JoistAddEndJoist, "loaded measurement end joist flag");
     });
 }
 
@@ -937,6 +2267,8 @@ static void JoistPitchAppliesItemProperties()
         IsJoistTakeoff = true,
         JoistPitch = "4/12",
         JoistDetailedLabels = false,
+        JoistDirectionFollowsAreaRotation = false,
+        JoistAddEndJoist = false,
     };
     item.Measurements.Add(new Measurement
     {
@@ -948,6 +2280,8 @@ static void JoistPitchAppliesItemProperties()
 
     AssertEqual("4:12", item.Measurements[0].JoistPitch, "measurement pitch copied");
     AssertFalse(item.Measurements[0].JoistDetailedLabels, "measurement label format copied");
+    AssertFalse(item.Measurements[0].JoistDirectionFollowsAreaRotation, "measurement rotate direction flag copied");
+    AssertFalse(item.Measurements[0].JoistAddEndJoist, "measurement end joist flag copied");
 }
 
 static void PageOverlayPersistsThroughSourceRewrites()
@@ -1066,6 +2400,43 @@ static void AppSettingsJobRootsDedupe()
     AssertEqual("1", AppSettingsStore.CurrentJobsRootPaths(settings).Count.ToString(), "deduped roots");
 }
 
+static void AppSettingsPathCanUseEnvOverride()
+{
+    string? previous = Environment.GetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable);
+    string overridePath = Path.Combine(Path.GetTempPath(), "opc_settings_override", Guid.NewGuid().ToString("N"), "settings.json");
+    try
+    {
+        Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, overridePath);
+        AssertEqual(Path.GetFullPath(overridePath), AppSettingsStore.SettingsPath, "settings path override");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, previous);
+    }
+}
+
+static void AtomicWriteIgnoresStaleFixedTempPath()
+{
+    string dir = Path.Combine(Path.GetTempPath(), "opc_atomic_write", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    string path = Path.Combine(dir, "global_ai_index.jsonl");
+    string staleFixedTempPath = path + ".tmp";
+
+    try
+    {
+        File.WriteAllText(path, "old");
+        using var locked = new FileStream(staleFixedTempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+
+        IoUtil.WriteAllTextAtomic(path, "new");
+
+        AssertEqual("new", File.ReadAllText(path), "atomic write should use a unique temp path");
+    }
+    finally
+    {
+        TryDeleteDirectory(dir);
+    }
+}
+
 static void AppSettingsRecentPreservesPinAndThumbnail()
 {
     var settings = new AppSettings();
@@ -1094,6 +2465,52 @@ static void AppSettingsRemovesRecentJobByPath()
     AppSettingsStore.RemoveRecentJob(settings, path + Path.DirectorySeparatorChar);
 
     AssertEqual("0", settings.RecentJobs.Count.ToString(), "recent job removed");
+}
+
+static void OpenAiResponseParserExtractsOutputText()
+{
+    string json = """
+    {
+      "id": "resp_test",
+      "status": "completed",
+      "output": [
+        {
+          "type": "message",
+          "content": [
+            { "type": "output_text", "text": "Line one" },
+            { "type": "output_text", "text": "Line two" }
+          ]
+        }
+      ]
+    }
+    """;
+
+    AssertEqual("Line one" + Environment.NewLine + "Line two", OpenAiResponseParser.ExtractOutputText(json), "output text");
+}
+
+static void OpenAiResponseParserReportsIncompleteMaxTokens()
+{
+    string json = """
+    {
+      "id": "resp_test",
+      "status": "incomplete",
+      "incomplete_details": { "reason": "max_output_tokens" },
+      "output": [{ "type": "reasoning" }]
+    }
+    """;
+
+    AssertEqual("incomplete", OpenAiResponseParser.ExtractString(json, "status"), "status");
+    AssertEqual(
+        "OpenAI response was incomplete (max_output_tokens). See raw response JSON.",
+        OpenAiResponseParser.ExtractIncompleteError(json),
+        "incomplete error");
+}
+
+static void KeyboardShortcutKeysUseEnglishDisplayText()
+{
+    AssertEqual("BK", KeyboardShortcutKeys.EnglishLayoutDisplay("bk"), "bookmark shortcut display");
+    AssertEqual("E", KeyboardShortcutKeys.EnglishLayoutDisplay("e"), "select shortcut display");
+    AssertEqual("T", KeyboardShortcutKeys.EnglishLayoutDisplay("t"), "new item shortcut display");
 }
 
 static void PdfMetadataNeedsFallbackWhenScaleUnresolved()
@@ -1126,9 +2543,14 @@ static void ViewportRenderScaleChoosesNextQualityStep()
 {
     float[] steps = [0.75f, 1.0f, 1.5f, 2.25f, 3.0f, 4.0f];
 
-    AssertClose(0.75, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom clamps to first render step");
+    AssertClose(1.0, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom uses the responsive clarity floor");
     AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
-    AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom stays on responsive render cap");
+    AssertClose(2.25, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom uses the responsive render cap");
+    AssertClose(
+        1.637,
+        ViewportRenderPolicy.SelectRenderScale(8.0f, steps, pageWidthPt: 2592f, pageHeightPt: 3456f),
+        "large sheets stay inside the viewport render pixel budget",
+        tolerance: 0.001);
 }
 
 static void ViewportBackgroundDefaultsToOpaqueWhite()
@@ -1240,6 +2662,22 @@ static void ViewportEditingBlocksFastNavigationFrame()
         "active edit interaction should keep the full render frame");
 }
 
+static void ViewportVisibleGeometryPaddingIsScreenRelative()
+{
+    AssertClose(
+        ViewportRenderPolicy.VisibleGeometryPaddingScreenPx,
+        ViewportRenderPolicy.VisibleGeometryPaddingPdf(1.0f),
+        "1x zoom uses the configured screen padding in PDF points");
+    AssertClose(
+        ViewportRenderPolicy.VisibleGeometryPaddingScreenPx / 4.0f,
+        ViewportRenderPolicy.VisibleGeometryPaddingPdf(4.0f),
+        "high zoom reduces PDF-space padding instead of widening the screen margin");
+    AssertClose(
+        ViewportRenderPolicy.VisibleGeometryPaddingScreenPx * 2.0f,
+        ViewportRenderPolicy.VisibleGeometryPaddingPdf(0.5f),
+        "far zoom expands PDF-space padding to keep the same screen margin");
+}
+
 static void ViewportMeasurementLabelsSurviveDistantZoom()
 {
     AssertTrue(
@@ -1273,6 +2711,11 @@ static void ViewportMeasurementLabelsSurviveDistantZoom()
 
 static void ViewportMeasurementLodLimitsDenseDetails()
 {
+    AssertTrue(
+        ViewportRenderPolicy.SlowSnapLogMs > 0 &&
+        ViewportRenderPolicy.SlowSnapLogMs < ViewportRenderPolicy.SlowFrameLogMs,
+        "snap search logging should catch pointer hitches before a full slow frame");
+
     AssertFalse(
         ViewportRenderPolicy.ShouldDrawMeasurementDetails(
             zoom: 2.0f,
@@ -1300,6 +2743,156 @@ static void ViewportLodHidesExpensiveLayersDuringFastFrames()
             activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementGeometryThreshold + 1,
             fastNavigationFrame: true),
         "very dense takeoff pages should skip non-selected measurement geometry during navigation");
+}
+
+static void ViewportMeasurementSpatialIndexFiltersByBounds()
+{
+    Measurement near = SpatialIndexLine("near", 10, 10, 40, 10);
+    Measurement far = SpatialIndexLine("far", 500, 500, 530, 500);
+    Measurement hole = new()
+    {
+        Id = "hole",
+        MType = "area",
+        Points =
+        [
+            new SKPoint(200, 200),
+            new SKPoint(260, 200),
+            new SKPoint(260, 260),
+            new SKPoint(200, 260),
+        ],
+        Holes =
+        [
+            [
+                new SKPoint(215, 215),
+                new SKPoint(225, 215),
+                new SKPoint(225, 225),
+                new SKPoint(215, 225),
+            ],
+        ],
+    };
+
+    var index = new ViewportMeasurementSpatialIndex([near, far, hole]);
+    IReadOnlyList<Measurement> hits = index.Query(SKRect.Create(0, 0, 80, 80));
+    AssertEqual("near", string.Join(",", hits.Select(hit => hit.Id)), "small query should return only intersecting measurement bounds");
+
+    IReadOnlyList<ViewportMeasurementVertexCandidate> vertices = index.QueryVertices(SKRect.Create(8, 8, 5, 5));
+    AssertEqual("near:0", string.Join(",", vertices.Select(hit => $"{hit.Measurement.Id}:{hit.GlobalIndex}")), "vertex query should return only nearby vertices");
+
+    IReadOnlyList<ViewportMeasurementSegmentCandidate> segments = index.QuerySegments(SKRect.Create(20, 8, 5, 5));
+    AssertEqual("near", string.Join(",", segments.Select(hit => hit.Measurement.Id)), "segment query should return only nearby segments");
+
+    hits = index.Query(SKRect.Create(218, 218, 2, 2));
+    AssertEqual("hole", string.Join(",", hits.Select(hit => hit.Id)), "holes should contribute to indexed measurement bounds");
+}
+
+static void ViewportMeasurementSpatialIndexPreservesDrawOrder()
+{
+    Measurement first = SpatialIndexLine("first", 0, 0, 100, 0);
+    Measurement second = SpatialIndexLine("second", 20, 20, 120, 20);
+    Measurement third = SpatialIndexLine("third", 40, 40, 140, 40);
+    var index = new ViewportMeasurementSpatialIndex([first, second, third]);
+
+    IReadOnlyList<Measurement> hits = index.Query(SKRect.Create(10, -10, 150, 70));
+    AssertEqual("first,second,third", string.Join(",", hits.Select(hit => hit.Id)), "spatial query should preserve active-page draw order");
+
+    Measurement broad = SpatialIndexLine("broad", -10000, -10000, 10000, 10000);
+    index = new ViewportMeasurementSpatialIndex([first, broad, third]);
+    hits = index.Query(SKRect.Create(50, 50, 1, 1));
+    AssertEqual("broad", string.Join(",", hits.Select(hit => hit.Id)), "broad measurements should be included once");
+
+    IReadOnlyList<ViewportMeasurementSegmentCandidate> segmentHits = index.QuerySegments(SKRect.Create(50, 50, 1, 1));
+    AssertEqual("broad", string.Join(",", segmentHits.Select(hit => hit.Measurement.Id)), "broad segments should be included once");
+}
+
+static Measurement SpatialIndexLine(string id, float x1, float y1, float x2, float y2) =>
+    new()
+    {
+        Id = id,
+        MType = "line",
+        Points =
+        [
+            new SKPoint(x1, y1),
+            new SKPoint(x2, y2),
+        ],
+    };
+
+static void ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback()
+{
+    RunOnStaThread(() =>
+    {
+        const int existingCount = 40;
+        const int pastedCount = 500;
+        string pageFolder = Path.Combine(Path.GetTempPath(), "opc_batch_undo_page");
+        var existing = Enumerable.Range(0, existingCount)
+            .Select(index => BatchUndoLineMeasurement(index, pageFolder, @"Takeoffs\Existing"))
+            .ToList();
+        var pasted = Enumerable.Range(existingCount, pastedCount)
+            .Select(index => BatchUndoLineMeasurement(index, pageFolder, @"Takeoffs\Pasted"))
+            .ToList();
+
+        var viewport = new PdfViewport();
+        viewport.SetMeasurements(existing.Concat(pasted));
+
+        int singleRemoved = 0;
+        int batchRemovedCalls = 0;
+        int batchRemovedCount = 0;
+        viewport.MeasurementRemoved += _ => singleRemoved++;
+        viewport.MeasurementsRemoved += measurements =>
+        {
+            batchRemovedCalls++;
+            batchRemovedCount += measurements.Count;
+        };
+
+        viewport.RegisterAddedMeasurementsUndo(pasted, "remove pasted measurements");
+        viewport.UndoLast();
+
+        AssertEqual("0", singleRemoved.ToString(), "batch undo should not emit one removed event per measurement");
+        AssertEqual("1", batchRemovedCalls.ToString(), "batch undo should emit one removed callback");
+        AssertEqual(pastedCount.ToString(), batchRemovedCount.ToString(), "batch undo callback count");
+        AssertEqual(existingCount.ToString(), LoadedViewportMeasurementCount(viewport).ToString(), "undo should keep pre-existing measurements");
+    });
+}
+
+static Measurement BatchUndoLineMeasurement(int index, string pageFolder, string takeoffFolder) =>
+    new()
+    {
+        MType = "line",
+        PageFolder = pageFolder,
+        TakeoffFolder = takeoffFolder,
+        Points =
+        [
+            new SKPoint(index, 0),
+            new SKPoint(index + 1, 1),
+        ],
+    };
+
+static int LoadedViewportMeasurementCount(PdfViewport viewport)
+{
+    var field = typeof(PdfViewport).GetField("_measurementSet", BindingFlags.NonPublic | BindingFlags.Instance);
+    if (field?.GetValue(viewport) is not ICollection<Measurement> measurements)
+        throw new InvalidOperationException("PdfViewport measurement index was not available for test inspection.");
+    return measurements.Count;
+}
+
+static void RunOnStaThread(Action action)
+{
+    Exception? failure = null;
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join();
+    if (failure != null)
+        throw new InvalidOperationException(failure.Message, failure);
 }
 
 static void PdfSnapIndexFindsNearestPoint()
@@ -1355,6 +2948,97 @@ static List<Measurement> SectionMeasurements(params string[] ids) =>
 static void AssertSectionOrder(string expected, IReadOnlyList<Measurement> measurements, string message) =>
     AssertEqual(expected, string.Join(",", measurements.Select(measurement => measurement.Id)), message);
 
+static TakeoffItem CreateMeasuredTakeoffItem(
+    OurPlaneCoreJob job,
+    string parentFolder,
+    string name,
+    string measurementType,
+    string pageFolder,
+    IReadOnlyList<SKPoint> points)
+{
+    TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", measurementType);
+    item.Measurements.Add(new Measurement
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Name = name,
+        MType = measurementType,
+        Color = "#FF4444",
+        PageFolder = pageFolder,
+        TakeoffFolder = item.FolderPath,
+        ScaleMetersPerPt = 0.3048,
+        Points = points.ToList(),
+    });
+    OurPlaneCoreJobStore.SaveTakeoffItem(item);
+    return item;
+}
+
+static SmartMassingTakeoffAiAssignment AiAssignment(
+    OurPlaneCoreJob job,
+    TakeoffItem item,
+    string role,
+    int level) =>
+    new()
+    {
+        TakeoffId = Path.GetFileName(item.FolderPath),
+        FolderPath = Path.GetRelativePath(job.RootPath, item.FolderPath),
+        Role = role,
+        Level = level,
+        Confidence = 0.92,
+        Reason = "test plan",
+    };
+
+static IReadOnlyList<SKPoint> RectPoints(float x, float y, float width, float height) =>
+[
+    new SKPoint(x, y),
+    new SKPoint(x + width, y),
+    new SKPoint(x + width, y + height),
+    new SKPoint(x, y + height),
+];
+
+static ThreeDRoofGuide RoofGuide(string kind, double x1, double z1, double x2, double z2, double pitchRisePerFoot = 0)
+{
+    var guide = new ThreeDRoofGuide
+    {
+        Kind = kind,
+        Label = ThreeDRoofGuideKinds.Title(kind),
+        PageFolder = @"C:\job\Pages\A101",
+        ElevationFeet = 9.1,
+        PitchRisePerFoot = pitchRisePerFoot,
+        Color = ThreeDRoofGuideKinds.Color(kind),
+        Points =
+        [
+            new ThreeDRoofGuidePoint { PdfX = x1, PdfY = z1, XFeet = x1, ZFeet = z1 },
+            new ThreeDRoofGuidePoint { PdfX = x2, PdfY = z2, XFeet = x2, ZFeet = z2 },
+        ],
+    };
+    guide.RawPoints = guide.Points
+        .Select(point => new ThreeDRoofGuidePoint
+        {
+            PdfX = point.PdfX,
+            PdfY = point.PdfY,
+            XFeet = point.XFeet,
+            ZFeet = point.ZFeet,
+        })
+        .ToList();
+    return guide;
+}
+
+static ThreeDFloorSlab RoofSlab(string label, double x, double z, double width, double depth) =>
+    new()
+    {
+        Label = label,
+        TakeoffName = label,
+        LevelKey = "roof",
+        ElevationFeet = 10,
+        Points =
+        [
+            new ThreeDPoint { XFeet = x, ZFeet = z },
+            new ThreeDPoint { XFeet = x + width, ZFeet = z },
+            new ThreeDPoint { XFeet = x + width, ZFeet = z + depth },
+            new ThreeDPoint { XFeet = x, ZFeet = z + depth },
+        ],
+    };
+
 static TakeoffItem CreateRootTakeoffItem(OurPlaneCoreJob job, string name) =>
     OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, name, "#FF4444", "line");
 
@@ -1378,11 +3062,14 @@ static PageInfo CreatePageItem(OurPlaneCoreJob job, string parentFolder, string 
 
 static void AssertTakeoffChildOrder(string parentFolder, string expected, string message)
 {
-    string actual = string.Join(",",
-        OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
-            .Select(OurPlaneCoreJobStore.DisplayName));
+    string actual = string.Join(",", TakeoffChildNames(parentFolder));
     AssertEqual(expected, actual, message);
 }
+
+static IReadOnlyList<string> TakeoffChildNames(string parentFolder) =>
+    OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
+        .Select(OurPlaneCoreJobStore.DisplayName)
+        .ToList();
 
 static void AssertPageChildOrder(string parentFolder, string expected, string message)
 {
@@ -1390,6 +3077,13 @@ static void AssertPageChildOrder(string parentFolder, string expected, string me
         OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
             .Select(OurPlaneCoreJobStore.DisplayName));
     AssertEqual(expected, actual, message);
+}
+
+static string ReadDataGuid(string folder)
+{
+    XElement root = XDocument.Load(Path.Combine(folder, "Data.xml")).Root
+        ?? throw new InvalidOperationException("missing Data.xml root");
+    return root.Attribute("GUID")?.Value ?? "";
 }
 
 static void AssertTrue(bool condition, string message)

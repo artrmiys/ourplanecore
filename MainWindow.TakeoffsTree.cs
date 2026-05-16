@@ -17,7 +17,15 @@ public partial class MainWindow
         if (_syncingTakeoffTreeSelection)
             return;
 
+        if (e.NewValue is TreeViewItem selectedItem &&
+            TryBlockTakeoffTreeSelectionDuringRecord(selectedItem))
+        {
+            e.Handled = true;
+            return;
+        }
+
         CancelPendingTakeoffSelectionSync();
+        string? previousActiveTakeoffFolder = _activeItem?.FolderPath;
 
         if (e.NewValue is TreeViewItem selectedNode &&
             GetTakeoffNodePath(selectedNode) is { } selectedPath &&
@@ -32,35 +40,41 @@ public partial class MainWindow
 
         if (e.NewValue is TreeViewItem { Tag: TakeoffItem item })
         {
+            TreeViewItem? anchor = e.NewValue as TreeViewItem;
+            var selectedTakeoffs = TakeoffItemsForSelection(anchor);
             _takeoffSectionMultiSelection.Clear();
             item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
             _activeItem           = item;
             _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
             _viewport.ActiveColor = item.Color;
             _viewport.ActiveTakeoffFolder = item.FolderPath;
-            if (_activeTool is "point" or "line" or "area" && _activeTool != item.MeasurementType)
-                ApplyToolSelection(item.MeasurementType);
-            else
-            UpdateToolStatus();
-            RefreshPagesTakeoffIndicators();
-            RefreshActiveTakeoffVisuals();
-            RevealPagesForTakeoffSelection(e.NewValue as TreeViewItem);
-            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
-            UpdateTotalDisplay();
+            _viewport.ActiveCountSymbol = item.CountSymbol;
+            SyncToolTypeForTakeoffItem(item);
+            RefreshPageTakeoffIndicatorsForActiveChange(previousActiveTakeoffFolder, selectedTakeoffs);
+            RefreshActiveTakeoffVisualsForPaths(
+                TakeoffVisualPathsForActiveChange(previousActiveTakeoffFolder, selectedTakeoffs)
+                    .Append(item.FolderPath));
+            RevealPagesForTakeoffItems(selectedTakeoffs, _currentPage?.FolderPath);
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(anchor));
+            UpdateTotalDisplay(refreshEstimate: false);
         }
         else if (e.NewValue is TreeViewItem { Tag: TakeoffFolderNode folder })
         {
+            TreeViewItem? anchor = e.NewValue as TreeViewItem;
+            var selectedTakeoffs = TakeoffItemsForSelection(anchor);
             _takeoffSectionMultiSelection.Clear();
             _activeItem = null;
             _activeTakeoffParentFolder = folder.FolderPath;
             _viewport.ActiveTakeoffFolder = "";
             TxtStatus.Text = TakeoffFolderStatusText(folder);
             UpdateToolStatus();
-            RefreshPagesTakeoffIndicators();
-            RefreshActiveTakeoffVisuals();
-            RevealPagesForTakeoffSelection(e.NewValue as TreeViewItem);
-            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(e.NewValue as TreeViewItem));
-            UpdateTotalDisplay();
+            RefreshPageTakeoffIndicatorsForActiveChange(previousActiveTakeoffFolder, selectedTakeoffs);
+            RefreshActiveTakeoffVisualsForPaths(
+                TakeoffVisualPathsForActiveChange(previousActiveTakeoffFolder, selectedTakeoffs)
+                    .Append(folder.FolderPath));
+            RevealPagesForTakeoffItems(selectedTakeoffs, _currentPage?.FolderPath);
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSelectionMeasurementsOnCurrentPage(anchor));
+            UpdateTotalDisplay(refreshEstimate: false);
         }
         else if (e.NewValue is TreeViewItem { Tag: TakeoffMeasurementNode node })
         {
@@ -76,9 +90,11 @@ public partial class MainWindow
             }
 
             _activeItem = node.Item;
+            node.Item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType);
             _activeTakeoffParentFolder = Path.GetDirectoryName(node.Item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
             _viewport.ActiveColor = node.Item.Color;
             _viewport.ActiveTakeoffFolder = node.Item.FolderPath;
+            _viewport.ActiveCountSymbol = node.Item.CountSymbol;
             if (_suppressCanvasFocusFromTakeoffSelection || Mouse.LeftButton == MouseButtonState.Pressed)
             {
                 if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, node.Measurement.PageFolder))
@@ -88,11 +104,12 @@ public partial class MainWindow
             {
                 SelectSectionOnCanvas(node.Measurement, suppressTakeoffSync: true);
             }
-            UpdateToolStatus();
-            RefreshPagesTakeoffIndicators();
-            RefreshActiveTakeoffVisuals();
+            SyncToolTypeForTakeoffItem(node.Item);
+            RefreshPageTakeoffIndicatorsForActiveChange(previousActiveTakeoffFolder, [node.Item]);
+            RefreshActiveTakeoffVisualsForPaths(
+                TakeoffVisualPathsForActiveChange(previousActiveTakeoffFolder, [node.Item]));
             RevealPagesForTakeoffItems([node.Item], node.Measurement.PageFolder);
-            UpdateTotalDisplay();
+            UpdateTotalDisplay(refreshEstimate: false);
         }
     }
 
@@ -128,6 +145,12 @@ public partial class MainWindow
     {
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is { } item)
         {
+            if (TryBlockTakeoffTreeSelectionDuringRecord(item))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (item.Tag is TakeoffMeasurementNode sectionNode)
             {
                 string key = TakeoffSectionSelectionKey(sectionNode);
@@ -187,6 +210,20 @@ public partial class MainWindow
         _takeoffsDragArmed = false;
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
             return;
+
+        if (TryRefreshStaleTakeoffTreeNode(item))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (TryBlockTakeoffTreeSelectionDuringRecord(item))
+        {
+            _takeoffsDragItem = null;
+            _takeoffsDragArmed = false;
+            e.Handled = true;
+            return;
+        }
 
         _takeoffsDragItem = item;
         _takeoffsDragArmed = CanArmTakeoffsTreeDrag(item, e.OriginalSource as DependencyObject);
@@ -259,13 +296,11 @@ public partial class MainWindow
     {
         if (FindAncestor<ToggleButton>(source) != null)
             return false;
-        if (ReferenceEquals(TakeoffsTree.SelectedItem, item))
+        if (item.Tag is TakeoffMeasurementNode)
             return true;
-        if (item.Tag is TakeoffMeasurementNode sectionNode)
-            return _takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(sectionNode));
 
         string? path = GetTakeoffNodePath(item);
-        return path != null && _takeoffsMultiSelection.Contains(path);
+        return path != null && Directory.Exists(path);
     }
 
     private void HandleTakeoffSectionNodeMultiSelect(TreeViewItem item, TakeoffMeasurementNode node, MouseButtonEventArgs e)
