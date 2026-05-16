@@ -13,6 +13,99 @@ internal static class StorageSupport
     private static readonly object CorruptJsonLock = new();
     private static readonly List<string> CorruptJsonFiles = [];
 
+    // ── Data.xml metadata cache ───────────────────────────────────────────────
+    // Every node (page / takeoff / folder) stores its metadata in a per-folder
+    // Data.xml. Without a cache, each ReadProperty/DisplayName/SetProperty call
+    // re-parses the whole file from disk — sorting one folder of 100 children
+    // costs ~200 XML parses, and one takeoff autosave costs ~22 load+save
+    // round-trips. The cache keeps the parsed XDocument in memory and reloads
+    // only when the file's last-write time changes (so on-disk moves/copies and
+    // the GUID-regenerator are still picked up).
+    private sealed class DataXmlCacheEntry
+    {
+        public required XDocument Doc;
+        public required long WriteTicks;
+    }
+
+    private static readonly object DataXmlCacheLock = new();
+
+    private static readonly Dictionary<string, DataXmlCacheEntry> DataXmlCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static long GetWriteTicks(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks : -1;
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
+    /// <summary>
+    /// Returns the cached <see cref="XDocument"/> for a folder's Data.xml,
+    /// reloading from disk only if the file changed. The returned instance is
+    /// the live cached one — callers that mutate it MUST call
+    /// <see cref="StoreCachedDoc"/> after saving.
+    /// </summary>
+    private static XDocument? GetCachedDoc(string folder)
+    {
+        string path = Path.Combine(folder, "Data.xml");
+        long ticks = GetWriteTicks(path);
+        if (ticks < 0)
+        {
+            lock (DataXmlCacheLock)
+                DataXmlCache.Remove(folder);
+            return null;
+        }
+
+        lock (DataXmlCacheLock)
+        {
+            if (DataXmlCache.TryGetValue(folder, out DataXmlCacheEntry? entry) &&
+                entry.WriteTicks == ticks)
+            {
+                return entry.Doc;
+            }
+        }
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Load(path);
+        }
+        catch
+        {
+            lock (DataXmlCacheLock)
+                DataXmlCache.Remove(folder);
+            return null;
+        }
+
+        lock (DataXmlCacheLock)
+            DataXmlCache[folder] = new DataXmlCacheEntry { Doc = doc, WriteTicks = ticks };
+        return doc;
+    }
+
+    private static void StoreCachedDoc(string folder, XDocument doc)
+    {
+        string path = Path.Combine(folder, "Data.xml");
+        lock (DataXmlCacheLock)
+            DataXmlCache[folder] = new DataXmlCacheEntry { Doc = doc, WriteTicks = GetWriteTicks(path) };
+    }
+
+    public static void InvalidateDataXmlCache(string folder)
+    {
+        lock (DataXmlCacheLock)
+            DataXmlCache.Remove(folder);
+    }
+
+    public static void ClearDataXmlCache()
+    {
+        lock (DataXmlCacheLock)
+            DataXmlCache.Clear();
+    }
+
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -95,16 +188,14 @@ internal static class StorageSupport
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(Path.Combine(folder, "Data.xml"));
+        StoreCachedDoc(folder, doc);
     }
 
     public static void UpdateItemName(string folder, string name)
     {
-        string path = Path.Combine(folder, "Data.xml");
-        if (!File.Exists(path)) return;
-
-        XDocument doc = XDocument.Load(path);
-        XElement? root = doc.Root;
-        if (root == null) return;
+        XDocument? doc = GetCachedDoc(folder);
+        XElement? root = doc?.Root;
+        if (doc == null || root == null) return;
 
         bool changed = false;
         if (!string.Equals(root.Attribute("Name")?.Value, name, StringComparison.Ordinal))
@@ -115,20 +206,42 @@ internal static class StorageSupport
 
         changed = SetProperty(root, "Name", name) || changed;
         if (changed)
-            doc.Save(path);
+            SaveCachedDoc(folder, doc);
+    }
+
+    private static void SaveCachedDoc(string folder, XDocument doc)
+    {
+        doc.Save(Path.Combine(folder, "Data.xml"));
+        StoreCachedDoc(folder, doc);
     }
 
     public static void SetProperty(string folder, string propertyName, string value)
     {
-        string path = Path.Combine(folder, "Data.xml");
-        if (!File.Exists(path)) return;
-
-        XDocument doc = XDocument.Load(path);
-        XElement? root = doc.Root;
-        if (root == null) return;
+        XDocument? doc = GetCachedDoc(folder);
+        XElement? root = doc?.Root;
+        if (doc == null || root == null) return;
 
         if (SetProperty(root, propertyName, value))
-            doc.Save(path);
+            SaveCachedDoc(folder, doc);
+    }
+
+    /// <summary>
+    /// Applies several properties in a single Data.xml load + save. Replaces the
+    /// pattern of calling <see cref="SetProperty(string,string,string)"/> ~20
+    /// times in a row (which used to be ~20 full file round-trips per autosave).
+    /// </summary>
+    public static void SetProperties(string folder, IEnumerable<KeyValuePair<string, string>> properties)
+    {
+        XDocument? doc = GetCachedDoc(folder);
+        XElement? root = doc?.Root;
+        if (doc == null || root == null) return;
+
+        bool changed = false;
+        foreach (KeyValuePair<string, string> property in properties)
+            changed = SetProperty(root, property.Key, property.Value) || changed;
+
+        if (changed)
+            SaveCachedDoc(folder, doc);
     }
 
     public static string? ReadProperty(string folder, string propertyName)
@@ -222,20 +335,8 @@ internal static class StorageSupport
         return true;
     }
 
-    private static XElement? ReadDataRoot(string folder)
-    {
-        string path = Path.Combine(folder, "Data.xml");
-        if (!File.Exists(path)) return null;
-
-        try
-        {
-            return XDocument.Load(path).Root;
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private static XElement? ReadDataRoot(string folder) =>
+        GetCachedDoc(folder)?.Root;
 
     private static string FullPathWithSeparator(string path)
     {

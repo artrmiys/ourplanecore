@@ -20,6 +20,10 @@ internal static class JobLayout
         if (!Directory.Exists(rootPath))
             throw new DirectoryNotFoundException(rootPath);
 
+        // Drop any cached Data.xml from a previously-open job so stale paths
+        // don't accumulate (and a job folder changed on disk re-reads cleanly).
+        OurPlaneCoreJobStore.ClearMetadataCache();
+
         if (!File.Exists(Path.Combine(rootPath, "Data.xml")))
             OurPlaneCoreJobStore.WriteItemDataXml(rootPath, "Folder", Path.GetFileName(rootPath), 0);
 

@@ -101,25 +101,28 @@ internal static class TakeoffStore
             return;
 
         OurPlaneCoreJobStore.UpdateItemName(item.FolderPath, item.Name);
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "SmartNodeKind", "item");
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "Color", item.Color);
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "MeasurementType", OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType));
         item.CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "CountSymbol", item.CountSymbol);
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "Notes", item.Notes);
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistEnabled", item.IsJoistArea.ToString(CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistType", item.JoistType ?? "");
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistSpacingInches", Math.Max(0.001, item.JoistSpacingInches).ToString("G17", CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistDirectionDegrees", item.JoistDirectionDegrees.ToString("G17", CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistDirectionFollowsAreaRotation", item.JoistDirectionFollowsAreaRotation.ToString(CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistAddEndJoist", item.JoistAddEndJoist.ToString(CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture));
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "MeasurementCount", item.Measurements.Count.ToString());
-        OurPlaneCoreJobStore.SetProperty(item.FolderPath, "MeasuredPageCount", MeasuredPageCount(item).ToString());
+        OurPlaneCoreJobStore.SetProperties(item.FolderPath, new[]
+        {
+            new KeyValuePair<string, string>("SmartNodeKind", "item"),
+            new KeyValuePair<string, string>("Color", item.Color),
+            new KeyValuePair<string, string>("MeasurementType", OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType)),
+            new KeyValuePair<string, string>("CountSymbol", item.CountSymbol),
+            new KeyValuePair<string, string>("UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("Notes", item.Notes),
+            new KeyValuePair<string, string>("JoistEnabled", item.IsJoistArea.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistType", item.JoistType ?? ""),
+            new KeyValuePair<string, string>("JoistSpacingInches", Math.Max(0.001, item.JoistSpacingInches).ToString("G17", CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistDirectionDegrees", item.JoistDirectionDegrees.ToString("G17", CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistDirectionFollowsAreaRotation", item.JoistDirectionFollowsAreaRotation.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistAddEndJoist", item.JoistAddEndJoist.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch)),
+            new KeyValuePair<string, string>("JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding)),
+            new KeyValuePair<string, string>("JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("MeasurementCount", item.Measurements.Count.ToString()),
+            new KeyValuePair<string, string>("MeasuredPageCount", MeasuredPageCount(item).ToString()),
+        });
         ApplyTakeoffPropertiesToMeasurements(item);
         SaveMeasurements(item.FolderPath, item.Measurements);
     }

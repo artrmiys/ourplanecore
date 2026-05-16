@@ -466,6 +466,9 @@ internal static class NodeStore
         root.SetAttributeValue("GUID", guid);
         SetProperty(root, "GUID", guid);
         doc.Save(path);
+        // This path loads/saves Data.xml directly; drop the cached copy so the
+        // next read picks up the regenerated GUID.
+        OurPlaneCoreJobStore.InvalidateMetadataCache(folder);
     }
 
     private static void SetProperty(XElement root, string propertyName, string value)

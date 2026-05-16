@@ -252,6 +252,15 @@ public static class OurPlaneCoreJobStore
     internal static void SetProperty(string folder, string propertyName, string value) =>
         StorageSupport.SetProperty(folder, propertyName, value);
 
+    internal static void SetProperties(string folder, IEnumerable<System.Collections.Generic.KeyValuePair<string, string>> properties) =>
+        StorageSupport.SetProperties(folder, properties);
+
+    internal static void InvalidateMetadataCache(string folder) =>
+        StorageSupport.InvalidateDataXmlCache(folder);
+
+    public static void ClearMetadataCache() =>
+        StorageSupport.ClearDataXmlCache();
+
     internal static string? ReadProperty(string folder, string propertyName) =>
         StorageSupport.ReadProperty(folder, propertyName);
 
