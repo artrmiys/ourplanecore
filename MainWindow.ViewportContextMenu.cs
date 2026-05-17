@@ -32,7 +32,7 @@ public partial class MainWindow
             () => PasteMeasurementsFromClipboard(new SKPoint(request.PdfX, request.PdfY))));
     }
 
-    private void AddPdfAiMenuItems(ContextMenu menu, ViewportContextRequest request)
+    private void AddPdfAiMenuItems(ItemsControl menu, ViewportContextRequest request)
     {
         menu.Items.Add(MakeMenuItem("AI crop here -> note", true, () =>
             _viewport.BeginAiCropNoteSelection(new SKPoint(request.PdfX, request.PdfY))));
@@ -203,7 +203,7 @@ public partial class MainWindow
         };
     }
 
-    private void AddMeasurementAiMenuItems(ContextMenu menu, ViewportContextRequest request)
+    private void AddMeasurementAiMenuItems(ItemsControl menu, ViewportContextRequest request)
     {
         Measurement measurement = request.Measurement!;
         menu.Items.Add(MakeMenuItem("AI crop here -> note", true, async () =>

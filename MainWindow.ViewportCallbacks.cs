@@ -93,21 +93,29 @@ public partial class MainWindow
         AddMeasurementClipboardMenuItems(menu, request);
         menu.Items.Add(new Separator());
 
+        // AI actions are numerous; keep them in one "AI Assist ▸" submenu so the
+        // canvas right-click stays scannable instead of a ~12-item flat dump.
         if (request.Measurement != null)
         {
             AddMeasurementEditMenuItems(menu, request);
             menu.Items.Add(new Separator());
-            AddMeasurementAiMenuItems(menu, request);
+            var aiMenu = new MenuItem { Header = "AI Assist" };
+            AddMeasurementAiMenuItems(aiMenu, request);
+            menu.Items.Add(aiMenu);
         }
         else if (request.Annotation != null)
         {
             AddAnnotationEditMenuItems(menu, request);
             menu.Items.Add(new Separator());
-            AddPdfAiMenuItems(menu, request);
+            var aiMenu = new MenuItem { Header = "AI Assist" };
+            AddPdfAiMenuItems(aiMenu, request);
+            menu.Items.Add(aiMenu);
         }
         else
         {
-            AddPdfAiMenuItems(menu, request);
+            var aiMenu = new MenuItem { Header = "AI Assist" };
+            AddPdfAiMenuItems(aiMenu, request);
+            menu.Items.Add(aiMenu);
         }
 
         menu.Items.Add(new Separator());
