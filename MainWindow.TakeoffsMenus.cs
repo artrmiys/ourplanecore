@@ -6,96 +6,84 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    // Section model (mirrors the Pages tree menu so both trees feel identical):
+    //   1. Primary action + item-specific tool submenus
+    //   2. Rename / Delete / Duplicate
+    //   3. Properties
+    //   4. Clipboard ▸ / Organize ▸
     private void AttachContextMenu(TreeViewItem tvi, TakeoffItem item)
     {
         var menu = new ContextMenu();
         int selectedCount = TakeoffSelectionCount(tvi);
         bool singleSelection = selectedCount <= 1;
+        bool isArea = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
+        string parentFolder = Path.GetDirectoryName(item.FolderPath) ?? "";
 
-        var activeTarget = new MenuItem { Header = IsActiveTakeoffItem(item) ? "Active Target" : "Set Active Target" };
-        activeTarget.Click += (_, _) => SetActiveTakeoffTarget(tvi, item);
-        activeTarget.IsEnabled = singleSelection && CanChangeActiveTakeoffTarget(item);
-        menu.Items.Add(activeTarget);
+        // 1 — primary action + tools
+        menu.Items.Add(MakeMenuItem(
+            IsActiveTakeoffItem(item) ? "Active Target" : "Set Active Target",
+            singleSelection && CanChangeActiveTakeoffTarget(item),
+            () => SetActiveTakeoffTarget(tvi, item)));
+        menu.Items.Add(MakeMenuItem(
+            item.MeasurementType == "point" ? "Add Count" : "New Section",
+            singleSelection,
+            () => StartNewSection(tvi, item)));
+        if (isArea)
+        {
+            menu.Items.Add(MakeSubmenu(
+                "Joist",
+                MakeMenuItem(
+                    item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
+                    singleSelection,
+                    () => EditTakeoffItemProperties(tvi, item)),
+                MakeMenuItem("Set / Reset Joist Direction", singleSelection, () => SetJoistDirectionFromSelectedLine(tvi, item)),
+                MakeMenuItem("Set Direction for All Areas", singleSelection, () => SetJoistDirectionForAllAreasFromSelectedLine(tvi, item))));
+        }
+        menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
+        menu.Items.Add(BuildTakeoff3DMenu(tvi));
+
         menu.Items.Add(new Separator());
 
-        var properties = new MenuItem { Header = "Properties..." };
-        properties.Click += (_, _) => EditTakeoffItemProperties(tvi, item);
-        properties.IsEnabled = singleSelection;
-        menu.Items.Add(properties);
-        int roofBaseAreaCount = RoofBaseAreaSelectionCount(tvi);
+        // 2 — rename / delete / duplicate
+        menu.Items.Add(MakeMenuItem("Rename...", singleSelection, () => RenameItem(tvi, item)));
         menu.Items.Add(MakeMenuItem(
-            roofBaseAreaCount > 1 ? $"Roof Base from Areas ({roofBaseAreaCount})" : "Roof Base from Area",
-            CanBuildRoofBaseFromTakeoffSelection(tvi),
-            () => BuildRoofFromRfAreas(tvi, switchTo3DTab: true)));
+            selectedCount > 1 ? "Delete selected takeoffs" : "Delete item + measurements",
+            true,
+            () => DeleteTakeoffNodes(tvi)));
         menu.Items.Add(MakeMenuItem(
-            item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
-            singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
-            () => EditTakeoffItemProperties(tvi, item)));
-        menu.Items.Add(MakeMenuItem(
-            "Set / Reset Joist Direction",
-            singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
-            () => SetJoistDirectionFromSelectedLine(tvi, item)));
-        menu.Items.Add(MakeMenuItem(
-            "Set Direction for All Areas",
-            singleSelection && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area",
-            () => SetJoistDirectionForAllAreasFromSelectedLine(tvi, item)));
+            selectedCount > 1 ? "Duplicate Selected" : "Duplicate Item",
+            true,
+            () => DuplicateTakeoffNode(tvi)));
 
-        int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
+        menu.Items.Add(new Separator());
+
+        // 3 — properties
+        menu.Items.Add(MakeMenuItem("Properties...", singleSelection, () => EditTakeoffItemProperties(tvi, item)));
         menu.Items.Add(MakeMenuItem(
             selectedItemsCount > 1 ? $"Bulk Properties ({selectedItemsCount} Items)..." : "Bulk Properties...",
             selectedItemsCount > 1,
             () => EditSelectedTakeoffProperties(tvi)));
-        menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
-        menu.Items.Add(BuildTakeoff3DMenu(tvi));
-
-        var rename = new MenuItem { Header = "Rename..." };
-        rename.Click += (_, _) => RenameItem(tvi, item);
-        rename.IsEnabled = singleSelection;
-        menu.Items.Add(rename);
-
-        var newSection = new MenuItem { Header = item.MeasurementType == "point" ? "Add Count" : "New Section" };
-        newSection.Click += (_, _) => StartNewSection(tvi, item);
-        newSection.IsEnabled = singleSelection;
-        menu.Items.Add(newSection);
-
-        var unitPrice = new MenuItem { Header = "Set Unit Price" };
-        unitPrice.Click += (_, _) => SetUnitPrice(item);
-        unitPrice.IsEnabled = singleSelection;
-        menu.Items.Add(unitPrice);
+        menu.Items.Add(MakeMenuItem("Set Unit Price", singleSelection, () => SetUnitPrice(item)));
 
         menu.Items.Add(new Separator());
 
-        menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Item", true, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Copy)));
-        menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Item", true, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Cut)));
-        menu.Items.Add(MakeMenuItem(
-            "Paste Into Parent Folder",
-            CanPasteTakeoffsInto(Path.GetDirectoryName(item.FolderPath)),
-            () => PasteIntoSelectedTakeoffTarget(tvi)));
-        menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Duplicate Selected" : "Duplicate Item", true, () => DuplicateTakeoffNode(tvi)));
-
-        menu.Items.Add(new Separator());
-
-        var moveUp = new MenuItem
-        {
-            Header = selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
-            IsEnabled = CanMoveTakeoffNodes(tvi, -1),
-        };
-        moveUp.Click += (_, _) => MoveTakeoffNodes(tvi, -1);
-        menu.Items.Add(moveUp);
-
-        var moveDown = new MenuItem
-        {
-            Header = selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
-            IsEnabled = CanMoveTakeoffNodes(tvi, 1),
-        };
-        moveDown.Click += (_, _) => MoveTakeoffNodes(tvi, 1);
-        menu.Items.Add(moveDown);
-
-        menu.Items.Add(new Separator());
-
-        var delete = new MenuItem { Header = selectedCount > 1 ? "Delete selected takeoffs" : "Delete item + measurements" };
-        delete.Click += (_, _) => DeleteTakeoffNodes(tvi);
-        menu.Items.Add(delete);
+        // 4 — clipboard / organize
+        menu.Items.Add(MakeSubmenu(
+            "Clipboard",
+            MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Item", true, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Copy)),
+            MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Item", true, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Cut)),
+            MakeMenuItem("Paste Into Parent Folder", CanPasteTakeoffsInto(parentFolder), () => PasteIntoSelectedTakeoffTarget(tvi))));
+        menu.Items.Add(MakeSubmenu(
+            "Organize",
+            MakeMenuItem(
+                selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
+                CanMoveTakeoffNodes(tvi, -1),
+                () => MoveTakeoffNodes(tvi, -1)),
+            MakeMenuItem(
+                selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
+                CanMoveTakeoffNodes(tvi, 1),
+                () => MoveTakeoffNodes(tvi, 1))));
 
         tvi.ContextMenu = menu;
     }
@@ -107,37 +95,33 @@ public partial class MainWindow
         bool singleSelection = selectedCount <= 1;
         bool canEditFolder = !folder.IsRoot && singleSelection;
 
-        var newFolder = new MenuItem { Header = "New Folder" };
-        newFolder.Click += (_, _) =>
+        int nestedTakeoffCount = TakeoffItemsForSelection(tvi).Count;
+
+        // 1 — create
+        menu.Items.Add(MakeMenuItem("New Folder", true, () =>
         {
             tvi.IsSelected = true;
             BtnNewTakeoffFolder_Click(tvi, new RoutedEventArgs());
-        };
-        menu.Items.Add(newFolder);
-
-        var newItem = new MenuItem { Header = "New Item" };
-        newItem.Click += (_, _) =>
+        }));
+        menu.Items.Add(MakeMenuItem("New Item", true, () =>
         {
             tvi.IsSelected = true;
             BtnNewItem_Click(tvi, new RoutedEventArgs());
-        };
-        menu.Items.Add(newItem);
-
-        menu.Items.Add(MakeMenuItem("Auto Create Tree", true, () => AutoCreateTakeoffTree(folder.FolderPath)));
-        menu.Items.Add(MakeMenuItem("Create Folders From Pages", true, () => AutoCreateTakeoffFoldersFromPages(folder.FolderPath)));
+        }));
 
         menu.Items.Add(new Separator());
 
-        var rename = new MenuItem { Header = "Rename Folder…" };
-        menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Folder", !folder.IsRoot, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Copy)));
-        menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Folder", !folder.IsRoot, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Cut)));
-        menu.Items.Add(MakeMenuItem("Paste Into Folder", CanPasteTakeoffsInto(folder.FolderPath), () => PasteIntoSelectedTakeoffTarget(tvi)));
-        menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Duplicate Selected" : "Duplicate Folder", !folder.IsRoot, () => DuplicateTakeoffNode(tvi)));
+        // 2 — rename / delete
+        menu.Items.Add(MakeMenuItem("Rename Folder…", canEditFolder, () => RenameTakeoffFolder(tvi, folder)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? "Delete selected takeoffs" : "Delete folder + children",
+            !folder.IsRoot,
+            () => DeleteTakeoffNodes(tvi)));
 
         menu.Items.Add(new Separator());
 
+        // 3 — properties
         menu.Items.Add(MakeMenuItem("Folder Properties...", canEditFolder, () => EditTakeoffFolderProperties(tvi, folder)));
-        int nestedTakeoffCount = TakeoffItemsForSelection(tvi).Count;
         menu.Items.Add(MakeMenuItem(
             nestedTakeoffCount > 1 ? $"Bulk Item Properties ({nestedTakeoffCount})..." : "Bulk Item Properties...",
             nestedTakeoffCount > 0,
@@ -145,49 +129,34 @@ public partial class MainWindow
         menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
         menu.Items.Add(BuildTakeoff3DMenu(tvi));
 
-        rename.Click += (_, _) => RenameTakeoffFolder(tvi, folder);
-        rename.IsEnabled = canEditFolder;
-        menu.Items.Add(rename);
+        menu.Items.Add(new Separator());
 
-        var moveUp = new MenuItem
-        {
-            Header = selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
-            IsEnabled = CanMoveTakeoffNodes(tvi, -1),
-        };
-        moveUp.Click += (_, _) => MoveTakeoffNodes(tvi, -1);
-        menu.Items.Add(moveUp);
-
-        var moveDown = new MenuItem
-        {
-            Header = selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
-            IsEnabled = CanMoveTakeoffNodes(tvi, 1),
-        };
-        moveDown.Click += (_, _) => MoveTakeoffNodes(tvi, 1);
-        menu.Items.Add(moveDown);
+        // 4 — clipboard / organize
+        menu.Items.Add(MakeSubmenu(
+            "Clipboard",
+            MakeMenuItem(selectedCount > 1 ? "Copy Selected" : "Copy Folder", !folder.IsRoot, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Copy)),
+            MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Folder", !folder.IsRoot, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Cut)),
+            MakeMenuItem("Paste Into Folder", CanPasteTakeoffsInto(folder.FolderPath), () => PasteIntoSelectedTakeoffTarget(tvi)),
+            MakeMenuItem(selectedCount > 1 ? "Duplicate Selected" : "Duplicate Folder", !folder.IsRoot, () => DuplicateTakeoffNode(tvi))));
+        menu.Items.Add(MakeSubmenu(
+            "Organize",
+            MakeMenuItem("Auto Create Tree", true, () => AutoCreateTakeoffTree(folder.FolderPath)),
+            MakeMenuItem("Create Folders From Pages", true, () => AutoCreateTakeoffFoldersFromPages(folder.FolderPath)),
+            MakeMenuItem(
+                selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
+                CanMoveTakeoffNodes(tvi, -1),
+                () => MoveTakeoffNodes(tvi, -1)),
+            MakeMenuItem(
+                selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
+                CanMoveTakeoffNodes(tvi, 1),
+                () => MoveTakeoffNodes(tvi, 1)),
+            MakeMenuItem("Sort Children A-Z", true, () => SortTakeoffChildren(folder.FolderPath, descending: false)),
+            MakeMenuItem("Sort Children Z-A", true, () => SortTakeoffChildren(folder.FolderPath, descending: true))));
 
         menu.Items.Add(new Separator());
 
-        var sortAz = new MenuItem { Header = "Sort Children A-Z" };
-        sortAz.Click += (_, _) => SortTakeoffChildren(folder.FolderPath, descending: false);
-        menu.Items.Add(sortAz);
-
-        var sortZa = new MenuItem { Header = "Sort Children Z-A" };
-        sortZa.Click += (_, _) => SortTakeoffChildren(folder.FolderPath, descending: true);
-        menu.Items.Add(sortZa);
-
-        menu.Items.Add(new Separator());
-
-        var open = new MenuItem { Header = "Open in Explorer" };
-        open.Click += (_, _) => OpenFolderInExplorer(folder.FolderPath);
-        menu.Items.Add(open);
-
-        var delete = new MenuItem
-        {
-            Header = selectedCount > 1 ? "Delete selected takeoffs" : "Delete folder + children",
-            IsEnabled = !folder.IsRoot,
-        };
-        delete.Click += (_, _) => DeleteTakeoffNodes(tvi);
-        menu.Items.Add(delete);
+        // 5 — explorer
+        menu.Items.Add(MakeMenuItem("Open in Explorer", true, () => OpenFolderInExplorer(folder.FolderPath)));
 
         tvi.ContextMenu = menu;
     }
@@ -280,9 +249,6 @@ public partial class MainWindow
         menu.Items.Add(roof);
         return menu;
     }
-
-    private int RoofBaseAreaSelectionCount(TreeViewItem anchor) =>
-        TakeoffItemsForSelection(anchor).Count(item => ThreeDRoofFootprintBuildService.IsAreaTakeoff(item));
 
     private void RefreshTakeoffNodeContextMenu(TreeViewItem item)
     {
