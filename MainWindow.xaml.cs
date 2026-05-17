@@ -81,6 +81,8 @@ public partial class MainWindow : Window
     private ToggleButton? _recordButton;
     private bool _updatingRulerVisibilityButton;
     private ListView? _estimateList;
+    private TabItem? _estimateTab;
+    private bool _estimateTableDirty;
     private TextBox? _estimateFilterBox;
     private CheckBox? _estimateCurrentSheetOnlyBox;
     private Button? _estimateSelectButton;

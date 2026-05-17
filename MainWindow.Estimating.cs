@@ -114,11 +114,12 @@ public partial class MainWindow
             Header = "Takeoffs",
             Content = TakeoffsTreeHost,
         });
-        tabs.Items.Add(new TabItem
+        _estimateTab = new TabItem
         {
             Header = "Estimating",
             Content = estimatePanel,
-        });
+        };
+        tabs.Items.Add(_estimateTab);
         _threeDTab = new TabItem
         {
             Header = "3D",
@@ -126,6 +127,14 @@ public partial class MainWindow
         };
         tabs.Items.Add(_threeDTab);
         tabs.SelectedIndex = 0;
+        tabs.SelectionChanged += (sender, e) =>
+        {
+            // Ignore SelectionChanged bubbled up from nested TabControls.
+            if (sender is TabControl tc && !ReferenceEquals(e.OriginalSource, tc))
+                return;
+            if (_estimateTableDirty && ReferenceEquals(tabs.SelectedItem, _estimateTab))
+                RefreshEstimateTable();
+        };
 
         TakeoffsPanel.Children.Add(tabs);
         RefreshEstimateTable();

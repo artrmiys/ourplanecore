@@ -1330,6 +1330,27 @@ public partial class MainWindow
         if (_estimateList == null)
             return;
 
+        // The estimate rebuild is O(all takeoffs × all measurements) plus a
+        // full DataGrid ItemsSource reset. It runs on every measurement edit,
+        // but the Estimating tab is hidden during normal takeoff work (the
+        // right panel defaults to the Takeoffs tab). Defer the rebuild while
+        // it's not visible and do it when the tab is activated instead.
+        if (_rightWorkspaceTabs != null && _estimateTab != null &&
+            !ReferenceEquals(_rightWorkspaceTabs.SelectedItem, _estimateTab))
+        {
+            _estimateTableDirty = true;
+            return;
+        }
+
+        _estimateTableDirty = false;
+        RebuildEstimateTableNow();
+    }
+
+    private void RebuildEstimateTableNow()
+    {
+        if (_estimateList == null)
+            return;
+
         Measurement? selectedMeasurement = (_estimateList.SelectedItem as EstimateDisplayRow)?.Measurement;
         _syncingEstimateSelection = true;
         try
