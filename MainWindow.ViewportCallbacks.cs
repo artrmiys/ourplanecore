@@ -23,11 +23,16 @@ public partial class MainWindow
     {
         if (_currentPage != null)
             _currentPage.ScaleMetersPerPt = scale;
-        ApplyScaleToCurrentPageMeasurements(scale);
+        // Only takeoffs with measurements on the current page can change
+        // quantity when this page's scale changes — ApplyScale... already
+        // returns exactly those. Refresh just their rows instead of rebuilding
+        // every takeoff header/section in the tree.
+        IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(scale);
         SaveCurrentPageScale();
         UpdateScaleUi(scale);
         RefreshFloatingPageSetup(_currentPage?.FolderPath);
-        RefreshTotalsRecursive(TakeoffsTree);
+        foreach (TakeoffItem item in scaledItems)
+            RefreshTreeItem(item);
         using (UsePageMeasurementLookup())
         {
             RefreshPageTakeoffIndicatorsForFolder(_currentPage?.FolderPath);
