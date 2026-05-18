@@ -146,8 +146,7 @@ public partial class MainWindow
         sp.Children.Add(content);
         var border = new Border
         {
-            BorderBrush = TryFindResource("ControlBorderBrush") as Brush,
-            BorderThickness = new Thickness(0, 1, 0, 0),
+            Style = TryFindResource("RibbonGroupCap") as Style,
         };
         border.Child = new TextBlock
         {

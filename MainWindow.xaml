@@ -85,6 +85,12 @@
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,3,0,0"/>
         </Style>
+        <!-- Single source of truth for the group caption line (Viewport + PDF Output share this) -->
+        <Style x:Key="RibbonGroupCap" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
         <Style x:Key="RibbonRowLabel" TargetType="TextBlock" BasedOn="{StaticResource TopCommandLabel}">
             <Setter Property="MinWidth" Value="36"/>
             <Setter Property="Margin" Value="0,0,4,0"/>
@@ -323,7 +329,7 @@
                                     </Grid>
                                 </StackPanel>
                             </StackPanel>
-                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                            <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="LINES &amp; AREA" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>
@@ -357,7 +363,7 @@
                                           Margin="6,0,7,0"
                                           ToolTip="Off (default): labels keep a fixed screen size when zooming. On: labels grow/shrink with page zoom."/>
                             </StackPanel>
-                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                            <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="LABELS" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>
@@ -387,7 +393,7 @@
                                           Margin="6,0,7,0"
                                           ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>
                             </StackPanel>
-                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                            <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="OVERLAYS" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>
@@ -425,7 +431,7 @@
                                               Style="{StaticResource TopCommandToggle}"
                                               ToolTip="Toggle dark/light UI theme"/>
                             </StackPanel>
-                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                            <Border Style="{StaticResource RibbonGroupCap}">
                                 <TextBlock Text="UNITS &amp; VIEW" Style="{StaticResource RibbonGroupLabel}"/>
                             </Border>
                         </StackPanel>

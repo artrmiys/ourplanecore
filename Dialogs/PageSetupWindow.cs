@@ -32,8 +32,9 @@ public sealed class PageSetupWindow : Window
 
         var root = new Border
         {
-            Padding = new Thickness(12),
+            Padding = new Thickness(16),
             BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
         };
         root.SetResourceReference(Border.BackgroundProperty, "PanelBackgroundBrush");
         root.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
@@ -74,9 +75,9 @@ public sealed class PageSetupWindow : Window
         DockPanel.SetDock(buttons, Dock.Bottom);
         panel.Children.Add(buttons);
 
-        _prevButton = AddButton(buttons, "<", 58);
-        var okButton = AddButton(buttons, "OK", 72);
-        _nextButton = AddButton(buttons, ">", 58);
+        _prevButton = AddButton(buttons, "<", 48, primary: false);
+        var okButton = AddButton(buttons, "OK", 76, primary: true);
+        _nextButton = AddButton(buttons, ">", 48, primary: false);
         okButton.IsDefault = true;
 
         _statusText = new TextBlock
@@ -118,6 +119,7 @@ public sealed class PageSetupWindow : Window
         {
             Text = text,
             Width = 54,
+            FontSize = 12,
             Margin = new Thickness(0, row == 0 ? 0 : 8, 8, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -133,7 +135,11 @@ public sealed class PageSetupWindow : Window
         {
             Margin = new Thickness(0, row == 0 ? 0 : 8, 0, 0),
             MinWidth = 220,
+            FontSize = 12,
+            MinHeight = 26,
+            Padding = new Thickness(5, 3, 5, 3),
             VerticalAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
         };
         textBox.SetResourceReference(Control.BackgroundProperty, "ControlBackgroundBrush");
         textBox.SetResourceReference(Control.ForegroundProperty, "ControlForegroundBrush");
@@ -144,18 +150,15 @@ public sealed class PageSetupWindow : Window
         return textBox;
     }
 
-    private static Button AddButton(Panel panel, string content, double width)
+    private static Button AddButton(Panel panel, string content, double width, bool primary)
     {
         var button = new Button
         {
             Content = content,
             Width = width,
             Margin = new Thickness(4, 0, 0, 0),
-            Padding = new Thickness(6, 3, 6, 3),
+            Style = Application.Current?.TryFindResource(primary ? "ManagerPrimaryButton" : "ManagerButton") as Style,
         };
-        button.SetResourceReference(Control.BackgroundProperty, "ControlBackgroundBrush");
-        button.SetResourceReference(Control.ForegroundProperty, "ControlForegroundBrush");
-        button.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
         panel.Children.Add(button);
         return button;
     }
