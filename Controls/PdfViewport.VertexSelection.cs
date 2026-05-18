@@ -31,12 +31,19 @@ public sealed partial class PdfViewport
         SelectMeasurement(measurement, vertexIndex);
     }
 
-    private bool TryToggleMeasurementVertexSelection(SKPoint pdf)
+    private bool TryToggleMeasurementVertexSelection(SKPoint pdf, bool removeMode)
     {
         if (!TryHitVertex(pdf, out Measurement measurement, out int vertexIndex) ||
             !CanEditMeasurementVertices(measurement))
         {
             return false;
+        }
+
+        if (removeMode && !IsMeasurementVertexSelected(measurement, vertexIndex))
+        {
+            // Shift-clicked a handle that is not selected: nothing to remove.
+            PostStatus("Shift-click a selected handle to deselect it; Ctrl-click to select.");
+            return true;
         }
 
         if (!_selectedMeasurements.Contains(measurement))
@@ -45,8 +52,10 @@ public sealed partial class PdfViewport
         }
 
         HashSet<int> indices = VertexSelectionSet(measurement, create: true);
-        if (!indices.Add(vertexIndex))
+        if (removeMode)
             indices.Remove(vertexIndex);
+        else
+            indices.Add(vertexIndex);
         if (indices.Count == 0)
             _selectedMeasurementVertexIndices.Remove(measurement);
 
@@ -58,12 +67,12 @@ public sealed partial class PdfViewport
         RequestRepaint();
         int selectedCount = SelectedVertexCount();
         PostStatus(selectedCount == 0
-            ? $"{EntryTitle(measurement.MType)} selected. Ctrl/Shift-click blue handles to select vertices."
-            : $"Selected {selectedCount} vertex/vertices. Drag a selected handle to move; Delete removes them.");
+            ? $"{EntryTitle(measurement.MType)} selected. Ctrl-click handles to select, Shift-click to deselect."
+            : $"Selected {selectedCount} vertex/vertices. Drag a selected handle to move (hold Shift = ortho); Delete removes them.");
         return true;
     }
 
-    private bool TrySelectMeasurementVerticesInBox(SKRect rect)
+    private bool TrySelectMeasurementVerticesInBox(SKRect rect, bool removeMode)
     {
         var targets = GetSelectedMeasurements()
             .Where(measurement => IsMeasurementOnActivePage(measurement) && CanEditMeasurementVertices(measurement))
@@ -71,24 +80,48 @@ public sealed partial class PdfViewport
         if (targets.Count == 0)
             return false;
 
-        int added = 0;
+        int changed = 0;
         int hitCount = 0;
         Measurement? primary = null;
         int primaryVertex = -1;
         foreach (Measurement measurement in targets)
         {
-            HashSet<int>? indices = null;
-            foreach (MeasurementVertexRef vertex in MeasurementVertices(measurement))
+            if (removeMode)
             {
-                if (!RectContains(rect, vertex.Point))
+                if (!_selectedMeasurementVertexIndices.TryGetValue(measurement, out HashSet<int>? indices) ||
+                    indices.Count == 0)
+                {
                     continue;
+                }
 
-                indices ??= VertexSelectionSet(measurement, create: true);
-                hitCount++;
-                primary = measurement;
-                primaryVertex = vertex.GlobalIndex;
-                if (indices.Add(vertex.GlobalIndex))
-                    added++;
+                foreach (MeasurementVertexRef vertex in MeasurementVertices(measurement))
+                {
+                    if (!RectContains(rect, vertex.Point))
+                        continue;
+
+                    hitCount++;
+                    if (indices.Remove(vertex.GlobalIndex))
+                        changed++;
+                }
+
+                if (indices.Count == 0)
+                    _selectedMeasurementVertexIndices.Remove(measurement);
+            }
+            else
+            {
+                HashSet<int>? indices = null;
+                foreach (MeasurementVertexRef vertex in MeasurementVertices(measurement))
+                {
+                    if (!RectContains(rect, vertex.Point))
+                        continue;
+
+                    indices ??= VertexSelectionSet(measurement, create: true);
+                    hitCount++;
+                    primary = measurement;
+                    primaryVertex = vertex.GlobalIndex;
+                    if (indices.Add(vertex.GlobalIndex))
+                        changed++;
+                }
             }
         }
 
@@ -97,11 +130,17 @@ public sealed partial class PdfViewport
             _selectedMeasurement = primary;
             _selectedVertexIndex = primaryVertex;
         }
+        else if (removeMode)
+        {
+            _selectedVertexIndex = LastSelectedVertexIndex();
+        }
 
         int selectedCount = SelectedVertexCount();
         PostStatus(hitCount == 0
             ? "Select vertices: no vertices inside box on selected Line/Area objects."
-            : $"Selected {selectedCount} vertex/vertices on selected Line/Area objects ({added} new).");
+            : removeMode
+                ? $"Deselected {changed} vertex/vertices. {selectedCount} still selected."
+                : $"Selected {selectedCount} vertex/vertices on selected Line/Area objects ({changed} new).");
         return true;
     }
 

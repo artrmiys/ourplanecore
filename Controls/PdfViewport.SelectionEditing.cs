@@ -265,6 +265,18 @@ public sealed partial class PdfViewport
             (float)((screen.Y - _dragScreenStart.Y) / safeZoom));
     }
 
+    // While moving selected vertices or whole shapes, holding Shift (ortho)
+    // locks the move to the dominant axis so lines/areas stay aligned.
+    private SKPoint ConstrainDragDeltaOrtho(SKPoint delta)
+    {
+        if (!IsOrthoActive())
+            return delta;
+
+        return Math.Abs(delta.X) >= Math.Abs(delta.Y)
+            ? new SKPoint(delta.X, 0f)
+            : new SKPoint(0f, delta.Y);
+    }
+
     private void PostDragStatus(string label, SKPoint delta)
     {
         DateTime now = DateTime.UtcNow;
@@ -277,19 +289,22 @@ public sealed partial class PdfViewport
         PostStatus($"{label}: dx={screenDx:F0}px dy={screenDy:F0}px.");
     }
 
-    private void BeginBoxSelection(SKPoint pdf, bool additive)
+    private void BeginBoxSelection(SKPoint pdf, bool additive, bool removeMode = false)
     {
         ClearInProgressInputForEdit();
         _boxSelecting = true;
         _boxSelectStartPdf = pdf;
         _boxSelectEndPdf = pdf;
         _boxSelectAdditive = additive;
+        _boxSelectRemove = removeMode;
         CaptureMouse();
-        PostStatus(additive
-            ? HasEditableMeasurementSelection()
-                ? "Select vertices: drag box around Line/Area handles on selected measurements."
-                : "Select: drag box to add measurements to the current selection."
-            : "Select: drag box around measurements.");
+        PostStatus(removeMode
+            ? "Deselect: drag box around Line/Area handles to remove them from the selection."
+            : additive
+                ? HasEditableMeasurementSelection()
+                    ? "Select vertices: drag box around Line/Area handles on selected measurements."
+                    : "Select: drag box to add measurements to the current selection."
+                : "Select: drag box around measurements.");
         RequestRepaint();
     }
 
@@ -309,7 +324,7 @@ public sealed partial class PdfViewport
         {
             if (_boxSelectAdditive)
             {
-                if (TryToggleMeasurementVertexSelection(_boxSelectStartPdf))
+                if (TryToggleMeasurementVertexSelection(_boxSelectStartPdf, _boxSelectRemove))
                 {
                     RequestRepaint();
                     return;
@@ -337,7 +352,7 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (_boxSelectAdditive && TrySelectMeasurementVerticesInBox(rect))
+        if (_boxSelectAdditive && TrySelectMeasurementVerticesInBox(rect, _boxSelectRemove))
         {
             RequestRepaint();
             return;
@@ -358,7 +373,20 @@ public sealed partial class PdfViewport
                 .ToList()
             : new List<PageAnnotation>();
 
-        if (_boxSelectAdditive)
+        if (_boxSelectRemove)
+        {
+            if (hits.Count > 0)
+            {
+                var combined = GetSelectedMeasurements().Where(m => !hits.Contains(m)).ToList();
+                SetSelectedMeasurements(combined, combined.LastOrDefault(), -1);
+            }
+            else if (annotationHits.Count > 0)
+            {
+                var combinedAnnotations = GetSelectedAnnotations().Where(a => !annotationHits.Contains(a)).ToList();
+                SetSelectedAnnotations(combinedAnnotations, combinedAnnotations.LastOrDefault(), -1);
+            }
+        }
+        else if (_boxSelectAdditive)
         {
             if (hits.Count > 0)
             {

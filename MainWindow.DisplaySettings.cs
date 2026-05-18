@@ -211,6 +211,7 @@ public partial class MainWindow
         _settings.ShowMeasurementLabels = ChkDisplayMeasurementLabels.IsChecked == true;
         _settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true;
         _settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true;
+        _settings.ShowJoistLabels = ChkDisplayJoistLabels.IsChecked == true;
         _settings.ShowCountLabels = ChkDisplayCountLabels.IsChecked == true;
         _settings.ShowSheetLegend = ChkDisplayLegend.IsChecked == true;
         _settings.ScaleSheetOverlaysWithPage = ChkDisplayLegendScaleWithPage.IsChecked == true;
@@ -352,6 +353,74 @@ public partial class MainWindow
         SaveAppSettings();
         _viewport.InvalidateVisual();
         TxtStatus.Text = $"Viewport point size: {_settings.ViewportPointSizeScale:0.##}x.";
+    }
+
+    private void BtnAreaEdgeApply_Click(object sender, RoutedEventArgs e) =>
+        ApplyAreaEdgeScaleFromText();
+
+    private void TxtAreaEdgeScale_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyAreaEdgeScaleFromText();
+        e.Handled = true;
+    }
+
+    private void TxtAreaEdgeScale_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyAreaEdgeScaleFromText();
+
+    private void ApplyAreaEdgeScaleFromText()
+    {
+        string raw = TxtAreaEdgeScale.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
+            scale < 0.25 ||
+            scale > 4.00)
+        {
+            TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtStatus.Text = "Area edge thickness must be 0.25 - 4.0.";
+            return;
+        }
+
+        _settings.ViewportAreaEdgeScale = Math.Clamp(scale, 0.25, 4.0);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"Area edge thickness: {_settings.ViewportAreaEdgeScale:0.##}x.";
+    }
+
+    private void BtnAreaFillOpacityApply_Click(object sender, RoutedEventArgs e) =>
+        ApplyAreaFillOpacityFromText();
+
+    private void TxtAreaFillOpacity_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyAreaFillOpacityFromText();
+        e.Handled = true;
+    }
+
+    private void TxtAreaFillOpacity_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyAreaFillOpacityFromText();
+
+    private void ApplyAreaFillOpacityFromText()
+    {
+        string raw = TxtAreaFillOpacity.Text.Trim().TrimEnd('%').Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double percent) ||
+            percent < 0.0 ||
+            percent > 100.0)
+        {
+            TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
+            TxtStatus.Text = "Area fill opacity must be 0 - 100 (%).";
+            return;
+        }
+
+        _settings.ViewportAreaFillOpacity = Math.Clamp(percent / 100.0, 0.0, 1.0);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"Area fill opacity: {Math.Round(_settings.ViewportAreaFillOpacity * 100.0):0}%.";
     }
 
     private void BtnLegendSizeMenu_Click(object sender, RoutedEventArgs e)
@@ -570,10 +639,13 @@ public partial class MainWindow
         _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = _settings.ShowLineLabels;
         _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
+        _viewport.ShowJoistLabels = _settings.ShowJoistLabels;
         _viewport.ShowCountLabels = _settings.ShowCountLabels;
         _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
         _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
         _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
+        _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
+        _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
         _viewport.ScaleSheetHeaderWithPage = _settings.ScaleSheetHeaderWithPage;
         _viewport.SimplifyNavigationRendering = _settings.SimplifyViewportNavigation;
@@ -593,6 +665,7 @@ public partial class MainWindow
             ChkDisplayMeasurementLabels.IsChecked = _settings.ShowMeasurementLabels;
             ChkDisplayLineLabels.IsChecked = _settings.ShowLineLabels;
             ChkDisplayAreaLabels.IsChecked = _settings.ShowAreaLabels;
+            ChkDisplayJoistLabels.IsChecked = _settings.ShowJoistLabels;
             ChkDisplayCountLabels.IsChecked = _settings.ShowCountLabels;
             ChkDisplayLegend.IsChecked = _settings.ShowSheetLegend;
             ChkDisplayLegendScaleWithPage.IsChecked = _settings.ScaleSheetOverlaysWithPage;
@@ -605,6 +678,8 @@ public partial class MainWindow
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
             SyncOutputSettingsControls();
         }
         finally
@@ -631,9 +706,12 @@ public partial class MainWindow
         _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = _settings.ShowLineLabels;
         _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
+        _viewport.ShowJoistLabels = _settings.ShowJoistLabels;
         _viewport.ShowCountLabels = _settings.ShowCountLabels;
         _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
         _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
+        _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
+        _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
         SyncDisplaySettingsControls();
         RefreshSheetLegend();
         _viewport.InvalidateVisual();

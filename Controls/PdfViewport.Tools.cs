@@ -900,6 +900,12 @@ public sealed partial class PdfViewport
     private static bool IsSelectionModifierActive() =>
         (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != ModifierKeys.None;
 
+    // Shift (without Ctrl) means "remove from selection" while a selection
+    // modifier is active. Ctrl means "add to selection".
+    private static bool IsDeselectModifierActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
+        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.None;
+
     private bool ShouldPreviewAsBox() =>
         _tool == ViewerTool.DrawRect ||
         _tool == ViewerTool.DrawCloud ||

@@ -138,14 +138,19 @@ public sealed partial class PdfViewport
 
         _draggingTransformScale = handle != TransformHandleKind.Rotate;
         _draggingTransformRotate = handle == TransformHandleKind.Rotate;
+        _transformHandle = handle;
         _dragScreenStart = screen;
         _transformCenter = CurrentSelectionCenter();
         _transformStartDistance = Math.Max(ViewportConstants.ZeroLengthEpsilon, Distance(pdf, _transformCenter));
         _transformStartAngle = AngleFromCenter(_transformCenter, pdf);
+        _transformStartBounds = TryGetTransformBounds(out SKRect startBounds) ? startBounds : SKRect.Empty;
+        _transformStartPdf = pdf;
         CaptureMouse();
         PostStatus(_draggingTransformRotate
             ? "Rotate selection: drag orange handle."
-            : "Scale selection: drag orange corner handle.");
+            : IsEdgeHandle(handle)
+                ? "Resize selection: drag the orange edge handle (hold Shift = keep proportions)."
+                : "Scale selection: drag orange corner handle.");
         return true;
     }
 
@@ -177,7 +182,11 @@ public sealed partial class PdfViewport
         if (!_draggingTransformScale && !_draggingTransformRotate)
             return;
 
-        if (_draggingTransformScale)
+        if (_draggingTransformScale && IsEdgeHandle(_transformHandle))
+        {
+            UpdateEdgeResizeDrag(pdf);
+        }
+        else if (_draggingTransformScale)
         {
             float distance = Distance(pdf, _transformCenter);
             float factor = Math.Clamp(distance / Math.Max(_transformStartDistance, ViewportConstants.ZeroLengthEpsilon), 0.05f, 20f);
@@ -218,6 +227,53 @@ public sealed partial class PdfViewport
             RestoreAnnotationTransform(annotation, originalPoints, transform);
     }
 
+    // Drag one edge of the orange frame to resize the selection along that
+    // axis. The opposite edge stays anchored. Holding Shift (ortho) keeps the
+    // selection proportional by scaling the other axis by the same factor.
+    private void UpdateEdgeResizeDrag(SKPoint pdf)
+    {
+        SKRect b = _transformStartBounds;
+        float eps = Math.Max(ViewportConstants.ZeroLengthEpsilon, 0.0001f);
+        float cx = (b.Left + b.Right) / 2f;
+        float cy = (b.Top + b.Bottom) / 2f;
+        bool proportional = IsOrthoActive();
+        bool horizontal = _transformHandle is TransformHandleKind.ScaleLeft or TransformHandleKind.ScaleRight;
+
+        float factor;
+        if (horizontal)
+        {
+            float anchorX = _transformHandle == TransformHandleKind.ScaleLeft ? b.Right : b.Left;
+            float origReach = _transformStartPdf.X - anchorX;
+            factor = Math.Abs(origReach) < eps
+                ? 1f
+                : Math.Clamp((pdf.X - anchorX) / origReach, 0.05f, 20f);
+
+            float fx = factor;
+            float fy = proportional ? factor : 1f;
+            ApplyTransformFromOriginal(point => new SKPoint(
+                anchorX + (point.X - anchorX) * fx,
+                cy + (point.Y - cy) * fy));
+        }
+        else
+        {
+            float anchorY = _transformHandle == TransformHandleKind.ScaleTop ? b.Bottom : b.Top;
+            float origReach = _transformStartPdf.Y - anchorY;
+            factor = Math.Abs(origReach) < eps
+                ? 1f
+                : Math.Clamp((pdf.Y - anchorY) / origReach, 0.05f, 20f);
+
+            float fy = factor;
+            float fx = proportional ? factor : 1f;
+            ApplyTransformFromOriginal(point => new SKPoint(
+                cx + (point.X - cx) * fx,
+                anchorY + (point.Y - anchorY) * fy));
+        }
+
+        PostStatus(proportional
+            ? $"Resizing selection (proportional): {factor:0.##}x."
+            : $"Resizing selection: {factor:0.##}x along {(horizontal ? "width" : "height")}.");
+    }
+
     private void FinishTransformDrag()
     {
         if (!_draggingTransformScale && !_draggingTransformRotate)
@@ -237,6 +293,7 @@ public sealed partial class PdfViewport
 
         _draggingTransformScale = false;
         _draggingTransformRotate = false;
+        _transformHandle = TransformHandleKind.None;
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();
@@ -359,6 +416,10 @@ public sealed partial class PdfViewport
         yield return (TransformHandleKind.ScaleTopRight, new SKPoint(bounds.Right, bounds.Top));
         yield return (TransformHandleKind.ScaleBottomRight, new SKPoint(bounds.Right, bounds.Bottom));
         yield return (TransformHandleKind.ScaleBottomLeft, new SKPoint(bounds.Left, bounds.Bottom));
+        yield return (TransformHandleKind.ScaleLeft, new SKPoint(bounds.Left, (bounds.Top + bounds.Bottom) / 2f));
+        yield return (TransformHandleKind.ScaleRight, new SKPoint(bounds.Right, (bounds.Top + bounds.Bottom) / 2f));
+        yield return (TransformHandleKind.ScaleTop, new SKPoint((bounds.Left + bounds.Right) / 2f, bounds.Top));
+        yield return (TransformHandleKind.ScaleBottom, new SKPoint((bounds.Left + bounds.Right) / 2f, bounds.Bottom));
         yield return (TransformHandleKind.Rotate, new SKPoint((bounds.Left + bounds.Right) / 2f, bounds.Top - ScreenToPdfDistance(22f)));
     }
 
@@ -505,7 +566,17 @@ public sealed partial class PdfViewport
         ScaleTopRight,
         ScaleBottomRight,
         ScaleBottomLeft,
+        ScaleLeft,
+        ScaleRight,
+        ScaleTop,
+        ScaleBottom,
         Rotate,
     }
+
+    private static bool IsEdgeHandle(TransformHandleKind kind) =>
+        kind is TransformHandleKind.ScaleLeft
+             or TransformHandleKind.ScaleRight
+             or TransformHandleKind.ScaleTop
+             or TransformHandleKind.ScaleBottom;
 
 }

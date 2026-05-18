@@ -19,6 +19,7 @@ public sealed class AppSettings
     public bool ShowMeasurementLabels { get; set; } = true;
     public bool ShowLineLabels { get; set; } = true;
     public bool ShowAreaLabels { get; set; } = true;
+    public bool ShowJoistLabels { get; set; } = true;
     public bool ShowCountLabels { get; set; }
     public double MeasurementLabelScale { get; set; } = 1.0;
     public bool ShowSheetLegend { get; set; } = true;
@@ -31,6 +32,8 @@ public sealed class AppSettings
     public bool SimplifyViewportNavigation { get; set; } = false;
     public double ViewportMeasurementStrokeScale { get; set; } = 1.0;
     public double ViewportPointSizeScale { get; set; } = 1.0;
+    public double ViewportAreaEdgeScale { get; set; } = 1.0;
+    public double ViewportAreaFillOpacity { get; set; } = 0.24;
     public bool PdfExportIncludeMeasurements { get; set; } = true;
     public bool PdfExportIncludeAnnotations { get; set; } = true;
     public bool PdfExportShowSheetLegend { get; set; } = true;
@@ -319,6 +322,15 @@ public static class AppSettingsStore
             fallback: 1.0,
             min: 0.25,
             max: 4.0);
+        settings.ViewportAreaEdgeScale = NormalizeScale(
+            settings.ViewportAreaEdgeScale,
+            fallback: 1.0,
+            min: 0.25,
+            max: 4.0);
+        settings.ViewportAreaFillOpacity =
+            double.IsNaN(settings.ViewportAreaFillOpacity) || double.IsInfinity(settings.ViewportAreaFillOpacity)
+                ? 0.24
+                : Math.Clamp(settings.ViewportAreaFillOpacity, 0.0, 1.0);
         settings.PdfExportMeasurementStrokeScale = NormalizeScale(
             settings.PdfExportMeasurementStrokeScale,
             fallback: 1.5,

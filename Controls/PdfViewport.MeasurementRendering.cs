@@ -107,10 +107,15 @@ public sealed partial class PdfViewport
                 {
                 using (var fillTrans = fill.Clone())
                 {
-                    fillTrans.Color = fillTrans.Color.WithAlpha(60);
+                    fillTrans.Color = fillTrans.Color.WithAlpha(AreaFillAlpha());
                     canvas.DrawPath(poly, fillTrans);
                 }
-                canvas.DrawPath(poly, stroke);
+                using (var areaStroke = stroke.Clone())
+                {
+                    areaStroke.StrokeWidth =
+                        ScreenToPdfDistance((selected ? 3f : 2f) * strokeScale * AreaEdgeScaleFactor());
+                    canvas.DrawPath(poly, areaStroke);
+                }
                 }
                 if (drawDetails)
                     DrawJoistLayout(canvas, m, color, drawLabels);
@@ -193,21 +198,22 @@ public sealed partial class PdfViewport
 
     private void DrawMeasurementTopLabels(SKCanvas canvas, Measurement measurement)
     {
-        if (measurement.MType == "area" && measurement.JoistEnabled)
+        bool isJoistArea = measurement.MType == "area" && measurement.JoistEnabled;
+        if (isJoistArea)
             DrawJoistLayoutLabels(canvas, measurement);
-
-        if (!ShouldDrawMeasurementLabel(measurement.MType))
-            return;
 
         var points = measurement.Points;
         switch (measurement.MType)
         {
-            case "point" when points.Count > 0:
-            case "line" when points.Count >= 2:
+            case "point" when points.Count > 0 && ShouldDrawMeasurementLabel("point"):
+            case "line" when points.Count >= 2 && ShouldDrawMeasurementLabel("line"):
                 DrawLabel(canvas, points[^1], measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
                 break;
             case "area" when points.Count >= 3:
-                DrawLabel(canvas, Centroid(points), measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
+                // For a joist area the centroid label is the joist summary, so it
+                // follows the Joist toggle; a plain area follows the Area toggle.
+                if (isJoistArea ? ShouldDrawJoistLabels() : ShouldDrawMeasurementLabel("area"))
+                    DrawLabel(canvas, Centroid(points), measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
                 break;
         }
     }
@@ -594,12 +600,21 @@ public sealed partial class PdfViewport
     private float MeasurementStrokeScaleFactor() =>
         (float)Math.Clamp(MeasurementStrokeScale, 0.25, 4.0);
 
+    private float AreaEdgeScaleFactor() =>
+        (float)Math.Clamp(AreaEdgeScale, 0.25, 4.0);
+
+    private byte AreaFillAlpha() =>
+        (byte)Math.Clamp((int)Math.Round(Math.Clamp(AreaFillOpacity, 0.0, 1.0) * 255.0), 0, 255);
+
     private float PointSizeScaleFactor() =>
         (float)Math.Clamp(PointSizeScale, 0.25, 4.0);
 
+    private bool ShouldDrawJoistLabels() =>
+        ShowMeasurementLabels && ShowJoistLabels;
+
     private void DrawJoistLayoutLabels(SKCanvas canvas, Measurement measurement)
     {
-        if (!measurement.JoistEnabled || !measurement.JoistShowLabels)
+        if (!ShouldDrawJoistLabels() || !measurement.JoistEnabled || !measurement.JoistShowLabels)
             return;
 
         JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, ScaleMetersPerPt);

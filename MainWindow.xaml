@@ -164,6 +164,8 @@
                                       ToolTip="Show length label on each line measurement"/>
                             <CheckBox x:Name="ChkDisplayAreaLabels" Content="Area sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                       ToolTip="Show area label on each area measurement"/>
+                            <CheckBox x:Name="ChkDisplayJoistLabels" Content="Joist sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                      ToolTip="Show joist segment labels on area joist layouts (separate from the Area sf label)"/>
                             <CheckBox x:Name="ChkDisplayCountLabels" Content="Count ea" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                       ToolTip="Show count label on each count measurement"/>
                         </StackPanel>
@@ -203,6 +205,42 @@
                                     ToolTip="Apply the typed point marker size"/>
                             <Button Content="v" Click="BtnPointSizePresets_Click" Style="{StaticResource TopCommandButton}" MinWidth="20"
                                     ToolTip="Pick a point size preset"/>
+                        </StackPanel>
+                        <Separator/>
+                        <!-- в”Ђв”Ђ Area: area edge thickness + fill opacity в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
+                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
+                            <TextBlock Text="Area" Style="{StaticResource TopCommandLabel}"
+                                       ToolTip="Area edge thickness and fill opacity"/>
+                            <TextBlock Text="Edge" Style="{StaticResource TopCommandLabel}"
+                                       Margin="0,0,3,0"
+                                       ToolTip="Area boundary line thickness"/>
+                            <TextBox x:Name="TxtAreaEdgeScale"
+                                     Width="42"
+                                     Height="22"
+                                     Text="1.0"
+                                     VerticalAlignment="Center"
+                                     FontSize="11"
+                                     Margin="0,0,3,0"
+                                     KeyDown="TxtAreaEdgeScale_KeyDown"
+                                     LostFocus="TxtAreaEdgeScale_LostFocus"
+                                     ToolTip="Area edge thickness 0.25 - 4.0 (e.g. 1.0 = default)"/>
+                            <Button Content="Set" Click="BtnAreaEdgeApply_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Apply the typed area edge thickness"/>
+                            <TextBlock Text="Fill %" Style="{StaticResource TopCommandLabel}"
+                                       Margin="7,0,3,0"
+                                       ToolTip="Area fill opacity in percent (0 = transparent, 100 = solid)"/>
+                            <TextBox x:Name="TxtAreaFillOpacity"
+                                     Width="42"
+                                     Height="22"
+                                     Text="24"
+                                     VerticalAlignment="Center"
+                                     FontSize="11"
+                                     Margin="0,0,3,0"
+                                     KeyDown="TxtAreaFillOpacity_KeyDown"
+                                     LostFocus="TxtAreaFillOpacity_LostFocus"
+                                     ToolTip="Area fill opacity 0 - 100 % (e.g. 24 = default)"/>
+                            <Button Content="Set" Click="BtnAreaFillOpacityApply_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Apply the typed area fill opacity"/>
                         </StackPanel>
                         <Separator/>
                         <!-- в”Ђв”Ђ Label: appearance of value labels в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->

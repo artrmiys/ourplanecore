@@ -92,6 +92,7 @@ public sealed partial class PdfViewport : SKElement
     private SKPoint                 _boxSelectStartPdf;
     private SKPoint                 _boxSelectEndPdf;
     private bool                    _boxSelectAdditive;
+    private bool                    _boxSelectRemove;
     private bool                    _aiCropNoteSelecting;
     private bool                    _aiCropNoteDragging;
     private SKPoint                 _aiCropNoteStartPdf;
@@ -143,9 +144,12 @@ public sealed partial class PdfViewport : SKElement
     public  bool     ShowMeasurementLabels { get; set; } = true;
     public  bool     ShowLineLabels { get; set; } = true;
     public  bool     ShowAreaLabels { get; set; } = true;
+    public  bool     ShowJoistLabels { get; set; } = true;
     public  bool     ShowCountLabels { get; set; }
     public  double   MeasurementLabelScale { get; set; } = 1.0;
     public  double   MeasurementStrokeScale { get; set; } = 1.0;
+    public  double   AreaEdgeScale { get; set; } = 1.0;
+    public  double   AreaFillOpacity { get; set; } = 0.24;
     public  double   PointSizeScale { get; set; } = 1.0;
     public  string   SheetLegendAnchor { get; set; } = "BottomLeft";
     public  double   SheetLegendScale { get; set; } = 1.0;
@@ -260,6 +264,9 @@ public sealed partial class PdfViewport : SKElement
     private SKPoint _transformCenter;
     private float _transformStartDistance;
     private float _transformStartAngle;
+    private TransformHandleKind _transformHandle = TransformHandleKind.None;
+    private SKRect _transformStartBounds;
+    private SKPoint _transformStartPdf;
     private readonly Dictionary<int, bool> _layerStates = [];
     private readonly HashSet<int> _highlightedLayers = [];
     private List<PdfLayer> _layers = [];

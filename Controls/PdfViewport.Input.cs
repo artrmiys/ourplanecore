@@ -112,9 +112,16 @@ public sealed partial class PdfViewport
             {
                 bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
                 bool selectionModifierActive = IsSelectionModifierActive();
+                bool deselectModifierActive = IsDeselectModifierActive();
                 if (selectionModifierActive)
                 {
-                    if (TryToggleMeasurementVertexSelection(pdf))
+                    if (TryToggleMeasurementVertexSelection(pdf, deselectModifierActive))
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (TrySelectCutRegionAt(pdf, deselectModifierActive ? HoleSelectMode.Remove : HoleSelectMode.Add))
                     {
                         e.Handled = true;
                         return;
@@ -122,7 +129,7 @@ public sealed partial class PdfViewport
 
                     if (HasEditableMeasurementSelection())
                     {
-                        BeginBoxSelection(pdf, additive: true);
+                        BeginBoxSelection(pdf, additive: true, removeMode: deselectModifierActive);
                         e.Handled = true;
                         return;
                     }
@@ -144,6 +151,13 @@ public sealed partial class PdfViewport
 
                 bool preserveSelectionForAdd = selectionModifierActive;
                 if (TryBeginTransformHandleEdit(pdf, pos))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (!TryHitVertex(pdf, out _, out _) &&
+                    TrySelectCutRegionAt(pdf, HoleSelectMode.Replace))
                 {
                     e.Handled = true;
                     return;
@@ -171,7 +185,7 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                BeginBoxSelection(pdf, additive: IsSelectionModifierActive());
+                BeginBoxSelection(pdf, additive: IsSelectionModifierActive(), removeMode: deselectModifierActive);
                 e.Handled = true;
                 return;
             }
@@ -253,7 +267,7 @@ public sealed partial class PdfViewport
             _selectedMeasurement != null &&
             _selectedVertexIndex >= 0)
         {
-            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            SKPoint delta = ConstrainDragDeltaOrtho(ScreenDragDeltaToPdf(pos));
             if (_dragMeasurementVertexOriginalPoints.Count > 0)
             {
                 foreach (var (measurement, originalPoints) in _dragMeasurementVertexOriginalPoints)
@@ -286,7 +300,7 @@ public sealed partial class PdfViewport
         if (_draggingMeasurement &&
             _selectedMeasurement != null)
         {
-            SKPoint delta = ScreenDragDeltaToPdf(pos);
+            SKPoint delta = ConstrainDragDeltaOrtho(ScreenDragDeltaToPdf(pos));
             if (_dragSelectionOriginalPoints.Count > 0)
             {
                 foreach (var (measurement, originalPoints) in _dragSelectionOriginalPoints)
@@ -649,7 +663,11 @@ public sealed partial class PdfViewport
             case Key.C:
                 if (Keyboard.Modifiers == ModifierKeys.Control)
                 {
-                    CopyMeasurementsRequested?.Invoke(GetSelectedMeasurements());
+                    if (!CopySelectedCutRegions())
+                    {
+                        _holeClipboard.Clear();
+                        CopyMeasurementsRequested?.Invoke(GetSelectedMeasurements());
+                    }
                     e.Handled = true;
                 }
                 else if (_drawPts.Count > 0 && (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.DrawArea || _tool == ViewerTool.AreaCut))
@@ -659,7 +677,10 @@ public sealed partial class PdfViewport
                 }
                 break;
             case Key.V when Keyboard.Modifiers == ModifierKeys.Control:
-                PasteMeasurementsRequested?.Invoke(_lastPointerPdf);
+                if (_holeClipboard.Count > 0)
+                    PasteCutRegions(_lastPointerPdf);
+                else
+                    PasteMeasurementsRequested?.Invoke(_lastPointerPdf);
                 e.Handled = true;
                 break;
             case Key.Delete:
