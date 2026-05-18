@@ -214,21 +214,37 @@ public partial class MainWindow
 
     private static string ClassifyArchStructPageTarget(PageInfo page, string arch, string struc, string others)
     {
+        PageSortConfig cfg = PageSortRulesService.Active;
         string name = (page.Name ?? "").Trim();
-        if (name.EndsWith("-", StringComparison.Ordinal))
+        if (cfg.ArchStructDashToOthers && name.EndsWith("-", StringComparison.Ordinal))
             return others;
 
-        char first = name.FirstOrDefault(char.IsLetter);
-        if (first == 'A' || first == 'a')
-            return arch;
-        if (first == 'S' || first == 's')
-            return struc;
+        string Map(string target) => target switch
+        {
+            "Struct" => struc,
+            "Others" => others,
+            _ => arch,
+        };
+
+        char first = char.ToLowerInvariant(name.FirstOrDefault(char.IsLetter));
+        foreach (ArchStructRule rule in cfg.ArchStructRules)
+        {
+            if (!string.Equals(rule.Kind, "FirstLetter", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string m = (rule.Match ?? "").Trim();
+            if (m.Length > 0 && char.ToLowerInvariant(m[0]) == first && first != '\0')
+                return Map(rule.Target);
+        }
 
         string sourceName = Path.GetFileName(page.PdfPath);
-        if (sourceName.Contains("struct", StringComparison.OrdinalIgnoreCase))
-            return struc;
-        if (sourceName.Contains("arch", StringComparison.OrdinalIgnoreCase))
-            return arch;
+        foreach (ArchStructRule rule in cfg.ArchStructRules)
+        {
+            if (!string.Equals(rule.Kind, "FileKeyword", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string m = (rule.Match ?? "").Trim();
+            if (m.Length > 0 && sourceName.Contains(m, StringComparison.OrdinalIgnoreCase))
+                return Map(rule.Target);
+        }
 
         return "";
     }
@@ -281,10 +297,22 @@ public partial class MainWindow
 
     private void SortPagesBySuffix(string scopeFolder, bool scopedToSelectedFolder)
     {
-        string detailsStruct = EnsurePagesChildFolder(scopeFolder, "details struct");
-        string detailsArch = EnsurePagesChildFolder(scopeFolder, "details arch");
-        string units = EnsurePagesChildFolder(scopeFolder, "units");
-        string sections = EnsurePagesChildFolder(scopeFolder, "sections");
+        PageSortConfig cfg = PageSortRulesService.Active;
+
+        // Pre-create each distinct destination folder referenced by the rules
+        // (defaults reproduce the old "details struct / arch, units, sections").
+        var targets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string EnsureChild(string name)
+        {
+            if (targets.TryGetValue(name, out string? p) && !string.IsNullOrEmpty(p))
+                return p;
+            string ensured = EnsurePagesChildFolder(scopeFolder, name);
+            targets[name] = ensured;
+            return ensured;
+        }
+
+        foreach (string name in cfg.SuffixTargetFolderNames())
+            EnsureChild(name);
 
         IReadOnlyList<PageInfo> pages = CollectPagesUnder(scopeFolder)
             .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
@@ -292,17 +320,14 @@ public partial class MainWindow
             .ToList();
 
         int movedTop = 0;
-        int movedDetailsStruct = 0;
-        int movedDetailsArch = 0;
-        int movedUnits = 0;
-        int movedSections = 0;
+        var movedByFolder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int skipped = 0;
         bool reloadActiveTab = false;
         string? selectAfter = null;
 
         foreach (PageInfo page in pages)
         {
-            string target = ClassifySuffixPageTarget(page, scopeFolder, detailsStruct, detailsArch, units, sections);
+            string target = ClassifySuffixPageTarget(page, scopeFolder, EnsureChild);
             if (string.IsNullOrWhiteSpace(target))
             {
                 skipped++;
@@ -323,20 +348,12 @@ public partial class MainWindow
 
             if (string.Equals(target, scopeFolder, StringComparison.OrdinalIgnoreCase))
                 movedTop++;
-            else if (string.Equals(target, detailsStruct, StringComparison.OrdinalIgnoreCase))
-                movedDetailsStruct++;
-            else if (string.Equals(target, detailsArch, StringComparison.OrdinalIgnoreCase))
-                movedDetailsArch++;
-            else if (string.Equals(target, units, StringComparison.OrdinalIgnoreCase))
-                movedUnits++;
-            else if (string.Equals(target, sections, StringComparison.OrdinalIgnoreCase))
-                movedSections++;
+            else
+                movedByFolder[target] = movedByFolder.GetValueOrDefault(target) + 1;
         }
 
-        OurPlaneCoreJobStore.SortChildren(detailsStruct, descending: false);
-        OurPlaneCoreJobStore.SortChildren(detailsArch, descending: false);
-        OurPlaneCoreJobStore.SortChildren(units, descending: false);
-        OurPlaneCoreJobStore.SortChildren(sections, descending: false);
+        foreach (string folder in targets.Values.Where(v => !string.IsNullOrEmpty(v)).Distinct(StringComparer.OrdinalIgnoreCase))
+            OurPlaneCoreJobStore.SortChildren(folder, descending: false);
         int reorderedTop = ReorderSuffixPagesToTop(scopeFolder);
 
         ReloadPagesTree(selectAfter ?? scopeFolder);
@@ -344,9 +361,13 @@ public partial class MainWindow
         string scopeLabel = scopedToSelectedFolder
             ? $" in {OurPlaneCoreJobStore.DisplayName(scopeFolder)}"
             : "";
+        string perFolder = string.Join(", ", movedByFolder
+            .OrderBy(kv => OurPlaneCoreJobStore.DisplayName(kv.Key), StringComparer.OrdinalIgnoreCase)
+            .Select(kv => $"{OurPlaneCoreJobStore.DisplayName(kv.Key)} {kv.Value}"));
         TxtStatus.Text =
-            $"Sort D/Sec/WT{scopeLabel}: top {movedTop}, details struct {movedDetailsStruct}, details arch {movedDetailsArch}, " +
-            $"units {movedUnits}, sections {movedSections}, reordered {reorderedTop}, skipped {skipped}.";
+            $"Sort D/Sec/WT{scopeLabel}: top {movedTop}" +
+            (perFolder.Length > 0 ? $", {perFolder}" : "") +
+            $", reordered {reorderedTop}, skipped {skipped}.";
     }
 
     private string CurrentSelectedPagesFolderOrRoot(out bool scopedToSelectedFolder)
@@ -391,25 +412,31 @@ public partial class MainWindow
     private string ClassifySuffixPageTarget(
         PageInfo page,
         string topFolder,
-        string detailsStruct,
-        string detailsArch,
-        string units,
-        string sections)
+        Func<string, string> ensureChild)
     {
         if (_currentJob == null)
             return "";
 
+        PageSortConfig cfg = PageSortRulesService.Active;
         (string suffix, char first) = DetectPageSuffixSortInfo(page);
-        if (PageSuffixTopOrder.Contains(suffix, StringComparer.OrdinalIgnoreCase))
+        if (cfg.SuffixTopOrder.Contains(suffix, StringComparer.OrdinalIgnoreCase))
             return topFolder;
-        if (string.Equals(suffix, "d", StringComparison.OrdinalIgnoreCase) && first == 's')
-            return detailsStruct;
-        if (string.Equals(suffix, "d", StringComparison.OrdinalIgnoreCase) && first == 'a')
-            return detailsArch;
-        if (string.Equals(suffix, "u", StringComparison.OrdinalIgnoreCase))
-            return units;
-        if (string.Equals(suffix, "sec", StringComparison.OrdinalIgnoreCase))
-            return sections;
+
+        foreach (SuffixRule rule in cfg.SuffixRules)
+        {
+            if (!string.Equals(rule.Suffix, suffix, StringComparison.OrdinalIgnoreCase))
+                continue;
+            string fl = (rule.FirstLetter ?? "").Trim();
+            if (fl.Length > 0 && char.ToLowerInvariant(fl[0]) != first)
+                continue;
+            string target = (rule.Target ?? "").Trim();
+            if (target.Length == 0)
+                continue;
+            return string.Equals(target, "top", StringComparison.OrdinalIgnoreCase)
+                ? topFolder
+                : ensureChild(target);
+        }
+
         return "";
     }
 
@@ -440,7 +467,7 @@ public partial class MainWindow
     {
         var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder).ToList();
         var topPages = new List<string>();
-        foreach (string suffix in PageSuffixTopOrder)
+        foreach (string suffix in PageSortRulesService.Active.SuffixTopOrder)
         {
             topPages.AddRange(children.Where(child =>
                 OurPlaneCoreJobStore.TryReadPage(child) is { } childPage &&
@@ -479,14 +506,14 @@ public partial class MainWindow
             return "";
 
         string tokenText = Regex.Replace(raw, @"[\s._-]+", " ").Trim();
-        foreach (string suffix in PageSuffixDetectionOrder)
+        foreach (string suffix in PageSortRulesService.Active.SuffixDetectionOrder)
         {
             if (Regex.IsMatch(tokenText, $@"(?:^| ){Regex.Escape(suffix)}$"))
                 return suffix;
         }
 
         string compact = Regex.Replace(raw, @"[\s._-]+", "");
-        foreach (string suffix in PageSuffixDetectionOrder)
+        foreach (string suffix in PageSortRulesService.Active.SuffixDetectionOrder)
         {
             if (!compact.EndsWith(suffix, StringComparison.Ordinal))
                 continue;

@@ -158,8 +158,7 @@ public partial class MainWindow : Window
     private Point? _takeoffsDragStart;
     private PageTabState? _activePageTab;
     // Tree node and metadata support types moved to MainWindow.SupportTypes.cs
-    private static readonly string[] PageSuffixTopOrder = ["v", "wt", "ft", "sv", "sw"];
-    private static readonly string[] PageSuffixDetectionOrder = ["sec", "wt", "ft", "sv", "sw", "u", "d", "v"];
+    // Page-sort suffix order/rules now live in PageSortConfig (editable in Settings).
 
     // Page tab support type moved to MainWindow.SupportTypes.cs
 
