@@ -423,6 +423,89 @@ public partial class MainWindow
         TxtStatus.Text = $"Area fill opacity: {Math.Round(_settings.ViewportAreaFillOpacity * 100.0):0}%.";
     }
 
+    // ── Ribbon sliders ───────────────────────────────────────────────────
+    // ValueChanged applies a live preview without writing settings.json on
+    // every tick; the value is persisted once on Slider_CommitSave (mouse-up
+    // or key-up).
+
+    private bool _viewportScaleDirty;
+
+    private void SldLineThickness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(e.NewValue);
+        _viewport.MeasurementStrokeScale = _settings.ViewportMeasurementStrokeScale;
+        TxtMeasurementStrokeScale.Text = _settings.ViewportMeasurementStrokeScale.ToString("0.##", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Viewport line thickness: {_settings.ViewportMeasurementStrokeScale:0.##}x.";
+    }
+
+    private void SldPointSize_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        _settings.ViewportPointSizeScale = NormalizePointScale(e.NewValue);
+        _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
+        TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Viewport point size: {_settings.ViewportPointSizeScale:0.##}x.";
+    }
+
+    private void SldAreaEdge_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        _settings.ViewportAreaEdgeScale = Math.Clamp(e.NewValue, 0.25, 4.0);
+        _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
+        TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Area edge thickness: {_settings.ViewportAreaEdgeScale:0.##}x.";
+    }
+
+    private void SldAreaFill_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        _settings.ViewportAreaFillOpacity = Math.Clamp(e.NewValue / 100.0, 0.0, 1.0);
+        _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
+        TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Area fill opacity: {Math.Round(_settings.ViewportAreaFillOpacity * 100.0):0}%.";
+    }
+
+    private void SldLabelScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        _settings.MeasurementLabelScale = NormalizeOverlayScale(e.NewValue);
+        _viewport.MeasurementLabelScale = _settings.MeasurementLabelScale;
+        TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Viewport value label size: {_settings.MeasurementLabelScale:0.##}x.";
+    }
+
+    private void Slider_CommitSave(object sender, RoutedEventArgs e)
+    {
+        if (!_viewportScaleDirty)
+            return;
+
+        _viewportScaleDirty = false;
+        AppSettingsStore.NormalizeOutputSettings(_settings);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+    }
+
     private void BtnLegendSizeMenu_Click(object sender, RoutedEventArgs e)
     {
         ShowOverlaySizePopup(sender, "Legend Size", _settings.SheetLegendScale, SetSheetLegendScale);
@@ -680,6 +763,11 @@ public partial class MainWindow
             TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
+            SldLabelScale.Value = _settings.MeasurementLabelScale;
+            SldLineThickness.Value = _settings.ViewportMeasurementStrokeScale;
+            SldPointSize.Value = _settings.ViewportPointSizeScale;
+            SldAreaEdge.Value = _settings.ViewportAreaEdgeScale;
+            SldAreaFill.Value = Math.Round(_settings.ViewportAreaFillOpacity * 100.0);
             SyncOutputSettingsControls();
         }
         finally

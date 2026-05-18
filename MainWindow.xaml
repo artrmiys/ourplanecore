@@ -48,6 +48,43 @@
             <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="Margin" Value="0,0,5,0"/>
         </Style>
+        <!-- Ribbon group footer label (canon §8: label below, on a 1px top border) -->
+        <Style x:Key="RibbonGroupLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+        </Style>
+        <Style x:Key="RibbonRowLabel" TargetType="TextBlock" BasedOn="{StaticResource TopCommandLabel}">
+            <Setter Property="MinWidth" Value="36"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+        </Style>
+        <Style x:Key="RibbonSlider" TargetType="Slider">
+            <Setter Property="Width" Value="94"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="IsSnapToTickEnabled" Value="False"/>
+            <Setter Property="IsMoveToPointEnabled" Value="True"/>
+        </Style>
+        <Style x:Key="RibbonValue" TargetType="TextBox">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+        </Style>
+        <Style x:Key="RibbonGroup" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Vertical"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+        </Style>
+        <Style x:Key="RibbonGroupSep" TargetType="Border">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="Margin" Value="6,3,6,3"/>
+        </Style>
     </Window.Resources>
     <Grid x:Name="RootFrame">
     <DockPanel x:Name="RootDock">
@@ -55,8 +92,8 @@
         <TabControl x:Name="TopMainTabs"
                     DockPanel.Dock="Top"
                     ItemContainerStyle="{StaticResource CommandTabItem}"
-                    MinHeight="60"
-                    MaxHeight="66"
+                    MinHeight="118"
+                    MaxHeight="126"
                     FontSize="11"
                     Background="{DynamicResource ControlBackgroundBrush}"
                     BorderBrush="{DynamicResource ControlBorderBrush}">
@@ -153,186 +190,182 @@
             <TabItem Header="Viewport">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal" Margin="6,3">
-                        <!-- в”Ђв”Ђ Values: which value labels are shown в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,9,0">
-                            <TextBlock Text="Values" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="Show or hide measurement value labels in the viewport"/>
-                            <CheckBox x:Name="ChkDisplayMeasurementLabels" Content="All" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Master toggle for all measurement value labels"/>
-                            <CheckBox x:Name="ChkDisplayLineLabels" Content="Line ft" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Show length label on each line measurement"/>
-                            <CheckBox x:Name="ChkDisplayAreaLabels" Content="Area sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Show area label on each area measurement"/>
-                            <CheckBox x:Name="ChkDisplayJoistLabels" Content="Joist sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Show joist segment labels on area joist layouts (separate from the Area sf label)"/>
-                            <CheckBox x:Name="ChkDisplayCountLabels" Content="Count ea" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Show count label on each count measurement"/>
+                    <StackPanel Orientation="Horizontal" Margin="6,2">
+
+                        <!-- GROUP: LINES & AREA -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Line" Style="{StaticResource RibbonRowLabel}"/>
+                                <Slider Grid.Column="1" x:Name="SldLineThickness" Minimum="0.25" Maximum="4" SmallChange="0.25" LargeChange="0.5"
+                                        Style="{StaticResource RibbonSlider}"
+                                        ValueChanged="SldLineThickness_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                        ToolTip="Line measurement thickness 0.25 - 4.0"/>
+                                <TextBox Grid.Column="2" x:Name="TxtMeasurementStrokeScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                         KeyDown="TxtMeasurementStrokeScale_KeyDown" LostFocus="TxtMeasurementStrokeScale_LostFocus"
+                                         ToolTip="Type a line thickness 0.25 - 4.0 and press Enter"/>
+                            </Grid>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Point" Style="{StaticResource RibbonRowLabel}"/>
+                                <Slider Grid.Column="1" x:Name="SldPointSize" Minimum="0.25" Maximum="4" SmallChange="0.25" LargeChange="0.5"
+                                        Style="{StaticResource RibbonSlider}"
+                                        ValueChanged="SldPointSize_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                        ToolTip="Count marker size 0.25 - 4.0"/>
+                                <TextBox Grid.Column="2" x:Name="TxtMeasurementPointScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                         KeyDown="TxtMeasurementPointScale_KeyDown" LostFocus="TxtMeasurementPointScale_LostFocus"
+                                         ToolTip="Type a point size 0.25 - 4.0 and press Enter"/>
+                            </Grid>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Edge" Style="{StaticResource RibbonRowLabel}"/>
+                                <Slider Grid.Column="1" x:Name="SldAreaEdge" Minimum="0.25" Maximum="4" SmallChange="0.25" LargeChange="0.5"
+                                        Style="{StaticResource RibbonSlider}"
+                                        ValueChanged="SldAreaEdge_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                        ToolTip="Area boundary thickness 0.25 - 4.0"/>
+                                <TextBox Grid.Column="2" x:Name="TxtAreaEdgeScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                         KeyDown="TxtAreaEdgeScale_KeyDown" LostFocus="TxtAreaEdgeScale_LostFocus"
+                                         ToolTip="Type an area edge thickness 0.25 - 4.0 and press Enter"/>
+                            </Grid>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Fill" Style="{StaticResource RibbonRowLabel}"/>
+                                <Slider Grid.Column="1" x:Name="SldAreaFill" Minimum="0" Maximum="100" SmallChange="5" LargeChange="10"
+                                        Style="{StaticResource RibbonSlider}"
+                                        ValueChanged="SldAreaFill_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                        ToolTip="Area fill opacity 0 - 100 %"/>
+                                <TextBox Grid.Column="2" x:Name="TxtAreaFillOpacity" Text="24" Style="{StaticResource RibbonValue}"
+                                         KeyDown="TxtAreaFillOpacity_KeyDown" LostFocus="TxtAreaFillOpacity_LostFocus"
+                                         ToolTip="Type an area fill opacity 0 - 100 % and press Enter"/>
+                            </Grid>
+                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                                <TextBlock Text="LINES &amp; AREA" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <!-- в”Ђв”Ђ Lines: viewport measurement stroke appearance в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Lines" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="Viewport measurement line thickness"/>
-                            <TextBox x:Name="TxtMeasurementStrokeScale"
-                                     Width="42"
-                                     Height="22"
-                                     Text="1.0"
-                                     VerticalAlignment="Center"
-                                     FontSize="11"
-                                     Margin="0,0,3,0"
-                                     KeyDown="TxtMeasurementStrokeScale_KeyDown"
-                                     LostFocus="TxtMeasurementStrokeScale_LostFocus"
-                                     ToolTip="Viewport line thickness 0.25 - 4.0 (e.g. 1.0 = default size)"/>
-                            <Button Content="Set" Click="BtnMeasurementStrokeApply_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Apply the typed viewport line thickness"/>
-                            <Button Content="v" Click="BtnStrokeSizePresets_Click" Style="{StaticResource TopCommandButton}" MinWidth="20"
-                                    ToolTip="Pick a stroke preset"/>
-                            <TextBlock Text="Point" Style="{StaticResource TopCommandLabel}"
-                                       Margin="7,0,3,0"
-                                       ToolTip="Viewport point marker size"/>
-                            <TextBox x:Name="TxtMeasurementPointScale"
-                                     Width="42"
-                                     Height="22"
-                                     Text="1.0"
-                                     VerticalAlignment="Center"
-                                     FontSize="11"
-                                     Margin="0,0,3,0"
-                                     KeyDown="TxtMeasurementPointScale_KeyDown"
-                                     LostFocus="TxtMeasurementPointScale_LostFocus"
-                                     ToolTip="Viewport point marker size 0.25 - 4.0 (e.g. 1.0 = default size)"/>
-                            <Button Content="Set" Click="BtnMeasurementPointApply_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Apply the typed point marker size"/>
-                            <Button Content="v" Click="BtnPointSizePresets_Click" Style="{StaticResource TopCommandButton}" MinWidth="20"
-                                    ToolTip="Pick a point size preset"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: LABELS -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <CheckBox x:Name="ChkDisplayMeasurementLabels" Content="All" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Master toggle for all measurement value labels"/>
+                                <CheckBox x:Name="ChkDisplayLineLabels" Content="Line ft" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Show length label on each line measurement"/>
+                                <CheckBox x:Name="ChkDisplayAreaLabels" Content="Area sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Show area label on each area measurement"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <CheckBox x:Name="ChkDisplayJoistLabels" Content="Joist sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Show joist segment labels on area joist layouts (separate from the Area sf label)"/>
+                                <CheckBox x:Name="ChkDisplayCountLabels" Content="Count ea" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Show count label on each count measurement"/>
+                            </StackPanel>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Size" Style="{StaticResource RibbonRowLabel}"/>
+                                <Slider Grid.Column="1" x:Name="SldLabelScale" Minimum="0.5" Maximum="3" SmallChange="0.25" LargeChange="0.5"
+                                        Style="{StaticResource RibbonSlider}"
+                                        ValueChanged="SldLabelScale_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                        ToolTip="Value label size 0.5 - 3.0"/>
+                                <TextBox Grid.Column="2" x:Name="TxtMeasurementLabelScale" Text="1.0" Style="{StaticResource RibbonValue}"
+                                         KeyDown="TxtMeasurementLabelScale_KeyDown" LostFocus="TxtMeasurementLabelScale_LostFocus"
+                                         ToolTip="Type a label size 0.5 - 3.0 and press Enter"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <CheckBox x:Name="ChkDisplayLabelsScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Off (default): labels keep a fixed screen size when zooming. On: labels grow/shrink with page zoom."/>
+                            </StackPanel>
+                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                                <TextBlock Text="LABELS" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <!-- в”Ђв”Ђ Area: area edge thickness + fill opacity в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Area" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="Area edge thickness and fill opacity"/>
-                            <TextBlock Text="Edge" Style="{StaticResource TopCommandLabel}"
-                                       Margin="0,0,3,0"
-                                       ToolTip="Area boundary line thickness"/>
-                            <TextBox x:Name="TxtAreaEdgeScale"
-                                     Width="42"
-                                     Height="22"
-                                     Text="1.0"
-                                     VerticalAlignment="Center"
-                                     FontSize="11"
-                                     Margin="0,0,3,0"
-                                     KeyDown="TxtAreaEdgeScale_KeyDown"
-                                     LostFocus="TxtAreaEdgeScale_LostFocus"
-                                     ToolTip="Area edge thickness 0.25 - 4.0 (e.g. 1.0 = default)"/>
-                            <Button Content="Set" Click="BtnAreaEdgeApply_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Apply the typed area edge thickness"/>
-                            <TextBlock Text="Fill %" Style="{StaticResource TopCommandLabel}"
-                                       Margin="7,0,3,0"
-                                       ToolTip="Area fill opacity in percent (0 = transparent, 100 = solid)"/>
-                            <TextBox x:Name="TxtAreaFillOpacity"
-                                     Width="42"
-                                     Height="22"
-                                     Text="24"
-                                     VerticalAlignment="Center"
-                                     FontSize="11"
-                                     Margin="0,0,3,0"
-                                     KeyDown="TxtAreaFillOpacity_KeyDown"
-                                     LostFocus="TxtAreaFillOpacity_LostFocus"
-                                     ToolTip="Area fill opacity 0 - 100 % (e.g. 24 = default)"/>
-                            <Button Content="Set" Click="BtnAreaFillOpacityApply_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Apply the typed area fill opacity"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: OVERLAYS -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Legend" Style="{StaticResource RibbonRowLabel}"/>
+                                <CheckBox x:Name="ChkDisplayLegend" Content="Show" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Show or hide the legend overlay on the active sheet"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <Button Content="Size" Click="BtnLegendSizeMenu_Click" Style="{StaticResource TopCommandButton}"
+                                        ToolTip="Pick legend size preset"/>
+                                <Button Content="Pos" Click="BtnLegendPositionMenu_Click" Style="{StaticResource TopCommandButton}"
+                                        ToolTip="Pick legend anchor (corner/edge of the sheet)"/>
+                                <CheckBox x:Name="ChkDisplayLegendScaleWithPage" Content="w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Off (default): legend keeps a fixed screen size when zooming. On: legend grows/shrinks with page zoom."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Header" Style="{StaticResource RibbonRowLabel}"/>
+                                <Button Content="Size" Click="BtnScaleHeaderSizeMenu_Click" Style="{StaticResource TopCommandButton}"
+                                        ToolTip="Pick header size preset"/>
+                                <CheckBox x:Name="ChkDisplayHeaderScaleWithPage" Content="w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Off (default): header keeps a fixed screen size when zooming. On: header grows/shrinks with page zoom."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <CheckBox x:Name="ChkDisplaySimplifyNavigation" Content="Fast pan/zoom" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>
+                            </StackPanel>
+                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                                <TextBlock Text="OVERLAYS" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <!-- в”Ђв”Ђ Label: appearance of value labels в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Label" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="How measurement value labels are drawn"/>
-                            <TextBox x:Name="TxtMeasurementLabelScale"
-                                     Width="42"
-                                     Height="22"
-                                     Text="1.0"
-                                     VerticalAlignment="Center"
-                                     FontSize="11"
-                                     Margin="0,0,3,0"
-                                     KeyDown="TxtMeasurementLabelScale_KeyDown"
-                                     LostFocus="TxtMeasurementLabelScale_LostFocus"
-                                     ToolTip="Value label scale 0.5 - 3.0 (e.g. 1.0 = default size)"/>
-                            <Button Content="Set" Click="BtnMeasurementLabelApply_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Apply the typed scale value"/>
-                            <Button Content="в–ѕ" Click="BtnLabelSizePresets_Click" Style="{StaticResource TopCommandButton}" MinWidth="20"
-                                    ToolTip="Pick a preset (Small / Normal / Large / XL / XXL / Custom)"/>
-                            <CheckBox x:Name="ChkDisplayLabelsScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Off (default): labels keep a fixed screen size when zooming. On: labels grow/shrink with page zoom."/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: UNITS / VIEW -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <CheckBox x:Name="ChkDisplayImperial" Content="ft / sf (imperial)" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          ToolTip="Imperial units (ft / sf / ea). Off = metric."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Edge" Style="{StaticResource RibbonRowLabel}"/>
+                                <ComboBox x:Name="ComboDisplayViewportBackground" Width="100" Height="22" FontSize="11" Margin="0,0,5,0"
+                                          SelectionChanged="ComboDisplayViewportBackground_SelectionChanged"
+                                          ToolTip="Choose the background around the sheet">
+                                    <ComboBoxItem Content="White" Tag="#FFFFFF"/>
+                                    <ComboBoxItem Content="Gray" Tag="#F2F2F2"/>
+                                    <ComboBoxItem Content="Dark" Tag="#2B2B2B"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Paper" Style="{StaticResource RibbonRowLabel}"/>
+                                <ComboBox x:Name="ComboDisplayPageBackground" Width="100" Height="22" FontSize="11" Margin="0,0,5,0"
+                                          SelectionChanged="ComboDisplayPageBackground_SelectionChanged"
+                                          ToolTip="Choose a softer page background tint">
+                                    <ComboBoxItem Content="White" Tag="#FFFFFF"/>
+                                    <ComboBoxItem Content="Soft gray" Tag="#F2F2F2"/>
+                                    <ComboBoxItem Content="Medium gray" Tag="#D8D8D8"/>
+                                    <ComboBoxItem Content="Dark gray" Tag="#B8B8B8"/>
+                                    <ComboBoxItem Content="Warm" Tag="#FFF8E8"/>
+                                    <ComboBoxItem Content="Soft green" Tag="#EFF7ED"/>
+                                    <ComboBoxItem Content="Black" Tag="#000000"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <ToggleButton x:Name="BtnDisplayDarkTheme" Content="Dark theme" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
+                                              Style="{StaticResource TopCommandToggle}"
+                                              ToolTip="Toggle dark/light UI theme"/>
+                            </StackPanel>
+                            <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0">
+                                <TextBlock Text="UNITS &amp; VIEW" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <!-- в”Ђв”Ђ Legend: sheet legend overlay в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Legend" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="Sheet legend overlay (per-page color/sign list)"/>
-                            <CheckBox x:Name="ChkDisplayLegend" Content="Show" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Show or hide the legend overlay on the active sheet"/>
-                            <Button Content="Size" Click="BtnLegendSizeMenu_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Pick legend size preset"/>
-                            <Button Content="Pos" Click="BtnLegendPositionMenu_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Pick legend anchor (corner/edge of the sheet)"/>
-                            <CheckBox x:Name="ChkDisplayLegendScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Off (default): legend keeps a fixed screen size when zooming. On: legend grows/shrinks with page zoom."/>
-                        </StackPanel>
-                        <Separator/>
-                        <!-- в”Ђв”Ђ Header: sheet scale/size header overlay в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Header" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="Top-of-sheet header overlay (drawing scale + sheet size)"/>
-                            <Button Content="Size" Click="BtnScaleHeaderSizeMenu_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Pick header size preset"/>
-                            <CheckBox x:Name="ChkDisplayHeaderScaleWithPage" Content="Scale w/ page" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Off (default): header keeps a fixed screen size when zooming. On: header grows/shrinks with page zoom."/>
-                        </StackPanel>
-                        <Separator/>
-                        <!-- в”Ђв”Ђ View: viewport appearance в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="View" Style="{StaticResource TopCommandLabel}"
-                                       ToolTip="Viewport units and theme"/>
-                            <CheckBox x:Name="ChkDisplayImperial" Content="ft/sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Imperial units (ft / sf / ea). Off = metric."/>
-                            <TextBlock Text="Edge" Style="{StaticResource TopCommandLabel}"
-                                       Margin="0,0,3,0"
-                                       ToolTip="Background around the PDF sheet"/>
-                            <ComboBox x:Name="ComboDisplayViewportBackground"
-                                      Width="82"
-                                      Height="24"
-                                      FontSize="11"
-                                      Margin="0,0,5,0"
-                                      SelectionChanged="ComboDisplayViewportBackground_SelectionChanged"
-                                      ToolTip="Choose the background around the sheet">
-                                <ComboBoxItem Content="White" Tag="#FFFFFF"/>
-                                <ComboBoxItem Content="Gray" Tag="#F2F2F2"/>
-                                <ComboBoxItem Content="Dark" Tag="#2B2B2B"/>
-                            </ComboBox>
-                            <TextBlock Text="Paper" Style="{StaticResource TopCommandLabel}"
-                                       Margin="0,0,3,0"
-                                       ToolTip="PDF page background tint for eye comfort"/>
-                            <ComboBox x:Name="ComboDisplayPageBackground"
-                                      Width="112"
-                                      Height="24"
-                                      FontSize="11"
-                                      Margin="0,0,5,0"
-                                      SelectionChanged="ComboDisplayPageBackground_SelectionChanged"
-                                      ToolTip="Choose a softer page background tint">
-                                <ComboBoxItem Content="White" Tag="#FFFFFF"/>
-                                <ComboBoxItem Content="Soft gray" Tag="#F2F2F2"/>
-                                <ComboBoxItem Content="Medium gray" Tag="#D8D8D8"/>
-                                <ComboBoxItem Content="Dark gray" Tag="#B8B8B8"/>
-                                <ComboBoxItem Content="Warm" Tag="#FFF8E8"/>
-                                <ComboBoxItem Content="Soft green" Tag="#EFF7ED"/>
-                                <ComboBoxItem Content="Black" Tag="#000000"/>
-                            </ComboBox>
-                            <CheckBox x:Name="ChkDisplaySimplifyNavigation" Content="Fast pan/zoom" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                      ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>
-                            <ToggleButton x:Name="BtnDisplayDarkTheme" Content="Dark" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
-                                          Style="{StaticResource TopCommandToggle}"
-                                          ToolTip="Toggle dark/light UI theme"/>
-                        </StackPanel>
+
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
