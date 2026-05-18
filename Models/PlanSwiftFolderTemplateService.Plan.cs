@@ -38,12 +38,21 @@ public static partial class PlanSwiftFolderTemplateService
         new() { Name = node.Name, Children = node.Children.Select(ToPlan).ToList() };
 
     // The hard-coded standard sub-tree for a mode, as an editable plan.
-    public static List<FolderPlanNode> DefaultSubTree(string mode) =>
+    public static List<FolderPlanNode> HardcodedSubTree(string mode) =>
         (string.Equals(mode, "EWP", StringComparison.OrdinalIgnoreCase)
             ? TakeoffTreeEwp
             : TakeoffTreeStandard)
         .Select(ToPlan)
         .ToList();
+
+    // Effective sub-tree: user override for the mode if present, else default.
+    public static List<FolderPlanNode> DefaultSubTree(string mode)
+    {
+        IReadOnlyList<FolderPlanNode>? over = TakeoffTreeOverride?.Invoke(mode);
+        return over is { Count: > 0 }
+            ? over.Select(n => n.Clone()).ToList()
+            : HardcodedSubTree(mode);
+    }
 
     // The default plan: top folders detected from Pages CAPS names + the
     // standard sub-tree for the resolved mode.

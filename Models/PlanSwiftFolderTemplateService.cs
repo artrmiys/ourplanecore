@@ -134,14 +134,29 @@ public static partial class PlanSwiftFolderTemplateService
         return hasEwp && !hasCom ? "EWP" : "COM";
     }
 
-    public static IReadOnlyList<string> PageFolderNames(string mode) =>
+    // Optional user overrides (from Settings). When set and non-empty for a
+    // mode, these replace the hard-coded templates everywhere they are used.
+    public static Func<string, IReadOnlyList<string>?>? PageFoldersOverride;
+    public static Func<string, IReadOnlyList<FolderPlanNode>?>? TakeoffTreeOverride;
+
+    public static IReadOnlyList<string> DefaultPageFolders(string mode) =>
         string.Equals(mode, "EWP", StringComparison.OrdinalIgnoreCase) ? PageFoldersEwp : PageFoldersCom;
+
+    public static IReadOnlyList<string> PageFolderNames(string mode)
+    {
+        IReadOnlyList<string>? over = PageFoldersOverride?.Invoke(mode);
+        return over is { Count: > 0 } ? over : DefaultPageFolders(mode);
+    }
 
     public static FolderTemplateResult CreatePageFolders(string baseFolder, string mode) =>
         CreateFlatFolders(baseFolder, PageFolderNames(mode));
 
     public static FolderTemplateResult CreateTakeoffTree(string baseFolder, string mode)
     {
+        IReadOnlyList<FolderPlanNode>? over = TakeoffTreeOverride?.Invoke(mode);
+        if (over is { Count: > 0 })
+            return CreatePlanTree(baseFolder, over);
+
         IReadOnlyList<FolderNode> tree = string.Equals(mode, "EWP", StringComparison.OrdinalIgnoreCase)
             ? TakeoffTreeEwp
             : TakeoffTreeStandard;

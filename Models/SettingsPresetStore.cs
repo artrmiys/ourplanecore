@@ -6,26 +6,59 @@ using System.Text.Json;
 
 namespace OurPlaneCore;
 
-// Global presets (+ optional per-job override) for Settings sections.
-// Global:  %APPDATA%/OurPlaneCore (SmartContextStore.GlobalRoot) /presets/<section>.json
-// Per-job: <job>/AI_Context/settings/<section>.json
-public sealed class FolderPlanPresets
+// Editable folder templates that drive the three auto-create features:
+//  • PageFolders  -> "Auto Page Folders" (Pages tree, flat list per mode)
+//  • TakeoffTree  -> "Auto Takeoff Tree" (Takeoffs tree, nested per mode)
+//                    and the per-folder sub-tree used by "From Pages".
+public sealed class FolderTemplateConfig
 {
-    public List<FolderPlan> Presets { get; set; } = [];
+    // mode ("COM"/"EWP") -> flat page-folder names
+    public Dictionary<string, List<string>> PageFolders { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // mode ("COM"/"EWP") -> nested takeoff tree
+    public Dictionary<string, List<FolderPlanNode>> TakeoffTree { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public FolderTemplateConfig Clone()
+    {
+        var c = new FolderTemplateConfig();
+        foreach (var (k, v) in PageFolders)
+            c.PageFolders[k] = [.. v];
+        foreach (var (k, v) in TakeoffTree)
+            c.TakeoffTree[k] = v.Select(n => n.Clone()).ToList();
+        return c;
+    }
+
+    public static FolderTemplateConfig BuildDefault()
+    {
+        var c = new FolderTemplateConfig();
+        foreach (string mode in new[] { "COM", "EWP" })
+        {
+            c.PageFolders[mode] = PlanSwiftFolderTemplateService.DefaultPageFolders(mode).ToList();
+            c.TakeoffTree[mode] = PlanSwiftFolderTemplateService.HardcodedSubTree(mode);
+        }
+        return c;
+    }
+
+    public List<string> PageFoldersFor(string mode) =>
+        PageFolders.TryGetValue(mode, out var v) && v.Count > 0
+            ? v
+            : PlanSwiftFolderTemplateService.DefaultPageFolders(mode).ToList();
+
+    public List<FolderPlanNode> TreeFor(string mode) =>
+        TakeoffTree.TryGetValue(mode, out var v) && v.Count > 0
+            ? v
+            : PlanSwiftFolderTemplateService.HardcodedSubTree(mode);
 }
 
 public static class SettingsPresetStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private static string GlobalPath(string section) =>
-        Path.Combine(SmartContextStore.GlobalRoot, "presets", $"{section}.json");
+    private static string GlobalPath() =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", "folder_template.json");
 
-    private static string JobPath(OurPlaneCoreJob job, string section) =>
-        Path.Combine(job.RootPath, "AI_Context", "settings", $"{section}.json");
+    private static string JobPath(OurPlaneCoreJob job) =>
+        Path.Combine(job.RootPath, "AI_Context", "settings", "folder_template.json");
 
     private static T? LoadJson<T>(string path) where T : class
     {
@@ -48,27 +81,22 @@ public static class SettingsPresetStore
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(value, JsonOptions));
     }
 
-    // ── From Pages presets (global) ──────────────────────────────────────
-    public static FolderPlanPresets LoadFromPagesPresets() =>
-        LoadJson<FolderPlanPresets>(GlobalPath("frompages")) ?? new FolderPlanPresets();
+    public static FolderTemplateConfig? LoadGlobal() => LoadJson<FolderTemplateConfig>(GlobalPath());
+    public static void SaveGlobal(FolderTemplateConfig c) => SaveJson(GlobalPath(), c);
 
-    public static void SaveFromPagesPresets(FolderPlanPresets presets) =>
-        SaveJson(GlobalPath("frompages"), presets);
+    public static FolderTemplateConfig? LoadJobOverride(OurPlaneCoreJob job) =>
+        LoadJson<FolderTemplateConfig>(JobPath(job));
 
-    // ── From Pages active plan: per-job override, else global "active" ────
-    public static FolderPlan? LoadJobFromPagesPlan(OurPlaneCoreJob job) =>
-        LoadJson<FolderPlan>(JobPath(job, "frompages_active"));
+    public static void SaveJobOverride(OurPlaneCoreJob job, FolderTemplateConfig c) =>
+        SaveJson(JobPath(job), c);
 
-    public static void SaveJobFromPagesPlan(OurPlaneCoreJob job, FolderPlan plan) =>
-        SaveJson(JobPath(job, "frompages_active"), plan);
-
-    public static void ClearJobFromPagesPlan(OurPlaneCoreJob job)
+    public static void ClearJobOverride(OurPlaneCoreJob job)
     {
         try
         {
-            string path = JobPath(job, "frompages_active");
-            if (File.Exists(path))
-                File.Delete(path);
+            string p = JobPath(job);
+            if (File.Exists(p))
+                File.Delete(p);
         }
         catch
         {
@@ -76,27 +104,21 @@ public static class SettingsPresetStore
         }
     }
 
-    public static FolderPlan? LoadGlobalActiveFromPagesPlan() =>
-        LoadJson<FolderPlan>(GlobalPath("frompages_active"));
-
-    public static void SaveGlobalActiveFromPagesPlan(FolderPlan plan) =>
-        SaveJson(GlobalPath("frompages_active"), plan);
-
-    // Effective plan: per-job override → global active → built default.
-    public static FolderPlan ResolveFromPagesPlan(OurPlaneCoreJob job, string requestedMode = "AUTO")
+    // Effective config: per-job override → global → built-in defaults.
+    public static FolderTemplateConfig Resolve(OurPlaneCoreJob? job)
     {
-        FolderPlan? jobPlan = LoadJobFromPagesPlan(job);
-        if (jobPlan is { TopFolders.Count: > 0 } or { SubTree.Count: > 0 })
-            return jobPlan;
+        if (job != null && LoadJobOverride(job) is { } j)
+            return j;
+        if (LoadGlobal() is { } g)
+            return g;
+        return FolderTemplateConfig.BuildDefault();
+    }
 
-        FolderPlan? global = LoadGlobalActiveFromPagesPlan();
-        if (global is { SubTree.Count: > 0 })
-        {
-            // keep stored sub-tree/mode, refresh top folders from this job's pages
-            global.TopFolders = PlanSwiftFolderTemplateService.CollectCapsGroupNames(job).ToList();
-            return global;
-        }
-
-        return PlanSwiftFolderTemplateService.BuildDefaultPlan(job, requestedMode);
+    // Make the edited templates apply everywhere (menus, From Pages, etc.).
+    public static void InstallProviders(OurPlaneCoreJob? job)
+    {
+        FolderTemplateConfig cfg = Resolve(job);
+        PlanSwiftFolderTemplateService.PageFoldersOverride = mode => cfg.PageFoldersFor(mode);
+        PlanSwiftFolderTemplateService.TakeoffTreeOverride = mode => cfg.TreeFor(mode);
     }
 }

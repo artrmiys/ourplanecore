@@ -119,6 +119,7 @@ public partial class MainWindow
     {
         PrepareCurrentJobForSwitch();
         _currentJob = OurPlaneCoreJobStore.LoadJob(rootPath);
+        ApplyFolderTemplateProviders();
         _currentPage = null;
         _currentPdfPath = "";
         _pagesClipboard = null;

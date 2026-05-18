@@ -17,32 +17,51 @@ public partial class MainWindow
     private ContentControl _settingsHost = new();
     private readonly Dictionary<string, FrameworkElement> _settingsPanels = new();
 
-    // From Pages working state
-    private FolderPlan _fromPagesPlan = new();
-    private ObservableCollection<FolderPlanNode> _fromPagesTop = [];
-    private TreeView? _fromPagesSubTree;
-    private ComboBox? _fromPagesPreset;
-    private TextBlock? _fromPagesStatus;
+    private FolderTemplateConfig _ftConfig = FolderTemplateConfig.BuildDefault();
 
-    // Auto rename/scale working state
+    // Page Folders editor
+    private ComboBox? _pfMode;
+    private readonly ObservableCollection<FolderPlanNode> _pfList = [];
+    private ListBox? _pfListBox;
+    private TextBlock? _pfStatus;
+
+    // Auto Tree editor
+    private ComboBox? _atMode;
+    private TreeView? _atTree;
+    private TextBlock? _atStatus;
+
+    // From Pages editor
+    private ComboBox? _fpMode;
+    private readonly ObservableCollection<FolderPlanNode> _fpTop = [];
+    private ListBox? _fpTopBox;
+    private TextBlock? _fpStatus;
+
+    // Auto rename/scale
     private ComboBox? _rulesScope;
-    private ObservableCollection<LearnedRuleRow> _ruleRows = [];
+    private readonly ObservableCollection<LearnedRuleRow> _ruleRows = [];
     private DataGrid? _rulesGrid;
 
     private static readonly string[] SettingsCategories =
     [
+        "Page Folders",
+        "Auto Tree",
         "From Pages",
-        "Sort & Grouping",
         "Auto Rename / Scale",
         "Defaults",
     ];
+
+    // Called on job open so edited templates apply app-wide (menus too).
+    private void ApplyFolderTemplateProviders()
+    {
+        SettingsPresetStore.InstallProviders(_currentJob);
+        _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
+    }
 
     private void RefreshSettingsManager()
     {
         if (!_settingsBuilt)
             BuildSettingsManager();
-
-        // Re-resolve data for the visible category.
+        _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         string cat = (_settingsCategoryList?.SelectedItem as string) ?? SettingsCategories[0];
         ShowSettingsCategory(cat);
     }
@@ -57,7 +76,7 @@ public partial class MainWindow
         barPanel.Children.Add(new TextBlock { Text = "Settings", Style = TryFindResource("ManagerGroupLabel") as Style });
         barPanel.Children.Add(new TextBlock
         {
-            Text = "Rules & defaults — preview, edit, presets (global, override per job).",
+            Text = "Edit templates & rules (default, presets — global, override per job). Edits apply everywhere.",
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(4, 0, 0, 0),
             Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
@@ -73,7 +92,6 @@ public partial class MainWindow
             BorderThickness = new Thickness(0, 0, 1, 0),
             BorderBrush = TryFindResource("ControlBorderBrush") as Brush,
             Background = Brushes.Transparent,
-            Margin = new Thickness(0, 0, 0, 0),
         };
         foreach (string c in SettingsCategories)
             _settingsCategoryList.Items.Add(c);
@@ -97,8 +115,9 @@ public partial class MainWindow
         {
             panel = category switch
             {
+                "Page Folders" => BuildPageFoldersPanel(),
+                "Auto Tree" => BuildAutoTreePanel(),
                 "From Pages" => BuildFromPagesPanel(),
-                "Sort & Grouping" => BuildSortPanel(),
                 "Auto Rename / Scale" => BuildRulesPanel(),
                 _ => BuildDefaultsPanel(),
             };
@@ -107,11 +126,16 @@ public partial class MainWindow
 
         _settingsHost.Content = panel;
 
-        if (category == "From Pages") LoadFromPagesPlan();
-        else if (category == "Auto Rename / Scale") LoadRuleRows();
+        switch (category)
+        {
+            case "Page Folders": BindPageFolders(); break;
+            case "Auto Tree": BindAutoTree(); break;
+            case "From Pages": BindFromPages(); break;
+            case "Auto Rename / Scale": LoadRuleRows(); break;
+        }
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────
+    // ── shared helpers ───────────────────────────────────────────────────
     private Button MgrButton(string text, RoutedEventHandler onClick, bool primary = false)
     {
         var b = new Button
@@ -126,6 +150,31 @@ public partial class MainWindow
 
     private static StackPanel HBar() =>
         new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+
+    private static TextBlock Header(string text)
+    {
+        var tb = new TextBlock
+        {
+            Text = text,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        DockPanel.SetDock(tb, Dock.Top);
+        return tb;
+    }
+
+    private ComboBox ModeCombo(SelectionChangedEventHandler onChange)
+    {
+        var cb = new ComboBox { Width = 90, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+        cb.Items.Add("COM");
+        cb.Items.Add("EWP");
+        cb.SelectedIndex = 0;
+        cb.SelectionChanged += onChange;
+        return cb;
+    }
+
+    private static string ModeOf(ComboBox? cb) => (cb?.SelectedItem as string) ?? "COM";
 
     private string? PromptText(string title, string initial)
     {
@@ -142,185 +191,45 @@ public partial class MainWindow
         var root = new StackPanel { Margin = new Thickness(14) };
         var box = new TextBox { Text = initial, FontSize = 13, Padding = new Thickness(5, 3, 5, 3) };
         root.Children.Add(box);
-        var row = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
-        };
+        var bar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         var ok = new Button { Content = "OK", MinWidth = 76, IsDefault = true, Margin = new Thickness(0, 0, 6, 0), Style = TryFindResource("ManagerPrimaryButton") as Style };
         var cancel = new Button { Content = "Cancel", MinWidth = 76, IsCancel = true, Style = TryFindResource("ManagerButton") as Style };
-        bool okClicked = false;
-        ok.Click += (_, _) => { okClicked = true; win.Close(); };
+        bool okay = false;
+        ok.Click += (_, _) => { okay = true; win.Close(); };
         cancel.Click += (_, _) => win.Close();
-        row.Children.Add(ok);
-        row.Children.Add(cancel);
-        root.Children.Add(row);
+        bar.Children.Add(ok);
+        bar.Children.Add(cancel);
+        root.Children.Add(bar);
         win.Content = root;
         box.Focus();
         box.SelectAll();
         win.ShowDialog();
-        string result = box.Text.Trim();
-        return okClicked && result.Length > 0 ? result : null;
+        string r = box.Text.Trim();
+        return okay && r.Length > 0 ? r : null;
     }
 
-    // ── From Pages ───────────────────────────────────────────────────────
-    private FrameworkElement BuildFromPagesPanel()
+    private void PersistAndInstall(bool job)
     {
-        var root = new DockPanel();
-
-        var top = HBar();
-        top.Children.Add(new TextBlock { Text = "Mode:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-        foreach (string m in new[] { "AUTO", "COM", "EWP" })
+        if (job)
         {
-            var rb = new RadioButton
-            {
-                Content = m,
-                GroupName = "FromPagesMode",
-                Margin = new Thickness(0, 0, 8, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Tag = m,
-            };
-            rb.Checked += (_, _) =>
-            {
-                if (rb.Tag is string mm && _currentJob != null)
-                {
-                    _fromPagesPlan.Mode = PlanSwiftFolderTemplateService.ResolveMode(_currentJob, mm);
-                    _fromPagesPlan.SubTree = PlanSwiftFolderTemplateService.DefaultSubTree(_fromPagesPlan.Mode);
-                    BindFromPages();
-                }
-            };
-            top.Children.Add(rb);
+            if (_currentJob == null) { TxtStatus.Text = "Open a job to save a per-job override."; return; }
+            SettingsPresetStore.SaveJobOverride(_currentJob, _ftConfig);
+            TxtStatus.Text = "Saved as this job's template (overrides global).";
         }
-        _fromPagesPreset = new ComboBox { Width = 150, Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
-        top.Children.Add(new TextBlock { Text = "Preset:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) });
-        top.Children.Add(_fromPagesPreset);
-        top.Children.Add(MgrButton("Load", (_, _) => LoadSelectedPreset()));
-        top.Children.Add(MgrButton("Save as preset", (_, _) => SaveFromPagesPreset()));
-        top.Children.Add(MgrButton("Reset to default", (_, _) => ResetFromPagesDefault()));
-        DockPanel.SetDock(top, Dock.Top);
-        root.Children.Add(top);
-
-        var actions = HBar();
-        actions.Children.Add(MgrButton("Apply — create these folders", (_, _) => ApplyFromPages(), primary: true));
-        actions.Children.Add(MgrButton("Save as this job's plan", (_, _) => SaveJobPlan()));
-        actions.Children.Add(MgrButton("Save as global default", (_, _) => SaveGlobalPlan()));
-        actions.Children.Add(MgrButton("Reload top from Pages", (_, _) => ReloadTopFromPages()));
-        DockPanel.SetDock(actions, Dock.Top);
-        root.Children.Add(actions);
-
-        _fromPagesStatus = new TextBlock
+        else
         {
-            Margin = new Thickness(0, 0, 0, 8),
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
-            FontSize = 12,
-        };
-        DockPanel.SetDock(_fromPagesStatus, Dock.Top);
-        root.Children.Add(_fromPagesStatus);
-
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.3, GridUnitType.Star) });
-
-        // Left: top folders
-        var leftDock = new DockPanel();
-        leftDock.Children.Add(Header("Top folders (created under Takeoffs)"));
-        var topBtns = HBar();
-        topBtns.Children.Add(MgrButton("Add", (_, _) => AddTopFolder()));
-        topBtns.Children.Add(MgrButton("Rename", (_, _) => RenameTop()));
-        topBtns.Children.Add(MgrButton("Remove", (_, _) => RemoveTop()));
-        DockPanel.SetDock(topBtns, Dock.Bottom);
-        leftDock.Children.Add(topBtns);
-        _fromPagesTopList = new ListBox
-        {
-            ItemsSource = _fromPagesTop,
-            DisplayMemberPath = nameof(FolderPlanNode.Name),
-        };
-        leftDock.Children.Add(_fromPagesTopList);
-        Grid.SetColumn(leftDock, 0);
-        grid.Children.Add(leftDock);
-
-        // Right: sub-tree
-        var rightDock = new DockPanel();
-        rightDock.Children.Add(Header("Sub-tree created under EACH top folder"));
-        var subBtns = HBar();
-        subBtns.Children.Add(MgrButton("Add root", (_, _) => AddSub(root: true)));
-        subBtns.Children.Add(MgrButton("Add child", (_, _) => AddSub(root: false)));
-        subBtns.Children.Add(MgrButton("Rename", (_, _) => RenameSub()));
-        subBtns.Children.Add(MgrButton("Remove", (_, _) => RemoveSub()));
-        DockPanel.SetDock(subBtns, Dock.Bottom);
-        rightDock.Children.Add(subBtns);
-        _fromPagesSubTree = new TreeView { BorderThickness = new Thickness(1), BorderBrush = TryFindResource("ControlBorderBrush") as Brush };
-        rightDock.Children.Add(_fromPagesSubTree);
-        Grid.SetColumn(rightDock, 2);
-        grid.Children.Add(rightDock);
-
-        root.Children.Add(grid);
-        return root;
-    }
-
-    private ListBox? _fromPagesTopList;
-
-    private static TextBlock Header(string text)
-    {
-        var tb = new TextBlock
-        {
-            Text = text,
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 12,
-            Margin = new Thickness(0, 0, 0, 4),
-        };
-        DockPanel.SetDock(tb, Dock.Top);
-        return tb;
-    }
-
-    private void LoadFromPagesPlan()
-    {
-        if (_currentJob == null)
-        {
-            if (_fromPagesStatus != null) _fromPagesStatus.Text = "Open a job to edit the From Pages plan.";
-            _fromPagesPlan = new FolderPlan();
-            _fromPagesTop.Clear();
-            if (_fromPagesSubTree != null) _fromPagesSubTree.Items.Clear();
-            return;
+            SettingsPresetStore.SaveGlobal(_ftConfig);
+            TxtStatus.Text = "Saved as global default template.";
         }
-
-        _fromPagesPlan = SettingsPresetStore.ResolveFromPagesPlan(_currentJob);
-        RefreshPresetCombo();
-        BindFromPages();
+        SettingsPresetStore.InstallProviders(_currentJob);
     }
 
-    private void RefreshPresetCombo()
+    private void InstallWorkingProviders()
     {
-        if (_fromPagesPreset == null) return;
-        _fromPagesPreset.Items.Clear();
-        foreach (FolderPlan p in SettingsPresetStore.LoadFromPagesPresets().Presets)
-            _fromPagesPreset.Items.Add(p.Name);
+        var c = _ftConfig;
+        PlanSwiftFolderTemplateService.PageFoldersOverride = m => c.PageFoldersFor(m);
+        PlanSwiftFolderTemplateService.TakeoffTreeOverride = m => c.TreeFor(m);
     }
-
-    private void BindFromPages()
-    {
-        _fromPagesTop.Clear();
-        foreach (string n in _fromPagesPlan.TopFolders)
-            _fromPagesTop.Add(new FolderPlanNode { Name = n });
-
-        if (_fromPagesSubTree != null)
-        {
-            _fromPagesSubTree.Items.Clear();
-            foreach (FolderPlanNode node in _fromPagesPlan.SubTree)
-                _fromPagesSubTree.Items.Add(BuildTreeItem(node));
-        }
-
-        if (_fromPagesStatus != null)
-            _fromPagesStatus.Text =
-                $"Mode {_fromPagesPlan.Mode}. {_fromPagesPlan.TopFolders.Count} top folder(s); " +
-                $"{CountNodes(_fromPagesPlan.SubTree)} sub-folder(s) created under each. Apply creates exactly this.";
-    }
-
-    private static int CountNodes(IReadOnlyList<FolderPlanNode> nodes) =>
-        nodes.Count + nodes.Sum(n => CountNodes(n.Children));
 
     private static TreeViewItem BuildTreeItem(FolderPlanNode node)
     {
@@ -330,73 +239,8 @@ public partial class MainWindow
         return item;
     }
 
-    private void SyncTopToPlan() =>
-        _fromPagesPlan.TopFolders = _fromPagesTop.Select(n => n.Name).Where(s => s.Length > 0).ToList();
-
-    private void AddTopFolder()
-    {
-        string? name = PromptText("Add top folder", "New Folder");
-        if (name == null) return;
-        _fromPagesTop.Add(new FolderPlanNode { Name = name });
-        SyncTopToPlan();
-        BindFromPages();
-    }
-
-    private void RenameTop()
-    {
-        if (_fromPagesTopList?.SelectedItem is not FolderPlanNode sel) return;
-        string? name = PromptText("Rename folder", sel.Name);
-        if (name == null) return;
-        sel.Name = name;
-        SyncTopToPlan();
-        BindFromPages();
-    }
-
-    private void RemoveTop()
-    {
-        if (_fromPagesTopList?.SelectedItem is not FolderPlanNode sel) return;
-        _fromPagesTop.Remove(sel);
-        SyncTopToPlan();
-        BindFromPages();
-    }
-
-    private void ReloadTopFromPages()
-    {
-        if (_currentJob == null) return;
-        _fromPagesPlan.TopFolders = PlanSwiftFolderTemplateService.CollectCapsGroupNames(_currentJob).ToList();
-        BindFromPages();
-    }
-
-    private FolderPlanNode? SelectedSubNode() =>
-        (_fromPagesSubTree?.SelectedItem as TreeViewItem)?.Tag as FolderPlanNode;
-
-    private void AddSub(bool root)
-    {
-        string? name = PromptText(root ? "Add root sub-folder" : "Add child sub-folder", "New Folder");
-        if (name == null) return;
-        var node = new FolderPlanNode { Name = name };
-        if (root || SelectedSubNode() is not { } parent)
-            _fromPagesPlan.SubTree.Add(node);
-        else
-            parent.Children.Add(node);
-        BindFromPages();
-    }
-
-    private void RenameSub()
-    {
-        if (SelectedSubNode() is not { } sel) return;
-        string? name = PromptText("Rename sub-folder", sel.Name);
-        if (name == null) return;
-        sel.Name = name;
-        BindFromPages();
-    }
-
-    private void RemoveSub()
-    {
-        if (SelectedSubNode() is not { } sel) return;
-        RemoveNode(_fromPagesPlan.SubTree, sel);
-        BindFromPages();
-    }
+    private static int CountNodes(IReadOnlyList<FolderPlanNode> nodes) =>
+        nodes.Count + nodes.Sum(n => CountNodes(n.Children));
 
     private static bool RemoveNode(List<FolderPlanNode> nodes, FolderPlanNode target)
     {
@@ -406,82 +250,217 @@ public partial class MainWindow
         return false;
     }
 
-    private void ResetFromPagesDefault()
+    // ── Page Folders (Pages tree) ────────────────────────────────────────
+    private FrameworkElement BuildPageFoldersPanel()
     {
-        if (_currentJob == null) return;
-        _fromPagesPlan = PlanSwiftFolderTemplateService.BuildDefaultPlan(_currentJob);
-        BindFromPages();
-        TxtStatus.Text = "From Pages plan reset to default.";
+        var root = new DockPanel();
+        var top = HBar();
+        top.Children.Add(new TextBlock { Text = "Mode:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        _pfMode = ModeCombo((_, _) => BindPageFolders());
+        top.Children.Add(_pfMode);
+        top.Children.Add(MgrButton("Add", (_, _) => { var n = PromptText("Add page folder", "New Folder"); if (n != null) { _pfList.Add(new FolderPlanNode { Name = n }); SyncPageFolders(); } }));
+        top.Children.Add(MgrButton("Rename", (_, _) => { if (_pfListBox?.SelectedItem is FolderPlanNode s) { var n = PromptText("Rename", s.Name); if (n != null) { s.Name = n; SyncPageFolders(); _pfListBox.Items.Refresh(); } } }));
+        top.Children.Add(MgrButton("Remove", (_, _) => { if (_pfListBox?.SelectedItem is FolderPlanNode s) { _pfList.Remove(s); SyncPageFolders(); } }));
+        top.Children.Add(MgrButton("↑", (_, _) => MovePf(-1)));
+        top.Children.Add(MgrButton("↓", (_, _) => MovePf(1)));
+        top.Children.Add(MgrButton("Reset to default", (_, _) => { _ftConfig.PageFolders[ModeOf(_pfMode)] = PlanSwiftFolderTemplateService.DefaultPageFolders(ModeOf(_pfMode)).ToList(); BindPageFolders(); }));
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+
+        var act = HBar();
+        act.Children.Add(MgrButton("Apply — create page folders", (_, _) => ApplyPageFolders(), primary: true));
+        act.Children.Add(MgrButton("Save global default", (_, _) => { SyncPageFolders(); PersistAndInstall(false); }));
+        act.Children.Add(MgrButton("Save as this job", (_, _) => { SyncPageFolders(); PersistAndInstall(true); }));
+        DockPanel.SetDock(act, Dock.Top);
+        root.Children.Add(act);
+
+        _pfStatus = StatusLine();
+        DockPanel.SetDock(_pfStatus, Dock.Top);
+        root.Children.Add(_pfStatus);
+
+        _pfListBox = new ListBox { ItemsSource = _pfList, DisplayMemberPath = nameof(FolderPlanNode.Name) };
+        root.Children.Add(_pfListBox);
+        return root;
     }
 
-    private void SaveFromPagesPreset()
+    private void MovePf(int delta)
     {
-        SyncTopToPlan();
-        string? name = PromptText("Preset name", _fromPagesPlan.Name == "Default" ? "My Preset" : _fromPagesPlan.Name);
-        if (name == null) return;
-        FolderPlanPresets presets = SettingsPresetStore.LoadFromPagesPresets();
-        presets.Presets.RemoveAll(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-        FolderPlan clone = _fromPagesPlan.Clone();
-        clone.Name = name;
-        presets.Presets.Add(clone);
-        SettingsPresetStore.SaveFromPagesPresets(presets);
-        RefreshPresetCombo();
-        TxtStatus.Text = $"Saved From Pages preset '{name}'.";
+        if (_pfListBox?.SelectedItem is not FolderPlanNode s) return;
+        int i = _pfList.IndexOf(s), j = i + delta;
+        if (j < 0 || j >= _pfList.Count) return;
+        _pfList.Move(i, j);
+        SyncPageFolders();
+        _pfListBox.SelectedIndex = j;
     }
 
-    private void LoadSelectedPreset()
+    private void BindPageFolders()
     {
-        if (_fromPagesPreset?.SelectedItem is not string name) return;
-        FolderPlan? p = SettingsPresetStore.LoadFromPagesPresets().Presets
-            .FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (p == null) return;
-        _fromPagesPlan = p.Clone();
-        if (_currentJob != null && _fromPagesPlan.TopFolders.Count == 0)
-            _fromPagesPlan.TopFolders = PlanSwiftFolderTemplateService.CollectCapsGroupNames(_currentJob).ToList();
-        BindFromPages();
-        TxtStatus.Text = $"Loaded preset '{name}'.";
+        _pfList.Clear();
+        foreach (string n in _ftConfig.PageFoldersFor(ModeOf(_pfMode)))
+            _pfList.Add(new FolderPlanNode { Name = n });
+        if (_pfStatus != null)
+            _pfStatus.Text = $"{_pfList.Count} page folder(s) for mode {ModeOf(_pfMode)}. Apply creates them in the Pages tree.";
     }
 
-    private void SaveJobPlan()
+    private void SyncPageFolders() =>
+        _ftConfig.PageFolders[ModeOf(_pfMode)] = _pfList.Select(n => n.Name).Where(s => s.Length > 0).ToList();
+
+    private void ApplyPageFolders()
     {
-        if (_currentJob == null) return;
-        SyncTopToPlan();
-        SettingsPresetStore.SaveJobFromPagesPlan(_currentJob, _fromPagesPlan.Clone());
-        TxtStatus.Text = "Saved as this job's From Pages plan (overrides global).";
+        if (_currentJob == null) { MessageBox.Show("Open a job first.", "Page Folders"); return; }
+        SyncPageFolders();
+        InstallWorkingProviders();
+        AutoCreatePageFolders(_currentJob.PagesRoot);
     }
 
-    private void SaveGlobalPlan()
+    // ── Auto Tree (Takeoffs tree) ────────────────────────────────────────
+    private FrameworkElement BuildAutoTreePanel()
     {
-        SyncTopToPlan();
-        SettingsPresetStore.SaveGlobalActiveFromPagesPlan(_fromPagesPlan.Clone());
-        TxtStatus.Text = "Saved as global default From Pages plan.";
+        var root = new DockPanel();
+        var top = HBar();
+        top.Children.Add(new TextBlock { Text = "Mode:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        _atMode = ModeCombo((_, _) => BindAutoTree());
+        top.Children.Add(_atMode);
+        top.Children.Add(MgrButton("Add root", (_, _) => AddTreeNode(true)));
+        top.Children.Add(MgrButton("Add child", (_, _) => AddTreeNode(false)));
+        top.Children.Add(MgrButton("Rename", (_, _) => RenameTreeNode()));
+        top.Children.Add(MgrButton("Remove", (_, _) => RemoveTreeNode()));
+        top.Children.Add(MgrButton("Reset to default", (_, _) => { _ftConfig.TakeoffTree[ModeOf(_atMode)] = PlanSwiftFolderTemplateService.HardcodedSubTree(ModeOf(_atMode)); BindAutoTree(); }));
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+
+        var act = HBar();
+        act.Children.Add(MgrButton("Apply — create takeoff tree", (_, _) => ApplyAutoTree(), primary: true));
+        act.Children.Add(MgrButton("Save global default", (_, _) => PersistAndInstall(false)));
+        act.Children.Add(MgrButton("Save as this job", (_, _) => PersistAndInstall(true)));
+        DockPanel.SetDock(act, Dock.Top);
+        root.Children.Add(act);
+
+        _atStatus = StatusLine();
+        DockPanel.SetDock(_atStatus, Dock.Top);
+        root.Children.Add(_atStatus);
+
+        _atTree = new TreeView { BorderThickness = new Thickness(1), BorderBrush = TryFindResource("ControlBorderBrush") as Brush };
+        root.Children.Add(_atTree);
+        return root;
+    }
+
+    private List<FolderPlanNode> AtNodes() =>
+        _ftConfig.TakeoffTree.TryGetValue(ModeOf(_atMode), out var v)
+            ? v
+            : _ftConfig.TakeoffTree[ModeOf(_atMode)] = _ftConfig.TreeFor(ModeOf(_atMode));
+
+    private void BindAutoTree()
+    {
+        if (_atTree == null) return;
+        _atTree.Items.Clear();
+        foreach (FolderPlanNode n in AtNodes())
+            _atTree.Items.Add(BuildTreeItem(n));
+        if (_atStatus != null)
+            _atStatus.Text = $"{CountNodes(AtNodes())} folder(s) for mode {ModeOf(_atMode)}. Used by Auto Takeoff Tree and as the From Pages sub-tree.";
+    }
+
+    private FolderPlanNode? SelAt() => (_atTree?.SelectedItem as TreeViewItem)?.Tag as FolderPlanNode;
+
+    private void AddTreeNode(bool atRoot)
+    {
+        string? n = PromptText(atRoot ? "Add root folder" : "Add child folder", "New Folder");
+        if (n == null) return;
+        var node = new FolderPlanNode { Name = n };
+        if (atRoot || SelAt() is not { } p)
+            AtNodes().Add(node);
+        else
+            p.Children.Add(node);
+        BindAutoTree();
+    }
+
+    private void RenameTreeNode()
+    {
+        if (SelAt() is not { } s) return;
+        string? n = PromptText("Rename folder", s.Name);
+        if (n == null) return;
+        s.Name = n;
+        BindAutoTree();
+    }
+
+    private void RemoveTreeNode()
+    {
+        if (SelAt() is not { } s) return;
+        RemoveNode(AtNodes(), s);
+        BindAutoTree();
+    }
+
+    private void ApplyAutoTree()
+    {
+        if (_currentJob == null) { MessageBox.Show("Open a job first.", "Auto Tree"); return; }
+        InstallWorkingProviders();
+        AutoCreateTakeoffTree(_currentJob.TakeoffsRoot);
+    }
+
+    // ── From Pages ───────────────────────────────────────────────────────
+    private FrameworkElement BuildFromPagesPanel()
+    {
+        var root = new DockPanel();
+        var top = HBar();
+        top.Children.Add(new TextBlock { Text = "Mode:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        _fpMode = ModeCombo((_, _) => BindFromPages());
+        top.Children.Add(_fpMode);
+        top.Children.Add(MgrButton("Add", (_, _) => { var n = PromptText("Add top folder", "New Folder"); if (n != null) { _fpTop.Add(new FolderPlanNode { Name = n }); } }));
+        top.Children.Add(MgrButton("Rename", (_, _) => { if (_fpTopBox?.SelectedItem is FolderPlanNode s) { var n = PromptText("Rename", s.Name); if (n != null) { s.Name = n; _fpTopBox.Items.Refresh(); } } }));
+        top.Children.Add(MgrButton("Remove", (_, _) => { if (_fpTopBox?.SelectedItem is FolderPlanNode s) _fpTop.Remove(s); }));
+        top.Children.Add(MgrButton("Reload from Pages", (_, _) => BindFromPages()));
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+
+        var act = HBar();
+        act.Children.Add(MgrButton("Apply — create from pages", (_, _) => ApplyFromPages(), primary: true));
+        DockPanel.SetDock(act, Dock.Top);
+        root.Children.Add(act);
+
+        _fpStatus = StatusLine();
+        DockPanel.SetDock(_fpStatus, Dock.Top);
+        root.Children.Add(_fpStatus);
+
+        _fpTopBox = new ListBox { ItemsSource = _fpTop, DisplayMemberPath = nameof(FolderPlanNode.Name) };
+        root.Children.Add(_fpTopBox);
+        return root;
+    }
+
+    private void BindFromPages()
+    {
+        _fpTop.Clear();
+        if (_currentJob != null)
+            foreach (string n in PlanSwiftFolderTemplateService.CollectCapsGroupNames(_currentJob))
+                _fpTop.Add(new FolderPlanNode { Name = n });
+        if (_fpStatus != null)
+            _fpStatus.Text =
+                $"{_fpTop.Count} top folder(s) from Pages CAPS names. Each gets the Auto Tree ({ModeOf(_fpMode)}: " +
+                $"{CountNodes(_ftConfig.TreeFor(ModeOf(_fpMode)))} folders). Edit the tree in the Auto Tree section.";
     }
 
     private void ApplyFromPages()
     {
-        if (_currentJob == null) return;
-        SyncTopToPlan();
-        if (_fromPagesPlan.TopFolders.Count == 0)
-        {
-            MessageBox.Show("No top folders to create. Add some or Reload from Pages.", "From Pages",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        if (_currentJob == null) { MessageBox.Show("Open a job first.", "From Pages"); return; }
+        var top = _fpTop.Select(n => n.Name).Where(s => s.Length > 0).ToList();
+        if (top.Count == 0) { MessageBox.Show("No top folders. Reload from Pages or add some.", "From Pages"); return; }
 
         var confirm = MessageBox.Show(
-            $"Create {_fromPagesPlan.TopFolders.Count} top folder(s), each with {CountNodes(_fromPagesPlan.SubTree)} sub-folder(s), under Takeoffs?\nExisting folders are skipped.",
+            $"Create {top.Count} top folder(s), each with the Auto Tree ({ModeOf(_fpMode)}, {CountNodes(_ftConfig.TreeFor(ModeOf(_fpMode)))} folders), under Takeoffs?\nExisting folders are skipped.",
             "From Pages", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
         try
         {
             FlushTakeoffAutosaves();
-            CapsTakeoffFolderResult r = PlanSwiftFolderTemplateService.CreateFoldersFromPlan(
-                _currentJob.TakeoffsRoot, _fromPagesPlan);
+            var plan = new FolderPlan
+            {
+                Mode = ModeOf(_fpMode),
+                TopFolders = top,
+                SubTree = _ftConfig.TreeFor(ModeOf(_fpMode)).Select(n => n.Clone()).ToList(),
+            };
+            CapsTakeoffFolderResult r = PlanSwiftFolderTemplateService.CreateFoldersFromPlan(_currentJob.TakeoffsRoot, plan);
             LoadTakeoffsForJob();
-            TxtStatus.Text =
-                $"From Pages applied: top created {r.TopCreated}, skipped {r.TopSkipped}, " +
-                $"sub created {r.SubCreated}, skipped {r.SubSkipped}, errors {r.Errors}.";
+            TxtStatus.Text = $"From Pages: top created {r.TopCreated}, skipped {r.TopSkipped}, sub created {r.SubCreated}, skipped {r.SubSkipped}, errors {r.Errors}.";
         }
         catch (Exception ex)
         {
@@ -489,38 +468,16 @@ public partial class MainWindow
         }
     }
 
-    // ── Sort & Grouping ──────────────────────────────────────────────────
-    private FrameworkElement BuildSortPanel()
+    private TextBlock StatusLine()
     {
-        var root = new StackPanel { Margin = new Thickness(2) };
-        root.Children.Add(Header("Takeoff tree sort order (default)"));
-        var az = new RadioButton { Content = "A → Z", GroupName = "SortDir", Margin = new Thickness(0, 4, 0, 4), IsChecked = !_settings.TakeoffSortDescending };
-        var za = new RadioButton { Content = "Z → A", GroupName = "SortDir", Margin = new Thickness(0, 0, 0, 8), IsChecked = _settings.TakeoffSortDescending };
-        az.Checked += (_, _) => { _settings.TakeoffSortDescending = false; SaveAppSettings(); };
-        za.Checked += (_, _) => { _settings.TakeoffSortDescending = true; SaveAppSettings(); };
-        root.Children.Add(az);
-        root.Children.Add(za);
-        var row = HBar();
-        row.Children.Add(MgrButton("Apply to whole tree now", (_, _) => ApplySortNow(), primary: true));
-        root.Children.Add(row);
-        root.Children.Add(new TextBlock
+        var tb = new TextBlock
         {
-            Text = "Default direction is global and is used when sorting folders. 'Apply' sorts the Takeoffs root and its sub-folders now.",
+            Margin = new Thickness(0, 0, 0, 8),
             TextWrapping = TextWrapping.Wrap,
-            FontSize = 12,
             Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
-        });
-        return root;
-    }
-
-    private void ApplySortNow()
-    {
-        if (_currentJob == null) return;
-        bool desc = _settings.TakeoffSortDescending;
-        SortTakeoffChildren(_currentJob.TakeoffsRoot, desc);
-        foreach (string dir in System.IO.Directory.GetDirectories(_currentJob.TakeoffsRoot))
-            SortTakeoffChildren(dir, desc);
-        TxtStatus.Text = $"Sorted Takeoffs tree {(desc ? "Z→A" : "A→Z")}.";
+            FontSize = 12,
+        };
+        return tb;
     }
 
     // ── Auto Rename / Scale ──────────────────────────────────────────────
@@ -572,23 +529,13 @@ public partial class MainWindow
     private void LoadRuleRows()
     {
         _ruleRows.Clear();
-        SmartLearnedRuleSet set = GetRuleSetForScope();
-        foreach (var r in set.Rules
-                     .OrderByDescending(r => r.Enabled)
-                     .ThenByDescending(r => r.Support)
-                     .ThenBy(r => r.TitleToken))
-        {
-            _ruleRows.Add(LearnedRuleRow.FromRule(r));
-        }
-        _rulesGrid?.Items.Refresh();
-    }
-
-    private SmartLearnedRuleSet GetRuleSetForScope()
-    {
         bool job = _rulesScope?.SelectedIndex == 1;
-        if (job && _currentJob != null)
-            return SmartLearningStore.LoadProjectLearnedRules(_currentJob);
-        return SmartLearningStore.LoadGlobalLearnedRules();
+        SmartLearnedRuleSet set = job && _currentJob != null
+            ? SmartLearningStore.LoadProjectLearnedRules(_currentJob)
+            : SmartLearningStore.LoadGlobalLearnedRules();
+        foreach (var r in set.Rules.OrderByDescending(r => r.Enabled).ThenByDescending(r => r.Support).ThenBy(r => r.TitleToken))
+            _ruleRows.Add(LearnedRuleRow.FromRule(r));
+        _rulesGrid?.Items.Refresh();
     }
 
     private void SetSelRules(bool enabled)
