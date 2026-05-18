@@ -142,8 +142,15 @@ public partial class MainWindow
 
     private FrameworkElement RibbonGroupContainer(string label, UIElement content)
     {
-        var sp = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 4, 0) };
-        sp.Children.Add(content);
+        var sp = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Margin = new Thickness(0, 0, 4, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        var body = new StackPanel { Style = TryFindResource("RibbonGroupBody") as Style };
+        body.Children.Add(content);
+        sp.Children.Add(body);
         var border = new Border
         {
             Style = TryFindResource("RibbonGroupCap") as Style,
@@ -159,15 +166,13 @@ public partial class MainWindow
 
     private Border RibbonSep() => new()
     {
-        Width = 1,
-        Background = TryFindResource("ControlBorderBrush") as Brush,
-        Margin = new Thickness(6, 3, 6, 3),
+        Style = TryFindResource("RibbonGroupSep") as Style,
     };
 
     private FrameworkElement OutputScaleRow(string text, Slider slider, TextBox box)
     {
         var g = new Grid { Margin = new Thickness(0, 1, 0, 1) };
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var lbl = new TextBlock { Text = text, Style = TryFindResource("RibbonRowLabel") as Style };
