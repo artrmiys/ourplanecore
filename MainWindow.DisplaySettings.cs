@@ -432,7 +432,7 @@ public partial class MainWindow
 
     private void SldLineThickness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isApplyingSettings)
+        if (!IsInitialized || _isApplyingSettings)
             return;
 
         _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(e.NewValue);
@@ -445,7 +445,7 @@ public partial class MainWindow
 
     private void SldPointSize_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isApplyingSettings)
+        if (!IsInitialized || _isApplyingSettings)
             return;
 
         _settings.ViewportPointSizeScale = NormalizePointScale(e.NewValue);
@@ -458,7 +458,7 @@ public partial class MainWindow
 
     private void SldAreaEdge_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isApplyingSettings)
+        if (!IsInitialized || _isApplyingSettings)
             return;
 
         _settings.ViewportAreaEdgeScale = Math.Clamp(e.NewValue, 0.25, 4.0);
@@ -471,7 +471,7 @@ public partial class MainWindow
 
     private void SldAreaFill_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isApplyingSettings)
+        if (!IsInitialized || _isApplyingSettings)
             return;
 
         _settings.ViewportAreaFillOpacity = Math.Clamp(e.NewValue / 100.0, 0.0, 1.0);
@@ -484,7 +484,7 @@ public partial class MainWindow
 
     private void SldLabelScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isApplyingSettings)
+        if (!IsInitialized || _isApplyingSettings)
             return;
 
         _settings.MeasurementLabelScale = NormalizeOverlayScale(e.NewValue);
@@ -497,7 +497,7 @@ public partial class MainWindow
 
     private void Slider_CommitSave(object sender, RoutedEventArgs e)
     {
-        if (!_viewportScaleDirty)
+        if (!IsInitialized || !_viewportScaleDirty)
             return;
 
         _viewportScaleDirty = false;
