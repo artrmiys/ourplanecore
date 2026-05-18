@@ -30,6 +30,8 @@ public sealed class AppSettings
     public bool ScaleMeasurementLabelsWithPage { get; set; } = false;
     public bool ScaleSheetHeaderWithPage { get; set; } = false;
     public bool SimplifyViewportNavigation { get; set; } = false;
+    public bool TakeoffSortDescending { get; set; } = false;
+    public bool TakeoffAutoRouteOnImport { get; set; } = true;
     public double ViewportMeasurementStrokeScale { get; set; } = 1.0;
     public double ViewportPointSizeScale { get; set; } = 1.0;
     public double ViewportAreaEdgeScale { get; set; } = 1.0;

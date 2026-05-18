@@ -1660,6 +1660,9 @@
                     </Grid>
                 </DockPanel>
             </TabItem>
+            <TabItem Header="8 Settings" Tag="SettingsManager">
+                <DockPanel x:Name="SettingsManagerRoot" Margin="8" Style="{StaticResource ManagerSurface}"/>
+            </TabItem>
         </TabControl>
 
     </DockPanel>

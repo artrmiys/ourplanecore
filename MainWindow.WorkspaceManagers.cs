@@ -51,6 +51,9 @@ public partial class MainWindow
             case "3DManager":
                 RefreshThreeDViewer();
                 break;
+            case "SettingsManager":
+                RefreshSettingsManager();
+                break;
         }
     }
 
