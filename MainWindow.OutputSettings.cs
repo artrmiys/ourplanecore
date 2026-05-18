@@ -63,34 +63,15 @@ public partial class MainWindow
         double max = AppSettingsStore.PdfExportScaleMax;
         var root = new StackPanel { Orientation = Orientation.Horizontal };
 
-        // ── INCLUDE group (2 rows of checkboxes) ──
         _chkOutputPdfMeasurements = OutputCheckBox("Meas", "Default: include measurements in PDF export.");
         _chkOutputPdfMarkups = OutputCheckBox("Markups", "Default: include markups in PDF export.");
-        _chkOutputPdfLegend = OutputCheckBox("Legend", "Default: include legend in PDF export.");
+        _chkOutputPdfLegend = OutputCheckBox("Legend", "Default: include the legend overlay in PDF export.");
         _chkOutputPdfLabels = OutputCheckBox("All", "Master toggle for all exported measurement value labels.");
         _chkOutputPdfLineLabels = OutputCheckBox("Line", "Show exported line labels.");
         _chkOutputPdfAreaLabels = OutputCheckBox("Area", "Show exported area labels.");
         _chkOutputPdfJoistLabels = OutputCheckBox("Joist", "Show exported joist segment labels (separate from the Area label).");
         _chkOutputPdfCountLabels = OutputCheckBox("Count", "Show exported count labels.");
 
-        var incRow1 = OutputHRow();
-        incRow1.Children.Add(_chkOutputPdfMeasurements);
-        incRow1.Children.Add(_chkOutputPdfMarkups);
-        incRow1.Children.Add(_chkOutputPdfLegend);
-        var incRow2 = OutputHRow();
-        incRow2.Children.Add(_chkOutputPdfLabels);
-        incRow2.Children.Add(_chkOutputPdfLineLabels);
-        incRow2.Children.Add(_chkOutputPdfAreaLabels);
-        incRow2.Children.Add(_chkOutputPdfJoistLabels);
-        incRow2.Children.Add(_chkOutputPdfCountLabels);
-        var incStack = new StackPanel { Orientation = Orientation.Vertical };
-        incStack.Children.Add(incRow1);
-        incStack.Children.Add(incRow2);
-        root.Children.Add(RibbonGroupContainer("PDF INCLUDE", incStack));
-
-        root.Children.Add(RibbonSep());
-
-        // ── EXPORT SIZE group (4 columns x up to 2 rows) ──
         _txtOutputPdfStroke = OutputScaleBox("pdfStroke", "PDF export line thickness multiplier.");
         _txtOutputPdfPoint = OutputScaleBox("pdfPoint", "PDF export point marker size multiplier.");
         _txtOutputPdfAreaEdge = OutputScaleBox("pdfAreaEdge", "PDF export area edge thickness 0.25 - 4.");
@@ -106,23 +87,52 @@ public partial class MainWindow
         _sldOutputPdfLegend = OutputSlider("pdfLegend", 0.25, max, "PDF export legend size 0.25 - 10");
         _sldOutputPdfHeader = OutputSlider("pdfHeader", 0.25, max, "PDF export header size 0.25 - 10");
 
-        var col1 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
-        col1.Children.Add(OutputScaleRow("Line", _sldOutputPdfStroke, _txtOutputPdfStroke));
-        col1.Children.Add(OutputScaleRow("Point", _sldOutputPdfPoint, _txtOutputPdfPoint));
-        var col2 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
-        col2.Children.Add(OutputScaleRow("Edge", _sldOutputPdfAreaEdge, _txtOutputPdfAreaEdge));
-        col2.Children.Add(OutputScaleRow("Fill", _sldOutputPdfAreaFill, _txtOutputPdfAreaFill));
-        var col3 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
-        col3.Children.Add(OutputScaleRow("Label", _sldOutputPdfLabel, _txtOutputPdfLabel));
-        col3.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend));
-        var col4 = new StackPanel { Orientation = Orientation.Vertical };
-        col4.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader));
-        var sizeRow = new StackPanel { Orientation = Orientation.Horizontal };
-        sizeRow.Children.Add(col1);
-        sizeRow.Children.Add(col2);
-        sizeRow.Children.Add(col3);
-        sizeRow.Children.Add(col4);
-        root.Children.Add(RibbonGroupContainer("PDF EXPORT SIZE", sizeRow));
+        // ── GROUP: LINES & AREA (2 columns x 2 rows, same as Viewport) ──
+        var laColA = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
+        laColA.Children.Add(OutputScaleRow("Line", _sldOutputPdfStroke, _txtOutputPdfStroke));
+        laColA.Children.Add(OutputScaleRow("Point", _sldOutputPdfPoint, _txtOutputPdfPoint));
+        var laColB = new StackPanel { Orientation = Orientation.Vertical };
+        laColB.Children.Add(OutputScaleRow("Edge", _sldOutputPdfAreaEdge, _txtOutputPdfAreaEdge));
+        laColB.Children.Add(OutputScaleRow("Fill", _sldOutputPdfAreaFill, _txtOutputPdfAreaFill));
+        var linesArea = new StackPanel { Orientation = Orientation.Horizontal };
+        linesArea.Children.Add(laColA);
+        linesArea.Children.Add(laColB);
+        root.Children.Add(RibbonGroupContainer("LINES & AREA", linesArea));
+
+        root.Children.Add(RibbonSep());
+
+        // ── GROUP: LABELS (checkbox row + Size row, same as Viewport) ──
+        var lblRow = OutputHRow();
+        lblRow.Children.Add(_chkOutputPdfLabels);
+        lblRow.Children.Add(_chkOutputPdfLineLabels);
+        lblRow.Children.Add(_chkOutputPdfAreaLabels);
+        lblRow.Children.Add(_chkOutputPdfJoistLabels);
+        lblRow.Children.Add(_chkOutputPdfCountLabels);
+        var labels = new StackPanel { Orientation = Orientation.Vertical };
+        labels.Children.Add(lblRow);
+        labels.Children.Add(OutputScaleRow("Size", _sldOutputPdfLabel, _txtOutputPdfLabel));
+        root.Children.Add(RibbonGroupContainer("LABELS", labels));
+
+        root.Children.Add(RibbonSep());
+
+        // ── GROUP: OVERLAYS (Legend / Header sizes, same as Viewport) ──
+        var overlays = new StackPanel { Orientation = Orientation.Vertical };
+        overlays.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend));
+        overlays.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader));
+        root.Children.Add(RibbonGroupContainer("OVERLAYS", overlays));
+
+        root.Children.Add(RibbonSep());
+
+        // ── GROUP: INCLUDE (export content toggles; PDF analog of UNITS & VIEW) ──
+        var incRow1 = OutputHRow();
+        incRow1.Children.Add(_chkOutputPdfMeasurements);
+        incRow1.Children.Add(_chkOutputPdfMarkups);
+        var incRow2 = OutputHRow();
+        incRow2.Children.Add(_chkOutputPdfLegend);
+        var include = new StackPanel { Orientation = Orientation.Vertical };
+        include.Children.Add(incRow1);
+        include.Children.Add(incRow2);
+        root.Children.Add(RibbonGroupContainer("INCLUDE", include));
 
         return root;
     }
