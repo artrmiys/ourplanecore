@@ -16,17 +16,22 @@ public partial class MainWindow
     private CheckBox? _chkOutputPdfLabels;
     private CheckBox? _chkOutputPdfLineLabels;
     private CheckBox? _chkOutputPdfAreaLabels;
+    private CheckBox? _chkOutputPdfJoistLabels;
     private CheckBox? _chkOutputPdfCountLabels;
     private TextBox? _txtOutputPdfStroke;
     private TextBox? _txtOutputPdfPoint;
     private TextBox? _txtOutputPdfLabel;
     private TextBox? _txtOutputPdfLegend;
     private TextBox? _txtOutputPdfHeader;
+    private TextBox? _txtOutputPdfAreaEdge;
+    private TextBox? _txtOutputPdfAreaFill;
     private Slider? _sldOutputPdfStroke;
     private Slider? _sldOutputPdfPoint;
     private Slider? _sldOutputPdfLabel;
     private Slider? _sldOutputPdfLegend;
     private Slider? _sldOutputPdfHeader;
+    private Slider? _sldOutputPdfAreaEdge;
+    private Slider? _sldOutputPdfAreaFill;
     private bool _outputUiReady;
     private bool _outputScaleDirty;
 
@@ -62,9 +67,10 @@ public partial class MainWindow
         _chkOutputPdfMeasurements = OutputCheckBox("Meas", "Default: include measurements in PDF export.");
         _chkOutputPdfMarkups = OutputCheckBox("Markups", "Default: include markups in PDF export.");
         _chkOutputPdfLegend = OutputCheckBox("Legend", "Default: include legend in PDF export.");
-        _chkOutputPdfLabels = OutputCheckBox("Labels", "Show exported measurement value labels.");
+        _chkOutputPdfLabels = OutputCheckBox("All", "Master toggle for all exported measurement value labels.");
         _chkOutputPdfLineLabels = OutputCheckBox("Line", "Show exported line labels.");
         _chkOutputPdfAreaLabels = OutputCheckBox("Area", "Show exported area labels.");
+        _chkOutputPdfJoistLabels = OutputCheckBox("Joist", "Show exported joist segment labels (separate from the Area label).");
         _chkOutputPdfCountLabels = OutputCheckBox("Count", "Show exported count labels.");
 
         var incRow1 = OutputHRow();
@@ -75,6 +81,7 @@ public partial class MainWindow
         incRow2.Children.Add(_chkOutputPdfLabels);
         incRow2.Children.Add(_chkOutputPdfLineLabels);
         incRow2.Children.Add(_chkOutputPdfAreaLabels);
+        incRow2.Children.Add(_chkOutputPdfJoistLabels);
         incRow2.Children.Add(_chkOutputPdfCountLabels);
         var incStack = new StackPanel { Orientation = Orientation.Vertical };
         incStack.Children.Add(incRow1);
@@ -83,30 +90,38 @@ public partial class MainWindow
 
         root.Children.Add(RibbonSep());
 
-        // ── EXPORT SIZE group (3 columns x up to 2 rows) ──
-        _txtOutputPdfStroke = OutputScaleBox("pdfStroke", "PDF export measurement line thickness multiplier.");
+        // ── EXPORT SIZE group (4 columns x up to 2 rows) ──
+        _txtOutputPdfStroke = OutputScaleBox("pdfStroke", "PDF export line thickness multiplier.");
         _txtOutputPdfPoint = OutputScaleBox("pdfPoint", "PDF export point marker size multiplier.");
+        _txtOutputPdfAreaEdge = OutputScaleBox("pdfAreaEdge", "PDF export area edge thickness 0.25 - 4.");
+        _txtOutputPdfAreaFill = OutputScaleBox("pdfAreaFill", "PDF export area fill opacity 0 - 100 %.");
         _txtOutputPdfLabel = OutputScaleBox("pdfLabel", "PDF export measurement label size multiplier.");
         _txtOutputPdfLegend = OutputScaleBox("pdfLegend", "PDF export legend size multiplier.");
         _txtOutputPdfHeader = OutputScaleBox("pdfHeader", "PDF export scale / sheet-size header multiplier.");
         _sldOutputPdfStroke = OutputSlider("pdfStroke", 0.25, max, "PDF export line thickness 0.25 - 10");
         _sldOutputPdfPoint = OutputSlider("pdfPoint", 0.25, max, "PDF export point size 0.25 - 10");
+        _sldOutputPdfAreaEdge = OutputSlider("pdfAreaEdge", 0.25, 4.0, "PDF export area edge thickness 0.25 - 4");
+        _sldOutputPdfAreaFill = OutputSlider("pdfAreaFill", 0, 100, "PDF export area fill opacity 0 - 100 %");
         _sldOutputPdfLabel = OutputSlider("pdfLabel", 0.50, max, "PDF export label size 0.5 - 10");
         _sldOutputPdfLegend = OutputSlider("pdfLegend", 0.25, max, "PDF export legend size 0.25 - 10");
         _sldOutputPdfHeader = OutputSlider("pdfHeader", 0.25, max, "PDF export header size 0.25 - 10");
 
         var col1 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
-        col1.Children.Add(OutputScaleRow("Stroke", _sldOutputPdfStroke, _txtOutputPdfStroke));
+        col1.Children.Add(OutputScaleRow("Line", _sldOutputPdfStroke, _txtOutputPdfStroke));
         col1.Children.Add(OutputScaleRow("Point", _sldOutputPdfPoint, _txtOutputPdfPoint));
         var col2 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
-        col2.Children.Add(OutputScaleRow("Label", _sldOutputPdfLabel, _txtOutputPdfLabel));
-        col2.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend));
-        var col3 = new StackPanel { Orientation = Orientation.Vertical };
-        col3.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader));
+        col2.Children.Add(OutputScaleRow("Edge", _sldOutputPdfAreaEdge, _txtOutputPdfAreaEdge));
+        col2.Children.Add(OutputScaleRow("Fill", _sldOutputPdfAreaFill, _txtOutputPdfAreaFill));
+        var col3 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
+        col3.Children.Add(OutputScaleRow("Label", _sldOutputPdfLabel, _txtOutputPdfLabel));
+        col3.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend));
+        var col4 = new StackPanel { Orientation = Orientation.Vertical };
+        col4.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader));
         var sizeRow = new StackPanel { Orientation = Orientation.Horizontal };
         sizeRow.Children.Add(col1);
         sizeRow.Children.Add(col2);
         sizeRow.Children.Add(col3);
+        sizeRow.Children.Add(col4);
         root.Children.Add(RibbonGroupContainer("PDF EXPORT SIZE", sizeRow));
 
         return root;
@@ -191,6 +206,17 @@ public partial class MainWindow
                 _settings.PdfExportPointSizeScale = v;
                 SetScaleText(_txtOutputPdfPoint, v);
                 break;
+            case "pdfAreaEdge":
+                _settings.PdfExportAreaEdgeScale = v;
+                SetScaleText(_txtOutputPdfAreaEdge, v);
+                break;
+            case "pdfAreaFill":
+                _settings.PdfExportAreaFillOpacity = Math.Clamp(v / 100.0, 0.0, 1.0);
+                if (_txtOutputPdfAreaFill != null)
+                    _txtOutputPdfAreaFill.Text = Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
+                _outputScaleDirty = true;
+                TxtStatus.Text = $"Output {OutputScaleLabel(key)}: {Math.Round(v):0}%.";
+                return;
             case "pdfLabel":
                 _settings.PdfExportMeasurementLabelScale = v;
                 SetScaleText(_txtOutputPdfLabel, v);
@@ -270,6 +296,7 @@ public partial class MainWindow
         _settings.PdfExportShowMeasurementLabels = _chkOutputPdfLabels?.IsChecked == true;
         _settings.PdfExportShowLineLabels = _chkOutputPdfLineLabels?.IsChecked == true;
         _settings.PdfExportShowAreaLabels = _chkOutputPdfAreaLabels?.IsChecked == true;
+        _settings.PdfExportShowJoistLabels = _chkOutputPdfJoistLabels?.IsChecked == true;
         _settings.PdfExportShowCountLabels = _chkOutputPdfCountLabels?.IsChecked == true;
 
         ApplyOutputSettings();
@@ -297,17 +324,23 @@ public partial class MainWindow
             return;
 
         string key = box.Tag as string ?? "";
-        (double min, double max) = key.Equals("pdfLabel", StringComparison.OrdinalIgnoreCase)
-            ? (0.50, AppSettingsStore.PdfExportScaleMax)
-            : (0.25, AppSettingsStore.PdfExportScaleMax);
+        (double min, double max) = key switch
+        {
+            "pdfLabel" => (0.50, AppSettingsStore.PdfExportScaleMax),
+            "pdfAreaEdge" => (0.25, 4.0),
+            "pdfAreaFill" => (0.0, 100.0),
+            _ => (0.25, AppSettingsStore.PdfExportScaleMax),
+        };
 
-        string raw = box.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        string raw = box.Text.Trim().TrimEnd('%').Replace(",", ".", StringComparison.Ordinal);
         if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) ||
             scale < min ||
             scale > max)
         {
             SyncOutputSettingsControls();
-            TxtStatus.Text = $"Output scale must be {min:0.##} - {max:0.##}.";
+            TxtStatus.Text = key == "pdfAreaFill"
+                ? "Area fill opacity must be 0 - 100 (%)."
+                : $"Output scale must be {min:0.##} - {max:0.##}.";
             return;
         }
 
@@ -318,6 +351,12 @@ public partial class MainWindow
                 break;
             case "pdfPoint":
                 _settings.PdfExportPointSizeScale = scale;
+                break;
+            case "pdfAreaEdge":
+                _settings.PdfExportAreaEdgeScale = scale;
+                break;
+            case "pdfAreaFill":
+                _settings.PdfExportAreaFillOpacity = Math.Clamp(scale / 100.0, 0.0, 1.0);
                 break;
             case "pdfLabel":
                 _settings.PdfExportMeasurementLabelScale = scale;
@@ -333,7 +372,9 @@ public partial class MainWindow
         }
 
         ApplyOutputSettings();
-        TxtStatus.Text = $"Output {OutputScaleLabel(key)}: {scale:0.##}x.";
+        TxtStatus.Text = key == "pdfAreaFill"
+            ? $"Output {OutputScaleLabel(key)}: {scale:0}%."
+            : $"Output {OutputScaleLabel(key)}: {scale:0.##}x.";
     }
 
     private void ApplyOutputSettings()
@@ -360,14 +401,20 @@ public partial class MainWindow
             _chkOutputPdfLabels!.IsChecked = _settings.PdfExportShowMeasurementLabels;
             _chkOutputPdfLineLabels!.IsChecked = _settings.PdfExportShowLineLabels;
             _chkOutputPdfAreaLabels!.IsChecked = _settings.PdfExportShowAreaLabels;
+            _chkOutputPdfJoistLabels!.IsChecked = _settings.PdfExportShowJoistLabels;
             _chkOutputPdfCountLabels!.IsChecked = _settings.PdfExportShowCountLabels;
             SetScaleText(_txtOutputPdfStroke, _settings.PdfExportMeasurementStrokeScale);
             SetScaleText(_txtOutputPdfPoint, _settings.PdfExportPointSizeScale);
+            SetScaleText(_txtOutputPdfAreaEdge, _settings.PdfExportAreaEdgeScale);
+            if (_txtOutputPdfAreaFill != null)
+                _txtOutputPdfAreaFill.Text = Math.Round(_settings.PdfExportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
             SetScaleText(_txtOutputPdfLabel, _settings.PdfExportMeasurementLabelScale);
             SetScaleText(_txtOutputPdfLegend, _settings.PdfExportSheetLegendScale);
             SetScaleText(_txtOutputPdfHeader, _settings.PdfExportSheetHeaderScale);
             SetSlider(_sldOutputPdfStroke, _settings.PdfExportMeasurementStrokeScale);
             SetSlider(_sldOutputPdfPoint, _settings.PdfExportPointSizeScale);
+            SetSlider(_sldOutputPdfAreaEdge, _settings.PdfExportAreaEdgeScale);
+            SetSlider(_sldOutputPdfAreaFill, Math.Round(_settings.PdfExportAreaFillOpacity * 100.0));
             SetSlider(_sldOutputPdfLabel, _settings.PdfExportMeasurementLabelScale);
             SetSlider(_sldOutputPdfLegend, _settings.PdfExportSheetLegendScale);
             SetSlider(_sldOutputPdfHeader, _settings.PdfExportSheetHeaderScale);
@@ -394,8 +441,10 @@ public partial class MainWindow
 
     private static string OutputScaleLabel(string key) => key switch
     {
-        "pdfStroke" => "PDF stroke",
+        "pdfStroke" => "PDF line thickness",
         "pdfPoint" => "PDF point",
+        "pdfAreaEdge" => "PDF area edge",
+        "pdfAreaFill" => "PDF area fill",
         "pdfLabel" => "PDF label",
         "pdfLegend" => "PDF legend",
         "pdfHeader" => "PDF header",

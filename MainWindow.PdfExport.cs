@@ -91,7 +91,10 @@ public partial class MainWindow
                 _settings.PdfExportShowCountLabels,
                 dialog.MeasurementStrokeScale,
                 _settings.PdfExportPointSizeScale,
-                _settings.PdfExportMeasurementLabelScale);
+                _settings.PdfExportMeasurementLabelScale,
+                _settings.PdfExportShowJoistLabels,
+                _settings.PdfExportAreaEdgeScale,
+                _settings.PdfExportAreaFillOpacity);
             string outputPath = save.FileName;
             (bool ok, string error) exportResult;
             using (ShowBusyOverlay($"Exporting {pages.Count} sheet(s) to PDF..."))

@@ -40,9 +40,12 @@ public sealed class AppSettings
     public bool PdfExportShowMeasurementLabels { get; set; } = true;
     public bool PdfExportShowLineLabels { get; set; } = true;
     public bool PdfExportShowAreaLabels { get; set; } = true;
+    public bool PdfExportShowJoistLabels { get; set; } = true;
     public bool PdfExportShowCountLabels { get; set; }
     public double PdfExportMeasurementStrokeScale { get; set; } = 1.5;
     public double PdfExportPointSizeScale { get; set; } = 1.0;
+    public double PdfExportAreaEdgeScale { get; set; } = 1.0;
+    public double PdfExportAreaFillOpacity { get; set; } = 0.15;
     public double PdfExportMeasurementLabelScale { get; set; } = 1.0;
     public double PdfExportSheetLegendScale { get; set; } = 0.70;
     public double PdfExportSheetHeaderScale { get; set; } = 0.70;
@@ -341,6 +344,15 @@ public static class AppSettingsStore
             fallback: 1.0,
             min: 0.25,
             max: PdfExportScaleMax);
+        settings.PdfExportAreaEdgeScale = NormalizeScale(
+            settings.PdfExportAreaEdgeScale,
+            fallback: 1.0,
+            min: 0.25,
+            max: 4.0);
+        settings.PdfExportAreaFillOpacity =
+            double.IsNaN(settings.PdfExportAreaFillOpacity) || double.IsInfinity(settings.PdfExportAreaFillOpacity)
+                ? 0.15
+                : Math.Clamp(settings.PdfExportAreaFillOpacity, 0.0, 1.0);
         settings.PdfExportMeasurementLabelScale = NormalizeScale(
             settings.PdfExportMeasurementLabelScale,
             fallback: 1.0,

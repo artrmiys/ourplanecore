@@ -24,7 +24,10 @@ public sealed record PdfExportOptions(
     bool ShowCountLabels,
     double MeasurementStrokeScale,
     double PointSizeScale,
-    double MeasurementLabelScale);
+    double MeasurementLabelScale,
+    bool ShowJoistLabels = true,
+    double AreaEdgeScale = 1.0,
+    double AreaFillOpacity = 0.15);
 
 public sealed record PdfExportPageInput(
     PageInfo Page,
@@ -653,9 +656,10 @@ public static class PdfExporter
             using var fill = new SKPaint
             {
                 IsAntialias = true,
-                Color = color.WithAlpha(38),
+                Color = color.WithAlpha(ExportAreaFillAlpha(options)),
                 Style = SKPaintStyle.Fill,
             };
+            stroke.StrokeWidth = 1.4f * strokeScale * ExportAreaEdgeScale(options);
             canvas.DrawPath(path, fill);
             canvas.DrawPath(path, stroke);
             DrawJoistLayout(canvas, measurement, color, options, drawSegments: true, drawLabels: false);
@@ -695,7 +699,12 @@ public static class PdfExporter
         if (type == "area" && measurement.Points.Count >= 3)
         {
             DrawJoistLayout(canvas, measurement, color, options, drawSegments: false, drawLabels: true);
-            if (ShouldExportMeasurementLabel(measurement.MType, options))
+            // For a joist area the centroid label is the joist summary, so it
+            // follows the Joist toggle; a plain area follows the Area toggle.
+            bool showAreaCentroid = measurement.JoistEnabled
+                ? ShouldExportJoistLabels(options)
+                : ShouldExportMeasurementLabel(measurement.MType, options);
+            if (showAreaCentroid)
             {
                 DrawMeasurementLabel(
                     canvas,
@@ -735,6 +744,15 @@ public static class PdfExporter
 
     private static float ExportStrokeScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.MeasurementStrokeScale, 0.25, AppSettingsStore.PdfExportScaleMax);
+
+    private static float ExportAreaEdgeScale(PdfExportOptions options) =>
+        (float)Math.Clamp(options.AreaEdgeScale, 0.25, 4.0);
+
+    private static byte ExportAreaFillAlpha(PdfExportOptions options) =>
+        (byte)Math.Clamp((int)Math.Round(Math.Clamp(options.AreaFillOpacity, 0.0, 1.0) * 255.0), 0, 255);
+
+    private static bool ShouldExportJoistLabels(PdfExportOptions options) =>
+        options.ShowMeasurementLabels && options.ShowJoistLabels;
 
     private static float ExportPointScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);
@@ -885,7 +903,7 @@ public static class PdfExporter
                 canvas.DrawLine(segment.Start, segment.End, joistStroke);
         }
 
-        if (!drawLabels || !measurement.JoistShowLabels || layout.Count > 180)
+        if (!drawLabels || !ShouldExportJoistLabels(options) || !measurement.JoistShowLabels || layout.Count > 180)
             return;
 
         float labelScale = ExportLabelScale(options);
