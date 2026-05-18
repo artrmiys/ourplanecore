@@ -504,20 +504,6 @@ public partial class MainWindow
         return fallbackType;
     }
 
-    private string ResolveTakeoffFolderDefaultColor(string folderPath, string fallback)
-    {
-        foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
-        {
-            if (!string.IsNullOrWhiteSpace(properties.DefaultColor) &&
-                IsValidWpfColor(properties.DefaultColor))
-            {
-                return properties.DefaultColor;
-            }
-        }
-
-        return IsValidWpfColor(fallback) ? fallback : "#FF4444";
-    }
-
     private string RandomTakeoffColor(string? avoidColor = null)
     {
         List<Color> colorsToAvoid = CurrentSheetTakeoffColors();

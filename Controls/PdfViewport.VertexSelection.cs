@@ -125,6 +125,11 @@ public sealed partial class PdfViewport
             }
         }
 
+        // No handles inside the box → not a vertex gesture; let the caller
+        // fall through to whole-object add/remove.
+        if (hitCount == 0)
+            return false;
+
         if (primary != null)
         {
             _selectedMeasurement = primary;
@@ -136,11 +141,9 @@ public sealed partial class PdfViewport
         }
 
         int selectedCount = SelectedVertexCount();
-        PostStatus(hitCount == 0
-            ? "Select vertices: no vertices inside box on selected Line/Area objects."
-            : removeMode
-                ? $"Deselected {changed} vertex/vertices. {selectedCount} still selected."
-                : $"Selected {selectedCount} vertex/vertices on selected Line/Area objects ({changed} new).");
+        PostStatus(removeMode
+            ? $"Deselected {changed} vertex/vertices. {selectedCount} still selected."
+            : $"Selected {selectedCount} vertex/vertices on selected Line/Area objects ({changed} new).");
         return true;
     }
 

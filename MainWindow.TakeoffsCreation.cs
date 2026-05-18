@@ -23,7 +23,9 @@ public partial class MainWindow
         string measurementType = ResolveTakeoffFolderDefaultMeasurementType(
             parentFolder,
             CurrentToolMeasurementType());
-        string defaultColor = ResolveTakeoffFolderDefaultColor(parentFolder, RandomTakeoffColor(_viewport.ActiveColor));
+        // Every new takeoff gets its own random color not already on the
+        // sheet; still editable in the dialog and later via properties.
+        string defaultColor = RandomTakeoffColor(_viewport.ActiveColor);
         var dlg = new NewItemDialog(
             measurementType,
             DefaultTakeoffNameForFolder(measurementType, parentFolder),

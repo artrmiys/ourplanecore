@@ -352,7 +352,11 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (_boxSelectAdditive && TrySelectMeasurementVerticesInBox(rect, _boxSelectRemove))
+        // Ctrl/Shift + box extends a *vertex* selection only when vertex
+        // editing is already in progress (at least one handle picked).
+        // Otherwise the box adds (Ctrl) / removes (Shift) whole objects.
+        if (_boxSelectAdditive && SelectedVertexCount() > 0 &&
+            TrySelectMeasurementVerticesInBox(rect, _boxSelectRemove))
         {
             RequestRepaint();
             return;
