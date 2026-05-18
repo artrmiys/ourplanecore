@@ -46,7 +46,7 @@ public partial class MainWindow
         var panel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Margin = new Thickness(6, 3, 6, 3),
+            Margin = new Thickness(6, 1, 6, 1),
         };
 
         panel.Children.Add(BuildPdfOutputGroup());
