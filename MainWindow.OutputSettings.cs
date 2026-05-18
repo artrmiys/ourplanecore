@@ -2,7 +2,9 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace OurPlaneCore;
 
@@ -20,6 +22,13 @@ public partial class MainWindow
     private TextBox? _txtOutputPdfLabel;
     private TextBox? _txtOutputPdfLegend;
     private TextBox? _txtOutputPdfHeader;
+    private Slider? _sldOutputPdfStroke;
+    private Slider? _sldOutputPdfPoint;
+    private Slider? _sldOutputPdfLabel;
+    private Slider? _sldOutputPdfLegend;
+    private Slider? _sldOutputPdfHeader;
+    private bool _outputUiReady;
+    private bool _outputScaleDirty;
 
     private void InstallOutputSettingsTab()
     {
@@ -41,13 +50,15 @@ public partial class MainWindow
         tab.Content = scroll;
         TopMainTabs.Items.Insert(Math.Min(TopMainTabs.Items.Count, 2), tab);
         SyncOutputSettingsControls();
+        _outputUiReady = true;
     }
 
     private FrameworkElement BuildPdfOutputGroup()
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0) };
-        panel.Children.Add(OutputLabel("PDF Export", "Defaults for exported PDF sheets."));
+        double max = AppSettingsStore.PdfExportScaleMax;
+        var root = new StackPanel { Orientation = Orientation.Horizontal };
 
+        // ── INCLUDE group (2 rows of checkboxes) ──
         _chkOutputPdfMeasurements = OutputCheckBox("Meas", "Default: include measurements in PDF export.");
         _chkOutputPdfMarkups = OutputCheckBox("Markups", "Default: include markups in PDF export.");
         _chkOutputPdfLegend = OutputCheckBox("Legend", "Default: include legend in PDF export.");
@@ -55,35 +66,158 @@ public partial class MainWindow
         _chkOutputPdfLineLabels = OutputCheckBox("Line", "Show exported line labels.");
         _chkOutputPdfAreaLabels = OutputCheckBox("Area", "Show exported area labels.");
         _chkOutputPdfCountLabels = OutputCheckBox("Count", "Show exported count labels.");
-        panel.Children.Add(_chkOutputPdfMeasurements);
-        panel.Children.Add(_chkOutputPdfMarkups);
-        panel.Children.Add(_chkOutputPdfLegend);
-        panel.Children.Add(_chkOutputPdfLabels);
-        panel.Children.Add(_chkOutputPdfLineLabels);
-        panel.Children.Add(_chkOutputPdfAreaLabels);
-        panel.Children.Add(_chkOutputPdfCountLabels);
 
-        panel.Children.Add(OutputLabel("Stroke", "Exported measurement line thickness."));
+        var incRow1 = OutputHRow();
+        incRow1.Children.Add(_chkOutputPdfMeasurements);
+        incRow1.Children.Add(_chkOutputPdfMarkups);
+        incRow1.Children.Add(_chkOutputPdfLegend);
+        var incRow2 = OutputHRow();
+        incRow2.Children.Add(_chkOutputPdfLabels);
+        incRow2.Children.Add(_chkOutputPdfLineLabels);
+        incRow2.Children.Add(_chkOutputPdfAreaLabels);
+        incRow2.Children.Add(_chkOutputPdfCountLabels);
+        var incStack = new StackPanel { Orientation = Orientation.Vertical };
+        incStack.Children.Add(incRow1);
+        incStack.Children.Add(incRow2);
+        root.Children.Add(RibbonGroupContainer("PDF INCLUDE", incStack));
+
+        root.Children.Add(RibbonSep());
+
+        // ── EXPORT SIZE group (3 columns x up to 2 rows) ──
         _txtOutputPdfStroke = OutputScaleBox("pdfStroke", "PDF export measurement line thickness multiplier.");
-        panel.Children.Add(_txtOutputPdfStroke);
-
-        panel.Children.Add(OutputLabel("Point", "Exported point marker size."));
         _txtOutputPdfPoint = OutputScaleBox("pdfPoint", "PDF export point marker size multiplier.");
-        panel.Children.Add(_txtOutputPdfPoint);
-
-        panel.Children.Add(OutputLabel("Label", "Exported measurement label size."));
         _txtOutputPdfLabel = OutputScaleBox("pdfLabel", "PDF export measurement label size multiplier.");
-        panel.Children.Add(_txtOutputPdfLabel);
-
-        panel.Children.Add(OutputLabel("Leg.", "Exported legend size."));
         _txtOutputPdfLegend = OutputScaleBox("pdfLegend", "PDF export legend size multiplier.");
-        panel.Children.Add(_txtOutputPdfLegend);
-
-        panel.Children.Add(OutputLabel("Hdr.", "Exported scale / sheet-size header size."));
         _txtOutputPdfHeader = OutputScaleBox("pdfHeader", "PDF export scale / sheet-size header multiplier.");
-        panel.Children.Add(_txtOutputPdfHeader);
+        _sldOutputPdfStroke = OutputSlider("pdfStroke", 0.25, max, "PDF export line thickness 0.25 - 10");
+        _sldOutputPdfPoint = OutputSlider("pdfPoint", 0.25, max, "PDF export point size 0.25 - 10");
+        _sldOutputPdfLabel = OutputSlider("pdfLabel", 0.50, max, "PDF export label size 0.5 - 10");
+        _sldOutputPdfLegend = OutputSlider("pdfLegend", 0.25, max, "PDF export legend size 0.25 - 10");
+        _sldOutputPdfHeader = OutputSlider("pdfHeader", 0.25, max, "PDF export header size 0.25 - 10");
 
-        return panel;
+        var col1 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
+        col1.Children.Add(OutputScaleRow("Stroke", _sldOutputPdfStroke, _txtOutputPdfStroke));
+        col1.Children.Add(OutputScaleRow("Point", _sldOutputPdfPoint, _txtOutputPdfPoint));
+        var col2 = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 10, 0) };
+        col2.Children.Add(OutputScaleRow("Label", _sldOutputPdfLabel, _txtOutputPdfLabel));
+        col2.Children.Add(OutputScaleRow("Legend", _sldOutputPdfLegend, _txtOutputPdfLegend));
+        var col3 = new StackPanel { Orientation = Orientation.Vertical };
+        col3.Children.Add(OutputScaleRow("Header", _sldOutputPdfHeader, _txtOutputPdfHeader));
+        var sizeRow = new StackPanel { Orientation = Orientation.Horizontal };
+        sizeRow.Children.Add(col1);
+        sizeRow.Children.Add(col2);
+        sizeRow.Children.Add(col3);
+        root.Children.Add(RibbonGroupContainer("PDF EXPORT SIZE", sizeRow));
+
+        return root;
+    }
+
+    private static StackPanel OutputHRow() =>
+        new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+
+    private FrameworkElement RibbonGroupContainer(string label, UIElement content)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 4, 0) };
+        sp.Children.Add(content);
+        var border = new Border
+        {
+            BorderBrush = TryFindResource("ControlBorderBrush") as Brush,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+        };
+        border.Child = new TextBlock
+        {
+            Text = label,
+            Style = TryFindResource("RibbonGroupLabel") as Style,
+        };
+        sp.Children.Add(border);
+        return sp;
+    }
+
+    private Border RibbonSep() => new()
+    {
+        Width = 1,
+        Background = TryFindResource("ControlBorderBrush") as Brush,
+        Margin = new Thickness(6, 3, 6, 3),
+    };
+
+    private FrameworkElement OutputScaleRow(string text, Slider slider, TextBox box)
+    {
+        var g = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var lbl = new TextBlock { Text = text, Style = TryFindResource("RibbonRowLabel") as Style };
+        Grid.SetColumn(lbl, 0);
+        Grid.SetColumn(slider, 1);
+        Grid.SetColumn(box, 2);
+        g.Children.Add(lbl);
+        g.Children.Add(slider);
+        g.Children.Add(box);
+        return g;
+    }
+
+    private Slider OutputSlider(string key, double min, double max, string tooltip)
+    {
+        var s = new Slider
+        {
+            Minimum = min,
+            Maximum = max,
+            SmallChange = 0.25,
+            LargeChange = 0.5,
+            Tag = key,
+            ToolTip = tooltip,
+            Style = TryFindResource("RibbonSlider") as Style,
+        };
+        s.ValueChanged += OutputSlider_ValueChanged;
+        s.PreviewMouseUp += OutputSlider_Commit;
+        s.KeyUp += OutputSlider_Commit;
+        return s;
+    }
+
+    private void OutputSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_outputUiReady || _isApplyingSettings || sender is not Slider s)
+            return;
+
+        string key = s.Tag as string ?? "";
+        double v = Math.Round(e.NewValue, 2);
+        switch (key)
+        {
+            case "pdfStroke":
+                _settings.PdfExportMeasurementStrokeScale = v;
+                SetScaleText(_txtOutputPdfStroke, v);
+                break;
+            case "pdfPoint":
+                _settings.PdfExportPointSizeScale = v;
+                SetScaleText(_txtOutputPdfPoint, v);
+                break;
+            case "pdfLabel":
+                _settings.PdfExportMeasurementLabelScale = v;
+                SetScaleText(_txtOutputPdfLabel, v);
+                break;
+            case "pdfLegend":
+                _settings.PdfExportSheetLegendScale = v;
+                SetScaleText(_txtOutputPdfLegend, v);
+                break;
+            case "pdfHeader":
+                _settings.PdfExportSheetHeaderScale = v;
+                SetScaleText(_txtOutputPdfHeader, v);
+                break;
+            default:
+                return;
+        }
+
+        _outputScaleDirty = true;
+        TxtStatus.Text = $"Output {OutputScaleLabel(key)}: {v:0.##}x.";
+    }
+
+    private void OutputSlider_Commit(object sender, RoutedEventArgs e)
+    {
+        if (!_outputUiReady || !_outputScaleDirty)
+            return;
+
+        _outputScaleDirty = false;
+        ApplyOutputSettings();
     }
 
     private CheckBox OutputCheckBox(string content, string tooltip)
@@ -102,13 +236,9 @@ public partial class MainWindow
     {
         var box = new TextBox
         {
-            Width = 38,
-            Height = 22,
-            FontSize = 11,
-            Margin = new Thickness(0, 0, 5, 0),
-            VerticalAlignment = VerticalAlignment.Center,
             Tag = key,
             ToolTip = tooltip,
+            Style = TryFindResource("RibbonValue") as Style,
         };
         box.KeyDown += OutputScaleBox_KeyDown;
         box.LostFocus += OutputScaleBox_LostFocus;
@@ -236,6 +366,11 @@ public partial class MainWindow
             SetScaleText(_txtOutputPdfLabel, _settings.PdfExportMeasurementLabelScale);
             SetScaleText(_txtOutputPdfLegend, _settings.PdfExportSheetLegendScale);
             SetScaleText(_txtOutputPdfHeader, _settings.PdfExportSheetHeaderScale);
+            SetSlider(_sldOutputPdfStroke, _settings.PdfExportMeasurementStrokeScale);
+            SetSlider(_sldOutputPdfPoint, _settings.PdfExportPointSizeScale);
+            SetSlider(_sldOutputPdfLabel, _settings.PdfExportMeasurementLabelScale);
+            SetSlider(_sldOutputPdfLegend, _settings.PdfExportSheetLegendScale);
+            SetSlider(_sldOutputPdfHeader, _settings.PdfExportSheetHeaderScale);
         }
         finally
         {
@@ -247,6 +382,14 @@ public partial class MainWindow
     {
         if (box != null)
             box.Text = value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    private static void SetSlider(Slider? slider, double value)
+    {
+        if (slider == null)
+            return;
+
+        slider.Value = Math.Clamp(value, slider.Minimum, slider.Maximum);
     }
 
     private static string OutputScaleLabel(string key) => key switch
