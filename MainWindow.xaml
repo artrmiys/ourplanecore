@@ -35,11 +35,40 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <!-- Dot-toggle look (matches the Ruler visibility dot): ring + accent dot + label -->
         <Style x:Key="TopCommandCheckBox" TargetType="CheckBox">
             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Margin" Value="0,0,7,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Grid Width="13" Height="13" VerticalAlignment="Center" Margin="0,0,4,0">
+                                <Ellipse x:Name="ring" Stroke="{DynamicResource ControlBorderBrush}" StrokeThickness="1"
+                                         Fill="{DynamicResource ControlBackgroundBrush}"/>
+                                <Ellipse x:Name="dot" Width="7" Height="7" Fill="{DynamicResource AccentBrush}"
+                                         Visibility="Collapsed"/>
+                            </Grid>
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="dot" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ring" Property="Stroke" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ring" Property="Stroke" Value="{DynamicResource AccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="TopCommandLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
@@ -142,8 +171,8 @@
         <TabControl x:Name="TopMainTabs"
                     DockPanel.Dock="Top"
                     ItemContainerStyle="{StaticResource CommandTabItem}"
-                    MinHeight="86"
-                    MaxHeight="94"
+                    MinHeight="98"
+                    MaxHeight="106"
                     FontSize="11"
                     Background="{DynamicResource ControlBackgroundBrush}"
                     BorderBrush="{DynamicResource ControlBorderBrush}">
