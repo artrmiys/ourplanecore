@@ -825,6 +825,7 @@ public sealed partial class PdfViewport
         _scalePts.Clear();
         _rubberEnd = null;
         _boxSelecting = false;
+        _boxVertexMode = false;
         _areaCutMeasurement = null;
         SetSnapPreview(null);
         if (_draggingVertex && IsMouseCaptured)
@@ -903,6 +904,18 @@ public sealed partial class PdfViewport
     // Shift (without Ctrl) means "remove from selection" while a selection
     // modifier is active. Ctrl means "add to selection".
     private static bool IsDeselectModifierActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
+        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.None;
+
+    // Alt switches the box/click into vertex (handle) mode on the selected
+    // Line/Area object(s). Within Alt: plain = set, Ctrl = add, Shift = remove.
+    private static bool IsVertexModifierActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+
+    private static bool IsAddModifierActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+    private static bool IsRemoveModifierActive() =>
         (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
         (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.None;
 

@@ -111,6 +111,17 @@ public sealed partial class PdfViewport
             if (_tool == ViewerTool.Select)
             {
                 bool hasInProgressInput = _drawPts.Count > 0 || _scalePts.Count > 0 || _rubberEnd.HasValue;
+
+                // Alt → operate on the selected Line/Area object's vertices
+                // (handle a box marquee or a single handle click). Plain = set,
+                // Ctrl = add, Shift = remove. Works mass (box) or single (click).
+                if (IsVertexModifierActive() && HasEditableMeasurementSelection())
+                {
+                    BeginVertexBoxSelection(pdf, IsAddModifierActive(), IsRemoveModifierActive());
+                    e.Handled = true;
+                    return;
+                }
+
                 bool selectionModifierActive = IsSelectionModifierActive();
                 bool deselectModifierActive = IsDeselectModifierActive();
                 if (selectionModifierActive)

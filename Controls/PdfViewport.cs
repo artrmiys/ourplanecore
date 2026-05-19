@@ -93,6 +93,7 @@ public sealed partial class PdfViewport : SKElement
     private SKPoint                 _boxSelectEndPdf;
     private bool                    _boxSelectAdditive;
     private bool                    _boxSelectRemove;
+    private bool                    _boxVertexMode;
     private bool                    _aiCropNoteSelecting;
     private bool                    _aiCropNoteDragging;
     private SKPoint                 _aiCropNoteStartPdf;
@@ -535,6 +536,7 @@ public sealed partial class PdfViewport : SKElement
         _scalePts.Clear();
         _rubberEnd = null;
         _boxSelecting = false;
+        _boxVertexMode = false;
         SetSnapPreview(null);
         _aiMarkers.Clear();
         ClearThreeDRoofGuides();
@@ -1219,6 +1221,7 @@ public sealed partial class PdfViewport : SKElement
         _scalePts.Clear();
         _rubberEnd = null;
         _boxSelecting = false;
+        _boxVertexMode = false;
         _aiActionDraftPreview = null;
         _aiActionDraftPreviewPage = "";
         _aiMarkers.Clear();

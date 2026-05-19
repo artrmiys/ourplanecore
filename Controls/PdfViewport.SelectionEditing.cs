@@ -293,18 +293,37 @@ public sealed partial class PdfViewport
     {
         ClearInProgressInputForEdit();
         _boxSelecting = true;
+        _boxVertexMode = false;
         _boxSelectStartPdf = pdf;
         _boxSelectEndPdf = pdf;
         _boxSelectAdditive = additive;
         _boxSelectRemove = removeMode;
         CaptureMouse();
         PostStatus(removeMode
-            ? "Deselect: drag box around Line/Area handles to remove them from the selection."
+            ? "Deselect: drag a box around objects to remove them from the selection."
             : additive
-                ? HasEditableMeasurementSelection()
-                    ? "Select vertices: drag box around Line/Area handles on selected measurements."
-                    : "Select: drag box to add measurements to the current selection."
-                : "Select: drag box around measurements.");
+                ? "Select: drag a box to add objects to the selection."
+                : "Select: drag a box around objects.");
+        RequestRepaint();
+    }
+
+    // Alt-mode box/click that targets the selected Line/Area object's
+    // vertices. add = Ctrl (extend), removeMode = Shift (trim), neither = set.
+    private void BeginVertexBoxSelection(SKPoint pdf, bool add, bool removeMode)
+    {
+        ClearInProgressInputForEdit();
+        _boxSelecting = true;
+        _boxVertexMode = true;
+        _boxSelectStartPdf = pdf;
+        _boxSelectEndPdf = pdf;
+        _boxSelectAdditive = add;
+        _boxSelectRemove = removeMode;
+        CaptureMouse();
+        PostStatus(removeMode
+            ? "Vertices: box/click handles to remove from the vertex selection (Alt+Shift)."
+            : add
+                ? "Vertices: box/click handles to add to the vertex selection (Alt+Ctrl)."
+                : "Vertices: box handles to select; click a handle for one; click the body for all (Alt).");
         RequestRepaint();
     }
 
@@ -319,6 +338,13 @@ public sealed partial class PdfViewport
         _boxSelecting = false;
         if (IsMouseCaptured)
             ReleaseMouseCapture();
+
+        if (_boxVertexMode)
+        {
+            _boxVertexMode = false;
+            FinishVertexBoxSelection(rect, tiny);
+            return;
+        }
 
         if (tiny)
         {
@@ -454,14 +480,10 @@ public sealed partial class PdfViewport
             return;
         }
 
-        // Re-selected only already-selected object(s) → select all their vertices.
-        var editable = hits
-            .Where(m => IsMeasurementOnActivePage(m) && CanEditMeasurementVertices(m))
-            .ToList();
-        if (editable.Count > 0)
-            SelectAllVerticesOf(editable);
-        else
-            PostStatus("Object already selected.");
+        // All hits already selected. Vertices are edited with Alt, not Ctrl.
+        PostStatus(selected.Count == 1
+            ? "Object already selected. Use Alt to select its vertices."
+            : $"{selected.Count} objects selected.");
     }
 
     private void SelectAllVerticesOf(IReadOnlyList<Measurement> measurements)
@@ -497,12 +519,147 @@ public sealed partial class PdfViewport
             : $"Selected all {total} handle(s). Drag a handle to move (Shift = ortho); Delete removes them.");
     }
 
+    // Alt gesture resolved: a single handle click, an Alt-click on the body
+    // (= all handles), an Alt-click on empty (= clear), or a marquee over
+    // handles. add = Ctrl (extend), remove = Shift (trim), neither = set.
+    private void FinishVertexBoxSelection(SKRect rect, bool tiny)
+    {
+        var targets = GetSelectedMeasurements()
+            .Where(m => IsMeasurementOnActivePage(m) && CanEditMeasurementVertices(m))
+            .ToList();
+        if (targets.Count == 0)
+        {
+            RequestRepaint();
+            PostStatus("Select a Line or Area object first, then hold Alt to edit its vertices.");
+            return;
+        }
+
+        bool add = _boxSelectAdditive;
+        bool remove = _boxSelectRemove;
+
+        if (tiny)
+        {
+            if (TryHitVertexAmong(targets, _boxSelectStartPdf, out Measurement hm, out int hv))
+            {
+                if (remove)
+                {
+                    VertexSelectionSet(hm, create: true).Remove(hv);
+                }
+                else if (add)
+                {
+                    VertexSelectionSet(hm, create: true).Add(hv);
+                }
+                else
+                {
+                    ClearMeasurementVertexSelection();
+                    VertexSelectionSet(hm, create: true).Add(hv);
+                }
+                if (_selectedMeasurementVertexIndices.TryGetValue(hm, out HashSet<int>? after) && after.Count == 0)
+                    _selectedMeasurementVertexIndices.Remove(hm);
+                _selectedMeasurement = hm;
+                _selectedVertexIndex = IsMeasurementVertexSelected(hm, hv) ? hv : LastSelectedVertexIndex();
+                RequestRepaint();
+                PostStatus($"{SelectedVertexCount()} handle(s) selected.");
+                return;
+            }
+
+            if (!add && !remove)
+            {
+                if (TryHitSelectedMeasurement(_boxSelectStartPdf, out _))
+                {
+                    SelectAllVerticesOf(targets); // Alt-click the body = all handles
+                    return;
+                }
+
+                ClearMeasurementVertexSelection(); // Alt-click empty = clear handles
+                _selectedVertexIndex = -1;
+                RequestRepaint();
+                PostStatus("Vertex selection cleared.");
+                return;
+            }
+
+            RequestRepaint();
+            PostStatus("Vertices: click directly on a handle (Alt+Ctrl add, Alt+Shift remove).");
+            return;
+        }
+
+        if (!add && !remove)
+            ClearMeasurementVertexSelection();
+
+        int changed = 0;
+        Measurement? primary = null;
+        int primaryVertex = -1;
+        foreach (Measurement m in targets)
+        {
+            _selectedMeasurementVertexIndices.TryGetValue(m, out HashSet<int>? set);
+            foreach (MeasurementVertexRef v in MeasurementVertices(m))
+            {
+                if (!RectContains(rect, v.Point))
+                    continue;
+
+                if (remove)
+                {
+                    if (set != null && set.Remove(v.GlobalIndex))
+                        changed++;
+                }
+                else
+                {
+                    set ??= VertexSelectionSet(m, create: true);
+                    if (set.Add(v.GlobalIndex))
+                        changed++;
+                    primary = m;
+                    primaryVertex = v.GlobalIndex;
+                }
+            }
+
+            if (set != null && set.Count == 0)
+                _selectedMeasurementVertexIndices.Remove(m);
+        }
+
+        if (primary != null)
+        {
+            _selectedMeasurement = primary;
+            _selectedVertexIndex = primaryVertex;
+        }
+        else if (remove)
+        {
+            _selectedVertexIndex = LastSelectedVertexIndex();
+        }
+
+        RequestRepaint();
+        int total = SelectedVertexCount();
+        PostStatus(remove
+            ? $"Removed {changed} handle(s). {total} still selected."
+            : $"{total} handle(s) selected ({changed} new). Drag a handle to move; Delete removes them.");
+    }
+
+    private bool TryHitVertexAmong(
+        IReadOnlyList<Measurement> targets,
+        SKPoint pdf,
+        out Measurement measurement,
+        out int vertexIndex)
+    {
+        foreach (Measurement m in targets)
+        {
+            if (TryHitVertexOnMeasurement(m, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+            {
+                measurement = m;
+                return true;
+            }
+        }
+
+        measurement = null!;
+        vertexIndex = -1;
+        return false;
+    }
+
     private void CancelBoxSelection()
     {
         if (!_boxSelecting)
             return;
 
         _boxSelecting = false;
+        _boxVertexMode = false;
         RequestRepaint();
     }
 
