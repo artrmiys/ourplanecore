@@ -324,16 +324,16 @@ public sealed partial class PdfViewport
         {
             if (_boxSelectAdditive)
             {
+                // Precise click on a handle still toggles that single vertex.
                 if (TryToggleMeasurementVertexSelection(_boxSelectStartPdf, _boxSelectRemove))
                 {
                     RequestRepaint();
                     return;
                 }
 
-                if (TryHitMeasurement(_boxSelectStartPdf, out Measurement toggled))
+                if (TryHitMeasurement(_boxSelectStartPdf, out Measurement hitMeasurement))
                 {
-                    ToggleMeasurementSelection(toggled);
-                    RequestRepaint();
+                    ApplyAdditiveObjectGesture([hitMeasurement], _boxSelectRemove);
                     return;
                 }
 
@@ -352,16 +352,6 @@ public sealed partial class PdfViewport
             return;
         }
 
-        // Ctrl/Shift + box extends a *vertex* selection only when vertex
-        // editing is already in progress (at least one handle picked).
-        // Otherwise the box adds (Ctrl) / removes (Shift) whole objects.
-        if (_boxSelectAdditive && SelectedVertexCount() > 0 &&
-            TrySelectMeasurementVerticesInBox(rect, _boxSelectRemove))
-        {
-            RequestRepaint();
-            return;
-        }
-
         bool selectTouched = _boxSelectEndPdf.X >= _boxSelectStartPdf.X;
         var hits = ActivePageMeasurementsNear(rect)
             .Where(m => selectTouched
@@ -377,49 +367,45 @@ public sealed partial class PdfViewport
                 .ToList()
             : new List<PageAnnotation>();
 
-        if (_boxSelectRemove)
+        if (_boxSelectAdditive)
         {
             if (hits.Count > 0)
             {
-                var combined = GetSelectedMeasurements().Where(m => !hits.Contains(m)).ToList();
-                SetSelectedMeasurements(combined, combined.LastOrDefault(), -1);
+                ApplyAdditiveObjectGesture(hits, _boxSelectRemove);
+                return;
             }
-            else if (annotationHits.Count > 0)
-            {
-                var combinedAnnotations = GetSelectedAnnotations().Where(a => !annotationHits.Contains(a)).ToList();
-                SetSelectedAnnotations(combinedAnnotations, combinedAnnotations.LastOrDefault(), -1);
-            }
-        }
-        else if (_boxSelectAdditive)
-        {
-            if (hits.Count > 0)
-            {
-                var combined = GetSelectedMeasurements().ToList();
-                foreach (Measurement hit in hits)
-                {
-                    if (!combined.Contains(hit))
-                        combined.Add(hit);
-                }
-                SetSelectedMeasurements(combined, hits.LastOrDefault() ?? combined.LastOrDefault(), -1);
-            }
-            else if (annotationHits.Count > 0)
-            {
-                var combinedAnnotations = GetSelectedAnnotations().ToList();
-                foreach (PageAnnotation hit in annotationHits)
-                {
-                    if (!combinedAnnotations.Contains(hit))
-                        combinedAnnotations.Add(hit);
-                }
-                SetSelectedAnnotations(combinedAnnotations, annotationHits.LastOrDefault() ?? combinedAnnotations.LastOrDefault(), -1);
-            }
-        }
-        else
-        {
+
             if (annotationHits.Count > 0)
-                SetSelectedAnnotations(annotationHits, annotationHits.LastOrDefault(), -1);
-            else
-                SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
+            {
+                if (_boxSelectRemove)
+                {
+                    var trimmed = GetSelectedAnnotations().Where(a => !annotationHits.Contains(a)).ToList();
+                    SetSelectedAnnotations(trimmed, trimmed.LastOrDefault(), -1);
+                }
+                else
+                {
+                    var combinedAnnotations = GetSelectedAnnotations().ToList();
+                    foreach (PageAnnotation hit in annotationHits)
+                    {
+                        if (!combinedAnnotations.Contains(hit))
+                            combinedAnnotations.Add(hit);
+                    }
+                    SetSelectedAnnotations(combinedAnnotations, annotationHits.LastOrDefault(), -1);
+                }
+                RequestRepaint();
+                PostStatus($"{GetSelectedAnnotations().Count} markup(s) selected.");
+                return;
+            }
+
+            RequestRepaint();
+            PostStatus("Select: nothing in box; current selection kept.");
+            return;
         }
+
+        if (annotationHits.Count > 0)
+            SetSelectedAnnotations(annotationHits, annotationHits.LastOrDefault(), -1);
+        else
+            SetSelectedMeasurements(hits, hits.LastOrDefault(), -1);
 
         RequestRepaint();
         PostStatus(annotationHits.Count > 0
@@ -433,6 +419,82 @@ public sealed partial class PdfViewport
             : selectTouched
                 ? $"Selected {GetSelectedMeasurements().Count} touched measurement(s). Ctrl+C copies, Ctrl+V pastes."
                 : $"Selected {GetSelectedMeasurements().Count} enclosed measurement(s). Ctrl+C copies, Ctrl+V pastes.");
+    }
+
+    // Ctrl/Shift gesture (click or box) on object(s):
+    //  • Shift            → remove the hit objects from the selection.
+    //  • Ctrl, new object → add it to the multi-selection (2, 3, … N).
+    //  • Ctrl, same object that is already selected → select ALL its vertices.
+    private void ApplyAdditiveObjectGesture(IReadOnlyList<Measurement> hits, bool removeMode)
+    {
+        var selected = GetSelectedMeasurements().ToList();
+
+        if (removeMode)
+        {
+            var combined = selected.Where(m => !hits.Contains(m)).ToList();
+            foreach (Measurement hit in hits)
+                _selectedMeasurementVertexIndices.Remove(hit);
+            int removed = selected.Count - combined.Count;
+            SetSelectedMeasurements(combined, combined.LastOrDefault(), -1);
+            RequestRepaint();
+            PostStatus(combined.Count == 0
+                ? "Selection cleared."
+                : $"Removed {removed} object(s). {combined.Count} still selected.");
+            return;
+        }
+
+        var newOnes = hits.Where(m => !selected.Contains(m)).ToList();
+        if (newOnes.Count > 0)
+        {
+            var combined = selected.Concat(newOnes).ToList();
+            // SetSelectedMeasurements also clears any per-object vertex sub-selection.
+            SetSelectedMeasurements(combined, newOnes[^1], -1);
+            RequestRepaint();
+            PostStatus($"Selected {combined.Count} object(s). Ctrl+C copies, Ctrl+V pastes.");
+            return;
+        }
+
+        // Re-selected only already-selected object(s) → select all their vertices.
+        var editable = hits
+            .Where(m => IsMeasurementOnActivePage(m) && CanEditMeasurementVertices(m))
+            .ToList();
+        if (editable.Count > 0)
+            SelectAllVerticesOf(editable);
+        else
+            PostStatus("Object already selected.");
+    }
+
+    private void SelectAllVerticesOf(IReadOnlyList<Measurement> measurements)
+    {
+        Measurement? primary = null;
+        int primaryIndex = -1;
+        foreach (Measurement m in measurements)
+        {
+            if (!IsMeasurementOnActivePage(m) || !CanEditMeasurementVertices(m))
+                continue;
+
+            HashSet<int> set = VertexSelectionSet(m, create: true);
+            foreach (MeasurementVertexRef v in MeasurementVertices(m))
+            {
+                set.Add(v.GlobalIndex);
+                primary = m;
+                primaryIndex = v.GlobalIndex;
+            }
+            if (set.Count == 0)
+                _selectedMeasurementVertexIndices.Remove(m);
+        }
+
+        if (primary != null)
+        {
+            _selectedMeasurement = primary;
+            _selectedVertexIndex = primaryIndex;
+        }
+
+        RequestRepaint();
+        int total = SelectedVertexCount();
+        PostStatus(total == 0
+            ? "No editable handles to select."
+            : $"Selected all {total} handle(s). Drag a handle to move (Shift = ortho); Delete removes them.");
     }
 
     private void CancelBoxSelection()
