@@ -152,7 +152,7 @@ public sealed partial class PdfViewport
                 .ToList());
         }
 
-        PostStatus($"Copied {_holeClipboard.Count} cut region(s). Ctrl+V pastes them into the area under the cursor.");
+        PostStatus($"Copied {_holeClipboard.Count} cut region(s). Ctrl+V pastes using the copied set's top-left corner as the cursor anchor.");
         return true;
     }
 
@@ -176,8 +176,10 @@ public sealed partial class PdfViewport
         // Land the cut at the cursor; without one, drop it onto the target Area's
         // centre so the paste is always visible rather than flung to the origin.
         SKPoint at = atPdf ?? Centroid(target.Points);
+        // Anchor the paste by the copied cut's top-left corner, matching how
+        // measurement paste maps the cursor (CalculateMeasurementPasteOffset).
         var allPts = _holeClipboard.SelectMany(h => h).ToList();
-        SKPoint src = Centroid(allPts);
+        SKPoint src = new(allPts.Min(p => p.X), allPts.Min(p => p.Y));
         SKPoint offset = new(at.X - src.X, at.Y - src.Y);
 
         List<SKPoint> beforePoints = target.Points.ToList();
