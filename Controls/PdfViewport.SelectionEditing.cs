@@ -1139,14 +1139,14 @@ public sealed partial class PdfViewport
 
     private void CenterOnMeasurement(Measurement measurement)
     {
-        if (measurement.Points.Count == 0 || ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
+        if (measurement.Points.Count == 0 || !HasViewportCanvasSize || _zoom <= 0)
             return;
 
         SKRect bounds = MeasurementBounds(measurement);
         float centerX = (bounds.Left + bounds.Right) / 2f;
         float centerY = (bounds.Top + bounds.Bottom) / 2f;
-        float visibleW = ScreenToPdfDistance((float)ActualWidth);
-        float visibleH = ScreenToPdfDistance((float)ActualHeight);
+        float visibleW = ScreenToPdfDistance(ViewportCanvasWidth);
+        float visibleH = ScreenToPdfDistance(ViewportCanvasHeight);
 
         _panX = centerX - visibleW / 2f;
         _panY = centerY - visibleH / 2f;
@@ -1156,11 +1156,11 @@ public sealed partial class PdfViewport
 
     private void ClampPanToPage()
     {
-        if (_pdfW <= 0 || _pdfH <= 0 || ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
+        if (_pdfW <= 0 || _pdfH <= 0 || !HasViewportCanvasSize || _zoom <= 0)
             return;
 
-        float visibleW = ScreenToPdfDistance((float)ActualWidth);
-        float visibleH = ScreenToPdfDistance((float)ActualHeight);
+        float visibleW = ScreenToPdfDistance(ViewportCanvasWidth);
+        float visibleH = ScreenToPdfDistance(ViewportCanvasHeight);
         _panX = Math.Clamp(_panX, 0, Math.Max(0, _pdfW - visibleW));
         _panY = Math.Clamp(_panY, 0, Math.Max(0, _pdfH - visibleH));
     }

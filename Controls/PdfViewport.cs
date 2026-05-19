@@ -652,14 +652,14 @@ public sealed partial class PdfViewport : SKElement
 
     public SKRect GetVisiblePdfRect()
     {
-        if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || ActualWidth <= 0 || ActualHeight <= 0)
+        if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || !HasViewportCanvasSize)
             return SKRect.Empty;
 
         var rect = new SKRect(
             _panX,
             _panY,
-            _panX + (float)ActualWidth / _zoom,
-            _panY + (float)ActualHeight / _zoom);
+            _panX + ViewportCanvasWidth / _zoom,
+            _panY + ViewportCanvasHeight / _zoom);
         float left = Math.Clamp(rect.Left, 0, Math.Max(0, _pdfW - 1));
         float top = Math.Clamp(rect.Top, 0, Math.Max(0, _pdfH - 1));
         float right = Math.Clamp(rect.Right, left + 1, _pdfW);
@@ -710,15 +710,15 @@ public sealed partial class PdfViewport : SKElement
 
     public void ZoomFit()
     {
-        if (_pdfW <= 0 || ActualWidth < 2 || ActualHeight < 2) return;
-        _zoom = (float)Math.Min(ActualWidth / _pdfW, ActualHeight / _pdfH) * 0.95f;
+        if (_pdfW <= 0 || ViewportCanvasWidth < 2 || ViewportCanvasHeight < 2) return;
+        _zoom = Math.Min(ViewportCanvasWidth / _pdfW, ViewportCanvasHeight / _pdfH) * 0.95f;
         _panX = _panY = 0;
         ScheduleRerenderForZoom(force: true);
         RequestRepaint();
     }
 
-    public void ZoomIn()  => ApplyZoom(1.25f, (float)(ActualWidth  / 2), (float)(ActualHeight / 2));
-    public void ZoomOut() => ApplyZoom(0.80f, (float)(ActualWidth  / 2), (float)(ActualHeight / 2));
+    public void ZoomIn()  => ApplyZoom(1.25f, ViewportCanvasWidth / 2f, ViewportCanvasHeight / 2f);
+    public void ZoomOut() => ApplyZoom(0.80f, ViewportCanvasWidth / 2f, ViewportCanvasHeight / 2f);
 
     private bool TrySavePdfCrop(SKRect requestedPdfRect, string outputPath, out SKRect cropPdfRect, out string error)
     {
@@ -983,11 +983,11 @@ public sealed partial class PdfViewport : SKElement
 
     public void FocusPdfPoint(float pdfX, float pdfY)
     {
-        if (ActualWidth <= 0 || ActualHeight <= 0 || _zoom <= 0)
+        if (!HasViewportCanvasSize || _zoom <= 0)
             return;
 
-        float visibleW = ScreenToPdfDistance((float)ActualWidth);
-        float visibleH = ScreenToPdfDistance((float)ActualHeight);
+        float visibleW = ScreenToPdfDistance(ViewportCanvasWidth);
+        float visibleH = ScreenToPdfDistance(ViewportCanvasHeight);
         _panX = pdfX - visibleW / 2f;
         _panY = pdfY - visibleH / 2f;
         ClampPanToPage();

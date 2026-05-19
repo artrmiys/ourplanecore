@@ -24,6 +24,9 @@ public sealed partial class PdfViewport
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
     {
+        if (UpdateCanvasMetrics(e.Info.Width, e.Info.Height))
+            ClampPanToPage();
+
         Stopwatch frameWatch = Stopwatch.StartNew();
         var canvas = e.Surface.Canvas;
         canvas.Clear(GetCachedColor(ViewBackgroundColor, SKColors.White));
@@ -63,8 +66,8 @@ public sealed partial class PdfViewport
                     FilterQuality = _renderNavigationFastFrame ? SKFilterQuality.Low : SKFilterQuality.Medium,
                 };
 
-                float visibleW = (float)ActualWidth / Math.Max(_zoom, 0.001f);
-                float visibleH = (float)ActualHeight / Math.Max(_zoom, 0.001f);
+                float visibleW = ViewportCanvasWidth / Math.Max(_zoom, 0.001f);
+                float visibleH = ViewportCanvasHeight / Math.Max(_zoom, 0.001f);
                 float srcLeft = Math.Clamp(_panX * _bitmapScale, 0, _pageBitmap.Width);
                 float srcTop = Math.Clamp(_panY * _bitmapScale, 0, _pageBitmap.Height);
                 float srcRight = Math.Clamp((_panX + visibleW) * _bitmapScale, 0, _pageBitmap.Width);

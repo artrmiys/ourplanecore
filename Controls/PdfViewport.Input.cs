@@ -24,7 +24,7 @@ public sealed partial class PdfViewport
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         Focus();
-        var pos    = e.GetPosition(this);
+        var pos    = ViewPointToCanvas(e.GetPosition(this));
         float fac  = e.Delta > 0 ? 1.12f : 1f / 1.12f;
         ApplyZoom(fac, (float)pos.X, (float)pos.Y);
         e.Handled = true;
@@ -33,7 +33,7 @@ public sealed partial class PdfViewport
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
-        var pos = e.GetPosition(this);
+        var pos = ViewPointToCanvas(e.GetPosition(this));
 
         if (e.RightButton == MouseButtonState.Pressed && _pageBitmap != null)
         {
@@ -251,7 +251,7 @@ public sealed partial class PdfViewport
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        var pos = e.GetPosition(this);
+        var pos = ViewPointToCanvas(e.GetPosition(this));
         if (_pageBitmap != null)
             _cursorGuideVisible = true;
 
@@ -489,7 +489,7 @@ public sealed partial class PdfViewport
                                _rightClickPdf.HasValue &&
                                _pageBitmap != null &&
                                !_aiCropNoteSelecting;
-        Point contextScreen = _rightClickStart ?? e.GetPosition(this);
+        Point contextScreen = _rightClickStart ?? ViewPointToCanvas(e.GetPosition(this));
         SKPoint contextPdf = _rightClickPdf ?? ScreenToPdf((float)contextScreen.X, (float)contextScreen.Y);
         Measurement? contextMeasurement = _rightClickMeasurement;
         PageAnnotation? contextAnnotation = _rightClickAnnotation;

@@ -155,8 +155,8 @@ public sealed partial class PdfViewport
     {
         float safeZoom = Math.Max(_zoom, 0.001f);
         float pad = screenPadding / safeZoom;
-        float visibleW = (float)ActualWidth / safeZoom;
-        float visibleH = (float)ActualHeight / safeZoom;
+        float visibleW = ViewportCanvasWidth / safeZoom;
+        float visibleH = ViewportCanvasHeight / safeZoom;
         return new SKRect(
             _panX - pad,
             _panY - pad,

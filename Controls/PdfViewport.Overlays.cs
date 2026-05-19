@@ -106,10 +106,10 @@ public sealed partial class PdfViewport
 
     private float CurrentFitZoom()
     {
-        if (_pdfW <= 0 || _pdfH <= 0 || ActualWidth < 2 || ActualHeight < 2)
+        if (_pdfW <= 0 || _pdfH <= 0 || ViewportCanvasWidth < 2 || ViewportCanvasHeight < 2)
             return 0;
 
-        return (float)Math.Min(ActualWidth / _pdfW, ActualHeight / _pdfH) * 0.95f;
+        return Math.Min(ViewportCanvasWidth / _pdfW, ViewportCanvasHeight / _pdfH) * 0.95f;
     }
 
     private static float ClampOverlayUserScale(double scale)
@@ -140,12 +140,12 @@ public sealed partial class PdfViewport
 
     private ViewportOverlayHitKind HitSheetOverlay(Point screen)
     {
-        if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || ActualWidth <= 0 || ActualHeight <= 0)
+        if (_pdfW <= 0 || _pdfH <= 0 || _zoom <= 0 || !HasViewportCanvasSize)
             return ViewportOverlayHitKind.None;
 
         if (TryGetSheetOverlayViewport(
-                (float)ActualWidth,
-                (float)ActualHeight,
+                ViewportCanvasWidth,
+                ViewportCanvasHeight,
                 out float visibleLeft,
                 out float visibleTop,
                 out float visibleRight,
