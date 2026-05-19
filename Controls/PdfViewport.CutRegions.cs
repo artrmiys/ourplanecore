@@ -161,21 +161,21 @@ public sealed partial class PdfViewport
         if (_holeClipboard.Count == 0)
             return false;
 
-        if (!atPdf.HasValue)
+        // Anchor probe: the cursor when we have one, otherwise the selected
+        // Area's centre so a keyboard-only Ctrl+V still resolves a target.
+        SKPoint probe = atPdf ?? (_selectedMeasurement is { MType: "area" } a && a.Points.Count >= 3
+            ? Centroid(a.Points)
+            : default);
+
+        if (!TryResolvePasteCutTarget(probe, out Measurement target, out string status))
         {
-            PostStatus("Paste cut region: move the cursor over an Area, then press Ctrl+V.");
+            PostStatus(status);
             return true;
         }
 
-        SKPoint at = atPdf.Value;
-        if (!TryResolveAreaCutTarget(at, out Measurement target, out string status))
-        {
-            PostStatus(string.IsNullOrEmpty(status)
-                ? "Paste cut region: hover inside an Area and try again."
-                : status);
-            return true;
-        }
-
+        // Land the cut at the cursor; without one, drop it onto the target Area's
+        // centre so the paste is always visible rather than flung to the origin.
+        SKPoint at = atPdf ?? Centroid(target.Points);
         var allPts = _holeClipboard.SelectMany(h => h).ToList();
         SKPoint src = Centroid(allPts);
         SKPoint offset = new(at.X - src.X, at.Y - src.Y);
@@ -183,24 +183,24 @@ public sealed partial class PdfViewport
         List<SKPoint> beforePoints = target.Points.ToList();
         List<List<SKPoint>> beforeHoles = CloneHoles(target.Holes);
         int added = 0;
-        string? firstError = null;
+        // Paste is intentionally permissive: a copied cut region is dropped in as-is
+        // even if it pokes past the Area edge or overlaps another hole. The area math
+        // (Measurement.PolygonAreaPt) already subtracts holes and clamps to >= 0, so an
+        // out-of-bounds cut is harmless. Only the live Area-Cut draw tool keeps the
+        // stricter containment guard.
         foreach (var hole in _holeClipboard)
         {
             var moved = hole.Select(p => new SKPoint(p.X + offset.X, p.Y + offset.Y)).ToList();
-            if (CanApplyAreaCut(target, moved, out string err))
-            {
-                target.Holes.Add(moved);
-                added++;
-            }
-            else
-            {
-                firstError ??= err;
-            }
+            if (moved.Count < 3)
+                continue;
+
+            target.Holes.Add(moved);
+            added++;
         }
 
         if (added == 0)
         {
-            PostStatus(firstError ?? "Paste cut region: it did not fit inside the Area.");
+            PostStatus("Paste cut region: the copied cut region is empty.");
             return true;
         }
 
@@ -208,9 +208,66 @@ public sealed partial class PdfViewport
         SelectMeasurement(target, -1);
         NotifyMeasurementsChanged([target]);
         RequestRepaint();
-        PostStatus(firstError == null
-            ? $"Pasted {added} cut region(s). New area {target.Label(ScaleMetersPerPt, UnitMode)}."
-            : $"Pasted {added} cut region(s); some did not fit inside the Area.");
+        PostStatus($"Pasted {added} cut region(s). New area {target.Label(ScaleMetersPerPt, UnitMode)}.");
         return true;
+    }
+
+    // Lenient target lookup for *pasting* cut regions. Unlike the live Area-Cut
+    // draw tool, paste must not require the anchor to sit inside an Area's fill —
+    // cuts are routinely placed on edges or over existing holes.
+    private bool TryResolvePasteCutTarget(SKPoint probe, out Measurement target, out string status)
+    {
+        target = null!;
+        status = "";
+
+        // 1. Cursor genuinely inside an Area fill — the ideal anchor.
+        if (TryResolveAreaCutTarget(probe, out Measurement direct, out _))
+        {
+            target = direct;
+            return true;
+        }
+
+        // 2. A selected Area is the natural destination even when the cursor
+        //    (and the pasted cut) lands outside its fill or on a hole.
+        if (_selectedMeasurement is { MType: "area" } selected &&
+            selected.Points.Count >= 3 &&
+            IsMeasurementOnActivePage(selected))
+        {
+            target = selected;
+            return true;
+        }
+
+        // 3. Otherwise pick an Area on the active sheet: the one whose outer
+        //    outline contains the probe (holes ignored), else the nearest.
+        Measurement? nearest = null;
+        double nearestDist = double.MaxValue;
+        foreach (Measurement m in ActivePageMeasurements())
+        {
+            if (m.MType != "area" || m.Points.Count < 3)
+                continue;
+
+            if (PointInPolygon(probe, m.Points))
+            {
+                target = m;
+                return true;
+            }
+
+            SKPoint c = Centroid(m.Points);
+            double d = (c.X - probe.X) * (c.X - probe.X) + (c.Y - probe.Y) * (c.Y - probe.Y);
+            if (d < nearestDist)
+            {
+                nearestDist = d;
+                nearest = m;
+            }
+        }
+
+        if (nearest != null)
+        {
+            target = nearest;
+            return true;
+        }
+
+        status = "Paste cut region: this sheet has no Area to paste into. Draw an Area first.";
+        return false;
     }
 }
