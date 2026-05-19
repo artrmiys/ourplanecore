@@ -532,8 +532,104 @@ public static partial class ThreeDRoofPreviewBuilder
             }
         }
 
-        return faces.Count > 0 ? faces : BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
+        if (faces.Count == 0)
+            return BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
+
+        // The per-cell clipping shatters each slope into many coplanar
+        // pieces. Fuse the pieces of each eave back into one polygon per
+        // slope so the roof is a few clean faces, not a quilt of squares.
+        return MergeCoplanarFaces(faces, roofBase);
     }
+
+    // Union the coplanar pieces of each plane: drop internal shared edges,
+    // walk the surviving boundary edges into one loop per slope.
+    private static List<EnvelopeFace> MergeCoplanarFaces(
+        List<EnvelopeFace> pieces,
+        double roofBase)
+    {
+        var merged = new List<EnvelopeFace>();
+        foreach (IGrouping<SlopePlane, EnvelopeFace> group in pieces.GroupBy(f => f.Plane))
+        {
+            // Directed boundary edges; an edge shared by two pieces of this
+            // same plane appears once each way and cancels out.
+            var edges = new Dictionary<(long, long, long, long), (P2 A, P2 B)>();
+            foreach (EnvelopeFace face in group)
+            {
+                List<P2> poly = face.Points;
+                for (int i = 0; i < poly.Count; i++)
+                {
+                    P2 a = poly[i];
+                    P2 b = poly[(i + 1) % poly.Count];
+                    if (Distance(a, b) < 0.01)
+                        continue;
+                    (long, long) ka = Key(a);
+                    (long, long) kb = Key(b);
+                    var fwd = (ka.Item1, ka.Item2, kb.Item1, kb.Item2);
+                    var rev = (kb.Item1, kb.Item2, ka.Item1, ka.Item2);
+                    if (edges.Remove(rev))
+                        continue;
+                    edges[fwd] = (a, b);
+                }
+            }
+
+            if (edges.Count < 3)
+            {
+                merged.AddRange(group);
+                continue;
+            }
+
+            // Chain the surviving boundary edges into loops.
+            var adjacency = new Dictionary<(long, long), List<P2>>();
+            foreach ((P2 A, P2 B) e in edges.Values)
+            {
+                if (!adjacency.TryGetValue(Key(e.A), out List<P2>? outs))
+                    adjacency[Key(e.A)] = outs = [];
+                outs.Add(e.B);
+            }
+
+            var used = new HashSet<(long, long, long, long)>();
+            foreach ((P2 A, P2 B) start in edges.Values)
+            {
+                var sk = (Key(start.A).Item1, Key(start.A).Item2, Key(start.B).Item1, Key(start.B).Item2);
+                if (!used.Add(sk))
+                    continue;
+
+                var loop = new List<P2> { start.A, start.B };
+                P2 cur = start.B;
+                for (int guard = 0; guard < edges.Count + 4; guard++)
+                {
+                    if (!adjacency.TryGetValue(Key(cur), out List<P2>? nexts) || nexts.Count == 0)
+                        break;
+                    P2 nxt = nexts[0];
+                    foreach (P2 cand in nexts)
+                    {
+                        var ck = (Key(cur).Item1, Key(cur).Item2, Key(cand).Item1, Key(cand).Item2);
+                        if (!used.Contains(ck)) { nxt = cand; break; }
+                    }
+
+                    var nk = (Key(cur).Item1, Key(cur).Item2, Key(nxt).Item1, Key(nxt).Item2);
+                    used.Add(nk);
+                    if (Distance(nxt, loop[0]) < 0.05)
+                        break;
+                    loop.Add(nxt);
+                    cur = nxt;
+                }
+
+                List<P2> clean = CleanPolygon(loop);
+                if (clean.Count >= 3 && Math.Abs(SignedArea(clean)) >= 0.05)
+                {
+                    if (SignedArea(clean) < 0)
+                        clean.Reverse();
+                    merged.Add(new EnvelopeFace(group.Key, clean, roofBase));
+                }
+            }
+        }
+
+        return merged.Count > 0 ? merged : pieces;
+    }
+
+    private static (long, long) Key(P2 p) =>
+        ((long)Math.Round(p.X * 64.0), (long)Math.Round(p.Z * 64.0));
 
     // Lower-envelope clip that ignores a competitor where it is BEHIND its own
     // eave (height < 0): there it does not roof anything, so it must not push
