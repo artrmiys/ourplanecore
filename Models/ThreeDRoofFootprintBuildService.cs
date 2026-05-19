@@ -77,7 +77,7 @@ public static class ThreeDRoofFootprintBuildService
                 measurement.Id,
                 color,
                 feetPerPt,
-                CleanPoints(slabPoints)));
+                SanitizeRing(slabPoints)));
             index++;
         }
 
@@ -306,6 +306,83 @@ public static class ThreeDRoofFootprintBuildService
             clean.RemoveAt(clean.Count - 1);
 
         return clean;
+    }
+
+    // A roughly-drawn roof area is often a self-touching scribble. A clean
+    // roof is impossible from a non-simple ring, so fall back to its convex
+    // hull - always a valid polygon that yields a sensible hip roof.
+    private static List<ThreeDPoint> SanitizeRing(IReadOnlyList<ThreeDPoint> points)
+    {
+        List<ThreeDPoint> clean = CleanPoints(points);
+        if (clean.Count < 4 || !RingSelfIntersects(clean))
+            return clean;
+
+        List<ThreeDPoint> hull = ConvexHull(clean);
+        return hull.Count >= 3 ? hull : clean;
+    }
+
+    private static bool RingSelfIntersects(IReadOnlyList<ThreeDPoint> points)
+    {
+        int n = points.Count;
+        for (int i = 0; i < n; i++)
+        {
+            ThreeDPoint a1 = points[i];
+            ThreeDPoint a2 = points[(i + 1) % n];
+            for (int j = i + 1; j < n; j++)
+            {
+                if (j == i || (j + 1) % n == i || (i + 1) % n == j)
+                    continue;
+
+                if (SegmentsCross(a1, a2, points[j], points[(j + 1) % n]))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SegmentsCross(ThreeDPoint a, ThreeDPoint b, ThreeDPoint c, ThreeDPoint d)
+    {
+        double d1 = Orient(c, d, a);
+        double d2 = Orient(c, d, b);
+        double d3 = Orient(a, b, c);
+        double d4 = Orient(a, b, d);
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+               ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
+
+    private static double Orient(ThreeDPoint p, ThreeDPoint q, ThreeDPoint r) =>
+        (q.XFeet - p.XFeet) * (r.ZFeet - p.ZFeet) -
+        (q.ZFeet - p.ZFeet) * (r.XFeet - p.XFeet);
+
+    private static List<ThreeDPoint> ConvexHull(IReadOnlyList<ThreeDPoint> points)
+    {
+        List<ThreeDPoint> sorted = points
+            .OrderBy(p => p.XFeet)
+            .ThenBy(p => p.ZFeet)
+            .ToList();
+        if (sorted.Count < 3)
+            return sorted;
+
+        var hull = new List<ThreeDPoint>();
+        foreach (ThreeDPoint p in sorted) // lower
+        {
+            while (hull.Count >= 2 && Orient(hull[^2], hull[^1], p) <= 0)
+                hull.RemoveAt(hull.Count - 1);
+            hull.Add(p);
+        }
+
+        int lower = hull.Count + 1;
+        for (int i = sorted.Count - 2; i >= 0; i--) // upper
+        {
+            ThreeDPoint p = sorted[i];
+            while (hull.Count >= lower && Orient(hull[^2], hull[^1], p) <= 0)
+                hull.RemoveAt(hull.Count - 1);
+            hull.Add(p);
+        }
+
+        hull.RemoveAt(hull.Count - 1);
+        return hull;
     }
 
     private static bool IsOrthogonal(IReadOnlyList<ThreeDPoint> points)

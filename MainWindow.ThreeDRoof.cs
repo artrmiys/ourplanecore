@@ -200,14 +200,14 @@ public partial class MainWindow
         }
 
         double autoPitch = ResolveThreeDRoofPitchRisePerFoot();
-        int measuredEaves = ApplyAvailableEaveTakeoffsToRoofEdges(anchor, autoPitch);
-        ThreeDRoofAutoGuideResult auto = ThreeDRoofAutoGuideService.ApplyAutoEaves(_threeDRoofGuides, autoPitch);
-        if (auto.EaveGuideCount == 0 && !_threeDRoofGuides.Any(ThreeDRoofPreviewBuilder.IsSlopeDefiningGuide))
+        // Revit-style one-click default: full hip - every boundary edge slopes
+        // at the panel pitch. Robust for any footprint; the user can later
+        // flip individual edges to Rake for a gable end.
+        int eaves = MarkAllRoofBoundaryEdgesAsEave(autoPitch);
+        if (eaves == 0)
         {
-            TxtStatus.Text = auto.SkippedManualRegionCount > 0
-                ? "3D Auto Roof: roof base has manual eaves, but no auto eave could be selected."
-                : "3D Auto Roof: no roof base boundary edges were available for auto eaves.";
-            LogThreeD($"Auto roof edge selection skipped: regions {auto.RoofRegionCount}, manual regions {auto.SkippedManualRegionCount}.");
+            TxtStatus.Text = "3D Auto Roof: no roof base boundary edges were available. Use Roof Base / select a roof area first.";
+            LogThreeD("Auto roof skipped: roof base produced no editable boundary edges.");
             RenderThreeDWallModel(fitCamera: true);
             SaveCurrentThreeDModel();
             return;
@@ -217,10 +217,26 @@ public partial class MainWindow
             SelectRightWorkspaceTab("3D");
 
         BuildThreeDRoofPreview();
-        string detail = auto.Messages.Count == 0 ? "" : " " + string.Join(" ", auto.Messages.Take(2));
-        string measured = measuredEaves > 0 ? $" matched {measuredEaves} measured eave edge(s)," : "";
-        TxtStatus.Text = $"3D Auto Roof:{measured} selected {auto.EaveGuideCount} auto eave edge(s), pitch {PitchLabel(autoPitch)}, generated {_threeDRoofPlanes.Count} roof mesh face(s).{detail}";
-        LogThreeD($"Auto roof: matched {measuredEaves} measured eave edge(s), selected {auto.EaveGuideCount} auto eave edge(s), reset {auto.ResetGuideCount}, generated {_threeDRoofPlanes.Count} roof mesh face(s).");
+        TxtStatus.Text = $"3D Auto Roof: full hip from {eaves} eave edge(s), pitch {PitchLabel(autoPitch)}, generated {_threeDRoofPlanes.Count} roof mesh face(s).";
+        LogThreeD($"Auto roof: full hip, {eaves} eave edge(s), pitch {PitchLabel(autoPitch)}, generated {_threeDRoofPlanes.Count} roof mesh face(s).");
+    }
+
+    // Every editable roof base boundary edge becomes a slope-defining eave at
+    // the given pitch (full hip). Generated seams are left untouched.
+    private int MarkAllRoofBoundaryEdgesAsEave(double pitch)
+    {
+        int count = 0;
+        foreach (ThreeDRoofGuide guide in _threeDRoofGuides.Where(IsSelectableThreeDRoofBaseGuide))
+        {
+            guide.Kind = ThreeDRoofGuideKinds.Eave;
+            guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+            guide.DefinesSlope = true;
+            guide.PitchRisePerFoot = pitch;
+            guide.Label = RelabelRoofGuide(guide);
+            count++;
+        }
+
+        return count;
     }
 
     private IReadOnlyList<ThreeDRoofFootprintSource> RoofFootprintSources(TreeViewItem? anchor, out string sourceLabel)
