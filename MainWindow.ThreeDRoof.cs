@@ -388,7 +388,7 @@ public partial class MainWindow
             return;
         }
 
-        bool? definesSlope = _threeDRoofDefinesSlopeBox?.IsChecked;
+        bool? checkbox = _threeDRoofDefinesSlopeBox?.IsChecked;
         string pitchText = (_threeDRoofEdgePitchBox?.Text ?? "").Trim();
         string overhangText = (_threeDRoofEdgeOverhangBox?.Text ?? "").Trim();
 
@@ -399,21 +399,36 @@ public partial class MainWindow
             System.Globalization.CultureInfo.InvariantCulture,
             out double overhangInches);
 
+        // Intent, not just the checkbox: entering a pitch means "this is a
+        // sloped eave" (you do not pitch a non-slope edge). The checkbox only
+        // forces slope OFF when the user explicitly unchecks it with no pitch.
+        // null = mixed/untouched and no pitch -> leave each edge unchanged.
+        bool? slope = hasPitch ? true
+            : checkbox == true ? true
+            : checkbox == false ? false
+            : null;
+
+        double fallbackPitch = ResolveThreeDRoofPitchRisePerFoot();
         foreach (ThreeDRoofGuide guide in guides)
         {
-            if (definesSlope.HasValue)
+            if (slope == true)
             {
-                guide.DefinesSlope = definesSlope.Value;
-                string kind = definesSlope.Value ? ThreeDRoofGuideKinds.Eave : ThreeDRoofGuideKinds.Rake;
-                guide.Kind = kind;
-                guide.Color = ThreeDRoofGuideKinds.Color(kind);
-                if (!definesSlope.Value)
-                    guide.PitchRisePerFoot = 0;
+                guide.DefinesSlope = true;
+                guide.Kind = ThreeDRoofGuideKinds.Eave;
+                guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+                guide.PitchRisePerFoot = hasPitch
+                    ? pitch
+                    : guide.PitchRisePerFoot > 0 ? guide.PitchRisePerFoot : fallbackPitch;
                 guide.Label = RelabelRoofGuide(guide);
             }
-
-            if (hasPitch && guide.DefinesSlope)
-                guide.PitchRisePerFoot = pitch;
+            else if (slope == false)
+            {
+                guide.DefinesSlope = false;
+                guide.Kind = ThreeDRoofGuideKinds.Rake;
+                guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Rake);
+                guide.PitchRisePerFoot = 0;
+                guide.Label = RelabelRoofGuide(guide);
+            }
 
             if (hasOverhang)
                 guide.OverhangFeet = Math.Max(0, overhangInches) / 12.0;
@@ -421,13 +436,13 @@ public partial class MainWindow
 
         BuildThreeDRoofPreview();
 
-        string slopePart = definesSlope switch
+        string slopePart = slope switch
         {
             true => "Defines Slope on",
             false => "Defines Slope off",
             _ => "slope unchanged",
         };
-        string pitchPart = hasPitch ? $", pitch {PitchLabel(pitch)}" : "";
+        string pitchPart = slope == true ? $", pitch {PitchLabel(hasPitch ? pitch : fallbackPitch)}" : "";
         string overhangPart = hasOverhang ? $", overhang {Math.Max(0, overhangInches):0.##} in" : "";
         TxtStatus.Text = $"3D Roof: {guides.Count} edge(s) - {slopePart}{pitchPart}{overhangPart}.";
         LogThreeD($"Roof edge properties applied: {guides.Count} edge(s), {slopePart}{pitchPart}{overhangPart}.");

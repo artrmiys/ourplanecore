@@ -212,6 +212,15 @@ public partial class MainWindow
 
         var inputs = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 4) };
         _threeDRoofEdgePitchBox = ThreeDEditBox("Pitch as rise/run, e.g. 6/12");
+        // Typing a valid pitch implies a sloped eave - reflect it in the box.
+        _threeDRoofEdgePitchBox.TextChanged += (_, _) =>
+        {
+            if (_threeDRoofDefinesSlopeBox != null &&
+                RoofPitchText.TryParse(_threeDRoofEdgePitchBox?.Text, out _))
+            {
+                _threeDRoofDefinesSlopeBox.IsChecked = true;
+            }
+        };
         _threeDRoofEdgeOverhangBox = ThreeDEditBox("Overhang in inches (recorded; projection geometry in a later pass)");
         inputs.Children.Add(_threeDRoofEdgePitchBox);
         inputs.Children.Add(_threeDRoofEdgeOverhangBox);
