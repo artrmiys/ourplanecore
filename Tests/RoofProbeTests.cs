@@ -350,6 +350,101 @@ internal static class RoofProbeTests
             minimumRidges: 1);
     }
 
+    // Diagnostic: dumps real 3D geometry for a canonical 40x24 gable
+    // (2 long eaves + 2 short rakes, 6/12). Writes bin/roof_probe.txt.
+    public static void GableGeometryProbe()
+    {
+        var model = new ThreeDWallModel
+        {
+            Slabs = [RectSlab("gable", 0, 0, 40, 24)],
+            RoofGuides =
+            [
+                Guide(ThreeDRoofGuideKinds.Eave, 0, 0, 40, 0, "south eave", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 40, 24, 0, 24, "north eave", 0.5),
+                Guide(ThreeDRoofGuideKinds.Rake, 40, 0, 40, 24, "east rake"),
+                Guide(ThreeDRoofGuideKinds.Rake, 0, 24, 0, 0, "west rake"),
+            ],
+        };
+
+        var lModel = new ThreeDWallModel
+        {
+            Slabs = [new ThreeDFloorSlab { Label = "L", LevelKey = "roof", ElevationFeet = 10,
+                Points = [Point(0,0),Point(30,0),Point(30,12),Point(20,12),Point(20,26),Point(0,26)] }],
+            RoofGuides =
+            [
+                Guide(ThreeDRoofGuideKinds.Eave, 0, 0, 30, 0, "south eave", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 30, 12, 20, 12, "wing north eave", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 20, 26, 0, 26, "main north eave", 0.5),
+                Guide(ThreeDRoofGuideKinds.Rake, 30, 0, 30, 12, "right rake"),
+                Guide(ThreeDRoofGuideKinds.Rake, 20, 12, 20, 26, "inside rake"),
+                Guide(ThreeDRoofGuideKinds.Rake, 0, 26, 0, 0, "left rake"),
+            ],
+        };
+
+        var sb = new System.Text.StringBuilder();
+        foreach ((string name, ThreeDWallModel m) in new[] { ("GABLE 40x24", model), ("L-SHAPE mixed", lModel) })
+        {
+            ThreeDRoofBuildResult r = ThreeDRoofBuildService.Build(m);
+            sb.AppendLine($"=== {name}: blocked={r.PlaneBuildBlocked} planes={r.Planes.Count} ===");
+            foreach (string msg in r.Messages) sb.AppendLine($"msg: {msg}");
+            foreach (ThreeDRoofPlane p in r.Planes)
+            {
+                sb.AppendLine($"PLANE kind={p.Kind} label='{p.Label}' pts={p.Points.Count}");
+                foreach (ThreeDRoofVertex v in p.Points)
+                    sb.AppendLine($"  ({v.XFeet:F2}, {v.YFeet:F2}, {v.ZFeet:F2})");
+            }
+            foreach (ThreeDRoofGuide g in r.Guides.Where(g => g.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus))
+            {
+                ThreeDRoofGuidePoint a = g.Points[0], b = g.Points[^1];
+                sb.AppendLine($"SEAM {g.Kind} '{g.Label}' ({a.XFeet:F2},{a.YFeet:F2},{a.ZFeet:F2})->({b.XFeet:F2},{b.YFeet:F2},{b.ZFeet:F2})");
+            }
+        }
+        System.IO.File.WriteAllText(
+            System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "roof_probe.txt"), sb.ToString());
+
+        // Strict geometry: 40x24 gable, base 10, pitch 0.5 -> ridge along
+        // z=12 at y=16, faces tile the 960 sqft footprint.
+        ThreeDRoofBuildResult gr = ThreeDRoofBuildService.Build(model);
+        if (gr.PlaneBuildBlocked)
+            throw new InvalidOperationException("gable probe: nothing built (see roof_probe.txt)");
+
+        double gableArea = gr.Planes.Where(p => p.Kind == "roof_face_envelope")
+            .Sum(p => Math.Abs(PolygonArea(p.Points.Select(v => (v.XFeet, v.ZFeet)))));
+        if (gableArea < 960 * 0.95 || gableArea > 960 * 1.05)
+            throw new InvalidOperationException($"gable faces must tile 960 sqft, got {gableArea:F0}.");
+
+        double gableMaxY = gr.Planes.Where(p => p.Kind == "roof_face_envelope")
+            .SelectMany(p => p.Points).Max(v => v.YFeet);
+        if (Math.Abs(gableMaxY - 16.0) > 0.4)
+            throw new InvalidOperationException($"gable ridge should reach y=16, got {gableMaxY:F2}.");
+
+        ThreeDRoofGuide gRidge = gr.Guides.First(g =>
+            g.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus && g.Kind == ThreeDRoofGuideKinds.Ridge);
+        double gRidgeLen = Math.Sqrt(
+            Math.Pow(gRidge.Points[^1].XFeet - gRidge.Points[0].XFeet, 2) +
+            Math.Pow(gRidge.Points[^1].ZFeet - gRidge.Points[0].ZFeet, 2));
+        if (gRidgeLen < 38 || Math.Abs(gRidge.Points.Average(p => p.ZFeet) - 12) > 0.6 ||
+            Math.Abs(gRidge.Points.Average(p => p.YFeet) - 16) > 0.5)
+        {
+            throw new InvalidOperationException(
+                $"gable ridge must span ~40 at z=12,y=16; len {gRidgeLen:F1} z {gRidge.Points.Average(p => p.ZFeet):F1} y {gRidge.Points.Average(p => p.YFeet):F1}.");
+        }
+
+        // L-shape: faces tile 640 sqft and the tall main wing actually rises
+        // to its own ridge (~y 16.5), not collapsed to the low wing.
+        ThreeDRoofBuildResult lr = ThreeDRoofBuildService.Build(lModel);
+        if (lr.PlaneBuildBlocked)
+            throw new InvalidOperationException("L probe: nothing built.");
+        double lArea = lr.Planes.Where(p => p.Kind == "roof_face_envelope")
+            .Sum(p => Math.Abs(PolygonArea(p.Points.Select(v => (v.XFeet, v.ZFeet)))));
+        if (lArea < 640 * 0.93 || lArea > 640 * 1.07)
+            throw new InvalidOperationException($"L faces must tile ~640 sqft, got {lArea:F0}.");
+        double lMaxY = lr.Planes.Where(p => p.Kind == "roof_face_envelope")
+            .SelectMany(p => p.Points).Max(v => v.YFeet);
+        if (lMaxY < 16.0)
+            throw new InvalidOperationException($"L main wing must rise to ~16.5, got max {lMaxY:F2}.");
+    }
+
     private static void AssertRoofBuild(
         ThreeDRoofBuildResult result,
         string label,

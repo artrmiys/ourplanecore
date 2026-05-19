@@ -449,22 +449,26 @@ public static partial class ThreeDRoofPreviewBuilder
         return distinct;
     }
 
-    // Exact lower envelope: triangulate the footprint into convex cells, then
-    // inside each triangle keep, per plane, the region where that plane is the
-    // lowest. Half-plane clipping is exact on a convex triangle, so this works
-    // for any footprint - simple gable, full hip, or non-convex U/S/L.
+    // Exact roof = lower envelope of the eave slope planes, computed per
+    // triangulated convex cell (half-plane clipping is exact on a triangle).
+    // Each plane is also clipped to its OWN eave front half-plane (height >= 0)
+    // so a partial eave (L/U/S wing) cannot overshoot with its negative back
+    // side; full-width perpendicular reach is kept, so there are no gaps.
+    // Few clean polygon faces; exact ridge/hip/valley seams between them.
     private static List<EnvelopeFace> BuildEnvelopeFaces(
         IReadOnlyList<P2> footprint,
         IReadOnlyList<SlopePlane> planes,
         double roofBase)
     {
-        var faces = new List<EnvelopeFace>();
+        if (footprint.Count < 3 || planes.Count == 0)
+            return BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
+
         ThreeDPolygonTriangulation tri = ThreeDPolygonTriangulator.Triangulate(
             footprint.Select(p => new ThreeDPoint { XFeet = p.X, ZFeet = p.Z }).ToList());
-
         if (!tri.Success || tri.TriangleIndices.Count < 3)
             return BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
 
+        var faces = new List<EnvelopeFace>();
         for (int t = 0; t + 2 < tri.TriangleIndices.Count; t += 3)
         {
             List<P2> triangle =
@@ -480,28 +484,159 @@ public static partial class ThreeDRoofPreviewBuilder
 
             foreach (SlopePlane plane in planes)
             {
-                List<P2> region = triangle.ToList();
+                // Own front half-plane: drop the eave's negative back side.
+                List<P2> front = CleanPolygon(ClipFrontHalfPlane(triangle, plane));
+                if (front.Count < 3 || Math.Abs(SignedArea(front)) < 0.0004)
+                    continue;
+
+                // Exact front-aware lower envelope as a set of convex pieces.
+                // For each competitor j: keep the part behind j's eave as-is
+                // (j does not roof there) and the part in front of j clipped
+                // linearly by i <= j. Every clip is a single line -> exact,
+                // so the per-plane cells partition with no overlap.
+                var pieces = new List<List<P2>> { front };
                 foreach (SlopePlane other in planes)
                 {
                     if (ReferenceEquals(plane, other) || AreSamePlane(plane, other))
                         continue;
 
-                    region = CleanPolygon(ClipToLowerPlane(region, plane, other));
-                    if (region.Count < 3 || Math.Abs(SignedArea(region)) < 0.0005)
+                    var next = new List<List<P2>>();
+                    foreach (List<P2> piece in pieces)
+                    {
+                        List<P2> jBack = CleanPolygon(ClipFrontHalfPlane(piece, other, invert: true));
+                        if (jBack.Count >= 3 && Math.Abs(SignedArea(jBack)) >= 0.0004)
+                            next.Add(jBack);
+
+                        List<P2> jFront = CleanPolygon(ClipFrontHalfPlane(piece, other, invert: false));
+                        if (jFront.Count < 3 || Math.Abs(SignedArea(jFront)) < 0.0004)
+                            continue;
+                        jFront = CleanPolygon(ClipToLowerPlane(jFront, plane, other));
+                        if (jFront.Count >= 3 && Math.Abs(SignedArea(jFront)) >= 0.0004)
+                            next.Add(jFront);
+                    }
+
+                    pieces = next;
+                    if (pieces.Count == 0)
                         break;
                 }
 
-                if (region.Count < 3 || Math.Abs(SignedArea(region)) < 0.0005)
-                    continue;
-
-                if (SignedArea(region) < 0)
-                    region.Reverse();
-
-                faces.Add(new EnvelopeFace(plane, region, roofBase));
+                foreach (List<P2> piece in pieces)
+                {
+                    if (piece.Count < 3 || Math.Abs(SignedArea(piece)) < 0.0004)
+                        continue;
+                    List<P2> region = piece;
+                    if (SignedArea(region) < 0)
+                        region.Reverse();
+                    faces.Add(new EnvelopeFace(plane, region, roofBase));
+                }
             }
         }
 
         return faces.Count > 0 ? faces : BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
+    }
+
+    // Lower-envelope clip that ignores a competitor where it is BEHIND its own
+    // eave (height < 0): there it does not roof anything, so it must not push
+    // the winning plane out. Boundary is piecewise (the eave line and the i=j
+    // line) so edge crossings are found by bisection - exact enough per cell.
+    private static List<P2> ClipToLowerPlaneFrontAware(
+        IReadOnlyList<P2> poly,
+        SlopePlane plane,
+        SlopePlane other)
+    {
+        const double tol = 0.01;
+        double Eff(SlopePlane s, P2 p)
+        {
+            double h = s.HeightAt(p);
+            return h >= -tol ? h : 1e9;
+        }
+        double F(P2 p) => Eff(plane, p) - Eff(other, p);
+
+        return ClipPolygon(
+            poly,
+            p => F(p) <= tol,
+            (p, q) =>
+            {
+                P2 lo = p;
+                P2 hi = q;
+                for (int k = 0; k < 28; k++)
+                {
+                    P2 mid = new((lo.X + hi.X) / 2.0, (lo.Z + hi.Z) / 2.0);
+                    if (F(p) <= tol == F(mid) <= tol)
+                        lo = mid;
+                    else
+                        hi = mid;
+                }
+
+                return new P2((lo.X + hi.X) / 2.0, (lo.Z + hi.Z) / 2.0);
+            });
+    }
+
+    // Keep the polygon where this eave's plane is at or above its eave line
+    // (HeightAt >= 0): the front, roofed side (invert -> the back side).
+    // Linear -> exact on a convex piece.
+    private static List<P2> ClipFrontHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
+    {
+        const double tol = 0.01;
+        return ClipPolygon(
+            poly,
+            p => invert ? plane.HeightAt(p) <= tol : plane.HeightAt(p) >= -tol,
+            (p, q) =>
+            {
+                double hp = plane.HeightAt(p);
+                double hq = plane.HeightAt(q);
+                double denom = hp - hq;
+                double s = Math.Abs(denom) <= 1e-12 ? 0 : hp / denom;
+                return new P2(p.X + (q.X - p.X) * s, p.Z + (q.Z - p.Z) * s);
+            });
+    }
+
+    // The footprint edge an eave guide lies on (matched by its endpoints).
+    private static int NearestFootprintEdge(IReadOnlyList<P2> footprint, SlopePlane plane)
+    {
+        int n = footprint.Count;
+        int best = -1;
+        double bestScore = double.PositiveInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            P2 a = footprint[i];
+            P2 b = footprint[(i + 1) % n];
+            double score = Math.Min(
+                Distance(a, plane.Start) + Distance(b, plane.End),
+                Distance(a, plane.End) + Distance(b, plane.Start));
+            P2 mid = new((plane.Start.X + plane.End.X) / 2.0, (plane.Start.Z + plane.End.Z) / 2.0);
+            score = Math.Min(score, DistanceToSegment(mid, a, b) * 2.0);
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    // Keep the polygon side of line(point, dir) that contains reference.
+    private static List<P2> ClipHalfPlane(IReadOnlyList<P2> poly, P2 point, P2 dir, P2 reference)
+    {
+        // Signed area test vs the infinite line through point along dir.
+        double Side(P2 p) => dir.X * (p.Z - point.Z) - dir.Z * (p.X - point.X);
+        double refSide = Side(reference);
+        if (Math.Abs(refSide) <= 1e-9)
+            return poly.ToList();
+
+        bool keepPositive = refSide > 0;
+        return ClipPolygon(
+            poly,
+            p => keepPositive ? Side(p) >= -1e-7 : Side(p) <= 1e-7,
+            (p, q) =>
+            {
+                double sp = Side(p);
+                double sq = Side(q);
+                double denom = sp - sq;
+                double t = Math.Abs(denom) <= 1e-12 ? 0 : sp / denom;
+                return new P2(p.X + (q.X - p.X) * t, p.Z + (q.Z - p.Z) * t);
+            });
     }
 
     // Pre-triangulation behavior, kept as a fallback when the footprint cannot
@@ -905,6 +1040,10 @@ public static partial class ThreeDRoofPreviewBuilder
         public double B { get; }
         public double C { get; }
 
+        // Signed height of this eave's infinite slope plane (linear, so the
+        // lower envelope partitions into clean polygons). A partial eave is
+        // confined to its straight-skeleton cell by the bisector wedge clip
+        // in BuildEnvelopeFaces, so it cannot overshoot into another wing.
         public double HeightAt(P2 point) => A * point.X + B * point.Z + C;
     }
 
