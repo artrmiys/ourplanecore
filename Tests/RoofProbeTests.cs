@@ -382,6 +382,60 @@ internal static class RoofProbeTests
             throw new InvalidOperationException($"{label} roof should rise above base, got maxY {maxY:F2}.");
     }
 
+    // Locks in the fix for "complex roof breaks": envelope faces must tile the
+    // whole footprint - no gaps, no overlap - for a non-convex U-shape.
+    public static void EnvelopeTilesUShapeFootprint()
+    {
+        ThreeDPoint[] footprint =
+        [
+            Point(0, 0), Point(40, 0), Point(40, 30), Point(30, 30),
+            Point(30, 10), Point(10, 10), Point(10, 30), Point(0, 30),
+        ];
+        var model = new ThreeDWallModel
+        {
+            Slabs = [new ThreeDFloorSlab { Label = "U", LevelKey = "roof", ElevationFeet = 10, Points = [.. footprint] }],
+            RoofGuides =
+            [
+                Guide(ThreeDRoofGuideKinds.Eave, 0, 0, 40, 0, "s", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 40, 30, 30, 30, "rn", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 30, 10, 10, 10, "court", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 10, 30, 0, 30, "ln", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 40, 0, 40, 30, "right eave", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 30, 30, 30, 10, "right inner", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 10, 10, 10, 30, "left inner", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 0, 30, 0, 0, "left eave", 0.5),
+            ],
+        };
+
+        ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+        if (result.PlaneBuildBlocked)
+            throw new InvalidOperationException("full-hip U-shape should build.");
+
+        double footprintArea = Math.Abs(PolygonArea(footprint.Select(p => (p.XFeet, p.ZFeet))));
+        double covered = result.Planes
+            .Where(plane => plane.Kind == "roof_face_envelope")
+            .Sum(plane => Math.Abs(PolygonArea(plane.Points.Select(v => (v.XFeet, v.ZFeet)))));
+
+        double ratio = covered / footprintArea;
+        if (ratio < 0.97 || ratio > 1.03)
+            throw new InvalidOperationException(
+                $"U-shape envelope must tile the footprint; covered {covered:F1} of {footprintArea:F1} (ratio {ratio:F3}).");
+    }
+
+    private static double PolygonArea(IEnumerable<(double X, double Z)> points)
+    {
+        var pts = points.ToList();
+        double area = 0;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            (double X, double Z) a = pts[i];
+            (double X, double Z) b = pts[(i + 1) % pts.Count];
+            area += a.X * b.Z - b.X * a.Z;
+        }
+
+        return area / 2.0;
+    }
+
     private static ThreeDPoint Point(double x, double z) =>
         new() { XFeet = x, ZFeet = z };
 

@@ -99,6 +99,7 @@ var tests = new List<(string Name, Action Run)>
     ("3d roof parallel eaves offset ridge by pitch", RoofProbeTests.ParallelEavesOffsetRidgeByPitch),
     ("3d roof l shape mixed eave rake probe", RoofProbeTests.LShapeMixedEaveRakeBuilds),
     ("3d roof u shape multiple valleys probe", RoofProbeTests.UShapeMultipleValleysBuilds),
+    ("3d roof envelope tiles u shape footprint", RoofProbeTests.EnvelopeTilesUShapeFootprint),
     ("3d roof stepped zig zag valleys probe", RoofProbeTests.SteppedZigZagValleysBuilds),
     ("3d roof skewed gable diagonal rake probe", RoofProbeTests.SkewedGableDiagonalRakeBuilds),
     ("3d roof separate islands probe", RoofProbeTests.SeparateGableIslandsBuild),

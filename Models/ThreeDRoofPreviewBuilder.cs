@@ -78,37 +78,17 @@ public static partial class ThreeDRoofPreviewBuilder
         if (slopePlanes.Count == 0)
             return;
 
-        var envelopeFaces = new List<EnvelopeFace>();
-        for (int i = 0; i < slopePlanes.Count; i++)
-        {
-            SlopePlane plane = slopePlanes[i];
-            List<P2> face = ClipToSourceStrip(footprint, plane);
-            if (face.Count < 3 || Math.Abs(SignedArea(face)) < 0.05)
-                continue;
-
-            foreach (SlopePlane other in slopePlanes)
-            {
-                if (ReferenceEquals(plane, other) || AreSamePlane(plane, other))
-                    continue;
-                if (!SourceStripsOverlap(plane, other))
-                    continue;
-
-                face = CleanPolygon(ClipToLowerPlane(face, plane, other));
-                if (face.Count < 3 || Math.Abs(SignedArea(face)) < 0.05)
-                    break;
-            }
-
-            if (face.Count < 3 || Math.Abs(SignedArea(face)) < 0.05)
-                continue;
-
-            if (SignedArea(face) < 0)
-                face.Reverse();
-
-            envelopeFaces.Add(new EnvelopeFace(plane, face, roofBase));
-        }
+        // Revit footprint-roof = lower envelope of the edge slope planes.
+        // Computing it as min(plane) clipped to the raw polygon fails on
+        // non-convex U/S/L footprints (half-plane clipping mangles concave
+        // rings). Instead triangulate the footprint into convex cells and
+        // clip the envelope inside each triangle, where half-plane clipping
+        // is exact. Union of cells = the exact hip/valley roof.
+        List<SlopePlane> envelopePlanes = DistinctSlopePlanes(slopePlanes);
+        List<EnvelopeFace> envelopeFaces = BuildEnvelopeFaces(footprint, envelopePlanes, roofBase);
 
         for (int i = 0; i < envelopeFaces.Count; i++)
-            AddEnvelopeFace(result, envelopeFaces[i], i);
+            AddEnvelopeFace(result, envelopeFaces[i], envelopePlanes.IndexOf(envelopeFaces[i].Plane));
         AddEnvelopeSeams(result, envelopeFaces, footprint);
         AddParallelEaveRidges(result, envelopeFaces, footprint);
         AddConcaveCornerValleys(result, envelopeFaces, footprint);
@@ -147,58 +127,138 @@ public static partial class ThreeDRoofPreviewBuilder
         IReadOnlyList<EnvelopeFace> faces,
         IReadOnlyList<P2> footprint)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        int ridge = 0;
-        int hip = 0;
-        int valley = 0;
+        // Collect every crease between pieces of different planes, then merge
+        // collinear contiguous pieces (the triangulation splits one ridge into
+        // many short segments) into a single ridge/hip/valley line.
+        var raw = new List<SeamSeg>();
         for (int i = 0; i < faces.Count; i++)
         for (int j = i + 1; j < faces.Count; j++)
         {
+            // Triangulated pieces of the same slope plane are flush, not a
+            // crease - only different planes meet at ridge/hip/valley.
+            if (AreSamePlane(faces[i].Plane, faces[j].Plane))
+                continue;
+
             foreach (Segment seam in SharedSegments(faces[i].Points, faces[j].Points))
             {
-                if (Distance(seam.Start, seam.End) < 0.25)
-                    continue;
-
-                string key = SegmentKey(seam);
-                if (!seen.Add(key))
+                if (Distance(seam.Start, seam.End) < 0.02)
                     continue;
 
                 string kind = ClassifySeam(faces[i].Plane, faces[j].Plane, seam, footprint);
-                int number = kind switch
-                {
-                    ThreeDRoofGuideKinds.Hip => ++hip,
-                    ThreeDRoofGuideKinds.Valley => ++valley,
-                    _ => ++ridge,
-                };
-                P2 mid = new((seam.Start.X + seam.End.X) / 2.0, (seam.Start.Z + seam.End.Z) / 2.0);
-                double y = faces[i].RoofBase + Math.Max(0, faces[i].Plane.HeightAt(mid));
-                double startY = faces[i].RoofBase + Math.Max(0, faces[i].Plane.HeightAt(seam.Start));
-                double endY = faces[i].RoofBase + Math.Max(0, faces[i].Plane.HeightAt(seam.End));
-                result.Guides.Add(new ThreeDRoofGuide
-                {
-                    Kind = kind,
-                    Label = $"{ThreeDRoofGuideKinds.Title(kind)} {number}",
-                    PageFolder = string.IsNullOrWhiteSpace(faces[i].Plane.PageFolder) ? faces[j].Plane.PageFolder : faces[i].Plane.PageFolder,
-                    LevelKey = "roof",
-                    ElevationFeet = y,
-                    PitchRisePerFoot = 0,
-                    Color = ThreeDRoofGuideKinds.Color(kind),
-                    Status = GeneratedSeamStatus,
-                    AdjustmentStatus = "generated",
-                    AdjustmentMessage = "Generated where roof planes meet.",
-                    Points =
-                    [
-                        RoofPoint(seam.Start, faces[i].Plane.FeetPerPdf, startY),
-                        RoofPoint(seam.End, faces[i].Plane.FeetPerPdf, endY),
-                    ],
-                    RawPoints =
-                    [
-                        RoofPoint(seam.Start, faces[i].Plane.FeetPerPdf, startY),
-                        RoofPoint(seam.End, faces[i].Plane.FeetPerPdf, endY),
-                    ],
-                });
+                raw.Add(new SeamSeg(seam.Start, seam.End, kind, faces[i].Plane, faces[i].RoofBase));
             }
         }
+
+        int ridge = 0;
+        int hip = 0;
+        int valley = 0;
+        foreach (SeamSeg seam in MergeSeamSegments(raw))
+        {
+            if (Distance(seam.Start, seam.End) < 0.25)
+                continue;
+
+            int number = seam.Kind switch
+            {
+                ThreeDRoofGuideKinds.Hip => ++hip,
+                ThreeDRoofGuideKinds.Valley => ++valley,
+                _ => ++ridge,
+            };
+            double startY = seam.RoofBase + Math.Max(0, seam.Plane.HeightAt(seam.Start));
+            double endY = seam.RoofBase + Math.Max(0, seam.Plane.HeightAt(seam.End));
+            double midY = seam.RoofBase + Math.Max(0, seam.Plane.HeightAt(
+                new P2((seam.Start.X + seam.End.X) / 2.0, (seam.Start.Z + seam.End.Z) / 2.0)));
+            result.Guides.Add(new ThreeDRoofGuide
+            {
+                Kind = seam.Kind,
+                Label = $"{ThreeDRoofGuideKinds.Title(seam.Kind)} {number}",
+                PageFolder = seam.Plane.PageFolder,
+                LevelKey = "roof",
+                ElevationFeet = midY,
+                PitchRisePerFoot = 0,
+                Color = ThreeDRoofGuideKinds.Color(seam.Kind),
+                Status = GeneratedSeamStatus,
+                AdjustmentStatus = "generated",
+                AdjustmentMessage = "Generated where roof planes meet.",
+                Points =
+                [
+                    RoofPoint(seam.Start, seam.Plane.FeetPerPdf, startY),
+                    RoofPoint(seam.End, seam.Plane.FeetPerPdf, endY),
+                ],
+                RawPoints =
+                [
+                    RoofPoint(seam.Start, seam.Plane.FeetPerPdf, startY),
+                    RoofPoint(seam.End, seam.Plane.FeetPerPdf, endY),
+                ],
+            });
+        }
+    }
+
+    private sealed record SeamSeg(P2 Start, P2 End, string Kind, SlopePlane Plane, double RoofBase);
+
+    // Greedily fuse seam pieces that share a kind and lie on the same line
+    // (small angle + offset tolerance) and overlap or nearly touch.
+    private static List<SeamSeg> MergeSeamSegments(List<SeamSeg> segments)
+    {
+        var merged = new List<SeamSeg>();
+        foreach (SeamSeg segment in segments)
+        {
+            SeamSeg current = segment;
+            bool fused = true;
+            while (fused)
+            {
+                fused = false;
+                for (int i = 0; i < merged.Count; i++)
+                {
+                    if (merged[i].Kind != current.Kind)
+                        continue;
+                    if (!TryFuseSeam(merged[i], current, out SeamSeg combined))
+                        continue;
+
+                    current = combined;
+                    merged.RemoveAt(i);
+                    fused = true;
+                    break;
+                }
+            }
+
+            merged.Add(current);
+        }
+
+        return merged;
+    }
+
+    private static bool TryFuseSeam(SeamSeg a, SeamSeg b, out SeamSeg fused)
+    {
+        fused = a;
+        P2 dir = Subtract(a.End, a.Start);
+        double len = Math.Sqrt(dir.X * dir.X + dir.Z * dir.Z);
+        if (len <= 0.000001)
+            return false;
+
+        P2 unit = new(dir.X / len, dir.Z / len);
+        if (DistanceToLine(b.Start, a.Start, a.End) > 0.06 ||
+            DistanceToLine(b.End, a.Start, a.End) > 0.06)
+        {
+            return false;
+        }
+
+        double a0 = 0;
+        double a1 = len;
+        double b0 = Dot(Subtract(b.Start, a.Start), unit);
+        double b1 = Dot(Subtract(b.End, a.Start), unit);
+        double lo = Math.Min(a0, Math.Min(b0, b1));
+        double hi = Math.Max(a1, Math.Max(b0, b1));
+
+        // overlap or a small gap between the projected intervals
+        if (Math.Max(b0, b1) < a0 - 0.35 || Math.Min(b0, b1) > a1 + 0.35)
+            return false;
+
+        fused = a with
+        {
+            Start = new P2(a.Start.X + unit.X * lo, a.Start.Z + unit.Z * lo),
+            End = new P2(a.Start.X + unit.X * hi, a.Start.Z + unit.Z * hi),
+        };
+        return true;
     }
 
     private static IEnumerable<Segment> SharedSegments(IReadOnlyList<P2> first, IReadOnlyList<P2> second)
@@ -363,6 +423,123 @@ public static partial class ThreeDRoofPreviewBuilder
         }
 
         return merged;
+    }
+
+    // Collapse coplanar slope planes (e.g. a split eave) so the envelope is
+    // computed over the true distinct slopes; union their guide ids.
+    private static List<SlopePlane> DistinctSlopePlanes(IReadOnlyList<SlopePlane> planes)
+    {
+        var distinct = new List<SlopePlane>();
+        foreach (SlopePlane plane in planes)
+        {
+            SlopePlane? same = distinct.FirstOrDefault(existing => AreSamePlane(existing, plane));
+            if (same == null)
+            {
+                distinct.Add(plane);
+                continue;
+            }
+
+            foreach (string guideId in plane.GuideIds)
+            {
+                if (!same.GuideIds.Contains(guideId, StringComparer.Ordinal))
+                    same.GuideIds.Add(guideId);
+            }
+        }
+
+        return distinct;
+    }
+
+    // Exact lower envelope: triangulate the footprint into convex cells, then
+    // inside each triangle keep, per plane, the region where that plane is the
+    // lowest. Half-plane clipping is exact on a convex triangle, so this works
+    // for any footprint - simple gable, full hip, or non-convex U/S/L.
+    private static List<EnvelopeFace> BuildEnvelopeFaces(
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<SlopePlane> planes,
+        double roofBase)
+    {
+        var faces = new List<EnvelopeFace>();
+        ThreeDPolygonTriangulation tri = ThreeDPolygonTriangulator.Triangulate(
+            footprint.Select(p => new ThreeDPoint { XFeet = p.X, ZFeet = p.Z }).ToList());
+
+        if (!tri.Success || tri.TriangleIndices.Count < 3)
+            return BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
+
+        for (int t = 0; t + 2 < tri.TriangleIndices.Count; t += 3)
+        {
+            List<P2> triangle =
+            [
+                new(tri.Points[tri.TriangleIndices[t]].XFeet, tri.Points[tri.TriangleIndices[t]].ZFeet),
+                new(tri.Points[tri.TriangleIndices[t + 1]].XFeet, tri.Points[tri.TriangleIndices[t + 1]].ZFeet),
+                new(tri.Points[tri.TriangleIndices[t + 2]].XFeet, tri.Points[tri.TriangleIndices[t + 2]].ZFeet),
+            ];
+            if (Math.Abs(SignedArea(triangle)) < 0.0005)
+                continue;
+            if (SignedArea(triangle) < 0)
+                triangle.Reverse();
+
+            foreach (SlopePlane plane in planes)
+            {
+                List<P2> region = triangle.ToList();
+                foreach (SlopePlane other in planes)
+                {
+                    if (ReferenceEquals(plane, other) || AreSamePlane(plane, other))
+                        continue;
+
+                    region = CleanPolygon(ClipToLowerPlane(region, plane, other));
+                    if (region.Count < 3 || Math.Abs(SignedArea(region)) < 0.0005)
+                        break;
+                }
+
+                if (region.Count < 3 || Math.Abs(SignedArea(region)) < 0.0005)
+                    continue;
+
+                if (SignedArea(region) < 0)
+                    region.Reverse();
+
+                faces.Add(new EnvelopeFace(plane, region, roofBase));
+            }
+        }
+
+        return faces.Count > 0 ? faces : BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
+    }
+
+    // Pre-triangulation behavior, kept as a fallback when the footprint cannot
+    // be triangulated (e.g. self-touching loops).
+    private static List<EnvelopeFace> BuildEnvelopeFacesLegacy(
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<SlopePlane> planes,
+        double roofBase)
+    {
+        var faces = new List<EnvelopeFace>();
+        foreach (SlopePlane plane in planes)
+        {
+            List<P2> face = ClipToSourceStrip(footprint, plane);
+            if (face.Count < 3 || Math.Abs(SignedArea(face)) < 0.05)
+                continue;
+
+            foreach (SlopePlane other in planes)
+            {
+                if (ReferenceEquals(plane, other) || AreSamePlane(plane, other))
+                    continue;
+                if (!SourceStripsOverlap(plane, other))
+                    continue;
+
+                face = CleanPolygon(ClipToLowerPlane(face, plane, other));
+                if (face.Count < 3 || Math.Abs(SignedArea(face)) < 0.05)
+                    break;
+            }
+
+            if (face.Count < 3 || Math.Abs(SignedArea(face)) < 0.05)
+                continue;
+
+            if (SignedArea(face) < 0)
+                face.Reverse();
+
+            faces.Add(new EnvelopeFace(plane, face, roofBase));
+        }
+
+        return faces;
     }
 
     private static bool AreSamePlane(SlopePlane a, SlopePlane b) =>
