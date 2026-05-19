@@ -103,11 +103,20 @@ public sealed class NewItemDialog : Window
 
         panel.Children.Add(new TextBlock { Text = "Color:", Margin = new Thickness(0, 10, 0, 4) });
 
-        string selectedHex = NormalizeColor(defaultColor);
+        string selectedHex = SanitizeColor(defaultColor);
+
+        // The caller hands us a per-takeoff random color; keep it as the real
+        // default. Surface it as its own "Auto" swatch when it is not one of
+        // the presets so the user still sees what is selected and can switch.
+        var palette = new List<(string Label, string Hex)>();
+        if (!Presets.Any(p => string.Equals(p.Hex, selectedHex, System.StringComparison.OrdinalIgnoreCase)))
+            palette.Add(("Auto", selectedHex));
+        palette.AddRange(Presets);
+
         var swatches = new List<Border>();
         var colorPanel = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
 
-        foreach (var (label, hex) in Presets)
+        foreach (var (label, hex) in palette)
         {
             var swatch = new Border
             {
@@ -128,7 +137,7 @@ public sealed class NewItemDialog : Window
         for (int i = 0; i < swatches.Count; i++)
         {
             int   idx = i;
-            string hex = Presets[i].Hex;
+            string hex = palette[i].Hex;
             swatches[i].MouseLeftButtonDown += (_, _) =>
             {
                 selectedHex = hex;
@@ -136,7 +145,7 @@ public sealed class NewItemDialog : Window
                 swatches[idx].BorderBrush = Brushes.White;
             };
         }
-        int selectedIndex = System.Array.FindIndex(Presets, p => p.Hex == selectedHex);
+        int selectedIndex = palette.FindIndex(p => string.Equals(p.Hex, selectedHex, System.StringComparison.OrdinalIgnoreCase));
         if (selectedIndex < 0) selectedIndex = 0;
         swatches[selectedIndex].BorderBrush = Brushes.White;   // default selection highlight
 
@@ -170,12 +179,19 @@ public sealed class NewItemDialog : Window
     private static string NormalizeType(string value) =>
         value is "area" or "point" or "count" ? (value == "count" ? "point" : value) : "line";
 
-    private static string NormalizeColor(string value)
+    private static string SanitizeColor(string value)
     {
-        foreach (var (_, hex) in Presets)
+        if (!string.IsNullOrWhiteSpace(value))
         {
-            if (string.Equals(hex, value, System.StringComparison.OrdinalIgnoreCase))
-                return hex;
+            try
+            {
+                var c = (Color)ColorConverter.ConvertFromString(value.Trim());
+                return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+            }
+            catch
+            {
+                // fall through to default
+            }
         }
         return Presets[0].Hex;
     }
