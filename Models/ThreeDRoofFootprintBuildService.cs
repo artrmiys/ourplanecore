@@ -354,6 +354,7 @@ public static class ThreeDRoofFootprintBuildService
                 PageFolder = component.PageFolder,
                 ElevationFeet = elevationFeet,
                 LevelKey = "roof",
+                DefinesSlope = false,
                 PitchRisePerFoot = 0,
                 Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Rake),
                 Status = GeneratedStatus,

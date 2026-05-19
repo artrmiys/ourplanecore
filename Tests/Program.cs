@@ -89,6 +89,9 @@ var tests = new List<(string Name, Action Run)>
     ("3d auto roof preserves manual eaves", ThreeDAutoRoofPreservesManualEaves),
     ("3d model store persists generated model", ThreeDModelStorePersistsGeneratedModel),
     ("3d model store persists roof guides", ThreeDModelStorePersistsRoofGuides),
+    ("3d model store infers legacy defines slope", ThreeDModelStoreInfersLegacyDefinesSlope),
+    ("roof pitch text parses and formats", RoofPitchTextParsesAndFormats),
+    ("3d roof per edge defines slope controls planes", ThreeDRoofPerEdgeDefinesSlopeControlsPlanes),
     ("3d roof base builder unions adjacent rf areas", ThreeDRoofBaseBuilderUnionsAdjacentRfAreas),
     ("3d roof generation requires eave edges", ThreeDRoofGenerationRequiresEaveEdges),
     ("3d roof eave pitch generates complex footprint mesh", ThreeDRoofEavePitchGeneratesComplexFootprintMesh),
@@ -1290,6 +1293,7 @@ static void ThreeDRoofFootprintBuilderCreatesRakeEdgesFromRfAreas()
         foreach (ThreeDRoofGuide guide in footprint.Guides)
         {
             guide.Kind = ThreeDRoofGuideKinds.Eave;
+            guide.DefinesSlope = true;
             guide.PitchRisePerFoot = 0.5;
             guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
         }
@@ -1365,6 +1369,7 @@ static void ThreeDAutoRoofPreservesManualEaves()
             0.5);
 
         footprint.Guides[0].Kind = ThreeDRoofGuideKinds.Eave;
+        footprint.Guides[0].DefinesSlope = true;
         footprint.Guides[0].Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
         footprint.Guides[0].PitchRisePerFoot = 0.25;
         footprint.Guides[0].AdjustmentStatus = "manual";
@@ -1419,7 +1424,7 @@ static void ThreeDRoofGenerationRequiresEaveEdges()
 
     AssertTrue(result.PlaneBuildBlocked, "roof generation should wait for selected eave edges");
     AssertEqual("0", result.Planes.Count.ToString(), "rake-only roof base should not generate a fake roof");
-    AssertTrue(result.Messages.Any(message => message.Contains("Eave", StringComparison.OrdinalIgnoreCase)), "missing eave selection should be explained");
+    AssertTrue(result.Messages.Any(message => message.Contains("Slope", StringComparison.OrdinalIgnoreCase)), "missing slope-defining selection should be explained");
 }
 
 static void ThreeDRoofEavePitchGeneratesComplexFootprintMesh()
@@ -1439,6 +1444,7 @@ static void ThreeDRoofEavePitchGeneratesComplexFootprintMesh()
         foreach (ThreeDRoofGuide guide in footprint.Guides)
         {
             guide.Kind = ThreeDRoofGuideKinds.Eave;
+            guide.DefinesSlope = true;
             guide.PitchRisePerFoot = 0.5;
             guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
         }
@@ -1567,6 +1573,9 @@ static void ThreeDModelStorePersistsRoofGuides()
                     Label = "Eave 1",
                     PageFolder = @"C:\job\Pages\A101",
                     ElevationFeet = 10,
+                    DefinesSlope = true,
+                    OverhangFeet = 0.5,
+                    PitchRisePerFoot = 0.5,
                     Points =
                     [
                         new ThreeDRoofGuidePoint { PdfX = 1, PdfY = 2, XFeet = 10, ZFeet = 20 },
@@ -1583,7 +1592,110 @@ static void ThreeDModelStorePersistsRoofGuides()
         AssertEqual("1", loaded!.RoofGuides.Count.ToString(), "loaded roof guide count");
         AssertEqual(ThreeDRoofGuideKinds.Eave, loaded.RoofGuides[0].Kind, "loaded roof edge kind");
         AssertClose(30, loaded.RoofGuides[0].Points[1].XFeet, "loaded roof guide x feet");
+        AssertTrue(loaded.RoofGuides[0].DefinesSlope, "loaded roof edge keeps DefinesSlope");
+        AssertClose(0.5, loaded.RoofGuides[0].OverhangFeet, "loaded roof edge keeps overhang feet");
+        AssertClose(0.5, loaded.RoofGuides[0].PitchRisePerFoot, "loaded roof edge keeps pitch");
     });
+}
+
+static void ThreeDModelStoreInfersLegacyDefinesSlope()
+{
+    WithTempJob("3d_model_store_legacy_roof", job =>
+    {
+        // A pre-DefinesSlope model: slope intent lived only in Kind == eave.
+        string path = ThreeDModelStore.ModelPath(job);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            """
+            {
+              "Source": "legacy",
+              "RoofGuides": [
+                { "Kind": "eave", "Label": "Eave 1", "PitchRisePerFoot": 0.5,
+                  "Points": [ { "XFeet": 0, "ZFeet": 0 }, { "XFeet": 20, "ZFeet": 0 } ] },
+                { "Kind": "rake", "Label": "Rake 1",
+                  "Points": [ { "XFeet": 20, "ZFeet": 0 }, { "XFeet": 20, "ZFeet": 10 } ] }
+              ]
+            }
+            """);
+
+        ThreeDWallModel? loaded = ThreeDModelStore.Load(job);
+
+        AssertTrue(loaded != null, "legacy model should load");
+        AssertTrue(loaded!.RoofGuides[0].DefinesSlope, "legacy eave guide infers DefinesSlope");
+        AssertTrue(!loaded.RoofGuides[1].DefinesSlope, "legacy rake guide stays non-slope");
+    });
+}
+
+static void RoofPitchTextParsesAndFormats()
+{
+    AssertTrue(RoofPitchText.TryParse("6/12", out double a) && Math.Abs(a - 0.5) < 1e-6, "6/12 -> 0.5");
+    AssertTrue(RoofPitchText.TryParse("6:12", out double b) && Math.Abs(b - 0.5) < 1e-6, "6:12 -> 0.5");
+    AssertTrue(RoofPitchText.TryParse("6 in 12", out double c) && Math.Abs(c - 0.5) < 1e-6, "6 in 12 -> 0.5");
+    AssertTrue(RoofPitchText.TryParse("4", out double d) && Math.Abs(d - 4.0 / 12.0) < 1e-6, "bare 4 -> 4/12");
+    AssertTrue(RoofPitchText.TryParse("0.333", out double e) && Math.Abs(e - 0.333) < 1e-6, "0.333 -> rise per foot");
+    AssertTrue(!RoofPitchText.TryParse("", out _), "empty pitch rejected");
+    AssertTrue(!RoofPitchText.TryParse("bad", out _), "bad pitch rejected");
+    AssertEqual("6/12", RoofPitchText.Format(0.5), "0.5 formats to 6/12");
+    AssertEqual("4/12", RoofPitchText.Format(4.0 / 12.0), "4/12 round-trips");
+}
+
+static void ThreeDRoofPerEdgeDefinesSlopeControlsPlanes()
+{
+    static ThreeDFloorSlab RoofSquare() => new()
+    {
+        LevelKey = "roof",
+        ElevationFeet = 10,
+        Points =
+        [
+            new ThreeDPoint { XFeet = 0, ZFeet = 0 },
+            new ThreeDPoint { XFeet = 40, ZFeet = 0 },
+            new ThreeDPoint { XFeet = 40, ZFeet = 30 },
+            new ThreeDPoint { XFeet = 0, ZFeet = 30 },
+        ],
+    };
+
+    static ThreeDRoofGuide Edge(double x1, double z1, double x2, double z2, string label) => new()
+    {
+        Kind = ThreeDRoofGuideKinds.Rake,
+        Label = label,
+        LevelKey = "roof",
+        ElevationFeet = 10,
+        Points =
+        [
+            new ThreeDRoofGuidePoint { XFeet = x1, ZFeet = z1, PdfX = x1, PdfY = z1 },
+            new ThreeDRoofGuidePoint { XFeet = x2, ZFeet = z2, PdfX = x2, PdfY = z2 },
+        ],
+        RawPoints =
+        [
+            new ThreeDRoofGuidePoint { XFeet = x1, ZFeet = z1, PdfX = x1, PdfY = z1 },
+            new ThreeDRoofGuidePoint { XFeet = x2, ZFeet = z2, PdfX = x2, PdfY = z2 },
+        ],
+    };
+
+    var south = Edge(0, 0, 40, 0, "South");
+    var north = Edge(0, 30, 40, 30, "North");
+    var model = new ThreeDWallModel
+    {
+        Slabs = [RoofSquare()],
+        RoofGuides = [south, north],
+    };
+
+    ThreeDRoofBuildResult noSlope = ThreeDRoofBuildService.Build(model);
+    AssertTrue(noSlope.PlaneBuildBlocked, "no DefinesSlope edge blocks the roof");
+
+    south.DefinesSlope = true;
+    south.PitchRisePerFoot = 0.5;
+    ThreeDRoofBuildResult oneSlope = ThreeDRoofBuildService.Build(model);
+    AssertTrue(!oneSlope.PlaneBuildBlocked && oneSlope.Planes.Count >= 1,
+        "one DefinesSlope eave builds a single-slope roof");
+
+    north.DefinesSlope = true;
+    north.PitchRisePerFoot = 0.25;
+    ThreeDRoofBuildResult twoSlope = ThreeDRoofBuildService.Build(model);
+    AssertTrue(twoSlope.Planes.Count >= 2,
+        "two opposite DefinesSlope eaves with different pitch build two faces");
+    AssertTrue(twoSlope.Guides.Any(guide => guide.Kind == ThreeDRoofGuideKinds.Ridge),
+        "opposite slope eaves still generate a ridge seam");
 }
 
 static void ThreeDSlabTriangulatorHandlesConcaveAreas()
@@ -3004,6 +3116,7 @@ static ThreeDRoofGuide RoofGuide(string kind, double x1, double z1, double x2, d
         PageFolder = @"C:\job\Pages\A101",
         ElevationFeet = 9.1,
         PitchRisePerFoot = pitchRisePerFoot,
+        DefinesSlope = ThreeDRoofGuideKinds.Normalize(kind) == ThreeDRoofGuideKinds.Eave,
         Color = ThreeDRoofGuideKinds.Color(kind),
         Points =
         [

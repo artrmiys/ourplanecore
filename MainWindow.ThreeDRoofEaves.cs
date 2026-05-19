@@ -208,6 +208,8 @@ public partial class MainWindow
             ElevationFeet = source.ElevationFeet,
             PitchRisePerFoot = cleanKind == ThreeDRoofGuideKinds.Eave ? pitchRisePerFoot : 0,
             Color = ThreeDRoofGuideKinds.Color(cleanKind),
+            DefinesSlope = cleanKind == ThreeDRoofGuideKinds.Eave,
+            OverhangFeet = source.OverhangFeet,
             Status = source.Status,
             AdjustmentStatus = "snapped",
             AdjustmentMessage = $"Split from {source.Label}: {note}.",

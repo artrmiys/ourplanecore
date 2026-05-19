@@ -14,6 +14,10 @@ public partial class MainWindow
     private TextBox? _threeDRoofPitchBox;
     private Button? _threeDApplyWallButton;
     private Button? _threeDApplyGroupButton;
+    private CheckBox? _threeDRoofDefinesSlopeBox;
+    private TextBox? _threeDRoofEdgePitchBox;
+    private TextBox? _threeDRoofEdgeOverhangBox;
+    private Button? _threeDApplyRoofEdgeButton;
     private DockPanel BuildThreeDSidePanel()
     {
         var panel = new DockPanel { Margin = new Thickness(2) };
@@ -159,6 +163,8 @@ public partial class MainWindow
         actions.Children.Add(_threeDApplyGroupButton);
         editor.Children.Add(actions);
 
+        editor.Children.Add(BuildThreeDRoofEdgeEditor());
+
         var border = new Border
         {
             BorderThickness = new Thickness(1),
@@ -169,6 +175,64 @@ public partial class MainWindow
         border.SetResourceReference(Border.BackgroundProperty, "ControlBackgroundBrush");
         border.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
         UpdateThreeDEditor();
+        return border;
+    }
+
+    // Revit-style per-edge roof properties. Edges are selected on the PDF
+    // sheet (Roof Edge Select); their slope/pitch/overhang are edited here.
+    private Border BuildThreeDRoofEdgeEditor()
+    {
+        var stack = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+        var header = new TextBlock
+        {
+            Text = "Roof Edge",
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        header.SetResourceReference(Control.ForegroundProperty, "SecondaryForegroundBrush");
+        stack.Children.Add(header);
+
+        _threeDRoofDefinesSlopeBox = new CheckBox
+        {
+            Content = "Defines Slope",
+            FontSize = 11,
+            IsThreeState = true,
+            Margin = new Thickness(0, 0, 0, 4),
+            ToolTip = "When on, this roof base edge contributes a slope plane (Revit \"Defines Slope\").",
+        };
+        _threeDRoofDefinesSlopeBox.Click += (_, _) =>
+        {
+            // A user click resolves the indeterminate (mixed) state to on.
+            if (_threeDRoofDefinesSlopeBox.IsChecked == null)
+                _threeDRoofDefinesSlopeBox.IsChecked = true;
+        };
+        stack.Children.Add(_threeDRoofDefinesSlopeBox);
+
+        var inputs = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 4) };
+        _threeDRoofEdgePitchBox = ThreeDEditBox("Pitch as rise/run, e.g. 6/12");
+        _threeDRoofEdgeOverhangBox = ThreeDEditBox("Overhang in inches (recorded; projection geometry in a later pass)");
+        inputs.Children.Add(_threeDRoofEdgePitchBox);
+        inputs.Children.Add(_threeDRoofEdgeOverhangBox);
+        stack.Children.Add(inputs);
+
+        _threeDApplyRoofEdgeButton = ThreeDSideButton(
+            "Apply Edge",
+            "Apply Defines Slope, pitch, and overhang to the selected roof edge(s) and rebuild the roof",
+            ApplyThreeDRoofEdgeProperties);
+        stack.Children.Add(_threeDApplyRoofEdgeButton);
+
+        var border = new Border
+        {
+            Margin = new Thickness(0, 4, 0, 0),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6),
+            Child = stack,
+        };
+        border.SetResourceReference(Border.BackgroundProperty, "ControlBackgroundBrush");
+        border.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
         return border;
     }
 
@@ -241,6 +305,49 @@ public partial class MainWindow
         _threeDThicknessBox.IsEnabled = hasWall;
         _threeDApplyWallButton.IsEnabled = hasWall;
         _threeDApplyGroupButton.IsEnabled = hasWall;
+
+        UpdateThreeDRoofEdgeEditor(SelectedThreeDRoofGuides());
+    }
+
+    private void UpdateThreeDRoofEdgeEditor(IReadOnlyList<ThreeDRoofGuide> guides)
+    {
+        if (_threeDRoofDefinesSlopeBox == null ||
+            _threeDRoofEdgePitchBox == null ||
+            _threeDRoofEdgeOverhangBox == null ||
+            _threeDApplyRoofEdgeButton == null)
+        {
+            return;
+        }
+
+        bool hasSelection = guides.Count > 0;
+        _threeDRoofDefinesSlopeBox.IsEnabled = hasSelection;
+        _threeDRoofEdgePitchBox.IsEnabled = hasSelection;
+        _threeDRoofEdgeOverhangBox.IsEnabled = hasSelection;
+        _threeDApplyRoofEdgeButton.IsEnabled = hasSelection;
+
+        if (!hasSelection)
+        {
+            _threeDRoofDefinesSlopeBox.IsChecked = false;
+            _threeDRoofEdgePitchBox.Text = "";
+            _threeDRoofEdgeOverhangBox.Text = "";
+            return;
+        }
+
+        bool allSlope = guides.All(guide => guide.DefinesSlope);
+        bool noneSlope = guides.All(guide => !guide.DefinesSlope);
+        _threeDRoofDefinesSlopeBox.IsChecked = allSlope ? true : noneSlope ? false : null;
+
+        double firstPitch = guides[0].PitchRisePerFoot;
+        bool samePitch = guides.All(guide => Math.Abs(guide.PitchRisePerFoot - firstPitch) < 0.0005);
+        _threeDRoofEdgePitchBox.Text = samePitch && firstPitch > 0
+            ? RoofPitchText.Format(firstPitch)
+            : "";
+
+        double firstOverhangIn = guides[0].OverhangFeet * 12.0;
+        bool sameOverhang = guides.All(guide => Math.Abs(guide.OverhangFeet * 12.0 - firstOverhangIn) < 0.05);
+        _threeDRoofEdgeOverhangBox.Text = sameOverhang
+            ? firstOverhangIn.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+            : "";
     }
 
     private static Button ThreeDSideButton(string text, string tooltip, Action action)

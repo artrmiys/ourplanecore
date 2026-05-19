@@ -82,7 +82,7 @@ public static class ThreeDRoofFootprintResolver
         out List<ThreeDPoint> loop)
     {
         var segments = guides
-            .Where(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave)
+            .Where(guide => guide.DefinesSlope)
             .Where(guide => guide.Points.Count >= 2)
             .Select(guide => new Segment(
                 ToP2(guide.Points[0]),

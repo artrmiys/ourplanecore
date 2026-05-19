@@ -59,12 +59,33 @@ public static class ThreeDModelStore
 
         try
         {
-            return JsonSerializer.Deserialize<ThreeDWallModel>(File.ReadAllText(path), OurPlaneCoreJobStore.JsonOptions);
+            ThreeDWallModel? model = JsonSerializer.Deserialize<ThreeDWallModel>(File.ReadAllText(path), OurPlaneCoreJobStore.JsonOptions);
+            if (model != null)
+                NormalizeLegacyRoofGuides(model);
+            return model;
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or IOException)
         {
             AppLog.Warn(ex, $"Failed to load 3D wall model {path}");
             return null;
+        }
+    }
+
+    // Pre-DefinesSlope models stored slope intent only in Kind == "eave".
+    // If no guide carries the new flag, infer it from Kind so old jobs still
+    // build a roof. New models always serialize DefinesSlope explicitly.
+    private static void NormalizeLegacyRoofGuides(ThreeDWallModel model)
+    {
+        if (model.RoofGuides.Count == 0 ||
+            model.RoofGuides.Any(guide => guide.DefinesSlope))
+        {
+            return;
+        }
+
+        foreach (ThreeDRoofGuide guide in model.RoofGuides)
+        {
+            guide.DefinesSlope =
+                ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave;
         }
     }
 

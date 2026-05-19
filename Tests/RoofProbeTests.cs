@@ -417,6 +417,7 @@ internal static class RoofProbeTests
             LevelKey = "roof",
             ElevationFeet = 10,
             PitchRisePerFoot = pitchRisePerFoot,
+            DefinesSlope = ThreeDRoofGuideKinds.Normalize(kind) == ThreeDRoofGuideKinds.Eave,
             Color = ThreeDRoofGuideKinds.Color(kind),
             Points =
             [

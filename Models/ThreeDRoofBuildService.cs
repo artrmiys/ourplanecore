@@ -26,9 +26,9 @@ public static class ThreeDRoofBuildService
             return result;
         }
 
-        if (!model.RoofGuides.Any(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave))
+        if (!model.RoofGuides.Any(ThreeDRoofPreviewBuilder.IsSlopeDefiningGuide))
         {
-            result.Messages.Add("Select roof base edges, set them to Eave, and apply pitch before generating the roof.");
+            result.Messages.Add("Select roof base edges, set Defines Slope, and apply pitch before generating the roof.");
             result.PlaneBuildBlocked = true;
             return result;
         }
@@ -53,6 +53,8 @@ public static class ThreeDRoofBuildService
             Points = guide.Points.Select(ClonePoint).ToList(),
             ElevationFeet = guide.ElevationFeet,
             PitchRisePerFoot = guide.PitchRisePerFoot,
+            DefinesSlope = guide.DefinesSlope,
+            OverhangFeet = guide.OverhangFeet,
             Color = guide.Color,
             Status = guide.Status,
             AdjustmentStatus = guide.AdjustmentStatus,

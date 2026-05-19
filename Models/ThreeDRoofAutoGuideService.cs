@@ -72,7 +72,7 @@ public static partial class ThreeDRoofAutoGuideService
         guide.Points.Count >= 2;
 
     private static bool IsManualEave(ThreeDRoofGuide guide) =>
-        ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave &&
+        guide.DefinesSlope &&
         !string.Equals(guide.AdjustmentStatus, AutoAdjustmentStatus, StringComparison.OrdinalIgnoreCase);
 
     private static string GuideRegionKey(ThreeDRoofGuide guide) =>
@@ -96,6 +96,7 @@ public static partial class ThreeDRoofAutoGuideService
 
         guide.Kind = ThreeDRoofGuideKinds.Rake;
         guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Rake);
+        guide.DefinesSlope = false;
         guide.PitchRisePerFoot = 0;
         if (string.Equals(guide.AdjustmentStatus, AutoAdjustmentStatus, StringComparison.OrdinalIgnoreCase))
         {
@@ -150,6 +151,7 @@ public static partial class ThreeDRoofAutoGuideService
     {
         guide.Kind = ThreeDRoofGuideKinds.Eave;
         guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+        guide.DefinesSlope = true;
         guide.PitchRisePerFoot = pitchRisePerFoot;
         guide.AdjustmentStatus = AutoAdjustmentStatus;
         guide.AdjustmentMessage = $"Auto Roof selected this boundary edge as a slope-defining eave at {PitchLabel(pitchRisePerFoot)}.";

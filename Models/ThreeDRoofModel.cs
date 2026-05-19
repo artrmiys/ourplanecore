@@ -20,6 +20,14 @@ public sealed class ThreeDRoofGuide
     public List<ThreeDRoofGuidePoint> Points { get; set; } = [];
     public double ElevationFeet { get; set; }
     public double PitchRisePerFoot { get; set; }
+
+    // Revit "Defines Slope": this edge contributes a slope plane to the roof
+    // envelope. Source of truth for slope; Kind (eave/rake) mirrors it.
+    public bool DefinesSlope { get; set; }
+
+    // Revit per-edge overhang: eave projection beyond the wall, in feet.
+    // Stored/edited now; envelope projection geometry lands in a later slice.
+    public double OverhangFeet { get; set; }
     public string Color { get; set; } = "#8B5CF6";
     public string Status { get; set; } = "guide";
     public string AdjustmentStatus { get; set; } = "";

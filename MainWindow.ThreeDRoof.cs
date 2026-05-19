@@ -202,7 +202,7 @@ public partial class MainWindow
         double autoPitch = ResolveThreeDRoofPitchRisePerFoot();
         int measuredEaves = ApplyAvailableEaveTakeoffsToRoofEdges(anchor, autoPitch);
         ThreeDRoofAutoGuideResult auto = ThreeDRoofAutoGuideService.ApplyAutoEaves(_threeDRoofGuides, autoPitch);
-        if (auto.EaveGuideCount == 0 && !_threeDRoofGuides.Any(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave))
+        if (auto.EaveGuideCount == 0 && !_threeDRoofGuides.Any(ThreeDRoofPreviewBuilder.IsSlopeDefiningGuide))
         {
             TxtStatus.Text = auto.SkippedManualRegionCount > 0
                 ? "3D Auto Roof: roof base has manual eaves, but no auto eave could be selected."
@@ -300,11 +300,13 @@ public partial class MainWindow
 
         string cleanKind = ThreeDRoofGuideKinds.Normalize(kind);
         double pitch = ResolveThreeDRoofPitchRisePerFoot();
+        bool definesSlope = cleanKind == ThreeDRoofGuideKinds.Eave;
         foreach (ThreeDRoofGuide guide in guides)
         {
             guide.Kind = cleanKind;
             guide.Color = ThreeDRoofGuideKinds.Color(cleanKind);
-            guide.PitchRisePerFoot = applyPitch || cleanKind == ThreeDRoofGuideKinds.Eave ? pitch : 0;
+            guide.DefinesSlope = definesSlope;
+            guide.PitchRisePerFoot = applyPitch || definesSlope ? pitch : 0;
             guide.Label = RelabelRoofGuide(guide);
         }
 
@@ -342,6 +344,7 @@ public partial class MainWindow
         {
             guide.Kind = ThreeDRoofGuideKinds.Eave;
             guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+            guide.DefinesSlope = true;
             guide.PitchRisePerFoot = pitch;
             guide.Label = RelabelRoofGuide(guide);
         }
@@ -357,8 +360,7 @@ public partial class MainWindow
     {
         double pitch = ResolveThreeDRoofPitchRisePerFoot();
         int changed = 0;
-        foreach (ThreeDRoofGuide guide in _threeDRoofGuides.Where(guide =>
-                     ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave))
+        foreach (ThreeDRoofGuide guide in _threeDRoofGuides.Where(ThreeDRoofPreviewBuilder.IsSlopeDefiningGuide))
         {
             guide.PitchRisePerFoot = pitch;
             changed++;
@@ -366,13 +368,69 @@ public partial class MainWindow
 
         if (changed == 0)
         {
-            TxtStatus.Text = "3D Roof: no eave edges found to receive pitch.";
+            TxtStatus.Text = "3D Roof: no slope-defining edges found to receive pitch.";
             return;
         }
 
         BuildThreeDRoofPreview();
         TxtStatus.Text = $"3D Roof: applied pitch {PitchLabel(pitch)} to {changed} eave edge(s).";
         LogThreeD($"Roof pitch applied to {changed} eave edge(s): {PitchLabel(pitch)}.");
+    }
+
+    // Revit-style per-edge apply: Defines Slope + pitch + overhang on the
+    // selected roof base edge(s), then rebuild the U/S envelope.
+    private void ApplyThreeDRoofEdgeProperties()
+    {
+        IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
+        if (guides.Count == 0)
+        {
+            TxtStatus.Text = "3D Roof: select one or more roof base edges on the sheet first.";
+            return;
+        }
+
+        bool? definesSlope = _threeDRoofDefinesSlopeBox?.IsChecked;
+        string pitchText = (_threeDRoofEdgePitchBox?.Text ?? "").Trim();
+        string overhangText = (_threeDRoofEdgeOverhangBox?.Text ?? "").Trim();
+
+        bool hasPitch = RoofPitchText.TryParse(pitchText, out double pitch);
+        bool hasOverhang = double.TryParse(
+            overhangText.Replace(',', '.'),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out double overhangInches);
+
+        foreach (ThreeDRoofGuide guide in guides)
+        {
+            if (definesSlope.HasValue)
+            {
+                guide.DefinesSlope = definesSlope.Value;
+                string kind = definesSlope.Value ? ThreeDRoofGuideKinds.Eave : ThreeDRoofGuideKinds.Rake;
+                guide.Kind = kind;
+                guide.Color = ThreeDRoofGuideKinds.Color(kind);
+                if (!definesSlope.Value)
+                    guide.PitchRisePerFoot = 0;
+                guide.Label = RelabelRoofGuide(guide);
+            }
+
+            if (hasPitch && guide.DefinesSlope)
+                guide.PitchRisePerFoot = pitch;
+
+            if (hasOverhang)
+                guide.OverhangFeet = Math.Max(0, overhangInches) / 12.0;
+        }
+
+        BuildThreeDRoofPreview();
+
+        string slopePart = definesSlope switch
+        {
+            true => "Defines Slope on",
+            false => "Defines Slope off",
+            _ => "slope unchanged",
+        };
+        string pitchPart = hasPitch ? $", pitch {PitchLabel(pitch)}" : "";
+        string overhangPart = hasOverhang ? $", overhang {Math.Max(0, overhangInches):0.##} in" : "";
+        TxtStatus.Text = $"3D Roof: {guides.Count} edge(s) - {slopePart}{pitchPart}{overhangPart}.";
+        LogThreeD($"Roof edge properties applied: {guides.Count} edge(s), {slopePart}{pitchPart}{overhangPart}.");
     }
 
     private void ApplySelectedEaveTakeoffsToRoofEdges(TreeViewItem? anchor)
@@ -437,6 +495,7 @@ public partial class MainWindow
                 {
                     guide.Kind = ThreeDRoofGuideKinds.Eave;
                     guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
+                    guide.DefinesSlope = true;
                     guide.PitchRisePerFoot = pitch;
                     guide.AdjustmentStatus = adjustmentStatus;
                     guide.AdjustmentMessage = $"Matched from eave line takeoff {measurement.Name}.";
@@ -562,6 +621,7 @@ public partial class MainWindow
         _threeDRoofIssues.Clear();
         _threeDRoofIssues.AddRange(build.Issues);
         RefreshThreeDRoofGuideOverlay();
+        UpdateThreeDEditor();
 
         if (build.PlaneBuildBlocked || build.Planes.Count == 0)
         {
@@ -668,28 +728,10 @@ public partial class MainWindow
         return Math.Max(wallTop, Math.Max(levelTop, slabTop));
     }
 
-    private double ResolveThreeDRoofPitchRisePerFoot()
-    {
-        string text = (_threeDRoofPitchBox?.Text ?? "").Trim().Replace(',', '.');
-        if (string.IsNullOrWhiteSpace(text))
-            return ThreeDRoofPreviewBuilder.DefaultPitchRisePerFoot;
-
-        string[] parts = text.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 2 &&
-            double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double rise) &&
-            double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double run) &&
-            run > 0)
-        {
-            return Math.Clamp(rise / run, 0.001, 4.0);
-        }
-
-        if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double value))
-        {
-            return Math.Clamp(value > 1 ? value / 12.0 : value, 0.001, 4.0);
-        }
-
-        return ThreeDRoofPreviewBuilder.DefaultPitchRisePerFoot;
-    }
+    private double ResolveThreeDRoofPitchRisePerFoot() =>
+        RoofPitchText.ParseOrDefault(
+            _threeDRoofPitchBox?.Text,
+            ThreeDRoofPreviewBuilder.DefaultPitchRisePerFoot);
 
     private bool TryFindThreeDRoofGuideAt(float pdfX, float pdfY, out ThreeDRoofGuide? guide)
     {
@@ -895,6 +937,8 @@ public partial class MainWindow
             RawPoints = guide.RawPoints.Select(CloneRoofGuidePoint).ToList(),
             Points = guide.Points.Select(CloneRoofGuidePoint).ToList(),
             PitchRisePerFoot = guide.PitchRisePerFoot,
+            DefinesSlope = guide.DefinesSlope,
+            OverhangFeet = guide.OverhangFeet,
         };
 
     private static ThreeDRoofPlane CloneThreeDRoofPlane(ThreeDRoofPlane plane) =>
@@ -951,12 +995,12 @@ public partial class MainWindow
         double pitch = pitchRisePerFoot > 0
             ? pitchRisePerFoot
             : ThreeDRoofPreviewBuilder.DefaultPitchRisePerFoot;
-        return $"{pitch * 12.0:F1}/12";
+        return RoofPitchText.Format(pitch);
     }
 
     private static string RoofGuidePitchLabel(ThreeDRoofGuide guide) =>
-        ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave
+        guide.DefinesSlope
             ? $"pitch {PitchLabel(guide.PitchRisePerFoot)}"
-            : "no pitch";
+            : "no slope";
 
 }

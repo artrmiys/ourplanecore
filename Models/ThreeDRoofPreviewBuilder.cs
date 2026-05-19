@@ -33,7 +33,7 @@ public static partial class ThreeDRoofPreviewBuilder
                 .Where(guide => GuideBelongsToBoundary(guide, boundary))
                 .ToList();
             List<ThreeDRoofGuide> boundarySlopeEdges = boundaryGuides
-                .Where(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave)
+                .Where(IsSlopeDefiningGuide)
                 .ToList();
             if (boundarySlopeEdges.Count == 0)
                 continue;
@@ -45,12 +45,16 @@ public static partial class ThreeDRoofPreviewBuilder
         if (result.Planes.Count > 0)
             return result;
 
-        bool hasEaveEdges = roofGuides.Any(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Eave);
+        bool hasEaveEdges = roofGuides.Any(IsSlopeDefiningGuide);
         result.Messages.Add(!hasEaveEdges
-            ? "Roof generation needs one or more roof base edges marked as Eave with pitch."
+            ? "Roof generation needs one or more roof base edges set to Defines Slope with pitch."
             : "Roof generation needs a roof base layer, not loose guide lines.");
         return result;
     }
+
+    // Slope is driven by the explicit Revit-style flag. Kind (eave/rake) only
+    // mirrors it for color/labeling.
+    internal static bool IsSlopeDefiningGuide(ThreeDRoofGuide guide) => guide.DefinesSlope;
 
     private static void AddFootprintSlopeMesh(
         ThreeDRoofPreviewBuildResult result,
