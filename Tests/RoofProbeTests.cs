@@ -649,6 +649,34 @@ internal static class RoofProbeTests
             string labels = string.Join(", ", flatGenerated.Select(guide => guide.Label));
             throw new InvalidOperationException($"Generated roof seams must not lie flat on the base plane: {labels}.");
         }
+
+        AssertGeneratedValleyFrom(result, Point(28.64603226273148, 38.088401511863424), "upper inside corner");
+        AssertGeneratedValleyFrom(result, Point(26.37896728515625, 45.23588957609953), "lower inside corner");
+    }
+
+    private static void AssertGeneratedValleyFrom(ThreeDRoofBuildResult result, ThreeDPoint expected, string label)
+    {
+        bool found = result.Guides
+            .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
+            .Where(guide => guide.Kind == ThreeDRoofGuideKinds.Valley)
+            .Where(guide => guide.Points.Count >= 2)
+            .Any(guide =>
+            {
+                ThreeDRoofGuidePoint a = guide.Points[0];
+                ThreeDRoofGuidePoint b = guide.Points[^1];
+                return Distance2(a.XFeet, a.ZFeet, expected.XFeet, expected.ZFeet) <= 0.5 ||
+                       Distance2(b.XFeet, b.ZFeet, expected.XFeet, expected.ZFeet) <= 0.5;
+            });
+
+        if (!found)
+            throw new InvalidOperationException($"Eagleview roof should generate a valley from the {label}.");
+    }
+
+    private static double Distance2(double ax, double az, double bx, double bz)
+    {
+        double dx = bx - ax;
+        double dz = bz - az;
+        return Math.Sqrt(dx * dx + dz * dz);
     }
 
     private static double PolygonArea(IEnumerable<(double X, double Z)> points)

@@ -224,11 +224,14 @@ public static partial class ThreeDRoofPreviewBuilder
         Segment seam,
         IReadOnlyList<P2> footprint)
     {
+        if (TryFindTouchedFootprintVertex(seam, footprint, out bool concave) && concave)
+            return ThreeDRoofGuideKinds.Valley;
+
         if (SourceEdgesAreParallel(first, second))
             return ThreeDRoofGuideKinds.Ridge;
 
-        if (TryFindTouchedFootprintVertex(seam, footprint, out bool concave))
-            return concave ? ThreeDRoofGuideKinds.Valley : ThreeDRoofGuideKinds.Hip;
+        if (TryFindTouchedFootprintVertex(seam, footprint, out _))
+            return ThreeDRoofGuideKinds.Hip;
 
         return ThreeDRoofGuideKinds.Ridge;
     }
