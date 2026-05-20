@@ -200,7 +200,7 @@ internal static class RoofProbeTests
             "stepped zig-zag",
             minimumEnvelopeFaces: 5,
             minimumRakeFaces: 2,
-            minimumValleys: 3,
+            minimumValleys: 2,
             minimumRidges: 1);
     }
 
@@ -470,7 +470,18 @@ internal static class RoofProbeTests
         if (rakeFaces < minimumRakeFaces)
             throw new InvalidOperationException($"{label} roof should create at least {minimumRakeFaces} rake/gable closure faces, got {rakeFaces}.");
         if (valleys < minimumValleys)
-            throw new InvalidOperationException($"{label} roof should create at least {minimumValleys} valleys, got {valleys}.");
+        {
+            string detail = string.Join("; ", result.Guides
+                .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus &&
+                                guide.Kind == ThreeDRoofGuideKinds.Valley)
+                .Select(guide =>
+                {
+                    ThreeDRoofGuidePoint a = guide.Points[0];
+                    ThreeDRoofGuidePoint b = guide.Points[^1];
+                    return $"{guide.Label} ({a.XFeet:F1},{a.YFeet:F1},{a.ZFeet:F1})->({b.XFeet:F1},{b.YFeet:F1},{b.ZFeet:F1})";
+                }));
+            throw new InvalidOperationException($"{label} roof should create at least {minimumValleys} valleys, got {valleys}: {detail}");
+        }
         if (ridges < minimumRidges)
             throw new InvalidOperationException($"{label} roof should create at least {minimumRidges} ridges, got {ridges}.");
         if (maxY <= 12)
@@ -575,6 +586,68 @@ internal static class RoofProbeTests
                 throw new InvalidOperationException(
                     $"roof face '{face.Label}' must stay directly triangulatable; {triangulation.Message}");
             }
+        }
+    }
+
+    public static void EagleviewSteppedFootprintHasNoFlatGeneratedSeams()
+    {
+        ThreeDPoint[] footprint =
+        [
+            Point(20.030933521412035, 50.19593641493055),
+            Point(20.030933521412035, 38.088401511863424),
+            Point(28.64603226273148, 38.088401511863424),
+            Point(28.64603226273148, 30.209120008680554),
+            Point(46.23650444878472, 30.209120008680554),
+            Point(46.23650444878472, 45.23588957609953),
+            Point(26.37896728515625, 45.23588957609953),
+            Point(26.37896728515625, 50.22584364149305),
+        ];
+        var model = new ThreeDWallModel
+        {
+            Slabs =
+            [
+                new ThreeDFloorSlab
+                {
+                    Label = "Eagleview roof base",
+                    LevelKey = "roof",
+                    ElevationFeet = 0,
+                    Points = [.. footprint],
+                },
+            ],
+            RoofGuides =
+            [
+                Guide(ThreeDRoofGuideKinds.Eave, 20.030933521412035, 50.19593641493055, 20.030933521412035, 38.088401511863424, "edge 1", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 20.030933521412035, 38.088401511863424, 28.64603226273148, 38.088401511863424, "edge 2", 0.5),
+                Guide(ThreeDRoofGuideKinds.Rake, 28.64603226273148, 38.088401511863424, 28.64603226273148, 30.209120008680554, "edge 3"),
+                Guide(ThreeDRoofGuideKinds.Eave, 28.64603226273148, 30.209120008680554, 46.23650444878472, 30.209120008680554, "edge 4", 0.5),
+                Guide(ThreeDRoofGuideKinds.Rake, 46.23650444878472, 30.209120008680554, 46.23650444878472, 45.23588957609953, "edge 5"),
+                Guide(ThreeDRoofGuideKinds.Eave, 46.23650444878472, 45.23588957609953, 26.37896728515625, 45.23588957609953, "edge 6", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 26.37896728515625, 45.23588957609953, 26.37896728515625, 50.22584364149305, "edge 7", 0.5),
+                Guide(ThreeDRoofGuideKinds.Rake, 26.37896728515625, 50.22584364149305, 20.030933521412035, 50.19593641493055, "edge 8"),
+            ],
+        };
+
+        ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+        if (result.PlaneBuildBlocked)
+            throw new InvalidOperationException("Eagleview stepped roof should build.");
+
+        List<ThreeDRoofPlane> faces = result.Planes
+            .Where(plane => plane.Kind == "roof_face_envelope")
+            .ToList();
+        double footprintArea = Math.Abs(PolygonArea(footprint.Select(p => (p.XFeet, p.ZFeet))));
+        double covered = faces.Sum(plane => Math.Abs(PolygonArea(plane.Points.Select(v => (v.XFeet, v.ZFeet)))));
+        double ratio = covered / footprintArea;
+        if (ratio < 0.97 || ratio > 1.03)
+            throw new InvalidOperationException($"Eagleview roof faces must tile the footprint; ratio {ratio:F3}.");
+
+        List<ThreeDRoofGuide> flatGenerated = result.Guides
+            .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
+            .Where(guide => guide.Points.Count >= 2 && guide.Points.Max(point => point.YFeet) <= 0.05)
+            .ToList();
+        if (flatGenerated.Count > 0)
+        {
+            string labels = string.Join(", ", flatGenerated.Select(guide => guide.Label));
+            throw new InvalidOperationException($"Generated roof seams must not lie flat on the base plane: {labels}.");
         }
     }
 

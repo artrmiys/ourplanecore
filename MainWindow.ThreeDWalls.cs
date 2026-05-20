@@ -172,10 +172,33 @@ public partial class MainWindow
         _threeDRoofGuides.AddRange(model.RoofGuides);
         _threeDRoofPlanes.AddRange(model.RoofPlanes);
         _threeDRoofIssues.AddRange(model.RoofIssues);
+        RebuildPersistedGeneratedRoofIfNeeded();
         ReflowThreeDModelLevels();
         RefreshThreeDRoofGuideOverlay();
         LogThreeD($"Loaded 3D model: {_threeDWallElements.Count} wall segment(s), {_threeDFloorSlabs.Count} slab(s), {_threeDRoofGuides.Count} roof edge(s), {_threeDRoofIssues.Count} roof issue(s).");
         UpdateThreeDEditor();
+    }
+
+    private void RebuildPersistedGeneratedRoofIfNeeded()
+    {
+        bool hasGeneratedRoof =
+            _threeDRoofPlanes.Count > 0 ||
+            _threeDRoofGuides.Any(guide =>
+                string.Equals(guide.Status, ThreeDRoofPreviewBuilder.GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase));
+        if (!hasGeneratedRoof || _threeDFloorSlabs.Count == 0 || _threeDRoofGuides.Count == 0)
+            return;
+
+        ThreeDRoofBuildResult rebuilt = ThreeDRoofBuildService.Build(CurrentThreeDModel());
+        if (rebuilt.PlaneBuildBlocked || rebuilt.Planes.Count == 0)
+            return;
+
+        _threeDRoofGuides.Clear();
+        _threeDRoofGuides.AddRange(rebuilt.Guides);
+        _threeDRoofPlanes.Clear();
+        _threeDRoofPlanes.AddRange(rebuilt.Planes);
+        _threeDRoofIssues.Clear();
+        _threeDRoofIssues.AddRange(rebuilt.Issues);
+        LogThreeD($"Regenerated persisted roof: {_threeDRoofPlanes.Count} mesh face(s), {_threeDRoofGuides.Count} roof edge(s).");
     }
 
     private ThreeDWallModel CurrentThreeDModel() =>

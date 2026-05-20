@@ -7,7 +7,7 @@ public static partial class ThreeDRoofPreviewBuilder
         IReadOnlyList<EnvelopeFace> faces,
         IReadOnlyList<P2> footprint)
     {
-        if (faces.Count < 2 || HasGeneratedValley(result))
+        if (faces.Count < 2)
             return;
 
         int valley = result.Guides.Count(guide => ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Valley);
@@ -20,21 +20,27 @@ public static partial class ThreeDRoofPreviewBuilder
                 continue;
 
             P2 direction = ConcaveValleyDirection(previous, vertex, next, footprint);
-            double length = ConcaveValleyLength(vertex, direction, footprint);
-            if (length < 0.25)
+            if (!TryFindConcaveValleyEnd(vertex, direction, footprint, faces, out P2 end, out double endY))
                 continue;
 
-            P2 end = new(vertex.X + direction.X * length, vertex.Z + direction.Z * length);
+            var candidate = new Segment(vertex, end);
+            if (HasEquivalentGeneratedValley(result, candidate))
+                continue;
+
             P2 mid = new((vertex.X + end.X) / 2.0, (vertex.Z + end.Z) / 2.0);
             double startY = EnvelopeHeightAt(faces, vertex);
-            double endY = EnvelopeHeightAt(faces, end);
+            double midY = EnvelopeHeightAt(faces, mid);
+            double roofBase = faces.Min(face => face.RoofBase);
+            if (!HasMeaningfulGeneratedRise(roofBase, startY, endY))
+                continue;
+
             result.Guides.Add(new ThreeDRoofGuide
             {
                 Kind = ThreeDRoofGuideKinds.Valley,
                 Label = $"Valley {++valley}",
                 PageFolder = faces.Select(face => face.Plane.PageFolder).FirstOrDefault(text => !string.IsNullOrWhiteSpace(text)) ?? "",
                 LevelKey = "roof",
-                ElevationFeet = EnvelopeHeightAt(faces, mid),
+                ElevationFeet = midY,
                 PitchRisePerFoot = 0,
                 Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Valley),
                 Status = GeneratedSeamStatus,
@@ -54,10 +60,26 @@ public static partial class ThreeDRoofPreviewBuilder
         }
     }
 
-    private static bool HasGeneratedValley(ThreeDRoofPreviewBuildResult result) =>
-        result.Guides.Any(guide =>
-            string.Equals(guide.Status, GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase) &&
-            ThreeDRoofGuideKinds.Normalize(guide.Kind) == ThreeDRoofGuideKinds.Valley);
+    private static bool HasEquivalentGeneratedValley(ThreeDRoofPreviewBuildResult result, Segment candidate)
+    {
+        foreach (ThreeDRoofGuide guide in result.Guides)
+        {
+            if (!string.Equals(guide.Status, GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase) ||
+                ThreeDRoofGuideKinds.Normalize(guide.Kind) != ThreeDRoofGuideKinds.Valley ||
+                guide.Points.Count < 2)
+            {
+                continue;
+            }
+
+            var existing = new Segment(
+                new P2(guide.Points[0].XFeet, guide.Points[0].ZFeet),
+                new P2(guide.Points[^1].XFeet, guide.Points[^1].ZFeet));
+            if (EquivalentSegments(existing, candidate))
+                return true;
+        }
+
+        return false;
+    }
 
     private static bool IsConcaveVertex(P2 previous, P2 vertex, P2 next) =>
         Cross(Subtract(vertex, previous), Subtract(next, vertex)) < -0.001;
@@ -74,6 +96,43 @@ public static partial class ThreeDRoofPreviewBuilder
         return PointInPolygon(probe, footprint)
             ? direction
             : new P2(-direction.X, -direction.Z);
+    }
+
+    private static bool TryFindConcaveValleyEnd(
+        P2 vertex,
+        P2 direction,
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<EnvelopeFace> faces,
+        out P2 end,
+        out double endY)
+    {
+        end = vertex;
+        endY = EnvelopeHeightAt(faces, vertex);
+        double length = ConcaveValleyLength(vertex, direction, footprint);
+        if (length < 0.25)
+            return false;
+
+        double bestT = 0;
+        double bestY = endY;
+        const int samples = 48;
+        for (int i = 1; i <= samples; i++)
+        {
+            double t = length * i / samples;
+            P2 point = new(vertex.X + direction.X * t, vertex.Z + direction.Z * t);
+            double y = EnvelopeHeightAt(faces, point);
+            if (y > bestY)
+            {
+                bestY = y;
+                bestT = t;
+            }
+        }
+
+        if (bestT < 0.25)
+            return false;
+
+        end = new P2(vertex.X + direction.X * bestT, vertex.Z + direction.Z * bestT);
+        endY = bestY;
+        return true;
     }
 
     private static double ConcaveValleyLength(P2 vertex, P2 direction, IReadOnlyList<P2> footprint)

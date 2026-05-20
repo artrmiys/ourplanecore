@@ -46,6 +46,9 @@ public static partial class ThreeDRoofPreviewBuilder
                 double y = first.RoofBase + Math.Max(0, first.Plane.HeightAt(mid));
                 double startY = first.RoofBase + Math.Max(0, first.Plane.HeightAt(ridgeSegment.Start));
                 double endY = first.RoofBase + Math.Max(0, first.Plane.HeightAt(ridgeSegment.End));
+                if (!HasMeaningfulGeneratedRise(first.RoofBase, startY, y, endY))
+                    continue;
+
                 result.Guides.Add(new ThreeDRoofGuide
                 {
                     Kind = ThreeDRoofGuideKinds.Ridge,

@@ -85,16 +85,18 @@ public static partial class ThreeDRoofPreviewBuilder
 
             foreach (SlopePlane plane in planes)
             {
-                // Own front half-plane: drop the eave's negative back side.
-                List<P2> front = CleanPolygon(ClipFrontHalfPlane(triangle, plane));
+                // Own active domain: a Revit-style slope edge is finite. It
+                // can slope inward from its own segment, but must not continue
+                // as an infinite eave line past the edge endpoints.
+                List<P2> front = ClipToActiveDomain(triangle, plane);
                 if (front.Count < 3 || Math.Abs(SignedArea(front)) < 0.0004)
                     continue;
 
-                // Exact front-aware lower envelope as a set of convex pieces.
-                // For each competitor j: keep the part behind j's eave as-is
-                // (j does not roof there) and the part in front of j clipped
-                // linearly by i <= j. Every clip is a single line -> exact,
-                // so the per-plane cells partition with no overlap.
+                // Exact active-domain-aware lower envelope as a set of convex
+                // pieces. For each competitor j: keep the parts outside j's
+                // finite slope domain as-is, and clip only the active part by
+                // i <= j. This keeps short eaves from cutting a roof face far
+                // beyond their own endpoints.
                 var pieces = new List<List<P2>> { front };
                 foreach (SlopePlane other in planes)
                 {
@@ -104,16 +106,14 @@ public static partial class ThreeDRoofPreviewBuilder
                     var next = new List<List<P2>>();
                     foreach (List<P2> piece in pieces)
                     {
-                        List<P2> jBack = CleanPolygon(ClipFrontHalfPlane(piece, other, invert: true));
-                        if (jBack.Count >= 3 && Math.Abs(SignedArea(jBack)) >= 0.0004)
-                            next.Add(jBack);
+                        List<P2> jActive;
+                        foreach (List<P2> inactive in SplitByActiveDomain(piece, other, out jActive))
+                            AddEnvelopePiece(next, inactive);
 
-                        List<P2> jFront = CleanPolygon(ClipFrontHalfPlane(piece, other, invert: false));
-                        if (jFront.Count < 3 || Math.Abs(SignedArea(jFront)) < 0.0004)
+                        if (jActive.Count < 3 || Math.Abs(SignedArea(jActive)) < 0.0004)
                             continue;
-                        jFront = CleanPolygon(ClipToLowerPlane(jFront, plane, other));
-                        if (jFront.Count >= 3 && Math.Abs(SignedArea(jFront)) >= 0.0004)
-                            next.Add(jFront);
+
+                        AddEnvelopePiece(next, ClipToLowerPlane(jActive, plane, other));
                     }
 
                     pieces = next;
@@ -289,6 +289,98 @@ public static partial class ThreeDRoofPreviewBuilder
                 return new P2(p.X + (q.X - p.X) * s, p.Z + (q.Z - p.Z) * s);
             });
     }
+
+    private static List<P2> ClipToActiveDomain(IReadOnlyList<P2> poly, SlopePlane plane)
+    {
+        List<P2> active = CleanPolygon(ClipFrontHalfPlane(poly, plane));
+        if (active.Count < 3)
+            return [];
+
+        active = CleanPolygon(ClipSourceStartHalfPlane(active, plane));
+        if (active.Count < 3)
+            return [];
+
+        return CleanPolygon(ClipSourceEndHalfPlane(active, plane));
+    }
+
+    private static IReadOnlyList<List<P2>> SplitByActiveDomain(
+        IReadOnlyList<P2> poly,
+        SlopePlane plane,
+        out List<P2> active)
+    {
+        var inactive = new List<List<P2>>();
+        List<P2> remaining = CleanPolygon(poly);
+        AddEnvelopePiece(inactive, ClipFrontHalfPlane(remaining, plane, invert: true));
+
+        remaining = CleanPolygon(ClipFrontHalfPlane(remaining, plane));
+        if (remaining.Count < 3)
+        {
+            active = [];
+            return inactive;
+        }
+
+        AddEnvelopePiece(inactive, ClipSourceStartHalfPlane(remaining, plane, invert: true));
+        remaining = CleanPolygon(ClipSourceStartHalfPlane(remaining, plane));
+        if (remaining.Count < 3)
+        {
+            active = [];
+            return inactive;
+        }
+
+        AddEnvelopePiece(inactive, ClipSourceEndHalfPlane(remaining, plane, invert: true));
+        active = CleanPolygon(ClipSourceEndHalfPlane(remaining, plane));
+        return inactive;
+    }
+
+    private static void AddEnvelopePiece(List<List<P2>> pieces, IReadOnlyList<P2> polygon)
+    {
+        List<P2> clean = CleanPolygon(polygon);
+        if (clean.Count >= 3 && Math.Abs(SignedArea(clean)) >= 0.0004)
+            pieces.Add(clean);
+    }
+
+    private static List<P2> ClipSourceStartHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
+    {
+        double tolerance = SourceDomainTolerance(plane);
+        return ClipPolygon(
+            poly,
+            point => invert
+                ? SourceProjection(plane, point) <= tolerance
+                : SourceProjection(plane, point) >= -tolerance,
+            (a, b) => IntersectSourceProjectionBoundary(a, b, plane, 0));
+    }
+
+    private static List<P2> ClipSourceEndHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
+    {
+        double length = Distance(plane.Start, plane.End);
+        double tolerance = SourceDomainTolerance(plane);
+        return ClipPolygon(
+            poly,
+            point => invert
+                ? SourceProjection(plane, point) >= length - tolerance
+                : SourceProjection(plane, point) <= length + tolerance,
+            (a, b) => IntersectSourceProjectionBoundary(a, b, plane, length));
+    }
+
+    private static P2 IntersectSourceProjectionBoundary(P2 a, P2 b, SlopePlane plane, double target)
+    {
+        double da = SourceProjection(plane, a) - target;
+        double db = SourceProjection(plane, b) - target;
+        double denom = da - db;
+        if (Math.Abs(denom) <= 0.000001)
+            return a;
+
+        double t = Math.Clamp(da / denom, 0, 1);
+        return new P2(
+            a.X + (b.X - a.X) * t,
+            a.Z + (b.Z - a.Z) * t);
+    }
+
+    private static double SourceProjection(SlopePlane plane, P2 point) =>
+        Dot(Subtract(point, plane.Start), UnitAlong(plane));
+
+    private static double SourceDomainTolerance(SlopePlane plane) =>
+        Math.Clamp(Distance(plane.Start, plane.End) * 0.005, 0.03, 0.15);
 
     // The footprint edge an eave guide lies on (matched by its endpoints).
     private static int NearestFootprintEdge(IReadOnlyList<P2> footprint, SlopePlane plane)

@@ -2,6 +2,8 @@ namespace OurPlaneCore;
 
 public static partial class ThreeDRoofPreviewBuilder
 {
+    private const double GeneratedSeamMinimumRiseFeet = 0.05;
+
     private static void AddEnvelopeSeams(
         ThreeDRoofPreviewBuildResult result,
         IReadOnlyList<EnvelopeFace> faces,
@@ -23,6 +25,8 @@ public static partial class ThreeDRoofPreviewBuilder
             {
                 if (Distance(seam.Start, seam.End) < 0.02)
                     continue;
+                if (!HasGeneratedSeamRise(faces[i], faces[j], seam))
+                    continue;
 
                 string kind = ClassifySeam(faces[i].Plane, faces[j].Plane, seam, footprint);
                 raw.Add(new SeamSeg(seam.Start, seam.End, kind, faces[i].Plane, faces[i].RoofBase));
@@ -35,6 +39,8 @@ public static partial class ThreeDRoofPreviewBuilder
         foreach (SeamSeg seam in MergeSeamSegments(raw))
         {
             if (Distance(seam.Start, seam.End) < 0.25)
+                continue;
+            if (!HasGeneratedSeamRise(seam.Plane, new Segment(seam.Start, seam.End)))
                 continue;
 
             int number = seam.Kind switch
@@ -74,6 +80,23 @@ public static partial class ThreeDRoofPreviewBuilder
     }
 
     private sealed record SeamSeg(P2 Start, P2 End, string Kind, SlopePlane Plane, double RoofBase);
+
+    private static bool HasGeneratedSeamRise(EnvelopeFace first, EnvelopeFace second, Segment seam) =>
+        HasGeneratedSeamRise(first.Plane, seam) || HasGeneratedSeamRise(second.Plane, seam);
+
+    private static bool HasGeneratedSeamRise(SlopePlane plane, Segment seam) =>
+        SeamMaxRelativeHeight(plane, seam) > GeneratedSeamMinimumRiseFeet;
+
+    private static double SeamMaxRelativeHeight(SlopePlane plane, Segment seam)
+    {
+        P2 mid = new((seam.Start.X + seam.End.X) / 2.0, (seam.Start.Z + seam.End.Z) / 2.0);
+        return Math.Max(
+            Math.Max(Math.Max(0, plane.HeightAt(seam.Start)), Math.Max(0, plane.HeightAt(mid))),
+            Math.Max(0, plane.HeightAt(seam.End)));
+    }
+
+    private static bool HasMeaningfulGeneratedRise(double roofBase, params double[] yValues) =>
+        yValues.Length > 0 && yValues.Max() - roofBase > GeneratedSeamMinimumRiseFeet;
 
     // Greedily fuse seam pieces that share a kind and lie on the same line
     // (small angle + offset tolerance) and overlap or nearly touch.
