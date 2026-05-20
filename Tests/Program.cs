@@ -186,6 +186,7 @@ var tests = new List<(string Name, Action Run)>
     ("job recovery snapshot copies metadata only", JobRecoverySnapshotCopiesMetadataOnly),
     ("job recovery snapshot pruning keeps newest", JobRecoverySnapshotPruningKeepsNewest),
     ("app settings job roots dedupe", AppSettingsJobRootsDedupe),
+    ("job picker roots classify local cloud network", JobPickerRootsClassifyLocalCloudNetwork),
     ("app settings path can use env override", AppSettingsPathCanUseEnvOverride),
     ("atomic write ignores stale fixed temp path", AtomicWriteIgnoresStaleFixedTempPath),
     ("app settings recent job preserves pin and thumbnail", AppSettingsRecentPreservesPinAndThumbnail),
@@ -2513,6 +2514,40 @@ static void AppSettingsJobRootsDedupe()
     AppSettingsStore.AddJobsRoot(settings, root + Path.DirectorySeparatorChar);
 
     AssertEqual("1", AppSettingsStore.CurrentJobsRootPaths(settings).Count.ToString(), "deduped roots");
+}
+
+static void JobPickerRootsClassifyLocalCloudNetwork()
+{
+    string localRoot = Path.Combine(Path.GetTempPath(), "opc_local_jobs", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(localRoot);
+    try
+    {
+        JobRootDescriptor local = JobRootSelectorBar.DescribeJobRoot(localRoot);
+        AssertEqual("Local", local.KindLabel, "local root kind");
+        AssertEqual("Ready", local.StatusLabel, "existing root status");
+        AssertEqual(Path.GetFileName(localRoot), local.DisplayName, "root display name");
+
+        AssertEqual(
+            JobRootLocationKind.Cloud.ToString(),
+            JobRootSelectorBar.ClassifyJobRootPath(@"C:\Users\User\OneDrive\OurPlaneCore Jobs").ToString(),
+            "OneDrive root kind");
+        AssertEqual(
+            JobRootLocationKind.Cloud.ToString(),
+            JobRootSelectorBar.ClassifyJobRootPath(@"D:\Dropbox\Shared Takeoffs").ToString(),
+            "Dropbox root kind");
+        AssertEqual(
+            JobRootLocationKind.Network.ToString(),
+            JobRootSelectorBar.ClassifyJobRootPath(@"\\server\shared\jobs").ToString(),
+            "UNC root kind");
+
+        JobRootDescriptor missing = JobRootSelectorBar.DescribeJobRoot(
+            Path.Combine(localRoot, "missing child"));
+        AssertEqual("Missing", missing.StatusLabel, "missing root status");
+    }
+    finally
+    {
+        Directory.Delete(localRoot, recursive: true);
+    }
 }
 
 static void AppSettingsPathCanUseEnvOverride()

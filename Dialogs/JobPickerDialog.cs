@@ -71,7 +71,7 @@ public sealed class JobPickerDialog : Window
     private readonly Action<string>? _removeRecent;
     private readonly List<string> _jobsRootPaths;
     private readonly TextBox _searchBox;
-    private readonly ComboBox _rootFilter;
+    private readonly JobRootSelectorBar? _rootSelector;
     private readonly ListView _list;
     private readonly TextBlock _details;
     private readonly Button _openButton;
@@ -107,7 +107,7 @@ public sealed class JobPickerDialog : Window
         {
             Text = _jobsRootPaths.Count == 0
                 ? "Recent jobs"
-                : $"Recent jobs  |  {_jobsRootPaths.Count} job folder(s)",
+                : $"Choose job source  |  {_jobsRootPaths.Count} job folder(s)",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 8),
         };
@@ -115,20 +115,12 @@ public sealed class JobPickerDialog : Window
         DockPanel.SetDock(title, Dock.Top);
         root.Children.Add(title);
 
-        _rootFilter = new ComboBox
+        if (_jobsRootPaths.Count > 0)
         {
-            MinHeight = 26,
-            Margin = new Thickness(0, 0, 0, 8),
-            ToolTip = "Switch job folder root",
-        };
-        _rootFilter.Items.Add("All job folders");
-        foreach (string rootPath in _jobsRootPaths)
-            _rootFilter.Items.Add(rootPath);
-        _rootFilter.SelectedIndex = 0;
-        if (_jobsRootPaths.Count > 1)
-        {
-            DockPanel.SetDock(_rootFilter, Dock.Top);
-            root.Children.Add(_rootFilter);
+            _rootSelector = new JobRootSelectorBar(_jobsRootPaths);
+            _rootSelector.SelectionChanged += (_, _) => ApplyFilter();
+            DockPanel.SetDock(_rootSelector, Dock.Top);
+            root.Children.Add(_rootSelector);
         }
 
         _searchBox = new TextBox
@@ -193,7 +185,6 @@ public sealed class JobPickerDialog : Window
         root.Children.Add(_list);
 
         _searchBox.TextChanged += (_, _) => ApplyFilter();
-        _rootFilter.SelectionChanged += (_, _) => ApplyFilter();
         _searchBox.PreviewKeyDown += SearchBox_PreviewKeyDown;
         _list.PreviewMouseRightButtonDown += List_PreviewMouseRightButtonDown;
         _list.SelectionChanged += (_, _) => UpdateDetails();
@@ -337,13 +328,11 @@ public sealed class JobPickerDialog : Window
                     item.Source.Contains(query, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-        if (_rootFilter.SelectedIndex > 0 &&
-            _rootFilter.SelectedItem is string selectedRoot &&
-            !string.IsNullOrWhiteSpace(selectedRoot))
+        string selectedRootPath = _rootSelector?.SelectedRootPath ?? "";
+        if (!string.IsNullOrWhiteSpace(selectedRootPath))
         {
-            string rootKey = NormalizePath(selectedRoot);
             visible = visible
-                .Where(item => string.Equals(NormalizePath(item.RootPath), rootKey, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.Equals(NormalizePath(item.RootPath), selectedRootPath, StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
 
@@ -387,11 +376,11 @@ public sealed class JobPickerDialog : Window
 
     private string ResolveSelectedJobsRootPath()
     {
-        if (_rootFilter.SelectedIndex > 0 &&
-            _rootFilter.SelectedItem is string selectedRoot &&
-            IsUsableRoot(selectedRoot))
+        string selectedRootPath = _rootSelector?.SelectedRootPath ?? "";
+        if (!string.IsNullOrWhiteSpace(selectedRootPath) &&
+            IsUsableRoot(selectedRootPath))
         {
-            return NormalizePath(selectedRoot);
+            return NormalizePath(selectedRootPath);
         }
 
         if (_list.SelectedItem is JobPickerItem item)
