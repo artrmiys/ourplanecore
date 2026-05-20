@@ -128,10 +128,10 @@ internal static class TakeoffsTreeRegressionTests
             joists.Contains("area.JoistDirectionLocked = false;", StringComparison.Ordinal),
             "starting a reset should not clear the existing joist direction before new points are captured");
 
-        string viewport = ReadRepoFile(Path.Combine("Controls", "PdfViewport.cs"));
+        string viewportCommands = ReadRepoFile(Path.Combine("Controls", "PdfViewport.ViewCommands.cs"));
         AssertTrue(
-            viewport.Contains("public bool BeginJoistDirectionCapture", StringComparison.Ordinal) &&
-            viewport.Contains("Joist direction was not started", StringComparison.Ordinal),
+            viewportCommands.Contains("public bool BeginJoistDirectionCapture", StringComparison.Ordinal) &&
+            viewportCommands.Contains("Joist direction was not started", StringComparison.Ordinal),
             "viewport should report whether joist direction capture actually started");
 
         string viewportMenu = ReadRepoFile("MainWindow.ViewportContextMenu.cs");
@@ -405,8 +405,8 @@ internal static class TakeoffsTreeRegressionTests
         string treeSearch = ReadRepoFile("MainWindow.TreeSearch.cs");
         string takeoffsClipboard = ReadRepoFile("MainWindow.TakeoffsClipboard.cs");
         string pageLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.cs");
-        string viewportSelection = ReadRepoFile("Controls/PdfViewport.SelectionEditing.cs");
-        string viewport = ReadRepoFile("Controls/PdfViewport.cs");
+        string viewportSelectionState = ReadRepoFile("Controls/PdfViewport.SelectionState.cs");
+        string viewportMeasurementApi = ReadRepoFile("Controls/PdfViewport.MeasurementApi.cs");
 
         AssertTrue(
             xaml.Contains("PagesTreeSearchBox", StringComparison.Ordinal) &&
@@ -424,10 +424,10 @@ internal static class TakeoffsTreeRegressionTests
             pageLegend.Contains("Show {selectedCount} Selected on This Sheet", StringComparison.Ordinal),
             "page linked takeoff menu must support bulk hide and show");
         AssertTrue(
-            viewportSelection.Contains("SetSelectedAnnotations", StringComparison.Ordinal) &&
-            viewportSelection.Contains("DeletePageAnnotations(selected)", StringComparison.Ordinal) &&
-            viewport.Contains("HideVisibleRulerAnnotationsOnActivePage", StringComparison.Ordinal) &&
-            viewport.Contains("ShowAllRulerAnnotationsOnActivePage", StringComparison.Ordinal),
+            viewportSelectionState.Contains("SetSelectedAnnotations", StringComparison.Ordinal) &&
+            viewportSelectionState.Contains("DeletePageAnnotations(selected)", StringComparison.Ordinal) &&
+            viewportMeasurementApi.Contains("HideVisibleRulerAnnotationsOnActivePage", StringComparison.Ordinal) &&
+            viewportMeasurementApi.Contains("ShowAllRulerAnnotationsOnActivePage", StringComparison.Ordinal),
             "viewport markups must support multi-select delete and snapshot-based ruler hiding");
     }
 
