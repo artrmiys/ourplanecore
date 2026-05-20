@@ -232,7 +232,7 @@ public sealed partial class PdfViewport
             CanEditMeasurementVertices(measurement));
 
     private static bool CanEditMeasurementVertices(Measurement measurement) =>
-        measurement.MType is "line" or "area";
+        measurement.MType is "point" or "line" or "area";
 
     private static IEnumerable<MeasurementVertexRef> MeasurementVertices(Measurement measurement)
     {
@@ -300,12 +300,20 @@ public sealed partial class PdfViewport
             .ToList();
 
         int outerDeleteCount = vertices.Count(vertex => !vertex.IsHole);
-        int minOuterPoints = measurement.MType == "area" ? 3 : 2;
+        int minOuterPoints = measurement.MType switch
+        {
+            "area" => 3,
+            "line" => 2,
+            "point" => 1,
+            _ => 1,
+        };
         if (measurement.Points.Count - outerDeleteCount < minOuterPoints)
         {
             error = measurement.MType == "area"
                 ? "Area outer boundary needs at least 3 vertices."
-                : "Line needs at least 2 vertices.";
+                : measurement.MType == "point"
+                    ? "Count needs at least 1 point."
+                    : "Line needs at least 2 vertices.";
             return false;
         }
 

@@ -751,7 +751,9 @@ public sealed partial class PdfViewport
     {
         if (_tool == ViewerTool.Select &&
             pdf.HasValue &&
-            TryHitVertexOnSelectedMeasurement(pdf.Value, out _, out _))
+            (TryHitVertexOnSelectedMeasurement(pdf.Value, out _, out _) ||
+             TryHitEditableVertex(pdf.Value, out Measurement pointVertexMeasurement, out _) &&
+             pointVertexMeasurement.MType == "point"))
         {
             Cursor = Cursors.SizeAll;
             return;

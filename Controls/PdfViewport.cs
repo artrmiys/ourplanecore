@@ -386,8 +386,8 @@ public sealed partial class PdfViewport : SKElement
     private const float SnapMarkerScreenPx = 8f;
     private const float VertexHitToleranceScreenPx = ViewportConstants.VertexHitRadiusScreen;
     private const float MeasurementHitToleranceScreenPx = ViewportConstants.MeasurementHitRadiusScreen;
-    private const float SelectedVertexHitToleranceScreenPx = 32f;
-    private const float SelectedMeasurementHitToleranceScreenPx = 28f;
+    private const float SelectedVertexHitToleranceScreenPx = 12f;
+    private const float SelectedMeasurementHitToleranceScreenPx = 10f;
     private const float MeasurementLabelFontScreenPx = 9f;
     private const float MeasurementLabelPaddingScreenPx = 2f;
     private const float JoistSegmentLabelFontScreenPx = 7f;

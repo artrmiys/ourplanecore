@@ -510,6 +510,62 @@ internal static class TakeoffsTreeRegressionTests
         });
     }
 
+    public static void ViewportCountHotGripsAndTightHitTestAreWired()
+    {
+        string constants = ReadRepoFile(Path.Combine("Models", "ViewportConstants.cs"));
+        string viewport = ReadRepoFile("Controls/PdfViewport.cs");
+        string vertexSelection = ReadRepoFile("Controls/PdfViewport.VertexSelection.cs");
+        string selectionEditing = ReadRepoFile("Controls/PdfViewport.SelectionEditing.cs");
+        string input = ReadRepoFile("Controls/PdfViewport.Input.cs");
+        string boxSelection = ReadRepoFile("Controls/PdfViewport.BoxSelection.cs");
+
+        AssertTrue(
+            constants.Contains("public const float VertexHitRadiusScreen = 10f;", StringComparison.Ordinal) &&
+            constants.Contains("public const float MeasurementHitRadiusScreen = 8f;", StringComparison.Ordinal) &&
+            viewport.Contains("SelectedVertexHitToleranceScreenPx = 12f", StringComparison.Ordinal) &&
+            viewport.Contains("SelectedMeasurementHitToleranceScreenPx = 10f", StringComparison.Ordinal),
+            "viewport hit halo should stay close to the visible grip size at low zoom");
+
+        AssertTrue(
+            vertexSelection.Contains("measurement.MType is \"point\" or \"line\" or \"area\"", StringComparison.Ordinal) &&
+            vertexSelection.Contains("\"Count needs at least 1 point.\"", StringComparison.Ordinal),
+            "Count measurements must participate in vertex editing without breaking delete validation");
+
+        int pointHotGrip = selectionEditing.IndexOf("pointVertexMeasurement.MType == \"point\"", StringComparison.Ordinal);
+        int bodyMove = selectionEditing.IndexOf("TryHitSelectedMeasurement(pdf, out Measurement selectedMeasurement)", StringComparison.Ordinal);
+        AssertTrue(pointHotGrip >= 0 && bodyMove > pointHotGrip, "Count point hot grip must win before body move");
+        AssertTrue(
+            input.Contains("pointVertexMeasurement.MType == \"point\"", StringComparison.Ordinal) &&
+            input.Contains("Cursor = Cursors.SizeAll", StringComparison.Ordinal),
+            "cursor should advertise direct Count point drag");
+        AssertTrue(
+            boxSelection.Contains("Count, Line, or Area object", StringComparison.Ordinal),
+            "Alt vertex selection guidance should include Count objects");
+    }
+
+    public static void PagesTreeSelectedSheetScaleMenuIsWired()
+    {
+        string commands = ReadRepoFile("MainWindow.PagesCommands.cs");
+        string scale = ReadRepoFile("MainWindow.PagesScale.cs");
+        string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
+
+        AssertTrue(
+            commands.Contains("SetSelectedPagesScaleFromContext(item)", StringComparison.Ordinal) &&
+            commands.Contains("Set Scale for {selectedPageCount} Selected", StringComparison.Ordinal),
+            "page context menu must expose Set Scale for single and multi-selected sheets");
+        AssertTrue(
+            scale.Contains("SelectedPagesFromPagesTree(anchor)", StringComparison.Ordinal) &&
+            scale.Contains("PdfSheetMetadataService.TryParseScaleMetersPerPt", StringComparison.Ordinal) &&
+            scale.Contains("OurPlaneCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
+            scale.Contains("WriteFloatingPageSetupMetadata", StringComparison.Ordinal) &&
+            scale.Contains("ApplyScaleToPageMeasurements", StringComparison.Ordinal) &&
+            scale.Contains("FlushTakeoffAutosaves", StringComparison.Ordinal),
+            "scale menu must parse, persist metadata, update measurements, and flush changed takeoffs");
+        AssertTrue(
+            callbacks.Contains("private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements", StringComparison.Ordinal),
+            "page-scale updates should reuse a page-scoped measurement scale helper");
+    }
+
     public static void ViewportRenderingPreservesDpiMatrix()
     {
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");

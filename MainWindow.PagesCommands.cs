@@ -143,6 +143,10 @@ public partial class MainWindow
                 selectedPageCount >= 1,
                 () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: true)));
             menu.Items.Add(BuildSheetOverlayMenu(page));
+            menu.Items.Add(MakeMenuItem(
+                selectedPageCount > 1 ? $"Set Scale for {selectedPageCount} Selected..." : "Set Scale...",
+                selectedPageCount >= 1,
+                () => SetSelectedPagesScaleFromContext(item)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
             menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", true, () => DeletePagesNode(item)));

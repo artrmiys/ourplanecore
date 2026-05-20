@@ -194,9 +194,9 @@ public sealed partial class PdfViewport
             return;
         }
 
-        // All hits already selected. Vertices are edited with Alt, not Ctrl.
+        // All hits already selected. Alt changes the vertex selection set; direct handle drag edits it.
         PostStatus(selected.Count == 1
-            ? "Object already selected. Use Alt to select its vertices."
+            ? "Object already selected. Drag a handle to edit it, or use Alt to select multiple handles."
             : $"{selected.Count} objects selected.");
     }
 
@@ -244,7 +244,7 @@ public sealed partial class PdfViewport
         if (targets.Count == 0)
         {
             RequestRepaint();
-            PostStatus("Select a Line or Area object first, then hold Alt to edit its vertices.");
+            PostStatus("Select a Count, Line, or Area object first, then hold Alt to edit its vertices.");
             return;
         }
 

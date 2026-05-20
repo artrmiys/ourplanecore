@@ -47,11 +47,19 @@ public partial class MainWindow
         if (_currentPage == null || scale <= 0)
             return [];
 
+        return ApplyScaleToPageMeasurements(_currentPage.FolderPath, scale);
+    }
+
+    private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements(string pageFolder, double scale)
+    {
+        if (string.IsNullOrWhiteSpace(pageFolder) || scale <= 0)
+            return [];
+
         var changedItems = new HashSet<TakeoffItem>();
         foreach (TakeoffItem item in _takeoffItems)
         foreach (Measurement measurement in item.Measurements)
         {
-            if (IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+            if (IsSamePageFolder(measurement.PageFolder, pageFolder))
             {
                 if (Math.Abs(measurement.ScaleMetersPerPt - scale) > 0.0000001)
                     changedItems.Add(item);

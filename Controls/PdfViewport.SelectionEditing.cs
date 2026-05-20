@@ -32,6 +32,13 @@ public sealed partial class PdfViewport
             return true;
         }
 
+        if (TryHitEditableVertex(pdf, out Measurement pointVertexMeasurement, out int pointVertexIndex) &&
+            pointVertexMeasurement.MType == "point")
+        {
+            BeginVertexEdit(pointVertexMeasurement, pointVertexIndex, screen);
+            return true;
+        }
+
         if (IsVertexModifierActive() &&
             (TryHitSelectedVertex(pdf, out Measurement selectedVertexMeasurement, out int selectedVertexIndex) ||
              TryHitEditableVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex)))

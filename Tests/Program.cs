@@ -73,6 +73,8 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression measurement paste keeps source name", TakeoffsTreeRegressionTests.MeasurementPasteNewTakeoffKeepsSourceName),
     ("takeoff tree search bulk visibility and markup selection are wired", TakeoffsTreeRegressionTests.TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
+    ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
+    ("pages tree selected sheet scale menu is wired", TakeoffsTreeRegressionTests.PagesTreeSelectedSheetScaleMenuIsWired),
     ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
     ("takeoff auto routing sorts page legend labels", TakeoffAutoRoutingSortsPageLegendLabels),
