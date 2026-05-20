@@ -388,12 +388,27 @@ static void OutputSettingsDefaultExportAppearance()
     var settings = new AppSettings();
     AppSettingsStore.NormalizeOutputSettings(settings);
 
-    AssertClose(1.5, settings.PdfExportMeasurementStrokeScale, "export measurements should default 50 percent thicker");
-    AssertClose(0.70, settings.PdfExportSheetLegendScale, "export legend should default 30 percent smaller");
-    AssertClose(0.70, settings.PdfExportSheetHeaderScale, "export header should match export legend default");
-    AssertClose(1.0, settings.ViewportMeasurementStrokeScale, "viewport stroke should keep normal default");
-    AssertClose(1.0, settings.ViewportPointSizeScale, "viewport point size should keep normal default");
-    AssertClose(1.0, settings.PdfExportPointSizeScale, "export point size should keep normal default");
+    AssertEqual("Dark", settings.Theme, "theme should default to the current display profile");
+    AssertEqual("#2B2B2B", settings.ViewportBackground, "viewport background should default to the current display profile");
+    AssertFalse(settings.ShowLineLabels, "line labels should default to the current display profile");
+    AssertFalse(settings.ShowAreaLabels, "area labels should default to the current display profile");
+    AssertClose(0.9619565217391305, settings.MeasurementLabelScale, "viewport labels should default to the current size");
+    AssertClose(3.0, settings.ViewportMeasurementStrokeScale, "viewport stroke should default to the current size");
+    AssertClose(2.0, settings.ViewportPointSizeScale, "viewport point size should default to the current size");
+    AssertClose(0.25, settings.ViewportAreaEdgeScale, "viewport area edge should default to the current size");
+    AssertClose(0.2826086956521738, settings.ViewportAreaFillOpacity, "viewport area fill should default to the current opacity");
+    AssertFalse(settings.PdfExportIncludeAnnotations, "PDF annotations should default to the current export profile");
+    AssertFalse(settings.PdfExportShowLineLabels, "PDF line labels should default to the current export profile");
+    AssertFalse(settings.PdfExportShowAreaLabels, "PDF area labels should default to the current export profile");
+    AssertClose(3.5, settings.PdfExportMeasurementStrokeScale, "PDF stroke should default to the current export profile");
+    AssertClose(3.5, settings.PdfExportPointSizeScale, "PDF point size should default to the current export profile");
+    AssertClose(0.25, settings.PdfExportAreaEdgeScale, "PDF area edge should default to the current export profile");
+    AssertClose(0.1826, settings.PdfExportAreaFillOpacity, "PDF area fill should default to the current export profile");
+    AssertClose(1.2, settings.PdfExportMeasurementLabelScale, "PDF label should default to the current export profile");
+    AssertClose(2.0, settings.PdfExportSheetLegendScale, "PDF legend should default to the current export profile");
+    AssertClose(1.2, settings.PdfExportSheetHeaderScale, "PDF header should default to the current export profile");
+    AssertClose(248.0, settings.LeftPanelWidth, "left panel should default to the current width");
+    AssertClose(269.0, settings.RightPanelWidth, "right panel should default to the current width");
 
     settings.PdfExportMeasurementStrokeScale = 6.0;
     AppSettingsStore.NormalizeOutputSettings(settings);

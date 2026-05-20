@@ -13,15 +13,15 @@ public sealed class AppSettings
     public string LastJobPath { get; set; } = "";
     public string LastPageFolder { get; set; } = "";
     public string UnitMode { get; set; } = "Imperial";
-    public string Theme { get; set; } = "Light";
-    public string ViewportBackground { get; set; } = "#FFFFFF";
+    public string Theme { get; set; } = "Dark";
+    public string ViewportBackground { get; set; } = "#2B2B2B";
     public string PageBackground { get; set; } = "#FFFFFF";
     public bool ShowMeasurementLabels { get; set; } = true;
-    public bool ShowLineLabels { get; set; } = true;
-    public bool ShowAreaLabels { get; set; } = true;
+    public bool ShowLineLabels { get; set; }
+    public bool ShowAreaLabels { get; set; }
     public bool ShowJoistLabels { get; set; } = true;
     public bool ShowCountLabels { get; set; }
-    public double MeasurementLabelScale { get; set; } = 1.0;
+    public double MeasurementLabelScale { get; set; } = 0.9619565217391305;
     public bool ShowSheetLegend { get; set; } = true;
     public string SheetLegendAnchor { get; set; } = "BottomLeft";
     public double SheetLegendScale { get; set; } = 1.0;
@@ -32,29 +32,29 @@ public sealed class AppSettings
     public bool SimplifyViewportNavigation { get; set; } = false;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
-    public double ViewportMeasurementStrokeScale { get; set; } = 1.0;
-    public double ViewportPointSizeScale { get; set; } = 1.0;
-    public double ViewportAreaEdgeScale { get; set; } = 1.0;
-    public double ViewportAreaFillOpacity { get; set; } = 0.24;
+    public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
+    public double ViewportPointSizeScale { get; set; } = 2.0;
+    public double ViewportAreaEdgeScale { get; set; } = 0.25;
+    public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
     public bool PdfExportIncludeMeasurements { get; set; } = true;
-    public bool PdfExportIncludeAnnotations { get; set; } = true;
+    public bool PdfExportIncludeAnnotations { get; set; }
     public bool PdfExportShowSheetLegend { get; set; } = true;
     public bool PdfExportShowMeasurementLabels { get; set; } = true;
-    public bool PdfExportShowLineLabels { get; set; } = true;
-    public bool PdfExportShowAreaLabels { get; set; } = true;
+    public bool PdfExportShowLineLabels { get; set; }
+    public bool PdfExportShowAreaLabels { get; set; }
     public bool PdfExportShowJoistLabels { get; set; } = true;
     public bool PdfExportShowCountLabels { get; set; }
-    public double PdfExportMeasurementStrokeScale { get; set; } = 1.5;
-    public double PdfExportPointSizeScale { get; set; } = 1.0;
-    public double PdfExportAreaEdgeScale { get; set; } = 1.0;
-    public double PdfExportAreaFillOpacity { get; set; } = 0.15;
-    public double PdfExportMeasurementLabelScale { get; set; } = 1.0;
-    public double PdfExportSheetLegendScale { get; set; } = 0.70;
-    public double PdfExportSheetHeaderScale { get; set; } = 0.70;
+    public double PdfExportMeasurementStrokeScale { get; set; } = 3.5;
+    public double PdfExportPointSizeScale { get; set; } = 3.5;
+    public double PdfExportAreaEdgeScale { get; set; } = 0.25;
+    public double PdfExportAreaFillOpacity { get; set; } = 0.1826;
+    public double PdfExportMeasurementLabelScale { get; set; } = 1.2;
+    public double PdfExportSheetLegendScale { get; set; } = 2.0;
+    public double PdfExportSheetHeaderScale { get; set; } = 1.2;
     public double MassingFloorAssemblyFeet { get; set; } = SmartMassingDraftService.DefaultFloorAssemblyFeet;
     public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
-    public double LeftPanelWidth { get; set; } = 200.0;
-    public double RightPanelWidth { get; set; } = 220.0;
+    public double LeftPanelWidth { get; set; } = 248.0;
+    public double RightPanelWidth { get; set; } = 269.0;
     public string OpenAiModel { get; set; } = OpenAiRequestRunner.DefaultModel;
     public string FolderTemplateMode { get; set; } = "AUTO";
     public List<RecentJobInfo> RecentJobs { get; set; } = [];
@@ -319,55 +319,55 @@ public static class AppSettingsStore
     {
         settings.ViewportMeasurementStrokeScale = NormalizeScale(
             settings.ViewportMeasurementStrokeScale,
-            fallback: 1.0,
+            fallback: 3.0,
             min: 0.25,
             max: 4.0);
         settings.ViewportPointSizeScale = NormalizeScale(
             settings.ViewportPointSizeScale,
-            fallback: 1.0,
+            fallback: 2.0,
             min: 0.25,
             max: 4.0);
         settings.ViewportAreaEdgeScale = NormalizeScale(
             settings.ViewportAreaEdgeScale,
-            fallback: 1.0,
+            fallback: 0.25,
             min: 0.25,
             max: 4.0);
         settings.ViewportAreaFillOpacity =
             double.IsNaN(settings.ViewportAreaFillOpacity) || double.IsInfinity(settings.ViewportAreaFillOpacity)
-                ? 0.24
+                ? 0.2826086956521738
                 : Math.Clamp(settings.ViewportAreaFillOpacity, 0.0, 1.0);
         settings.PdfExportMeasurementStrokeScale = NormalizeScale(
             settings.PdfExportMeasurementStrokeScale,
-            fallback: 1.5,
+            fallback: 3.5,
             min: 0.25,
             max: PdfExportScaleMax);
         settings.PdfExportPointSizeScale = NormalizeScale(
             settings.PdfExportPointSizeScale,
-            fallback: 1.0,
+            fallback: 3.5,
             min: 0.25,
             max: PdfExportScaleMax);
         settings.PdfExportAreaEdgeScale = NormalizeScale(
             settings.PdfExportAreaEdgeScale,
-            fallback: 1.0,
+            fallback: 0.25,
             min: 0.25,
             max: 4.0);
         settings.PdfExportAreaFillOpacity =
             double.IsNaN(settings.PdfExportAreaFillOpacity) || double.IsInfinity(settings.PdfExportAreaFillOpacity)
-                ? 0.15
+                ? 0.1826
                 : Math.Clamp(settings.PdfExportAreaFillOpacity, 0.0, 1.0);
         settings.PdfExportMeasurementLabelScale = NormalizeScale(
             settings.PdfExportMeasurementLabelScale,
-            fallback: 1.0,
+            fallback: 1.2,
             min: 0.50,
             max: PdfExportScaleMax);
         settings.PdfExportSheetLegendScale = NormalizeScale(
             settings.PdfExportSheetLegendScale,
-            fallback: 0.70,
+            fallback: 2.0,
             min: 0.25,
             max: PdfExportScaleMax);
         settings.PdfExportSheetHeaderScale = NormalizeScale(
             settings.PdfExportSheetHeaderScale,
-            fallback: 0.70,
+            fallback: 1.2,
             min: 0.25,
             max: PdfExportScaleMax);
     }
