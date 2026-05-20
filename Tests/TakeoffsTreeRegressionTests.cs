@@ -329,6 +329,29 @@ internal static class TakeoffsTreeRegressionTests
             "page measurement lookup must remain scoped so stale measurement data is not reused after edits");
     }
 
+    public static void PagesDropUsesBatchMoveAndSilentRefresh()
+    {
+        string actions = ReadRepoFile("MainWindow.PagesNodeActions.cs");
+        string drag = ReadRepoFile("MainWindow.PagesDragDrop.cs");
+        string references = ReadRepoFile("MainWindow.PagePathReferences.cs");
+        string flushMethod = SliceMethod(drag, "private void FlushPendingPagesTreeDropRefresh()");
+
+        AssertTrue(
+            actions.Contains("OurPlaneCoreJobStore.MoveNodes(validEntries.Select(entry => entry.SourcePath), targetFolder)", StringComparison.Ordinal) &&
+            drag.Contains("OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetParent)", StringComparison.Ordinal) &&
+            drag.Contains("OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), root)", StringComparison.Ordinal),
+            "Pages cut/drop should batch filesystem moves instead of moving each selected page/folder separately");
+        AssertTrue(
+            references.Contains("private bool UpdatePageReferencesForMovedPaths", StringComparison.Ordinal) &&
+            references.Contains("RebaseMeasurementPageFolderReferences(normalizedMoves)", StringComparison.Ordinal),
+            "Pages bulk moves should rebase page refs in one pass");
+        AssertTrue(
+            flushMethod.Contains("ReloadPagesTree(selectPath, selectSilently: true)", StringComparison.Ordinal) &&
+            !flushMethod.Contains("PagesTree.UpdateLayout()", StringComparison.Ordinal) &&
+            !flushMethod.Contains("PagesTree.Items.Refresh()", StringComparison.Ordinal),
+            "Pages drop refresh should not synchronously relayout or open the moved sheet through selection change");
+    }
+
     public static void PageRepairDoesNotLeafRebaseNonEmptyReferences()
     {
         string source = ReadRepoFile("MainWindow.JobLifecycle.cs");

@@ -398,6 +398,7 @@ public partial class MainWindow
             }
             else
             {
+                var moveEntries = new List<PagesClipboardEntry>();
                 foreach (var entry in payload.Entries)
                 {
                     if (string.Equals(Path.GetDirectoryName(entry.SourcePath) ?? "", targetParent, StringComparison.OrdinalIgnoreCase))
@@ -409,10 +410,16 @@ public partial class MainWindow
                     if (!CanDropInto(new PagesClipboard([entry], PagesClipboardMode.Cut), targetParent, PagesClipboardMode.Cut))
                         continue;
 
-                    string changedPath = OurPlaneCoreJobStore.MoveNode(entry.SourcePath, targetParent);
-                    reloadActiveTab = UpdatePageReferencesForMovedPath(entry.SourcePath, changedPath) || reloadActiveTab;
-                    changed.Add(changedPath);
+                    moveEntries.Add(entry);
                 }
+
+                var moved = OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetParent);
+                foreach (var move in moved)
+                {
+                    changed.Add(move.MovedPath);
+                }
+                reloadActiveTab = UpdatePageReferencesForMovedPaths(
+                    moved.Select(move => (move.SourcePath, move.MovedPath)).ToList());
 
                 if (changed.Count == 0 ||
                     !OurPlaneCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
@@ -450,6 +457,7 @@ public partial class MainWindow
             var changed = new List<string>();
             bool reloadActiveTab = false;
             bool movedIntoRoot = false;
+            var moveEntries = new List<PagesClipboardEntry>();
             foreach (PagesClipboardEntry entry in payload.Entries)
             {
                 string source = entry.SourcePath;
@@ -466,11 +474,17 @@ public partial class MainWindow
                 if (!CanDropInto(new PagesClipboard([entry], PagesClipboardMode.Cut), root, PagesClipboardMode.Cut))
                     continue;
 
-                string moved = OurPlaneCoreJobStore.MoveNode(source, root);
-                reloadActiveTab = UpdatePageReferencesForMovedPath(source, moved) || reloadActiveTab;
-                movedIntoRoot = true;
-                changed.Add(moved);
+                moveEntries.Add(entry);
             }
+
+            var moved = OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), root);
+            foreach (var move in moved)
+            {
+                movedIntoRoot = true;
+                changed.Add(move.MovedPath);
+            }
+            reloadActiveTab = UpdatePageReferencesForMovedPaths(
+                moved.Select(move => (move.SourcePath, move.MovedPath)).ToList());
 
             if (changed.Count == 0)
                 return;
@@ -521,10 +535,8 @@ public partial class MainWindow
         _pendingPagesTreeDropReloadActiveTab = false;
 
         ClearPagesPositionDropCue();
-        ReloadPagesTree(selectPath);
+        ReloadPagesTree(selectPath, selectSilently: true);
         ReloadActivePageTabAfterPathChange(reloadActiveTab);
-        PagesTree.Items.Refresh();
-        PagesTree.UpdateLayout();
         RevealPageNodeAfterDrop(selectPath);
     }
 

@@ -66,6 +66,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression loads nested mixed items", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsNestedMixedTreeItems),
     ("takeoff tree regression keeps siblings after corrupt measurements", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsSiblingsWhenMeasurementsJsonIsCorrupt),
     ("takeoff tree regression page lookup enabled for large tree refresh", TakeoffsTreeRegressionTests.PageMeasurementLookupEnabledForLargeTreeRefresh),
+    ("takeoff tree regression pages drop batches and refreshes silently", TakeoffsTreeRegressionTests.PagesDropUsesBatchMoveAndSilentRefresh),
     ("takeoff tree regression page repair exact only", TakeoffsTreeRegressionTests.PageRepairDoesNotLeafRebaseNonEmptyReferences),
     ("takeoff tree regression drag uses mouse down anchor", TakeoffsTreeRegressionTests.TreeDragUsesMouseDownAnchor),
     ("takeoff tree regression nested rows resolve drop target", TakeoffsTreeRegressionTests.NestedTreeRowsResolveToOwningDropTargets),

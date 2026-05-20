@@ -25,7 +25,7 @@ public partial class MainWindow
 {
     // ── Pages tree ────────────────────────────────────────────────────────────
 
-    private void ReloadPagesTree(string? selectPath = null)
+    private void ReloadPagesTree(string? selectPath = null, bool selectSilently = false)
     {
         PagesTree.Items.Clear();
         _pageTakeoffMultiSelection.Clear();
@@ -51,7 +51,12 @@ public partial class MainWindow
         RestoreExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
 
         if (!string.IsNullOrWhiteSpace(selectPath))
-            SelectNodeByFolder(selectPath);
+        {
+            if (selectSilently)
+                SelectPageTreeNodeSilently(selectPath);
+            else
+                SelectNodeByFolder(selectPath);
+        }
         PrunePagesMultiSelection();
         ApplyPagesMultiSelectionVisuals();
         ApplyPagesTreeSearchFilter();

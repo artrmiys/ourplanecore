@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -25,31 +26,41 @@ public partial class MainWindow
             RefreshPageTabs(_activePageTab);
     }
 
-    private bool UpdatePageReferencesForMovedPath(string oldPath, string newPath)
+    private bool UpdatePageReferencesForMovedPath(string oldPath, string newPath) =>
+        UpdatePageReferencesForMovedPaths([(oldPath, newPath)]);
+
+    private bool UpdatePageReferencesForMovedPaths(IReadOnlyList<(string OldPath, string NewPath)> moves)
     {
-        string oldFull = NormalizePath(oldPath);
-        string newFull = NormalizePath(newPath);
-        RebaseExpandedTreePaths(_expandedPageTreePaths, oldFull, newFull);
+        var normalizedMoves = moves
+            .Select(move => (OldPath: NormalizePath(move.OldPath), NewPath: NormalizePath(move.NewPath)))
+            .Where(move => !string.Equals(move.OldPath, move.NewPath, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (normalizedMoves.Count == 0)
+            return false;
+
+        foreach (var move in normalizedMoves)
+            RebaseExpandedTreePaths(_expandedPageTreePaths, move.OldPath, move.NewPath);
+
         bool activeAffected = _currentPage != null &&
-                              OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, _currentPage.FolderPath);
+                              normalizedMoves.Any(move => OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, _currentPage.FolderPath));
         bool tabsChanged = false;
-        bool measurementsChanged = RebaseMeasurementPageFolderReferences(oldFull, newFull);
+        bool measurementsChanged = RebaseMeasurementPageFolderReferences(normalizedMoves);
 
         foreach (PageTabState tab in _pageTabs)
         {
-            if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, tab.PageFolder))
+            if (!TryRebaseMovedPagePath(normalizedMoves, tab.PageFolder, out string rebasedTabFolder))
                 continue;
 
-            tab.PageFolder = RebaseDescendantPath(oldFull, newFull, tab.PageFolder);
+            tab.PageFolder = rebasedTabFolder;
             if (OurPlaneCoreJobStore.TryReadPage(tab.PageFolder) is { } page)
                 tab.PageName = page.Name;
             tabsChanged = true;
         }
 
         if (!string.IsNullOrWhiteSpace(_settings.LastPageFolder) &&
-            OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, _settings.LastPageFolder))
+            TryRebaseMovedPagePath(normalizedMoves, _settings.LastPageFolder, out string rebasedLastPageFolder))
         {
-            _settings.LastPageFolder = RebaseDescendantPath(oldFull, newFull, _settings.LastPageFolder);
+            _settings.LastPageFolder = rebasedLastPageFolder;
             SaveAppSettings();
         }
 
@@ -71,9 +82,9 @@ public partial class MainWindow
         return activeAffected;
     }
 
-    private bool RebaseMeasurementPageFolderReferences(string oldFull, string newFull)
+    private bool RebaseMeasurementPageFolderReferences(IReadOnlyList<(string OldPath, string NewPath)> moves)
     {
-        if (_currentJob == null)
+        if (_currentJob == null || moves.Count == 0)
             return false;
 
         bool changed = false;
@@ -85,11 +96,10 @@ public partial class MainWindow
                 if (string.IsNullOrWhiteSpace(measurement.PageFolder))
                     continue;
 
-                string current = NormalizePageReferencePath(measurement.PageFolder);
-                if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldFull, current))
+                if (!TryRebaseMovedPagePath(moves, measurement.PageFolder, out string rebased))
                     continue;
 
-                measurement.PageFolder = RebaseDescendantPath(oldFull, newFull, current);
+                measurement.PageFolder = rebased;
                 changed = true;
                 itemChanged = true;
             }
@@ -99,6 +109,25 @@ public partial class MainWindow
         }
 
         return changed;
+    }
+
+    private bool TryRebaseMovedPagePath(
+        IReadOnlyList<(string OldPath, string NewPath)> moves,
+        string path,
+        out string rebased)
+    {
+        string current = NormalizePageReferencePath(path);
+        foreach (var move in moves)
+        {
+            if (!OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, current))
+                continue;
+
+            rebased = RebaseDescendantPath(move.OldPath, move.NewPath, current);
+            return true;
+        }
+
+        rebased = current;
+        return false;
     }
 
     private void ReloadActivePageTabAfterPathChange(bool shouldReload)

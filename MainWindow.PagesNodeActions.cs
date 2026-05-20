@@ -192,26 +192,27 @@ public partial class MainWindow
         {
             var pastedItems = new List<string>();
             bool reloadActiveTab = false;
-            foreach (var entry in payload.Entries)
+            var validEntries = payload.Entries
+                .Where(entry => Directory.Exists(entry.SourcePath))
+                .Where(entry => CanDropInto(new PagesClipboard([entry], mode), targetFolder, mode))
+                .ToList();
+
+            if (wasCut)
             {
-                string source = entry.SourcePath;
-                if (!Directory.Exists(source))
-                    continue;
-                if (!CanDropInto(new PagesClipboard([entry], mode), targetFolder, mode))
-                    continue;
-
-                string pasted;
-                if (wasCut)
+                var moved = OurPlaneCoreJobStore.MoveNodes(validEntries.Select(entry => entry.SourcePath), targetFolder);
+                foreach (var move in moved)
                 {
-                    pasted = OurPlaneCoreJobStore.MoveNode(source, targetFolder);
-                    reloadActiveTab = UpdatePageReferencesForMovedPath(source, pasted) || reloadActiveTab;
-                }
-                else
-                {
-                    pasted = OurPlaneCoreJobStore.CopyNode(source, targetFolder);
+                    pastedItems.Add(move.MovedPath);
                 }
 
-                pastedItems.Add(pasted);
+                reloadActiveTab = UpdatePageReferencesForMovedPaths(
+                    moved.Select(move => (move.SourcePath, move.MovedPath)).ToList());
+            }
+            else
+            {
+                pastedItems.AddRange(OurPlaneCoreJobStore.CopyNodesPreserveDisplayName(
+                    validEntries.Select(entry => entry.SourcePath),
+                    targetFolder));
             }
 
             if (wasCut)
