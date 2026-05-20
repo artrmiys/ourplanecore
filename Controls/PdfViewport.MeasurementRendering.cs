@@ -34,7 +34,8 @@ public sealed partial class PdfViewport
             activeMeasurements.Count,
             _renderNavigationFastFrame);
 
-        IReadOnlyList<Measurement> renderCandidates = VisibleMeasurementCandidates(visiblePdf);
+        IReadOnlyList<Measurement> renderCandidates = LayerOrderedMeasurements(
+            VisibleMeasurementCandidates(visiblePdf));
         List<Measurement>? visibleMeasurements = null;
         foreach (var m in renderCandidates)
         {
@@ -125,6 +126,40 @@ public sealed partial class PdfViewport
                 break;
         }
     }
+
+    private IReadOnlyList<Measurement> LayerOrderedMeasurements(IReadOnlyList<Measurement> measurements)
+    {
+        if (measurements.Count <= 1)
+            return measurements;
+
+        return measurements
+            .Select((measurement, index) => (Measurement: measurement, Index: index))
+            .OrderBy(entry => TakeoffLayerRank(entry.Measurement))
+            .ThenBy(entry => DefaultMeasurementLayerRank(entry.Measurement))
+            .ThenBy(entry => entry.Index)
+            .Select(entry => entry.Measurement)
+            .ToList();
+    }
+
+    private int TakeoffLayerRank(Measurement measurement)
+    {
+        if (!string.IsNullOrWhiteSpace(measurement.TakeoffFolder) &&
+            _takeoffLayerRanks.TryGetValue(NormalizePageFolderForCompare(measurement.TakeoffFolder), out int rank))
+        {
+            return rank;
+        }
+
+        return int.MaxValue / 2;
+    }
+
+    private static int DefaultMeasurementLayerRank(Measurement measurement) =>
+        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) switch
+        {
+            "area" => 0,
+            "line" => 1,
+            "point" => 2,
+            _ => 1,
+        };
 
     private void DrawCountPoint(SKCanvas canvas, SKPoint point, SKColor color, string countSymbol, float pointSizeScale)
     {

@@ -110,11 +110,13 @@ public sealed partial class PdfViewport
 
         if (_tool == ViewerTool.Line  && _drawPts.Count < 2) { CancelDrawing(); return; }
         if (_tool == ViewerTool.Area  && _drawPts.Count < 3) { CancelDrawing(); return; }
+        List<SKPoint> points = CleanFinalizePoints(_drawPts, closeArea: _tool == ViewerTool.Area);
+        if (_tool == ViewerTool.Area && points.Count < 3) { CancelDrawing(); return; }
 
         var m = new Measurement
         {
             MType      = _tool.ToString().ToLower(),
-            Points     = new List<SKPoint>(_drawPts),
+            Points     = points,
             Color      = ActiveColor,
             CountSymbol = _tool == ViewerTool.Point ? CountDisplaySymbol.Normalize(ActiveCountSymbol) : CountDisplaySymbol.Circle,
             PageFolder = _pageFolder,
@@ -170,11 +172,18 @@ public sealed partial class PdfViewport
             PostStatus("Area annotation cancelled.");
             return;
         }
+        List<SKPoint> points = CleanFinalizePoints(_drawPts, closeArea: true);
+        if (points.Count < 3)
+        {
+            CancelDrawing();
+            PostStatus("Area annotation cancelled.");
+            return;
+        }
 
         var annotation = new PageAnnotation
         {
             Kind = "area",
-            Points = _drawPts.ToList(),
+            Points = points,
             Color = ActiveAnnotationColor,
             StrokeWidth = ActiveAnnotationStrokeWidth,
             PageFolder = _pageFolder,
@@ -189,6 +198,27 @@ public sealed partial class PdfViewport
         PostStatus("Added Area annotation.");
         PageAnnotationAdded?.Invoke(annotation);
         PostRecordPrompt();
+    }
+
+    private List<SKPoint> CleanFinalizePoints(IReadOnlyList<SKPoint> points, bool closeArea)
+    {
+        var clean = points.ToList();
+        while (clean.Count >= 2 &&
+               PdfToScreenDistance(MeasurementGeometry.Distance(clean[^1], clean[^2])) <= 3f)
+        {
+            clean.RemoveAt(clean.Count - 1);
+        }
+
+        if (closeArea)
+        {
+            while (clean.Count >= 4 &&
+                   PdfToScreenDistance(MeasurementGeometry.Distance(clean[^1], clean[0])) <= 14f)
+            {
+                clean.RemoveAt(clean.Count - 1);
+            }
+        }
+
+        return clean;
     }
 
     private void AddNoteAnnotation(SKPoint pdf)

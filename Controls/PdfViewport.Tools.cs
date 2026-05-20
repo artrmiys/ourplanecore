@@ -48,6 +48,8 @@ public sealed partial class PdfViewport
                 AddTwoPointAnnotation(pdf, "cloud");
                 break;
             case ViewerTool.DrawArea:
+                if (TryFinishOpenAreaAt(pdf, FinalizeAreaAnnotation))
+                    break;
                 _drawPts.Add(pdf);
                 RequestRepaint();
                 PostRecordPrompt();
@@ -65,6 +67,8 @@ public sealed partial class PdfViewport
                 break;
             case ViewerTool.Line:
             case ViewerTool.Area:
+                if (_tool == ViewerTool.Area && TryFinishOpenAreaAt(pdf, FinalizeDrawing))
+                    break;
                 _drawPts.Add(pdf);
                 RequestRepaint();
                 PostRecordPrompt();
@@ -118,6 +122,19 @@ public sealed partial class PdfViewport
         _drawPts.Add(pdf);
         RequestRepaint();
         PostRecordPrompt();
+    }
+
+    private bool TryFinishOpenAreaAt(SKPoint pdf, Action finalize)
+    {
+        if (_drawPts.Count < 3)
+            return false;
+
+        float closeDistance = MeasurementGeometry.Distance(pdf, _drawPts[0]);
+        if (PdfToScreenDistance(closeDistance) > 14f)
+            return false;
+
+        finalize();
+        return true;
     }
 
 }

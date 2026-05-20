@@ -226,6 +226,7 @@ public sealed partial class PdfViewport : SKElement
     private int _activePageMeasurementSpatialIndexHiddenVersion = -1;
     private int _activePageMeasurementSpatialIndexFolderHash;
     private readonly HashSet<string> _hiddenTakeoffFolders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _takeoffLayerRanks = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PageAnnotation> _annotations = [];
     private bool _hideRulerAnnotations;
     private string _pageFolder = "";

@@ -38,6 +38,7 @@ public sealed class PageInfo
     public IReadOnlyList<PdfLayerInfo> PdfLayers { get; init; } = [];
     public List<string> LegendTakeoffOrder { get; set; } = [];
     public string LegendTakeoffOrderMode { get; set; } = "auto";
+    public List<string> TakeoffLayerOrder { get; set; } = [];
     public List<string> HiddenTakeoffs { get; set; } = [];
     public string OverlayPageFolder { get; init; } = "";
     public bool OverlayVisible { get; init; } = true;

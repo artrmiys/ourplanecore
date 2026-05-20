@@ -87,7 +87,7 @@ public sealed partial class PdfViewport
         (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.None;
 
     // Alt switches the box/click into vertex (handle) mode on the selected
-    // Line/Area object(s). Within Alt: plain = set, Ctrl = add, Shift = remove.
+    // Line/Area object(s). Alt alone toggles handle selection.
     private static bool IsVertexModifierActive() =>
         (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
 

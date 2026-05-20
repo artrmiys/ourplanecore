@@ -229,6 +229,12 @@ public partial class MainWindow
                         item,
                         MeasurementsForTakeoffOnPage(item, page.FolderPath).ToList()))
                     .ToList(),
-                OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath)))
+                OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath),
+                LayerOrderedTakeoffsForPage(page)
+                    .Where(item => IsPageTakeoffVisible(page, item))
+                    .Select(item => new PdfExportTakeoffInput(
+                        item,
+                        MeasurementsForTakeoffOnPage(item, page.FolderPath).ToList()))
+                    .ToList()))
             .ToList();
 }

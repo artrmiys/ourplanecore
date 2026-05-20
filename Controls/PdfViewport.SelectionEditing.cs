@@ -19,14 +19,16 @@ public sealed partial class PdfViewport
 {
     private bool TryBeginMeasurementEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
     {
-        if (TryHitSelectedVertex(pdf, out Measurement selectedVertexMeasurement, out int selectedVertexIndex) ||
-            TryHitEditableVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex))
+        if (IsVertexModifierActive() &&
+            (TryHitSelectedVertex(pdf, out Measurement selectedVertexMeasurement, out int selectedVertexIndex) ||
+             TryHitEditableVertex(pdf, out selectedVertexMeasurement, out selectedVertexIndex)))
         {
             BeginVertexEdit(selectedVertexMeasurement, selectedVertexIndex, screen);
             return true;
         }
 
-        if (SelectedVertexCount() > 0 &&
+        if (IsVertexModifierActive() &&
+            SelectedVertexCount() > 0 &&
             TryHitSelectedMeasurement(pdf, out Measurement vertexModeMeasurement) &&
             TryGetSelectedVertexDragAnchor(vertexModeMeasurement, out Measurement anchorMeasurement, out int anchorVertexIndex))
         {

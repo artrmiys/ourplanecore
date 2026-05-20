@@ -32,7 +32,8 @@ public sealed record PdfExportOptions(
 public sealed record PdfExportPageInput(
     PageInfo Page,
     IReadOnlyList<PdfExportTakeoffInput> Takeoffs,
-    IReadOnlyList<PageAnnotation> Annotations);
+    IReadOnlyList<PageAnnotation> Annotations,
+    IReadOnlyList<PdfExportTakeoffInput>? MeasurementLayers = null);
 
 public sealed record PdfExportTakeoffInput(
     TakeoffItem Item,
@@ -103,7 +104,7 @@ public static partial class PdfExporter
                         }
 
                     if (options.IncludeMeasurements)
-                        DrawMeasurements(canvas, input.Takeoffs, page, options);
+                        DrawMeasurements(canvas, input.MeasurementLayers ?? input.Takeoffs, page, options);
                     if (options.IncludeAnnotations)
                         DrawAnnotations(canvas, input.Annotations, page.ScaleMetersPerPt, options);
                         if (options.IncludeLegend)

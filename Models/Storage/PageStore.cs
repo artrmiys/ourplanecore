@@ -122,6 +122,7 @@ internal static class PageStore
             PdfLayers = src.PdfLayers,
             LegendTakeoffOrder = src.LegendTakeoffOrder ?? [],
             LegendTakeoffOrderMode = NormalizeLegendTakeoffOrderMode(src.LegendTakeoffOrderMode),
+            TakeoffLayerOrder = PageTakeoffLayerOrderStore.Load(pageFolder).ToList(),
             HiddenTakeoffs = NormalizeStringList(src.HiddenTakeoffs),
             OverlayPageFolder = ResolveRelativePagePath(pageFolder, src.OverlayPageFolder),
             OverlayVisible = src.OverlayVisible,

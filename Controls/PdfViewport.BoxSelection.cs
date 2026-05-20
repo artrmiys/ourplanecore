@@ -26,23 +26,18 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
-    // Alt-mode box/click that targets the selected Line/Area object's
-    // vertices. add = Ctrl (extend), removeMode = Shift (trim), neither = set.
-    private void BeginVertexBoxSelection(SKPoint pdf, bool add, bool removeMode)
+    // Alt-mode box/click that targets the selected Line/Area object's vertices.
+    private void BeginVertexBoxSelection(SKPoint pdf)
     {
         ClearInProgressInputForEdit();
         _boxSelecting = true;
         _boxVertexMode = true;
         _boxSelectStartPdf = pdf;
         _boxSelectEndPdf = pdf;
-        _boxSelectAdditive = add;
-        _boxSelectRemove = removeMode;
+        _boxSelectAdditive = true;
+        _boxSelectRemove = false;
         CaptureMouse();
-        PostStatus(removeMode
-            ? "Vertices: box/click handles to remove from the vertex selection (Alt+Shift)."
-            : add
-                ? "Vertices: box/click handles to add to the vertex selection (Alt+Ctrl)."
-                : "Vertices: box handles to select; click a handle for one; click the body for all (Alt).");
+        PostStatus("Vertices: Alt-click or Alt-box handles to toggle them; Alt-click body selects/clears all.");
         RequestRepaint();
     }
 
@@ -238,9 +233,9 @@ public sealed partial class PdfViewport
             : $"Selected all {total} handle(s). Drag a handle to move (Shift = ortho); Delete removes them.");
     }
 
-    // Alt gesture resolved: a single handle click, an Alt-click on the body
-    // (= all handles), an Alt-click on empty (= clear), or a marquee over
-    // handles. add = Ctrl (extend), remove = Shift (trim), neither = set.
+    // Alt gesture resolved: a single handle click, an Alt-click on the body,
+    // an Alt-click on empty (= clear), or a marquee over handles. Every hit
+    // toggles so add/remove are both plain Alt.
     private void FinishVertexBoxSelection(SKRect rect, bool tiny)
     {
         var targets = GetSelectedMeasurements()
@@ -253,27 +248,16 @@ public sealed partial class PdfViewport
             return;
         }
 
-        bool add = _boxSelectAdditive;
-        bool remove = _boxSelectRemove;
-
         if (tiny)
         {
             if (TryHitVertexAmong(targets, _boxSelectStartPdf, out Measurement hm, out int hv))
             {
-                if (remove)
-                {
-                    VertexSelectionSet(hm, create: true).Remove(hv);
-                }
-                else if (add)
-                {
-                    VertexSelectionSet(hm, create: true).Add(hv);
-                }
+                HashSet<int> set = VertexSelectionSet(hm, create: true);
+                if (set.Contains(hv))
+                    set.Remove(hv);
                 else
-                {
-                    ClearMeasurementVertexSelection();
-                    VertexSelectionSet(hm, create: true).Add(hv);
-                }
-                if (_selectedMeasurementVertexIndices.TryGetValue(hm, out HashSet<int>? after) && after.Count == 0)
+                    set.Add(hv);
+                if (set.Count == 0)
                     _selectedMeasurementVertexIndices.Remove(hm);
                 _selectedMeasurement = hm;
                 _selectedVertexIndex = IsMeasurementVertexSelected(hm, hv) ? hv : LastSelectedVertexIndex();
@@ -282,30 +266,22 @@ public sealed partial class PdfViewport
                 return;
             }
 
-            if (!add && !remove)
+            if (TryHitSelectedMeasurement(_boxSelectStartPdf, out _))
             {
-                if (TryHitSelectedMeasurement(_boxSelectStartPdf, out _))
-                {
-                    SelectAllVerticesOf(targets); // Alt-click the body = all handles
-                    return;
-                }
-
-                ClearMeasurementVertexSelection(); // Alt-click empty = clear handles
-                _selectedVertexIndex = -1;
-                RequestRepaint();
-                PostStatus("Vertex selection cleared.");
+                ToggleAllVerticesOf(targets);
                 return;
             }
 
+            ClearMeasurementVertexSelection(); // Alt-click empty = clear handles
+            _selectedVertexIndex = -1;
             RequestRepaint();
-            PostStatus("Vertices: click directly on a handle (Alt+Ctrl add, Alt+Shift remove).");
+            PostStatus("Vertex selection cleared.");
             return;
         }
 
-        if (!add && !remove)
-            ClearMeasurementVertexSelection();
-
         int changed = 0;
+        int added = 0;
+        int removed = 0;
         Measurement? primary = null;
         int primaryVertex = -1;
         foreach (Measurement m in targets)
@@ -316,16 +292,18 @@ public sealed partial class PdfViewport
                 if (!RectContains(rect, v.Point))
                     continue;
 
-                if (remove)
+                set ??= VertexSelectionSet(m, create: true);
+                if (set.Contains(v.GlobalIndex))
                 {
-                    if (set != null && set.Remove(v.GlobalIndex))
-                        changed++;
+                    set.Remove(v.GlobalIndex);
+                    changed++;
+                    removed++;
                 }
                 else
                 {
-                    set ??= VertexSelectionSet(m, create: true);
-                    if (set.Add(v.GlobalIndex))
-                        changed++;
+                    set.Add(v.GlobalIndex);
+                    changed++;
+                    added++;
                     primary = m;
                     primaryVertex = v.GlobalIndex;
                 }
@@ -340,16 +318,32 @@ public sealed partial class PdfViewport
             _selectedMeasurement = primary;
             _selectedVertexIndex = primaryVertex;
         }
-        else if (remove)
+        else if (removed > 0)
         {
             _selectedVertexIndex = LastSelectedVertexIndex();
         }
 
         RequestRepaint();
         int total = SelectedVertexCount();
-        PostStatus(remove
-            ? $"Removed {changed} handle(s). {total} still selected."
-            : $"{total} handle(s) selected ({changed} new). Drag a handle to move; Delete removes them.");
+        PostStatus($"Toggled {changed} handle(s): +{added}, -{removed}. {total} selected.");
+    }
+
+    private void ToggleAllVerticesOf(IReadOnlyList<Measurement> measurements)
+    {
+        int selected = SelectedVertexCount();
+        int editable = measurements
+            .Where(m => IsMeasurementOnActivePage(m) && CanEditMeasurementVertices(m))
+            .Sum(m => MeasurementVertices(m).Count());
+        if (editable > 0 && selected >= editable)
+        {
+            ClearMeasurementVertexSelection();
+            _selectedVertexIndex = -1;
+            RequestRepaint();
+            PostStatus("Vertex selection cleared.");
+            return;
+        }
+
+        SelectAllVerticesOf(measurements);
     }
 
     private bool TryHitVertexAmong(

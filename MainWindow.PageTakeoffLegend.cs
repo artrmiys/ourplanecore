@@ -265,6 +265,53 @@ public partial class MainWindow
             .Where(takeoff => IsPageTakeoffVisible(page, takeoff))
             .ToList();
 
+    private IReadOnlyList<TakeoffItem> LayerOrderedTakeoffsForPage(PageInfo page)
+    {
+        var defaultOrder = DefaultLayerOrderedTakeoffsForPage(page).ToList();
+        if (defaultOrder.Count <= 1 || page.TakeoffLayerOrder.Count == 0)
+            return defaultOrder;
+
+        var byKey = defaultOrder
+            .GroupBy(TakeoffLegendOrderKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var result = new List<TakeoffItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string stored in page.TakeoffLayerOrder.Select(NormalizeTakeoffLegendOrderKey))
+        {
+            if (!string.IsNullOrWhiteSpace(stored) &&
+                seen.Add(stored) &&
+                byKey.TryGetValue(stored, out TakeoffItem? takeoff))
+            {
+                result.Add(takeoff);
+            }
+        }
+
+        foreach (TakeoffItem takeoff in defaultOrder)
+        {
+            string key = TakeoffLegendOrderKey(takeoff);
+            if (seen.Add(key))
+                result.Add(takeoff);
+        }
+
+        return result;
+    }
+
+    private IEnumerable<TakeoffItem> DefaultLayerOrderedTakeoffsForPage(PageInfo page) =>
+        TakeoffsForPage(page.FolderPath)
+            .Select((takeoff, index) => (Takeoff: takeoff, Index: index))
+            .OrderBy(entry => DefaultTakeoffLayerRank(entry.Takeoff))
+            .ThenBy(entry => entry.Index)
+            .Select(entry => entry.Takeoff);
+
+    private static int DefaultTakeoffLayerRank(TakeoffItem takeoff) =>
+        OurPlaneCoreJobStore.NormalizeMeasurementType(takeoff.MeasurementType) switch
+        {
+            "area" => 0,
+            "line" => 1,
+            "point" => 2,
+            _ => 1,
+        };
+
     private bool IsPageTakeoffVisible(PageInfo page, TakeoffItem takeoff)
     {
         string key = TakeoffLegendOrderKey(takeoff);
@@ -326,6 +373,7 @@ public partial class MainWindow
             .Select(item => item.FolderPath)
             .ToList();
         _viewport.SetHiddenTakeoffFolders(hiddenFolders);
+        _viewport.SetTakeoffLayerOrder(LayerOrderedTakeoffsForPage(page).Select(item => item.FolderPath));
     }
 
     private string TakeoffLegendOrderKey(TakeoffItem item) =>
@@ -368,6 +416,20 @@ public partial class MainWindow
         OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order, "manual");
     }
 
+    private void SavePageTakeoffLayerOrder(PageInfo page, IReadOnlyList<TakeoffItem> orderedTakeoffs)
+    {
+        var order = orderedTakeoffs
+            .Select(TakeoffLegendOrderKey)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        page.TakeoffLayerOrder = order;
+        if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+            _currentPage.TakeoffLayerOrder = order.ToList();
+        PageTakeoffLayerOrderStore.Save(page.FolderPath, order);
+    }
+
     private void RebasePageLegendTakeoffOrderReferences(string oldPath, string newPath)
     {
         RebasePageLegendTakeoffOrderReferences([(oldPath, newPath)]);
@@ -402,35 +464,62 @@ public partial class MainWindow
 
         foreach (PageInfo page in CollectPagesUnder(_currentJob.PagesRoot))
         {
-            if (page.LegendTakeoffOrder.Count == 0)
+            if (page.LegendTakeoffOrder.Count > 0)
+            {
+                var updated = new List<string>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string key in page.LegendTakeoffOrder)
+                {
+                    string rebased = RebaseTakeoffLegendOrderKey(key, rebases);
+                    if (string.IsNullOrWhiteSpace(rebased) || !seen.Add(rebased))
+                        continue;
+
+                    updated.Add(rebased);
+                }
+
+                bool changed = updated.Count != page.LegendTakeoffOrder.Count ||
+                               updated.Where((key, index) => !string.Equals(
+                                   key,
+                                   NormalizeTakeoffLegendOrderKey(page.LegendTakeoffOrder[index]),
+                                   StringComparison.OrdinalIgnoreCase)).Any();
+                if (changed)
+                {
+                    page.LegendTakeoffOrder = updated;
+                    OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated, page.LegendTakeoffOrderMode);
+                    if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+                    {
+                        _currentPage.LegendTakeoffOrder = updated.ToList();
+                        _currentPage.LegendTakeoffOrderMode = page.LegendTakeoffOrderMode;
+                    }
+                }
+            }
+
+            if (page.TakeoffLayerOrder.Count == 0)
                 continue;
 
-            var updated = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string key in page.LegendTakeoffOrder)
+            var updatedLayers = new List<string>();
+            var seenLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string key in page.TakeoffLayerOrder)
             {
                 string rebased = RebaseTakeoffLegendOrderKey(key, rebases);
-                if (string.IsNullOrWhiteSpace(rebased) || !seen.Add(rebased))
+                if (string.IsNullOrWhiteSpace(rebased) || !seenLayers.Add(rebased))
                     continue;
 
-                updated.Add(rebased);
+                updatedLayers.Add(rebased);
             }
 
-            bool changed = updated.Count != page.LegendTakeoffOrder.Count ||
-                           updated.Where((key, index) => !string.Equals(
+            bool layerChanged = updatedLayers.Count != page.TakeoffLayerOrder.Count ||
+                           updatedLayers.Where((key, index) => !string.Equals(
                                key,
-                               NormalizeTakeoffLegendOrderKey(page.LegendTakeoffOrder[index]),
+                               NormalizeTakeoffLegendOrderKey(page.TakeoffLayerOrder[index]),
                                StringComparison.OrdinalIgnoreCase)).Any();
-            if (!changed)
+            if (!layerChanged)
                 continue;
 
-            page.LegendTakeoffOrder = updated;
-            OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated, page.LegendTakeoffOrderMode);
+            page.TakeoffLayerOrder = updatedLayers;
+            PageTakeoffLayerOrderStore.Save(page.FolderPath, updatedLayers);
             if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
-            {
-                _currentPage.LegendTakeoffOrder = updated.ToList();
-                _currentPage.LegendTakeoffOrderMode = page.LegendTakeoffOrderMode;
-            }
+                _currentPage.TakeoffLayerOrder = updatedLayers.ToList();
         }
     }
 
@@ -548,6 +637,10 @@ public partial class MainWindow
             true,
             () => SelectLinkedPageTakeoff(node)));
         menu.Items.Add(MakeMenuItem(
+            "Rename Linked Takeoff...",
+            selectedCount <= 1,
+            () => RenameLinkedPageTakeoff(node)));
+        menu.Items.Add(MakeMenuItem(
             IsPageTakeoffVisible(node.Page, node.Takeoff) ? "Hide on This Sheet" : "Show on This Sheet",
             true,
             () => TogglePageTakeoffVisibility(node.Page, node.Takeoff)));
@@ -559,6 +652,15 @@ public partial class MainWindow
             selectedCount > 1 ? $"Show {selectedCount} Selected on This Sheet" : "Show Selected on This Sheet",
             selectedCount > 0,
             () => SetSelectedPageTakeoffVisibility(node, visible: true)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Move {selectedCount} Backward" : "Move Backward",
+            CanMovePageTakeoffLayerNodes(node, -1),
+            () => MovePageTakeoffLayerNodes(node, -1)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Move {selectedCount} Forward" : "Move Forward",
+            CanMovePageTakeoffLayerNodes(node, 1),
+            () => MovePageTakeoffLayerNodes(node, 1)));
         menu.Items.Add(BuildPageTakeoffCountDisplayMenu(node));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
@@ -578,6 +680,17 @@ public partial class MainWindow
 
     private int SelectedPageTakeoffContextCount(PageTakeoffNode anchor) =>
         SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true).Count;
+
+    private void RenameLinkedPageTakeoff(PageTakeoffNode node)
+    {
+        if (FindTakeoffTreeItem(node.Takeoff) is not { } item)
+        {
+            TxtStatus.Text = "Linked takeoff is not visible in the Takeoffs tree.";
+            return;
+        }
+
+        RenameItem(item, node.Takeoff);
+    }
 
     private void SetSelectedPageTakeoffVisibility(PageTakeoffNode anchor, bool visible)
     {
@@ -772,6 +885,91 @@ public partial class MainWindow
         {
             TxtStatus.Text = $"Selected {pageMeasurements.Count} measurements from {selectedItems.Count} takeoffs on {_currentPage.Name}.";
         }
+    }
+
+    private bool CanMovePageTakeoffLayerNodes(PageTakeoffNode anchor, int offset)
+    {
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true);
+        return CanMovePageTakeoffLayerNodes(selectedNodes, anchor.Page, offset);
+    }
+
+    private bool CanMovePageTakeoffLayerNodes(IReadOnlyList<PageTakeoffNode> selectedNodes, PageInfo page, int offset)
+    {
+        if (offset == 0 || selectedNodes.Count == 0)
+            return false;
+
+        var ordered = LayerOrderedTakeoffsForPage(page).ToList();
+        if (ordered.Count <= 1)
+            return false;
+
+        var selectedKeys = selectedNodes
+            .Select(node => TakeoffLegendOrderKey(node.Takeoff))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedKeys.Count == 0 || selectedKeys.Count >= ordered.Count)
+            return false;
+
+        if (offset < 0)
+        {
+            for (int i = 1; i < ordered.Count; i++)
+            {
+                if (selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i])) &&
+                    !selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i - 1])))
+                    return true;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < ordered.Count - 1; i++)
+            {
+                if (selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i])) &&
+                    !selectedKeys.Contains(TakeoffLegendOrderKey(ordered[i + 1])))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void MovePageTakeoffLayerNodes(PageTakeoffNode anchor, int offset)
+    {
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor: true);
+        if (!CanMovePageTakeoffLayerNodes(selectedNodes, anchor.Page, offset))
+            return;
+
+        var ordered = LayerOrderedTakeoffsForPage(anchor.Page).ToList();
+        var selectedKeys = selectedNodes
+            .Select(node => TakeoffLegendOrderKey(node.Takeoff))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (offset < 0)
+        {
+            for (int i = 1; i < ordered.Count; i++)
+            {
+                string currentKey = TakeoffLegendOrderKey(ordered[i]);
+                string previousKey = TakeoffLegendOrderKey(ordered[i - 1]);
+                if (selectedKeys.Contains(currentKey) && !selectedKeys.Contains(previousKey))
+                    (ordered[i - 1], ordered[i]) = (ordered[i], ordered[i - 1]);
+            }
+        }
+        else
+        {
+            for (int i = ordered.Count - 2; i >= 0; i--)
+            {
+                string currentKey = TakeoffLegendOrderKey(ordered[i]);
+                string nextKey = TakeoffLegendOrderKey(ordered[i + 1]);
+                if (selectedKeys.Contains(currentKey) && !selectedKeys.Contains(nextKey))
+                    (ordered[i], ordered[i + 1]) = (ordered[i + 1], ordered[i]);
+            }
+        }
+
+        SavePageTakeoffLayerOrder(anchor.Page, ordered);
+        ApplyViewportPageTakeoffVisibility(anchor.Page);
+        ApplyPagesMultiSelectionVisuals();
+        TxtStatus.Text = offset < 0
+            ? $"Moved {selectedNodes.Count} linked takeoff layer(s) backward on {anchor.Page.Name}."
+            : $"Moved {selectedNodes.Count} linked takeoff layer(s) forward on {anchor.Page.Name}.";
     }
 
     private bool CanMovePageTakeoffLegendNode(PageTakeoffNode node, int offset)

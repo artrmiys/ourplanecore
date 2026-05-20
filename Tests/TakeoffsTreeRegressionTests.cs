@@ -431,6 +431,48 @@ internal static class TakeoffsTreeRegressionTests
             "viewport markups must support multi-select delete and snapshot-based ruler hiding");
     }
 
+    public static void PageTakeoffLayersAndAltVertexModeAreWired()
+    {
+        string pageLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.cs");
+        AssertTrue(
+            pageLegend.Contains("RenameLinkedPageTakeoff", StringComparison.Ordinal) &&
+            pageLegend.Contains("LayerOrderedTakeoffsForPage", StringComparison.Ordinal) &&
+            pageLegend.Contains("Move Backward", StringComparison.Ordinal) &&
+            pageLegend.Contains("Move Forward", StringComparison.Ordinal) &&
+            pageLegend.Contains("PageTakeoffLayerOrderStore.Save", StringComparison.Ordinal),
+            "left page takeoff menu must support rename plus draw-layer forward/back independent of legend");
+
+        string viewportInput = ReadRepoFile("Controls/PdfViewport.Input.cs");
+        string selectionEditing = ReadRepoFile("Controls/PdfViewport.SelectionEditing.cs");
+        string boxSelection = ReadRepoFile("Controls/PdfViewport.BoxSelection.cs");
+        AssertTrue(
+            viewportInput.Contains("BeginVertexBoxSelection(pdf)", StringComparison.Ordinal) &&
+            selectionEditing.Contains("if (IsVertexModifierActive() &&", StringComparison.Ordinal) &&
+            boxSelection.Contains("Alt-click or Alt-box handles to toggle", StringComparison.Ordinal) &&
+            !boxSelection.Contains("Alt+Ctrl", StringComparison.Ordinal) &&
+            !boxSelection.Contains("Alt+Shift", StringComparison.Ordinal),
+            "vertex selection and drag must be Alt-only without Ctrl/Shift vertex paths");
+
+        string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
+        string pdfExporter = ReadRepoFile("Models/PdfExporter.cs");
+        AssertTrue(
+            rendering.Contains("LayerOrderedMeasurements", StringComparison.Ordinal) &&
+            rendering.Contains("\"area\" => 0", StringComparison.Ordinal) &&
+            pdfExporter.Contains("MeasurementLayers ?? input.Takeoffs", StringComparison.Ordinal),
+            "viewport and PDF export must draw takeoffs by layer order with areas behind by default");
+
+        WithTempJob("takeoff_layers_store", job =>
+        {
+            string pageFolder = Path.Combine(job.PagesRoot, "A1");
+            Directory.CreateDirectory(pageFolder);
+            PageTakeoffLayerOrderStore.Save(pageFolder, ["walls", "areas", "walls", ""]);
+            AssertEqual(
+                "walls,areas",
+                string.Join(",", PageTakeoffLayerOrderStore.Load(pageFolder)),
+                "takeoff layer sidecar should persist distinct order");
+        });
+    }
+
     public static void PdfExportDefaultsMeasurementsOnForMeasuredSheets()
     {
         string source = ReadRepoFile("MainWindow.PdfExport.cs");

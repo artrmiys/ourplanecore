@@ -37,6 +37,23 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    public void SetTakeoffLayerOrder(IEnumerable<string> takeoffFolders)
+    {
+        _takeoffLayerRanks.Clear();
+        int index = 0;
+        foreach (string folder in takeoffFolders)
+        {
+            if (string.IsNullOrWhiteSpace(folder))
+                continue;
+
+            string key = NormalizePageFolderForCompare(folder);
+            if (!_takeoffLayerRanks.ContainsKey(key))
+                _takeoffLayerRanks[key] = index++;
+        }
+
+        RequestRepaint();
+    }
+
     public bool HideRulerAnnotations
     {
         get => _hideRulerAnnotations;
