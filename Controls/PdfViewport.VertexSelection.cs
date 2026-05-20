@@ -92,7 +92,14 @@ public sealed partial class PdfViewport
         if (groups.Count == 0)
             return false;
 
-        foreach (var group in groups)
+        var removeGroups = groups
+            .Where(group => DeletesWholeCountMeasurement(group.Measurement, group.Indices))
+            .ToList();
+        var editGroups = groups
+            .Where(group => !DeletesWholeCountMeasurement(group.Measurement, group.Indices))
+            .ToList();
+
+        foreach (var group in editGroups)
         {
             if (!CanDeleteMeasurementVertices(group.Measurement, group.Indices, out string error))
             {
@@ -101,22 +108,66 @@ public sealed partial class PdfViewport
             }
         }
 
-        PushMeasurementUndoSnapshots(
-            groups.ToDictionary(group => group.Measurement, group => group.Measurement.Points.ToList()),
-            groups.ToDictionary(group => group.Measurement, group => CloneHoles(group.Measurement.Holes)),
+        PushMixedMeasurementUndo(
+            editGroups.ToDictionary(group => group.Measurement, group => group.Measurement.Points.ToList()),
+            editGroups.ToDictionary(group => group.Measurement, group => CloneHoles(group.Measurement.Holes)),
+            removeGroups.ToDictionary(group => group.Measurement, group => _measurements.IndexOf(group.Measurement)),
+            [],
             "delete selected vertices",
             "delete-vertices");
         int deletedCount = 0;
-        foreach (var group in groups)
+        foreach (var group in editGroups)
             deletedCount += DeleteMeasurementVertices(group.Measurement, group.Indices);
-        NotifyMeasurementsChanged(groups.Select(group => group.Measurement).ToList());
 
-        ClearMeasurementVertexSelection();
+        var removedMeasurements = removeGroups
+            .Select(group => group.Measurement)
+            .Distinct()
+            .ToList();
+        foreach (Measurement measurement in removedMeasurements)
+        {
+            deletedCount += measurement.Points.Count;
+            _measurements.Remove(measurement);
+            _measurementSet.Remove(measurement);
+            RemoveMeasurementFromPageIndex(measurement);
+            ForgetMeasurementState(measurement);
+        }
+
+        NotifyMeasurementsChanged(editGroups.Select(group => group.Measurement).ToList());
+        NotifyMeasurementsRemoved(removedMeasurements);
+
+        if (removedMeasurements.Count > 0)
+        {
+            var removedSet = new HashSet<Measurement>(removedMeasurements);
+            var remainingSelection = GetSelectedMeasurements()
+                .Where(measurement => !removedSet.Contains(measurement))
+                .ToList();
+            SetSelectedMeasurements(remainingSelection, remainingSelection.LastOrDefault(), -1);
+        }
+        else
+        {
+            ClearMeasurementVertexSelection();
+        }
         _selectedVertexIndex = -1;
         _dragMeasurementVertexOriginalPoints.Clear();
         RequestRepaint();
         PostStatus($"Deleted {deletedCount} selected vertex/vertices.");
         return true;
+    }
+
+    private static bool DeletesWholeCountMeasurement(Measurement measurement, IReadOnlyList<int> globalIndices)
+    {
+        if (measurement.MType != "point" || measurement.Points.Count == 0)
+            return false;
+
+        var selectedOuterVertices = globalIndices
+            .Select(index => TryResolveMeasurementVertex(measurement, index, out MeasurementVertexRef vertex)
+                ? vertex
+                : (MeasurementVertexRef?)null)
+            .Where(vertex => vertex.HasValue && !vertex.Value.IsHole)
+            .Select(vertex => vertex!.Value.VertexIndex)
+            .Distinct()
+            .Count();
+        return selectedOuterVertices >= measurement.Points.Count;
     }
 
     private IEnumerable<Measurement> ActiveVertexMeasurements() =>

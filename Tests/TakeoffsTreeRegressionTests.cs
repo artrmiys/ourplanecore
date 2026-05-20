@@ -476,7 +476,8 @@ internal static class TakeoffsTreeRegressionTests
             selectionEditing.Contains("TryHitVertexOnSelectedMeasurement(pdf", StringComparison.Ordinal) &&
             selectionEditing.Contains("if (IsVertexModifierActive() &&", StringComparison.Ordinal) &&
             hitTesting.Contains("TryHitSelectedVertexOnMeasurement", StringComparison.Ordinal) &&
-            viewportInput.Contains("Cursors.SizeAll", StringComparison.Ordinal) &&
+            viewportInput.Contains("Cursor = Cursors.Cross", StringComparison.Ordinal) &&
+            !viewportInput.Contains("Cursors.SizeAll", StringComparison.Ordinal) &&
             boxSelection.Contains("Alt-click or Alt-box handles to toggle", StringComparison.Ordinal) &&
             !boxSelection.Contains("Alt+Ctrl", StringComparison.Ordinal) &&
             !boxSelection.Contains("Alt+Shift", StringComparison.Ordinal),
@@ -518,6 +519,7 @@ internal static class TakeoffsTreeRegressionTests
         string selectionEditing = ReadRepoFile("Controls/PdfViewport.SelectionEditing.cs");
         string input = ReadRepoFile("Controls/PdfViewport.Input.cs");
         string boxSelection = ReadRepoFile("Controls/PdfViewport.BoxSelection.cs");
+        string overlayRendering = ReadRepoFile("Controls/PdfViewport.SelectionOverlayRendering.cs");
 
         AssertTrue(
             constants.Contains("public const float VertexHitRadiusScreen = 10f;", StringComparison.Ordinal) &&
@@ -528,16 +530,24 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             vertexSelection.Contains("measurement.MType is \"point\" or \"line\" or \"area\"", StringComparison.Ordinal) &&
-            vertexSelection.Contains("\"Count needs at least 1 point.\"", StringComparison.Ordinal),
-            "Count measurements must participate in vertex editing without breaking delete validation");
+            vertexSelection.Contains("DeletesWholeCountMeasurement", StringComparison.Ordinal) &&
+            vertexSelection.Contains("PushMixedMeasurementUndo", StringComparison.Ordinal) &&
+            vertexSelection.Contains("NotifyMeasurementsRemoved(removedMeasurements)", StringComparison.Ordinal),
+            "Count measurements must participate in vertex editing and delete whole empty Count measurements");
 
         int pointHotGrip = selectionEditing.IndexOf("pointVertexMeasurement.MType == \"point\"", StringComparison.Ordinal);
         int bodyMove = selectionEditing.IndexOf("TryHitSelectedMeasurement(pdf, out Measurement selectedMeasurement)", StringComparison.Ordinal);
         AssertTrue(pointHotGrip >= 0 && bodyMove > pointHotGrip, "Count point hot grip must win before body move");
         AssertTrue(
             input.Contains("pointVertexMeasurement.MType == \"point\"", StringComparison.Ordinal) &&
-            input.Contains("Cursor = Cursors.SizeAll", StringComparison.Ordinal),
-            "cursor should advertise direct Count point drag");
+            input.Contains("Cursor = Cursors.Cross", StringComparison.Ordinal) &&
+            !input.Contains("Cursors.SizeAll", StringComparison.Ordinal),
+            "cursor should use a simple cross for direct Count point drag");
+        AssertTrue(
+            overlayRendering.Contains("drawOnlySelectedCountVertices", StringComparison.Ordinal) &&
+            overlayRendering.Contains("m.MType == \"point\"", StringComparison.Ordinal) &&
+            overlayRendering.Contains("if (drawOnlySelectedCountVertices && !vertexSelected)", StringComparison.Ordinal),
+            "Count vertex selection should not draw every Count handle as selected once a point subset exists");
         AssertTrue(
             boxSelection.Contains("Count, Line, or Area object", StringComparison.Ordinal),
             "Alt vertex selection guidance should include Count objects");

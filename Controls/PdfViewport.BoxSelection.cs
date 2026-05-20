@@ -26,7 +26,7 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
-    // Alt-mode box/click that targets the selected Line/Area object's vertices.
+    // Alt-mode box/click that targets the selected Count/Line/Area object's vertices.
     private void BeginVertexBoxSelection(SKPoint pdf)
     {
         ClearInProgressInputForEdit();

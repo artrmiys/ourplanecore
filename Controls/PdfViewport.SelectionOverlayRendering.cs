@@ -60,12 +60,20 @@ public sealed partial class PdfViewport
             Style = SKPaintStyle.Stroke,
         };
 
+        bool drawOnlySelectedCountVertices =
+            m.MType == "point" &&
+            _selectedMeasurementVertexIndices.TryGetValue(m, out HashSet<int>? selectedCountVertices) &&
+            selectedCountVertices.Count > 0;
+
         foreach (MeasurementVertexRef vertex in MeasurementVertices(m))
         {
-            var rect = SKRect.Create(vertex.Point.X - radius, vertex.Point.Y - radius, radius * 2, radius * 2);
             bool vertexSelected = ReferenceEquals(_selectedMeasurement, m) &&
                                   vertex.GlobalIndex == _selectedVertexIndex ||
                                   IsMeasurementVertexSelected(m, vertex.GlobalIndex);
+            if (drawOnlySelectedCountVertices && !vertexSelected)
+                continue;
+
+            var rect = SKRect.Create(vertex.Point.X - radius, vertex.Point.Y - radius, radius * 2, radius * 2);
             canvas.DrawRect(rect, vertexSelected ? activeFill : fill);
             canvas.DrawRect(rect, stroke);
         }

@@ -755,7 +755,7 @@ public sealed partial class PdfViewport
              TryHitEditableVertex(pdf.Value, out Measurement pointVertexMeasurement, out _) &&
              pointVertexMeasurement.MType == "point"))
         {
-            Cursor = Cursors.SizeAll;
+            Cursor = Cursors.Cross;
             return;
         }
 
