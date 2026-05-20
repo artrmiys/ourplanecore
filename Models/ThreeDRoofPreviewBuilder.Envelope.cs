@@ -345,9 +345,9 @@ public static partial class ThreeDRoofPreviewBuilder
         return ClipPolygon(
             poly,
             point => invert
-                ? SourceProjection(plane, point) <= tolerance
+                ? SourceProjection(plane, point) <= -tolerance
                 : SourceProjection(plane, point) >= -tolerance,
-            (a, b) => IntersectSourceProjectionBoundary(a, b, plane, 0));
+            (a, b) => IntersectSourceProjectionBoundary(a, b, plane, -tolerance));
     }
 
     private static List<P2> ClipSourceEndHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
@@ -357,9 +357,9 @@ public static partial class ThreeDRoofPreviewBuilder
         return ClipPolygon(
             poly,
             point => invert
-                ? SourceProjection(plane, point) >= length - tolerance
+                ? SourceProjection(plane, point) >= length + tolerance
                 : SourceProjection(plane, point) <= length + tolerance,
-            (a, b) => IntersectSourceProjectionBoundary(a, b, plane, length));
+            (a, b) => IntersectSourceProjectionBoundary(a, b, plane, length + tolerance));
     }
 
     private static P2 IntersectSourceProjectionBoundary(P2 a, P2 b, SlopePlane plane, double target)

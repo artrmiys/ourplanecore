@@ -640,6 +640,15 @@ internal static class RoofProbeTests
         if (ratio < 0.97 || ratio > 1.03)
             throw new InvalidOperationException($"Eagleview roof faces must tile the footprint; ratio {ratio:F3}.");
 
+        double topCornerMaxY = faces
+            .SelectMany(face => face.Points)
+            .Where(point => point.ZFeet > 49.8)
+            .Select(point => point.YFeet)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (topCornerMaxY > 3.5)
+            throw new InvalidOperationException($"Eagleview upper roof corner should not fold above the adjacent eave planes; got maxY {topCornerMaxY:F2}.");
+
         List<ThreeDRoofGuide> flatGenerated = result.Guides
             .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
             .Where(guide => guide.Points.Count >= 2 && guide.Points.Max(point => point.YFeet) <= 0.05)
