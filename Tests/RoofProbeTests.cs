@@ -618,7 +618,7 @@ internal static class RoofProbeTests
             [
                 Guide(ThreeDRoofGuideKinds.Eave, 20.030933521412035, 50.19593641493055, 20.030933521412035, 38.088401511863424, "edge 1", 0.5),
                 Guide(ThreeDRoofGuideKinds.Eave, 20.030933521412035, 38.088401511863424, 28.64603226273148, 38.088401511863424, "edge 2", 0.5),
-                Guide(ThreeDRoofGuideKinds.Rake, 28.64603226273148, 38.088401511863424, 28.64603226273148, 30.209120008680554, "edge 3"),
+                Guide(ThreeDRoofGuideKinds.Eave, 28.64603226273148, 38.088401511863424, 28.64603226273148, 30.209120008680554, "edge 3", 0.5),
                 Guide(ThreeDRoofGuideKinds.Eave, 28.64603226273148, 30.209120008680554, 46.23650444878472, 30.209120008680554, "edge 4", 0.5),
                 Guide(ThreeDRoofGuideKinds.Rake, 46.23650444878472, 30.209120008680554, 46.23650444878472, 45.23588957609953, "edge 5"),
                 Guide(ThreeDRoofGuideKinds.Eave, 46.23650444878472, 45.23588957609953, 26.37896728515625, 45.23588957609953, "edge 6", 0.5),
@@ -661,6 +661,8 @@ internal static class RoofProbeTests
 
         AssertGeneratedValleyFrom(result, Point(28.64603226273148, 38.088401511863424), "upper inside corner");
         AssertGeneratedValleyFrom(result, Point(26.37896728515625, 45.23588957609953), "lower inside corner");
+        AssertGeneratedValleyAlong(result, Point(28.64603226273148, 38.088401511863424), 1, 1, "upper inside corner");
+        AssertGeneratedValleyAlong(result, Point(26.37896728515625, 45.23588957609953), -1, -1, "lower inside corner");
     }
 
     private static void AssertGeneratedValleyFrom(ThreeDRoofBuildResult result, ThreeDPoint expected, string label)
@@ -679,6 +681,59 @@ internal static class RoofProbeTests
 
         if (!found)
             throw new InvalidOperationException($"Eagleview roof should generate a valley from the {label}.");
+    }
+
+    private static void AssertGeneratedValleyAlong(
+        ThreeDRoofBuildResult result,
+        ThreeDPoint expectedStart,
+        double expectedDx,
+        double expectedDz,
+        string label)
+    {
+        double expectedLength = Math.Sqrt(expectedDx * expectedDx + expectedDz * expectedDz);
+        double unitX = expectedDx / expectedLength;
+        double unitZ = expectedDz / expectedLength;
+        bool found = result.Guides
+            .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
+            .Where(guide => guide.Kind == ThreeDRoofGuideKinds.Valley)
+            .Where(guide => guide.Points.Count >= 2)
+            .Any(guide =>
+            {
+                ThreeDRoofGuidePoint a = guide.Points[0];
+                ThreeDRoofGuidePoint b = guide.Points[^1];
+                return StartsAndRunsAlong(a, b) || StartsAndRunsAlong(b, a);
+
+                bool StartsAndRunsAlong(ThreeDRoofGuidePoint start, ThreeDRoofGuidePoint end)
+                {
+                    double startDistance = Distance2(start.XFeet, start.ZFeet, expectedStart.XFeet, expectedStart.ZFeet);
+                    if (startDistance > 0.18)
+                        return false;
+
+                    double dx = end.XFeet - start.XFeet;
+                    double dz = end.ZFeet - start.ZFeet;
+                    double length = Math.Sqrt(dx * dx + dz * dz);
+                    if (length < 2.0)
+                        return false;
+
+                    double alignment = (dx / length) * unitX + (dz / length) * unitZ;
+                    return alignment > 0.82;
+                }
+            });
+
+        if (!found)
+        {
+            string valleys = string.Join("; ", result.Guides
+                .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
+                .Where(guide => guide.Kind == ThreeDRoofGuideKinds.Valley)
+                .Where(guide => guide.Points.Count >= 2)
+                .Select(guide =>
+                {
+                    ThreeDRoofGuidePoint a = guide.Points[0];
+                    ThreeDRoofGuidePoint b = guide.Points[^1];
+                    return $"{guide.Label} ({a.XFeet:F2},{a.YFeet:F2},{a.ZFeet:F2})->({b.XFeet:F2},{b.YFeet:F2},{b.ZFeet:F2})";
+                }));
+            throw new InvalidOperationException($"Eagleview roof should generate a real diagonal valley from the {label}. Valleys: {valleys}");
+        }
     }
 
     private static double Distance2(double ax, double az, double bx, double bz)

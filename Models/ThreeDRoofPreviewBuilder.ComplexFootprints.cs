@@ -19,8 +19,9 @@ public static partial class ThreeDRoofPreviewBuilder
             if (!IsConcaveVertex(previous, vertex, next))
                 continue;
 
-            P2 direction = ConcaveValleyDirection(previous, vertex, next, footprint);
-            if (!TryFindConcaveValleyEnd(vertex, direction, footprint, faces, out P2 end, out double endY))
+            List<SlopePlane> cornerPlanes = ConcaveCornerSlopePlanes(vertex, faces);
+            P2 direction = ConcaveValleyDirection(previous, vertex, next, footprint, cornerPlanes);
+            if (!TryFindConcaveValleyEnd(vertex, direction, footprint, faces, cornerPlanes, out P2 end, out double endY))
                 continue;
 
             var candidate = new Segment(vertex, end);
@@ -28,8 +29,8 @@ public static partial class ThreeDRoofPreviewBuilder
                 continue;
 
             P2 mid = new((vertex.X + end.X) / 2.0, (vertex.Z + end.Z) / 2.0);
-            double startY = EnvelopeHeightAt(faces, vertex);
-            double midY = EnvelopeHeightAt(faces, mid);
+            double startY = ConcaveValleyHeightAt(faces, cornerPlanes, vertex);
+            double midY = ConcaveValleyHeightAt(faces, cornerPlanes, mid);
             double roofBase = faces.Min(face => face.RoofBase);
             if (!HasMeaningfulGeneratedRise(roofBase, startY, endY))
                 continue;
@@ -84,8 +85,43 @@ public static partial class ThreeDRoofPreviewBuilder
     private static bool IsConcaveVertex(P2 previous, P2 vertex, P2 next) =>
         Cross(Subtract(vertex, previous), Subtract(next, vertex)) < -0.001;
 
-    private static P2 ConcaveValleyDirection(P2 previous, P2 vertex, P2 next, IReadOnlyList<P2> footprint)
+    private static List<SlopePlane> ConcaveCornerSlopePlanes(P2 vertex, IReadOnlyList<EnvelopeFace> faces)
     {
+        var planes = new List<SlopePlane>();
+        foreach (EnvelopeFace face in faces)
+        {
+            SlopePlane plane = face.Plane;
+            if (Distance(plane.Start, vertex) > 0.2 && Distance(plane.End, vertex) > 0.2)
+                continue;
+            if (planes.Any(existing => AreSamePlane(existing, plane)))
+                continue;
+
+            planes.Add(plane);
+        }
+
+        return planes;
+    }
+
+    private static P2 ConcaveValleyDirection(
+        P2 previous,
+        P2 vertex,
+        P2 next,
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<SlopePlane> cornerPlanes)
+    {
+        if (cornerPlanes.Count >= 2)
+        {
+            SlopePlane first = cornerPlanes[0];
+            SlopePlane second = cornerPlanes[1];
+            P2 equalHeight = Normalize(new P2(-(first.B - second.B), first.A - second.A));
+            if (Length(equalHeight) > 0.000001)
+            {
+                P2 chosen = ChooseInteriorValleyDirection(vertex, equalHeight, footprint, cornerPlanes);
+                if (Length(chosen) > 0.000001)
+                    return chosen;
+            }
+        }
+
         P2 toPrevious = Normalize(Subtract(previous, vertex));
         P2 toNext = Normalize(Subtract(next, vertex));
         P2 direction = Normalize(new P2(-(toPrevious.X + toNext.X), -(toPrevious.Z + toNext.Z)));
@@ -98,16 +134,52 @@ public static partial class ThreeDRoofPreviewBuilder
             : new P2(-direction.X, -direction.Z);
     }
 
+    private static P2 ChooseInteriorValleyDirection(
+        P2 vertex,
+        P2 direction,
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<SlopePlane> cornerPlanes)
+    {
+        P2 forward = Normalize(direction);
+        P2 backward = new(-forward.X, -forward.Z);
+        bool forwardValid = IsInteriorRisingValleyDirection(vertex, forward, footprint, cornerPlanes);
+        bool backwardValid = IsInteriorRisingValleyDirection(vertex, backward, footprint, cornerPlanes);
+        if (forwardValid && !backwardValid)
+            return forward;
+        if (backwardValid && !forwardValid)
+            return backward;
+        if (forwardValid)
+            return forward;
+
+        return default;
+    }
+
+    private static bool IsInteriorRisingValleyDirection(
+        P2 vertex,
+        P2 direction,
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<SlopePlane> cornerPlanes)
+    {
+        P2 probe = new(vertex.X + direction.X * 0.25, vertex.Z + direction.Z * 0.25);
+        if (!PointInPolygon(probe, footprint))
+            return false;
+
+        return cornerPlanes
+            .Take(2)
+            .All(plane => plane.HeightAt(probe) >= -0.05);
+    }
+
     private static bool TryFindConcaveValleyEnd(
         P2 vertex,
         P2 direction,
         IReadOnlyList<P2> footprint,
         IReadOnlyList<EnvelopeFace> faces,
+        IReadOnlyList<SlopePlane> cornerPlanes,
         out P2 end,
         out double endY)
     {
         end = vertex;
-        endY = EnvelopeHeightAt(faces, vertex);
+        endY = ConcaveValleyHeightAt(faces, cornerPlanes, vertex);
         double length = ConcaveValleyLength(vertex, direction, footprint);
         if (length < 0.25)
             return false;
@@ -119,7 +191,7 @@ public static partial class ThreeDRoofPreviewBuilder
         {
             double t = length * i / samples;
             P2 point = new(vertex.X + direction.X * t, vertex.Z + direction.Z * t);
-            double y = EnvelopeHeightAt(faces, point);
+            double y = ConcaveValleyHeightAt(faces, cornerPlanes, point);
             if (y > bestY)
             {
                 bestY = y;
@@ -133,6 +205,25 @@ public static partial class ThreeDRoofPreviewBuilder
         end = new P2(vertex.X + direction.X * bestT, vertex.Z + direction.Z * bestT);
         endY = bestY;
         return true;
+    }
+
+    private static double ConcaveValleyHeightAt(
+        IReadOnlyList<EnvelopeFace> faces,
+        IReadOnlyList<SlopePlane> cornerPlanes,
+        P2 point)
+    {
+        double roofBase = faces.Select(face => face.RoofBase).DefaultIfEmpty(0).Min();
+        if (cornerPlanes.Count >= 2)
+        {
+            double local = cornerPlanes
+                .Take(2)
+                .Select(plane => roofBase + Math.Max(0, plane.HeightAt(point)))
+                .Min();
+            if (double.IsFinite(local))
+                return local;
+        }
+
+        return EnvelopeHeightAt(faces, point);
     }
 
     private static double ConcaveValleyLength(P2 vertex, P2 direction, IReadOnlyList<P2> footprint)
@@ -158,7 +249,16 @@ public static partial class ThreeDRoofPreviewBuilder
     {
         double best = double.PositiveInfinity;
         foreach (EnvelopeFace face in faces)
-            best = Math.Min(best, face.RoofBase + Math.Max(0, face.Plane.HeightAt(point)));
+        {
+            if (PointInPolygon(point, face.Points) || DistanceToPolygon(point, face.Points) <= 0.05)
+                best = Math.Min(best, face.RoofBase + Math.Max(0, face.Plane.HeightAt(point)));
+        }
+
+        if (!double.IsFinite(best))
+        {
+            foreach (EnvelopeFace face in faces)
+                best = Math.Min(best, face.RoofBase + Math.Max(0, face.Plane.HeightAt(point)));
+        }
 
         return double.IsFinite(best) ? best : 0;
     }
