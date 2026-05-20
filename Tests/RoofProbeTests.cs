@@ -649,6 +649,9 @@ internal static class RoofProbeTests
         if (topCornerMaxY > 3.5)
             throw new InvalidOperationException($"Eagleview upper roof corner should not fold above the adjacent eave planes; got maxY {topCornerMaxY:F2}.");
 
+        if (faces.Count > 32)
+            throw new InvalidOperationException($"Eagleview roof should not be shredded into endpoint-strip slivers; got {faces.Count} envelope faces.");
+
         List<ThreeDRoofGuide> flatGenerated = result.Guides
             .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
             .Where(guide => guide.Points.Count >= 2 && guide.Points.Max(point => point.YFeet) <= 0.05)
@@ -663,6 +666,8 @@ internal static class RoofProbeTests
         AssertGeneratedValleyFrom(result, Point(26.37896728515625, 45.23588957609953), "lower inside corner");
         AssertGeneratedValleyAlong(result, Point(28.64603226273148, 38.088401511863424), 1, 1, "upper inside corner");
         AssertGeneratedValleyAlong(result, Point(26.37896728515625, 45.23588957609953), -1, -1, "lower inside corner");
+        AssertRoofMeshEdgeAlong(faces, Point(28.64603226273148, 38.088401511863424), 1, 1, "upper inside corner valley");
+        AssertRoofMeshEdgeAlong(faces, Point(26.37896728515625, 45.23588957609953), -1, -1, "lower inside corner valley");
     }
 
     private static void AssertGeneratedValleyFrom(ThreeDRoofBuildResult result, ThreeDPoint expected, string label)
@@ -741,6 +746,49 @@ internal static class RoofProbeTests
         double dx = bx - ax;
         double dz = bz - az;
         return Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    private static void AssertRoofMeshEdgeAlong(
+        IReadOnlyList<ThreeDRoofPlane> faces,
+        ThreeDPoint expectedStart,
+        double expectedDx,
+        double expectedDz,
+        string label)
+    {
+        double expectedLength = Math.Sqrt(expectedDx * expectedDx + expectedDz * expectedDz);
+        double unitX = expectedDx / expectedLength;
+        double unitZ = expectedDz / expectedLength;
+        bool found = faces.Any(face =>
+        {
+            for (int i = 0; i < face.Points.Count; i++)
+            {
+                ThreeDRoofVertex a = face.Points[i];
+                ThreeDRoofVertex b = face.Points[(i + 1) % face.Points.Count];
+                if (EdgeStartsAndRunsAlong(a, b) || EdgeStartsAndRunsAlong(b, a))
+                    return true;
+            }
+
+            return false;
+        });
+
+        if (!found)
+            throw new InvalidOperationException($"Eagleview roof mesh should include a real face edge along the {label}.");
+
+        bool EdgeStartsAndRunsAlong(ThreeDRoofVertex start, ThreeDRoofVertex end)
+        {
+            double startDistance = Distance2(start.XFeet, start.ZFeet, expectedStart.XFeet, expectedStart.ZFeet);
+            if (startDistance > 0.2)
+                return false;
+
+            double dx = end.XFeet - start.XFeet;
+            double dz = end.ZFeet - start.ZFeet;
+            double length = Math.Sqrt(dx * dx + dz * dz);
+            if (length < 2.0)
+                return false;
+
+            double alignment = (dx / length) * unitX + (dz / length) * unitZ;
+            return alignment > 0.82;
+        }
     }
 
     private static double PolygonArea(IEnumerable<(double X, double Z)> points)

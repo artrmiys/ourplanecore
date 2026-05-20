@@ -85,18 +85,17 @@ public static partial class ThreeDRoofPreviewBuilder
 
             foreach (SlopePlane plane in planes)
             {
-                // Own active domain: a Revit-style slope edge is finite. It
-                // can slope inward from its own segment, but must not continue
-                // as an infinite eave line past the edge endpoints.
+                // A Revit footprint-roof slope edge contributes its support
+                // plane across the roofed side of the edge. Do not clip it to
+                // the source segment endpoints: hip/valley faces past a
+                // corner are exactly where adjacent edge planes keep meeting.
                 List<P2> front = ClipToActiveDomain(triangle, plane);
                 if (front.Count < 3 || Math.Abs(SignedArea(front)) < 0.0004)
                     continue;
 
-                // Exact active-domain-aware lower envelope as a set of convex
-                // pieces. For each competitor j: keep the parts outside j's
-                // finite slope domain as-is, and clip only the active part by
-                // i <= j. This keeps short eaves from cutting a roof face far
-                // beyond their own endpoints.
+                // Exact lower envelope as convex pieces. For each competitor:
+                // keep the area behind its eave line as-is, and clip only the
+                // roofed side by i <= j.
                 var pieces = new List<List<P2>> { front };
                 foreach (SlopePlane other in planes)
                 {
@@ -292,15 +291,7 @@ public static partial class ThreeDRoofPreviewBuilder
 
     private static List<P2> ClipToActiveDomain(IReadOnlyList<P2> poly, SlopePlane plane)
     {
-        List<P2> active = CleanPolygon(ClipFrontHalfPlane(poly, plane));
-        if (active.Count < 3)
-            return [];
-
-        active = CleanPolygon(ClipSourceStartHalfPlane(active, plane));
-        if (active.Count < 3)
-            return [];
-
-        return CleanPolygon(ClipSourceEndHalfPlane(active, plane));
+        return CleanPolygon(ClipFrontHalfPlane(poly, plane));
     }
 
     private static IReadOnlyList<List<P2>> SplitByActiveDomain(
@@ -312,23 +303,7 @@ public static partial class ThreeDRoofPreviewBuilder
         List<P2> remaining = CleanPolygon(poly);
         AddEnvelopePiece(inactive, ClipFrontHalfPlane(remaining, plane, invert: true));
 
-        remaining = CleanPolygon(ClipFrontHalfPlane(remaining, plane));
-        if (remaining.Count < 3)
-        {
-            active = [];
-            return inactive;
-        }
-
-        AddEnvelopePiece(inactive, ClipSourceStartHalfPlane(remaining, plane, invert: true));
-        remaining = CleanPolygon(ClipSourceStartHalfPlane(remaining, plane));
-        if (remaining.Count < 3)
-        {
-            active = [];
-            return inactive;
-        }
-
-        AddEnvelopePiece(inactive, ClipSourceEndHalfPlane(remaining, plane, invert: true));
-        active = CleanPolygon(ClipSourceEndHalfPlane(remaining, plane));
+        active = CleanPolygon(ClipFrontHalfPlane(remaining, plane));
         return inactive;
     }
 
