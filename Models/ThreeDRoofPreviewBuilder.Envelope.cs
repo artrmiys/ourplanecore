@@ -136,10 +136,12 @@ public static partial class ThreeDRoofPreviewBuilder
         if (faces.Count == 0)
             return BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
 
-        // The per-cell clipping shatters each slope into many coplanar
-        // pieces. Fuse the pieces of each eave back into one polygon per
-        // slope so the roof is a few clean faces, not a quilt of squares.
-        return MergeCoplanarFaces(faces, roofBase);
+        // Keep the clipped pieces instead of fusing coplanar regions. The
+        // fused loop can become non-simple on stepped/L footprints and then
+        // the 3D renderer triangulates it as torn geometry. These pieces are
+        // convex cell fragments, so they render as stable roof surfaces while
+        // seams still merge into clean ridge/hip/valley guide lines.
+        return faces;
     }
 
     // Union the coplanar pieces of each plane: drop internal shared edges,

@@ -517,6 +517,67 @@ internal static class RoofProbeTests
                 $"U-shape envelope must tile the footprint; covered {covered:F1} of {footprintArea:F1} (ratio {ratio:F3}).");
     }
 
+    public static void SteppedFootprintFacesTriangulate()
+    {
+        ThreeDPoint[] footprint =
+        [
+            Point(11.8, 0), Point(36, 0), Point(36, 19),
+            Point(8.7, 19), Point(8.7, 24), Point(0, 24),
+            Point(0, 9.5), Point(11.8, 9.5),
+        ];
+        var model = new ThreeDWallModel
+        {
+            Slabs =
+            [
+                new ThreeDFloorSlab
+                {
+                    Label = "Revit-like stepped roof base",
+                    LevelKey = "roof",
+                    ElevationFeet = 10,
+                    Points = [.. footprint],
+                },
+            ],
+            RoofGuides =
+            [
+                Guide(ThreeDRoofGuideKinds.Eave, 11.8, 0, 36, 0, "top eave", 0.25),
+                Guide(ThreeDRoofGuideKinds.Eave, 36, 0, 36, 19, "right eave", 0.25),
+                Guide(ThreeDRoofGuideKinds.Eave, 36, 19, 8.7, 19, "main lower eave", 0.25),
+                Guide(ThreeDRoofGuideKinds.Rake, 8.7, 19, 8.7, 24, "step rake"),
+                Guide(ThreeDRoofGuideKinds.Eave, 8.7, 24, 0, 24, "lower eave", 0.25),
+                Guide(ThreeDRoofGuideKinds.Eave, 0, 24, 0, 9.5, "left eave", 0.25),
+                Guide(ThreeDRoofGuideKinds.Rake, 0, 9.5, 11.8, 9.5, "notch rake"),
+                Guide(ThreeDRoofGuideKinds.Rake, 11.8, 9.5, 11.8, 0, "upper rake"),
+            ],
+        };
+
+        ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+        if (result.PlaneBuildBlocked)
+            throw new InvalidOperationException("stepped Revit-like footprint should build.");
+
+        List<ThreeDRoofPlane> faces = result.Planes
+            .Where(plane => plane.Kind == "roof_face_envelope")
+            .ToList();
+        if (faces.Count < 5)
+            throw new InvalidOperationException($"stepped footprint should create multiple roof faces, got {faces.Count}.");
+
+        double footprintArea = Math.Abs(PolygonArea(footprint.Select(p => (p.XFeet, p.ZFeet))));
+        double covered = faces.Sum(plane => Math.Abs(PolygonArea(plane.Points.Select(v => (v.XFeet, v.ZFeet)))));
+        double ratio = covered / footprintArea;
+        if (ratio < 0.97 || ratio > 1.03)
+            throw new InvalidOperationException($"stepped footprint faces must tile the footprint; ratio {ratio:F3}.");
+
+        foreach (ThreeDRoofPlane face in faces)
+        {
+            ThreeDPolygonTriangulation triangulation = ThreeDPolygonTriangulator.Triangulate(
+                face.Points.Select(point => new ThreeDPoint { XFeet = point.XFeet, ZFeet = point.ZFeet }).ToList());
+            if (!triangulation.Success || triangulation.Points.Count != face.Points.Count)
+            {
+                throw new InvalidOperationException(
+                    $"roof face '{face.Label}' must stay directly triangulatable; {triangulation.Message}");
+            }
+        }
+    }
+
     private static double PolygonArea(IEnumerable<(double X, double Z)> points)
     {
         var pts = points.ToList();
