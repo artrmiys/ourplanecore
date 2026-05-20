@@ -102,7 +102,8 @@ public sealed partial class PdfViewport
                 var measMtx = SKMatrix.CreateScaleTranslation(
                     _zoom, _zoom, -_panX * _zoom, -_panY * _zoom);
                 using var saved = new SKAutoCanvasRestore(canvas, true);
-                canvas.SetMatrix(measMtx);
+                // Preserve the SKElement DPI matrix; replacing it causes laptop-scale cursor offsets.
+                canvas.Concat(ref measMtx);
                 sectionStart = frameWatch.ElapsedMilliseconds;
                 if (ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
                     DrawSheetOverlay(canvas);

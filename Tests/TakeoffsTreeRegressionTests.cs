@@ -473,6 +473,17 @@ internal static class TakeoffsTreeRegressionTests
         });
     }
 
+    public static void ViewportRenderingPreservesDpiMatrix()
+    {
+        string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        AssertTrue(
+            rendering.Contains("canvas.Concat(ref measMtx)", StringComparison.Ordinal),
+            "measurement overlay must compose with the SKElement DPI matrix instead of replacing it");
+        AssertFalse(
+            rendering.Contains("canvas.SetMatrix(measMtx)", StringComparison.Ordinal),
+            "measurement overlay must not drop the SKElement DPI matrix on high-DPI laptop displays");
+    }
+
     public static void PdfExportDefaultsMeasurementsOnForMeasuredSheets()
     {
         string source = ReadRepoFile("MainWindow.PdfExport.cs");

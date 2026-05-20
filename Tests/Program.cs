@@ -204,6 +204,7 @@ var tests = new List<(string Name, Action Run)>
     ("viewport far zoom respects fast navigation toggle", ViewportFarZoomRespectsFastNavigationToggle),
     ("viewport dense page respects fast navigation toggle", ViewportDensePageRespectsFastNavigationToggle),
     ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
+    ("viewport rendering preserves dpi matrix", TakeoffsTreeRegressionTests.ViewportRenderingPreservesDpiMatrix),
     ("viewport visible geometry padding is screen relative", ViewportVisibleGeometryPaddingIsScreenRelative),
     ("viewport measurement labels survive distant zoom", ViewportMeasurementLabelsSurviveDistantZoom),
     ("viewport measurement LOD limits dense details", ViewportMeasurementLodLimitsDenseDetails),
