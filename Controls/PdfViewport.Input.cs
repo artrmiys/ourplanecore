@@ -463,6 +463,7 @@ public sealed partial class PdfViewport
         else
             PostPointerStatus(pointerPdf);
 
+        UpdateCursor(pointerPdf);
         RequestRepaint();
         e.Handled = true;
     }
@@ -746,8 +747,16 @@ public sealed partial class PdfViewport
     }
 
 
-    private void UpdateCursor()
+    private void UpdateCursor(SKPoint? pdf = null)
     {
+        if (_tool == ViewerTool.Select &&
+            pdf.HasValue &&
+            TryHitVertexOnSelectedMeasurement(pdf.Value, out _, out _))
+        {
+            Cursor = Cursors.SizeAll;
+            return;
+        }
+
         Cursor = _tool switch
         {
             ViewerTool.Pan => Cursors.Hand,

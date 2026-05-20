@@ -107,17 +107,17 @@ public sealed partial class PdfViewport
                 if (BoxModeEnabled)
                 {
                     PostStatus(_drawPts.Count == 0
-                        ? $"Area Cut Box: click inside the selected Area at the first cut-box corner.{modes}"
-                        : $"Area Cut Box: click the opposite cut-box corner.{modes}");
+                        ? $"Cut Box: click the first corner over Area/Line geometry.{modes}"
+                        : $"Cut Box: click the opposite corner to erase Line pieces or cut Area holes.{modes}");
                 }
                 else
                 {
                     PostStatus(_drawPts.Count switch
                     {
-                        0 => $"Area Cut: click the first polygon point inside the selected Area.{modes}",
-                        1 => $"Area Cut: click the next polygon point.{modes}",
-                        2 => $"Area Cut: click at least one more point, then C / Esc / double-click to finish.{modes}",
-                        _ => $"Area Cut: click next point, or C / Esc / double-click to finish.{modes}",
+                        0 => $"Cut: click the first polygon point over Area/Line geometry.{modes}",
+                        1 => $"Cut: click the next polygon point.{modes}",
+                        2 => $"Cut: click at least one more point, then C / Esc / double-click to finish.{modes}",
+                        _ => $"Cut: click next point, or C / Esc / double-click to finish.{modes}",
                     });
                 }
                 break;
@@ -195,7 +195,7 @@ public sealed partial class PdfViewport
             "point" => "Count",
             "line" => "Line",
             "area" => "Area",
-            "areacut" => "Area Cut",
+            "areacut" => "Cut",
             "dimension" => "Ruler",
             "arrow" => "Arrow",
             "rectangle" => "Box",

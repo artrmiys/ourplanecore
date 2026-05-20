@@ -99,14 +99,12 @@ public sealed partial class PdfViewport
     {
         if (_drawPts.Count == 0)
         {
-            if (!TryResolveAreaCutTarget(pdf, out Measurement target, out string status))
+            if (TryResolveAreaCutTarget(pdf, out Measurement target, out _))
             {
-                PostStatus(status);
-                return;
+                _areaCutMeasurement = target;
+                SelectMeasurement(target, -1);
             }
 
-            _areaCutMeasurement = target;
-            SelectMeasurement(target, -1);
             _drawPts.Add(pdf);
             RequestRepaint();
             PostRecordPrompt();

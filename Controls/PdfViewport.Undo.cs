@@ -312,6 +312,52 @@ public sealed partial class PdfViewport
         PushUndoAction(new ViewportUndoAction("", status, [], [], [], [], [], snapshots), coalesce: false);
     }
 
+    private void PushMixedMeasurementUndo(
+        IReadOnlyDictionary<Measurement, List<SKPoint>> beforePoints,
+        IReadOnlyDictionary<Measurement, List<List<SKPoint>>> beforeHoles,
+        IReadOnlyDictionary<Measurement, int> removedMeasurements,
+        IReadOnlyList<Measurement> addedMeasurements,
+        string status,
+        string key = "")
+    {
+        if (_applyingViewportUndo)
+            return;
+
+        var pointSnapshots = beforePoints
+            .Where(pair => _measurementSet.Contains(pair.Key))
+            .Select(pair => new MeasurementPointUndo(
+                pair.Key,
+                pair.Value.ToList(),
+                beforeHoles.TryGetValue(pair.Key, out var holes)
+                    ? CloneHoles(holes)
+                    : CloneHoles(pair.Key.Holes),
+                pair.Key.JoistDirectionDegrees))
+            .ToList();
+
+        var addedSnapshots = addedMeasurements
+            .Where(measurement => _measurementSet.Contains(measurement))
+            .Select(measurement => new MeasurementPresenceUndo(measurement, _measurements.IndexOf(measurement)))
+            .Where(snapshot => snapshot.Index >= 0)
+            .ToList();
+
+        var removedSnapshots = removedMeasurements
+            .Select(pair => new MeasurementPresenceUndo(pair.Key, pair.Value))
+            .ToList();
+
+        if (pointSnapshots.Count == 0 && addedSnapshots.Count == 0 && removedSnapshots.Count == 0)
+            return;
+
+        PushUndoAction(new ViewportUndoAction(
+            key,
+            status,
+            pointSnapshots,
+            [],
+            addedSnapshots,
+            [],
+            removedSnapshots,
+            []), coalesce: false);
+    }
+
     private void PushUndoAction(ViewportUndoAction action, bool coalesce)
     {
         if (coalesce &&

@@ -581,7 +581,7 @@
                          GroupName="DrawingTool" ToolTip="Create a new Joist Area item and start recording (J)"
                          Style="{StaticResource ToolRadio}"/>
             <RadioButton x:Name="BtnAreaCut" Content="Cut" Click="BtnTool_Click" Tag="areacut"
-                         GroupName="DrawingTool" ToolTip="Cut a rectangular hole from an Area (X)"
+                         GroupName="DrawingTool" ToolTip="Cut Area holes or erase Line pieces (X, F9 toggles box)"
                          Style="{StaticResource ToolRadio}"/>
             <ToggleButton x:Name="BtnSnap" Content="Snap"
                           ToolTip="Snap to existing takeoff points (F3)"

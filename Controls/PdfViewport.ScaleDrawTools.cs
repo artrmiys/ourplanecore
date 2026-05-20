@@ -341,7 +341,7 @@ public sealed partial class PdfViewport
             }
 
             CancelDrawing(clearSelection: false);
-            PostStatus("Area Cut cancelled.");
+            PostStatus("Cut cancelled.");
             return;
         }
 

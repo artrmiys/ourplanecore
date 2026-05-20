@@ -445,13 +445,27 @@ internal static class TakeoffsTreeRegressionTests
         string viewportInput = ReadRepoFile("Controls/PdfViewport.Input.cs");
         string selectionEditing = ReadRepoFile("Controls/PdfViewport.SelectionEditing.cs");
         string boxSelection = ReadRepoFile("Controls/PdfViewport.BoxSelection.cs");
+        string hitTesting = ReadRepoFile("Controls/PdfViewport.HitTesting.cs");
+        string areaCut = ReadRepoFile("Controls/PdfViewport.AreaCutTools.cs");
         AssertTrue(
             viewportInput.Contains("BeginVertexBoxSelection(pdf)", StringComparison.Ordinal) &&
+            selectionEditing.Contains("TryHitSelectedMeasurementSelectedVertex(pdf", StringComparison.Ordinal) &&
+            selectionEditing.Contains("TryHitVertexOnSelectedMeasurement(pdf", StringComparison.Ordinal) &&
             selectionEditing.Contains("if (IsVertexModifierActive() &&", StringComparison.Ordinal) &&
+            hitTesting.Contains("TryHitSelectedVertexOnMeasurement", StringComparison.Ordinal) &&
+            viewportInput.Contains("Cursors.SizeAll", StringComparison.Ordinal) &&
             boxSelection.Contains("Alt-click or Alt-box handles to toggle", StringComparison.Ordinal) &&
             !boxSelection.Contains("Alt+Ctrl", StringComparison.Ordinal) &&
             !boxSelection.Contains("Alt+Shift", StringComparison.Ordinal),
-            "vertex selection and drag must be Alt-only without Ctrl/Shift vertex paths");
+            "selected measurement handles must support direct hot-grip drag while Alt remains the vertex selection modifier");
+
+        AssertTrue(
+            areaCut.Contains("CutLinePiecesByPolygon", StringComparison.Ordinal) &&
+            areaCut.Contains("CloneLineMeasurement", StringComparison.Ordinal) &&
+            areaCut.Contains("PushMixedMeasurementUndo", StringComparison.Ordinal) &&
+            areaCut.Contains("NotifyMeasurementsRemoved(removedLines)", StringComparison.Ordinal) &&
+            areaCut.Contains("NotifyMeasurementsAdded(addedLines)", StringComparison.Ordinal),
+            "Cut tool must apply the same box/polygon gesture to Area holes and Line eraser pieces");
 
         string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
         string pdfExporter = ReadRepoFile("Models/PdfExporter.cs");

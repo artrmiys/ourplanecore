@@ -26,6 +26,46 @@ public sealed partial class PdfViewport
         return false;
     }
 
+    private bool TryHitSelectedMeasurementSelectedVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
+    {
+        foreach (Measurement candidate in GetSelectedMeasurements().Reverse())
+        {
+            if (!IsMeasurementOnActivePage(candidate) ||
+                !CanEditMeasurementVertices(candidate))
+            {
+                continue;
+            }
+
+            if (TryHitSelectedVertexOnMeasurement(candidate, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+            {
+                measurement = candidate;
+                return true;
+            }
+        }
+
+        measurement = null!;
+        vertexIndex = -1;
+        return false;
+    }
+
+    private bool TryHitVertexOnSelectedMeasurement(SKPoint pdf, out Measurement measurement, out int vertexIndex)
+    {
+        foreach (Measurement candidate in GetSelectedMeasurements().Reverse())
+        {
+            if (IsMeasurementOnActivePage(candidate) &&
+                CanEditMeasurementVertices(candidate) &&
+                TryHitVertexOnMeasurement(candidate, pdf, SelectedVertexHitToleranceScreenPx, out vertexIndex))
+            {
+                measurement = candidate;
+                return true;
+            }
+        }
+
+        measurement = null!;
+        vertexIndex = -1;
+        return false;
+    }
+
     private bool TryHitVertex(SKPoint pdf, out Measurement measurement, out int vertexIndex)
     {
         SKRect searchRect = MeasurementHitSearchRect(pdf, VertexHitToleranceScreenPx);
@@ -70,6 +110,25 @@ public sealed partial class PdfViewport
         foreach (MeasurementVertexRef vertex in MeasurementVertices(measurement).Reverse())
         {
             if (DistanceSquared(pdf, vertex.Point) <= tolSq)
+            {
+                vertexIndex = vertex.GlobalIndex;
+                return true;
+            }
+        }
+
+        vertexIndex = -1;
+        return false;
+    }
+
+    private bool TryHitSelectedVertexOnMeasurement(Measurement measurement, SKPoint pdf, float screenTolerancePx, out int vertexIndex)
+    {
+        float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
+        float tolSq = tol * tol;
+
+        foreach (MeasurementVertexRef vertex in MeasurementVertices(measurement).Reverse())
+        {
+            if (IsMeasurementVertexSelected(measurement, vertex.GlobalIndex) &&
+                DistanceSquared(pdf, vertex.Point) <= tolSq)
             {
                 vertexIndex = vertex.GlobalIndex;
                 return true;
