@@ -1,0 +1,57 @@
+<UserControl x:Class="OurPlaneCore.Controls.OpcDataGridDemo"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OurPlaneCore.Controls">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
+        <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
+            <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
+                <WrapPanel.Resources>
+                    <Style TargetType="Button" BasedOn="{StaticResource ManagerButton}"/>
+                </WrapPanel.Resources>
+                <TextBlock Text="Grid Playground" Style="{StaticResource ManagerGroupLabel}"/>
+                <Button Content="+ Row" Click="AddRow_Click" ToolTip="Add a demo row"/>
+                <Button Content="Group by Folder" Click="GroupByFolder_Click" ToolTip="Toggle grouping by Folder"/>
+                <Button Content="Toggle Freeze" Click="ToggleFreeze_Click" ToolTip="Toggle frozen first column"/>
+                <Button Content="Toggle Footer" Click="ToggleFooter_Click" ToolTip="Toggle the status aggregate footer"/>
+            </WrapPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource ToolbarBandBrush}"
+                BorderBrush="{DynamicResource ControlBorderBrush}"
+                BorderThickness="1"
+                Padding="8,4"
+                Visibility="{Binding ShowStatusFooter, ElementName=DemoGrid, Converter={StaticResource BoolToVisibilityConverter}}">
+            <TextBlock Text="{Binding StatusFooterText, ElementName=DemoGrid}"
+                       FontSize="11"
+                       Foreground="{DynamicResource ControlForegroundBrush}"/>
+        </Border>
+
+        <controls:OpcDataGrid x:Name="DemoGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserSortColumns="True"
+                              EnableColumnVirtualization="True"
+                              EnableRowVirtualization="True"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              IsReadOnly="False"
+                              RowHeight="26"
+                              SelectionMode="Extended"
+                              SelectionUnit="CellOrRowHeader">
+            <controls:OpcDataGrid.Columns>
+                <DataGridTextColumn Header="#" Binding="{Binding N}" Width="54" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Folder" Binding="{Binding Folder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="220"/>
+                <DataGridTextColumn Header="Qty" Binding="{Binding Qty, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
+                <DataGridTextColumn Header="Cost" Binding="{Binding Cost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
+                <DataGridTextColumn Header="Color" Binding="{Binding Color, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+            </controls:OpcDataGrid.Columns>
+        </controls:OpcDataGrid>
+    </DockPanel>
+</UserControl>

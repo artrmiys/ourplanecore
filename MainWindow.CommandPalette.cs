@@ -70,6 +70,7 @@ public partial class MainWindow
         Add("view.sheetManager", "Show Sheet Manager", "Workspace", "", "Switch to the sheet table / PDF metadata workspace.");
         Add("view.takeoffManager", "Show Takeoff Manager", "Workspace", "", "Switch to the takeoff item manager workspace.");
         Add("view.materialsManager", "Show Materials", "Workspace", "", "Switch to the material extraction workspace.");
+        Add("view.gridPlayground", "Show Grid Playground", "Workspace", "", "Switch to the OpcDataGrid demo / playground workspace.");
         Add("view.aiManager", "Show AI Manager", "Workspace", "", "Switch to the AI inbox and marker manager workspace.");
         Add("view.3dManager", "Show 3D Viewer", "Workspace", "", "Switch to the clean 3D viewer workspace.");
         Add("view.takeoffsTab", "Show Takeoffs Tab", "View", "", "Select the Takeoffs workspace tab.", hasRightTabs, "Workspace tabs are not ready yet.");
@@ -167,6 +168,7 @@ public partial class MainWindow
             case "view.sheetManager": SelectWorkspaceTab("SheetManager"); break;
             case "view.takeoffManager": SelectWorkspaceTab("TakeoffManager"); break;
             case "view.materialsManager": SelectWorkspaceTab("MaterialsManager"); break;
+            case "view.gridPlayground": WorkspaceTabs.SelectedItem = GridPlaygroundTab; break;
             case "view.aiManager": SelectWorkspaceTab("AiManager"); break;
             case "view.3dManager": SelectWorkspaceTab("3DManager"); break;
             case "view.takeoffsTab": SelectRightWorkspaceTab("Takeoffs"); break;

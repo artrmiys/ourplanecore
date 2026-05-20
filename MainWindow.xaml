@@ -1,6 +1,7 @@
 ﻿<Window x:Class="OurPlaneCore.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OurPlaneCore.Controls"
         Title="ourplanecore" Height="780" Width="1280"
         MinHeight="600" MinWidth="900"
         Icon="Assets/ourplanecore.ico"
@@ -1484,6 +1485,9 @@
                         </Border>
                     </Grid>
                 </DockPanel>
+            </TabItem>
+            <TabItem Header="Grid Playground" x:Name="GridPlaygroundTab">
+                <controls:OpcDataGridDemo />
             </TabItem>
             <TabItem Header="8 Settings" Tag="SettingsManager">
                 <DockPanel x:Name="SettingsManagerRoot" Margin="8" Style="{StaticResource ManagerSurface}"/>
