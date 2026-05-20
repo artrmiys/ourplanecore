@@ -62,8 +62,8 @@ public partial class MainWindow
                 thumbnailPath: File.Exists(recent.ThumbnailPath)
                     ? recent.ThumbnailPath
                     : JobThumbnailService.ExistingThumbnailPath(path),
-                lastOpened: FormatRecentJobTime(recent.LastOpenedUtc),
-                source: "Recent",
+                lastOpenedUtc: ParseRecentJobTime(recent.LastOpenedUtc),
+                sourceLabel: BuildSourceLabel(rootPath, fallback: "Recent"),
                 isPinned: recent.IsPinned,
                 isRecent: true,
                 rootPath: rootPath);
@@ -73,6 +73,8 @@ public partial class MainWindow
         {
             if (!Directory.Exists(rootPath))
                 continue;
+
+            string sourceLabel = BuildSourceLabel(rootPath, fallback: "Local");
 
             foreach (string folder in Directory.EnumerateDirectories(rootPath)
                          .Where(IsJobFolder)
@@ -84,8 +86,8 @@ public partial class MainWindow
                     name: Path.GetFileName(folder),
                     path: folder,
                     thumbnailPath: JobThumbnailService.ExistingThumbnailPath(folder),
-                    lastOpened: "",
-                    source: $"Jobs: {Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}",
+                    lastOpenedUtc: ReadJobDataMtimeUtc(folder),
+                    sourceLabel: sourceLabel,
                     isPinned: false,
                     isRecent: false,
                     rootPath: rootPath);
@@ -101,8 +103,8 @@ public partial class MainWindow
         string name,
         string path,
         string thumbnailPath,
-        string lastOpened,
-        string source,
+        DateTime? lastOpenedUtc,
+        string sourceLabel,
         bool isPinned,
         bool isRecent,
         string rootPath = "")
@@ -112,16 +114,44 @@ public partial class MainWindow
             return;
 
         bool exists = Directory.Exists(path) && IsJobFolder(path);
-        items.Add(new JobPickerItem(
-            string.IsNullOrWhiteSpace(name) ? Path.GetFileName(path) : name,
-            path,
-            thumbnailPath,
-            lastOpened,
-            source,
-            exists,
-            isPinned,
-            isRecent,
-            rootPath));
+        items.Add(new JobPickerItem
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(path) : name,
+            Path = path,
+            ThumbnailPath = thumbnailPath,
+            LastOpenedUtc = lastOpenedUtc,
+            SourceLabel = sourceLabel,
+            Exists = exists,
+            IsPinned = isPinned,
+            IsRecent = isRecent,
+            RootPath = rootPath,
+        });
+    }
+
+    private static DateTime? ReadJobDataMtimeUtc(string jobFolder)
+    {
+        try
+        {
+            string dataXml = Path.Combine(jobFolder, "Data.xml");
+            if (!File.Exists(dataXml))
+                return null;
+
+            return File.GetLastWriteTimeUtc(dataXml);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string BuildSourceLabel(string rootPath, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return fallback;
+
+        string trimmed = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string name = Path.GetFileName(trimmed);
+        return string.IsNullOrWhiteSpace(name) ? fallback : name;
     }
 
     private void HandleJobPickerAction(JobPickerAction action, string selectedJobPath, string selectedJobsRootPath = "")
@@ -355,12 +385,12 @@ public partial class MainWindow
         SaveAppSettings();
     }
 
-    private static string FormatRecentJobTime(string value)
+    private static DateTime? ParseRecentJobTime(string value)
     {
         if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime utc))
-            return "";
+            return null;
 
-        return utc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        return utc;
     }
 
     private static string RootForJobPath(string jobPath, IEnumerable<string> roots)
