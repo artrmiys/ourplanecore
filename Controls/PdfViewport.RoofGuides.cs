@@ -477,7 +477,7 @@ public sealed partial class PdfViewport
     {
         if (_threeDRoofEdgeSelectModeEnabled)
         {
-            PostStatus("3D Roof Edge Select: click roof base edges. Ctrl/Shift-click adds more.");
+            PostStatus("3D Roof Edge Select: click roof base edges, enter pitch, then Edge Pitch. Ctrl/Shift-click adds more.");
             return;
         }
 
