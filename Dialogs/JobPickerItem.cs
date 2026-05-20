@@ -144,7 +144,7 @@ public static class JobPickerFormatting
         TimeSpan delta = nowLocal - local;
 
         if (delta.TotalSeconds < 0)
-            return local.ToString("g", CultureInfo.CurrentCulture);
+            return local.ToString("MMM d, yyyy HH:mm", CultureInfo.InvariantCulture);
 
         if (local.Date == nowLocal.Date)
         {
@@ -162,7 +162,7 @@ public static class JobPickerFormatting
             return $"{(int)delta.TotalDays}d ago";
 
         return local.Year == nowLocal.Year
-            ? local.ToString("MMM d", CultureInfo.CurrentCulture)
-            : local.ToString("MMM d, yyyy", CultureInfo.CurrentCulture);
+            ? local.ToString("MMM d", CultureInfo.InvariantCulture)
+            : local.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
     }
 }
