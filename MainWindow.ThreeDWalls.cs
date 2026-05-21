@@ -598,6 +598,12 @@ public partial class MainWindow
 
     private void AddThreeDFloorSlabMesh(Model3DGroup group, ThreeDFloorSlab slab, double centerX, double centerZ)
     {
+        if (IsRoofSlab(slab) &&
+            _threeDRoofPlanes.Any(plane => SameRoofGroup(plane.RoofGroupId, slab.RoofGroupId)))
+        {
+            return;
+        }
+
         ThreeDPolygonTriangulation triangulation = ThreeDPolygonTriangulator.Triangulate(slab.Points);
         if (!triangulation.Success)
         {
@@ -752,10 +758,6 @@ public partial class MainWindow
         group.Children.Add(new GeometryModel3D(mesh, material) { BackMaterial = material });
     }
 
-    // Roof slab thickness in feet - gives faces a visible edge/fascia depth so
-    // the roof reads as a solid from below instead of a paper-thin surface.
-    private const double RoofSlabThicknessFeet = 0.5;
-
     private void AddThreeDRoofPlaneMesh(
         Model3DGroup group,
         ThreeDRoofPlane plane,
@@ -774,62 +776,17 @@ public partial class MainWindow
         int n = renderPoints.Count;
         var positions = new Point3DCollection();
         foreach (ThreeDRoofVertex p in renderPoints)
-            positions.Add(new Point3D(p.XFeet + ox - centerX, p.YFeet + oy, p.ZFeet + oz - centerZ)); // top
-        foreach (ThreeDRoofVertex p in renderPoints)
-            positions.Add(new Point3D(p.XFeet + ox - centerX, p.YFeet + oy - RoofSlabThicknessFeet, p.ZFeet + oz - centerZ)); // bottom
+            positions.Add(new Point3D(p.XFeet + ox - centerX, p.YFeet + oy, p.ZFeet + oz - centerZ));
 
         var mesh = new MeshGeometry3D { Positions = positions };
-
-        // Top + bottom surfaces share the polygon triangulation.
-        var topMesh = new MeshGeometry3D { Positions = positions };
-        if (TryAddProjectedRoofTriangles(topMesh, renderPoints))
-        {
-            for (int i = 0; i < topMesh.TriangleIndices.Count; i += 6)
-            {
-                int a = topMesh.TriangleIndices[i];
-                int b = topMesh.TriangleIndices[i + 1];
-                int c = topMesh.TriangleIndices[i + 2];
-                mesh.TriangleIndices.Add(a);
-                mesh.TriangleIndices.Add(b);
-                mesh.TriangleIndices.Add(c);
-                mesh.TriangleIndices.Add(n + a);
-                mesh.TriangleIndices.Add(n + c);
-                mesh.TriangleIndices.Add(n + b);
-            }
-        }
-        else
-        {
-            for (int i = 1; i < n - 1; i++)
-            {
-                mesh.TriangleIndices.Add(0);
-                mesh.TriangleIndices.Add(i);
-                mesh.TriangleIndices.Add(i + 1);
-                mesh.TriangleIndices.Add(n);
-                mesh.TriangleIndices.Add(n + i + 1);
-                mesh.TriangleIndices.Add(n + i);
-            }
-        }
-
-        // Fascia/edge sides around the boundary.
-        for (int i = 0; i < n; i++)
-        {
-            int next = (i + 1) % n;
-            if (!roofBoundaryEdges.IsBoundary(plane.RoofGroupId, renderPoints[i], renderPoints[next]))
-                continue;
-
-            mesh.TriangleIndices.Add(i);
-            mesh.TriangleIndices.Add(n + i);
-            mesh.TriangleIndices.Add(n + next);
-            mesh.TriangleIndices.Add(i);
-            mesh.TriangleIndices.Add(n + next);
-            mesh.TriangleIndices.Add(next);
-        }
+        if (!TryAddProjectedRoofTriangles(mesh, renderPoints))
+            AddFanRoofTriangles(mesh, n);
 
         bool selectedRoof = SameRoofGroup(plane.RoofGroupId, ActiveThreeDRoofGroupId());
-        Color planeColor = selectedRoof ? Color.FromRgb(245, 158, 11) : ParseWallColor(plane.Color);
+        Color planeColor = ParseWallColor(plane.Color);
         var brush = new SolidColorBrush(planeColor)
         {
-            Opacity = selectedRoof ? 1.0 : Math.Clamp(plane.Opacity + 0.28, 0.92, 1.0),
+            Opacity = selectedRoof ? 0.98 : Math.Clamp(plane.Opacity + 0.18, 0.82, 0.96),
         };
         var material = new MaterialGroup();
         material.Children.Add(new DiffuseMaterial(brush));
@@ -837,6 +794,78 @@ public partial class MainWindow
         var model = new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) };
         RegisterThreeDRoofMeshHit(model, plane.RoofGroupId);
         group.Children.Add(model);
+
+        Color edgeColor = selectedRoof ? Color.FromRgb(245, 158, 11) : Color.FromRgb(38, 50, 64);
+        for (int i = 0; i < n; i++)
+        {
+            int next = (i + 1) % n;
+            bool boundary = roofBoundaryEdges.IsBoundary(plane.RoofGroupId, renderPoints[i], renderPoints[next]);
+            GeometryModel3D edge = AddThreeDRoofPlaneEdgeMesh(
+                group,
+                renderPoints[i],
+                renderPoints[next],
+                ox - centerX,
+                oy + 0.035,
+                oz - centerZ,
+                edgeColor,
+                boundary ? 0.055 : 0.035);
+            RegisterThreeDRoofMeshHit(edge, plane.RoofGroupId);
+        }
+    }
+
+    private static GeometryModel3D AddThreeDRoofPlaneEdgeMesh(
+        Model3DGroup group,
+        ThreeDRoofVertex a,
+        ThreeDRoofVertex b,
+        double offsetX,
+        double offsetY,
+        double offsetZ,
+        Color color,
+        double halfWidth)
+    {
+        double sx = a.XFeet + offsetX;
+        double sz = a.ZFeet + offsetZ;
+        double ex = b.XFeet + offsetX;
+        double ez = b.ZFeet + offsetZ;
+        double dx = ex - sx;
+        double dz = ez - sz;
+        double length = Math.Sqrt(dx * dx + dz * dz);
+        if (length <= 0.001)
+            return new GeometryModel3D();
+
+        double nx = -dz / length;
+        double nz = dx / length;
+        double halfHeight = Math.Max(0.016, halfWidth * 0.45);
+        double sy = a.YFeet + offsetY;
+        double ey = b.YFeet + offsetY;
+        var mesh = new MeshGeometry3D
+        {
+            Positions = new Point3DCollection
+            {
+                new(sx + nx * halfWidth, sy - halfHeight, sz + nz * halfWidth),
+                new(ex + nx * halfWidth, ey - halfHeight, ez + nz * halfWidth),
+                new(ex - nx * halfWidth, ey - halfHeight, ez - nz * halfWidth),
+                new(sx - nx * halfWidth, sy - halfHeight, sz - nz * halfWidth),
+                new(sx + nx * halfWidth, sy + halfHeight, sz + nz * halfWidth),
+                new(ex + nx * halfWidth, ey + halfHeight, ez + nz * halfWidth),
+                new(ex - nx * halfWidth, ey + halfHeight, ez - nz * halfWidth),
+                new(sx - nx * halfWidth, sy + halfHeight, sz - nz * halfWidth),
+            },
+            TriangleIndices = new Int32Collection
+            {
+                0, 1, 2, 0, 2, 3,
+                4, 6, 5, 4, 7, 6,
+                0, 4, 5, 0, 5, 1,
+                1, 5, 6, 1, 6, 2,
+                2, 6, 7, 2, 7, 3,
+                3, 7, 4, 3, 4, 0,
+            },
+        };
+        var brush = new SolidColorBrush(color) { Opacity = 0.88 };
+        var material = new DiffuseMaterial(brush);
+        var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
+        group.Children.Add(model);
+        return model;
     }
 
     private static bool TryAddProjectedRoofTriangles(MeshGeometry3D mesh, IReadOnlyList<ThreeDRoofVertex> points)

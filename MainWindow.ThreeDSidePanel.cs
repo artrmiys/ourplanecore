@@ -66,6 +66,7 @@ public partial class MainWindow
         toolbar.Children.Add(ThreeDSideButton("Roof Takeoff", "Create reviewable takeoff items (eave/ridge/hip/valley lines + plan area) from the generated roof", CreateRoofTakeoffFromGenerated));
         panel.Children.Add(toolbar);
 
+        var detailStack = new StackPanel { Margin = new Thickness(0, 0, 0, 4) };
         _threeDSideSummaryText = new TextBlock
         {
             Text = "3D viewer ready. Select takeoff lines for Wall, or area takeoffs for Roof Base.",
@@ -76,16 +77,25 @@ public partial class MainWindow
             MaxHeight = 70,
         };
         _threeDSideSummaryText.SetResourceReference(Control.ForegroundProperty, "SecondaryForegroundBrush");
-        DockPanel.SetDock(_threeDSideSummaryText, Dock.Top);
-        panel.Children.Add(_threeDSideSummaryText);
+        detailStack.Children.Add(_threeDSideSummaryText);
 
         Border editor = BuildThreeDEditorPanel();
-        DockPanel.SetDock(editor, Dock.Top);
-        panel.Children.Add(editor);
+        detailStack.Children.Add(editor);
 
         Border logPanel = BuildThreeDLogPanel();
-        DockPanel.SetDock(logPanel, Dock.Bottom);
-        panel.Children.Add(logPanel);
+        logPanel.Margin = new Thickness(4, 2, 4, 0);
+        detailStack.Children.Add(logPanel);
+
+        var details = new Expander
+        {
+            Header = "Details",
+            IsExpanded = false,
+            Margin = new Thickness(0, 0, 0, 4),
+            Content = detailStack,
+        };
+        details.SetResourceReference(Control.ForegroundProperty, "ControlForegroundBrush");
+        DockPanel.SetDock(details, Dock.Top);
+        panel.Children.Add(details);
 
         var viewportGrid = new Grid
         {
