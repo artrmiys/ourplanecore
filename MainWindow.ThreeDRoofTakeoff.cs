@@ -19,8 +19,11 @@ public partial class MainWindow
             return;
         }
 
-        ThreeDRoofQuantities q = CurrentThreeDRoofQuantities();
-        if (!q.HasRoof || _threeDRoofGuides.Count == 0)
+        string groupId = ActiveThreeDRoofGroupId();
+        ThreeDRoofQuantities q = ThreeDRoofQuantities.Compute(
+            _threeDRoofPlanes.Where(plane => SameRoofGroup(plane.RoofGroupId, groupId)),
+            _threeDRoofGuides.Where(guide => SameRoofGroup(guide.RoofGroupId, groupId)));
+        if (!q.HasRoof || !_threeDRoofGuides.Any(guide => SameRoofGroup(guide.RoofGroupId, groupId)))
         {
             TxtStatus.Text = "3D Roof Takeoff: generate a roof first (Roof Base -> set eave pitch).";
             return;
@@ -34,19 +37,19 @@ public partial class MainWindow
         }
 
         double scale = RoofTakeoffScaleForPage(pageFolder);
-        string summary = ThreeDRoofQuantitiesText();
+        string summary = ThreeDRoofQuantitiesText(groupId);
         string notes = RoofTakeoffNotes(q);
         string parent = NewTakeoffItemParentFolder();
         int created = 0;
 
         created += TryCreateRoofLineItem("Roof Eave", ThreeDRoofGuideKinds.Eave, pageFolder, scale, notes, parent,
-            _threeDRoofGuides.Where(g => g.DefinesSlope && IsSamePageFolder(g.PageFolder, pageFolder)));
+            _threeDRoofGuides.Where(g => SameRoofGroup(g.RoofGroupId, groupId) && g.DefinesSlope && IsSamePageFolder(g.PageFolder, pageFolder)));
         created += TryCreateRoofLineItem("Roof Ridge", ThreeDRoofGuideKinds.Ridge, pageFolder, scale, notes, parent,
-            GeneratedSeamGuides(ThreeDRoofGuideKinds.Ridge, pageFolder));
+            GeneratedSeamGuides(ThreeDRoofGuideKinds.Ridge, pageFolder, groupId));
         created += TryCreateRoofLineItem("Roof Hip", ThreeDRoofGuideKinds.Hip, pageFolder, scale, notes, parent,
-            GeneratedSeamGuides(ThreeDRoofGuideKinds.Hip, pageFolder));
+            GeneratedSeamGuides(ThreeDRoofGuideKinds.Hip, pageFolder, groupId));
         created += TryCreateRoofLineItem("Roof Valley", ThreeDRoofGuideKinds.Valley, pageFolder, scale, notes, parent,
-            GeneratedSeamGuides(ThreeDRoofGuideKinds.Valley, pageFolder));
+            GeneratedSeamGuides(ThreeDRoofGuideKinds.Valley, pageFolder, groupId));
         created += TryCreateRoofAreaItem(pageFolder, scale, notes, parent);
 
         if (created == 0)
@@ -59,8 +62,9 @@ public partial class MainWindow
         LogThreeD($"Roof takeoff created: {created} item(s). {summary}");
     }
 
-    private IEnumerable<ThreeDRoofGuide> GeneratedSeamGuides(string kind, string pageFolder) =>
+    private IEnumerable<ThreeDRoofGuide> GeneratedSeamGuides(string kind, string pageFolder, string groupId) =>
         _threeDRoofGuides.Where(g =>
+            SameRoofGroup(g.RoofGroupId, groupId) &&
             string.Equals(g.Status, ThreeDRoofPreviewBuilder.GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase) &&
             ThreeDRoofGuideKinds.Normalize(g.Kind) == kind &&
             IsSamePageFolder(g.PageFolder, pageFolder));
@@ -140,6 +144,7 @@ public partial class MainWindow
 
     private string MostCommonRoofGuidePageFolder() =>
         _threeDRoofGuides
+            .Where(g => SameRoofGroup(g.RoofGroupId, ActiveThreeDRoofGroupId()))
             .Where(g => !string.IsNullOrWhiteSpace(g.PageFolder) && g.Points.Count >= 2)
             .GroupBy(g => g.PageFolder, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(group => group.Count())
@@ -161,6 +166,7 @@ public partial class MainWindow
     private List<SKPoint> ChainRoofBaseLoop(string pageFolder)
     {
         var segments = _threeDRoofGuides
+            .Where(g => SameRoofGroup(g.RoofGroupId, ActiveThreeDRoofGroupId()))
             .Where(IsSelectableThreeDRoofBaseGuide)
             .Where(g => g.Points.Count >= 2 && IsSamePageFolder(g.PageFolder, pageFolder))
             .Select(g => (

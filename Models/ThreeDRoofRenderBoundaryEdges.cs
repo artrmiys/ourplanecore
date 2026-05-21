@@ -3,24 +3,25 @@ namespace OurPlaneCore;
 internal sealed class ThreeDRoofRenderBoundaryEdges
 {
     private const double QuantizeFeet = 0.02;
-    private readonly HashSet<EdgeKey> _boundaryEdges;
+    private readonly HashSet<GroupedEdgeKey> _boundaryEdges;
 
-    private ThreeDRoofRenderBoundaryEdges(HashSet<EdgeKey> boundaryEdges)
+    private ThreeDRoofRenderBoundaryEdges(HashSet<GroupedEdgeKey> boundaryEdges)
     {
         _boundaryEdges = boundaryEdges;
     }
 
     public static ThreeDRoofRenderBoundaryEdges Build(IEnumerable<ThreeDRoofPlane> planes)
     {
-        var counts = new Dictionary<EdgeKey, int>();
+        var counts = new Dictionary<GroupedEdgeKey, int>();
         foreach (ThreeDRoofPlane plane in planes)
         {
             if (plane.Points.Count < 3)
                 continue;
 
+            string groupId = plane.RoofGroupId ?? "";
             for (int i = 0; i < plane.Points.Count; i++)
             {
-                EdgeKey key = EdgeKey.Create(plane.Points[i], plane.Points[(i + 1) % plane.Points.Count]);
+                GroupedEdgeKey key = GroupedEdgeKey.Create(groupId, plane.Points[i], plane.Points[(i + 1) % plane.Points.Count]);
                 counts[key] = counts.TryGetValue(key, out int count) ? count + 1 : 1;
             }
         }
@@ -32,8 +33,14 @@ internal sealed class ThreeDRoofRenderBoundaryEdges
                 .ToHashSet());
     }
 
-    public bool IsBoundary(ThreeDRoofVertex a, ThreeDRoofVertex b) =>
-        _boundaryEdges.Contains(EdgeKey.Create(a, b));
+    public bool IsBoundary(string groupId, ThreeDRoofVertex a, ThreeDRoofVertex b) =>
+        _boundaryEdges.Contains(GroupedEdgeKey.Create(groupId ?? "", a, b));
+
+    private readonly record struct GroupedEdgeKey(string GroupId, EdgeKey Edge)
+    {
+        public static GroupedEdgeKey Create(string groupId, ThreeDRoofVertex a, ThreeDRoofVertex b) =>
+            new(groupId, EdgeKey.Create(a, b));
+    }
 
     private readonly record struct EdgeKey(PointKey A, PointKey B)
     {

@@ -80,6 +80,8 @@ public partial class MainWindow
 
         _threeDRoofEdgeSelectModeEnabled = enabled;
         _viewport.SetThreeDRoofEdgeSelectMode(enabled);
+        if (!enabled)
+            HideThreeDRoofPitchPopup();
         TxtStatus.Text = enabled
             ? "3D Roof Edge Select: click a roof base edge, set its pitch in Roof Edge, then Generate Roof. Ctrl/Shift-click adds more."
             : "3D Roof Edge Select off.";
@@ -153,7 +155,7 @@ public partial class MainWindow
             return;
         }
 
-        ReplaceGeneratedRoofFootprints(result);
+        AddGeneratedRoofFootprints(result, sourceLabel);
         _threeDModelSource = "rf_roof";
         if (switchTo3DTab)
             SelectRightWorkspaceTab("3D");
@@ -161,8 +163,8 @@ public partial class MainWindow
         RenderThreeDWallModel(fitCamera: true);
         SaveCurrentThreeDModel();
         SetThreeDRoofEdgeSelectMode(enabled: true);
-        TxtStatus.Text = $"3D Roof Base: created {result.Slabs.Count} base layer(s), {result.Guides.Count} selectable edge(s). Select slope edges and apply pitch.";
-        LogThreeD($"Roof base created: {result.SourceAreaCount} {sourceLabel} area(s), {result.Slabs.Count} base layer(s), {result.Guides.Count} edge(s) defaulted to Rake, current pitch {PitchLabel(pitch)}.");
+        TxtStatus.Text = $"3D Roof Base: created {RoofGroupLabel(ActiveThreeDRoofGroupId())}, {result.Slabs.Count} base layer(s), {result.Guides.Count} selectable edge(s). Select slope edges and apply pitch.";
+        LogThreeD($"Roof base created: {RoofGroupLabel(ActiveThreeDRoofGroupId())}, {result.SourceAreaCount} {sourceLabel} area(s), {result.Slabs.Count} base layer(s), {result.Guides.Count} edge(s) defaulted to Rake, current pitch {PitchLabel(pitch)}.");
     }
 
     private void BuildAutoThreeDRoof(TreeViewItem? anchor, bool switchTo3DTab)
@@ -191,7 +193,7 @@ public partial class MainWindow
                 return;
             }
 
-            ReplaceGeneratedRoofFootprints(footprint);
+            AddGeneratedRoofFootprints(footprint, sourceLabel);
             LogThreeD($"Auto roof base: {footprint.SourceAreaCount} {sourceLabel} area(s), {footprint.Slabs.Count} base layer(s), {footprint.Guides.Count} boundary edge(s).");
         }
         else if (!HasGeneratedRoofBase() && !_threeDFloorSlabs.Any(slab => string.Equals(slab.LevelKey, "roof", StringComparison.OrdinalIgnoreCase)))
@@ -219,8 +221,10 @@ public partial class MainWindow
             SelectRightWorkspaceTab("3D");
 
         BuildThreeDRoofPreview();
-        TxtStatus.Text = $"3D Auto Roof: full hip from {eaves} eave edge(s), pitch {PitchLabel(autoPitch)}, generated {_threeDRoofPlanes.Count} roof mesh face(s).";
-        LogThreeD($"Auto roof: full hip, {eaves} eave edge(s), pitch {PitchLabel(autoPitch)}, generated {_threeDRoofPlanes.Count} roof mesh face(s).");
+        string activeGroupId = ActiveThreeDRoofGroupId();
+        int activePlaneCount = _threeDRoofPlanes.Count(plane => SameRoofGroup(plane.RoofGroupId, activeGroupId));
+        TxtStatus.Text = $"3D Auto Roof: {RoofGroupLabel(activeGroupId)}, full hip from {eaves} eave edge(s), pitch {PitchLabel(autoPitch)}, generated {activePlaneCount} roof mesh face(s).";
+        LogThreeD($"Auto roof: {RoofGroupLabel(activeGroupId)}, full hip, {eaves} eave edge(s), pitch {PitchLabel(autoPitch)}, generated {activePlaneCount} roof mesh face(s).");
     }
 
     // Every editable roof base boundary edge becomes a slope-defining eave at
@@ -228,7 +232,10 @@ public partial class MainWindow
     private int MarkAllRoofBoundaryEdgesAsEave(double pitch)
     {
         int count = 0;
-        foreach (ThreeDRoofGuide guide in _threeDRoofGuides.Where(IsSelectableThreeDRoofBaseGuide))
+        string groupId = ActiveThreeDRoofGroupId();
+        foreach (ThreeDRoofGuide guide in _threeDRoofGuides
+                     .Where(IsSelectableThreeDRoofBaseGuide)
+                     .Where(guide => SameRoofGroup(guide.RoofGroupId, groupId)))
         {
             guide.Kind = ThreeDRoofGuideKinds.Eave;
             guide.Color = ThreeDRoofGuideKinds.Color(ThreeDRoofGuideKinds.Eave);
@@ -285,28 +292,6 @@ public partial class MainWindow
         _currentJob != null &&
         anchor != null &&
         TakeoffItemsForSelection(anchor).Any(item => ThreeDRoofFootprintBuildService.IsAreaTakeoff(item));
-
-    private void ReplaceGeneratedRoofFootprints(ThreeDRoofFootprintBuildResult result)
-    {
-        var measurementIds = result.Slabs
-            .Select(slab => slab.MeasurementId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        _threeDFloorSlabs.RemoveAll(slab =>
-            slab.GroupKey.StartsWith(ThreeDRoofFootprintBuildService.GeneratedSlabGroupPrefix, StringComparison.OrdinalIgnoreCase) ||
-            measurementIds.Contains(slab.MeasurementId));
-        _threeDRoofGuides.RemoveAll(guide =>
-            string.Equals(guide.Status, ThreeDRoofFootprintBuildService.GeneratedStatus, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(guide.Status, ThreeDRoofPreviewBuilder.GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase));
-
-        _threeDFloorSlabs.AddRange(result.Slabs);
-        _threeDRoofGuides.AddRange(result.Guides);
-        _threeDRoofPlanes.Clear();
-        _threeDRoofIssues.Clear();
-        PruneThreeDRoofGuideSelection();
-        RefreshThreeDRoofGuideOverlay();
-    }
 
     private void SetSelectedThreeDRoofGuideKind(string kind, bool applyPitch)
     {
@@ -379,8 +364,11 @@ public partial class MainWindow
     private void ApplyThreeDRoofPitchToEaves()
     {
         double pitch = ResolveThreeDRoofPitchRisePerFoot();
+        string groupId = ActiveThreeDRoofGroupId();
         int changed = 0;
-        foreach (ThreeDRoofGuide guide in _threeDRoofGuides.Where(ThreeDRoofPreviewBuilder.IsSlopeDefiningGuide))
+        foreach (ThreeDRoofGuide guide in _threeDRoofGuides
+                     .Where(ThreeDRoofPreviewBuilder.IsSlopeDefiningGuide)
+                     .Where(guide => SameRoofGroup(guide.RoofGroupId, groupId)))
         {
             guide.PitchRisePerFoot = pitch;
             changed++;
@@ -503,10 +491,22 @@ public partial class MainWindow
 
     private void InvalidateGeneratedThreeDRoofAfterEdgeEdit()
     {
+        HashSet<string> targetGroups = SelectedThreeDRoofGuides()
+            .Select(guide => guide.RoofGroupId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (targetGroups.Count == 0)
+        {
+            string activeGroupId = ActiveThreeDRoofGroupId();
+            if (!string.IsNullOrWhiteSpace(activeGroupId))
+                targetGroups.Add(activeGroupId);
+        }
+
         _threeDRoofGuides.RemoveAll(guide =>
+            targetGroups.Contains(guide.RoofGroupId) &&
             string.Equals(guide.Status, ThreeDRoofPreviewBuilder.GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase));
-        _threeDRoofPlanes.Clear();
-        _threeDRoofIssues.Clear();
+        _threeDRoofPlanes.RemoveAll(plane => targetGroups.Contains(plane.RoofGroupId));
+        _threeDRoofIssues.RemoveAll(issue => targetGroups.Contains(issue.RoofGroupId));
         PruneThreeDRoofGuideSelection();
         RefreshThreeDRoofGuideOverlay();
         RenderThreeDWallModel(fitCamera: false);
@@ -654,6 +654,9 @@ public partial class MainWindow
     {
         guide = null;
         IEnumerable<ThreeDRoofGuide> candidates = _threeDRoofGuides;
+        string activeGroupId = ActiveThreeDRoofGroupId();
+        if (!string.IsNullOrWhiteSpace(activeGroupId))
+            candidates = candidates.Where(candidate => SameRoofGroup(candidate.RoofGroupId, activeGroupId));
         if (!string.IsNullOrWhiteSpace(pageFolder))
             candidates = candidates.Where(candidate => IsSamePageFolder(candidate.PageFolder, pageFolder));
 
@@ -693,61 +696,47 @@ public partial class MainWindow
             return;
         }
 
-        ThreeDWallModel model = CurrentThreeDModel();
+        string groupId = ActiveThreeDRoofGroupId();
+        if (string.IsNullOrWhiteSpace(groupId))
+        {
+            TxtStatus.Text = "3D Roof: create or select a roof base first.";
+            return;
+        }
+
+        ThreeDWallModel model = CurrentThreeDModelForRoofGroup(groupId);
         ThreeDRoofBuildResult build = ThreeDRoofBuildService.Build(model);
-        _threeDRoofGuides.Clear();
-        _threeDRoofGuides.AddRange(build.Guides);
+        ReplaceActiveRoofBuildResult(groupId, build);
         PruneThreeDRoofGuideSelection();
 
-        _threeDRoofIssues.Clear();
-        _threeDRoofIssues.AddRange(build.Issues);
         RefreshThreeDRoofGuideOverlay();
         UpdateThreeDEditor();
 
         if (build.PlaneBuildBlocked || build.Planes.Count == 0)
         {
-            _threeDRoofPlanes.Clear();
             RenderThreeDWallModel(fitCamera: false);
             string message = build.Messages.LastOrDefault() ?? "Roof preview could not be built.";
-            TxtStatus.Text = $"3D Roof: {message}";
+            TxtStatus.Text = $"3D Roof: {RoofGroupLabel(groupId)}: {message}";
             SaveCurrentThreeDModel();
-            LogThreeD($"Roof generation blocked: issues {_threeDRoofIssues.Count}. {message}");
+            LogThreeD($"Roof generation blocked: {RoofGroupLabel(groupId)}, issues {build.Issues.Count}. {message}");
             return;
         }
 
-        _threeDRoofPlanes.Clear();
-        _threeDRoofPlanes.AddRange(build.Planes);
         RenderThreeDWallModel(fitCamera: true);
         SaveCurrentThreeDModel();
         string summary = string.Join(" ", build.Messages);
-        TxtStatus.Text = $"3D Roof: generated {_threeDRoofPlanes.Count} roof mesh face(s) from Eave edge pitch.";
-        string qty = ThreeDRoofQuantitiesText();
+        int activePlaneCount = _threeDRoofPlanes.Count(plane => SameRoofGroup(plane.RoofGroupId, groupId));
+        TxtStatus.Text = $"3D Roof: generated {activePlaneCount} roof mesh face(s) for {RoofGroupLabel(groupId)} from Eave edge pitch.";
+        string qty = ThreeDRoofQuantitiesText(groupId);
         LogThreeD(string.IsNullOrWhiteSpace(summary)
-            ? $"Roof generated: {_threeDRoofPlanes.Count} mesh face(s)."
-            : $"Roof generated: {_threeDRoofPlanes.Count} mesh face(s). {summary}");
+            ? $"Roof generated: {RoofGroupLabel(groupId)}, {activePlaneCount} mesh face(s)."
+            : $"Roof generated: {RoofGroupLabel(groupId)}, {activePlaneCount} mesh face(s). {summary}");
         if (!string.IsNullOrWhiteSpace(qty))
             LogThreeD(qty);
     }
 
     private void ClearThreeDRoof()
     {
-        bool hasRoofBase = HasGeneratedRoofBase();
-        if (!hasRoofBase && _threeDRoofGuides.Count == 0 && _threeDRoofPlanes.Count == 0 && _threeDRoofIssues.Count == 0)
-            return;
-
-        _threeDFloorSlabs.RemoveAll(slab =>
-            slab.GroupKey.StartsWith(ThreeDRoofFootprintBuildService.GeneratedSlabGroupPrefix, StringComparison.OrdinalIgnoreCase));
-        _threeDRoofGuides.Clear();
-        _threeDRoofPlanes.Clear();
-        _threeDRoofIssues.Clear();
-        _selectedThreeDRoofGuideId = "";
-        _selectedThreeDRoofGuideIds.Clear();
-        SetThreeDRoofEdgeSelectMode(enabled: false);
-        RefreshThreeDRoofGuideOverlay();
-        RenderThreeDWallModel(fitCamera: false);
-        SaveCurrentThreeDModel(allowEmpty: true);
-        TxtStatus.Text = "3D Roof: roof base, edge roles, and generated mesh cleared.";
-        LogThreeD("Roof base, edge roles, and generated mesh cleared.");
+        DeleteActiveThreeDRoof();
     }
 
     private bool HasGeneratedRoofBase() =>
@@ -759,6 +748,7 @@ public partial class MainWindow
         if (_currentPage == null)
         {
             _viewport.ClearThreeDRoofGuides();
+            HideThreeDRoofPitchPopup();
             return;
         }
 
@@ -852,11 +842,15 @@ public partial class MainWindow
 
     private void SelectThreeDRoofGuide(string guideId)
     {
+        ThreeDRoofGuide? guide = _threeDRoofGuides.FirstOrDefault(candidate => string.Equals(candidate.Id, guideId, StringComparison.Ordinal));
+        if (guide != null && !string.IsNullOrWhiteSpace(guide.RoofGroupId))
+            SetActiveThreeDRoofGroup(guide.RoofGroupId, render: false);
         _selectedThreeDRoofGuideIds.Clear();
         _selectedThreeDRoofGuideIds.Add(guideId);
         _selectedThreeDRoofGuideId = guideId;
         RefreshThreeDRoofGuideOverlay();
         UpdateThreeDEditor();
+        ShowThreeDRoofPitchPopup();
         TxtStatus.Text = "3D Roof: 1 roof edge selected. Ctrl/Shift + right-click adds more edges.";
     }
 
@@ -864,6 +858,19 @@ public partial class MainWindow
     {
         if (string.IsNullOrWhiteSpace(guideId))
             return;
+
+        ThreeDRoofGuide? guide = _threeDRoofGuides.FirstOrDefault(candidate => string.Equals(candidate.Id, guideId, StringComparison.Ordinal));
+        if (guide != null && !string.IsNullOrWhiteSpace(guide.RoofGroupId))
+        {
+            string activeGroupId = ActiveThreeDRoofGroupId();
+            if (!string.IsNullOrWhiteSpace(activeGroupId) && !SameRoofGroup(activeGroupId, guide.RoofGroupId))
+            {
+                _selectedThreeDRoofGuideIds.Clear();
+                _selectedThreeDRoofGuideId = "";
+            }
+
+            SetActiveThreeDRoofGroup(guide.RoofGroupId, render: false);
+        }
 
         if (_selectedThreeDRoofGuideIds.Contains(guideId))
             _selectedThreeDRoofGuideIds.Remove(guideId);
@@ -875,6 +882,7 @@ public partial class MainWindow
             : _selectedThreeDRoofGuideIds.FirstOrDefault() ?? "";
         RefreshThreeDRoofGuideOverlay();
         UpdateThreeDEditor();
+        ShowThreeDRoofPitchPopup();
         TxtStatus.Text = _selectedThreeDRoofGuideIds.Count == 0
             ? "3D Roof: edge selection cleared."
             : $"3D Roof: {_selectedThreeDRoofGuideIds.Count} roof edge(s) selected.";
@@ -889,6 +897,7 @@ public partial class MainWindow
         _selectedThreeDRoofGuideId = "";
         RefreshThreeDRoofGuideOverlay();
         UpdateThreeDEditor();
+        HideThreeDRoofPitchPopup();
         TxtStatus.Text = "3D Roof: edge selection cleared.";
     }
 
@@ -1021,6 +1030,8 @@ public partial class MainWindow
             RawPoints = guide.RawPoints.Select(CloneRoofGuidePoint).ToList(),
             Points = guide.Points.Select(CloneRoofGuidePoint).ToList(),
             PitchRisePerFoot = guide.PitchRisePerFoot,
+            RoofGroupId = guide.RoofGroupId,
+            RoofGroupLabel = guide.RoofGroupLabel,
             DefinesSlope = guide.DefinesSlope,
             OverhangFeet = guide.OverhangFeet,
         };
@@ -1035,6 +1046,8 @@ public partial class MainWindow
             Opacity = plane.Opacity,
             Status = plane.Status,
             Message = plane.Message,
+            RoofGroupId = plane.RoofGroupId,
+            RoofGroupLabel = plane.RoofGroupLabel,
             SourceGuideIds = plane.SourceGuideIds.ToList(),
             Points = plane.Points
                 .Select(point => new ThreeDRoofVertex
@@ -1061,6 +1074,8 @@ public partial class MainWindow
             YFeet = issue.YFeet,
             ZFeet = issue.ZFeet,
             Color = issue.Color,
+            RoofGroupId = issue.RoofGroupId,
+            RoofGroupLabel = issue.RoofGroupLabel,
             GuideIds = issue.GuideIds.ToList(),
         };
 

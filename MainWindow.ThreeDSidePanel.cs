@@ -155,6 +155,7 @@ public partial class MainWindow
         editor.Children.Add(actions);
 
         editor.Children.Add(BuildThreeDRoofEdgeGroup());
+        editor.Children.Add(BuildThreeDRoofPlacementGroup());
 
         var border = new Border
         {
@@ -308,6 +309,7 @@ public partial class MainWindow
         _threeDApplyGroupButton.IsEnabled = hasWall;
 
         UpdateThreeDRoofEdgeGroup(selectedRoofEdgeCount);
+        UpdateThreeDRoofMoveControls();
     }
 
     private void UpdateThreeDRoofEdgeGroup(int selectedRoofEdgeCount)

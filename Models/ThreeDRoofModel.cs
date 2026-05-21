@@ -20,6 +20,8 @@ public sealed class ThreeDRoofGuide
     public List<ThreeDRoofGuidePoint> Points { get; set; } = [];
     public double ElevationFeet { get; set; }
     public double PitchRisePerFoot { get; set; }
+    public string RoofGroupId { get; set; } = "";
+    public string RoofGroupLabel { get; set; } = "";
 
     // Revit "Defines Slope": this edge contributes a slope plane to the roof
     // envelope. Source of truth for slope; Kind (eave/rake) mirrors it.
@@ -51,6 +53,8 @@ public sealed class ThreeDRoofPlane
     public double Opacity { get; set; } = 0.42;
     public string Status { get; set; } = "preview";
     public string Message { get; set; } = "";
+    public string RoofGroupId { get; set; } = "";
+    public string RoofGroupLabel { get; set; } = "";
     public List<string> SourceGuideIds { get; set; } = [];
 }
 
@@ -68,6 +72,8 @@ public sealed class ThreeDRoofIssue
     public double YFeet { get; set; }
     public double ZFeet { get; set; }
     public string Color { get; set; } = "#DC2626";
+    public string RoofGroupId { get; set; } = "";
+    public string RoofGroupLabel { get; set; } = "";
     public List<string> GuideIds { get; set; } = [];
 }
 

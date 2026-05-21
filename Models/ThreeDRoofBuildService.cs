@@ -53,6 +53,8 @@ public static class ThreeDRoofBuildService
             Points = guide.Points.Select(ClonePoint).ToList(),
             ElevationFeet = guide.ElevationFeet,
             PitchRisePerFoot = guide.PitchRisePerFoot,
+            RoofGroupId = guide.RoofGroupId,
+            RoofGroupLabel = guide.RoofGroupLabel,
             DefinesSlope = guide.DefinesSlope,
             OverhangFeet = guide.OverhangFeet,
             Color = guide.Color,

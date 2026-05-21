@@ -147,6 +147,16 @@ public sealed partial class PdfViewport
     private SKPoint PdfToScreen(SKPoint point) =>
         new((point.X - _panX) * _zoom, (point.Y - _panY) * _zoom);
 
+    public Point PdfToViewPoint(float pdfX, float pdfY)
+    {
+        SKPoint canvas = PdfToScreen(new SKPoint(pdfX, pdfY));
+        double actualWidth = Math.Max(ActualWidth, 0.001);
+        double actualHeight = Math.Max(ActualHeight, 0.001);
+        double scaleX = ViewportCanvasWidth > 0 ? ViewportCanvasWidth / actualWidth : 1.0;
+        double scaleY = ViewportCanvasHeight > 0 ? ViewportCanvasHeight / actualHeight : 1.0;
+        return new Point(canvas.X / Math.Max(scaleX, 0.001), canvas.Y / Math.Max(scaleY, 0.001));
+    }
+
     private float ScreenToPdfDistance(float pixels) => pixels / _zoom;
 
     private float PdfToScreenDistance(float pts) => pts * _zoom;
