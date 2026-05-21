@@ -171,6 +171,9 @@ var tests = new List<(string Name, Action Run)>
     ("joist length label can use standard format", JoistLengthLabelCanUseStandardFormat),
     ("joist pitch label explains flat slope and order lengths", JoistPitchLabelExplainsFlatSlopeAndOrderLengths),
     ("joist export uses visible label lines", JoistExportUsesVisibleLabelLines),
+    ("joist area defaults use compact labels and foot rounding", JoistAreaDefaultsUseCompactLabelsAndFootRounding),
+    ("folder template openings have numbered children", FolderTemplateOpeningsHaveNumberedChildren),
+    ("settings manager folder template edits auto persist", TakeoffsTreeRegressionTests.SettingsManagerFolderTemplateEditsAutoPersist),
     ("report template loads synthetic detailed frame list", ReportTemplateServiceTests.LoadsSyntheticDetailedFrameList),
     ("report template loads local template if present", ReportTemplateServiceTests.LoadsLocalTemplateIfPresent),
     ("report builder applies A3 wall block like macro", ReportTemplateServiceTests.AppliesA3WallBlockLikeMacro),
@@ -2360,6 +2363,33 @@ static void ActiveExcelExportMatrixKeepsNumbers()
     AssertEqual("FT", values[1, 2]?.ToString() ?? "", "unit first cell");
     AssertEqual("Note with break", values[2, 0]?.ToString() ?? "", "note text is cell-safe");
     AssertEqual("", values[3, 0]?.ToString() ?? "", "blank row first cell");
+}
+
+static void JoistAreaDefaultsUseCompactLabelsAndFootRounding()
+{
+    var item = new TakeoffItem
+    {
+        MeasurementType = "area",
+        JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestEvenFoot,
+        JoistDetailedLabels = true,
+    };
+
+    JoistTakeoffDefaults.ApplyToNewJoistArea(item);
+
+    AssertTrue(item.IsJoistTakeoff, "joist default enables item");
+    AssertEqual(JoistTakeoffCalculator.RoundingNearestFoot, item.JoistLengthRounding, "joist default rounding");
+    AssertFalse(item.JoistDetailedLabels, "joist default area label");
+    AssertTrue(item.JoistDirectionFollowsAreaRotation, "joist default rotate direction");
+    AssertTrue(item.JoistAddEndJoist, "joist default end joist");
+}
+
+static void FolderTemplateOpeningsHaveNumberedChildren()
+{
+    FolderPlanNode openings = PlanSwiftFolderTemplateService.HardcodedSubTree("COM")
+        .FirstOrDefault(node => string.Equals(node.Name, "openings", StringComparison.OrdinalIgnoreCase))
+        ?? throw new InvalidOperationException("openings folder missing");
+
+    AssertEqual("0,1,2,3,4,5", string.Join(",", openings.Children.Select(node => node.Name)), "openings child folders");
 }
 
 static void JoistPitchPersistsOnTakeoffItem()

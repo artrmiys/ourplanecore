@@ -234,6 +234,15 @@ public partial class MainWindow
         SettingsPresetStore.InstallProviders(_currentJob);
     }
 
+    private void PersistFolderTemplateEditorChange(string status)
+    {
+        SettingsPresetStore.SaveGlobal(_ftConfig);
+        if (_currentJob != null && SettingsPresetStore.LoadJobOverride(_currentJob) != null)
+            SettingsPresetStore.SaveJobOverride(_currentJob, _ftConfig);
+        InstallWorkingProviders();
+        TxtStatus.Text = status;
+    }
+
     private void InstallWorkingProviders()
     {
         var c = _ftConfig;
@@ -268,12 +277,12 @@ public partial class MainWindow
         top.Children.Add(new TextBlock { Text = "Mode:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
         _pfMode = ModeCombo((_, _) => BindPageFolders());
         top.Children.Add(_pfMode);
-        top.Children.Add(MgrButton("Add", (_, _) => { var n = PromptText("Add page folder", "New Folder"); if (n != null) { _pfList.Add(new FolderPlanNode { Name = n }); SyncPageFolders(); } }));
-        top.Children.Add(MgrButton("Rename", (_, _) => { if (_pfListBox?.SelectedItem is FolderPlanNode s) { var n = PromptText("Rename", s.Name); if (n != null) { s.Name = n; SyncPageFolders(); _pfListBox.Items.Refresh(); } } }));
-        top.Children.Add(MgrButton("Remove", (_, _) => { if (_pfListBox?.SelectedItem is FolderPlanNode s) { _pfList.Remove(s); SyncPageFolders(); } }));
+        top.Children.Add(MgrButton("Add", (_, _) => { var n = PromptText("Add page folder", "New Folder"); if (n != null) { _pfList.Add(new FolderPlanNode { Name = n }); SyncPageFolders(); PersistFolderTemplateEditorChange($"Page Folders {ModeOf(_pfMode)} saved as global default."); } }));
+        top.Children.Add(MgrButton("Rename", (_, _) => { if (_pfListBox?.SelectedItem is FolderPlanNode s) { var n = PromptText("Rename", s.Name); if (n != null) { s.Name = n; SyncPageFolders(); _pfListBox.Items.Refresh(); PersistFolderTemplateEditorChange($"Page Folders {ModeOf(_pfMode)} saved as global default."); } } }));
+        top.Children.Add(MgrButton("Remove", (_, _) => { if (_pfListBox?.SelectedItem is FolderPlanNode s) { _pfList.Remove(s); SyncPageFolders(); PersistFolderTemplateEditorChange($"Page Folders {ModeOf(_pfMode)} saved as global default."); } }));
         top.Children.Add(MgrButton("↑", (_, _) => MovePf(-1)));
         top.Children.Add(MgrButton("↓", (_, _) => MovePf(1)));
-        top.Children.Add(MgrButton("Reset to default", (_, _) => { _ftConfig.PageFolders[ModeOf(_pfMode)] = PlanSwiftFolderTemplateService.DefaultPageFolders(ModeOf(_pfMode)).ToList(); BindPageFolders(); }));
+        top.Children.Add(MgrButton("Reset to default", (_, _) => { _ftConfig.PageFolders[ModeOf(_pfMode)] = PlanSwiftFolderTemplateService.DefaultPageFolders(ModeOf(_pfMode)).ToList(); BindPageFolders(); PersistFolderTemplateEditorChange($"Page Folders {ModeOf(_pfMode)} reset and saved as global default."); }));
         DockPanel.SetDock(top, Dock.Top);
         root.Children.Add(top);
 
@@ -300,6 +309,7 @@ public partial class MainWindow
         if (j < 0 || j >= _pfList.Count) return;
         _pfList.Move(i, j);
         SyncPageFolders();
+        PersistFolderTemplateEditorChange($"Page Folders {ModeOf(_pfMode)} order saved as global default.");
         _pfListBox.SelectedIndex = j;
     }
 
@@ -335,7 +345,7 @@ public partial class MainWindow
         top.Children.Add(MgrButton("Add child", (_, _) => AddTreeNode(false)));
         top.Children.Add(MgrButton("Rename", (_, _) => RenameTreeNode()));
         top.Children.Add(MgrButton("Remove", (_, _) => RemoveTreeNode()));
-        top.Children.Add(MgrButton("Reset to default", (_, _) => { _ftConfig.TakeoffTree[ModeOf(_atMode)] = PlanSwiftFolderTemplateService.HardcodedSubTree(ModeOf(_atMode)); BindAutoTree(); }));
+        top.Children.Add(MgrButton("Reset to default", (_, _) => { _ftConfig.TakeoffTree[ModeOf(_atMode)] = PlanSwiftFolderTemplateService.HardcodedSubTree(ModeOf(_atMode)); BindAutoTree(); PersistFolderTemplateEditorChange($"Auto Tree {ModeOf(_atMode)} reset and saved as global default."); }));
         DockPanel.SetDock(top, Dock.Top);
         root.Children.Add(top);
 
@@ -382,6 +392,7 @@ public partial class MainWindow
         else
             p.Children.Add(node);
         BindAutoTree();
+        PersistFolderTemplateEditorChange($"Auto Tree {ModeOf(_atMode)} saved as global default.");
     }
 
     private void RenameTreeNode()
@@ -391,6 +402,7 @@ public partial class MainWindow
         if (n == null) return;
         s.Name = n;
         BindAutoTree();
+        PersistFolderTemplateEditorChange($"Auto Tree {ModeOf(_atMode)} saved as global default.");
     }
 
     private void RemoveTreeNode()
@@ -398,6 +410,7 @@ public partial class MainWindow
         if (SelAt() is not { } s) return;
         RemoveNode(AtNodes(), s);
         BindAutoTree();
+        PersistFolderTemplateEditorChange($"Auto Tree {ModeOf(_atMode)} saved as global default.");
     }
 
     private void ApplyAutoTree()

@@ -577,11 +577,7 @@ public partial class MainWindow
 
     private void ApplyDefaultJoistAreaSettings(TakeoffItem item)
     {
-        item.IsJoistTakeoff = true;
-        item.JoistDirectionFollowsAreaRotation = true;
-        item.JoistAddEndJoist = true;
-        item.JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestFoot;
-        item.JoistDetailedLabels = false;
+        JoistTakeoffDefaults.ApplyToNewJoistArea(item);
         OurPlaneCoreJobStore.SaveTakeoffItem(item);
     }
 

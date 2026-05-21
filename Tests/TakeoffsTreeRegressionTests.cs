@@ -149,6 +149,20 @@ internal static class TakeoffsTreeRegressionTests
             "takeoff item context menu should expose all-area joist direction");
     }
 
+    public static void SettingsManagerFolderTemplateEditsAutoPersist()
+    {
+        string source = ReadRepoFile("MainWindow.SettingsManager.cs");
+        AssertTrue(
+            source.Contains("private void PersistFolderTemplateEditorChange", StringComparison.Ordinal) &&
+            source.Contains("SettingsPresetStore.SaveGlobal(_ftConfig)", StringComparison.Ordinal) &&
+            source.Contains("InstallWorkingProviders();", StringComparison.Ordinal),
+            "settings manager should have a shared global autosave path for folder template edits");
+        AssertTrue(
+            source.Contains("SyncPageFolders(); PersistFolderTemplateEditorChange", StringComparison.Ordinal) &&
+            source.Contains("PersistFolderTemplateEditorChange($\"Auto Tree", StringComparison.Ordinal),
+            "page folder and auto tree edit actions should autosave as the global default");
+    }
+
     public static void FastRefreshDisabledForDataSafety()
     {
         string source = ReadRepoFile("MainWindow.TakeoffsTreeFastRefresh.cs");

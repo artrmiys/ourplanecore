@@ -141,6 +141,14 @@ public partial class MainWindow
         color = NormalizeTakeoffColor(item.Color);
         unitPrice = item.UnitPrice;
         notes = item.Notes;
+        bool isAreaTakeoff = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        bool seedJoistEnableDefaults = isAreaTakeoff && !item.IsJoistArea;
+        string initialJoistRounding = seedJoistEnableDefaults
+            ? JoistTakeoffDefaults.LengthRounding
+            : JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
+        bool initialJoistDetailedLabels = seedJoistEnableDefaults
+            ? JoistTakeoffDefaults.DetailedAreaLabel
+            : item.JoistDetailedLabels;
         joistEdit = new JoistTakeoffEdit(
             item.IsJoistArea,
             item.JoistType,
@@ -149,9 +157,9 @@ public partial class MainWindow
             item.JoistDirectionFollowsAreaRotation,
             item.JoistAddEndJoist,
             JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
-            JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
+            initialJoistRounding,
             item.JoistShowLabels,
-            item.JoistDetailedLabels);
+            initialJoistDetailedLabels);
 
         var dialog = new Window
         {
@@ -174,7 +182,6 @@ public partial class MainWindow
             Foreground = Brushes.Gray,
             Margin = new Thickness(0, 8, 0, 0),
         });
-        bool isAreaTakeoff = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
         var joistEnabledBox = new CheckBox
         {
             Content = "Joist layout",
@@ -257,7 +264,7 @@ public partial class MainWindow
                 Tag = rounding,
             });
         }
-        string selectedRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
+        string selectedRounding = initialJoistRounding;
         for (int i = 0; i < roundingBox.Items.Count; i++)
         {
             if (roundingBox.Items[i] is ComboBoxItem option &&
@@ -309,7 +316,7 @@ public partial class MainWindow
         var joistDetailedLabelsBox = new CheckBox
         {
             Content = "Detailed area label",
-            IsChecked = item.JoistDetailedLabels,
+            IsChecked = initialJoistDetailedLabels,
             Margin = new Thickness(0, 3, 0, 3),
             ToolTip = "On: show order/raw/flat lengths. Off: use the old compact count / length format.",
         };
@@ -437,6 +444,7 @@ public partial class MainWindow
             {
                 joistRounding = JoistTakeoffCalculator.NormalizeLengthRounding(selectedRoundingValue);
             }
+            bool joistDetailedLabels = joistDetailedLabelsBox.IsChecked == true;
 
             if (joistEnabled)
             {
@@ -463,6 +471,11 @@ public partial class MainWindow
                     return;
                 }
             }
+            else if (!item.IsJoistArea)
+            {
+                joistRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
+                joistDetailedLabels = item.JoistDetailedLabels;
+            }
 
             resultName = nameBox.Text.Trim();
             resultColor = cleanColor;
@@ -478,7 +491,7 @@ public partial class MainWindow
                 joistPitch,
                 joistRounding,
                 joistLabelsBox.IsChecked == true,
-                joistDetailedLabelsBox.IsChecked == true);
+                joistDetailedLabels);
             dialog.DialogResult = true;
         };
         dialog.Loaded += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };
