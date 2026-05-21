@@ -495,8 +495,8 @@ public partial class MainWindow
         double baseY = Math.Max(0, wall.BaseElevationFeet);
         double topY = baseY + height;
         bool selected = _selectedThreeDWall != null && string.Equals(_selectedThreeDWall.Id, wall.Id, StringComparison.Ordinal);
-        Color color = selected ? Color.FromRgb(245, 158, 11) : ParseWallColor(wall.Color);
-        double opacity = selected ? 0.94 : 0.76;
+        Color color = selected ? Color.FromRgb(245, 158, 11) : ToCleanMeshTint(ParseWallColor(wall.Color));
+        double opacity = selected ? 0.94 : 0.72;
 
         // Top-of-structure walls follow the roof underside: a flat eave wall
         // gets clipped to the eave, a gable wall rises into a triangle up to
@@ -631,7 +631,7 @@ public partial class MainWindow
             ? Color.FromRgb(59, 130, 246)
             : selectedRoof
                 ? Color.FromRgb(245, 158, 11)
-                : ParseWallColor(slab.Color);
+                : ToCleanMeshTint(ParseWallColor(slab.Color));
 
         var positions = new Point3DCollection();
         foreach (ThreeDPoint point in triangulation.Points)
@@ -783,14 +783,14 @@ public partial class MainWindow
             AddFanRoofTriangles(mesh, n);
 
         bool selectedRoof = SameRoofGroup(plane.RoofGroupId, ActiveThreeDRoofGroupId());
-        Color planeColor = ParseWallColor(plane.Color);
+        Color planeColor = ToCleanMeshTint(ParseWallColor(plane.Color));
         var brush = new SolidColorBrush(planeColor)
         {
-            Opacity = selectedRoof ? 0.98 : Math.Clamp(plane.Opacity + 0.18, 0.82, 0.96),
+            // Matte (no specular) with a touch of transparency so internal
+            // roofs stay visible through the outer surfaces.
+            Opacity = selectedRoof ? 0.85 : 0.7,
         };
-        var material = new MaterialGroup();
-        material.Children.Add(new DiffuseMaterial(brush));
-        material.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)), 28));
+        var material = new DiffuseMaterial(brush);
         var model = new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) };
         RegisterThreeDRoofMeshHit(model, plane.RoofGroupId);
         group.Children.Add(model);
@@ -1214,5 +1214,16 @@ public partial class MainWindow
         }
 
         return Color.FromRgb(120, 144, 156);
+    }
+
+    // Revit-style clean shaded look: blend the takeoff color heavily toward a
+    // neutral gray so surfaces read as matte monochrome with only a hint of
+    // the original hue. Selected colors are left vivid and bypass this.
+    private static Color ToCleanMeshTint(Color color)
+    {
+        const double keep = 0.25; // share of the original hue retained
+        static byte Mix(byte neutral, byte channel) =>
+            (byte)Math.Clamp(neutral * (1 - keep) + channel * keep, 0, 255);
+        return Color.FromRgb(Mix(182, color.R), Mix(188, color.G), Mix(196, color.B));
     }
 }
