@@ -37,7 +37,11 @@ public partial class MainWindow
 
     private void RefreshThreeDViewer()
     {
-        if (_threeDWallElements.Count > 0 || _threeDFloorSlabs.Count > 0)
+        if (_threeDWallElements.Count > 0 ||
+            _threeDFloorSlabs.Count > 0 ||
+            _threeDRoofGuides.Count > 0 ||
+            _threeDRoofPlanes.Count > 0 ||
+            _threeDRoofIssues.Count > 0)
         {
             RenderThreeDWallModel(fitCamera: false);
             return;
@@ -81,13 +85,19 @@ public partial class MainWindow
         _threeDViewerDragStart = point;
         _threeDViewerMouseDownPoint = point;
         _threeDViewerMouseMoved = false;
+        if (TryBeginThreeDRoofGizmoDrag(ThreeDViewerViewport, point, ThreeDViewerCamera, _threeDViewerDistance))
+            _threeDViewerMouseDownPoint = null;
         CaptureThreeDInput(sender);
     }
 
     private void ThreeDViewerViewport_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         Point point = e.GetPosition(ThreeDViewerViewport);
-        if (_threeDRoofMoveModeEnabled)
+        if (IsThreeDRoofGizmoDragging)
+        {
+            EndThreeDRoofGizmoDrag(_threeDViewerMouseMoved);
+        }
+        else if (_threeDRoofMoveModeEnabled)
         {
             if (_threeDViewerMouseMoved)
                 SaveCurrentThreeDModel();
@@ -119,6 +129,12 @@ public partial class MainWindow
         if (Math.Abs(delta.X) > 1 || Math.Abs(delta.Y) > 1)
             _threeDViewerMouseMoved = true;
         _threeDViewerDragStart = current;
+
+        if (IsThreeDRoofGizmoDragging)
+        {
+            DragThreeDRoofGizmoTo(current);
+            return;
+        }
 
         if (_threeDRoofMoveModeEnabled)
         {
@@ -229,6 +245,7 @@ public partial class MainWindow
         _threeDViewerSceneRadius = 12;
         _threeDWallHitMap.Clear();
         _threeDFloorSlabHitMap.Clear();
+        ClearThreeDRoofSceneHitMaps();
 
         ThreeDViewerViewport.Children.Clear();
         ThreeDViewerViewport.Children.Add(new ModelVisual3D { Content = CreateCleanThreeDViewerSceneGroup() });
@@ -272,6 +289,11 @@ public partial class MainWindow
         _threeDSideViewerDragStart = point;
         _threeDSideViewerMouseDownPoint = point;
         _threeDSideViewerMouseMoved = false;
+        if (_threeDSideCamera != null &&
+            TryBeginThreeDRoofGizmoDrag(_threeDSideViewport, point, _threeDSideCamera, _threeDSideViewerDistance))
+        {
+            _threeDSideViewerMouseDownPoint = null;
+        }
         CaptureThreeDInput(sender);
     }
 
@@ -281,7 +303,11 @@ public partial class MainWindow
             return;
 
         Point point = e.GetPosition(_threeDSideViewport);
-        if (_threeDRoofMoveModeEnabled)
+        if (IsThreeDRoofGizmoDragging)
+        {
+            EndThreeDRoofGizmoDrag(_threeDSideViewerMouseMoved);
+        }
+        else if (_threeDRoofMoveModeEnabled)
         {
             if (_threeDSideViewerMouseMoved)
                 SaveCurrentThreeDModel();
@@ -319,6 +345,12 @@ public partial class MainWindow
         if (Math.Abs(delta.X) > 1 || Math.Abs(delta.Y) > 1)
             _threeDSideViewerMouseMoved = true;
         _threeDSideViewerDragStart = current;
+        if (IsThreeDRoofGizmoDragging)
+        {
+            DragThreeDRoofGizmoTo(current);
+            return;
+        }
+
         if (_threeDRoofMoveModeEnabled && _threeDSideCamera != null)
         {
             NudgeThreeDRoofOffsetFromDrag(_threeDSideCamera, delta, _threeDSideViewerDistance);
@@ -377,7 +409,7 @@ public partial class MainWindow
             element.ReleaseMouseCapture();
     }
 
-    private static void AddThreeDViewerBox(
+    private static GeometryModel3D AddThreeDViewerBox(
         Model3DGroup group,
         Point3D center,
         double width,
@@ -418,6 +450,8 @@ public partial class MainWindow
             Opacity = opacity,
         };
         var material = new DiffuseMaterial(brush);
-        group.Children.Add(new GeometryModel3D(mesh, material) { BackMaterial = material });
+        var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
+        group.Children.Add(model);
+        return model;
     }
 }

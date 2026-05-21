@@ -336,6 +336,7 @@ public partial class MainWindow
     {
         _threeDWallHitMap.Clear();
         _threeDFloorSlabHitMap.Clear();
+        ClearThreeDRoofSceneHitMaps();
         if (_threeDWallElements.Count == 0 &&
             _threeDFloorSlabs.Count == 0 &&
             _threeDRoofGuides.Count == 0 &&
@@ -457,6 +458,7 @@ public partial class MainWindow
 
         foreach (ThreeDRoofIssue issue in _threeDRoofIssues)
             AddThreeDRoofIssueMarker(group, issue, centerX, centerZ);
+        AddThreeDRoofMoveGizmo(group, centerX, centerZ);
         return group;
     }
 
@@ -618,7 +620,12 @@ public partial class MainWindow
         double topY = bottomY + thickness;
         bool selected = _selectedThreeDFloorSlab != null &&
                         string.Equals(_selectedThreeDFloorSlab.Id, slab.Id, StringComparison.Ordinal);
-        Color color = selected ? Color.FromRgb(59, 130, 246) : ParseWallColor(slab.Color);
+        bool selectedRoof = IsRoofSlab(slab) && SameRoofGroup(slab.RoofGroupId, ActiveThreeDRoofGroupId());
+        Color color = selected
+            ? Color.FromRgb(59, 130, 246)
+            : selectedRoof
+                ? Color.FromRgb(245, 158, 11)
+                : ParseWallColor(slab.Color);
 
         var positions = new Point3DCollection();
         foreach (ThreeDPoint point in triangulation.Points)
@@ -657,10 +664,13 @@ public partial class MainWindow
             Positions = positions,
             TriangleIndices = indices,
         };
-        var brush = new SolidColorBrush(color) { Opacity = selected ? 0.58 : 0.34 };
+        var brush = new SolidColorBrush(color) { Opacity = selected || selectedRoof ? 0.62 : 0.34 };
         var material = new DiffuseMaterial(brush);
         var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
-        _threeDFloorSlabHitMap[model] = slab;
+        if (IsRoofSlab(slab))
+            RegisterThreeDRoofMeshHit(model, slab.RoofGroupId);
+        else
+            _threeDFloorSlabHitMap[model] = slab;
         group.Children.Add(model);
     }
 
@@ -815,14 +825,18 @@ public partial class MainWindow
             mesh.TriangleIndices.Add(next);
         }
 
-        var brush = new SolidColorBrush(ParseWallColor(plane.Color))
+        bool selectedRoof = SameRoofGroup(plane.RoofGroupId, ActiveThreeDRoofGroupId());
+        Color planeColor = selectedRoof ? Color.FromRgb(245, 158, 11) : ParseWallColor(plane.Color);
+        var brush = new SolidColorBrush(planeColor)
         {
-            Opacity = Math.Clamp(plane.Opacity + 0.28, 0.92, 1.0),
+            Opacity = selectedRoof ? 1.0 : Math.Clamp(plane.Opacity + 0.28, 0.92, 1.0),
         };
         var material = new MaterialGroup();
         material.Children.Add(new DiffuseMaterial(brush));
         material.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)), 28));
-        group.Children.Add(new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) });
+        var model = new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) };
+        RegisterThreeDRoofMeshHit(model, plane.RoofGroupId);
+        group.Children.Add(model);
     }
 
     private static bool TryAddProjectedRoofTriangles(MeshGeometry3D mesh, IReadOnlyList<ThreeDRoofVertex> points)
@@ -903,7 +917,10 @@ public partial class MainWindow
 
     private void SelectThreeDViewerWallAt(Viewport3D viewport, Point point)
     {
-        if (_threeDWallHitMap.Count == 0 && _threeDFloorSlabHitMap.Count == 0)
+        if (_threeDWallHitMap.Count == 0 && _threeDFloorSlabHitMap.Count == 0 && _threeDRoofMeshHitMap.Count == 0)
+            return;
+
+        if (TrySelectThreeDRoofMeshAt(viewport, point))
             return;
 
         HitTestResult? hit = VisualTreeHelper.HitTest(viewport, point);
@@ -964,11 +981,14 @@ public partial class MainWindow
             ? ""
             : $"Roof: {_threeDRoofGuides.Count} edge(s), {_threeDRoofPlanes.Count} mesh face(s), {_threeDRoofIssues.Count} issue(s)";
         string roofQtyText = ThreeDRoofQuantitiesText();
+        ThreeDRoofPlacement? selectedRoof = ActiveThreeDRoofPlacement();
         string selected = _selectedThreeDWall != null
             ? $"Selected: {_selectedThreeDWall.Label} | H {_selectedThreeDWall.HeightFeet:F1} ft | W {_selectedThreeDWall.ThicknessInches:F0} in | base {_selectedThreeDWall.BaseElevationFeet:F1}"
             : _selectedThreeDFloorSlab != null
                 ? $"Selected slab: {_selectedThreeDFloorSlab.Label} | elev {_selectedThreeDFloorSlab.ElevationFeet:F1} ft"
-                : "Click a wall to edit its height/thickness or apply the values to its group.";
+                : selectedRoof != null
+                    ? $"Selected roof: {selectedRoof.Label} | X {selectedRoof.OffsetXFeet:F1} ft | Y {selectedRoof.OffsetYFeet:F1} ft | Z {selectedRoof.OffsetZFeet:F1} ft | drag colored axis arrows to move"
+                    : "Click a wall to edit its height/thickness or apply the values to its group.";
         string body = string.Join("\n", groups);
         return $"3D model: {_threeDWallElements.Count} wall segment(s), {_threeDFloorSlabs.Count} slab(s)\n{levelText}\n{slabText}\n{roofText}\n{roofQtyText}\n{body}\n{selected}";
     }
