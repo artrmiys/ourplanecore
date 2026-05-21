@@ -90,8 +90,6 @@ public static partial class ThreeDRoofPreviewBuilder
         for (int i = 0; i < envelopeFaces.Count; i++)
             AddEnvelopeFace(result, envelopeFaces[i], envelopePlanes.IndexOf(envelopeFaces[i].Plane));
         AddEnvelopeSeams(result, envelopeFaces, footprint);
-        AddParallelEaveRidges(result, envelopeFaces, footprint);
-        AddConcaveCornerValleys(result, envelopeFaces, footprint);
         AddRakeEndFaces(result, boundary, boundaryGuides, slopePlanes, roofBase);
 
         if (envelopeFaces.Count > 0)

@@ -85,17 +85,18 @@ public static partial class ThreeDRoofPreviewBuilder
 
             foreach (SlopePlane plane in planes)
             {
-                // A Revit footprint-roof slope edge contributes its support
-                // plane across the roofed side of the edge. Do not clip it to
-                // the source segment endpoints: hip/valley faces past a
-                // corner are exactly where adjacent edge planes keep meeting.
+                // A footprint-roof slope edge is finite, but its support is
+                // mitered at the endpoints. A hard perpendicular strip chops
+                // off concave valleys; an infinite line lets one short edge
+                // cut the whole roof. The mitered active domain is the middle
+                // ground used by footprint-roof hips/valleys.
                 List<P2> front = ClipToActiveDomain(triangle, plane);
                 if (front.Count < 3 || Math.Abs(SignedArea(front)) < 0.0004)
                     continue;
 
                 // Exact lower envelope as convex pieces. For each competitor:
-                // keep the area behind its eave line as-is, and clip only the
-                // roofed side by i <= j.
+                // keep the area outside its finite mitered domain as-is, and
+                // clip only the active part by i <= j.
                 var pieces = new List<List<P2>> { front };
                 foreach (SlopePlane other in planes)
                 {
@@ -291,7 +292,15 @@ public static partial class ThreeDRoofPreviewBuilder
 
     private static List<P2> ClipToActiveDomain(IReadOnlyList<P2> poly, SlopePlane plane)
     {
-        return CleanPolygon(ClipFrontHalfPlane(poly, plane));
+        List<P2> active = CleanPolygon(ClipFrontHalfPlane(poly, plane));
+        if (active.Count < 3)
+            return [];
+
+        active = CleanPolygon(ClipSourceStartMiterHalfPlane(active, plane));
+        if (active.Count < 3)
+            return [];
+
+        return CleanPolygon(ClipSourceEndMiterHalfPlane(active, plane));
     }
 
     private static IReadOnlyList<List<P2>> SplitByActiveDomain(
@@ -304,6 +313,16 @@ public static partial class ThreeDRoofPreviewBuilder
         AddEnvelopePiece(inactive, ClipFrontHalfPlane(remaining, plane, invert: true));
 
         active = CleanPolygon(ClipFrontHalfPlane(remaining, plane));
+        if (active.Count < 3)
+            return inactive;
+
+        AddEnvelopePiece(inactive, ClipSourceStartMiterHalfPlane(active, plane, invert: true));
+        active = CleanPolygon(ClipSourceStartMiterHalfPlane(active, plane));
+        if (active.Count < 3)
+            return inactive;
+
+        AddEnvelopePiece(inactive, ClipSourceEndMiterHalfPlane(active, plane, invert: true));
+        active = CleanPolygon(ClipSourceEndMiterHalfPlane(active, plane));
         return inactive;
     }
 
@@ -324,6 +343,58 @@ public static partial class ThreeDRoofPreviewBuilder
                 : SourceProjection(plane, point) >= -tolerance,
             (a, b) => IntersectSourceProjectionBoundary(a, b, plane, -tolerance));
     }
+
+    private static List<P2> ClipSourceStartMiterHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
+    {
+        double tolerance = SourceDomainTolerance(plane);
+        return ClipPolygon(
+            poly,
+            point => invert
+                ? SourceStartMiterValue(plane, point) <= -tolerance
+                : SourceStartMiterValue(plane, point) >= -tolerance,
+            (a, b) => IntersectMiterBoundary(a, b, plane, SourceStartMiterValue, -tolerance));
+    }
+
+    private static List<P2> ClipSourceEndMiterHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
+    {
+        double tolerance = SourceDomainTolerance(plane);
+        return ClipPolygon(
+            poly,
+            point => invert
+                ? SourceEndMiterValue(plane, point) >= tolerance
+                : SourceEndMiterValue(plane, point) <= tolerance,
+            (a, b) => IntersectMiterBoundary(a, b, plane, SourceEndMiterValue, tolerance));
+    }
+
+    private static P2 IntersectMiterBoundary(
+        P2 a,
+        P2 b,
+        SlopePlane plane,
+        Func<SlopePlane, P2, double> value,
+        double target)
+    {
+        double da = value(plane, a) - target;
+        double db = value(plane, b) - target;
+        double denom = da - db;
+        if (Math.Abs(denom) <= 0.000001)
+            return a;
+
+        double t = Math.Clamp(da / denom, 0, 1);
+        return new P2(
+            a.X + (b.X - a.X) * t,
+            a.Z + (b.Z - a.Z) * t);
+    }
+
+    private static double SourceStartMiterValue(SlopePlane plane, P2 point) =>
+        SourceProjection(plane, point) + SourceMiterRun(plane, point);
+
+    private static double SourceEndMiterValue(SlopePlane plane, P2 point) =>
+        SourceProjection(plane, point) - Distance(plane.Start, plane.End) - SourceMiterRun(plane, point);
+
+    private static double SourceMiterRun(SlopePlane plane, P2 point) =>
+        plane.PitchRisePerFoot <= 0.000001
+            ? 0
+            : Math.Max(0, plane.HeightAt(point)) / plane.PitchRisePerFoot;
 
     private static List<P2> ClipSourceEndHalfPlane(IReadOnlyList<P2> poly, SlopePlane plane, bool invert = false)
     {

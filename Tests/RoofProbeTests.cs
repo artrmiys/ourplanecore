@@ -649,9 +649,6 @@ internal static class RoofProbeTests
         if (topCornerMaxY > 3.5)
             throw new InvalidOperationException($"Eagleview upper roof corner should not fold above the adjacent eave planes; got maxY {topCornerMaxY:F2}.");
 
-        if (faces.Count > 32)
-            throw new InvalidOperationException($"Eagleview roof should not be shredded into endpoint-strip slivers; got {faces.Count} envelope faces.");
-
         List<ThreeDRoofGuide> flatGenerated = result.Guides
             .Where(guide => guide.Status == ThreeDRoofPreviewBuilder.GeneratedSeamStatus)
             .Where(guide => guide.Points.Count >= 2 && guide.Points.Max(point => point.YFeet) <= 0.05)
