@@ -175,7 +175,7 @@ public static partial class PdfExporter
             Color = color.WithAlpha(180),
             Style = SKPaintStyle.Fill,
         };
-        float radius = 3.0f * pointScale;
+        float radius = 1.5f * pointScale;
         foreach (SKPoint point in points)
             canvas.DrawCircle(point, radius, fill);
     }

@@ -3,6 +3,7 @@ obj/
 cache/
 publish/
 .vs/
+.claude/
 *.user
 *.suo
 *.pdb
