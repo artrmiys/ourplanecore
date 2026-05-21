@@ -2758,3 +2758,24 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   retargeting to `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`,
   and SHA256 match
   `826A6231C146B69867BFA2579F2FED7EE4D0655751DCE2B6439B62063518235C`.
+
+## 2026-05-21 3D Roof Render and Desktop Package Pass
+
+- Documented the current 3D roof render state in
+  `docs/3D_ROOF_RENDER_HANDOFF_2026_05_21.md`.
+- Current roof render behavior removes visible internal planar lines by avoiding
+  reverse duplicate coplanar roof triangles and drawing extra roof edge bars
+  only on outer boundary edges.
+- Roof faces now use a dedicated visible color material path with a light
+  emissive component, almost-solid opacity, and upward-facing flat normals so
+  surfaces do not read as gray or broken under WPF 3D lighting.
+- Confirmed the Desktop shortcut target:
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`.
+- Verified the fresh packaged app, not only Debug output:
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`212/212`), compressed single-file Release publish, update-folder
+  replacement, shortcut retargeting, SHA256 match
+  `DAD7F17E135ED338EB2967F608B5CD27053C0F1B8125E5C9C7038B0AB049168C`,
+  and packaged-exe startup log check with no `ERROR` after the last
+  `Application startup.` marker.
