@@ -89,6 +89,7 @@ public static partial class ThreeDRoofPreviewBuilder
 
         for (int i = 0; i < envelopeFaces.Count; i++)
             AddEnvelopeFace(result, envelopeFaces[i], envelopePlanes.IndexOf(envelopeFaces[i].Plane));
+        AddEaveOverhangFaces(result, envelopeFaces, envelopePlanes);
         AddEnvelopeSeams(result, envelopeFaces, footprint);
         AddRakeEndFaces(result, boundary, boundaryGuides, slopePlanes, roofBase);
 
@@ -99,6 +100,74 @@ public static partial class ThreeDRoofPreviewBuilder
                 : $"Roof faces generated from {slopePlanes.Count} slope-defining eave edge(s).";
             result.Messages.Add(message + " Ridges, hips, and valleys are the exact seams where adjacent eave planes meet.");
         }
+    }
+
+    private const double EaveHeightTolerance = 0.06;
+
+    // Additive eave overhang: for every face edge sitting on the eave line
+    // (both ends at plane height ~0), extend a strip outward by the plane's
+    // OverhangFeet along the downslope plan normal. The strip's outer edge
+    // drops below the wall plate exactly as a real eave projection does. Zero
+    // overhang adds nothing, so existing roofs are unchanged. v1 limitation:
+    // adjacent overhangs do not miter at hips/valleys (flagged in messages).
+    private static void AddEaveOverhangFaces(
+        ThreeDRoofPreviewBuildResult result,
+        IReadOnlyList<EnvelopeFace> faces,
+        List<SlopePlane> planes)
+    {
+        bool anyOverhang = false;
+        foreach (EnvelopeFace face in faces)
+        {
+            SlopePlane plane = face.Plane;
+            double overhang = plane.OverhangFeet;
+            if (overhang <= 0.001)
+                continue;
+
+            double grad = Math.Sqrt(plane.A * plane.A + plane.B * plane.B);
+            if (grad < 1e-6)
+                continue;
+            double nx = -plane.A / grad;
+            double nz = -plane.B / grad;
+            int planeIndex = planes.IndexOf(plane);
+
+            List<P2> poly = face.Points;
+            for (int i = 0; i < poly.Count; i++)
+            {
+                P2 a = poly[i];
+                P2 b = poly[(i + 1) % poly.Count];
+                if (Math.Abs(plane.HeightAt(a)) > EaveHeightTolerance ||
+                    Math.Abs(plane.HeightAt(b)) > EaveHeightTolerance)
+                {
+                    continue;
+                }
+
+                if (Distance(a, b) < 0.1)
+                    continue;
+
+                P2 outerA = new(a.X + nx * overhang, a.Z + nz * overhang);
+                P2 outerB = new(b.X + nx * overhang, b.Z + nz * overhang);
+                result.Planes.Add(new ThreeDRoofPlane
+                {
+                    Kind = "roof_face_envelope",
+                    Label = $"Eave overhang from {plane.Label}",
+                    Color = RoofFaceColor(planeIndex),
+                    Opacity = 0.68,
+                    Points =
+                    [
+                        Vertex(a.X, face.RoofBase + Math.Max(0, plane.HeightAt(a)), a.Z),
+                        Vertex(b.X, face.RoofBase + Math.Max(0, plane.HeightAt(b)), b.Z),
+                        Vertex(outerB.X, face.RoofBase + plane.HeightAt(outerB), outerB.Z),
+                        Vertex(outerA.X, face.RoofBase + plane.HeightAt(outerA), outerA.Z),
+                    ],
+                    SourceGuideIds = plane.GuideIds.ToList(),
+                    Message = "Eave overhang projected beyond the wall line.",
+                });
+                anyOverhang = true;
+            }
+        }
+
+        if (anyOverhang)
+            result.Messages.Add("Eave overhangs projected beyond the walls; at hips/valleys they are not mitered together yet.");
     }
 
     private static void AddEnvelopeFace(
@@ -149,7 +218,10 @@ public static partial class ThreeDRoofPreviewBuilder
             start,
             end,
             Math.Clamp(pitch, 0.001, 4.0),
-            feetPerPdf);
+            feetPerPdf)
+        {
+            OverhangFeet = Math.Max(0, guide.OverhangFeet),
+        };
         return true;
     }
 }

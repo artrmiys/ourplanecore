@@ -87,8 +87,15 @@ public partial class MainWindow
     private void ThreeDViewerViewport_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         Point point = e.GetPosition(ThreeDViewerViewport);
-        if (!_threeDViewerMouseMoved && _threeDViewerMouseDownPoint != null)
+        if (_threeDRoofMoveModeEnabled)
+        {
+            if (_threeDViewerMouseMoved)
+                SaveCurrentThreeDModel();
+        }
+        else if (!_threeDViewerMouseMoved && _threeDViewerMouseDownPoint != null)
+        {
             SelectThreeDViewerWallAt(ThreeDViewerViewport, point);
+        }
 
         _threeDViewerDragStart = null;
         _threeDViewerMouseDownPoint = null;
@@ -112,6 +119,13 @@ public partial class MainWindow
         if (Math.Abs(delta.X) > 1 || Math.Abs(delta.Y) > 1)
             _threeDViewerMouseMoved = true;
         _threeDViewerDragStart = current;
+
+        if (_threeDRoofMoveModeEnabled)
+        {
+            NudgeThreeDRoofOffsetFromDrag(ThreeDViewerCamera, delta, _threeDViewerDistance);
+            return;
+        }
+
         SetThreeDViewerView(
             _threeDViewerYaw + delta.X * 0.35,
             Math.Clamp(_threeDViewerPitch - delta.Y * 0.25, -85, 86),

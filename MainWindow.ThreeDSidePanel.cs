@@ -15,6 +15,11 @@ public partial class MainWindow
     private TextBox? _threeDRoofPitchBox;
     private Button? _threeDApplyWallButton;
     private Button? _threeDApplyGroupButton;
+    private CheckBox? _threeDRoofDefinesSlopeCheck;
+    private TextBox? _threeDRoofEdgePitchBox;
+    private TextBox? _threeDRoofEdgeOverhangBox;
+    private Button? _threeDRoofApplyEdgeButton;
+    private Border? _threeDRoofEdgeGroup;
     private DockPanel BuildThreeDSidePanel()
     {
         var panel = new DockPanel { Margin = new Thickness(2) };
@@ -48,6 +53,9 @@ public partial class MainWindow
         };
         toolbar.Children.Add(_threeDRoofPitchBox);
         toolbar.Children.Add(ThreeDSideButton("Edge Pitch", "Mark selected roof edge(s) as slope-defining with this pitch and generate ridge/hip/valley", ApplyThreeDRoofPitchToSelectedEdges));
+        toolbar.Children.Add(ThreeDSideButton("Move Roof", "Toggle move mode, then drag in the 3D viewer to slide the roof over the walls when they were drawn from different sheets", ToggleThreeDRoofMoveMode));
+        toolbar.Children.Add(ThreeDSideButton("Reset Pos", "Move the roof back to its generated position", ResetThreeDRoofOffset));
+        toolbar.Children.Add(ThreeDSideButton("Roof Qty", "Show roof takeoff quantities: sloped/plan area, ridge, hip, valley and eave lengths", ShowThreeDRoofQuantities));
         panel.Children.Add(toolbar);
 
         _threeDSideSummaryText = new TextBlock
@@ -138,6 +146,8 @@ public partial class MainWindow
         actions.Children.Add(_threeDApplyGroupButton);
         editor.Children.Add(actions);
 
+        editor.Children.Add(BuildThreeDRoofEdgeGroup());
+
         var border = new Border
         {
             BorderThickness = new Thickness(1),
@@ -149,6 +159,63 @@ public partial class MainWindow
         border.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
         UpdateThreeDEditor();
         return border;
+    }
+
+    // Revit-style roof edge property block: select edge(s) on the sheet (or in
+    // the viewer), set Defines Slope / Pitch / Overhang, Apply -> live rebuild.
+    private Border BuildThreeDRoofEdgeGroup()
+    {
+        var stack = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Roof Edge",
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
+
+        _threeDRoofDefinesSlopeCheck = new CheckBox
+        {
+            Content = "Defines Slope (eave)",
+            IsThreeState = true,
+            FontSize = 11,
+            Margin = new Thickness(0, 0, 0, 4),
+            ToolTip = "When on, this edge slopes a roof plane at the pitch below; off makes it a flat rake/gable edge",
+        };
+        stack.Children.Add(_threeDRoofDefinesSlopeCheck);
+
+        var inputs = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 4) };
+        _threeDRoofEdgePitchBox = ThreeDEditBox("Pitch rise/run, e.g. 6/12, 4, or 0.333");
+        _threeDRoofEdgeOverhangBox = ThreeDEditBox("Overhang beyond the wall, in inches");
+        inputs.Children.Add(LabeledField("Pitch", _threeDRoofEdgePitchBox));
+        inputs.Children.Add(LabeledField("Overhang in", _threeDRoofEdgeOverhangBox));
+        stack.Children.Add(inputs);
+
+        _threeDRoofApplyEdgeButton = ThreeDSideButton(
+            "Apply to Edge(s)",
+            "Write Defines Slope / Pitch / Overhang to the selected roof edge(s) and rebuild ridge/hip/valley",
+            ApplyThreeDRoofEdgePropertiesFromPanel);
+        stack.Children.Add(_threeDRoofApplyEdgeButton);
+
+        _threeDRoofEdgeGroup = new Border
+        {
+            Margin = new Thickness(0, 6, 0, 0),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(0, 6, 0, 0),
+            Child = stack,
+        };
+        _threeDRoofEdgeGroup.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
+        return _threeDRoofEdgeGroup;
+    }
+
+    private static StackPanel LabeledField(string label, UIElement field)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 4, 0) };
+        var caption = new TextBlock { Text = label, FontSize = 10 };
+        caption.SetResourceReference(Control.ForegroundProperty, "SecondaryForegroundBrush");
+        panel.Children.Add(caption);
+        panel.Children.Add(field);
+        return panel;
     }
 
     private Border BuildThreeDLogPanel()
@@ -221,6 +288,47 @@ public partial class MainWindow
         _threeDApplyWallButton.IsEnabled = hasWall;
         _threeDApplyGroupButton.IsEnabled = hasWall;
 
+        UpdateThreeDRoofEdgeGroup(selectedRoofEdgeCount);
+    }
+
+    private void UpdateThreeDRoofEdgeGroup(int selectedRoofEdgeCount)
+    {
+        if (_threeDRoofEdgeGroup == null ||
+            _threeDRoofDefinesSlopeCheck == null ||
+            _threeDRoofEdgePitchBox == null ||
+            _threeDRoofEdgeOverhangBox == null ||
+            _threeDRoofApplyEdgeButton == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
+        bool any = guides.Count > 0;
+        _threeDRoofEdgeGroup.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        _threeDRoofDefinesSlopeCheck.IsEnabled = any;
+        _threeDRoofEdgePitchBox.IsEnabled = any;
+        _threeDRoofEdgeOverhangBox.IsEnabled = any;
+        _threeDRoofApplyEdgeButton.IsEnabled = any;
+        if (!any)
+            return;
+
+        // Mixed selections show indeterminate / blank so Apply only writes what
+        // the user actually touched.
+        bool allSlope = guides.All(g => g.DefinesSlope);
+        bool noneSlope = guides.All(g => !g.DefinesSlope);
+        _threeDRoofDefinesSlopeCheck.IsChecked = allSlope ? true : noneSlope ? false : null;
+
+        double firstPitch = guides[0].PitchRisePerFoot > 0 ? guides[0].PitchRisePerFoot : ThreeDRoofPreviewBuilder.DefaultPitchRisePerFoot;
+        bool samePitch = guides.All(g => Math.Abs((g.PitchRisePerFoot > 0 ? g.PitchRisePerFoot : ThreeDRoofPreviewBuilder.DefaultPitchRisePerFoot) - firstPitch) < 0.0001);
+        _threeDRoofEdgePitchBox.Text = samePitch ? RoofPitchText.Format(firstPitch) : "";
+
+        double firstOverhang = guides[0].OverhangFeet;
+        bool sameOverhang = guides.All(g => Math.Abs(g.OverhangFeet - firstOverhang) < 0.0001);
+        _threeDRoofEdgeOverhangBox.Text = sameOverhang
+            ? (firstOverhang * 12.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)
+            : "";
+
+        _ = selectedRoofEdgeCount;
     }
 
     private static Button ThreeDSideButton(string text, string tooltip, Action action)

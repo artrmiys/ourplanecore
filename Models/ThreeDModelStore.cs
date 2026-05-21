@@ -44,6 +44,14 @@ public sealed class ThreeDWallModel
     public List<ThreeDRoofGuide> RoofGuides { get; set; } = [];
     public List<ThreeDRoofPlane> RoofPlanes { get; set; } = [];
     public List<ThreeDRoofIssue> RoofIssues { get; set; } = [];
+
+    // 3D placement nudge for the roof relative to the walls/slabs. Walls and
+    // roof can come from different sheets and not sit on top of each other;
+    // this offset (feet) lets the user move the roof into place in the viewer
+    // without touching generation. Applied at render only.
+    public double RoofOffsetXFeet { get; set; }
+    public double RoofOffsetYFeet { get; set; }
+    public double RoofOffsetZFeet { get; set; }
 }
 
 public static class ThreeDModelStore

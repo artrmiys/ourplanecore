@@ -20,6 +20,66 @@ public partial class MainWindow
     private ThreeDFloorSlab? _selectedThreeDFloorSlab;
     private string _threeDModelSource = "";
 
+    // Render-time placement nudge for the roof relative to walls (Move Roof).
+    private double _threeDRoofOffsetXFeet;
+    private double _threeDRoofOffsetYFeet;
+    private double _threeDRoofOffsetZFeet;
+    private bool _threeDRoofMoveModeEnabled;
+
+    private void ToggleThreeDRoofMoveMode()
+    {
+        _threeDRoofMoveModeEnabled = !_threeDRoofMoveModeEnabled;
+        TxtStatus.Text = _threeDRoofMoveModeEnabled
+            ? "3D Move Roof: drag in the viewer to slide the roof over the walls. Toggle off when aligned."
+            : "3D Move Roof off.";
+        UpdateThreeDEditor();
+    }
+
+    private void ResetThreeDRoofOffset()
+    {
+        if (_threeDRoofOffsetXFeet == 0 && _threeDRoofOffsetYFeet == 0 && _threeDRoofOffsetZFeet == 0)
+        {
+            TxtStatus.Text = "3D Move Roof: roof is already at its generated position.";
+            return;
+        }
+
+        _threeDRoofOffsetXFeet = 0;
+        _threeDRoofOffsetYFeet = 0;
+        _threeDRoofOffsetZFeet = 0;
+        RenderThreeDWallModel(fitCamera: false);
+        SaveCurrentThreeDModel();
+        TxtStatus.Text = "3D Move Roof: roof position reset to generated alignment.";
+        LogThreeD("Roof placement offset reset to zero.");
+    }
+
+    // Slide the roof on the ground plane (X/Z) from a screen drag, using the
+    // camera basis so the roof tracks the cursor regardless of view angle.
+    private void NudgeThreeDRoofOffsetFromDrag(PerspectiveCamera camera, Vector delta, double distance)
+    {
+        Vector3D look = camera.LookDirection;
+        if (look.LengthSquared < 1e-6)
+            look = new Vector3D(0, 0, -1);
+        look.Normalize();
+        Vector3D up = camera.UpDirection;
+        if (up.LengthSquared < 1e-6)
+            up = new Vector3D(0, 1, 0);
+        up.Normalize();
+        Vector3D right = Vector3D.CrossProduct(look, up);
+        if (right.LengthSquared < 1e-6)
+            right = new Vector3D(1, 0, 0);
+        right.Normalize();
+        Vector3D forward = new(look.X, 0, look.Z);
+        if (forward.LengthSquared < 1e-6)
+            forward = new Vector3D(0, 0, -1);
+        forward.Normalize();
+
+        double scale = Math.Clamp(distance * 0.0025, 0.01, 2.5);
+        Vector3D move = right * (delta.X * scale) - forward * (delta.Y * scale);
+        _threeDRoofOffsetXFeet += move.X;
+        _threeDRoofOffsetZFeet += move.Z;
+        RenderThreeDWallModel(fitCamera: false);
+    }
+
     private void Btn3dBuildWalls_Click(object sender, RoutedEventArgs e)
     {
         Build3DWallsFromTakeoffSelection(TakeoffsTree.SelectedItem as TreeViewItem, switchTo3DTab: false);
@@ -158,6 +218,9 @@ public partial class MainWindow
         _selectedThreeDWall = null;
         _selectedThreeDFloorSlab = null;
         _threeDModelSource = model?.Source ?? "";
+        _threeDRoofOffsetXFeet = model?.RoofOffsetXFeet ?? 0;
+        _threeDRoofOffsetYFeet = model?.RoofOffsetYFeet ?? 0;
+        _threeDRoofOffsetZFeet = model?.RoofOffsetZFeet ?? 0;
 
         if (model == null)
         {
@@ -211,6 +274,9 @@ public partial class MainWindow
             RoofGuides = SnapshotThreeDRoofGuides(),
             RoofPlanes = SnapshotThreeDRoofPlanes(),
             RoofIssues = SnapshotThreeDRoofIssues(),
+            RoofOffsetXFeet = _threeDRoofOffsetXFeet,
+            RoofOffsetYFeet = _threeDRoofOffsetYFeet,
+            RoofOffsetZFeet = _threeDRoofOffsetZFeet,
         };
 
     private void SaveCurrentThreeDModel(bool allowEmpty = false)
@@ -312,26 +378,27 @@ public partial class MainWindow
             maxY = Math.Max(maxY, slab.ElevationFeet + Math.Max(0.02, slab.ThicknessFeet));
         }
 
+        double ox = _threeDRoofOffsetXFeet, oy = _threeDRoofOffsetYFeet, oz = _threeDRoofOffsetZFeet;
         foreach (ThreeDRoofGuide guide in _threeDRoofGuides)
         {
-            xs.AddRange(guide.Points.Select(point => point.XFeet));
-            zs.AddRange(guide.Points.Select(point => point.ZFeet));
-            maxY = Math.Max(maxY, guide.ElevationFeet + 0.25);
+            xs.AddRange(guide.Points.Select(point => point.XFeet + ox));
+            zs.AddRange(guide.Points.Select(point => point.ZFeet + oz));
+            maxY = Math.Max(maxY, guide.ElevationFeet + oy + 0.25);
         }
 
         foreach (ThreeDRoofPlane plane in _threeDRoofPlanes)
         foreach (ThreeDRoofVertex point in plane.Points)
         {
-            xs.Add(point.XFeet);
-            zs.Add(point.ZFeet);
-            maxY = Math.Max(maxY, point.YFeet);
+            xs.Add(point.XFeet + ox);
+            zs.Add(point.ZFeet + oz);
+            maxY = Math.Max(maxY, point.YFeet + oy);
         }
 
         foreach (ThreeDRoofIssue issue in _threeDRoofIssues)
         {
-            xs.Add(issue.XFeet);
-            zs.Add(issue.ZFeet);
-            maxY = Math.Max(maxY, issue.YFeet + 0.5);
+            xs.Add(issue.XFeet + ox);
+            zs.Add(issue.ZFeet + oz);
+            maxY = Math.Max(maxY, issue.YFeet + oy + 0.5);
         }
 
         return (xs.Min(), xs.Max(), zs.Min(), zs.Max(), maxY);
@@ -345,11 +412,13 @@ public partial class MainWindow
         group.Children.Add(new DirectionalLight(Color.FromRgb(130, 160, 190), new Vector3D(0.65, -0.35, 0.55)));
         AddThreeDWallGrid(group, centerX, centerZ);
 
+        ThreeDRoofSurface roofSurface = ThreeDRoofSurface.Build(_threeDRoofPlanes);
+
         foreach (ThreeDFloorSlab slab in _threeDFloorSlabs)
             AddThreeDFloorSlabMesh(group, slab, centerX, centerZ);
 
         foreach (ThreeDWallSegment wall in _threeDWallElements)
-            AddThreeDWallMesh(group, wall, centerX, centerZ);
+            AddThreeDWallMesh(group, wall, centerX, centerZ, roofSurface);
 
         foreach (ThreeDRoofPlane plane in _threeDRoofPlanes)
             AddThreeDRoofPlaneMesh(group, plane, centerX, centerZ);
@@ -376,7 +445,7 @@ public partial class MainWindow
         _ = centerZ;
     }
 
-    private void AddThreeDWallMesh(Model3DGroup group, ThreeDWallSegment wall, double centerX, double centerZ)
+    private void AddThreeDWallMesh(Model3DGroup group, ThreeDWallSegment wall, double centerX, double centerZ, ThreeDRoofSurface roofSurface)
     {
         double sx = wall.StartXFeet - centerX;
         double sz = wall.StartZFeet - centerZ;
@@ -398,21 +467,39 @@ public partial class MainWindow
         Color color = selected ? Color.FromRgb(245, 158, 11) : ParseWallColor(wall.Color);
         double opacity = selected ? 0.94 : 0.76;
 
-        var points = new Point3DCollection
-        {
-            new(sx + nx * halfThickness, baseY, sz + nz * halfThickness),
-            new(ex + nx * halfThickness, baseY, ez + nz * halfThickness),
-            new(ex - nx * halfThickness, baseY, ez - nz * halfThickness),
-            new(sx - nx * halfThickness, baseY, sz - nz * halfThickness),
-            new(sx + nx * halfThickness, topY, sz + nz * halfThickness),
-            new(ex + nx * halfThickness, topY, ez + nz * halfThickness),
-            new(ex - nx * halfThickness, topY, ez - nz * halfThickness),
-            new(sx - nx * halfThickness, topY, sz - nz * halfThickness),
-        };
+        // Top-of-structure walls follow the roof underside: a flat eave wall
+        // gets clipped to the eave, a gable wall rises into a triangle up to
+        // the ridge. Lower-floor walls (well below the eave) keep a flat top.
+        var mesh = WallReachesRoof(roofSurface, topY)
+            ? BuildRoofFollowingWallMesh(wall, centerX, centerZ, sx, sz, dx, dz, length, nx, nz, halfThickness, baseY, topY, roofSurface)
+            : BuildFlatWallMesh(sx, sz, ex, ez, nx, nz, halfThickness, baseY, topY);
 
-        var mesh = new MeshGeometry3D
+        var brush = new SolidColorBrush(color) { Opacity = opacity };
+        var material = new DiffuseMaterial(brush);
+        var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
+        _threeDWallHitMap[model] = wall;
+        group.Children.Add(model);
+    }
+
+    private bool WallReachesRoof(ThreeDRoofSurface roofSurface, double wallTopY) =>
+        roofSurface.HasFaces && wallTopY >= roofSurface.BaseElevationFeet + _threeDRoofOffsetYFeet - 1.0;
+
+    private static MeshGeometry3D BuildFlatWallMesh(
+        double sx, double sz, double ex, double ez,
+        double nx, double nz, double halfThickness, double baseY, double topY) =>
+        new()
         {
-            Positions = points,
+            Positions = new Point3DCollection
+            {
+                new(sx + nx * halfThickness, baseY, sz + nz * halfThickness),
+                new(ex + nx * halfThickness, baseY, ez + nz * halfThickness),
+                new(ex - nx * halfThickness, baseY, ez - nz * halfThickness),
+                new(sx - nx * halfThickness, baseY, sz - nz * halfThickness),
+                new(sx + nx * halfThickness, topY, sz + nz * halfThickness),
+                new(ex + nx * halfThickness, topY, ez + nz * halfThickness),
+                new(ex - nx * halfThickness, topY, ez - nz * halfThickness),
+                new(sx - nx * halfThickness, topY, sz - nz * halfThickness),
+            },
             TriangleIndices = new Int32Collection
             {
                 0, 1, 2, 0, 2, 3,
@@ -424,11 +511,60 @@ public partial class MainWindow
             },
         };
 
-        var brush = new SolidColorBrush(color) { Opacity = opacity };
-        var material = new DiffuseMaterial(brush);
-        var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
-        _threeDWallHitMap[model] = wall;
-        group.Children.Add(model);
+    // A wall whose top profile follows the roof underside along its length.
+    // Sampled densely so a ridge crossing the wall reads as a gable peak.
+    private MeshGeometry3D BuildRoofFollowingWallMesh(
+        ThreeDWallSegment wall, double centerX, double centerZ,
+        double sx, double sz, double dx, double dz, double length,
+        double nx, double nz, double halfThickness, double baseY, double plateTopY,
+        ThreeDRoofSurface roofSurface)
+    {
+        int samples = Math.Clamp((int)Math.Ceiling(length / 1.0), 2, 96);
+        var positions = new Point3DCollection();
+        var topYs = new double[samples + 1];
+        for (int i = 0; i <= samples; i++)
+        {
+            double t = (double)i / samples;
+            double cx = sx + dx * t;
+            double cz = sz + dz * t;
+            // Query in world feet (surface built before centering), backing out
+            // the roof placement offset so trimming follows the moved roof.
+            double? roofY = roofSurface.HeightAt(
+                cx + centerX - _threeDRoofOffsetXFeet,
+                cz + centerZ - _threeDRoofOffsetZFeet);
+            double top = roofY.HasValue ? roofY.Value + _threeDRoofOffsetYFeet : plateTopY;
+            // Never below the plate (no gaps under eaves); never below base.
+            topYs[i] = Math.Max(baseY + 0.05, Math.Max(plateTopY, top));
+
+            positions.Add(new Point3D(cx + nx * halfThickness, baseY, cz + nz * halfThickness)); // side+ bottom
+            positions.Add(new Point3D(cx + nx * halfThickness, topYs[i], cz + nz * halfThickness)); // side+ top
+            positions.Add(new Point3D(cx - nx * halfThickness, baseY, cz - nz * halfThickness)); // side- bottom
+            positions.Add(new Point3D(cx - nx * halfThickness, topYs[i], cz - nz * halfThickness)); // side- top
+        }
+
+        var indices = new Int32Collection();
+        void Quad(int a, int b, int c, int d)
+        {
+            indices.Add(a); indices.Add(b); indices.Add(c);
+            indices.Add(a); indices.Add(c); indices.Add(d);
+        }
+
+        for (int i = 0; i < samples; i++)
+        {
+            int p = i * 4;
+            int q = (i + 1) * 4;
+            Quad(p + 0, p + 1, q + 1, q + 0); // + side
+            Quad(p + 2, p + 3, q + 3, q + 2); // - side
+            Quad(p + 1, p + 3, q + 3, q + 1); // top ridge strip
+            Quad(p + 0, p + 2, q + 2, q + 0); // bottom
+        }
+
+        int last = samples * 4;
+        Quad(0, 1, 3, 2);                     // start cap
+        Quad(last + 0, last + 1, last + 3, last + 2); // end cap
+
+        _ = wall;
+        return new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
     }
 
     private void AddThreeDFloorSlabMesh(Model3DGroup group, ThreeDFloorSlab slab, double centerX, double centerZ)
@@ -508,18 +644,19 @@ public partial class MainWindow
         Color color = ParseWallColor(string.IsNullOrWhiteSpace(guide.Color)
             ? ThreeDRoofGuideKinds.Color(guide.Kind)
             : guide.Color);
+        double ox = _threeDRoofOffsetXFeet, oy = _threeDRoofOffsetYFeet, oz = _threeDRoofOffsetZFeet;
         for (int i = 1; i < guide.Points.Count; i++)
         {
             ThreeDRoofGuidePoint a = guide.Points[i - 1];
             ThreeDRoofGuidePoint b = guide.Points[i];
-            double startY = RoofGuidePointRenderY(guide, a);
-            double endY = RoofGuidePointRenderY(guide, b);
+            double startY = RoofGuidePointRenderY(guide, a) + oy;
+            double endY = RoofGuidePointRenderY(guide, b) + oy;
             AddThreeDGuideSegmentMesh(
                 group,
-                a.XFeet - centerX,
-                a.ZFeet - centerZ,
-                b.XFeet - centerX,
-                b.ZFeet - centerZ,
+                a.XFeet + ox - centerX,
+                a.ZFeet + oz - centerZ,
+                b.XFeet + ox - centerX,
+                b.ZFeet + oz - centerZ,
                 startY,
                 endY,
                 color);
@@ -577,6 +714,10 @@ public partial class MainWindow
         group.Children.Add(new GeometryModel3D(mesh, material) { BackMaterial = material });
     }
 
+    // Roof slab thickness in feet - gives faces a visible edge/fascia depth so
+    // the roof reads as a solid from below instead of a paper-thin surface.
+    private const double RoofSlabThicknessFeet = 0.5;
+
     private void AddThreeDRoofPlaneMesh(Model3DGroup group, ThreeDRoofPlane plane, double centerX, double centerZ)
     {
         if (plane.Points.Count < 3)
@@ -586,21 +727,66 @@ public partial class MainWindow
         if (ProjectedRoofArea(renderPoints) < -0.0001)
             renderPoints.Reverse();
 
-        var mesh = new MeshGeometry3D
-        {
-            Positions = new Point3DCollection(renderPoints
-                .Select(point => new Point3D(point.XFeet - centerX, point.YFeet, point.ZFeet - centerZ))),
-        };
+        double ox = _threeDRoofOffsetXFeet, oy = _threeDRoofOffsetYFeet, oz = _threeDRoofOffsetZFeet;
+        int n = renderPoints.Count;
+        var positions = new Point3DCollection();
+        foreach (ThreeDRoofVertex p in renderPoints)
+            positions.Add(new Point3D(p.XFeet + ox - centerX, p.YFeet + oy, p.ZFeet + oz - centerZ)); // top
+        foreach (ThreeDRoofVertex p in renderPoints)
+            positions.Add(new Point3D(p.XFeet + ox - centerX, p.YFeet + oy - RoofSlabThicknessFeet, p.ZFeet + oz - centerZ)); // bottom
 
-        if (!TryAddProjectedRoofTriangles(mesh, renderPoints))
-            AddFanRoofTriangles(mesh, renderPoints.Count);
+        var mesh = new MeshGeometry3D { Positions = positions };
+
+        // Top + bottom surfaces share the polygon triangulation.
+        var topMesh = new MeshGeometry3D { Positions = positions };
+        if (TryAddProjectedRoofTriangles(topMesh, renderPoints))
+        {
+            for (int i = 0; i < topMesh.TriangleIndices.Count; i += 6)
+            {
+                int a = topMesh.TriangleIndices[i];
+                int b = topMesh.TriangleIndices[i + 1];
+                int c = topMesh.TriangleIndices[i + 2];
+                mesh.TriangleIndices.Add(a);
+                mesh.TriangleIndices.Add(b);
+                mesh.TriangleIndices.Add(c);
+                mesh.TriangleIndices.Add(n + a);
+                mesh.TriangleIndices.Add(n + c);
+                mesh.TriangleIndices.Add(n + b);
+            }
+        }
+        else
+        {
+            for (int i = 1; i < n - 1; i++)
+            {
+                mesh.TriangleIndices.Add(0);
+                mesh.TriangleIndices.Add(i);
+                mesh.TriangleIndices.Add(i + 1);
+                mesh.TriangleIndices.Add(n);
+                mesh.TriangleIndices.Add(n + i + 1);
+                mesh.TriangleIndices.Add(n + i);
+            }
+        }
+
+        // Fascia/edge sides around the boundary.
+        for (int i = 0; i < n; i++)
+        {
+            int next = (i + 1) % n;
+            mesh.TriangleIndices.Add(i);
+            mesh.TriangleIndices.Add(n + i);
+            mesh.TriangleIndices.Add(n + next);
+            mesh.TriangleIndices.Add(i);
+            mesh.TriangleIndices.Add(n + next);
+            mesh.TriangleIndices.Add(next);
+        }
 
         var brush = new SolidColorBrush(ParseWallColor(plane.Color))
         {
-            Opacity = Math.Clamp(plane.Opacity, 0.12, 0.88),
+            Opacity = Math.Clamp(plane.Opacity + 0.12, 0.2, 0.96),
         };
-        var material = new DiffuseMaterial(brush);
-        group.Children.Add(new GeometryModel3D(mesh, material) { BackMaterial = material });
+        var material = new MaterialGroup();
+        material.Children.Add(new DiffuseMaterial(brush));
+        material.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)), 28));
+        group.Children.Add(new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) });
     }
 
     private static bool TryAddProjectedRoofTriangles(MeshGeometry3D mesh, IReadOnlyList<ThreeDRoofVertex> points)
@@ -659,10 +845,11 @@ public partial class MainWindow
     private void AddThreeDRoofIssueMarker(Model3DGroup group, ThreeDRoofIssue issue, double centerX, double centerZ)
     {
         Color color = ParseWallColor(string.IsNullOrWhiteSpace(issue.Color) ? "#DC2626" : issue.Color);
-        double y = Math.Max(0.2, issue.YFeet);
+        double ox = _threeDRoofOffsetXFeet, oy = _threeDRoofOffsetYFeet, oz = _threeDRoofOffsetZFeet;
+        double y = Math.Max(0.2, issue.YFeet + oy);
         AddThreeDViewerBox(
             group,
-            new Point3D(issue.XFeet - centerX, y, issue.ZFeet - centerZ),
+            new Point3D(issue.XFeet + ox - centerX, y, issue.ZFeet + oz - centerZ),
             0.8,
             0.8,
             0.8,
@@ -670,7 +857,7 @@ public partial class MainWindow
             issue.Severity == "error" ? 0.96 : 0.84);
         AddThreeDViewerBox(
             group,
-            new Point3D(issue.XFeet - centerX, Math.Max(0.05, y / 2.0), issue.ZFeet - centerZ),
+            new Point3D(issue.XFeet + ox - centerX, Math.Max(0.05, y / 2.0), issue.ZFeet + oz - centerZ),
             0.08,
             Math.Max(0.1, y),
             0.08,
@@ -740,13 +927,43 @@ public partial class MainWindow
         string roofText = _threeDRoofGuides.Count == 0 && _threeDRoofPlanes.Count == 0 && _threeDRoofIssues.Count == 0
             ? ""
             : $"Roof: {_threeDRoofGuides.Count} edge(s), {_threeDRoofPlanes.Count} mesh face(s), {_threeDRoofIssues.Count} issue(s)";
+        string roofQtyText = ThreeDRoofQuantitiesText();
         string selected = _selectedThreeDWall != null
             ? $"Selected: {_selectedThreeDWall.Label} | H {_selectedThreeDWall.HeightFeet:F1} ft | W {_selectedThreeDWall.ThicknessInches:F0} in | base {_selectedThreeDWall.BaseElevationFeet:F1}"
             : _selectedThreeDFloorSlab != null
                 ? $"Selected slab: {_selectedThreeDFloorSlab.Label} | elev {_selectedThreeDFloorSlab.ElevationFeet:F1} ft"
                 : "Click a wall to edit its height/thickness or apply the values to its group.";
         string body = string.Join("\n", groups);
-        return $"3D model: {_threeDWallElements.Count} wall segment(s), {_threeDFloorSlabs.Count} slab(s)\n{levelText}\n{slabText}\n{roofText}\n{body}\n{selected}";
+        return $"3D model: {_threeDWallElements.Count} wall segment(s), {_threeDFloorSlabs.Count} slab(s)\n{levelText}\n{slabText}\n{roofText}\n{roofQtyText}\n{body}\n{selected}";
+    }
+
+    private ThreeDRoofQuantities CurrentThreeDRoofQuantities() =>
+        ThreeDRoofQuantities.Compute(_threeDRoofPlanes, _threeDRoofGuides);
+
+    private string ThreeDRoofQuantitiesText()
+    {
+        ThreeDRoofQuantities q = CurrentThreeDRoofQuantities();
+        if (!q.HasRoof)
+            return "";
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "Roof qty: {0:F0} SF sloped ({1:F0} SF plan) | ridge {2:F1} ft | hip {3:F1} ft | valley {4:F1} ft | eave {5:F1} ft",
+            q.SlopedAreaSqFt, q.PlanAreaSqFt, q.RidgeLengthFeet, q.HipLengthFeet, q.ValleyLengthFeet, q.EaveLengthFeet);
+    }
+
+    private void ShowThreeDRoofQuantities()
+    {
+        ThreeDRoofQuantities q = CurrentThreeDRoofQuantities();
+        if (!q.HasRoof)
+        {
+            TxtStatus.Text = "3D Roof Qty: generate a roof first (Roof Base -> set eave pitch).";
+            return;
+        }
+
+        string text = ThreeDRoofQuantitiesText();
+        TxtStatus.Text = "3D " + text;
+        LogThreeD(text);
     }
 
     private void ApplyThreeDWallEditor(bool applyGroup)

@@ -40,6 +40,10 @@ public static partial class ThreeDRoofPreviewBuilder
         public double B { get; }
         public double C { get; }
 
+        // Revit per-edge eave projection beyond the wall, in feet. Max across
+        // merged coplanar guides. 0 = eave sits on the wall line (no overhang).
+        public double OverhangFeet { get; set; }
+
         // Signed height of this eave's infinite slope plane (linear, so the
         // lower envelope partitions into clean polygons). A partial eave is
         // confined to its straight-skeleton cell by the bisector wedge clip

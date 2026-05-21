@@ -21,6 +21,8 @@ public static partial class ThreeDRoofPreviewBuilder
                 if (!existing.GuideIds.Contains(guideId, StringComparer.Ordinal))
                     existing.GuideIds.Add(guideId);
             }
+
+            existing.OverhangFeet = Math.Max(existing.OverhangFeet, plane.OverhangFeet);
         }
 
         return merged;
@@ -45,6 +47,8 @@ public static partial class ThreeDRoofPreviewBuilder
                 if (!same.GuideIds.Contains(guideId, StringComparer.Ordinal))
                     same.GuideIds.Add(guideId);
             }
+
+            same.OverhangFeet = Math.Max(same.OverhangFeet, plane.OverhangFeet);
         }
 
         return distinct;

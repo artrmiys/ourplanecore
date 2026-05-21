@@ -391,6 +391,72 @@ public partial class MainWindow
 
     private void ApplyThreeDRoofEdgeProperties() => ApplyThreeDRoofPitchToSelectedEdges();
 
+    // Revit-style: write only the fields the user touched in the side panel
+    // (Defines Slope tri-state, Pitch, Overhang) onto every selected edge,
+    // then rebuild. Blank fields are left as-is so mixed selections are safe.
+    private void ApplyThreeDRoofEdgePropertiesFromPanel()
+    {
+        IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
+        if (guides.Count == 0)
+        {
+            SetThreeDRoofEdgeSelectMode(enabled: true);
+            TxtStatus.Text = "3D Roof: select one or more roof base edges first.";
+            return;
+        }
+
+        bool? definesSlope = _threeDRoofDefinesSlopeCheck?.IsChecked;
+        bool hasPitch = TryParseRoofEdgePitch(out double pitch);
+        bool hasOverhang = TryParseRoofEdgeOverhangFeet(out double overhangFeet);
+
+        foreach (ThreeDRoofGuide guide in guides)
+        {
+            if (definesSlope.HasValue)
+            {
+                guide.DefinesSlope = definesSlope.Value;
+                guide.Kind = definesSlope.Value ? ThreeDRoofGuideKinds.Eave : ThreeDRoofGuideKinds.Rake;
+                guide.Color = ThreeDRoofGuideKinds.Color(guide.Kind);
+                if (!definesSlope.Value)
+                    guide.PitchRisePerFoot = 0;
+            }
+
+            if (hasPitch && guide.DefinesSlope)
+                guide.PitchRisePerFoot = pitch;
+            else if (guide.DefinesSlope && guide.PitchRisePerFoot <= 0)
+                guide.PitchRisePerFoot = ResolveThreeDRoofPitchRisePerFoot();
+
+            if (hasOverhang)
+                guide.OverhangFeet = overhangFeet;
+
+            guide.Label = RelabelRoofGuide(guide);
+        }
+
+        BuildThreeDRoofPreview();
+        TxtStatus.Text = $"3D Roof: applied edge properties to {guides.Count} edge(s); roof rebuilt.";
+        LogThreeD($"Roof edge properties applied to {guides.Count} edge(s): " +
+                  $"slope={(definesSlope.HasValue ? definesSlope.Value.ToString() : "unchanged")}, " +
+                  $"pitch={(hasPitch ? PitchLabel(pitch) : "unchanged")}, " +
+                  $"overhang={(hasOverhang ? (overhangFeet * 12.0).ToString("0.#") + " in" : "unchanged")}.");
+    }
+
+    private bool TryParseRoofEdgePitch(out double pitch)
+    {
+        pitch = 0;
+        string? text = _threeDRoofEdgePitchBox?.Text;
+        return !string.IsNullOrWhiteSpace(text) && RoofPitchText.TryParse(text, out pitch);
+    }
+
+    private bool TryParseRoofEdgeOverhangFeet(out double overhangFeet)
+    {
+        overhangFeet = 0;
+        string? text = _threeDRoofEdgeOverhangBox?.Text;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+        if (!double.TryParse(text.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double inches))
+            return false;
+        overhangFeet = Math.Max(0, inches) / 12.0;
+        return true;
+    }
+
     private void ApplySelectedEaveTakeoffsToRoofEdges(TreeViewItem? anchor)
     {
         if (_threeDRoofGuides.Count == 0)
@@ -598,9 +664,12 @@ public partial class MainWindow
         SaveCurrentThreeDModel();
         string summary = string.Join(" ", build.Messages);
         TxtStatus.Text = $"3D Roof: generated {_threeDRoofPlanes.Count} roof mesh face(s) from Eave edge pitch.";
+        string qty = ThreeDRoofQuantitiesText();
         LogThreeD(string.IsNullOrWhiteSpace(summary)
             ? $"Roof generated: {_threeDRoofPlanes.Count} mesh face(s)."
             : $"Roof generated: {_threeDRoofPlanes.Count} mesh face(s). {summary}");
+        if (!string.IsNullOrWhiteSpace(qty))
+            LogThreeD(qty);
     }
 
     private void ClearThreeDRoof()
