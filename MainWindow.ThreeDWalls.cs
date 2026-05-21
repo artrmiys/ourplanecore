@@ -20,6 +20,9 @@ public partial class MainWindow
     private ThreeDFloorSlab? _selectedThreeDFloorSlab;
     private string _threeDModelSource = "";
     private bool _threeDRoofMoveModeEnabled;
+    private double _threeDSceneCenterX;
+    private double _threeDSceneCenterZ;
+    private bool _threeDSceneCenterValid;
 
     private void ToggleThreeDRoofMoveMode()
     {
@@ -353,8 +356,24 @@ public partial class MainWindow
         }
 
         (double minX, double maxX, double minZ, double maxZ, double maxY) = ThreeDModelBounds();
-        double centerX = (minX + maxX) / 2;
-        double centerZ = (minZ + maxZ) / 2;
+        // While a roof is being dragged, keep the scene center fixed so the
+        // building and grid stay put and only the roof slides. Recentering on
+        // the moving roof's bounds makes the whole background appear to drift.
+        bool roofDragging = _threeDRoofMoveModeEnabled || IsThreeDRoofGizmoDragging;
+        double centerX, centerZ;
+        if (roofDragging && _threeDSceneCenterValid)
+        {
+            centerX = _threeDSceneCenterX;
+            centerZ = _threeDSceneCenterZ;
+        }
+        else
+        {
+            centerX = (minX + maxX) / 2;
+            centerZ = (minZ + maxZ) / 2;
+            _threeDSceneCenterX = centerX;
+            _threeDSceneCenterZ = centerZ;
+            _threeDSceneCenterValid = true;
+        }
         double spanX = Math.Max(1, maxX - minX);
         double spanZ = Math.Max(1, maxZ - minZ);
         _threeDViewerSceneRadius = Math.Max(Math.Max(spanX, spanZ), Math.Max(maxY, 8));
@@ -453,8 +472,15 @@ public partial class MainWindow
         foreach (ThreeDRoofPlane plane in _threeDRoofPlanes)
             AddThreeDRoofPlaneMesh(group, plane, centerX, centerZ, roofBoundaryEdges);
 
+        // Once a roof group has generated plane geometry, its guide lines
+        // (ridge/hip/valley/eave bars) just clutter the surfaces with lines.
+        // Keep guides only for groups that have no built roof mesh yet.
         foreach (ThreeDRoofGuide guide in _threeDRoofGuides)
+        {
+            if (_threeDRoofPlanes.Any(plane => SameRoofGroup(plane.RoofGroupId, guide.RoofGroupId)))
+                continue;
             AddThreeDRoofGuideMesh(group, guide, centerX, centerZ);
+        }
 
         foreach (ThreeDRoofIssue issue in _threeDRoofIssues)
             AddThreeDRoofIssueMarker(group, issue, centerX, centerZ);
@@ -781,6 +807,10 @@ public partial class MainWindow
         var mesh = new MeshGeometry3D { Positions = positions };
         if (!TryAddProjectedRoofTriangles(mesh, renderPoints))
             AddFanRoofTriangles(mesh, n);
+        // One flat normal for the whole face so every triangle shades
+        // identically. Otherwise per-triangle normals make the triangulation
+        // diagonals read as faint lines across the middle of the plane.
+        ApplyFlatFaceNormals(mesh);
 
         bool selectedRoof = SameRoofGroup(plane.RoofGroupId, ActiveThreeDRoofGroupId());
         Color planeColor = ToCleanMeshTint(ParseWallColor(plane.Color));
@@ -795,6 +825,10 @@ public partial class MainWindow
         RegisterThreeDRoofMeshHit(model, plane.RoofGroupId);
         group.Children.Add(model);
 
+        // Outline the real model edges only: outer boundary (thicker) and the
+        // shared intersections between planes (ridges/hips/valleys, thinner).
+        // The mid-plane triangulation diagonals never get an edge here and are
+        // smoothed out of the shading by ApplyFlatFaceNormals.
         Color edgeColor = selectedRoof ? Color.FromRgb(245, 158, 11) : Color.FromRgb(38, 50, 64);
         for (int i = 0; i < n; i++)
         {
@@ -808,7 +842,7 @@ public partial class MainWindow
                 oy + 0.035,
                 oz - centerZ,
                 edgeColor,
-                boundary ? 0.055 : 0.035);
+                boundary ? 0.05 : 0.035);
             RegisterThreeDRoofMeshHit(edge, plane.RoofGroupId);
         }
     }
@@ -866,6 +900,35 @@ public partial class MainWindow
         var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
         group.Children.Add(model);
         return model;
+    }
+
+    // Assign a single averaged (Newell) normal to every vertex so the mesh
+    // shades as one flat plane and the triangulation diagonals disappear.
+    private static void ApplyFlatFaceNormals(MeshGeometry3D mesh)
+    {
+        Point3DCollection p = mesh.Positions;
+        if (p.Count < 3)
+            return;
+
+        double nx = 0, ny = 0, nz = 0;
+        for (int i = 0; i < p.Count; i++)
+        {
+            Point3D a = p[i];
+            Point3D b = p[(i + 1) % p.Count];
+            nx += (a.Y - b.Y) * (a.Z + b.Z);
+            ny += (a.Z - b.Z) * (a.X + b.X);
+            nz += (a.X - b.X) * (a.Y + b.Y);
+        }
+
+        var normal = new Vector3D(nx, ny, nz);
+        if (normal.LengthSquared < 1e-9)
+            normal = new Vector3D(0, 1, 0);
+        normal.Normalize();
+
+        var normals = new Vector3DCollection(p.Count);
+        for (int i = 0; i < p.Count; i++)
+            normals.Add(normal);
+        mesh.Normals = normals;
     }
 
     private static bool TryAddProjectedRoofTriangles(MeshGeometry3D mesh, IReadOnlyList<ThreeDRoofVertex> points)
