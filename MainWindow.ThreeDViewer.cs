@@ -58,7 +58,7 @@ public partial class MainWindow
 
     private void Btn3dViewerFit_Click(object sender, RoutedEventArgs e)
     {
-        _threeDViewerTarget = new Point3D(0, 0, 0);
+        _threeDViewerTarget = new Point3D(0, _threeDViewerPivotY, 0);
         SetThreeDViewerView(_threeDViewerYaw, _threeDViewerPitch, ThreeDViewerFitDistance());
     }
     private void Btn3dViewerIso_Click(object sender, RoutedEventArgs e) => SetThreeDViewerView(-38, 28, ThreeDViewerFitDistance());

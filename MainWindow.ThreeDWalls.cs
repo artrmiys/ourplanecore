@@ -23,6 +23,7 @@ public partial class MainWindow
     private double _threeDSceneCenterX;
     private double _threeDSceneCenterZ;
     private bool _threeDSceneCenterValid;
+    private double _threeDViewerPivotY;
 
     private void ToggleThreeDRoofMoveMode()
     {
@@ -377,6 +378,10 @@ public partial class MainWindow
         double spanX = Math.Max(1, maxX - minX);
         double spanZ = Math.Max(1, maxZ - minZ);
         _threeDViewerSceneRadius = Math.Max(Math.Max(spanX, spanZ), Math.Max(maxY, 8));
+        // Orbit around the object's body, lifted a bit above the roof top so
+        // the model rotates about a point just over it rather than its base.
+        if (!roofDragging)
+            _threeDViewerPivotY = maxY * 0.6;
 
         ThreeDViewerViewport.Children.Clear();
         ThreeDViewerViewport.Children.Add(new ModelVisual3D { Content = BuildThreeDWallModelGroup(centerX, centerZ) });
@@ -388,8 +393,8 @@ public partial class MainWindow
 
         if (fitCamera)
         {
-            _threeDViewerTarget = new Point3D(0, 0, 0);
-            _threeDSideViewerTarget = new Point3D(0, 0, 0);
+            _threeDViewerTarget = new Point3D(0, _threeDViewerPivotY, 0);
+            _threeDSideViewerTarget = new Point3D(0, _threeDViewerPivotY, 0);
             SetThreeDViewerView(-38, 28, ThreeDViewerFitDistance());
             SetThreeDSideViewerView(-38, 28, ThreeDViewerFitDistance());
         }
@@ -522,7 +527,7 @@ public partial class MainWindow
         double topY = baseY + height;
         bool selected = _selectedThreeDWall != null && string.Equals(_selectedThreeDWall.Id, wall.Id, StringComparison.Ordinal);
         Color color = selected ? Color.FromRgb(245, 158, 11) : ToCleanMeshTint(ParseWallColor(wall.Color));
-        double opacity = selected ? 0.94 : 0.72;
+        double opacity = selected ? 0.94 : 0.8;
 
         // Top-of-structure walls follow the roof underside: a flat eave wall
         // gets clipped to the eave, a gable wall rises into a triangle up to
@@ -816,9 +821,9 @@ public partial class MainWindow
         Color planeColor = ToCleanMeshTint(ParseWallColor(plane.Color));
         var brush = new SolidColorBrush(planeColor)
         {
-            // Matte (no specular) with a touch of transparency so internal
-            // roofs stay visible through the outer surfaces.
-            Opacity = selectedRoof ? 0.85 : 0.7,
+            // Matte (no specular) but mostly solid so the roof keeps its body;
+            // a slight transparency still lets internal roofs read through.
+            Opacity = selectedRoof ? 0.92 : 0.82,
         };
         var material = new DiffuseMaterial(brush);
         var model = new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) };
@@ -842,7 +847,7 @@ public partial class MainWindow
                 oy + 0.035,
                 oz - centerZ,
                 edgeColor,
-                boundary ? 0.05 : 0.035);
+                boundary ? 0.06 : 0.042);
             RegisterThreeDRoofMeshHit(edge, plane.RoofGroupId);
         }
     }
@@ -1284,7 +1289,7 @@ public partial class MainWindow
     // the original hue. Selected colors are left vivid and bypass this.
     private static Color ToCleanMeshTint(Color color)
     {
-        const double keep = 0.25; // share of the original hue retained
+        const double keep = 0.45; // share of the original hue retained
         static byte Mix(byte neutral, byte channel) =>
             (byte)Math.Clamp(neutral * (1 - keep) + channel * keep, 0, 255);
         return Color.FromRgb(Mix(182, color.R), Mix(188, color.G), Mix(196, color.B));
