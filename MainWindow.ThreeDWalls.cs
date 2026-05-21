@@ -929,6 +929,8 @@ public partial class MainWindow
         if (normal.LengthSquared < 1e-9)
             normal = new Vector3D(0, 1, 0);
         normal.Normalize();
+        if (normal.Y < -0.0001)
+            normal *= -1;
 
         var normals = new Vector3DCollection(p.Count);
         for (int i = 0; i < p.Count; i++)
