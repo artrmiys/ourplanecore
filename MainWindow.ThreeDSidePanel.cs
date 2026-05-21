@@ -56,6 +56,7 @@ public partial class MainWindow
         toolbar.Children.Add(ThreeDSideButton("Move Roof", "Toggle move mode, then drag in the 3D viewer to slide the roof over the walls when they were drawn from different sheets", ToggleThreeDRoofMoveMode));
         toolbar.Children.Add(ThreeDSideButton("Reset Pos", "Move the roof back to its generated position", ResetThreeDRoofOffset));
         toolbar.Children.Add(ThreeDSideButton("Roof Qty", "Show roof takeoff quantities: sloped/plan area, ridge, hip, valley and eave lengths", ShowThreeDRoofQuantities));
+        toolbar.Children.Add(ThreeDSideButton("Roof Takeoff", "Create reviewable takeoff items (eave/ridge/hip/valley lines + plan area) from the generated roof", CreateRoofTakeoffFromGenerated));
         panel.Children.Add(toolbar);
 
         _threeDSideSummaryText = new TextBlock
