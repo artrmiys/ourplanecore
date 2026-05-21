@@ -281,8 +281,15 @@ public partial class MainWindow
             return;
 
         Point point = e.GetPosition(_threeDSideViewport);
-        if (!_threeDSideViewerMouseMoved && _threeDSideViewerMouseDownPoint != null)
+        if (_threeDRoofMoveModeEnabled)
+        {
+            if (_threeDSideViewerMouseMoved)
+                SaveCurrentThreeDModel();
+        }
+        else if (!_threeDSideViewerMouseMoved && _threeDSideViewerMouseDownPoint != null)
+        {
             SelectThreeDViewerWallAt(_threeDSideViewport, point);
+        }
 
         _threeDSideViewerDragStart = null;
         _threeDSideViewerMouseDownPoint = null;
@@ -312,6 +319,12 @@ public partial class MainWindow
         if (Math.Abs(delta.X) > 1 || Math.Abs(delta.Y) > 1)
             _threeDSideViewerMouseMoved = true;
         _threeDSideViewerDragStart = current;
+        if (_threeDRoofMoveModeEnabled && _threeDSideCamera != null)
+        {
+            NudgeThreeDRoofOffsetFromDrag(_threeDSideCamera, delta, _threeDSideViewerDistance);
+            return;
+        }
+
         SetThreeDSideViewerView(
             _threeDSideViewerYaw + delta.X * 0.35,
             Math.Clamp(_threeDSideViewerPitch - delta.Y * 0.25, -85, 86),

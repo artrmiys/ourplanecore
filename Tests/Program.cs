@@ -112,6 +112,7 @@ var tests = new List<(string Name, Action Run)>
     ("3d roof separate islands probe", RoofProbeTests.SeparateGableIslandsBuild),
     ("3d roof crossing footprint blocks probe", RoofProbeTests.CrossingFootprintDoesNotBuild),
     ("3d roof noisy clockwise footprint probe", RoofProbeTests.NoisyClockwiseFootprintBuilds),
+    ("3d roof surface height fits x and z slopes", RoofProbeTests.SurfaceHeightFitsXAndZSlopes),
     ("3d slab triangulator handles concave areas", ThreeDSlabTriangulatorHandlesConcaveAreas),
     ("3d slab triangulator rejects crossing areas", ThreeDSlabTriangulatorRejectsCrossingAreas),
     ("page tree order moves sheet before folder", PageTreeOrderMovesSheetBeforeFolder),

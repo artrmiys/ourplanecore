@@ -420,8 +420,9 @@ public partial class MainWindow
         foreach (ThreeDWallSegment wall in _threeDWallElements)
             AddThreeDWallMesh(group, wall, centerX, centerZ, roofSurface);
 
+        ThreeDRoofRenderBoundaryEdges roofBoundaryEdges = ThreeDRoofRenderBoundaryEdges.Build(_threeDRoofPlanes);
         foreach (ThreeDRoofPlane plane in _threeDRoofPlanes)
-            AddThreeDRoofPlaneMesh(group, plane, centerX, centerZ);
+            AddThreeDRoofPlaneMesh(group, plane, centerX, centerZ, roofBoundaryEdges);
 
         foreach (ThreeDRoofGuide guide in _threeDRoofGuides)
             AddThreeDRoofGuideMesh(group, guide, centerX, centerZ);
@@ -718,7 +719,12 @@ public partial class MainWindow
     // the roof reads as a solid from below instead of a paper-thin surface.
     private const double RoofSlabThicknessFeet = 0.5;
 
-    private void AddThreeDRoofPlaneMesh(Model3DGroup group, ThreeDRoofPlane plane, double centerX, double centerZ)
+    private void AddThreeDRoofPlaneMesh(
+        Model3DGroup group,
+        ThreeDRoofPlane plane,
+        double centerX,
+        double centerZ,
+        ThreeDRoofRenderBoundaryEdges roofBoundaryEdges)
     {
         if (plane.Points.Count < 3)
             return;
@@ -771,6 +777,9 @@ public partial class MainWindow
         for (int i = 0; i < n; i++)
         {
             int next = (i + 1) % n;
+            if (!roofBoundaryEdges.IsBoundary(renderPoints[i], renderPoints[next]))
+                continue;
+
             mesh.TriangleIndices.Add(i);
             mesh.TriangleIndices.Add(n + i);
             mesh.TriangleIndices.Add(n + next);
@@ -781,7 +790,7 @@ public partial class MainWindow
 
         var brush = new SolidColorBrush(ParseWallColor(plane.Color))
         {
-            Opacity = Math.Clamp(plane.Opacity + 0.12, 0.2, 0.96),
+            Opacity = Math.Clamp(plane.Opacity + 0.28, 0.92, 1.0),
         };
         var material = new MaterialGroup();
         material.Children.Add(new DiffuseMaterial(brush));

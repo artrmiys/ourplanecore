@@ -69,12 +69,12 @@ public sealed class ThreeDRoofSurface
         {
             ThreeDRoofVertex p1 = points[i];
             ThreeDRoofVertex p2 = points[i + 1];
-            double ux = p1.XFeet - p0.XFeet, uz = p1.ZFeet - p0.ZFeet, uy = p1.YFeet - p0.YFeet;
-            double vx = p2.XFeet - p0.XFeet, vz = p2.ZFeet - p0.ZFeet, vy = p2.YFeet - p0.YFeet;
-            // Normal of the (X,Z,Y) triangle; ny is the component along height.
-            double nx = uz * vy - uy * vz;
-            double ny = uy * vx - ux * vy;
-            double nz = ux * vz - uz * vx;
+            double ux = p1.XFeet - p0.XFeet, uy = p1.YFeet - p0.YFeet, uz = p1.ZFeet - p0.ZFeet;
+            double vx = p2.XFeet - p0.XFeet, vy = p2.YFeet - p0.YFeet, vz = p2.ZFeet - p0.ZFeet;
+            // Plane normal in real X/Y/Z space; ny is the height component.
+            double nx = uy * vz - uz * vy;
+            double ny = uz * vx - ux * vz;
+            double nz = ux * vy - uy * vx;
             if (Math.Abs(ny) < 1e-6)
                 continue;
 

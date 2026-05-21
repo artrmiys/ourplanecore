@@ -350,6 +350,33 @@ internal static class RoofProbeTests
             minimumRidges: 1);
     }
 
+    public static void SurfaceHeightFitsXAndZSlopes()
+    {
+        ThreeDRoofSurface zSlope = ThreeDRoofSurface.Build(
+        [
+            RoofFace(
+            [
+                Vertex(0, 0, 0),
+                Vertex(10, 0, 0),
+                Vertex(10, 5, 10),
+                Vertex(0, 5, 10),
+            ]),
+        ]);
+        AssertSurfaceHeight(2.5, zSlope.HeightAt(5, 5), "Z slope height");
+
+        ThreeDRoofSurface xSlope = ThreeDRoofSurface.Build(
+        [
+            RoofFace(
+            [
+                Vertex(0, 0, 0),
+                Vertex(10, 5, 0),
+                Vertex(10, 5, 10),
+                Vertex(0, 0, 10),
+            ]),
+        ]);
+        AssertSurfaceHeight(2.5, xSlope.HeightAt(5, 5), "X slope height");
+    }
+
     // Diagnostic: dumps real 3D geometry for a canonical 40x24 gable
     // (2 long eaves + 2 short rakes, 6/12). Writes bin/roof_probe.txt.
     public static void GableGeometryProbe()
@@ -804,6 +831,22 @@ internal static class RoofProbeTests
 
     private static ThreeDPoint Point(double x, double z) =>
         new() { XFeet = x, ZFeet = z };
+
+    private static ThreeDRoofPlane RoofFace(List<ThreeDRoofVertex> points) =>
+        new()
+        {
+            Kind = "roof_face_envelope",
+            Points = points,
+        };
+
+    private static ThreeDRoofVertex Vertex(double x, double y, double z) =>
+        new() { XFeet = x, YFeet = y, ZFeet = z };
+
+    private static void AssertSurfaceHeight(double expected, double? actual, string label)
+    {
+        if (!actual.HasValue || Math.Abs(actual.Value - expected) > 0.000001)
+            throw new InvalidOperationException($"{label}: expected {expected:F3}, got {(actual.HasValue ? actual.Value.ToString("F3") : "null")}.");
+    }
 
     private static ThreeDFloorSlab RectSlab(string label, double x, double z, double width, double depth) =>
         new()

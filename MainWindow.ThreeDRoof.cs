@@ -17,7 +17,15 @@ public partial class MainWindow
     private bool _threeDRoofEdgeSelectModeEnabled;
 
     private void Btn3dBuildRoof_Click(object sender, RoutedEventArgs e) =>
+        GenerateThreeDRoofFromUi();
+
+    private void GenerateThreeDRoofFromUi()
+    {
+        if (!TryApplyPendingThreeDRoofEdgePropertiesFromPanel(showStatus: false))
+            return;
+
         BuildThreeDRoofPreview();
+    }
 
     private void Btn3dRfRoof_Click(object sender, RoutedEventArgs e) =>
         BuildRoofFromRfAreas(TakeoffsTree.SelectedItem as TreeViewItem, switchTo3DTab: true);
@@ -73,7 +81,7 @@ public partial class MainWindow
         _threeDRoofEdgeSelectModeEnabled = enabled;
         _viewport.SetThreeDRoofEdgeSelectMode(enabled);
         TxtStatus.Text = enabled
-            ? "3D Roof Edge Select: click roof base edges, enter pitch, then Edge Pitch. Ctrl/Shift-click adds more."
+            ? "3D Roof Edge Select: click a roof base edge, set its pitch in Roof Edge, then Generate Roof. Ctrl/Shift-click adds more."
             : "3D Roof Edge Select off.";
     }
 
@@ -322,18 +330,18 @@ public partial class MainWindow
             guide.Label = RelabelRoofGuide(guide);
         }
 
-        BuildThreeDRoofPreview();
+        InvalidateGeneratedThreeDRoofAfterEdgeEdit();
         if (guides.Count == 1)
         {
             ThreeDRoofGuide guide = guides[0];
             TxtStatus.Text = cleanKind == ThreeDRoofGuideKinds.Eave
-                ? $"3D Roof: {guide.Label} set to Eave, pitch {PitchLabel(guide.PitchRisePerFoot)}."
+                ? $"3D Roof: {guide.Label} saved as Eave, pitch {PitchLabel(guide.PitchRisePerFoot)}. Generate Roof when ready."
                 : $"3D Roof: {guide.Label} set to {ThreeDRoofGuideKinds.Title(cleanKind)}.";
         }
         else
         {
             TxtStatus.Text = cleanKind == ThreeDRoofGuideKinds.Eave
-                ? $"3D Roof: {guides.Count} selected edge(s) set to Eave, pitch {PitchLabel(pitch)}."
+                ? $"3D Roof: {guides.Count} selected edge(s) saved as Eave, pitch {PitchLabel(pitch)}. Generate Roof when ready."
                 : $"3D Roof: {guides.Count} selected edge(s) set to {ThreeDRoofGuideKinds.Title(cleanKind)}.";
         }
 
@@ -361,11 +369,11 @@ public partial class MainWindow
             guide.Label = RelabelRoofGuide(guide);
         }
 
-        BuildThreeDRoofPreview();
+        InvalidateGeneratedThreeDRoofAfterEdgeEdit();
         TxtStatus.Text = guides.Count == 1
-            ? $"3D Roof: applied pitch {PitchLabel(pitch)} to {guides[0].Label}."
-            : $"3D Roof: applied pitch {PitchLabel(pitch)} to {guides.Count} selected edge(s); ridge/hip/valley regenerated.";
-        LogThreeD($"Roof edge pitch applied: {guides.Count} selected edge(s), {PitchLabel(pitch)}. Generated seams refreshed.");
+            ? $"3D Roof: saved pitch {PitchLabel(pitch)} on {guides[0].Label}. Generate Roof when ready."
+            : $"3D Roof: saved pitch {PitchLabel(pitch)} on {guides.Count} selected edge(s). Generate Roof when ready.";
+        LogThreeD($"Roof edge pitch saved: {guides.Count} selected edge(s), {PitchLabel(pitch)}.");
     }
 
     private void ApplyThreeDRoofPitchToEaves()
@@ -391,22 +399,32 @@ public partial class MainWindow
 
     private void ApplyThreeDRoofEdgeProperties() => ApplyThreeDRoofPitchToSelectedEdges();
 
-    // Revit-style: write only the fields the user touched in the side panel
-    // (Defines Slope tri-state, Pitch, Overhang) onto every selected edge,
-    // then rebuild. Blank fields are left as-is so mixed selections are safe.
-    private void ApplyThreeDRoofEdgePropertiesFromPanel()
+    // Revit-style: save only the side-panel fields onto every selected edge.
+    // Blank fields stay unchanged so mixed selections are safe; Generate Roof
+    // rebuilds after the user finishes assigning all edge pitches.
+    private void ApplyThreeDRoofEdgePropertiesFromPanel() =>
+        TryApplyPendingThreeDRoofEdgePropertiesFromPanel(showStatus: true);
+
+    private bool TryApplyPendingThreeDRoofEdgePropertiesFromPanel(bool showStatus)
     {
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         if (guides.Count == 0)
         {
-            SetThreeDRoofEdgeSelectMode(enabled: true);
-            TxtStatus.Text = "3D Roof: select one or more roof base edges first.";
-            return;
+            if (showStatus)
+            {
+                SetThreeDRoofEdgeSelectMode(enabled: true);
+                TxtStatus.Text = "3D Roof: select one or more roof base edges first.";
+            }
+
+            return !showStatus;
         }
 
         bool? definesSlope = _threeDRoofDefinesSlopeCheck?.IsChecked;
-        bool hasPitch = TryParseRoofEdgePitch(out double pitch);
-        bool hasOverhang = TryParseRoofEdgeOverhangFeet(out double overhangFeet);
+        if (!TryReadRoofEdgePitch(out bool hasPitch, out double pitch) ||
+            !TryReadRoofEdgeOverhangFeet(out bool hasOverhang, out double overhangFeet))
+        {
+            return false;
+        }
 
         foreach (ThreeDRoofGuide guide in guides)
         {
@@ -419,10 +437,17 @@ public partial class MainWindow
                     guide.PitchRisePerFoot = 0;
             }
 
-            if (hasPitch && guide.DefinesSlope)
+            if (hasPitch)
+            {
+                guide.DefinesSlope = true;
+                guide.Kind = ThreeDRoofGuideKinds.Eave;
+                guide.Color = ThreeDRoofGuideKinds.Color(guide.Kind);
                 guide.PitchRisePerFoot = pitch;
+            }
             else if (guide.DefinesSlope && guide.PitchRisePerFoot <= 0)
+            {
                 guide.PitchRisePerFoot = ResolveThreeDRoofPitchRisePerFoot();
+            }
 
             if (hasOverhang)
                 guide.OverhangFeet = overhangFeet;
@@ -430,31 +455,63 @@ public partial class MainWindow
             guide.Label = RelabelRoofGuide(guide);
         }
 
-        BuildThreeDRoofPreview();
-        TxtStatus.Text = $"3D Roof: applied edge properties to {guides.Count} edge(s); roof rebuilt.";
+        InvalidateGeneratedThreeDRoofAfterEdgeEdit();
+        if (showStatus)
+            TxtStatus.Text = $"3D Roof: saved edge properties to {guides.Count} edge(s). Generate Roof when ready.";
         LogThreeD($"Roof edge properties applied to {guides.Count} edge(s): " +
                   $"slope={(definesSlope.HasValue ? definesSlope.Value.ToString() : "unchanged")}, " +
                   $"pitch={(hasPitch ? PitchLabel(pitch) : "unchanged")}, " +
                   $"overhang={(hasOverhang ? (overhangFeet * 12.0).ToString("0.#") + " in" : "unchanged")}.");
+        return true;
     }
 
-    private bool TryParseRoofEdgePitch(out double pitch)
+    private bool TryReadRoofEdgePitch(out bool hasPitch, out double pitch)
     {
+        hasPitch = false;
         pitch = 0;
         string? text = _threeDRoofEdgePitchBox?.Text;
-        return !string.IsNullOrWhiteSpace(text) && RoofPitchText.TryParse(text, out pitch);
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+
+        if (RoofPitchText.TryParse(text, out pitch))
+        {
+            hasPitch = true;
+            return true;
+        }
+
+        TxtStatus.Text = $"3D Roof: invalid edge pitch '{text}'. Use 6/12, 4, or 0.333.";
+        return false;
     }
 
-    private bool TryParseRoofEdgeOverhangFeet(out double overhangFeet)
+    private bool TryReadRoofEdgeOverhangFeet(out bool hasOverhang, out double overhangFeet)
     {
+        hasOverhang = false;
         overhangFeet = 0;
         string? text = _threeDRoofEdgeOverhangBox?.Text;
         if (string.IsNullOrWhiteSpace(text))
-            return false;
+            return true;
         if (!double.TryParse(text.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double inches))
+        {
+            TxtStatus.Text = $"3D Roof: invalid overhang '{text}'. Use inches, for example 12.";
             return false;
+        }
+
+        hasOverhang = true;
         overhangFeet = Math.Max(0, inches) / 12.0;
         return true;
+    }
+
+    private void InvalidateGeneratedThreeDRoofAfterEdgeEdit()
+    {
+        _threeDRoofGuides.RemoveAll(guide =>
+            string.Equals(guide.Status, ThreeDRoofPreviewBuilder.GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase));
+        _threeDRoofPlanes.Clear();
+        _threeDRoofIssues.Clear();
+        PruneThreeDRoofGuideSelection();
+        RefreshThreeDRoofGuideOverlay();
+        RenderThreeDWallModel(fitCamera: false);
+        SaveCurrentThreeDModel();
+        UpdateThreeDEditor();
     }
 
     private void ApplySelectedEaveTakeoffsToRoofEdges(TreeViewItem? anchor)

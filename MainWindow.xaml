@@ -1442,7 +1442,8 @@
                         <Button Content="Auto" Click="Btn3dAutoBuildWalls_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Auto-build walls, sqft slabs, and RF/roof areas when available"/>
                         <Button Content="Wall" Click="Btn3dBuildWalls_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Build wall prisms from selected line takeoffs"/>
                         <Button Content="Roof Base" Click="Btn3dRfRoof_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Create a roof footprint from selected area takeoffs"/>
-                        <Button Content="Select Edge" Click="Btn3dRoofEdges_Click" Style="{StaticResource ManagerPrimaryButton}" Margin="0,0,12,4" ToolTip="Select roof base edges on the sheet; apply pitch from the side panel"/>
+                        <Button Content="Select Edge" Click="Btn3dRoofEdges_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Select roof base edges on the sheet; save per-edge pitch from the side panel"/>
+                        <Button Content="Generate Roof" Click="Btn3dBuildRoof_Click" Style="{StaticResource ManagerPrimaryButton}" Margin="0,0,12,4" ToolTip="Build ridge, hip, and valley geometry from the saved per-edge roof pitches"/>
                         <TextBlock Text="Viewer" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Fit" Click="Btn3dViewerFit_Click" ToolTip="Fit the clean 3D viewer scene"/>
                         <Button Content="Iso" Click="Btn3dViewerIso_Click" ToolTip="Show isometric view"/>
