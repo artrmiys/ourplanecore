@@ -1042,13 +1042,16 @@ static void TakeoffAutoRoutingSortsPageLegendLabels()
         new TakeoffItem { Name = "2x8 walls", MeasurementType = "line" },
         new TakeoffItem { Name = "corners", MeasurementType = "line" },
         new TakeoffItem { Name = "1st", MeasurementType = "area" },
+        new TakeoffItem { Name = "count 10", MeasurementType = "point" },
+        new TakeoffItem { Name = "count 2", MeasurementType = "point" },
+        new TakeoffItem { Name = "count 1", MeasurementType = "point" },
     };
 
     string order = string.Join(",",
         TakeoffAutoRoutingService.SortPageLegendItems(items)
             .Select(item => item.Name));
 
-    AssertEqual("corners,ext 9.98,2x8 walls,2x4 walls,base,1st,porch", order, "page legend label sort");
+    AssertEqual("corners,ext 9.98,2x8 walls,2x4 walls,base,1st,porch,count 1,count 2,count 10", order, "page legend label sort");
 }
 
 static void SheetLegendLiveAutoIgnoresStoredAutoOrder()

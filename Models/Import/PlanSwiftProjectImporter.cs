@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using SkiaSharp;
 
 namespace OurPlaneCore;
@@ -27,12 +28,13 @@ public static partial class PlanSwiftProjectImporter
         int importedPages = 0;
         int importedItems = 0;
         int importedMeasurements = 0;
+        var importedTakeoffsBySource = new Dictionary<string, TakeoffItem>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
             ImportPages(options, manifest, job, tempRoot, pageByGuid, messages, ref importedPages);
-            ImportTakeoffs(options, manifest, job, pageByGuid, messages, ref importedItems, ref importedMeasurements);
-            ImportSegments(options, manifest, job, pageByGuid, messages, ref importedItems, ref importedMeasurements);
+            ImportTakeoffs(options, manifest, job, pageByGuid, importedTakeoffsBySource, messages, ref importedItems, ref importedMeasurements);
+            ImportSegments(options, manifest, job, pageByGuid, importedTakeoffsBySource, messages, ref importedItems, ref importedMeasurements);
         }
         finally
         {
@@ -162,6 +164,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftProjectManifest manifest,
         OurPlaneCoreJob job,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
+        Dictionary<string, TakeoffItem> importedTakeoffsBySource,
         List<string> messages,
         ref int importedItems,
         ref int importedMeasurements)
@@ -192,6 +195,7 @@ public static partial class PlanSwiftProjectImporter
             if (item.OrderIndex > 0)
                 OurPlaneCoreJobStore.SetOrderIndex(imported.FolderPath, item.OrderIndex);
             importedItems++;
+            importedTakeoffsBySource[NormalizeImportRelativePath(item.RelativeFolder)] = imported;
 
             foreach (PlanSwiftSectionRecord section in item.Sections)
             {
@@ -222,6 +226,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftProjectManifest manifest,
         OurPlaneCoreJob job,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
+        IReadOnlyDictionary<string, TakeoffItem> importedTakeoffsBySource,
         List<string> messages,
         ref int importedItems,
         ref int importedMeasurements)
@@ -234,6 +239,16 @@ public static partial class PlanSwiftProjectImporter
                 break;
             if (options.MaxMeasurements > 0 && importedMeasurements >= options.MaxMeasurements)
                 break;
+
+            if (TryApplySegmentAsJoistArea(
+                    manifest,
+                    segment,
+                    pageByGuid,
+                    importedTakeoffsBySource,
+                    messages))
+            {
+                continue;
+            }
 
             string parent = EnsureRelativeFolder(job.TakeoffsRoot, segment.ParentRelativeFolder);
             string itemName = UniqueChildDisplayName(parent, SegmentTakeoffName(segment));
@@ -268,6 +283,191 @@ public static partial class PlanSwiftProjectImporter
 
             OurPlaneCoreJobStore.SaveTakeoffItem(imported);
         }
+    }
+
+    private static bool TryApplySegmentAsJoistArea(
+        PlanSwiftProjectManifest manifest,
+        PlanSwiftSegmentRecord segment,
+        IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
+        IReadOnlyDictionary<string, TakeoffItem> importedTakeoffsBySource,
+        List<string> messages)
+    {
+        string sourceParentKey = NormalizeImportRelativePath(segment.SourceParentRelativeFolder);
+        if (string.IsNullOrWhiteSpace(sourceParentKey) ||
+            !importedTakeoffsBySource.TryGetValue(sourceParentKey, out TakeoffItem? areaItem) ||
+            OurPlaneCoreJobStore.NormalizeMeasurementType(areaItem.MeasurementType) != "area" ||
+            areaItem.Measurements.All(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area"))
+        {
+            return false;
+        }
+
+        if (!TryResolveSegmentJoistLayout(segment, pageByGuid, out PlanSwiftJoistSegmentLayout layout))
+            return false;
+
+        JoistTakeoffDefaults.ApplyToNewJoistArea(areaItem);
+        areaItem.IsJoistTakeoff = true;
+        areaItem.JoistDirectionDegrees = layout.DirectionDegrees;
+        areaItem.JoistSpacingInches = layout.SpacingInches;
+        areaItem.Notes = AppendPlanSwiftSegmentNote(areaItem.Notes, manifest, segment, layout);
+
+        foreach (Measurement measurement in areaItem.Measurements.Where(measurement =>
+                     OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area"))
+        {
+            measurement.JoistEnabled = true;
+            measurement.JoistDirectionLocked = true;
+            measurement.JoistDirectionDegrees = layout.DirectionDegrees;
+            measurement.JoistSpacingInches = layout.SpacingInches;
+        }
+
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(areaItem);
+        OurPlaneCoreJobStore.SaveTakeoffItem(areaItem);
+        messages.Add(
+            $"Applied PlanSwift segment '{segment.Name}' as joist direction on '{areaItem.Name}' " +
+            $"({layout.DirectionDegrees:0.#} deg, {layout.SpacingInches:0.###}\" O.C.).");
+        return true;
+    }
+
+    private static bool TryResolveSegmentJoistLayout(
+        PlanSwiftSegmentRecord segment,
+        IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
+        out PlanSwiftJoistSegmentLayout layout)
+    {
+        var lines = new List<PlanSwiftSegmentLine>();
+        foreach (PlanSwiftSectionRecord section in segment.Sections)
+        {
+            if (!pageByGuid.TryGetValue(section.PageGuid, out ImportedPlanSwiftPage? page) ||
+                section.Points.Count < 2)
+            {
+                continue;
+            }
+
+            SKPoint start = TransformPoint(section.Points[0], page.Normalization);
+            SKPoint end = TransformPoint(section.Points[^1], page.Normalization);
+            double length = Distance(start, end);
+            if (length <= 0.001)
+                continue;
+
+            double direction = NormalizePlanSwiftDirectionDegrees(Math.Atan2(end.Y - start.Y, end.X - start.X) * 180.0 / Math.PI);
+            lines.Add(new PlanSwiftSegmentLine(start, end, direction, length, page.Page.ScaleMetersPerPt));
+        }
+
+        if (lines.Count == 0)
+        {
+            layout = default;
+            return false;
+        }
+
+        PlanSwiftSegmentLine primary = lines.OrderByDescending(line => line.Length).First();
+        double spacingInches = TryCalculateSegmentSpacingInches(lines, primary, out double calculatedSpacing)
+            ? calculatedSpacing
+            : TryReadSegmentSpacingInches(segment, out double propertySpacing)
+                ? propertySpacing
+                : 16.0;
+
+        layout = new PlanSwiftJoistSegmentLayout(
+            primary.DirectionDegrees,
+            Math.Clamp(spacingInches, 0.001, 240.0));
+        return true;
+    }
+
+    private static bool TryCalculateSegmentSpacingInches(
+        IReadOnlyList<PlanSwiftSegmentLine> lines,
+        PlanSwiftSegmentLine primary,
+        out double spacingInches)
+    {
+        double radians = primary.DirectionDegrees * Math.PI / 180.0;
+        double nx = -Math.Sin(radians);
+        double ny = Math.Cos(radians);
+        var projections = lines
+            .Where(line => DirectionDeltaDegrees(line.DirectionDegrees, primary.DirectionDegrees) <= 15.0)
+            .Select(line =>
+            {
+                SKPoint midpoint = new((line.Start.X + line.End.X) / 2f, (line.Start.Y + line.End.Y) / 2f);
+                return midpoint.X * nx + midpoint.Y * ny;
+            })
+            .OrderBy(value => value)
+            .ToList();
+
+        var distances = new List<double>();
+        for (int i = 1; i < projections.Count; i++)
+        {
+            double distance = Math.Abs(projections[i] - projections[i - 1]);
+            if (distance > 0.001)
+                distances.Add(distance);
+        }
+
+        if (distances.Count == 0 || primary.ScaleMetersPerPt <= 0)
+        {
+            spacingInches = 0;
+            return false;
+        }
+
+        distances.Sort();
+        double medianPdfDistance = distances[distances.Count / 2];
+        spacingInches = medianPdfDistance * primary.ScaleMetersPerPt / 0.0254;
+        return spacingInches > 0.001;
+    }
+
+    private static bool TryReadSegmentSpacingInches(PlanSwiftSegmentRecord segment, out double spacingInches)
+    {
+        foreach (string key in new[] { "Spacing", "Joist Spacing", "O.C.", "OC", "On Center" })
+        {
+            if (!segment.Properties.TryGetValue(key, out string? value) ||
+                string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            Match match = System.Text.RegularExpressions.Regex.Match(value, @"[-+]?\d+(?:\.\d+)?");
+            if (match.Success &&
+                double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) &&
+                parsed > 0)
+            {
+                spacingInches = parsed;
+                return true;
+            }
+        }
+
+        spacingInches = 0;
+        return false;
+    }
+
+    private static string AppendPlanSwiftSegmentNote(
+        string existingNotes,
+        PlanSwiftProjectManifest manifest,
+        PlanSwiftSegmentRecord segment,
+        PlanSwiftJoistSegmentLayout layout)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(existingNotes))
+            parts.Add(existingNotes.Trim());
+        parts.Add(
+            $"Imported PlanSwift Segment as joist area direction from {Path.GetRelativePath(manifest.SourceJobPath, segment.SourceFolder)} " +
+            $"({layout.DirectionDegrees:0.#} deg, {layout.SpacingInches:0.###}\" O.C.).");
+        AddPropertyNote(parts, segment, "Type");
+        AddPropertyNote(parts, segment, "Default");
+        AddPropertyNote(parts, segment, "Joist Length");
+        AddPropertyNote(parts, segment, "Pitch");
+        return string.Join(Environment.NewLine, parts.Distinct(StringComparer.Ordinal));
+    }
+
+    private static double DirectionDeltaDegrees(double a, double b)
+    {
+        double delta = Math.Abs(NormalizePlanSwiftDirectionDegrees(a) - NormalizePlanSwiftDirectionDegrees(b));
+        return delta > 90.0 ? 180.0 - delta : delta;
+    }
+
+    private static double NormalizePlanSwiftDirectionDegrees(double degrees)
+    {
+        double normalized = degrees % 180.0;
+        return normalized < 0.0 ? normalized + 180.0 : normalized;
+    }
+
+    private static double Distance(SKPoint a, SKPoint b)
+    {
+        double dx = b.X - a.X;
+        double dy = b.Y - a.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     private static void WriteReports(
@@ -526,6 +726,9 @@ public static partial class PlanSwiftProjectImporter
                 .Where(segment => segment != ".")
                 .ToList();
 
+    private static string NormalizeImportRelativePath(string relativePath) =>
+        string.Join(Path.DirectorySeparatorChar, SplitRelativePath(relativePath));
+
     private static string UniqueChildDisplayName(string parent, string requestedName)
     {
         string clean = PlanSwiftXml.DecodeName(requestedName);
@@ -586,6 +789,17 @@ public static partial class PlanSwiftProjectImporter
         {
         }
     }
+
+    private readonly record struct PlanSwiftJoistSegmentLayout(
+        double DirectionDegrees,
+        double SpacingInches);
+
+    private readonly record struct PlanSwiftSegmentLine(
+        SKPoint Start,
+        SKPoint End,
+        double DirectionDegrees,
+        double Length,
+        double ScaleMetersPerPt);
 
     private sealed record ImportedPlanSwiftPage(
         PageInfo Page,

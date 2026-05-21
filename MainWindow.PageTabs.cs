@@ -208,6 +208,7 @@ public partial class MainWindow
             {
                 Owner = this,
             };
+            ConfigureDetachedSheetWindow(window, unitMode);
             window.Closed += (_, _) => _detachedSheetWindows.Remove(window);
             _detachedSheetWindows.Add(window);
             opened.Add(window);

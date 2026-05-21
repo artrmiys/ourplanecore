@@ -17,7 +17,7 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private bool TryBeginMeasurementEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
+    private bool TryBeginVertexEdit(SKPoint pdf, Point screen)
     {
         if (SelectedVertexCount() > 0 &&
             TryHitSelectedMeasurementSelectedVertex(pdf, out Measurement selectedSetMeasurement, out int selectedSetVertexIndex))
@@ -55,6 +55,14 @@ public sealed partial class PdfViewport
             BeginVertexEdit(anchorMeasurement, anchorVertexIndex, screen);
             return true;
         }
+
+        return false;
+    }
+
+    private bool TryBeginMeasurementEdit(SKPoint pdf, Point screen, bool clearSelectionOnMiss)
+    {
+        if (TryBeginVertexEdit(pdf, screen))
+            return true;
 
         if (_selectedMeasurements.Count > 1 &&
             TryHitSelectedMeasurement(pdf, out Measurement groupMeasurement))
@@ -285,6 +293,32 @@ public sealed partial class PdfViewport
         return new SKPoint(
             (float)((screen.X - _dragScreenStart.X) / safeZoom),
             (float)((screen.Y - _dragScreenStart.Y) / safeZoom));
+    }
+
+    private SKPoint ResolveVertexDragDelta(Point screen)
+    {
+        SKPoint rawDelta = ScreenDragDeltaToPdf(screen);
+        SKPoint rawTarget = new(
+            _dragVertexOriginalPoint.X + rawDelta.X,
+            _dragVertexOriginalPoint.Y + rawDelta.Y);
+
+        if (TryFindDigitizerSnapPoint(rawTarget, out SKPoint snapped, out string snapKind) &&
+            !IsSelfVertexSnap(snapped))
+        {
+            SetSnapPreview(snapped, snapKind);
+            return ConstrainDragDeltaOrtho(new SKPoint(
+                snapped.X - _dragVertexOriginalPoint.X,
+                snapped.Y - _dragVertexOriginalPoint.Y));
+        }
+
+        SetSnapPreview(null);
+        return ConstrainDragDeltaOrtho(rawDelta);
+    }
+
+    private bool IsSelfVertexSnap(SKPoint snapped)
+    {
+        float tolerance = Math.Max(ViewportConstants.ZeroLengthEpsilon, ScreenToPdfDistance(2f));
+        return DistanceSquared(snapped, _dragVertexOriginalPoint) <= tolerance * tolerance;
     }
 
     // While moving selected vertices or whole shapes, holding Shift (ortho)

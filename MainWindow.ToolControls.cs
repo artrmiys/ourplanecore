@@ -491,7 +491,7 @@ public partial class MainWindow
         if (!forceNewTakeoff && !ConfirmCreateDrawingTakeoffTarget(mtype, joistArea))
             return false;
 
-        string parentFolder = NewTakeoffItemParentFolder();
+        string parentFolder = NewTakeoffItemParentFolderForUserCreate();
         // Every new takeoff gets its own random color not already on the
         // sheet; still editable in the dialog and later via properties.
         string defaultColor = RandomTakeoffColor(_activeItem?.Color ?? _viewport.ActiveColor);

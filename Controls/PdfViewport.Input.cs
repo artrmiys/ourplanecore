@@ -116,6 +116,14 @@ public sealed partial class PdfViewport
                 // Click or box toggles handles; empty Alt-click clears handles.
                 if (IsVertexModifierActive() && HasEditableMeasurementSelection())
                 {
+                    if (TryBeginVertexEdit(pdf, pos))
+                    {
+                        if (_draggingVertex)
+                            CaptureMouse();
+                        e.Handled = true;
+                        return;
+                    }
+
                     BeginVertexBoxSelection(pdf);
                     e.Handled = true;
                     return;
@@ -271,7 +279,7 @@ public sealed partial class PdfViewport
             _selectedMeasurement != null &&
             _selectedVertexIndex >= 0)
         {
-            SKPoint delta = ConstrainDragDeltaOrtho(ScreenDragDeltaToPdf(pos));
+            SKPoint delta = ResolveVertexDragDelta(pos);
             if (_dragMeasurementVertexOriginalPoints.Count > 0)
             {
                 foreach (var (measurement, originalPoints) in _dragMeasurementVertexOriginalPoints)

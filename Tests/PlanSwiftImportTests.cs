@@ -175,19 +175,21 @@ internal static class PlanSwiftImportTests
             });
 
             AssertEqual("1", result.PagesImported.ToString(), "imported page count");
-            AssertEqual("3", result.TakeoffItemsImported.ToString(), "imported takeoff item count");
-            AssertEqual("4", result.MeasurementsImported.ToString(), "imported measurement count");
+            AssertEqual("2", result.TakeoffItemsImported.ToString(), "imported takeoff item count");
+            AssertEqual("2", result.MeasurementsImported.ToString(), "imported measurement count");
 
             OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
             IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(job);
-            TakeoffItem segmentItem = items.Single(item => item.Name == "Deck Area - PlanSwift segments");
-            AssertEqual("line", segmentItem.MeasurementType, "segment item type");
-            AssertTrue(segmentItem.Notes.Contains("Joist Segment", StringComparison.Ordinal), "segment item keeps source type");
-            AssertEqual("2", segmentItem.Measurements.Count.ToString(), "segment measurements");
-            AssertTrue(
-                segmentItem.Measurements.All(measurement => measurement.Notes.Contains("Segment Section", StringComparison.Ordinal)),
-                "segment section source notes");
-            AssertEqual("4", segmentItem.Measurements.Sum(measurement => measurement.Points.Count).ToString(), "segment points");
+            AssertTrue(!items.Any(item => item.Name == "Deck Area - PlanSwift segments"), "segment line item should not be created");
+            TakeoffItem deckArea = items.Single(item => item.Name == "Deck Area");
+            AssertTrue(deckArea.IsJoistArea, "deck area becomes joist area");
+            AssertClose(0, deckArea.JoistDirectionDegrees, "segment direction applied to joist area", tolerance: 0.001);
+            AssertClose(12, deckArea.JoistSpacingInches, "segment spacing applied as joist O.C.", tolerance: 0.001);
+            Measurement deckMeasurement = deckArea.Measurements.Single();
+            AssertTrue(deckMeasurement.JoistEnabled, "area measurement joist enabled");
+            AssertTrue(deckMeasurement.JoistDirectionLocked, "area measurement direction locked");
+            AssertClose(12, deckMeasurement.JoistSpacingInches, "area measurement spacing");
+            AssertTrue(deckArea.Notes.Contains("Imported PlanSwift Segment as joist area direction", StringComparison.Ordinal), "segment source note kept on area");
 
             string sourceMetadataPath = Path.Combine(result.DestinationJobPath, "import_reports", "planswift_source_metadata.json");
             AssertTrue(File.Exists(sourceMetadataPath), "source metadata sidecar written");
@@ -321,7 +323,7 @@ internal static class PlanSwiftImportTests
         Directory.CreateDirectory(secondSection);
         WriteSegmentData(segment);
         WriteSegmentSectionData(firstSection, "Deck Segment-1", "0", "0", "5", "0", "1");
-        WriteSegmentSectionData(secondSection, "Deck Segment-2", "5", "0", "5", "4", "2");
+        WriteSegmentSectionData(secondSection, "Deck Segment-2", "0", "10", "5", "10", "2");
         WriteEstimateItemData(materialItem);
         WriteNoteData(note);
     }

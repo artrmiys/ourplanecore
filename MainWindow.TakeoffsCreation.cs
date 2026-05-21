@@ -19,7 +19,7 @@ public partial class MainWindow
             return;
         }
 
-        string parentFolder = NewTakeoffItemParentFolder();
+        string parentFolder = NewTakeoffItemParentFolderForUserCreate();
         string measurementType = ResolveTakeoffFolderDefaultMeasurementType(
             parentFolder,
             CurrentToolMeasurementType());

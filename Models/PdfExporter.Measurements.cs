@@ -75,6 +75,7 @@ public static partial class PdfExporter
         {
             for (int i = 1; i < measurement.Points.Count; i++)
                 canvas.DrawLine(measurement.Points[i - 1], measurement.Points[i], stroke);
+            DrawLinePointMarkers(canvas, measurement.Points, color, pointScale);
             return;
         }
 
@@ -161,6 +162,23 @@ public static partial class PdfExporter
 
     private static float ExportPointScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);
+
+    private static void DrawLinePointMarkers(
+        SKCanvas canvas,
+        IReadOnlyList<SKPoint> points,
+        SKColor color,
+        float pointScale)
+    {
+        using var fill = new SKPaint
+        {
+            IsAntialias = true,
+            Color = color.WithAlpha(180),
+            Style = SKPaintStyle.Fill,
+        };
+        float radius = 3.0f * pointScale;
+        foreach (SKPoint point in points)
+            canvas.DrawCircle(point, radius, fill);
+    }
 
     private static float ExportLabelScale(PdfExportOptions options) =>
         BaseExportLabelScale * (float)Math.Clamp(options.MeasurementLabelScale, 0.50, AppSettingsStore.PdfExportScaleMax);

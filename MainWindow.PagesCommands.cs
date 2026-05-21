@@ -9,6 +9,32 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private void BtnRefreshPagesTree_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before refreshing Pages.";
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_pendingPagesTreeDropRefreshPath))
+        {
+            FlushPendingPagesTreeDropRefresh();
+            TxtStatus.Text = "Pages tree refreshed after pending move.";
+            return;
+        }
+
+        string? selectedPath = PagesTree.SelectedItem is TreeViewItem selected
+            ? GetPagesNodePath(selected)
+            : _currentPage?.FolderPath;
+
+        ClearPagesPositionDropCue();
+        ReloadPagesTree(selectedPath, selectSilently: true);
+        RefreshPageTabs(_activePageTab);
+        RefreshSheetLegend();
+        TxtStatus.Text = "Pages tree refreshed.";
+    }
+
     private void PagesTree_KeyDown(object sender, KeyEventArgs e)
     {
         if (PagesTree.SelectedItem is not TreeViewItem item) return;

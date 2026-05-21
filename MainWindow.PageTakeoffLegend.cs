@@ -737,8 +737,14 @@ public partial class MainWindow
             OpenPageInActiveTab(node.Page);
 
         var selectedNodes = SelectedPageTakeoffNodes(node, fallbackToAnchor: true);
+        var selectedTakeoffs = selectedNodes
+            .Select(selectedNode => selectedNode.Takeoff)
+            .Where(takeoff => !string.IsNullOrWhiteSpace(takeoff.FolderPath))
+            .GroupBy(takeoff => NormalizePath(takeoff.FolderPath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
         ActivateTakeoffItem(node.Takeoff);
-        SelectTakeoffItemSilently(node.Takeoff);
+        SelectTakeoffItemsSilently(selectedTakeoffs.Count > 0 ? selectedTakeoffs : [node.Takeoff], node.Takeoff);
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
         Dispatcher.InvokeAsync(() => SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, node.Page));

@@ -82,6 +82,7 @@ public partial class MainWindow
         }
 
         FlushTakeoffAutosaves();
+        RefreshPageTakeoffIndicatorsForFolders(affectedPageFolders);
         if (activePageScaled)
         {
             UpdateScaleUi(scaleMetersPerPt);

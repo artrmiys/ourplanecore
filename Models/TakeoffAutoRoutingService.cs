@@ -17,6 +17,8 @@ public readonly record struct TakeoffAutoSortKey(
 
 public static class TakeoffAutoRoutingService
 {
+    private static readonly IComparer<string> NaturalNameComparer = new NaturalStringComparer();
+
     private static readonly string[] SqftAreaTokens =
     [
         "base", "basement", "sqft", "sf", "sft", "deck", "porch",
@@ -90,7 +92,7 @@ public static class TakeoffAutoRoutingService
             .ThenBy(entry => entry.Key.Group)
             .ThenBy(entry => entry.Key.Rank)
             .ThenBy(entry => entry.Key.Secondary)
-            .ThenBy(entry => entry.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Key.Name, NaturalNameComparer)
             .Select(entry => entry.Folder)
             .ToList();
 
@@ -144,7 +146,7 @@ public static class TakeoffAutoRoutingService
             .ThenBy(entry => entry.Key.Group)
             .ThenBy(entry => entry.Key.Rank)
             .ThenBy(entry => entry.Key.Secondary)
-            .ThenBy(entry => entry.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Key.Name, NaturalNameComparer)
             .Select(entry => entry.Item)
             .ToList();
 
@@ -385,6 +387,52 @@ public static class TakeoffAutoRoutingService
         catch
         {
             return path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+    }
+
+    private sealed class NaturalStringComparer : IComparer<string>
+    {
+        public int Compare(string? x, string? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x == null) return -1;
+            if (y == null) return 1;
+
+            int ix = 0;
+            int iy = 0;
+            while (ix < x.Length && iy < y.Length)
+            {
+                char cx = x[ix];
+                char cy = y[iy];
+                if (char.IsDigit(cx) && char.IsDigit(cy))
+                {
+                    int nx = ReadNumberToken(x, ref ix);
+                    int ny = ReadNumberToken(y, ref iy);
+                    int numberCompare = nx.CompareTo(ny);
+                    if (numberCompare != 0)
+                        return numberCompare;
+                    continue;
+                }
+
+                int charCompare = char.ToUpperInvariant(cx).CompareTo(char.ToUpperInvariant(cy));
+                if (charCompare != 0)
+                    return charCompare;
+                ix++;
+                iy++;
+            }
+
+            return x.Length.CompareTo(y.Length);
+        }
+
+        private static int ReadNumberToken(string text, ref int index)
+        {
+            int start = index;
+            while (index < text.Length && char.IsDigit(text[index]))
+                index++;
+
+            string digits = text[start..index].TrimStart('0');
+            if (digits.Length == 0) return 0;
+            return int.TryParse(digits, out int value) ? value : int.MaxValue;
         }
     }
 

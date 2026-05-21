@@ -209,7 +209,10 @@ public partial class MainWindow
         _takeoffsDragItem = null;
         _takeoffsDragArmed = false;
         if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
+        {
+            ClearTakeoffFolderSelectionFromBlankClick();
             return;
+        }
 
         if (TryRefreshStaleTakeoffTreeNode(item))
         {
@@ -348,6 +351,32 @@ public partial class MainWindow
         _takeoffSectionRangeAnchorKey = key;
         ApplyTakeoffPageHighlights();
         ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: true)));
+    }
+
+    private void ClearTakeoffFolderSelectionFromBlankClick()
+    {
+        if (TakeoffsTree.SelectedItem is not TreeViewItem { Tag: TakeoffFolderNode } selectedFolder)
+            return;
+
+        _syncingTakeoffTreeSelection = true;
+        try
+        {
+            selectedFolder.IsSelected = false;
+        }
+        finally
+        {
+            _syncingTakeoffTreeSelection = false;
+        }
+
+        _takeoffsMultiSelection.Clear();
+        _takeoffSectionMultiSelection.Clear();
+        _takeoffsRangeAnchorPath = null;
+        _activeItem = null;
+        _activeTakeoffParentFolder = _currentJob?.TakeoffsRoot ?? "";
+        _viewport.ActiveTakeoffFolder = "";
+        ApplyTakeoffPageHighlights();
+        TxtStatus.Text = "Takeoffs folder selection cleared. New Item will use the Takeoffs root.";
+        UpdateToolStatus();
     }
 
     private void SelectTakeoffsRange(string? anchorPath, string targetPath, bool additive)

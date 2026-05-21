@@ -529,6 +529,15 @@
                     <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
                         <DockPanel LastChildFill="True">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="BtnRefreshPagesTree"
+                                        Content="R"
+                                        Click="BtnRefreshPagesTree_Click"
+                                        Width="22"
+                                        MinWidth="22"
+                                        Padding="0"
+                                        Margin="2,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Refresh Pages tree"/>
                                 <Button x:Name="BtnCollapsePagesTree"
                                         Content="-"
                                         Click="BtnCollapsePagesTree_Click"

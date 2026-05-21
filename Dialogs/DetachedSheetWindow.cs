@@ -11,6 +11,8 @@ namespace OurPlaneCore;
 public sealed class DetachedSheetWindow : Window
 {
     private readonly PdfViewport _viewport = new();
+    public PdfViewport Viewport => _viewport;
+    public PageInfo Page { get; }
 
     public DetachedSheetWindow(
         OurPlaneCoreJob job,
@@ -19,6 +21,7 @@ public sealed class DetachedSheetWindow : Window
         AppSettings settings,
         UnitMode unitMode)
     {
+        Page = page;
         Title = page.Name;
         MinWidth = 320;
         MinHeight = 240;
@@ -28,6 +31,19 @@ public sealed class DetachedSheetWindow : Window
         Content = _viewport;
 
         ConfigureViewport(job, page, takeoffItems, settings, unitMode);
+    }
+
+    public void RefreshTakeoffDisplay(
+        OurPlaneCoreJob job,
+        IReadOnlyList<TakeoffItem> takeoffItems,
+        AppSettings settings,
+        UnitMode unitMode)
+    {
+        _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
+        _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, Page, takeoffItems));
+        _viewport.SetSheetLegend(settings.ShowSheetLegend
+            ? SheetLegendBuilder.Build(job, Page, takeoffItems, unitMode)
+            : []);
     }
 
     private void ConfigureViewport(

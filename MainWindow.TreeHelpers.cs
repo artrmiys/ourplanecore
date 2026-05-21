@@ -492,6 +492,21 @@ public partial class MainWindow
     private string NewTakeoffItemParentFolder() =>
         TakeoffCreationPolicy.NewItemParentFolder(_currentJob);
 
+    private string NewTakeoffItemParentFolderForUserCreate()
+    {
+        if (_currentJob == null)
+            return "";
+
+        if (TakeoffsTree.SelectedItem is TreeViewItem { Tag: TakeoffFolderNode folder } &&
+            !string.IsNullOrWhiteSpace(folder.FolderPath) &&
+            Directory.Exists(folder.FolderPath))
+        {
+            return folder.FolderPath;
+        }
+
+        return NewTakeoffItemParentFolder();
+    }
+
     private string ResolveTakeoffFolderDefaultMeasurementType(string folderPath, string fallback)
     {
         string fallbackType = OurPlaneCoreJobStore.NormalizeMeasurementType(fallback);
@@ -508,7 +523,16 @@ public partial class MainWindow
     {
         List<Color> colorsToAvoid = CurrentSheetTakeoffColors();
         if (TryParseTakeoffColor(avoidColor, out Color avoided))
+        {
             colorsToAvoid.Add(avoided);
+            if (TryCreateContrastingTakeoffColor(avoided, colorsToAvoid, out string contrasting))
+                return contrasting;
+        }
+        else if (colorsToAvoid.Count > 0 &&
+                 TryCreateContrastingTakeoffColor(colorsToAvoid[^1], colorsToAvoid, out string contrasting))
+        {
+            return contrasting;
+        }
 
         for (int attempt = 0; attempt < 96; attempt++)
         {
@@ -521,6 +545,42 @@ public partial class MainWindow
         }
 
         return RandomVividTakeoffColor();
+    }
+
+    private static bool TryCreateContrastingTakeoffColor(
+        Color baseColor,
+        IReadOnlyList<Color> colorsToAvoid,
+        out string colorText)
+    {
+        RgbToHsl(baseColor, out double baseHue, out double baseSaturation, out double baseLightness);
+        double saturation = Math.Clamp(Math.Max(baseSaturation, 0.68), 0.58, 0.92);
+        double lightness = Math.Clamp(baseLightness, 0.40, 0.58);
+        double[] hueOffsets = [120.0, 240.0, 180.0, 90.0, 270.0, 150.0, 210.0, 60.0, 300.0];
+        double[] lightnessOffsets = [0.0, -0.08, 0.08, -0.14, 0.14];
+
+        foreach (double hueOffset in hueOffsets)
+        {
+            foreach (double lightnessOffset in lightnessOffsets)
+            {
+                double hue = NormalizeHue(baseHue + hueOffset);
+                HslToRgb(
+                    hue,
+                    saturation,
+                    Math.Clamp(lightness + lightnessOffset, 0.34, 0.66),
+                    out byte r,
+                    out byte g,
+                    out byte b);
+                var color = Color.FromRgb(r, g, b);
+                if (IsDistinctTakeoffColor(color, colorsToAvoid))
+                {
+                    colorText = $"#{r:X2}{g:X2}{b:X2}";
+                    return true;
+                }
+            }
+        }
+
+        colorText = "";
+        return false;
     }
 
     private List<Color> CurrentSheetTakeoffColors()
@@ -583,6 +643,40 @@ public partial class MainWindow
         double lightness = 0.38 + Random.Shared.NextDouble() * 0.24;
         HslToRgb(hue, saturation, lightness, out byte r, out byte g, out byte b);
         return $"#{r:X2}{g:X2}{b:X2}";
+    }
+
+    private static void RgbToHsl(Color color, out double hue, out double saturation, out double lightness)
+    {
+        double r = color.R / 255.0;
+        double g = color.G / 255.0;
+        double b = color.B / 255.0;
+        double max = Math.Max(r, Math.Max(g, b));
+        double min = Math.Min(r, Math.Min(g, b));
+        double delta = max - min;
+
+        lightness = (max + min) / 2.0;
+        if (delta <= 0.000001)
+        {
+            hue = 0.0;
+            saturation = 0.0;
+            return;
+        }
+
+        saturation = delta / (1.0 - Math.Abs(2.0 * lightness - 1.0));
+        if (Math.Abs(max - r) <= 0.000001)
+            hue = 60.0 * (((g - b) / delta) % 6.0);
+        else if (Math.Abs(max - g) <= 0.000001)
+            hue = 60.0 * (((b - r) / delta) + 2.0);
+        else
+            hue = 60.0 * (((r - g) / delta) + 4.0);
+
+        hue = NormalizeHue(hue);
+    }
+
+    private static double NormalizeHue(double hue)
+    {
+        double normalized = hue % 360.0;
+        return normalized < 0.0 ? normalized + 360.0 : normalized;
     }
 
     private static void HslToRgb(double hue, double saturation, double lightness, out byte r, out byte g, out byte b)
@@ -964,6 +1058,34 @@ public partial class MainWindow
         {
             _syncingTakeoffTreeSelection = false;
         }
+    }
+
+    private void SelectTakeoffItemsSilently(IReadOnlyList<TakeoffItem> items, TakeoffItem focusItem)
+    {
+        var paths = items
+            .Select(item => item.FolderPath)
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (paths.Count == 0 || FindTakeoffTreeItem(focusItem) is not { } focusNode)
+            return;
+
+        _syncingTakeoffTreeSelection = true;
+        try
+        {
+            _takeoffsMultiSelection.Clear();
+            _takeoffSectionMultiSelection.Clear();
+            foreach (string path in paths)
+                _takeoffsMultiSelection.Add(path);
+            focusNode.IsSelected = true;
+            focusNode.BringIntoView();
+        }
+        finally
+        {
+            _syncingTakeoffTreeSelection = false;
+        }
+
+        ApplyTakeoffPageHighlights();
     }
 
     private void ActivateTakeoffItem(TakeoffItem item)
