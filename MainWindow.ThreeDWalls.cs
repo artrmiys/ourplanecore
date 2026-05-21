@@ -701,7 +701,7 @@ public partial class MainWindow
             Positions = positions,
             TriangleIndices = indices,
         };
-        var brush = new SolidColorBrush(color) { Opacity = selected || selectedRoof ? 0.62 : 0.34 };
+        var brush = new SolidColorBrush(color) { Opacity = selected || selectedRoof ? 0.7 : (IsRoofSlab(slab) ? 0.62 : 0.34) };
         var material = new DiffuseMaterial(brush);
         var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
         if (IsRoofSlab(slab))
@@ -1284,14 +1284,14 @@ public partial class MainWindow
         return Color.FromRgb(120, 144, 156);
     }
 
-    // Revit-style clean shaded look: blend the takeoff color heavily toward a
-    // neutral gray so surfaces read as matte monochrome with only a hint of
-    // the original hue. Selected colors are left vivid and bypass this.
+    // Revit-style clean shaded look: keep most of the takeoff hue but soften
+    // it toward a light neutral so it reads as a clean matte surface with
+    // clear color. Selected colors are left vivid and bypass this.
     private static Color ToCleanMeshTint(Color color)
     {
-        const double keep = 0.45; // share of the original hue retained
+        const double keep = 0.72; // share of the original hue retained
         static byte Mix(byte neutral, byte channel) =>
             (byte)Math.Clamp(neutral * (1 - keep) + channel * keep, 0, 255);
-        return Color.FromRgb(Mix(182, color.R), Mix(188, color.G), Mix(196, color.B));
+        return Color.FromRgb(Mix(206, color.R), Mix(210, color.G), Mix(216, color.B));
     }
 }
