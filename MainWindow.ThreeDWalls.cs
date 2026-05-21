@@ -818,27 +818,27 @@ public partial class MainWindow
         ApplyFlatFaceNormals(mesh);
 
         bool selectedRoof = SameRoofGroup(plane.RoofGroupId, ActiveThreeDRoofGroupId());
-        Color planeColor = ToCleanMeshTint(ParseWallColor(plane.Color));
+        Color planeColor = ToVisibleRoofColor(ParseWallColor(plane.Color), selectedRoof);
         var brush = new SolidColorBrush(planeColor)
         {
-            // Matte (no specular) but mostly solid so the roof keeps its body;
-            // a slight transparency still lets internal roofs read through.
-            Opacity = selectedRoof ? 0.92 : 0.82,
+            Opacity = selectedRoof ? 1.0 : 0.96,
         };
-        var material = new DiffuseMaterial(brush);
-        var model = new GeometryModel3D(mesh, material) { BackMaterial = new DiffuseMaterial(brush) };
+        Material material = CreateRoofFaceMaterial(brush);
+        var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
         RegisterThreeDRoofMeshHit(model, plane.RoofGroupId);
         group.Children.Add(model);
 
-        // Outline the real model edges only: outer boundary (thicker) and the
-        // shared intersections between planes (ridges/hips/valleys, thinner).
-        // The mid-plane triangulation diagonals never get an edge here and are
-        // smoothed out of the shading by ApplyFlatFaceNormals.
+        // Outline only the outer roof boundary. Interior plane intersections
+        // should read from geometry/shading, not from extra bars laid over the
+        // surface.
         Color edgeColor = selectedRoof ? Color.FromRgb(245, 158, 11) : Color.FromRgb(38, 50, 64);
         for (int i = 0; i < n; i++)
         {
             int next = (i + 1) % n;
             bool boundary = roofBoundaryEdges.IsBoundary(plane.RoofGroupId, renderPoints[i], renderPoints[next]);
+            if (!boundary)
+                continue;
+
             GeometryModel3D edge = AddThreeDRoofPlaneEdgeMesh(
                 group,
                 renderPoints[i],
@@ -847,7 +847,7 @@ public partial class MainWindow
                 oy + 0.035,
                 oz - centerZ,
                 edgeColor,
-                boundary ? 0.06 : 0.042);
+                0.06);
             RegisterThreeDRoofMeshHit(edge, plane.RoofGroupId);
         }
     }
@@ -957,9 +957,6 @@ public partial class MainWindow
             mesh.TriangleIndices.Add(a);
             mesh.TriangleIndices.Add(b);
             mesh.TriangleIndices.Add(c);
-            mesh.TriangleIndices.Add(a);
-            mesh.TriangleIndices.Add(c);
-            mesh.TriangleIndices.Add(b);
         }
 
         return mesh.TriangleIndices.Count > 0;
@@ -972,9 +969,6 @@ public partial class MainWindow
             mesh.TriangleIndices.Add(0);
             mesh.TriangleIndices.Add(i);
             mesh.TriangleIndices.Add(i + 1);
-            mesh.TriangleIndices.Add(0);
-            mesh.TriangleIndices.Add(i + 1);
-            mesh.TriangleIndices.Add(i);
         }
     }
 
@@ -1285,6 +1279,35 @@ public partial class MainWindow
 
         return Color.FromRgb(120, 144, 156);
     }
+
+    private static Material CreateRoofFaceMaterial(SolidColorBrush diffuseBrush)
+    {
+        var material = new MaterialGroup();
+        material.Children.Add(new DiffuseMaterial(diffuseBrush));
+        material.Children.Add(new EmissiveMaterial(new SolidColorBrush(diffuseBrush.Color) { Opacity = 0.18 }));
+        return material;
+    }
+
+    private static Color ToVisibleRoofColor(Color color, bool selected)
+    {
+        Color boosted = Color.FromRgb(
+            BoostRoofChannel(color.R),
+            BoostRoofChannel(color.G),
+            BoostRoofChannel(color.B));
+        if (!selected)
+            return boosted;
+
+        return Color.FromRgb(
+            MixRoofChannel(boosted.R, 245, 0.22),
+            MixRoofChannel(boosted.G, 158, 0.22),
+            MixRoofChannel(boosted.B, 11, 0.22));
+    }
+
+    private static byte BoostRoofChannel(byte channel) =>
+        (byte)Math.Clamp(channel * 1.16 + 20, 0, 255);
+
+    private static byte MixRoofChannel(byte value, byte accent, double accentShare) =>
+        (byte)Math.Clamp(value * (1 - accentShare) + accent * accentShare, 0, 255);
 
     // Revit-style clean shaded look: keep most of the takeoff hue but soften
     // it toward a light neutral so it reads as a clean matte surface with
