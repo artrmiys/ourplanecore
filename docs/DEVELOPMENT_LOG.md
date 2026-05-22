@@ -2847,6 +2847,39 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   packaged-exe startup log check with no `ERROR` after the last
   `Application startup.` marker.
 
+## 2026-05-22 PDF Import Shear False Positive Fix
+
+- Tightened the `shw` suffix rule after the current job showed normal
+  structural detail sheets, such as `WOOD FRAMING SECTIONS AND DETAILS`, being
+  filed as shear walls only because their body text mentioned shear.
+- New behavior:
+  - title or filename explicitly mentioning `SHEAR` / `SHEAR WALL` still forces
+    suffix `shw`;
+  - body text mentioning shear only counts for plan-like sheet titles
+    (`plan`, `framing`, `bracing`, `floor`, `roof`, `foundation`);
+  - detail and schedule titles do not become `shw` from body text alone.
+- Applied repair to current job
+  `C:\Users\User\Desktop\Takeof_desctop\84. Main Str Hempstead_Neil_EBS` after
+  snapshot `.snapshots\20260522_183456_before_shear_false_positive_repair`:
+  - `400` pages rechecked;
+  - `33` false `shw` pages renamed/moved back to their proper suffix/folder;
+  - current `shw` pages: `9`;
+  - current `shw` pages outside `shear walls`: `0`;
+  - `WOOD FRAMING ... DETAILS` pages still marked `shw`: `0`;
+  - errors: `0`.
+- Verification passed:
+  direct helper suffix smoke cases,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`224/224`), `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `B8506CB2289DE8641CA4F19AA48243D8B3AB5F5F37A2E165DE6963F3E0A07629`.
+- Packaged launch validation:
+  - hidden verification launch: process alive, `0` errors after latest
+    `Application startup`, `Loaded takeoffs` and `Viewport` signals present;
+  - visible user launch left running from the update exe: process alive,
+    `0` errors after latest `Application startup`, job title loaded.
+
 ## 2026-05-22 PDF Import Detail/Finish Folder Rules
 
 - Added structural detail priority for sheet metadata: `S...` sheets with
