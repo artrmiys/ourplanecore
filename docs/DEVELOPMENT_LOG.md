@@ -2779,3 +2779,78 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   `DAD7F17E135ED338EB2967F608B5CD27053C0F1B8125E5C9C7038B0AB049168C`,
   and packaged-exe startup log check with no `ERROR` after the last
   `Application startup.` marker.
+
+## 2026-05-22 PDF Import Sheet Metadata Pass
+
+- Improved PDF import auto-name/auto-scale behavior for E-Wood plan sets.
+- `Tools/pdf_layers_helper.py` now prefers right/bottom title-block sheet
+  number, PDF page labels, and split-PDF filename ids before fallback text.
+- Removed the broad global sheet-number fallback that could pick detail callouts
+  instead of real sheet ids.
+- Sheet names are now normalized to lowercase in both the Python helper and
+  `Models/PdfSheetMetadataService.cs`.
+- Added stronger suffix and scale handling for level sheets, U/unit/kitchen/bath
+  sheets, roofs, elevations, sections, details/profiles, notes, schedules, wall
+  types, and floor types.
+- Added engineering-scale parsing/formatting for scales like `1" = 20'0"`.
+- Added regression coverage for lowercase dotted sheet names and engineering
+  scale parsing.
+- Current sample job validation:
+  `C:\Users\User\Desktop\Takeof_desctop\84. Main Str Hempstead_Neil_EBS\sources`
+  with 374 source PDFs produced zero duplicate rename candidates, zero uppercase
+  rename candidates, and zero missing scale on scale-capable sheets. The only
+  blank label was `Division-06.pdf`, which is not a normal sheet PDF.
+- Broader sample audit:
+  `E:\---\Work\E-Wood-Work\2.New_Projects` had 502 PDFs / 7403 pages; 30
+  spec/manual PDFs were skipped, and 472 plan-like PDFs / 3621 pages were
+  scanned. Remaining blanks are mostly scanned/no-text or weak-title-block PDFs
+  that need OCR/image fallback rather than looser regex.
+- Detailed handoff:
+  `docs/PDF_IMPORT_SHEET_METADATA_HANDOFF_2026_05_22.md`.
+- Verification passed:
+  `python -m py_compile .\Tools\pdf_layers_helper.py`,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`222/222`),
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`), compressed
+  single-file Release publish, update-folder replacement, Desktop shortcut
+  retargeting to `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`,
+  SHA256 match
+  `EB3625C5E3F7F671B7769D2470C742D0A064B5C33AD648466EB4D3C6840796C7`, and
+  packaged-exe startup log check with no `ERROR` after the last
+  `Application startup.` marker.
+
+## 2026-05-22 PDF Import Detail/Finish Folder Rules
+
+- Added structural detail priority for sheet metadata: `S...` sheets with
+  `DETAIL`, `DETAILS`, `DEATIL`, or `DETIAL` now force suffix `d` before
+  schedule/roof/section rules, so `SECTIONS AND DETAILS` does not file into
+  `sections`.
+- Added architectural finish/interior rule: `A...` sheets with `FINISH`,
+  `FINISHES`, or `INTERIOR` now force suffix `f`.
+- Added page-sort default/migration rules:
+  - detect suffix `f`;
+  - route `a ... f` to `finish`;
+  - route M/P/E/C first-letter sheets and MEP/mechanical/plumbing/electrical/
+    civil source filenames to `Others`.
+- Existing saved PageSort presets are upgraded through
+  `PageSortConfig.SchemaVersion`, without re-adding a rule after the user
+  removes and saves it under the current schema.
+- Pages Tree folder rows now show recursive sheet counts next to each folder.
+- Applied the new rules to current job
+  `C:\Users\User\Desktop\Takeof_desctop\84. Main Str Hempstead_Neil_EBS` after
+  snapshot
+  `.snapshots\20260522_180216_before_finish_detail_mep_rules`:
+  - `400` pages checked;
+  - `46` pages reanalyzed/renamed/moved;
+  - `43` `S` details moved to `00. imported\details struct`;
+  - `3` `A` finish/interior sheets moved to `00. imported\finish`;
+  - remaining wrong `S + details != d`: `0`;
+  - remaining wrong `A + finish/interior != f`: `0`.
+- Verification passed:
+  `python -m py_compile .\Tools\pdf_layers_helper.py`,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`224/224`), `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `B491A7E15B6CB38EA7225EB4A014E8AF0199162715CC89C7404481FD7CA5CA0F`, and
+  packaged-exe startup log check with no `ERROR` after the last
+  `Application startup.` marker.

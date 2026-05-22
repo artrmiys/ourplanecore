@@ -62,10 +62,12 @@ public partial class MainWindow
         ApplyPagesTreeSearchFilter();
     }
 
-    private void FillPagesTree(ItemCollection items, string folder)
+    private int FillPagesTree(ItemCollection items, string folder)
     {
-        if (!Directory.Exists(folder)) return;
+        if (!Directory.Exists(folder))
+            return 0;
 
+        int pageCount = 0;
         foreach (string dir in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
         {
             PageInfo? page = OurPlaneCoreJobStore.TryReadPage(dir);
@@ -79,6 +81,7 @@ public partial class MainWindow
                 };
                 RebuildPageTakeoffNodes(pageItem, page);
                 items.Add(pageItem);
+                pageCount++;
                 continue;
             }
 
@@ -91,8 +94,12 @@ public partial class MainWindow
                 IsExpanded = false,
             };
             items.Add(tvi);
-            FillPagesTree(tvi.Items, dir);
+            int childPageCount = FillPagesTree(tvi.Items, dir);
+            tvi.Header = BuildPageFolderHeader(folderNode, childPageCount);
+            pageCount += childPageCount;
         }
+
+        return pageCount;
     }
 
     private TreeViewItem CreateHiddenPagesRootItem() =>
@@ -129,6 +136,25 @@ public partial class MainWindow
             });
         }
 
+        return panel;
+    }
+
+    private StackPanel BuildPageFolderHeader(PageFolderNode folder, int pageCount)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"  {folder.Name}",
+            FontWeight = FontWeights.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = pageCount == 1 ? "  1 sheet" : $"  {pageCount} sheets",
+            Foreground = Brushes.Gray,
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
         return panel;
     }
 

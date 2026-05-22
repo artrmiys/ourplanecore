@@ -127,6 +127,8 @@ var tests = new List<(string Name, Action Run)>
     ("page tree order moves folder before folder", PageTreeOrderMovesFolderBeforeFolder),
     ("page tree order moves selected items to end", PageTreeOrderMovesSelectedItemsToEnd),
     ("page tree order moves nested folder out below parent", PageTreeOrderMovesNestedFolderOutBelowParent),
+    ("page sort defaults include finish and mep others", PageSortDefaultsIncludeFinishAndMepOthers),
+    ("page sort upgrade adds finish and mep rules", PageSortUpgradeAddsFinishAndMepRules),
     ("page rename allows duplicate display names", PageRenameAllowsDuplicateDisplayNames),
     ("takeoff display names preserve slash", TakeoffDisplayNamesPreserveSlash),
     ("takeoff copy keeps display name", TakeoffCopyKeepsDisplayName),
@@ -162,6 +164,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata preserves dotted sheet labels", PdfMetadataPreservesDottedSheetLabels),
     ("pdf scale parser handles architectural scale", PdfScaleParserHandlesArchitecturalScale),
     ("pdf scale parser handles mixed fraction scale", PdfScaleParserHandlesMixedFractionScale),
+    ("pdf scale parser handles engineering scale", PdfScaleParserHandlesEngineeringScale),
     ("pdf metadata crop template save load round trips", PdfSheetMetadataCropServiceTests.CropTemplateSaveLoadRoundTrips),
     ("pdf metadata crop template usable when either region exists", PdfSheetMetadataCropServiceTests.CropTemplateUsableWhenEitherRegionExists),
     ("joist rounding aliases normalize", JoistRoundingAliasesNormalize),
@@ -1905,6 +1908,66 @@ static void PageTreeOrderMovesNestedFolderOutBelowParent()
     });
 }
 
+static void PageSortDefaultsIncludeFinishAndMepOthers()
+{
+    PageSortConfig cfg = PageSortConfig.BuildDefault();
+
+    AssertTrue(cfg.SuffixDetectionOrder.Contains("f", StringComparer.OrdinalIgnoreCase), "f suffix should be detected");
+    AssertTrue(
+        cfg.SuffixRules.Any(rule =>
+            string.Equals(rule.Suffix, "f", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.FirstLetter, "a", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Target, "finish", StringComparison.OrdinalIgnoreCase)),
+        "A/f sheets should route to finish");
+
+    foreach (string letter in new[] { "m", "p", "e", "c" })
+    {
+        AssertTrue(
+            cfg.ArchStructRules.Any(rule =>
+                string.Equals(rule.Kind, "FirstLetter", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(rule.Match, letter, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(rule.Target, "Others", StringComparison.OrdinalIgnoreCase)),
+            $"{letter} sheets should route to Others");
+    }
+}
+
+static void PageSortUpgradeAddsFinishAndMepRules()
+{
+    var oldConfig = new PageSortConfig
+    {
+        SchemaVersion = 0,
+        ArchStructRules =
+        [
+            new() { Kind = "FirstLetter", Match = "a", Target = "Arch" },
+            new() { Kind = "FirstLetter", Match = "s", Target = "Struct" },
+        ],
+        SuffixTopOrder = ["v"],
+        SuffixDetectionOrder = ["sec", "d"],
+        SuffixRules =
+        [
+            new() { Suffix = "d", FirstLetter = "s", Target = "details struct" },
+        ],
+    };
+
+    PageSortConfig upgraded = PageSortConfig.UpgradeForCurrentSchema(oldConfig);
+
+    AssertTrue(
+        upgraded.SchemaVersion == PageSortConfig.CurrentSchemaVersion,
+        "schema version should upgrade to current");
+    AssertTrue(upgraded.SuffixDetectionOrder.Contains("f", StringComparer.OrdinalIgnoreCase), "upgrade should add f detection");
+    AssertTrue(
+        upgraded.SuffixRules.Any(rule =>
+            string.Equals(rule.Suffix, "f", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Target, "finish", StringComparison.OrdinalIgnoreCase)),
+        "upgrade should add finish rule");
+    AssertTrue(
+        upgraded.ArchStructRules.Any(rule =>
+            string.Equals(rule.Kind, "FileKeyword", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Match, "civil", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Target, "Others", StringComparison.OrdinalIgnoreCase)),
+        "upgrade should add civil keyword rule");
+}
+
 static void PageRenameAllowsDuplicateDisplayNames()
 {
     WithTempJob("page_duplicate_names", job =>
@@ -2085,7 +2148,7 @@ static void PdfMetadataPreservesDottedSheetLabels()
 
     AssertTrue(ok, $"metadata fallback should parse dotted sheet labels: {error}");
     AssertEqual("A5.03", metadata.SheetLabel, "dotted sheet label");
-    AssertEqual("A5.03", metadata.ProposedPageName(), "dotted sheet label preserved in proposed name");
+    AssertEqual("a5.03", metadata.ProposedPageName(), "dotted sheet label preserved in lowercase proposed name");
 }
 
 static void PdfScaleParserHandlesArchitecturalScale()
@@ -2106,6 +2169,15 @@ static void PdfScaleParserHandlesMixedFractionScale()
     AssertTrue(parsedLegacy, "hyphen mixed fraction scale should still parse");
     AssertClose(legacyMetersPerPt, mixedMetersPerPt, "mixed fraction styles should match");
     AssertEqual("1 1/2\" = 1'0\"", PdfSheetMetadataService.FormatImperialScale(mixedMetersPerPt), "mixed fraction roundtrip label");
+}
+
+static void PdfScaleParserHandlesEngineeringScale()
+{
+    bool parsed = PdfSheetMetadataService.TryParseScaleMetersPerPt("1\" = 20'0\"", out double metersPerPt);
+
+    AssertTrue(parsed, "engineering scale should parse");
+    AssertTrue(metersPerPt > 0, "engineering scale should be positive");
+    AssertEqual("1\" = 20'0\"", PdfSheetMetadataService.FormatImperialScale(metersPerPt), "engineering scale roundtrip label");
 }
 
 static void JoistRoundingAliasesNormalize()

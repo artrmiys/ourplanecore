@@ -29,7 +29,7 @@ public partial class MainWindow
     private static readonly string[] AsKinds = ["FirstLetter", "FileKeyword"];
     private static readonly string[] AsTargets = ["Arch", "Struct", "Others"];
     private static readonly string[] SuffixTargets =
-        ["top", "details struct", "details arch", "units", "sections", "--------others"];
+        ["top", "details struct", "details arch", "finish", "units", "sections", "--------others"];
 
     private void PersistPageSort(bool job)
     {

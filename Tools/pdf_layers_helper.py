@@ -32,9 +32,22 @@ AI_ALLOWED_SCALES = [
     '1-1/2" = 1\'0"',
     '3" = 1\'0"',
     '1" = 1"',
+    '1" = 10\'0"',
+    '1" = 20\'0"',
+    '1" = 30\'0"',
+    '1" = 40\'0"',
+    '1" = 50\'0"',
+    '1" = 100\'0"',
 ]
-AI_SCALE_SUFFIXES = {"1st", "2nd", "3rd", "4th", "5th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw"}
+AI_SCALE_SUFFIXES = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw"}
 AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t"}
+SHEET_PREFIXES = {"a", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l", "id", "fp", "fa", "fs"}
+SHEET_LABEL_RE = re.compile(
+    r"\b([A-Z]{1,3}-?\d{1,4}(?:\.(?:R\d+[A-Z]?|[0-9]?U\d+[A-Z]?|\d+[A-Z]{0,2}))?[A-Z]{0,2})\b",
+    flags=re.IGNORECASE,
+)
+TITLE_BLOCK_RIGHT_X = 0.82
+TITLE_BLOCK_BOTTOM_Y = 0.82
 
 
 def _load_json(path: str) -> dict:
@@ -48,7 +61,21 @@ def _write_json(path: str, data: dict) -> None:
 
 
 def _scale_key(value: str) -> str:
-    return (value or "").strip().lower().replace(" ", "").replace("'-0\"", "'0\"")
+    return (
+        (value or "")
+        .strip()
+        .lower()
+        .replace(" ", "")
+        .replace("feet", "'")
+        .replace("foot", "'")
+        .replace("ft", "'")
+        .replace("inches", '"')
+        .replace("inch", '"')
+        .replace("in.", '"')
+        .replace("in", '"')
+        .replace("'-0\"", "'0\"")
+        .replace("'-", "'")
+    )
 
 
 def _left_inches(scale_text: str) -> float | None:
@@ -64,19 +91,113 @@ def _left_inches(scale_text: str) -> float | None:
         return None
 
 
+def _clean_scale_text(text: str | None) -> str:
+    return (
+        (text or "")
+        .replace("''", '"')
+        .replace("\u201d", '"')
+        .replace("\u201c", '"')
+        .replace("\u2033", '"')
+        .replace("\u2019", "'")
+        .replace("\u2018", "'")
+        .replace("\u2032", "'")
+        .replace("вЂќ", '"')
+        .replace("вЂњ", '"')
+        .replace("вЂі", '"')
+        .replace("вЂ™", "'")
+        .replace("вЂІ", "'")
+        .strip()
+    )
+
+
+def _parse_inches(value: str | None) -> float | None:
+    clean = _clean_scale_text(value).replace('"', "")
+    clean = re.sub(r"\b(?:inches|inch|in\.?)\b", "", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    try:
+        mixed = re.fullmatch(r"(\d+(?:\.\d+)?)\s+(\d+)\s*/\s*(\d+)", clean)
+        if mixed:
+            return float(mixed.group(1)) + float(Fraction(f"{mixed.group(2)}/{mixed.group(3)}"))
+        if "-" in clean and re.fullmatch(r"\d+(?:\.\d+)?-\d+\s*/\s*\d+", clean):
+            whole, frac = clean.split("-", 1)
+            return float(whole) + float(Fraction(frac))
+        if "/" in clean:
+            return float(Fraction(clean.replace(" ", "")))
+        return float(clean)
+    except Exception:
+        return None
+
+
+def _right_inches(value: str | None) -> float | None:
+    clean = _clean_scale_text(value)
+    if not clean:
+        return None
+    feet_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:'|ft|feet|foot)", clean, flags=re.IGNORECASE)
+    if feet_match:
+        feet = float(feet_match.group(1))
+        remainder = clean[feet_match.end():]
+        inch_match = re.match(r"\s*-?\s*(\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?)\s*(?:\"|in|inch|inches)?", remainder, flags=re.IGNORECASE)
+        inches = _parse_inches(inch_match.group(1)) if inch_match else 0.0
+        return feet * 12.0 + (inches or 0.0)
+    dash_feet = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*\"?\s*", clean)
+    if dash_feet:
+        return float(dash_feet.group(1)) * 12.0 + float(dash_feet.group(2))
+    return _parse_inches(clean)
+
+
+def _format_inches(value: float) -> str:
+    rounded = round(value * 64)
+    if abs((rounded / 64.0) - value) <= 0.002:
+        whole = rounded // 64
+        remainder = rounded % 64
+        if remainder == 0:
+            return str(whole)
+        denominator = 64
+        numerator = remainder
+        while numerator % 2 == 0 and denominator % 2 == 0:
+            numerator //= 2
+            denominator //= 2
+        return f"{whole}-{numerator}/{denominator}" if whole else f"{numerator}/{denominator}"
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
+def _format_scale(left_inches: float, right_inches: float) -> str | None:
+    if left_inches <= 0 or right_inches <= 0:
+        return None
+    if abs(left_inches - 1.0) <= 0.002 and abs(right_inches - 1.0) <= 0.002:
+        return '1" = 1"'
+    left = _format_inches(left_inches)
+    feet = int(right_inches // 12)
+    inches = right_inches - (feet * 12)
+    inches_label = str(int(round(inches))) if abs(inches - round(inches)) <= 0.002 else _format_inches(inches)
+    return f'{left}" = {feet}\'{inches_label}"'
+
+
+def _parse_general_scale(scale_text: str | None) -> tuple[float, float] | None:
+    source = _clean_scale_text(scale_text)
+    if "=" not in source:
+        return None
+    left, right = source.split("=", 1)
+    left_match = re.search(r"(\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?)", left)
+    if not left_match:
+        return None
+    left_inches = _parse_inches(left_match.group(1))
+    right_inches = _right_inches(right)
+    if left_inches and right_inches:
+        return left_inches, right_inches
+    return None
+
+
 def _scale_ratio(scale_text: str | None) -> float | None:
-    if not scale_text:
+    parsed = _parse_general_scale(scale_text)
+    if not parsed:
         return None
-    if _scale_key(scale_text) == _scale_key('1" = 1"'):
-        return 1.0
-    inches = _left_inches(scale_text)
-    if not inches:
-        return None
-    return 12.0 / inches
+    left_inches, right_inches = parsed
+    return right_inches / left_inches if left_inches > 0 else None
 
 
 def _normalize_scale_candidate(text: str) -> str | None:
-    source = (text or "")
+    source = _clean_scale_text(text)
     source = (
         source.replace("''", '"')
         .replace("”", '"')
@@ -90,19 +211,14 @@ def _normalize_scale_candidate(text: str) -> str | None:
     if re.search(r'\b1\s*"\s*=\s*1\s*"', source, flags=re.IGNORECASE):
         return allowed.get(_scale_key('1" = 1"'), '1" = 1"')
 
-    patterns = [
-        r'(?<![A-Za-z0-9])(\d+(?:-\d+/\d+|/\d+)?)\s*"?\s*=\s*1\s*\'\s*-?\s*0?\s*"?',
-        r'(?<![A-Za-z0-9])(\d+(?:-\d+/\d+|/\d+)?)\s*"?\s*=\s*1\s*ft\s*-?\s*0?\s*"?',
-        r'(?<![A-Za-z0-9])(\d+(?:-\d+/\d+|/\d+)?)\s*"?\s*=\s*1\s*-\s*0\s*"?',
-    ]
-    for pattern in patterns:
-        for match in re.finditer(pattern, source, flags=re.IGNORECASE):
-            left = match.group(1).strip()
-            candidate = f'{left}" = 1\'0"'
-            normalized = allowed.get(_scale_key(candidate))
-            if normalized:
-                return normalized
-    return None
+    parsed = _parse_general_scale(source)
+    if not parsed:
+        return None
+    left_inches, right_inches = parsed
+    candidate = _format_scale(left_inches, right_inches)
+    if not candidate:
+        return None
+    return allowed.get(_scale_key(candidate))
 
 
 def _find_scales_in_text(text: str) -> list[str]:
@@ -119,6 +235,18 @@ def _find_scales_in_text(text: str) -> list[str]:
         if scale and key not in seen:
             seen.add(key)
             found.append(scale)
+    general_pattern = re.compile(
+        r'(?<![A-Za-z0-9])\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?\s*(?:"|in\.?|inch|inches)?\s*=\s*'
+        r'\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?\s*(?:\'|ft|feet|foot|-|")?\s*'
+        r'\d*(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?\s*(?:"|in\.?|inch|inches)?',
+        flags=re.IGNORECASE,
+    )
+    for match in general_pattern.finditer(_clean_scale_text(text)):
+        scale = _normalize_scale_candidate(match.group(0))
+        key = _scale_key(scale or "")
+        if scale and key not in seen:
+            seen.add(key)
+            found.append(scale)
     if re.search(r'\b1\s*"\s*=\s*1\s*"', source, flags=re.IGNORECASE) and _scale_key('1" = 1"') not in seen:
         found.append('1" = 1"')
     return found
@@ -128,7 +256,8 @@ def _choose_best_scale(scales: list[str]) -> str | None:
     best: str | None = None
     best_val: float | None = None
     for scale in scales or []:
-        value = _left_inches(scale)
+        parsed = _parse_general_scale(scale)
+        value = parsed[0] if parsed else None
         if value is not None and (best_val is None or value < best_val):
             best = scale
             best_val = value
@@ -141,16 +270,175 @@ def _sheet_key(label: str | None) -> str:
 
 def _sheet_display_key(label: str | None) -> str:
     compact = re.sub(r"\s+", "", (label or "").strip())
-    return compact.replace("-", "")
+    return compact.replace("-", "").lower()
+
+
+def _valid_sheet_label(label: str | None) -> bool:
+    raw = (label or "").strip()
+    if not raw or not SHEET_LABEL_RE.fullmatch(raw):
+        return False
+    prefix = re.match(r"[A-Za-z]+", raw.replace("-", ""))
+    return bool(prefix and prefix.group(0).lower() in SHEET_PREFIXES)
+
+
+def _sheet_label_candidates(text: str | None) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for match in SHEET_LABEL_RE.finditer(text or ""):
+        label = match.group(1)
+        if not _valid_sheet_label(label):
+            continue
+        key = _sheet_display_key(label)
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(label)
+    return candidates
+
+
+def _extract_sheet_label_from_filename(pdf_path: str) -> str | None:
+    stem = Path(pdf_path).stem
+    source = re.sub(r"^[\W_]+", "", stem)
+    match = re.match(
+        r"([A-Z]{1,3}-?\d{1,4}(?:\.(?:R\d+[A-Z]?|[0-9]?U\d+[A-Z]?|\d+[A-Z]{0,2}))?[A-Z]{0,2})",
+        source,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    label = match.group(1)
+    if _valid_sheet_label(label):
+        return label
+    return None
+
+
+def _extract_sheet_label_from_page_label(page: fitz.Page) -> str | None:
+    try:
+        label_text = page.get_label()
+    except Exception:
+        label_text = ""
+    candidates = _sheet_label_candidates(label_text)
+    return candidates[0] if candidates else None
 
 
 def _extract_sheet_label_from_text(text: str) -> str | None:
-    prefixes = {"a", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g"}
-    for raw in re.findall(r"\b([A-Z]{1,3}-?\d{1,4}(?:\.\d+)?[A-Z]?)\b", (text or "").upper()):
-        prefix = re.match(r"[A-Z]+", raw.replace("-", ""))
-        if prefix and prefix.group(0).lower() in prefixes:
-            return raw
-    return None
+    candidates = _sheet_label_candidates(text)
+    return candidates[0] if candidates else None
+
+
+def _clean_sheet_title(title: str | None) -> str:
+    source = re.sub(r"[_\s]+", " ", (title or "").strip())
+    source = re.sub(r"\b(?:sheet|drawing)\s+(?:title|number|no)\b:?", "", source, flags=re.IGNORECASE)
+    source = re.sub(r"\b(?:scale|revisions?|project|date|drawn|checked)\b:?.*", "", source, flags=re.IGNORECASE)
+    source = re.sub(r"\s+", " ", source).strip(" -:|")
+    return source
+
+
+def _filename_title(pdf_path: str, sheet_label: str | None) -> str:
+    stem = Path(pdf_path).stem
+    source = re.sub(r"^[\W_]+", "", stem)
+    if sheet_label:
+        source = source[len(sheet_label):] if source.lower().startswith(sheet_label.lower()) else source
+    else:
+        detected = _extract_sheet_label_from_filename(pdf_path)
+        if detected and source.lower().startswith(detected.lower()):
+            source = source[len(detected):]
+    if sheet_label and re.search(r"\.r\d+[a-z]?$", sheet_label, flags=re.IGNORECASE) and source.upper().startswith("OOF"):
+        source = "R" + source
+    source = source.replace("_", " ").replace("-", " ")
+    source = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", source)
+    return _clean_sheet_title(source)
+
+
+def _title_block_words(words: list, max_x: float, max_y: float) -> list:
+    return [
+        w for w in words
+        if float(w[0]) >= max_x * TITLE_BLOCK_RIGHT_X or float(w[1]) >= max_y * TITLE_BLOCK_BOTTOM_Y
+    ]
+
+
+def _same_row(left: object, right: object, tolerance: float = 12.0) -> bool:
+    return abs(float(left[1]) - float(right[1])) <= tolerance
+
+
+def _title_block_label_phrase(words: list, words_to_match: tuple[str, ...]) -> tuple[float, float, float] | None:
+    ordered = sorted(words, key=lambda w: (float(w[1]), float(w[0])))
+    matches: list[tuple[float, float, float]] = []
+    for index, word in enumerate(ordered):
+        token = str(word[4]).strip().lower().rstrip(":")
+        if token != words_to_match[0]:
+            continue
+        cursor = index + 1
+        matched = [word]
+        for expected in words_to_match[1:]:
+            found = None
+            while cursor < len(ordered):
+                candidate = ordered[cursor]
+                candidate_text = str(candidate[4]).strip().lower().rstrip(":")
+                cursor += 1
+                if not _same_row(word, candidate):
+                    break
+                if candidate_text == expected:
+                    found = candidate
+                    break
+            if found is None:
+                matched = []
+                break
+            matched.append(found)
+        if matched:
+            matches.append((
+                min(float(w[0]) for w in matched),
+                min(float(w[1]) for w in matched),
+                max(float(w[2]) for w in matched),
+            ))
+    if not matches:
+        return None
+    return max(matches, key=lambda item: (item[0], item[1]))
+
+
+def _extract_sheet_label_from_title_block(words: list, max_x: float, max_y: float) -> str | None:
+    block = _title_block_words(words, max_x, max_y)
+    phrase = (
+        _title_block_label_phrase(block, ("sheet", "number"))
+        or _title_block_label_phrase(block, ("sheet", "no"))
+        or _title_block_label_phrase(block, ("drawing", "number"))
+    )
+    if not phrase:
+        return None
+    x0, y0, x1 = phrase
+    search_words = _words_in_rect(words, max(0, x0 - 30), y0, max_x, min(max_y, y0 + 135))
+    below = [w for w in search_words if float(w[1]) >= y0 + 4 or float(w[0]) > x1 + 4]
+    candidates = _sheet_label_candidates(_words_text(below))
+    return candidates[0] if candidates else None
+
+
+def _extract_title_from_title_block(words: list, sheet_label: str | None, max_x: float, max_y: float) -> str:
+    block = _title_block_words(words, max_x, max_y)
+    phrase = (
+        _title_block_label_phrase(block, ("sheet", "title"))
+        or _title_block_label_phrase(block, ("drawing", "title"))
+    )
+    if not phrase:
+        return ""
+    x0, y0, _ = phrase
+    stop_y = min(max_y, y0 + 150)
+    for stop_phrase in (("sheet", "number"), ("scale",), ("revisions",), ("project",)):
+        found = _title_block_label_phrase(block, stop_phrase)
+        if found and found[1] > y0:
+            stop_y = min(stop_y, found[1] - 2)
+    title_words = _words_in_rect(words, max(0, x0 - 30), y0 + 4, max_x, stop_y)
+    cleaned = []
+    sheet_key = _sheet_display_key(sheet_label)
+    for word in title_words:
+        token = str(word[4]).strip()
+        token_clean = token.lower().rstrip(":")
+        if token_clean in {"sheet", "title", "drawing", "number", "no", "scale"}:
+            continue
+        if sheet_key and _sheet_display_key(token) == sheet_key:
+            continue
+        cleaned.append(word)
+    return _clean_sheet_title(_words_text(cleaned))
+
 
 
 def _words_text(words: list) -> str:
@@ -165,19 +453,20 @@ def _words_in_rect(words: list, x0: float, y0: float, x1: float, y1: float) -> l
     ]
 
 
-def _extract_title_block_scale(words: list, bottom_y0: float, max_y: float) -> tuple[str | None, str]:
+def _extract_title_block_scale(words: list, max_x: float, max_y: float) -> tuple[str | None, str]:
+    block = _title_block_words(words, max_x, max_y)
     scale_labels = [
-        w for w in words
-        if float(w[1]) >= bottom_y0 and str(w[4]).strip().lower().startswith("scale")
+        w for w in block
+        if str(w[4]).strip().lower().rstrip(":").startswith("scale")
     ]
     if not scale_labels:
         return None, ""
 
-    label = min(scale_labels, key=lambda w: (float(w[1]), float(w[0])))
+    label = max(scale_labels, key=lambda w: (float(w[0]), -float(w[1])))
     x0 = float(label[0]) - 25
-    x1 = float(label[2]) + 120
+    x1 = min(max_x, float(label[2]) + 220)
     y0 = float(label[1])
-    y1 = min(max_y, y0 + 180)
+    y1 = min(max_y, y0 + 130)
     text = _words_text(_words_in_rect(words, x0, y0, x1, y1))
     compact = re.sub(r"\s+", " ", text).strip()
     if re.search(r"\bAS\s+NOTED\b", compact, flags=re.IGNORECASE):
@@ -206,6 +495,7 @@ def _title_from_lines(text: str, sheet_label: str | None) -> str:
 
     keywords = [
         "foundation", "floor", "framing", "roof", "section", "details", "detail",
+        "deatil", "detial", "finish", "interior",
         "schedule", "notes", "elevation", "partition", "wall type", "floor type",
     ]
     for line in lines:
@@ -238,48 +528,97 @@ def _extract_pdf_title(words: list, text: str, sheet_label: str | None, bottom_y
     return title.strip()
 
 
+def _has_detail_word(value: str | None) -> bool:
+    return bool(re.search(r"\b(?:details?|deatil|deatils|detial|detials)\b", value or "", flags=re.IGNORECASE))
+
+
+def _has_finish_word(value: str | None) -> bool:
+    return bool(re.search(r"\b(?:finish(?:es|ed)?|interior(?:s)?)\b", value or "", flags=re.IGNORECASE))
+
+
 def _detect_suffix(sheet_title: str | None, has_details: bool, has_schedule: bool, sheet_label: str | None = None) -> tuple[str | None, bool]:
     title = (sheet_title or "").lower()
     label = (sheet_label or "").strip().lower().replace("-", "")
+    is_arch = label.startswith("a")
+    is_struct = label.startswith("s")
     num_match = re.search(r"(\d{2,4})", label)
     sheet_num = int(num_match.group(1)) if num_match else None
+    ordinals = {
+        1: "1st",
+        2: "2nd",
+        3: "3rd",
+        4: "4th",
+        5: "5th",
+        6: "6th",
+        7: "7th",
+        8: "8th",
+    }
 
+    if is_struct and (has_details or _has_detail_word(title)):
+        return "d", True
     if has_schedule or "schedule" in title or "schedules" in title:
         return "sc", True
-    if "general notes" in title or re.search(r"\bnotes?\b", title):
+    if (
+        "general notes" in title
+        or re.search(r"\bnotes?\b", title)
+        or "cover" in title
+        or "sheet index" in title
+        or re.search(r"\bindex\b", title)
+        or "code data" in title
+        or "fire separation" in title
+        or "garage ventilation" in title
+        or "matrices" in title
+        or "fixture calculation" in title
+        or "ul assemblies" in title
+        or "special inspections" in title
+    ):
         return "n", True
-    if has_details or "detail" in title or "details" in title:
-        return "d", True
     if "wall type" in title or "wall types" in title or "partition type" in title or "partition types" in title:
-        return "wt", False
+        return "wt", True
     if (
         "floor type" in title or "floor types" in title
-        or "floor/ceiling" in title or "floor/clg" in title
+        or "floor/ceiling" in title or "floor-ceiling" in title or "floor/clg" in title
         or "floor assembly" in title or "floor assemblies" in title
     ):
-        return "ft", False
+        return "ft", True
+    if is_arch and _has_finish_word(title):
+        return "f", False
     if "site visit" in title or "survey" in title:
         return "sv", False
     if "view" in title or "views" in title:
         return "v", False
-    if re.search(r"\bunits?\s+plans?\b", title):
+    if re.search(r"\bunits?\s+plans?\b", title) or re.search(r"\bunit\b", title) or "kitchen" in title or "bath" in title:
         return "u", False
-    if "first floor" in title or "1st floor" in title:
-        return "1st", False
-    if "second floor" in title or "2nd floor" in title:
-        return "2nd", False
-    if "third floor" in title or "3rd floor" in title:
-        return "3rd", False
-    if "fourth floor" in title or "4th floor" in title:
-        return "4th", False
-    if "fifth floor" in title or "5th floor" in title:
-        return "5th", False
+    if re.search(r"\blevel[\s_-]*u\d+\b", title) or re.search(r"u\d+", label):
+        return "u", False
+    word_levels = [
+        ("first", 1),
+        ("second", 2),
+        ("third", 3),
+        ("fourth", 4),
+        ("fifth", 5),
+        ("sixth", 6),
+        ("seventh", 7),
+        ("eighth", 8),
+    ]
+    for word, level in word_levels:
+        if f"{word} floor" in title or f"{ordinals[level]} floor" in title:
+            return ordinals[level], False
+    level_match = re.search(r"\blevel[\s_-]*0?([1-8])(?=\D|$)", title)
+    if level_match:
+        return ordinals[int(level_match.group(1))], False
     if "roof" in title:
         return "rf", False
     if "elevation" in title:
         return "el", False
+    if is_struct and sheet_num is not None and 500 <= sheet_num <= 699:
+        return "d", True
     if "section" in title:
         return "sec", False
+    if "profile" in title or "profiles" in title:
+        return "d", True
+    if has_details or _has_detail_word(title):
+        return "d", True
     if sheet_num is not None and label.startswith("s") and 500 <= sheet_num <= 599:
         return "d", True
     if "foundation" in title:
@@ -288,7 +627,39 @@ def _detect_suffix(sheet_title: str | None, has_details: bool, has_schedule: boo
         return "b", False
     if label.startswith("t"):
         return "t", True
+    if sheet_num is not None:
+        if label.startswith(("g", "t")) or (label.startswith(("a", "s")) and sheet_num < 100):
+            return "n", True
+        if label.startswith("a"):
+            if 200 <= sheet_num <= 299:
+                return "el", False
+            if 300 <= sheet_num <= 499:
+                return "sec", False
+            if 500 <= sheet_num <= 599:
+                return "u", False
+            if 600 <= sheet_num <= 799:
+                return "d", True
+        if label.startswith("s"):
+            if 100 <= sheet_num <= 199:
+                return "f", False
+            if 300 <= sheet_num <= 499:
+                return "sec", False
+            if 500 <= sheet_num <= 699:
+                return "d", True
     return None, False
+
+
+def _infer_scale_from_title(sheet_title: str | None, suffix: str | None) -> str | None:
+    title = (sheet_title or "").lower()
+    suffix = (suffix or "").lower()
+    if suffix == "el" and "elevation" in title:
+        return '1/4" = 1\'0"'
+    if suffix == "u" and ("kitchen" in title or "bath" in title or re.search(r"\bunit\b", title)):
+        return '1/4" = 1\'0"'
+    if suffix in {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "rf", "f", "u"}:
+        if any(token in title for token in ("plan", "framing", "reinforcing", "foundation", "roof", "slab")):
+            return '1/8" = 1\'0"'
+    return None
 
 
 def _metadata_layers(doc: fitz.Document, doc_key: tuple[str, int, int, str], page_index: int) -> list[dict]:
@@ -1372,16 +1743,39 @@ def sheetmeta_data(req: dict) -> dict:
     bottom_y0 = max_y * 0.91
     bottom_words = _words_in_rect(words, 0, bottom_y0, max_x, max_y)
     bottom_text = _words_text(bottom_words)
-    sheet_label = _extract_sheet_label_from_text(bottom_text) or _extract_sheet_label_from_text(text)
+    page_label = _extract_sheet_label_from_page_label(page)
+    filename_label = _extract_sheet_label_from_filename(pdf_path)
+    sheet_label = (
+        _extract_sheet_label_from_title_block(words, max_x, max_y)
+        or page_label
+        or filename_label
+        or _extract_sheet_label_from_text(bottom_text)
+    )
     sheet_key = _sheet_key(sheet_label)
     sheet_display_key = _sheet_display_key(sheet_label)
-    sheet_title = _extract_pdf_title(words, text, sheet_label, bottom_y0, max_x, max_y)
+    filename_title = _filename_title(pdf_path, sheet_label or filename_label) if doc.page_count <= 1 or filename_label else ""
+    sheet_title = (
+        _extract_title_from_title_block(words, sheet_label, max_x, max_y)
+        or _extract_pdf_title(words, text, sheet_label, bottom_y0, max_x, max_y)
+        or filename_title
+    )
+    sheet_title = _clean_sheet_title(sheet_title)
+    if not sheet_label and _valid_sheet_label(sheet_title):
+        sheet_label = sheet_title
+        sheet_key = _sheet_key(sheet_label)
+        sheet_display_key = _sheet_display_key(sheet_label)
+        sheet_title = ""
 
-    title_scale, title_scale_raw = _extract_title_block_scale(words, bottom_y0, max_y)
+    title_scale, title_scale_raw = _extract_title_block_scale(words, max_x, max_y)
     body_scales = _find_scales_in_text(text)
-    has_details = bool(re.search(r"\bdetails?\b", sheet_title or "", flags=re.IGNORECASE))
-    has_schedule = bool(re.search(r"\bschedules?\b", sheet_title or "", flags=re.IGNORECASE))
-    suffix, skip_scale = _detect_suffix(sheet_title, has_details, has_schedule, sheet_label)
+    all_scales = []
+    for scale in [title_scale, *body_scales]:
+        if scale and _scale_key(scale) not in {_scale_key(existing) for existing in all_scales}:
+            all_scales.append(scale)
+    suffix_text = f"{sheet_title} {filename_title}".strip()
+    has_details = _has_detail_word(suffix_text)
+    has_schedule = bool(re.search(r"\bschedules?\b", suffix_text, flags=re.IGNORECASE))
+    suffix, skip_scale = _detect_suffix(suffix_text, has_details, has_schedule, sheet_label)
 
     selected_scale = title_scale
     if title_scale_raw == "NTS":
@@ -1396,6 +1790,17 @@ def sheetmeta_data(req: dict) -> dict:
         selected_scale = _choose_best_scale(body_scales)
 
     if suffix in AI_NO_SCALE_SUFFIXES:
+        skip_scale = True
+        selected_scale = None
+    elif not selected_scale and re.search(r"\b(?:NTS|NOT\s+TO\s+SCALE)\b", text, flags=re.IGNORECASE):
+        skip_scale = True
+        warnings.append("page scale is NTS")
+    elif not selected_scale and not skip_scale and suffix in AI_SCALE_SUFFIXES:
+        selected_scale = _infer_scale_from_title(suffix_text, suffix)
+        if selected_scale:
+            warnings.append("scale inferred from sheet title")
+
+    if not sheet_label:
         skip_scale = True
         selected_scale = None
 
@@ -1428,7 +1833,7 @@ def sheetmeta_data(req: dict) -> dict:
         "title_scale_text": title_scale or "",
         "title_scale_raw": title_scale_raw or "",
         "body_scales": body_scales,
-        "all_scales": body_scales,
+        "all_scales": all_scales,
         "selected_scale_text": selected_scale or "",
         "scale_text": selected_scale or "",
         "selected_scale_ratio": ratio or 0.0,
@@ -1478,7 +1883,10 @@ def worker_loop() -> int:
                 "response": {"ok": False, "error": str(exc)},
             }
 
-        print(json.dumps(out, ensure_ascii=False), flush=True)
+        try:
+            print(json.dumps(out, ensure_ascii=False), flush=True)
+        except OSError:
+            return 0
     return 0
 
 

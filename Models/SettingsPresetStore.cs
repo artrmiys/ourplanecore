@@ -159,10 +159,10 @@ public static class SettingsPresetStore
     public static PageSortConfig ResolvePageSort(OurPlaneCoreJob? job)
     {
         if (job != null && LoadJobPageSortOverride(job) is { } j)
-            return j;
+            return PageSortConfig.UpgradeForCurrentSchema(j);
         if (LoadGlobalPageSort() is { } g)
-            return g;
-        return PageSortConfig.BuildDefault();
+            return PageSortConfig.UpgradeForCurrentSchema(g);
+        return PageSortConfig.UpgradeForCurrentSchema(PageSortConfig.BuildDefault());
     }
 
     public static void InstallPageSortProvider(OurPlaneCoreJob? job) =>

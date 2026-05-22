@@ -105,14 +105,15 @@ public sealed class PdfSheetMetadata
     public string ProposedPageName()
     {
         if (!string.IsNullOrWhiteSpace(RenameCandidate))
-            return RenameCandidate.Trim();
+            return RenameCandidate.Trim().ToLowerInvariant();
 
-        string key = EffectiveSheetKey.Trim();
+        string key = EffectiveSheetKey.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(key))
             return "-";
+        string suffix = Suffix.Trim().ToLowerInvariant();
         return string.IsNullOrWhiteSpace(Suffix)
             ? key
-            : $"{key} {Suffix.Trim()}";
+            : $"{key} {suffix}";
     }
 
     public bool CanApplyScale() =>
@@ -161,6 +162,11 @@ public static class PdfSheetMetadataService
             if (Math.Abs(ratio - preset.Ratio) <= 0.25)
                 return preset.Label;
         }
+
+        double feetPerInch = ratio / 12.0;
+        double roundedFeet = Math.Round(feetPerInch);
+        if (roundedFeet >= 10 && Math.Abs(feetPerInch - roundedFeet) <= 0.05)
+            return $"1\" = {roundedFeet:0}'0\"";
 
         double inchesPerFoot = 12.0 / ratio;
         string inchLabel = FormatScaleInches(inchesPerFoot);
@@ -586,6 +592,7 @@ public static class PdfSheetMetadataService
         metadata.PdfPath = string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath;
         metadata.PageIndex = metadata.PageIndex < 0 ? page.PdfPage : metadata.PageIndex;
         metadata.PageNumber = metadata.PageNumber <= 0 ? metadata.PageIndex + 1 : metadata.PageNumber;
+        metadata.Suffix = metadata.Suffix.Trim().ToLowerInvariant();
         metadata.SheetKey = NormalizeSheetKey(metadata.SheetKey, metadata.SheetLabel);
         metadata.NormalizedSheetName = string.IsNullOrWhiteSpace(metadata.NormalizedSheetName)
             ? metadata.SheetKey
@@ -614,21 +621,30 @@ public static class PdfSheetMetadataService
                 : 0;
         }
 
-        if (string.IsNullOrWhiteSpace(metadata.RenameCandidate))
-            metadata.RenameCandidate = metadata.ProposedPageName();
+        metadata.RenameCandidate = string.IsNullOrWhiteSpace(metadata.RenameCandidate)
+            ? metadata.ProposedPageName()
+            : NormalizeProposedPageName(metadata.RenameCandidate);
     }
 
     private static string NormalizeSheetKey(string value, string sheetLabel)
     {
         string source = string.IsNullOrWhiteSpace(value) ? sheetLabel : value;
         string compact = Regex.Replace(source.Trim(), @"\s+", "").Replace("-", "");
-        if (Regex.IsMatch(compact, @"^[A-Za-z]{1,3}\d{1,4}(?:\.\d+)?[A-Za-z]?$"))
-            return compact;
+        if (Regex.IsMatch(compact, @"^[A-Za-z]{1,3}\d{1,4}(?:\.(?:R\d+[A-Za-z]?|[0-9]?U\d+[A-Za-z]?|\d+[A-Za-z]{0,2}))?[A-Za-z]{0,2}$"))
+            return compact.ToLowerInvariant();
 
         return new string(source
             .ToLowerInvariant()
             .Where(char.IsLetterOrDigit)
             .ToArray());
+    }
+
+    private static string NormalizeProposedPageName(string value)
+    {
+        string compact = Regex.Replace((value ?? "").Trim(), @"\s+", " ");
+        return string.IsNullOrWhiteSpace(compact)
+            ? "-"
+            : compact.ToLowerInvariant();
     }
 
     public static bool TryParseScaleMetersPerPt(string scaleText, out double scaleMetersPerPt)
@@ -673,12 +689,22 @@ public static class PdfSheetMetadataService
             return 1;
         }
 
-        string left = (clean.Contains('=', StringComparison.Ordinal)
-                ? clean.Split('=')[0]
-                : clean)
-            .Replace("\"", "", StringComparison.Ordinal)
-            .Trim();
-        double inches = ParseInches(left);
+        if (clean.Contains('=', StringComparison.Ordinal))
+        {
+            string[] pieces = clean.Split('=', 2);
+            double leftInches = ParseInches(
+                pieces[0]
+                    .Replace("\"", "", StringComparison.Ordinal)
+                    .Replace("inches", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("inch", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("in.", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("in", "", StringComparison.OrdinalIgnoreCase)
+                    .Trim());
+            double rightInches = ParseRightScaleInches(pieces[1]);
+            return leftInches > 0 && rightInches > 0 ? rightInches / leftInches : 0;
+        }
+
+        double inches = ParseInches(clean.Replace("\"", "", StringComparison.Ordinal).Trim());
         return inches > 0 ? 12.0 / inches : 0;
     }
 
@@ -691,7 +717,42 @@ public static class PdfSheetMetadataService
             .Replace("\u2019", "'", StringComparison.Ordinal)
             .Replace("\u2018", "'", StringComparison.Ordinal)
             .Replace("\u2032", "'", StringComparison.Ordinal)
+            .Replace(" feet", "'", StringComparison.OrdinalIgnoreCase)
+            .Replace(" foot", "'", StringComparison.OrdinalIgnoreCase)
+            .Replace(" ft", "'", StringComparison.OrdinalIgnoreCase)
             .Replace("'-0\"", "'0\"", StringComparison.Ordinal);
+
+    private static double ParseRightScaleInches(string value)
+    {
+        string clean = NormalizeScaleInput(value);
+        Match feetMatch = Regex.Match(clean, @"(?<feet>\d+(?:\.\d+)?)\s*(?:'|ft|feet|foot)", RegexOptions.IgnoreCase);
+        if (feetMatch.Success)
+        {
+            double feet = double.Parse(feetMatch.Groups["feet"].Value, CultureInfo.InvariantCulture);
+            string remainder = clean[feetMatch.Index..];
+            remainder = remainder[(feetMatch.Length)..];
+            Match inchesMatch = Regex.Match(remainder, @"^\s*-?\s*(?<inches>\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?(?:\.\d+)?)\s*(?:""|in|inch|inches)?", RegexOptions.IgnoreCase);
+            double inches = inchesMatch.Success ? ParseInches(inchesMatch.Groups["inches"].Value) : 0;
+            return feet * 12.0 + Math.Max(0, inches);
+        }
+
+        Match dashFeetMatch = Regex.Match(clean, @"^\s*(?<feet>\d+(?:\.\d+)?)\s*-\s*(?<inches>\d+(?:\.\d+)?)\s*""?\s*$");
+        if (dashFeetMatch.Success)
+        {
+            double feet = double.Parse(dashFeetMatch.Groups["feet"].Value, CultureInfo.InvariantCulture);
+            double inches = double.Parse(dashFeetMatch.Groups["inches"].Value, CultureInfo.InvariantCulture);
+            return feet * 12.0 + inches;
+        }
+
+        return ParseInches(
+            clean
+                .Replace("\"", "", StringComparison.Ordinal)
+                .Replace("inches", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("inch", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("in.", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("in", "", StringComparison.OrdinalIgnoreCase)
+                .Trim());
+    }
 
     private static double ParseInches(string value)
     {

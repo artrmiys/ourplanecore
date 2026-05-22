@@ -702,9 +702,9 @@ public static class OpenAiRequestRunner
         sb.AppendLine();
         sb.AppendLine("JSON shape:");
         sb.AppendLine("{");
-        sb.AppendLine("  \"sheet_label\": \"S-100\",");
-        sb.AppendLine("  \"sheet_key\": \"s100\",");
-        sb.AppendLine("  \"sheet_title\": \"FOUNDATION PLAN\",");
+        sb.AppendLine("  \"sheet_label\": \"A-700\",");
+        sb.AppendLine("  \"sheet_key\": \"a700\",");
+        sb.AppendLine("  \"sheet_title\": \"FINISH PLAN\",");
         sb.AppendLine("  \"suffix\": \"f\",");
         sb.AppendLine("  \"skip_scale\": false,");
         sb.AppendLine("  \"selected_scale_text\": \"1/8\\\" = 1'0\\\"\",");
@@ -715,8 +715,8 @@ public static class OpenAiRequestRunner
         sb.AppendLine("Suffix rules:");
         sb.AppendLine("- GENERAL NOTES / NOTES -> n, skip scale");
         sb.AppendLine("- SCHEDULE / SCHEDULES -> sc, skip scale");
-        sb.AppendLine("- DETAILS / DETAIL / typical details -> d, skip scale");
-        sb.AppendLine("- FOUNDATION PLAN -> f");
+        sb.AppendLine("- S-sheet DETAILS / DETAIL / DEATIL / S500-S699 typical details -> d, skip scale, even when the title also says SECTION");
+        sb.AppendLine("- A-sheet FINISH / FINISHES / INTERIOR -> f");
         sb.AppendLine("- FIRST/1ST FLOOR -> 1st; SECOND/2ND -> 2nd; THIRD/3RD -> 3rd; FOURTH/4TH -> 4th");
         sb.AppendLine("- ROOF / ROOF FRAMING -> rf");
         sb.AppendLine("- SECTION / SECTIONS -> sec and scale eligible");
