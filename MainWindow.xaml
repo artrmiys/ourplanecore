@@ -1460,13 +1460,14 @@
                         <Button Content="Reset" Click="Btn3dViewerReset_Click" Margin="0,0,12,4" ToolTip="Reset the 3D camera view"/>
                     </WrapPanel>
                     </Border>
-                    <Grid Background="Transparent"
+                    <Grid x:Name="ThreeDViewerViewportHost"
                           MouseLeftButtonDown="ThreeDViewerViewport_MouseLeftButtonDown"
                           MouseLeftButtonUp="ThreeDViewerViewport_MouseLeftButtonUp"
                           MouseRightButtonDown="ThreeDViewerViewport_MouseRightButtonDown"
                           MouseRightButtonUp="ThreeDViewerViewport_MouseRightButtonUp"
                           MouseMove="ThreeDViewerViewport_MouseMove"
                           MouseWheel="ThreeDViewerViewport_MouseWheel">
+                        <!-- Background set theme-aware from ApplyThreeDViewportTheme. -->
                         <Viewport3D x:Name="ThreeDViewerViewport"
                                     ClipToBounds="True">
                             <Viewport3D.Camera>

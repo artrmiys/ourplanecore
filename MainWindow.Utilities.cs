@@ -226,6 +226,7 @@ public partial class MainWindow
         InboxPanel.Background           = new SolidColorBrush(tree);
         InboxHeaderBorder.Background    = new SolidColorBrush(toolbar);
         InboxSplitter.Background        = new SolidColorBrush(splitter);
+        ApplyThreeDViewportTheme(dark);
         UpdateRecordButton();
 
         if (persist)

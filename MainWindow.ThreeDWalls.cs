@@ -477,13 +477,22 @@ public partial class MainWindow
         foreach (ThreeDRoofPlane plane in _threeDRoofPlanes)
             AddThreeDRoofPlaneMesh(group, plane, centerX, centerZ, roofBoundaryEdges);
 
-        // Once a roof group has generated plane geometry, its guide lines
-        // (ridge/hip/valley/eave bars) just clutter the surfaces with lines.
-        // Keep guides only for groups that have no built roof mesh yet.
+        // Once a roof group has built plane geometry, the editable base guides
+        // (eave/rake bars) just clutter the surfaces. But the generated
+        // ridge/hip/valley seams should read as one clean pronounced crease
+        // along where the slopes meet (the interior plane-intersection edges are
+        // otherwise cancelled, so the crease would look torn). Draw seams as a
+        // crisp edge on the crease; keep full guide bars only for groups not yet
+        // built into a mesh.
         foreach (ThreeDRoofGuide guide in _threeDRoofGuides)
         {
-            if (_threeDRoofPlanes.Any(plane => SameRoofGroup(plane.RoofGroupId, guide.RoofGroupId)))
+            bool groupHasPlanes = _threeDRoofPlanes.Any(plane => SameRoofGroup(plane.RoofGroupId, guide.RoofGroupId));
+            if (groupHasPlanes)
+            {
+                if (IsGeneratedRoofSeamGuide(guide))
+                    AddThreeDRoofSeamEdge(group, guide, centerX, centerZ);
                 continue;
+            }
             AddThreeDRoofGuideMesh(group, guide, centerX, centerZ);
         }
 
@@ -711,6 +720,34 @@ public partial class MainWindow
         group.Children.Add(model);
     }
 
+    private static bool IsGeneratedRoofSeamGuide(ThreeDRoofGuide guide) =>
+        string.Equals(guide.Status, ThreeDRoofPreviewBuilder.GeneratedSeamStatus, StringComparison.OrdinalIgnoreCase);
+
+    // Draw a generated ridge/hip/valley as a single crisp edge sitting right on
+    // the crease (the seam guide already merges collinear pieces into one clean
+    // line). Sits a hair above the surface to avoid z-fighting with the two
+    // slope faces, and uses the seam's kind color so the crease reads clearly.
+    private void AddThreeDRoofSeamEdge(Model3DGroup group, ThreeDRoofGuide guide, double centerX, double centerZ)
+    {
+        if (guide.Points.Count < 2)
+            return;
+
+        Color color = ParseWallColor(string.IsNullOrWhiteSpace(guide.Color)
+            ? ThreeDRoofGuideKinds.Color(guide.Kind)
+            : guide.Color);
+        (double ox, double oy, double oz) = RoofOffsetFor(guide.RoofGroupId);
+        for (int i = 1; i < guide.Points.Count; i++)
+        {
+            ThreeDRoofGuidePoint a = guide.Points[i - 1];
+            ThreeDRoofGuidePoint b = guide.Points[i];
+            var va = new ThreeDRoofVertex { XFeet = a.XFeet, YFeet = a.YFeet, ZFeet = a.ZFeet };
+            var vb = new ThreeDRoofVertex { XFeet = b.XFeet, YFeet = b.YFeet, ZFeet = b.ZFeet };
+            GeometryModel3D edge = AddThreeDRoofPlaneEdgeMesh(
+                group, va, vb, ox - centerX, oy + 0.05, oz - centerZ, color, 0.05);
+            RegisterThreeDRoofMeshHit(edge, guide.RoofGroupId);
+        }
+    }
+
     private void AddThreeDRoofGuideMesh(Model3DGroup group, ThreeDRoofGuide guide, double centerX, double centerZ)
     {
         if (guide.Points.Count < 2)
@@ -818,7 +855,14 @@ public partial class MainWindow
         ApplyFlatFaceNormals(mesh);
 
         bool selectedRoof = SameRoofGroup(plane.RoofGroupId, ActiveThreeDRoofGroupId());
-        Color planeColor = ToVisibleRoofColor(ParseWallColor(plane.Color), selectedRoof);
+        // Slopes render in their source takeoff's color so editing that color is
+        // visible on the model; the active roof reads a touch more vivid.
+        // Directional light (not a neutral tint) carries the form difference
+        // between adjacent faces.
+        string? takeoffColorHex = ResolveRoofGroupTakeoffColor(plane.RoofGroupId);
+        Color planeColor = ToVisibleRoofColor(
+            ParseWallColor(string.IsNullOrWhiteSpace(takeoffColorHex) ? plane.Color : takeoffColorHex),
+            selectedRoof);
         var brush = new SolidColorBrush(planeColor)
         {
             Opacity = selectedRoof ? 1.0 : 0.96,
@@ -1284,8 +1328,44 @@ public partial class MainWindow
     {
         var material = new MaterialGroup();
         material.Children.Add(new DiffuseMaterial(diffuseBrush));
-        material.Children.Add(new EmissiveMaterial(new SolidColorBrush(diffuseBrush.Color) { Opacity = 0.18 }));
+        // A faint emissive evens the surface out so the triangulation diagonals
+        // don't read as stripes across a slope. (A specular sheen was tried here
+        // instead, but on a flat-shaded mesh it lit every triangle border as a
+        // visible band, so the emissive flatten stays.)
+        material.Children.Add(new EmissiveMaterial(
+            new SolidColorBrush(diffuseBrush.Color) { Opacity = 0.18 }));
         return material;
+    }
+
+    // Roof faces render in their source takeoff's color so editing the takeoff
+    // color shows up on the model. The roof group's generated slab records the
+    // source takeoff folder; we resolve the *live* takeoff color at render time
+    // (not the snapshot copied onto the slab) so a color edit is reflected
+    // without regenerating the roof. Falls back to the slab snapshot, then null
+    // (caller keeps the plane's own color).
+    private string? ResolveRoofGroupTakeoffColor(string roofGroupId)
+    {
+        if (string.IsNullOrWhiteSpace(roofGroupId))
+            return null;
+
+        ThreeDFloorSlab? slab = _threeDFloorSlabs.FirstOrDefault(s =>
+            IsRoofSlab(s) && SameRoofGroup(s.RoofGroupId, roofGroupId));
+        if (slab == null)
+            return null;
+
+        // Slab.TakeoffFolder can combine several source folders with '|'.
+        string folder = (slab.TakeoffFolder ?? "")
+            .Split('|')
+            .FirstOrDefault(f => !string.IsNullOrWhiteSpace(f)) ?? "";
+        if (!string.IsNullOrWhiteSpace(folder))
+        {
+            TakeoffItem? item = _takeoffItems.FirstOrDefault(t =>
+                string.Equals(t.FolderPath, folder, StringComparison.OrdinalIgnoreCase));
+            if (item != null && !string.IsNullOrWhiteSpace(item.Color))
+                return item.Color;
+        }
+
+        return string.IsNullOrWhiteSpace(slab.Color) ? null : slab.Color;
     }
 
     private static Color ToVisibleRoofColor(Color color, bool selected)

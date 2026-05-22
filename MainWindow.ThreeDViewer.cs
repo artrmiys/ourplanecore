@@ -26,8 +26,42 @@ public partial class MainWindow
     private Point3D _threeDSideViewerTarget = new(0, 0, 0);
     private double _threeDViewerSceneRadius = 12;
     private Viewport3D? _threeDSideViewport;
+    private Grid? _threeDSideViewportHost;
     private PerspectiveCamera? _threeDSideCamera;
     private TextBlock? _threeDSideSummaryText;
+
+    // Studio backdrop for the 3D viewports, theme-aware: a light gradient in
+    // the light theme and a deep one in dark, so the shaded model always pops
+    // against the background instead of washing out. Used by both the main and
+    // side viewports and refreshed from ApplyTheme.
+    private static LinearGradientBrush ThreeDViewportBackdropBrush(bool dark)
+    {
+        var stops = dark
+            ? new GradientStopCollection
+            {
+                new(Color.FromRgb(0x2A, 0x2F, 0x38), 0),
+                new(Color.FromRgb(0x1A, 0x1E, 0x25), 0.55),
+                new(Color.FromRgb(0x0E, 0x11, 0x16), 1),
+            }
+            : new GradientStopCollection
+            {
+                new(Color.FromRgb(0xF7, 0xF8, 0xFA), 0),
+                new(Color.FromRgb(0xE3, 0xE7, 0xEE), 0.62),
+                new(Color.FromRgb(0xD2, 0xD8, 0xE1), 1),
+            };
+        var brush = new LinearGradientBrush(stops, new Point(0, 0), new Point(0, 1));
+        brush.Freeze();
+        return brush;
+    }
+
+    private void ApplyThreeDViewportTheme(bool dark)
+    {
+        LinearGradientBrush backdrop = ThreeDViewportBackdropBrush(dark);
+        if (ThreeDViewerViewportHost != null)
+            ThreeDViewerViewportHost.Background = backdrop;
+        if (_threeDSideViewportHost != null)
+            _threeDSideViewportHost.Background = backdrop;
+    }
 
     private void InitializeThreeDViewer()
     {

@@ -99,8 +99,10 @@ public partial class MainWindow
 
         var viewportGrid = new Grid
         {
-            Background = Brushes.Transparent,
+            // Theme-aware studio backdrop, kept in sync by ApplyThreeDViewportTheme.
+            Background = ThreeDViewportBackdropBrush(_settings.Theme == "Dark"),
         };
+        _threeDSideViewportHost = viewportGrid;
         _threeDSideCamera = new PerspectiveCamera
         {
             Position = new Point3D(18, 14, 18),

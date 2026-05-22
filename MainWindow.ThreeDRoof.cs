@@ -752,8 +752,13 @@ public partial class MainWindow
             return;
         }
 
+        // Only the editable base edges (eave/rake) belong on the plan. The
+        // auto-generated ridge/hip/valley seams are generation output - drawing
+        // them here just clutters the top-down view with helper lines (the user
+        // can't edit them, and their lengths still live on as takeoff data).
         _viewport.SetThreeDRoofGuides(_threeDRoofGuides
-            .Where(guide => IsSamePageFolder(guide.PageFolder, _currentPage.FolderPath)));
+            .Where(guide => IsSamePageFolder(guide.PageFolder, _currentPage.FolderPath))
+            .Where(IsSelectableThreeDRoofBaseGuide));
         _viewport.SetSelectedThreeDRoofGuides(_selectedThreeDRoofGuideIds);
         _viewport.SetThreeDRoofIssues(_threeDRoofIssues
             .Where(issue => IsSamePageFolder(issue.PageFolder, _currentPage.FolderPath)));

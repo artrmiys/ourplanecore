@@ -112,8 +112,12 @@ public static partial class ThreeDRoofPreviewBuilder
                 fused = false;
                 for (int i = 0; i < merged.Count; i++)
                 {
-                    if (merged[i].Kind != current.Kind)
-                        continue;
+                    // Fuse across kinds: one straight crease is mislabelled
+                    // along its length because ClassifySeam only sees the
+                    // concave footprint vertex near one end (so the rest of a
+                    // valley reads as ridge/hip). Merging collinear pieces
+                    // regardless of kind keeps the valley a single unbroken
+                    // line; the fused kind is resolved by priority below.
                     if (!TryFuseSeam(merged[i], current, out SeamSeg combined))
                         continue;
 
@@ -160,9 +164,25 @@ public static partial class ThreeDRoofPreviewBuilder
         {
             Start = new P2(a.Start.X + unit.X * lo, a.Start.Z + unit.Z * lo),
             End = new P2(a.Start.X + unit.X * hi, a.Start.Z + unit.Z * hi),
+            Kind = PrioritizeSeamKind(a.Kind, b.Kind),
         };
         return true;
     }
+
+    // A crease that touches a concave footprint vertex anywhere along it is a
+    // valley for its whole length; a hip likewise outranks a plain ridge. So
+    // when collinear pieces with mixed labels fuse, keep the most specific kind.
+    private static string PrioritizeSeamKind(string a, string b)
+    {
+        if (IsKind(a, ThreeDRoofGuideKinds.Valley) || IsKind(b, ThreeDRoofGuideKinds.Valley))
+            return ThreeDRoofGuideKinds.Valley;
+        if (IsKind(a, ThreeDRoofGuideKinds.Hip) || IsKind(b, ThreeDRoofGuideKinds.Hip))
+            return ThreeDRoofGuideKinds.Hip;
+        return a;
+    }
+
+    private static bool IsKind(string value, string kind) =>
+        string.Equals(value, kind, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<Segment> SharedSegments(IReadOnlyList<P2> first, IReadOnlyList<P2> second)
     {

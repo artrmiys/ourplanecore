@@ -114,7 +114,10 @@ public partial class MainWindow
         if (Math.Abs(pixels) < 0.001)
             return;
 
-        double scale = Math.Clamp(distance * 0.0035, 0.02, 3.5);
+        // Lower drag sensitivity: the roof should slide noticeably slower than
+        // the cursor so it can be nudged into place precisely. (Was 0.0035 /
+        // clamp 0.02..3.5, which moved the roof too fast per pixel.)
+        double scale = Math.Clamp(distance * 0.0018, 0.01, 1.6);
         double amount = pixels * scale;
         switch (axis)
         {
