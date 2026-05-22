@@ -12,6 +12,8 @@ internal static class PlanSwiftImportTests
     private const string ImageGuid = "22222222-2222-2222-2222-222222222222";
     private const string UnusedPageGuid = "33333333-3333-3333-3333-333333333333";
     private const string UnusedImageGuid = "44444444-4444-4444-4444-444444444444";
+    private const string DeckAreaSectionGuid = "55555555-5555-5555-5555-555555555555";
+    private const string DeckSecondAreaSectionGuid = "66666666-6666-6666-6666-666666666666";
 
     public static void ImportCreatesJobPagesAndMeasurements()
     {
@@ -183,11 +185,15 @@ internal static class PlanSwiftImportTests
             AssertTrue(!items.Any(item => item.Name == "Deck Area - PlanSwift segments"), "segment line item should not be created");
             TakeoffItem deckArea = items.Single(item => item.Name == "Deck Area");
             AssertTrue(deckArea.IsJoistArea, "deck area becomes joist area");
+            AssertEqual("#00FF00", deckArea.Color, "joist area uses segment color");
+            AssertFalse(deckArea.JoistAddEndJoist, "imported joist area skips end joist");
             AssertClose(0, deckArea.JoistDirectionDegrees, "segment direction applied to joist area", tolerance: 0.001);
             AssertClose(12, deckArea.JoistSpacingInches, "segment spacing applied as joist O.C.", tolerance: 0.001);
             Measurement deckMeasurement = deckArea.Measurements.Single();
+            AssertEqual("#00FF00", deckMeasurement.Color, "joist area section uses segment color");
             AssertTrue(deckMeasurement.JoistEnabled, "area measurement joist enabled");
             AssertTrue(deckMeasurement.JoistDirectionLocked, "area measurement direction locked");
+            AssertFalse(deckMeasurement.JoistAddEndJoist, "area measurement skips end joist");
             AssertClose(12, deckMeasurement.JoistSpacingInches, "area measurement spacing");
             AssertTrue(deckArea.Notes.Contains("Imported PlanSwift Segment as joist area direction", StringComparison.Ordinal), "segment source note kept on area");
 
@@ -196,6 +202,49 @@ internal static class PlanSwiftImportTests
             string sourceMetadata = File.ReadAllText(sourceMetadataPath);
             AssertTrue(sourceMetadata.Contains("Deck material", StringComparison.Ordinal), "estimate item preserved");
             AssertTrue(sourceMetadata.Contains("Installer note", StringComparison.Ordinal), "note preserved");
+        });
+    }
+
+    public static void ImportJoistSegmentsUseLinkedAreaSectionDirections()
+    {
+        WithTempParent(parent =>
+        {
+            string sourceJob = Path.Combine(parent, "PlanSwift Job");
+            string destinationParent = Path.Combine(parent, "imported");
+            CreateSyntheticPlanSwiftJob(sourceJob);
+            AddAreaWithSubtractHole(sourceJob);
+            AddSecondDeckAreaSection(sourceJob);
+            AddLinkedJoistSegmentsWithBlankColor(sourceJob);
+
+            PlanSwiftImportResult result = PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
+            {
+                SourceJobPath = sourceJob,
+                DestinationParentPath = destinationParent,
+                ConvertPageImages = false,
+            });
+
+            AssertEqual("1", result.PagesImported.ToString(), "imported page count");
+            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            TakeoffItem deckArea = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single(item => item.Name == "Deck Area");
+            AssertTrue(deckArea.IsJoistArea, "deck area becomes joist area");
+            AssertTrue(!string.Equals("#FFFFFF", deckArea.Color, StringComparison.OrdinalIgnoreCase), "blank segment color becomes stable import color");
+            AssertFalse(deckArea.JoistAddEndJoist, "imported linked joist area skips end joist");
+
+            IReadOnlyDictionary<string, Measurement> measurements = deckArea.Measurements
+                .ToDictionary(measurement => NormalizeGuid(measurement.Id), StringComparer.OrdinalIgnoreCase);
+            Measurement first = measurements[NormalizeGuid(DeckAreaSectionGuid)];
+            Measurement second = measurements[NormalizeGuid(DeckSecondAreaSectionGuid)];
+
+            AssertEqual(deckArea.Color, first.Color, "first area section uses segment color");
+            AssertEqual(deckArea.Color, second.Color, "second area section uses segment color");
+            AssertTrue(first.JoistDirectionLocked, "first area section direction locked");
+            AssertTrue(second.JoistDirectionLocked, "second area section direction locked");
+            AssertFalse(first.JoistAddEndJoist, "first area section skips end joist");
+            AssertFalse(second.JoistAddEndJoist, "second area section skips end joist");
+            AssertClose(0, first.JoistDirectionDegrees, "first section direction from linked horizontal segment", tolerance: 0.001);
+            AssertClose(90, second.JoistDirectionDegrees, "second section direction from linked vertical segment", tolerance: 0.001);
+            AssertClose(24, first.JoistSpacingInches, "first section spacing from joist source properties");
+            AssertClose(24, second.JoistSpacingInches, "second section spacing from joist source properties");
         });
     }
 
@@ -328,6 +377,33 @@ internal static class PlanSwiftImportTests
         WriteNoteData(note);
     }
 
+    private static void AddSecondDeckAreaSection(string root)
+    {
+        string secondSection = Path.Combine(root, "Takeoff", "Areas", "Deck Area", "Section 2");
+        WriteAreaSectionData(
+            secondSection,
+            "Area Section 2",
+            DeckSecondAreaSectionGuid,
+            "20",
+            "20",
+            "30",
+            "30",
+            "2");
+    }
+
+    private static void AddLinkedJoistSegmentsWithBlankColor(string root)
+    {
+        string areaItem = Path.Combine(root, "Takeoff", "Areas", "Deck Area");
+        string segment = Path.Combine(areaItem, "Linked Joist Segment");
+        string firstSection = Path.Combine(segment, "Linked Segment-1");
+        string secondSection = Path.Combine(segment, "Linked Segment-2");
+
+        Directory.CreateDirectory(secondSection);
+        WriteSegmentData(segment, color: "536870911", spacing: "24");
+        WriteSegmentSectionData(firstSection, "Linked Segment-1", "0", "0", "10", "0", "1", DeckAreaSectionGuid);
+        WriteSegmentSectionData(secondSection, "Linked Segment-2", "20", "20", "20", "30", "2", DeckSecondAreaSectionGuid);
+    }
+
     private static void WriteFolderData(string folder, string name) =>
         WriteDataXml(
             folder,
@@ -432,25 +508,34 @@ internal static class PlanSwiftImportTests
                     Prop("DigitizerData", digitizerData))));
     }
 
-    private static void WriteAreaSectionData(string folder)
+    private static void WriteAreaSectionData(
+        string folder,
+        string name = "Area Section",
+        string guid = DeckAreaSectionGuid,
+        string x1 = "0",
+        string y1 = "0",
+        string x2 = "10",
+        string y2 = "5",
+        string orderIndex = "1")
     {
         string digitizerData =
-            """
+            $"""
             <?xml version="1.0" encoding="UTF-8"?>
-            <Points><Point X="0" Y="0" PointType="Normal"/><Point X="10" Y="5" PointType="Normal"/></Points>
+            <Points><Point X="{x1}" Y="{y1}" PointType="Normal"/><Point X="{x2}" Y="{y2}" PointType="Normal"/></Points>
             """;
 
         WriteDataXml(
             folder,
             new XElement("Item",
                 new XAttribute("Class", "Area Section"),
-                new XAttribute("Name", "Area Section"),
-                new XAttribute("GUID", Guid.NewGuid().ToString("B").ToUpperInvariant()),
+                new XAttribute("Name", name),
+                new XAttribute("GUID", $"{{{guid}}}"),
                 new XElement("Properties",
-                    Prop("Name", "Area Section"),
+                    Prop("Name", name),
                     Prop("Type", "Area Section"),
                     Prop("PageGUID", $"{{{PageGuid}}}"),
                     Prop("Visible", "True"),
+                    Prop("OrderIndex", orderIndex),
                     Prop("Box Mode", "4 Point"),
                     Prop("DigitizerData", digitizerData))));
     }
@@ -502,7 +587,7 @@ internal static class PlanSwiftImportTests
                     Prop("DigitizerData", digitizerData))));
     }
 
-    private static void WriteSegmentData(string folder) =>
+    private static void WriteSegmentData(string folder, string color = "65280", string spacing = "") =>
         WriteDataXml(
             folder,
             new XElement("Item",
@@ -512,7 +597,8 @@ internal static class PlanSwiftImportTests
                 new XElement("Properties",
                     Prop("Name", "Deck Segment"),
                     Prop("Type", "Joist Segment"),
-                    Prop("Color", "65280"),
+                    Prop("Color", color),
+                    Prop("O.C. Spacing", spacing),
                     Prop("Qty", "[Takeoff]"),
                     Prop("Default", "[Joist Length]"),
                     Prop("Joist Length", "9"),
@@ -525,7 +611,8 @@ internal static class PlanSwiftImportTests
         string y1,
         string x2,
         string y2,
-        string orderIndex)
+        string orderIndex,
+        string areaSectionGuid = "")
     {
         string digitizerData =
             $"""
@@ -545,6 +632,8 @@ internal static class PlanSwiftImportTests
                     Prop("PageGUID", $"{{{PageGuid}}}"),
                     Prop("Visible", "True"),
                     Prop("OrderIndex", orderIndex),
+                    Prop("Area Section", string.IsNullOrWhiteSpace(areaSectionGuid) ? "" : $"{{{areaSectionGuid}}}"),
+                    Prop("Section Link", string.IsNullOrWhiteSpace(areaSectionGuid) ? "" : $"{{{areaSectionGuid}}}"),
                     Prop("DigitizerData", digitizerData))));
     }
 
@@ -688,6 +777,12 @@ internal static class PlanSwiftImportTests
             throw new InvalidOperationException(message);
     }
 
+    private static void AssertFalse(bool condition, string message)
+    {
+        if (condition)
+            throw new InvalidOperationException(message);
+    }
+
     private static void AssertEqual(string expected, string actual, string message)
     {
         if (!string.Equals(expected, actual, StringComparison.Ordinal))
@@ -699,4 +794,7 @@ internal static class PlanSwiftImportTests
         if (Math.Abs(expected - actual) > tolerance)
             throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
     }
+
+    private static string NormalizeGuid(string value) =>
+        (value ?? "").Trim().Trim('{', '}').ToUpperInvariant();
 }

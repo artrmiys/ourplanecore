@@ -301,39 +301,117 @@ public static partial class PlanSwiftProjectImporter
             return false;
         }
 
-        if (!TryResolveSegmentJoistLayout(segment, pageByGuid, out PlanSwiftJoistSegmentLayout layout))
+        PlanSwiftTakeoffItemRecord? sourceAreaItem = FindSourceTakeoffItem(manifest, sourceParentKey);
+        IReadOnlyList<IReadOnlyDictionary<string, string>> spacingSources = SegmentSpacingSources(segment, sourceAreaItem);
+        if (!TryResolveSegmentJoistLayout(segment, segment.Sections, pageByGuid, spacingSources, out PlanSwiftJoistSegmentLayout layout))
             return false;
+
+        IReadOnlyList<Measurement> areaMeasurements = areaItem.Measurements
+            .Where(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .ToList();
+        Dictionary<Measurement, PlanSwiftJoistSegmentLayout> linkedLayouts =
+            ResolveLinkedSegmentLayouts(segment, areaMeasurements, pageByGuid, spacingSources);
+        string segmentColor = ResolveSegmentImportColor(segment);
 
         JoistTakeoffDefaults.ApplyToNewJoistArea(areaItem);
         areaItem.IsJoistTakeoff = true;
+        areaItem.Color = segmentColor;
         areaItem.JoistDirectionDegrees = layout.DirectionDegrees;
         areaItem.JoistSpacingInches = layout.SpacingInches;
+        areaItem.JoistAddEndJoist = false;
         areaItem.Notes = AppendPlanSwiftSegmentNote(areaItem.Notes, manifest, segment, layout);
 
-        foreach (Measurement measurement in areaItem.Measurements.Where(measurement =>
-                     OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area"))
+        foreach (Measurement measurement in areaMeasurements)
         {
+            PlanSwiftJoistSegmentLayout measurementLayout = linkedLayouts.TryGetValue(measurement, out PlanSwiftJoistSegmentLayout linked)
+                ? linked
+                : layout;
+            measurement.Color = segmentColor;
             measurement.JoistEnabled = true;
             measurement.JoistDirectionLocked = true;
-            measurement.JoistDirectionDegrees = layout.DirectionDegrees;
-            measurement.JoistSpacingInches = layout.SpacingInches;
+            measurement.JoistDirectionDegrees = measurementLayout.DirectionDegrees;
+            measurement.JoistSpacingInches = measurementLayout.SpacingInches;
+            measurement.JoistAddEndJoist = false;
         }
 
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(areaItem);
         OurPlaneCoreJobStore.SaveTakeoffItem(areaItem);
+        string linkedNote = linkedLayouts.Count > 0
+            ? $" using {linkedLayouts.Count.ToString(CultureInfo.InvariantCulture)} linked area section direction(s)"
+            : "";
         messages.Add(
             $"Applied PlanSwift segment '{segment.Name}' as joist direction on '{areaItem.Name}' " +
-            $"({layout.DirectionDegrees:0.#} deg, {layout.SpacingInches:0.###}\" O.C.).");
+            $"({layout.DirectionDegrees:0.#} deg, {layout.SpacingInches:0.###}\" O.C.){linkedNote}.");
         return true;
+    }
+
+    private static PlanSwiftTakeoffItemRecord? FindSourceTakeoffItem(
+        PlanSwiftProjectManifest manifest,
+        string sourceParentKey) =>
+        manifest.TakeoffItems.FirstOrDefault(item =>
+            string.Equals(
+                NormalizeImportRelativePath(item.RelativeFolder),
+                sourceParentKey,
+                StringComparison.OrdinalIgnoreCase));
+
+    private static IReadOnlyList<IReadOnlyDictionary<string, string>> SegmentSpacingSources(
+        PlanSwiftSegmentRecord segment,
+        PlanSwiftTakeoffItemRecord? sourceAreaItem) =>
+        sourceAreaItem == null
+            ? [segment.Properties]
+            : [segment.Properties, sourceAreaItem.Properties];
+
+    private static Dictionary<Measurement, PlanSwiftJoistSegmentLayout> ResolveLinkedSegmentLayouts(
+        PlanSwiftSegmentRecord segment,
+        IReadOnlyList<Measurement> areaMeasurements,
+        IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
+        IReadOnlyList<IReadOnlyDictionary<string, string>> spacingSources)
+    {
+        var measurementByGuid = areaMeasurements
+            .Select(measurement => (Key: PlanSwiftXml.NormalizeGuid(measurement.Id), Measurement: measurement))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .GroupBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Measurement, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<Measurement, PlanSwiftJoistSegmentLayout>();
+
+        foreach (IGrouping<string, PlanSwiftSectionRecord> group in segment.Sections
+                     .GroupBy(section => LinkedAreaSectionGuid(section, segment), StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(group.Key) ||
+                !measurementByGuid.TryGetValue(group.Key, out Measurement? measurement))
+            {
+                continue;
+            }
+
+            if (TryResolveSegmentJoistLayout(segment, group.ToList(), pageByGuid, spacingSources, out PlanSwiftJoistSegmentLayout layout))
+                result[measurement] = layout;
+        }
+
+        return result;
+    }
+
+    private static string LinkedAreaSectionGuid(PlanSwiftSectionRecord section, PlanSwiftSegmentRecord segment)
+    {
+        foreach (string key in new[] { "Area Section", "Section Link", "Joist Area" })
+        {
+            if (section.Properties.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value))
+                return PlanSwiftXml.NormalizeGuid(value);
+        }
+
+        return segment.Properties.TryGetValue("Joist Area", out string? segmentValue)
+            ? PlanSwiftXml.NormalizeGuid(segmentValue)
+            : "";
     }
 
     private static bool TryResolveSegmentJoistLayout(
         PlanSwiftSegmentRecord segment,
+        IReadOnlyList<PlanSwiftSectionRecord> sections,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
+        IReadOnlyList<IReadOnlyDictionary<string, string>> spacingSources,
         out PlanSwiftJoistSegmentLayout layout)
     {
         var lines = new List<PlanSwiftSegmentLine>();
-        foreach (PlanSwiftSectionRecord section in segment.Sections)
+        foreach (PlanSwiftSectionRecord section in sections)
         {
             if (!pageByGuid.TryGetValue(section.PageGuid, out ImportedPlanSwiftPage? page) ||
                 section.Points.Count < 2)
@@ -360,7 +438,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftSegmentLine primary = lines.OrderByDescending(line => line.Length).First();
         double spacingInches = TryCalculateSegmentSpacingInches(lines, primary, out double calculatedSpacing)
             ? calculatedSpacing
-            : TryReadSegmentSpacingInches(segment, out double propertySpacing)
+            : TryReadSegmentSpacingInches(spacingSources, out double propertySpacing)
                 ? propertySpacing
                 : 16.0;
 
@@ -408,28 +486,89 @@ public static partial class PlanSwiftProjectImporter
         return spacingInches > 0.001;
     }
 
-    private static bool TryReadSegmentSpacingInches(PlanSwiftSegmentRecord segment, out double spacingInches)
+    private static bool TryReadSegmentSpacingInches(
+        IReadOnlyList<IReadOnlyDictionary<string, string>> propertySources,
+        out double spacingInches)
     {
-        foreach (string key in new[] { "Spacing", "Joist Spacing", "O.C.", "OC", "On Center" })
+        foreach (IReadOnlyDictionary<string, string> properties in propertySources)
         {
-            if (!segment.Properties.TryGetValue(key, out string? value) ||
-                string.IsNullOrWhiteSpace(value))
+            foreach (string key in new[] { "Spacing", "Joist Spacing", "O.C. Spacing", "O.C.", "OC", "On Center" })
             {
-                continue;
-            }
+                if (!properties.TryGetValue(key, out string? value) ||
+                    string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
 
-            Match match = System.Text.RegularExpressions.Regex.Match(value, @"[-+]?\d+(?:\.\d+)?");
-            if (match.Success &&
-                double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) &&
-                parsed > 0)
-            {
-                spacingInches = parsed;
-                return true;
+                Match match = Regex.Match(value, @"[-+]?\d+(?:\.\d+)?");
+                if (match.Success &&
+                    double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) &&
+                    parsed > 0)
+                {
+                    spacingInches = parsed;
+                    return true;
+                }
             }
         }
 
         spacingInches = 0;
         return false;
+    }
+
+    private static string ResolveSegmentImportColor(PlanSwiftSegmentRecord segment)
+    {
+        string color = NormalizeColorHex(segment.ColorHex);
+        return IsUsableSegmentImportColor(color)
+            ? color
+            : StableSegmentImportColor(segment);
+    }
+
+    private static string NormalizeColorHex(string color)
+    {
+        string clean = (color ?? "").Trim();
+        if (!clean.StartsWith("#", StringComparison.Ordinal) || clean.Length != 7)
+            return "";
+
+        return clean.ToUpperInvariant();
+    }
+
+    private static bool IsUsableSegmentImportColor(string color)
+    {
+        if (string.IsNullOrWhiteSpace(color))
+            return false;
+        if (!int.TryParse(color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int rgb))
+            return false;
+
+        int r = (rgb >> 16) & 0xFF;
+        int g = (rgb >> 8) & 0xFF;
+        int b = rgb & 0xFF;
+        return Math.Max(r, Math.Max(g, b)) < 242 || Math.Min(r, Math.Min(g, b)) < 220;
+    }
+
+    private static string StableSegmentImportColor(PlanSwiftSegmentRecord segment)
+    {
+        string[] palette =
+        [
+            "#E53935",
+            "#1E88E5",
+            "#43A047",
+            "#FB8C00",
+            "#8E24AA",
+            "#00ACC1",
+            "#D81B60",
+            "#7CB342",
+            "#5E35B1",
+            "#F4511E",
+        ];
+        string seed = $"{segment.Guid}|{segment.RelativeFolder}|{segment.Name}";
+        uint hash = 2166136261;
+        foreach (char ch in seed)
+        {
+            hash ^= ch;
+            hash *= 16777619;
+        }
+
+        return palette[(int)(hash % (uint)palette.Length)];
     }
 
     private static string AppendPlanSwiftSegmentNote(

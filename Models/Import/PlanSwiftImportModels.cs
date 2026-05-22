@@ -75,6 +75,8 @@ public sealed class PlanSwiftTakeoffItemRecord
     public string MeasurementType { get; init; } = "line";
     public string ColorHex { get; init; } = "#FF4444";
     public int OrderIndex { get; init; }
+    public IReadOnlyDictionary<string, string> Properties { get; init; } =
+        new Dictionary<string, string>();
     public IReadOnlyList<PlanSwiftSectionRecord> Sections { get; init; } = [];
 }
 
@@ -119,7 +121,11 @@ public sealed record PlanSwiftSectionRecord(
     IReadOnlyList<IReadOnlyList<PlanSwiftPoint>> Holes,
     string BoxMode,
     bool Closed,
-    int OrderIndex);
+    int OrderIndex)
+{
+    public IReadOnlyDictionary<string, string> Properties { get; init; } =
+        new Dictionary<string, string>();
+}
 
 public sealed record PlanSwiftPoint(float X, float Y);
 

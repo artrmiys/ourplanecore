@@ -192,6 +192,7 @@ public static partial class PlanSwiftProjectScanner
                 MeasurementType = measurementType,
                 ColorHex = PlanSwiftGeometryConverter.ParsePlanSwiftColor(item.Property("Color")),
                 OrderIndex = PlanSwiftXml.ParseInt(item.Property("OrderIndex")),
+                Properties = CopyProperties(item),
                 Sections = sections,
             });
         }
@@ -296,7 +297,10 @@ public static partial class PlanSwiftProjectScanner
                 [],
                 boxMode,
                 closed,
-                PlanSwiftXml.ParseInt(section.Property("OrderIndex"))));
+                PlanSwiftXml.ParseInt(section.Property("OrderIndex")))
+            {
+                Properties = CopyProperties(section),
+            });
         }
 
         return sections
@@ -359,7 +363,10 @@ public static partial class PlanSwiftProjectScanner
                 holes,
                 boxMode,
                 closed,
-                PlanSwiftXml.ParseInt(section.Property("OrderIndex"))));
+                PlanSwiftXml.ParseInt(section.Property("OrderIndex")))
+            {
+                Properties = CopyProperties(section),
+            });
         }
 
         return sections
