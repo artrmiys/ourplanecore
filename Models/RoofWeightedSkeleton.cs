@@ -56,7 +56,9 @@ public static class RoofWeightedSkeleton
             if (dir.LengthSq < Eps)
                 return null;
             Vec inward = new(-dir.Z, dir.X); // CCW interior is to the left
-            double speed = edgeSpeed[i] > Eps ? edgeSpeed[i] : 1.0;
+            // speed 0 == a gable/rake edge (infinite pitch, stationary wavefront);
+            // the sloped eaves run up to it. Only a negative value is invalid.
+            double speed = edgeSpeed[i] >= 0 ? edgeSpeed[i] : 1.0;
             edges[i] = new Edge(i, a, b, dir, inward, speed, inward.Dot(a));
         }
 

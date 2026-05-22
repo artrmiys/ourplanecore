@@ -75,6 +75,122 @@ internal static class RoofProbeTests
             throw new InvalidOperationException($"complex facets must tile {area:F0} sqft, got {total:F1} (gap or overlap).");
     }
 
+    public static void WeightedSkeletonGableEavesTiles()
+    {
+        // Real slab-B L: only the two adjacent perpendicular notch edges are
+        // sloped eaves (6/12 and 3/12); the other four are gables (rake, speed 0
+        // = vertical). The sloped eave facets must between them cover the whole
+        // footprint (gables have no plan area).
+        List<(double X, double Z)> fp =
+            [(48.9, 24.1), (68.8, 24.1), (68.8, 37.7), (93.2, 37.7), (93.2, 68.4), (48.7, 68.4)];
+        // edges: 0 top rake, 1 eave 6/12 (speed 2), 2 eave 3/12 (speed 4), 3..5 rake.
+        List<double> speed = [0, 2.0, 4.0, 0, 0, 0];
+
+        double area = Math.Abs(PolygonArea(fp));
+        List<RoofWeightedSkeleton.Facet>? facets = RoofWeightedSkeleton.Build(fp, speed);
+        if (facets == null)
+            throw new InvalidOperationException("skeleton should build the gable+eave L.");
+
+        // Sum only the sloped-eave facets (edges 1 and 2).
+        double sloped = facets.Where(f => f.EdgeIndex is 1 or 2).Sum(f => Math.Abs(PolygonArea(f.Polygon)));
+        if (Math.Abs(sloped - area) > Math.Max(10.0, area * 0.03))
+            throw new InvalidOperationException($"sloped eave facets must cover {area:F0} sqft, got {sloped:F1}.");
+    }
+
+    public static void MixedPitchRoofHasNoSideHole()
+    {
+        // End-to-end through the real builder: slab-B L with two adjacent eaves
+        // of DIFFERENT pitch (6/12 + 3/12) + gables. The roof surface must be
+        // continuous (faces meet at one height) - the old miter envelope left a
+        // vertical seam gap here.
+        var model = new ThreeDWallModel
+        {
+            Slabs =
+            [
+                new ThreeDFloorSlab
+                {
+                    Label = "L mixed pitch", LevelKey = "roof", ElevationFeet = 0,
+                    Points =
+                    [
+                        Point(48.9, 24.1), Point(68.8, 24.1), Point(68.8, 37.7),
+                        Point(93.2, 37.7), Point(93.2, 68.4), Point(48.7, 68.4),
+                    ],
+                },
+            ],
+            RoofGuides =
+            [
+                Guide(ThreeDRoofGuideKinds.Rake, 48.9, 24.1, 68.8, 24.1, "top rake"),
+                Guide(ThreeDRoofGuideKinds.Eave, 68.8, 24.1, 68.8, 37.7, "eave 6/12", 0.5),
+                Guide(ThreeDRoofGuideKinds.Eave, 68.8, 37.7, 93.2, 37.7, "eave 3/12", 0.25),
+                Guide(ThreeDRoofGuideKinds.Rake, 93.2, 37.7, 93.2, 68.4, "right rake"),
+                Guide(ThreeDRoofGuideKinds.Rake, 93.2, 68.4, 48.7, 68.4, "bottom rake"),
+                Guide(ThreeDRoofGuideKinds.Rake, 48.7, 68.4, 48.9, 24.1, "left rake"),
+            ],
+        };
+
+        ThreeDRoofBuildResult result = ThreeDRoofBuildService.Build(model);
+        if (result.PlaneBuildBlocked)
+            throw new InvalidOperationException("mixed-pitch L should build.");
+
+        ThreeDRoofSurface surface = ThreeDRoofSurface.Build(
+            result.Planes.Where(p => p.Kind == "roof_face_envelope"));
+        List<(double X, double Z)> fp =
+            [(48.9, 24.1), (68.8, 24.1), (68.8, 37.7), (93.2, 37.7), (93.2, 68.4), (48.7, 68.4)];
+
+        const double stepF = 0.25;
+        double maxStepRise = 0.5 * stepF; // steepest pitch * step
+        var jumps = new List<(double X, double Z, double D)>();
+        for (double x = 49; x <= 93; x += stepF)
+        for (double z = 24; z <= 68; z += stepF)
+        {
+            if (!PointInPolygon(x, z, fp) || DistToEdges(x, z, fp) < 1.0)
+                continue;
+            double? h = surface.HeightAt(x, z);
+            if (h == null)
+                continue;
+            foreach ((double nx, double nz) in new[] { (x + stepF, z), (x, z + stepF) })
+            {
+                if (!PointInPolygon(nx, nz, fp) || DistToEdges(nx, nz, fp) < 1.0)
+                    continue;
+                double? hn = surface.HeightAt(nx, nz);
+                if (hn == null)
+                    continue;
+                double d = Math.Abs(hn.Value - h.Value);
+                if (d > maxStepRise + 0.25)
+                    jumps.Add((x, z, d));
+            }
+        }
+
+        if (jumps.Count > 0)
+            throw new InvalidOperationException(
+                $"mixed-pitch roof has {jumps.Count} vertical seam discontinuity(ies) (side hole). " +
+                $"e.g. {string.Join("; ", jumps.Take(5).Select(j => $"({j.X:F1},{j.Z:F1}) d={j.D:F2}"))}");
+    }
+
+    private static bool PointInPolygon(double x, double z, IReadOnlyList<(double X, double Z)> poly)
+    {
+        bool inside = false;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+            if (poly[i].Z > z != poly[j].Z > z &&
+                x < (poly[j].X - poly[i].X) * (z - poly[i].Z) / (poly[j].Z - poly[i].Z + 1e-12) + poly[i].X)
+                inside = !inside;
+        return inside;
+    }
+
+    private static double DistToEdges(double px, double pz, IReadOnlyList<(double X, double Z)> poly)
+    {
+        double best = double.PositiveInfinity;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+        {
+            double ax = poly[j].X, az = poly[j].Z, dx = poly[i].X - ax, dz = poly[i].Z - az;
+            double len2 = dx * dx + dz * dz;
+            double t = len2 <= 1e-12 ? 0 : Math.Clamp(((px - ax) * dx + (pz - az) * dz) / len2, 0, 1);
+            double cx = ax + dx * t, cz = az + dz * t;
+            best = Math.Min(best, Math.Sqrt((px - cx) * (px - cx) + (pz - cz) * (pz - cz)));
+        }
+        return best;
+    }
+
     private static double PolygonArea(List<(double X, double Z)> poly)
     {
         double a = 0;

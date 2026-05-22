@@ -104,6 +104,8 @@ var tests = new List<(string Name, Action Run)>
     ("3d roof weighted skeleton l shape tiles", RoofProbeTests.WeightedSkeletonLShapeTiles),
     ("3d roof weighted skeleton u shape tiles", RoofProbeTests.WeightedSkeletonUShapeTiles),
     ("3d roof weighted skeleton complex footprint tiles", RoofProbeTests.WeightedSkeletonComplexFootprintTiles),
+    ("3d roof weighted skeleton gable eaves tiles", RoofProbeTests.WeightedSkeletonGableEavesTiles),
+    ("3d roof mixed pitch roof has no side hole", RoofProbeTests.MixedPitchRoofHasNoSideHole),
     ("3d roof parallel eaves offset ridge by pitch", RoofProbeTests.ParallelEavesOffsetRidgeByPitch),
     ("3d roof l shape mixed eave rake probe", RoofProbeTests.LShapeMixedEaveRakeBuilds),
     ("3d roof u shape multiple valleys probe", RoofProbeTests.UShapeMultipleValleysBuilds),

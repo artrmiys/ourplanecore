@@ -68,6 +68,14 @@ public static partial class ThreeDRoofPreviewBuilder
         if (footprint.Count < 3 || planes.Count == 0)
             return BuildEnvelopeFacesLegacy(footprint, planes, roofBase);
 
+        // Weighted straight skeleton (Revit "roof by footprint"): exact for any
+        // mix of per-edge pitches - adjacent slopes join at one elevation along
+        // ridges/hips/valleys. Falls through to the legacy lower-envelope when it
+        // cannot produce a clean tiling, so unusual footprints never regress.
+        List<EnvelopeFace>? skeleton = TryBuildEnvelopeFacesViaSkeleton(footprint, planes, roofBase);
+        if (skeleton != null)
+            return skeleton;
+
         ThreeDPolygonTriangulation tri = ThreeDPolygonTriangulator.Triangulate(
             footprint.Select(p => new ThreeDPoint { XFeet = p.X, ZFeet = p.Z }).ToList());
         if (!tri.Success || tri.TriangleIndices.Count < 3)
@@ -150,6 +158,98 @@ public static partial class ThreeDRoofPreviewBuilder
 
     // Union the coplanar pieces of each plane: drop internal shared edges,
     // walk the surviving boundary edges into one loop per slope.
+    // Map the footprint + its eave slope planes onto the weighted straight
+    // skeleton, then turn each sloped edge's skeleton cell into an EnvelopeFace.
+    // Gable (rake) edges carry no slope plane and become stationary (speed 0)
+    // walls the eaves run up to. Returns null (caller falls back) if no eave is
+    // matched, the skeleton fails, or the sloped cells do not tile the footprint.
+    private static List<EnvelopeFace>? TryBuildEnvelopeFacesViaSkeleton(
+        IReadOnlyList<P2> footprint,
+        IReadOnlyList<SlopePlane> planes,
+        double roofBase)
+    {
+        int n = footprint.Count;
+        var pts = new List<(double X, double Z)>(n);
+        foreach (P2 p in footprint)
+            pts.Add((p.X, p.Z));
+
+        var edgePlane = new SlopePlane?[n];
+        var speed = new double[n];
+        int sloped = 0;
+        for (int i = 0; i < n; i++)
+        {
+            P2 a = footprint[i];
+            P2 b = footprint[(i + 1) % n];
+            SlopePlane? match = null;
+            foreach (SlopePlane plane in planes)
+            {
+                if (plane.PitchRisePerFoot <= 1e-6)
+                    continue;
+                if (EdgeMatches(plane.Start, plane.End, a, b) || EdgeMatches(plane.End, plane.Start, a, b))
+                {
+                    match = plane;
+                    break;
+                }
+            }
+
+            edgePlane[i] = match;
+            if (match != null)
+            {
+                speed[i] = 1.0 / match.PitchRisePerFoot;
+                sloped++;
+            }
+            else
+            {
+                speed[i] = 0.0; // gable / rake: vertical
+            }
+        }
+
+        if (sloped == 0)
+            return null;
+
+        // The skeleton fixes the *mixed-pitch* seam (faces meeting at different
+        // heights). With a single pitch the legacy lower-envelope is already
+        // exact and battle-tested, so only take over when eaves actually differ
+        // in pitch.
+        int distinctPitches = planes
+            .Where(p => p.PitchRisePerFoot > 1e-6)
+            .Select(p => Math.Round(p.PitchRisePerFoot, 3))
+            .Distinct()
+            .Count();
+        if (distinctPitches < 2)
+            return null;
+
+        List<RoofWeightedSkeleton.Facet>? facets = RoofWeightedSkeleton.Build(pts, speed);
+        if (facets == null)
+            return null;
+
+        var result = new List<EnvelopeFace>();
+        double covered = 0;
+        foreach (RoofWeightedSkeleton.Facet facet in facets)
+        {
+            SlopePlane? plane = edgePlane[facet.EdgeIndex];
+            if (plane == null)
+                continue; // gable edge has no sloped facet
+
+            List<P2> poly = facet.Polygon.Select(p => new P2(p.X, p.Z)).ToList();
+            if (poly.Count < 3 || Math.Abs(SignedArea(poly)) < 0.05)
+                continue;
+            if (SignedArea(poly) < 0)
+                poly.Reverse();
+            covered += Math.Abs(SignedArea(poly));
+            result.Add(new EnvelopeFace(plane, poly, roofBase));
+        }
+
+        double area = Math.Abs(SignedArea(footprint));
+        if (result.Count == 0 || Math.Abs(covered - area) > Math.Max(2.0, area * 0.05))
+            return null;
+
+        return result;
+    }
+
+    private static bool EdgeMatches(P2 s, P2 e, P2 a, P2 b) =>
+        Distance(s, a) < 0.2 && Distance(e, b) < 0.2;
+
     private static List<EnvelopeFace> MergeCoplanarFaces(
         List<EnvelopeFace> pieces,
         double roofBase)
