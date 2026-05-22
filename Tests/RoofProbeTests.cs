@@ -21,6 +21,23 @@ internal static class RoofProbeTests
             throw new InvalidOperationException($"facets must tile 1200 sqft, got {total:F1} (gap or overlap).");
     }
 
+    public static void WeightedSkeletonLShapeTiles()
+    {
+        // Concave L (reflex corner at (20,20) -> split event -> valley), all
+        // edges eaves with MIXED pitches. Facets must tile the L (area 1200).
+        List<(double X, double Z)> lshape =
+            [(0, 0), (40, 0), (40, 20), (20, 20), (20, 40), (0, 40)];
+        List<double> speed = [2.0, 4.0, 2.0, 4.0, 2.0, 4.0];
+
+        List<RoofWeightedSkeleton.Facet>? facets = RoofWeightedSkeleton.Build(lshape, speed);
+        if (facets == null)
+            throw new InvalidOperationException("skeleton should build the concave L.");
+
+        double total = facets.Sum(f => Math.Abs(PolygonArea(f.Polygon)));
+        if (Math.Abs(total - 1200.0) > 10.0)
+            throw new InvalidOperationException($"L facets must tile 1200 sqft, got {total:F1} (gap or overlap).");
+    }
+
     private static double PolygonArea(List<(double X, double Z)> poly)
     {
         double a = 0;

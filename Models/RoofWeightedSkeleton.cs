@@ -8,9 +8,15 @@ namespace OurPlaneCore;
 // single height shared by all faces meeting there - adjacent slopes of ANY pitch
 // mix join at one elevation along ridges/hips/valleys (no side gap).
 //
-// Build returns one plan polygon per input edge (the roof facet footprint) or
-// null when the event simulation cannot complete (caller falls back to the
-// legacy lower-envelope builder, so existing roofs never regress).
+// Faces are extracted from skeleton ARCS: every wavefront vertex, over its life,
+// traces one arc that separates the two eave faces it lies between. A facet =
+// its eave segment plus every arc that borders it, walked into a loop. This is
+// robust to split events (concave valleys), where a reflex vertex divides the
+// wavefront into two loops.
+//
+// Build returns one plan polygon per input edge or null when the simulation
+// cannot complete (caller falls back to the legacy lower-envelope builder, so
+// existing roofs never regress).
 public static class RoofWeightedSkeleton
 {
     private const double Eps = 1e-7;
@@ -33,30 +39,17 @@ public static class RoofWeightedSkeleton
             Vec dir = (b - a).Normalized();
             if (dir.LengthSq < Eps)
                 return null;
-            // CCW interior is to the left; inward normal of dir (dx,dz) = (-dz,dx).
-            Vec inward = new(-dir.Z, dir.X);
+            Vec inward = new(-dir.Z, dir.X); // CCW interior is to the left
             double speed = edgeSpeed[i] > Eps ? edgeSpeed[i] : 1.0;
             edges[i] = new Edge(i, a, b, dir, inward, speed, inward.Dot(a));
         }
 
-        // Per-facet ordered boundary chains (left chain grows from edge start,
-        // right chain from edge end); the facet is leftChain + reversed right.
-        var leftChain = new List<Vec>[n];
-        var rightChain = new List<Vec>[n];
-        for (int i = 0; i < n; i++)
-        {
-            leftChain[i] = [edges[i].A];
-            rightChain[i] = [edges[i].B];
-        }
-
-        // Active list of wavefront vertices (circular, doubly linked).
         var verts = new List<Vertex>(n);
         for (int i = 0; i < n; i++)
         {
             Edge left = edges[(i - 1 + n) % n];
             Edge right = edges[i];
-            var v = new Vertex(edges[(i - 1 + n) % n].B, left, right, 0);
-            verts.Add(v);
+            verts.Add(new Vertex(left.B, left, right, 0));
         }
         for (int i = 0; i < n; i++)
         {
@@ -67,24 +60,26 @@ public static class RoofWeightedSkeleton
             if (!v.ComputeMotion())
                 return null;
 
+        var arcs = new List<Arc>();
         var events = new List<Event>();
         foreach (Vertex v in verts)
+        {
             QueueEdgeEvent(events, v);
-        foreach (Vertex v in verts)
             QueueSplitEvents(events, v, edges);
+        }
 
-        int active = n;
+        var active = new HashSet<Vertex>(verts);
         int guard = 0;
-        int guardMax = 50 * n + 200;
+        int guardMax = 80 * n + 400;
 
-        while (active > 2 && events.Count > 0)
+        while (active.Count > 2 && events.Count > 0)
         {
             if (++guard > guardMax)
                 return null;
 
-            int bi = -1;
-            for (int i = 0; i < events.Count; i++)
-                if (bi < 0 || events[i].Time < events[bi].Time)
+            int bi = 0;
+            for (int i = 1; i < events.Count; i++)
+                if (events[i].Time < events[bi].Time)
                     bi = i;
             Event ev = events[bi];
             events.RemoveAt(bi);
@@ -101,113 +96,201 @@ public static class RoofWeightedSkeleton
                     continue;
                 Vec p = ev.Point;
 
-                // p closes edge a.Right (== b.Left): node shared by facets
-                // a.Left, a.Right(=b.Left), b.Right.
-                AddToFacet(rightChain, a.Left.Index, p);
-                AddToFacet(leftChain, a.Right.Index, p);
-                AddToFacet(rightChain, a.Right.Index, p); // a.Right == b.Left
-                AddToFacet(leftChain, b.Right.Index, p);
+                arcs.Add(new Arc(a.BornPos, p, a.Left.Index, a.Right.Index));
+                arcs.Add(new Arc(b.BornPos, p, b.Left.Index, b.Right.Index));
+                a.Processed = b.Processed = true;
+                active.Remove(a);
+                active.Remove(b);
 
-                a.Processed = true;
-                b.Processed = true;
                 var w = new Vertex(p, a.Left, b.Right, ev.Time) { Prev = a.Prev, Next = b.Next };
                 a.Prev!.Next = w;
                 b.Next!.Prev = w;
                 if (!w.ComputeMotion())
                     return null;
-                active--;
+                active.Add(w);
                 QueueEdgeEvent(events, w);
                 QueueEdgeEvent(events, w.Prev!);
-                if (w.IsReflex)
-                    QueueSplitEvents(events, w, edges);
+                QueueSplitEvents(events, w, edges);
             }
             else
             {
-                // Split event: reflex vertex a hits opposite edge ev.Edge at p.
-                Vertex a = ev.A;
+                Vertex v = ev.A;
                 Vec p = ev.Point;
                 Edge hit = ev.Edge!;
-                AddToFacet(rightChain, a.Left.Index, p);
-                AddToFacet(leftChain, a.Right.Index, p);
-                // The split node also bounds the hit facet on both sides.
-                AddToFacet(leftChain, hit.Index, p);
-                AddToFacet(rightChain, hit.Index, p);
-                // Conservative: splitting the LAV correctly needs locating the
-                // opposite chain link. To stay robust we bail to fallback when a
-                // split would be needed, rather than risk a malformed loop.
-                return null;
+
+                // Find the wavefront edge of `hit` whose current span contains p:
+                // an active vertex t with t.Right == hit and t.Next.Left == hit.
+                Vertex? t = null;
+                foreach (Vertex c in active)
+                {
+                    if (c.Right.Index != hit.Index || c.Next == null || c.Next.Left.Index != hit.Index)
+                        continue;
+                    if (SpanContains(c, c.Next!, p, ev.Time))
+                    {
+                        t = c;
+                        break;
+                    }
+                }
+                if (t == null || ReferenceEquals(t, v) || ReferenceEquals(t.Next, v))
+                    continue; // cannot place the split safely -> let other events run
+
+                Vertex headE = t.Next!;
+                arcs.Add(new Arc(v.BornPos, p, v.Left.Index, v.Right.Index));
+                v.Processed = true;
+                active.Remove(v);
+
+                // Loop A: v.Prev -> w1(L=v.Left,R=hit) -> headE -> ... -> v.Prev
+                var w1 = new Vertex(p, v.Left, hit, ev.Time) { Prev = v.Prev, Next = headE };
+                v.Prev!.Next = w1;
+                headE.Prev = w1;
+                // Loop B: t -> w2(L=hit,R=v.Right) -> v.Next -> ... -> t
+                var w2 = new Vertex(p, hit, v.Right, ev.Time) { Prev = t, Next = v.Next };
+                t.Next = w2;
+                v.Next!.Prev = w2;
+
+                if (!w1.ComputeMotion() || !w2.ComputeMotion())
+                    return null;
+                active.Add(w1);
+                active.Add(w2);
+                QueueEdgeEvent(events, w1);
+                QueueEdgeEvent(events, w1.Prev!);
+                QueueEdgeEvent(events, w2);
+                QueueEdgeEvent(events, w2.Prev!);
+                QueueSplitEvents(events, w1, edges);
+                QueueSplitEvents(events, w2, edges);
             }
         }
 
-        // Remaining active vertices converge to the apex region: dump them into
-        // each incident facet.
-        Vertex? start = verts.FirstOrDefault(v => !v.Processed);
-        if (start != null)
+        // Terminal: the remaining 2 vertices are a ridge segment; 3 (or a tiny
+        // remainder) meet at a peak.
+        var rest = active.Where(v => !v.Processed).ToList();
+        if (rest.Count == 2)
         {
-            Vertex cur = start;
-            for (int i = 0; i < active; i++)
+            Vertex u = rest[0], w = rest[1];
+            arcs.Add(new Arc(u.BornPos, w.BornPos, u.Right.Index, u.Left.Index));
+        }
+        else if (rest.Count >= 3)
+        {
+            Vec apex = Centroid(rest);
+            foreach (Vertex v in rest)
             {
-                Vec p = cur.PositionAt(cur.StartTime); // last known position
-                AddToFacet(rightChain, cur.Left.Index, p);
-                AddToFacet(leftChain, cur.Right.Index, p);
-                cur = cur.Next!;
-                if (ReferenceEquals(cur, start))
-                    break;
+                arcs.Add(new Arc(v.BornPos, apex, v.Left.Index, v.Right.Index));
             }
         }
 
+        return ExtractFacets(edges, arcs, n);
+    }
+
+    private static List<Facet>? ExtractFacets(Edge[] edges, List<Arc> arcs, int n)
+    {
         var facets = new List<Facet>(n);
         for (int i = 0; i < n; i++)
         {
-            var poly = new List<(double X, double Z)>();
-            foreach (Vec v in leftChain[i])
-                poly.Add((v.X, v.Z));
-            for (int k = rightChain[i].Count - 1; k >= 0; k--)
-                poly.Add((rightChain[i][k].X, rightChain[i][k].Z));
-            poly = DedupeClose(poly);
-            if (poly.Count >= 3)
-                facets.Add(new Facet(i, poly));
+            // Segments bounding facet i: its eave plus every arc touching it.
+            var segs = new List<(Vec A, Vec B)> { (edges[i].A, edges[i].B) };
+            foreach (Arc arc in arcs)
+            {
+                if (arc.FaceA == i || arc.FaceB == i)
+                {
+                    if ((arc.P - arc.Q).LengthSq > 1e-6)
+                        segs.Add((arc.P, arc.Q));
+                }
+            }
+            List<(double X, double Z)>? loop = WalkLoop(segs);
+            if (loop != null && loop.Count >= 3 && Math.Abs(SignedArea(loop)) > 0.05)
+                facets.Add(new Facet(i, loop));
         }
 
         return facets.Count >= 1 ? facets : null;
     }
 
-    private static void AddToFacet(List<Vec>[] chain, int edgeIndex, Vec p)
+    // Order undirected segments into one closed loop by endpoint matching.
+    private static List<(double X, double Z)>? WalkLoop(List<(Vec A, Vec B)> segs)
     {
-        List<Vec> list = chain[edgeIndex];
-        if (list.Count == 0 || (list[^1] - p).LengthSq > Eps)
-            list.Add(p);
+        if (segs.Count < 3)
+            return null;
+
+        const double q = 1e3; // quantize for endpoint matching (0.001 ft)
+        (long, long) Key(Vec p) => ((long)Math.Round(p.X * q), (long)Math.Round(p.Z * q));
+
+        var adj = new Dictionary<(long, long), List<Vec>>();
+        foreach ((Vec A, Vec B) s in segs)
+        {
+            (adj.TryGetValue(Key(s.A), out List<Vec>? la) ? la : adj[Key(s.A)] = []).Add(s.B);
+            (adj.TryGetValue(Key(s.B), out List<Vec>? lb) ? lb : adj[Key(s.B)] = []).Add(s.A);
+        }
+
+        Vec start = segs[0].A;
+        var loop = new List<Vec> { start };
+        Vec prev = start;
+        Vec cur = segs[0].B;
+        int guard = 0;
+        while ((cur - start).LengthSq > 1e-6)
+        {
+            if (++guard > segs.Count + 4)
+                return null;
+            loop.Add(cur);
+            if (!adj.TryGetValue(Key(cur), out List<Vec>? nbrs))
+                return null;
+            Vec? nxt = null;
+            foreach (Vec cand in nbrs)
+            {
+                if ((cand - prev).LengthSq > 1e-6)
+                {
+                    nxt = cand;
+                    break;
+                }
+            }
+            if (nxt == null)
+                return null;
+            prev = cur;
+            cur = nxt.Value;
+        }
+
+        return loop.Select(v => (v.X, v.Z)).ToList();
     }
 
-    private static List<(double X, double Z)> DedupeClose(List<(double X, double Z)> poly)
+    private static bool SpanContains(Vertex a, Vertex b, Vec p, double t)
     {
-        var clean = new List<(double X, double Z)>();
-        foreach ((double X, double Z) p in poly)
+        Vec pa = a.PositionAt(t);
+        Vec pb = b.PositionAt(t);
+        Vec d = pb - pa;
+        double len = d.LengthSq;
+        if (len < Eps)
+            return false;
+        double s = (p - pa).Dot(d) / len;
+        return s > -0.05 && s < 1.05;
+    }
+
+    private static Vec Centroid(List<Vertex> vs)
+    {
+        double x = 0, z = 0;
+        foreach (Vertex v in vs)
         {
-            if (clean.Count == 0)
-            {
-                clean.Add(p);
-                continue;
-            }
-            double dx = p.X - clean[^1].X, dz = p.Z - clean[^1].Z;
-            if (dx * dx + dz * dz > 1e-6)
-                clean.Add(p);
+            Vec p = v.PositionAt(v.StartTime);
+            x += p.X;
+            z += p.Z;
         }
-        if (clean.Count > 1)
-        {
-            double dx = clean[0].X - clean[^1].X, dz = clean[0].Z - clean[^1].Z;
-            if (dx * dx + dz * dz <= 1e-6)
-                clean.RemoveAt(clean.Count - 1);
-        }
-        return clean;
+        return new Vec(x / vs.Count, z / vs.Count);
+    }
+
+    private static double SignedArea(List<(double X, double Z)> poly)
+    {
+        double a = 0;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+            a += (poly[j].X + poly[i].X) * (poly[j].Z - poly[i].Z);
+        return a / 2.0;
     }
 
     private static void QueueEdgeEvent(List<Event> events, Vertex v)
     {
         if (v.Processed || v.Next == null || v.Next.Processed)
             return;
-        if (TryVertexCollision(v, v.Next, out double t, out Vec p) && t > v.StartTime - Eps && t > v.Next.StartTime - Eps)
+        if (TryVertexCollision(v, v.Next, out double t, out Vec p) &&
+            t > v.StartTime - Eps && t > v.Next.StartTime - Eps)
+        {
             events.Add(new Event(EventKind.Edge, t, p, v, v.Next, null));
+        }
     }
 
     private static void QueueSplitEvents(List<Event> events, Vertex v, Edge[] edges)
@@ -223,7 +306,6 @@ public static class RoofWeightedSkeleton
         }
     }
 
-    // Two adjacent moving vertices meet when their trajectories coincide.
     private static bool TryVertexCollision(Vertex a, Vertex b, out double t, out Vec p)
     {
         t = 0;
@@ -233,7 +315,7 @@ public static class RoofWeightedSkeleton
         double denom = dVel.LengthSq;
         if (denom < Eps)
             return false;
-        t = -(dBase.Dot(dVel)) / denom;
+        t = -dBase.Dot(dVel) / denom;
         Vec pa = a.Base + a.Vel * t;
         Vec pb = b.Base + b.Vel * t;
         if ((pa - pb).LengthSq > 1e-4)
@@ -242,14 +324,10 @@ public static class RoofWeightedSkeleton
         return true;
     }
 
-    // Reflex vertex a sweeps inward; it splits the wavefront when it reaches the
-    // moving line of edge e. Solve a.PositionAt(t) on e's offset line.
     private static bool TrySplit(Vertex a, Edge e, out double t, out Vec p)
     {
         t = 0;
         p = default;
-        // e offset line at time s: e.N . x = e.D0 + e.Speed * s. The vertex is on
-        // it when e.N . a.PositionAt(t) = e.D0 + e.Speed * t.
         double nDotBase = e.N.Dot(a.Base);
         double nDotVel = e.N.Dot(a.Vel);
         double denom = nDotVel - e.Speed;
@@ -259,17 +337,16 @@ public static class RoofWeightedSkeleton
         if (t < Eps)
             return false;
         p = a.Base + a.Vel * t;
-        // The hit point must fall within the (moving) edge's extent.
-        double along = (p - (e.A + e.Dir * 0)).Dot(e.Dir);
+        double along = (p - e.A).Dot(e.Dir);
         double len = (e.B - e.A).Dot(e.Dir);
-        if (along < -0.5 || along > len + 0.5)
-            return false;
-        return true;
+        return along > -0.5 && along < len + 0.5;
     }
 
     private enum EventKind { Edge, Split }
 
     private sealed record Event(EventKind Kind, double Time, Vec Point, Vertex A, Vertex? B, Edge? Edge);
+
+    private sealed record Arc(Vec P, Vec Q, int FaceA, int FaceB);
 
     private sealed class Edge(int index, Vec a, Vec b, Vec dir, Vec n, double speed, double d0)
     {
@@ -282,22 +359,21 @@ public static class RoofWeightedSkeleton
         public double D0 { get; } = d0;
     }
 
-    private sealed class Vertex(Vec start, Edge left, Edge right, double startTime)
+    private sealed class Vertex(Vec born, Edge left, Edge right, double startTime)
     {
         public Edge Left { get; } = left;
         public Edge Right { get; } = right;
         public double StartTime { get; } = startTime;
+        public Vec BornPos { get; } = born;
         public Vertex? Prev { get; set; }
         public Vertex? Next { get; set; }
         public bool Processed { get; set; }
         public bool IsReflex { get; private set; }
-        public Vec Base { get; private set; } = start;
+        public Vec Base { get; private set; }
         public Vec Vel { get; private set; }
 
-        public Vec PositionAt(double t) => Base + Vel * (t - StartTime + StartTime); // Base already at t=0 frame
+        public Vec PositionAt(double t) => Base + Vel * t;
 
-        // Solve the vertex as the intersection of its two edges' moving offset
-        // lines: N_l . x = D_l + speed_l t ; N_r . x = D_r + speed_r t.
         public bool ComputeMotion()
         {
             double a11 = Left.N.X, a12 = Left.N.Z;
@@ -305,21 +381,17 @@ public static class RoofWeightedSkeleton
             double det = a11 * a22 - a12 * a21;
             if (Math.Abs(det) < Eps)
             {
-                // Collinear edges: vertex translates along the shared normal.
                 Vel = Left.N * Left.Speed;
-                Base = start;
+                Base = BornPos - Vel * StartTime;
                 IsReflex = false;
                 return true;
             }
 
             double bx0 = Left.D0, by0 = Right.D0;
             double bxv = Left.Speed, byv = Right.Speed;
-            // Base (t=0) and velocity from Cramer's rule.
             Base = new Vec((bx0 * a22 - a12 * by0) / det, (a11 * by0 - bx0 * a21) / det);
             Vel = new Vec((bxv * a22 - a12 * byv) / det, (a11 * byv - bxv * a21) / det);
 
-            // Reflex if the turn from Left.Dir to Right.Dir is a right turn (CCW
-            // interior). cross(Left.Dir, Right.Dir) < 0 => reflex.
             double cross = Left.Dir.X * Right.Dir.Z - Left.Dir.Z * Right.Dir.X;
             IsReflex = cross < -Eps;
             return true;
