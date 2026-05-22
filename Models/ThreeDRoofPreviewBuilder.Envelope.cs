@@ -223,10 +223,9 @@ public static partial class ThreeDRoofPreviewBuilder
         if (facets == null)
             return null;
 
-        List<SlopePlane> eavePlanes = edgePlane.Where(p => p != null).Select(p => p!).Distinct().ToList();
-
-        var result = new List<EnvelopeFace>();
-        double covered = 0;
+        // First the directly-sloped (eave) facets.
+        var eaveFacets = new List<(SlopePlane Plane, List<P2> Poly)>();
+        var gableFacets = new List<List<P2>>();
         foreach (RoofWeightedSkeleton.Facet facet in facets)
         {
             List<P2> poly = facet.Polygon.Select(p => new P2(p.X, p.Z)).ToList();
@@ -235,14 +234,32 @@ public static partial class ThreeDRoofPreviewBuilder
             if (SignedArea(poly) < 0)
                 poly.Reverse();
 
-            // A gable (rake) edge is vertical and carries no slope of its own,
-            // but the strip of plan it owns is roofed by the neighbouring slope.
-            // Assign it the lowest front-facing eave plane over its centroid (the
-            // lower-envelope answer) so the footprint stays fully sloped.
-            SlopePlane? plane = edgePlane[facet.EdgeIndex] ?? LowestPlaneAt(eavePlanes, Centroid2(poly));
+            SlopePlane? plane = edgePlane[facet.EdgeIndex];
+            if (plane != null)
+                eaveFacets.Add((plane, poly));
+            else
+                gableFacets.Add(poly); // vertical gable strip: assigned below
+        }
+
+        var result = new List<EnvelopeFace>();
+        double covered = 0;
+        foreach ((SlopePlane Plane, List<P2> Poly) f in eaveFacets)
+        {
+            covered += Math.Abs(SignedArea(f.Poly));
+            result.Add(new EnvelopeFace(f.Plane, f.Poly, roofBase));
+        }
+
+        // A gable (rake) edge is vertical; the plan strip it owns is roofed by
+        // the slope it abuts. Continue the eave facet that shares the longest
+        // edge with the strip (so the surface stays continuous and no stray
+        // distant slope is projected onto it).
+        List<SlopePlane> allEavePlanes = edgePlane.Where(p => p != null).Select(p => p!).Distinct().ToList();
+        foreach (List<P2> poly in gableFacets)
+        {
+            SlopePlane? plane = AdjacentEavePlane(poly, eaveFacets)
+                ?? LowestPlaneAt(allEavePlanes, Centroid2(poly));
             if (plane == null)
                 continue;
-
             covered += Math.Abs(SignedArea(poly));
             result.Add(new EnvelopeFace(plane, poly, roofBase));
         }
@@ -257,6 +274,60 @@ public static partial class ThreeDRoofPreviewBuilder
     private static bool EdgeMatches(P2 s, P2 e, P2 a, P2 b) =>
         Distance(s, a) < 0.2 && Distance(e, b) < 0.2;
 
+    // The eave facet sharing the longest (collinear, overlapping) edge with the
+    // gable strip - i.e. the slope the strip physically continues.
+    private static SlopePlane? AdjacentEavePlane(
+        List<P2> strip,
+        List<(SlopePlane Plane, List<P2> Poly)> eaveFacets)
+    {
+        SlopePlane? best = null;
+        double bestShared = 0.1;
+        foreach ((SlopePlane Plane, List<P2> Poly) f in eaveFacets)
+        {
+            double shared = SharedEdgeLength(strip, f.Poly);
+            if (shared > bestShared)
+            {
+                bestShared = shared;
+                best = f.Plane;
+            }
+        }
+
+        return best;
+    }
+
+    private static double SharedEdgeLength(List<P2> a, List<P2> b)
+    {
+        double total = 0;
+        for (int i = 0; i < a.Count; i++)
+        {
+            P2 a0 = a[i], a1 = a[(i + 1) % a.Count];
+            P2 dir = new(a1.X - a0.X, a1.Z - a0.Z);
+            double len = Math.Sqrt(dir.X * dir.X + dir.Z * dir.Z);
+            if (len < 1e-6)
+                continue;
+            P2 u = new(dir.X / len, dir.Z / len);
+
+            for (int j = 0; j < b.Count; j++)
+            {
+                P2 b0 = b[j], b1 = b[(j + 1) % b.Count];
+                // Both b endpoints on a's line?
+                if (PerpDist(a0, u, b0) > 0.05 || PerpDist(a0, u, b1) > 0.05)
+                    continue;
+                double t0 = (b0.X - a0.X) * u.X + (b0.Z - a0.Z) * u.Z;
+                double t1 = (b1.X - a0.X) * u.X + (b1.Z - a0.Z) * u.Z;
+                double lo = Math.Max(0, Math.Min(t0, t1));
+                double hi = Math.Min(len, Math.Max(t0, t1));
+                if (hi - lo > 0.05)
+                    total += hi - lo;
+            }
+        }
+
+        return total;
+    }
+
+    private static double PerpDist(P2 origin, P2 unitDir, P2 p) =>
+        Math.Abs(unitDir.X * (p.Z - origin.Z) - unitDir.Z * (p.X - origin.X));
+
     private static P2 Centroid2(IReadOnlyList<P2> poly)
     {
         double x = 0, z = 0;
@@ -268,8 +339,8 @@ public static partial class ThreeDRoofPreviewBuilder
         return new P2(x / poly.Count, z / poly.Count);
     }
 
-    // Lowest front-facing (height >= 0) eave plane over a point - the lower
-    // envelope's answer for who roofs a gable strip.
+    // Lowest front-facing eave plane over a point - lower-envelope fallback for a
+    // gable strip with no clearly adjacent slope facet.
     private static SlopePlane? LowestPlaneAt(IReadOnlyList<SlopePlane> planes, P2 point)
     {
         SlopePlane? best = null;

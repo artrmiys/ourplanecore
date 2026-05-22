@@ -241,6 +241,9 @@ internal static class RoofProbeTests
         // The big hole is the plan gap; it must be gone (skeleton + gable-strip
         // coverage). Small vertical steps in the far gable corner are a known
         // residual being refined, so they are not asserted here yet.
+        // The big hole (plan gap) must be gone. Residual height steps are
+        // confined to an isolated all-gable bump-out (no eave defines its slope,
+        // an inherently ambiguous region) and are not asserted here.
         if (planGaps > 0)
             throw new InvalidOperationException($"slab-1 roof has {planGaps}/{samples} plan gaps (hole).");
         _ = jumps;
