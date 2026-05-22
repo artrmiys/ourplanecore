@@ -32,7 +32,7 @@ public sealed class SuffixRule
 
 public sealed class PageSortConfig
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public int SchemaVersion { get; set; }
 
@@ -76,12 +76,13 @@ public sealed class PageSortConfig
             new() { Kind = "FileKeyword", Match = "civil", Target = "Others" },
         ],
         SuffixTopOrder = ["v", "wt", "ft", "sv", "sw"],
-        SuffixDetectionOrder = ["sec", "wt", "ft", "sv", "sw", "u", "d", "f", "v"],
+        SuffixDetectionOrder = ["shw", "sec", "wt", "ft", "sv", "sw", "u", "d", "f", "v"],
         SuffixRules =
         [
             new() { Suffix = "d", FirstLetter = "s", Target = "details struct" },
             new() { Suffix = "d", FirstLetter = "a", Target = "details arch" },
             new() { Suffix = "f", FirstLetter = "a", Target = "finish" },
+            new() { Suffix = "shw", FirstLetter = "", Target = "shear walls" },
             new() { Suffix = "u", FirstLetter = "", Target = "units" },
             new() { Suffix = "sec", FirstLetter = "", Target = "sections" },
         ],
@@ -107,6 +108,12 @@ public sealed class PageSortConfig
                 AddArchStructRule(upgraded, "FirstLetter", letter, "Others");
             foreach (string keyword in new[] { "mep", "mechanical", "plumbing", "electrical", "civil" })
                 AddArchStructRule(upgraded, "FileKeyword", keyword, "Others");
+        }
+
+        if (upgraded.SchemaVersion < 4)
+        {
+            AddSuffixDetection(upgraded, "shw");
+            AddSuffixRule(upgraded, "shw", "", "shear walls");
         }
 
         upgraded.SchemaVersion = CurrentSchemaVersion;

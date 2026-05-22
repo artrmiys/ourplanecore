@@ -717,6 +717,7 @@ public static class OpenAiRequestRunner
         sb.AppendLine("- SCHEDULE / SCHEDULES -> sc, skip scale");
         sb.AppendLine("- S-sheet DETAILS / DETAIL / DEATIL / S500-S699 typical details -> d, skip scale, even when the title also says SECTION");
         sb.AppendLine("- A-sheet FINISH / FINISHES / INTERIOR -> f");
+        sb.AppendLine("- Any sheet mentioning SHEAR / SHEAR WALL -> shw; skip scale only when it is also a schedule/detail");
         sb.AppendLine("- FIRST/1ST FLOOR -> 1st; SECOND/2ND -> 2nd; THIRD/3RD -> 3rd; FOURTH/4TH -> 4th");
         sb.AppendLine("- ROOF / ROOF FRAMING -> rf");
         sb.AppendLine("- SECTION / SECTIONS -> sec and scale eligible");

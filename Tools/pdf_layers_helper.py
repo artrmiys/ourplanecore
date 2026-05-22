@@ -39,7 +39,7 @@ AI_ALLOWED_SCALES = [
     '1" = 50\'0"',
     '1" = 100\'0"',
 ]
-AI_SCALE_SUFFIXES = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw"}
+AI_SCALE_SUFFIXES = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw", "shw"}
 AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t"}
 SHEET_PREFIXES = {"a", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l", "id", "fp", "fa", "fs"}
 SHEET_LABEL_RE = re.compile(
@@ -495,7 +495,7 @@ def _title_from_lines(text: str, sheet_label: str | None) -> str:
 
     keywords = [
         "foundation", "floor", "framing", "roof", "section", "details", "detail",
-        "deatil", "detial", "finish", "interior",
+        "deatil", "detial", "finish", "interior", "shear",
         "schedule", "notes", "elevation", "partition", "wall type", "floor type",
     ]
     for line in lines:
@@ -536,7 +536,17 @@ def _has_finish_word(value: str | None) -> bool:
     return bool(re.search(r"\b(?:finish(?:es|ed)?|interior(?:s)?)\b", value or "", flags=re.IGNORECASE))
 
 
-def _detect_suffix(sheet_title: str | None, has_details: bool, has_schedule: bool, sheet_label: str | None = None) -> tuple[str | None, bool]:
+def _has_shear_word(value: str | None) -> bool:
+    return bool(re.search(r"\bshear(?:[\s_-]*walls?)?\b|\bshearwalls?\b", value or "", flags=re.IGNORECASE))
+
+
+def _detect_suffix(
+    sheet_title: str | None,
+    has_details: bool,
+    has_schedule: bool,
+    sheet_label: str | None = None,
+    has_shear: bool = False,
+) -> tuple[str | None, bool]:
     title = (sheet_title or "").lower()
     label = (sheet_label or "").strip().lower().replace("-", "")
     is_arch = label.startswith("a")
@@ -554,6 +564,8 @@ def _detect_suffix(sheet_title: str | None, has_details: bool, has_schedule: boo
         8: "8th",
     }
 
+    if has_shear or _has_shear_word(title):
+        return "shw", bool(has_details or has_schedule)
     if is_struct and (has_details or _has_detail_word(title)):
         return "d", True
     if has_schedule or "schedule" in title or "schedules" in title:
@@ -1773,9 +1785,11 @@ def sheetmeta_data(req: dict) -> dict:
         if scale and _scale_key(scale) not in {_scale_key(existing) for existing in all_scales}:
             all_scales.append(scale)
     suffix_text = f"{sheet_title} {filename_title}".strip()
+    shear_text = f"{suffix_text} {text}".strip()
     has_details = _has_detail_word(suffix_text)
     has_schedule = bool(re.search(r"\bschedules?\b", suffix_text, flags=re.IGNORECASE))
-    suffix, skip_scale = _detect_suffix(suffix_text, has_details, has_schedule, sheet_label)
+    has_shear = _has_shear_word(shear_text)
+    suffix, skip_scale = _detect_suffix(suffix_text, has_details, has_schedule, sheet_label, has_shear=has_shear)
 
     selected_scale = title_scale
     if title_scale_raw == "NTS":

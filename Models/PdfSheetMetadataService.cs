@@ -461,7 +461,7 @@ public static class PdfSheetMetadataService
         string.IsNullOrWhiteSpace(suffix) ||
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "1st", "2nd", "3rd", "4th", "5th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw",
+            "1st", "2nd", "3rd", "4th", "5th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw", "shw",
         }.Contains(suffix);
 
     public static SmartSheetLearningRecord BuildLearningRecord(

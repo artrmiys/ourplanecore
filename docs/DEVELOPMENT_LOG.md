@@ -2818,6 +2818,35 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   packaged-exe startup log check with no `ERROR` after the last
   `Application startup.` marker.
 
+## 2026-05-22 PDF Import Shear Wall Rule
+
+- Added shear-wall sheet metadata rule: any sheet where extracted PDF text,
+  title, or filename mentions `SHEAR` / `SHEAR WALL` now gets suffix `shw`.
+- `shw` is scale-capable for plan/elevation sheets, but schedule/detail shear
+  sheets keep `skip_scale`.
+- Page sorting now detects suffix `shw` and routes it to folder `shear walls`.
+- PageSort config schema upgraded to version `4`, so existing saved PageSort
+  presets receive `shw -> shear walls` once, without re-adding it after the user
+  edits and saves the current schema.
+- Applied to current job
+  `C:\Users\User\Desktop\Takeof_desctop\84. Main Str Hempstead_Neil_EBS` after
+  snapshot `.snapshots\20260522_181149_before_shear_wall_rules`:
+  - `400` pages reanalyzed;
+  - `42` sheets renamed/moved to `00. imported\shear walls`;
+  - `41` scale fields updated or cleared according to sheet type;
+  - remaining `shw` outside `shear walls`: `0`;
+  - errors: `0`.
+- Verification passed:
+  `python -m py_compile .\Tools\pdf_layers_helper.py`,
+  direct helper suffix smoke cases,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`224/224`),
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`), compressed
+  single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `A7A73CFC7B51B6B6AE6D3BD44267BDEF30FDCE2A6B8EE060DF79D617BFDA5632`, and
+  packaged-exe startup log check with no `ERROR` after the last
+  `Application startup.` marker.
+
 ## 2026-05-22 PDF Import Detail/Finish Folder Rules
 
 - Added structural detail priority for sheet metadata: `S...` sheets with

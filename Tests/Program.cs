@@ -1913,12 +1913,18 @@ static void PageSortDefaultsIncludeFinishAndMepOthers()
     PageSortConfig cfg = PageSortConfig.BuildDefault();
 
     AssertTrue(cfg.SuffixDetectionOrder.Contains("f", StringComparer.OrdinalIgnoreCase), "f suffix should be detected");
+    AssertTrue(cfg.SuffixDetectionOrder.Contains("shw", StringComparer.OrdinalIgnoreCase), "shw suffix should be detected");
     AssertTrue(
         cfg.SuffixRules.Any(rule =>
             string.Equals(rule.Suffix, "f", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(rule.FirstLetter, "a", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(rule.Target, "finish", StringComparison.OrdinalIgnoreCase)),
         "A/f sheets should route to finish");
+    AssertTrue(
+        cfg.SuffixRules.Any(rule =>
+            string.Equals(rule.Suffix, "shw", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Target, "shear walls", StringComparison.OrdinalIgnoreCase)),
+        "shw sheets should route to shear walls");
 
     foreach (string letter in new[] { "m", "p", "e", "c" })
     {
@@ -1955,11 +1961,17 @@ static void PageSortUpgradeAddsFinishAndMepRules()
         upgraded.SchemaVersion == PageSortConfig.CurrentSchemaVersion,
         "schema version should upgrade to current");
     AssertTrue(upgraded.SuffixDetectionOrder.Contains("f", StringComparer.OrdinalIgnoreCase), "upgrade should add f detection");
+    AssertTrue(upgraded.SuffixDetectionOrder.Contains("shw", StringComparer.OrdinalIgnoreCase), "upgrade should add shw detection");
     AssertTrue(
         upgraded.SuffixRules.Any(rule =>
             string.Equals(rule.Suffix, "f", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(rule.Target, "finish", StringComparison.OrdinalIgnoreCase)),
         "upgrade should add finish rule");
+    AssertTrue(
+        upgraded.SuffixRules.Any(rule =>
+            string.Equals(rule.Suffix, "shw", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(rule.Target, "shear walls", StringComparison.OrdinalIgnoreCase)),
+        "upgrade should add shear walls rule");
     AssertTrue(
         upgraded.ArchStructRules.Any(rule =>
             string.Equals(rule.Kind, "FileKeyword", StringComparison.OrdinalIgnoreCase) &&
