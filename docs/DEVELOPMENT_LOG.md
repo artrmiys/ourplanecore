@@ -2880,6 +2880,42 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   - visible user launch left running from the update exe: process alive,
     `0` errors after latest `Application startup`, job title loaded.
 
+## 2026-05-22 PDF Import Bracing Shear Correction
+
+- Adjusted the second-pass shear fix after reviewing the current job again:
+  `BRACING PLAN` sheets can be legitimate shear wall sheets even when the sheet
+  title does not literally say `SHEAR WALL`.
+- Final rule:
+  - title or filename saying `SHEAR` / `SHEAR WALL` -> `shw`;
+  - `BRACING PLAN` with visible shear wall callouts in the PDF body -> `shw`;
+  - roof/framing/foundation sheets do not become `shw` from body notes like
+    `SEE S6.## SERIES`;
+  - detail and schedule titles still do not become `shw` from body text alone.
+- Applied repair to current job
+  `C:\Users\User\Desktop\Takeof_desctop\84. Main Str Hempstead_Neil_EBS` after
+  snapshots:
+  `.snapshots\20260522_184353_before_shear_body_only_repair` and
+  `.snapshots\20260522_184601_before_restore_bracing_shear_walls`.
+- Current job result:
+  - total pages checked: `400`;
+  - current `shw` pages: `4`;
+  - `shw` titles: `CONSTRUCTION BRACING PLAN - PART A/B/C/D`;
+  - roof/foundation/plain framing sheets still marked `shw`: `0`.
+- Verification passed:
+  `python -m py_compile .\Tools\pdf_layers_helper.py`,
+  direct helper smoke cases,
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`224/224`), `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `0A26852D7B4906C3DE64162376A4CE544F80EE3BBB49E9E2C5FD2B3B9B9503CE`.
+- Packaged launch validation:
+  - hidden launch: process alive, `0` errors after latest `Application startup`,
+    `Loaded takeoffs` present;
+  - visible launch left running from the update exe: process alive, window
+    title `OurPlaneCore — 84. Main Str Hempstead_Neil_EBS`, responding, `0`
+    errors after latest `Application startup`.
+
 ## 2026-05-22 PDF Import Detail/Finish Folder Rules
 
 - Added structural detail priority for sheet metadata: `S...` sheets with

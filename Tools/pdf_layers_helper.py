@@ -1788,14 +1788,13 @@ def sheetmeta_data(req: dict) -> dict:
     has_details = _has_detail_word(suffix_text)
     has_schedule = bool(re.search(r"\bschedules?\b", suffix_text, flags=re.IGNORECASE))
     has_title_shear = _has_shear_word(suffix_text)
-    has_body_shear = _has_shear_word(text)
-    body_shear_allowed = (
-        has_body_shear
+    has_bracing_shear = (
+        _has_shear_word(text)
         and not has_details
         and not has_schedule
-        and bool(re.search(r"\b(?:plan|framing|bracing|floor|roof|foundation)\b", suffix_text, flags=re.IGNORECASE))
+        and bool(re.search(r"\bbracing\b", suffix_text, flags=re.IGNORECASE))
     )
-    has_shear = has_title_shear or body_shear_allowed
+    has_shear = has_title_shear or has_bracing_shear
     suffix, skip_scale = _detect_suffix(suffix_text, has_details, has_schedule, sheet_label, has_shear=has_shear)
 
     selected_scale = title_scale
