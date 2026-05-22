@@ -22,6 +22,10 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled">
                     <StackPanel Orientation="Horizontal" Margin="6,3">
+                        <Image Source="Assets/logo-64.png" Width="40" Height="40"
+                               Margin="2,0,12,0" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               ToolTip="OurPlaneCore"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,9,0">
                             <TextBlock Text="Job" Style="{StaticResource TopCommandLabel}"/>
                             <Button Content="Open / Import" Click="BtnOpenImportMenu_Click" Style="{StaticResource TopCommandButton}"
@@ -298,6 +302,11 @@
             <StatusBarItem>
                 <TextBlock x:Name="TxtStatus"
                            Text="Ready. Open or create a job to start."/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <Image Source="Assets/logo-32.png" Width="16" Height="16"
+                       Margin="6,0,2,0" VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
             </StatusBarItem>
         </StatusBar>
 
