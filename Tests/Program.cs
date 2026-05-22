@@ -21,6 +21,7 @@ var tests = new List<(string Name, Action Run)>
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
     ("pdf export writes selected sheets", PdfExportWritesSelectedSheets),
     ("pdf export writes measurement lines", PdfExportWritesMeasurementLines),
+    ("pdf export skips invalid area point artifacts", PdfExportSkipsInvalidAreaPointArtifacts),
     ("pdf export defaults measurements on for measured sheets", TakeoffsTreeRegressionTests.PdfExportDefaultsMeasurementsOnForMeasuredSheets),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
@@ -570,6 +571,80 @@ static void PdfExportWritesMeasurementLines()
             color.Green < 90 &&
             color.Blue < 90);
         AssertTrue(redPixels > 20, "PDF export should contain visible red measurement geometry");
+    }
+    finally
+    {
+        TryDeleteDirectory(dir);
+    }
+}
+
+static void PdfExportSkipsInvalidAreaPointArtifacts()
+{
+    string dir = Path.Combine(Path.GetTempPath(), "opc_pdf_export_invalid_area", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    try
+    {
+        string sourcePdf = Path.Combine(dir, "source.pdf");
+        using (var stream = File.Create(sourcePdf))
+        using (var document = SKDocument.CreatePdf(stream))
+        {
+            SKCanvas canvas = document.BeginPage(120, 80);
+            canvas.Clear(SKColors.White);
+            document.EndPage();
+            document.Close();
+        }
+
+        string outputPdf = Path.Combine(dir, "export.pdf");
+        var page = new PageInfo
+        {
+            Name = "Measured",
+            FolderPath = dir,
+            PdfPath = sourcePdf,
+            PdfPage = 0,
+            ScaleMetersPerPt = 1,
+        };
+        var item = new TakeoffItem
+        {
+            Name = "Invalid Joist Area",
+            Color = "#00BCD4",
+            MeasurementType = "area",
+            IsJoistTakeoff = true,
+        };
+        var measurement = new Measurement
+        {
+            MType = "area",
+            JoistEnabled = true,
+            JoistDirectionLocked = true,
+            Points = [new SKPoint(60, 40)],
+        };
+        var options = new PdfExportOptions(
+            IncludeMeasurements: true,
+            IncludeAnnotations: false,
+            IncludeLegend: false,
+            UnitMode: UnitMode.Imperial,
+            LegendAnchor: "BottomLeft",
+            LegendScale: 1,
+            HeaderScale: 1,
+            ShowMeasurementLabels: false,
+            ShowLineLabels: false,
+            ShowAreaLabels: false,
+            ShowCountLabels: false,
+            MeasurementStrokeScale: 4.0,
+            PointSizeScale: 4.0,
+            MeasurementLabelScale: 1.0);
+
+        (bool ok, string error) = PdfExporter.TryExport(
+            [new PdfExportPageInput(page, [new PdfExportTakeoffInput(item, [measurement])], [])],
+            outputPdf,
+            options);
+
+        AssertTrue(ok, $"PDF export with invalid area should succeed: {error}");
+        using SKBitmap bitmap = RenderPdfPage(outputPdf);
+        int cyanPixels = CountPixels(bitmap, color =>
+            color.Red < 80 &&
+            color.Green > 130 &&
+            color.Blue > 150);
+        AssertEqual("0", cyanPixels.ToString(), "invalid one-point area should not export as point marker");
     }
     finally
     {

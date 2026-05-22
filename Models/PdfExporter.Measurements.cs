@@ -70,6 +70,8 @@ public static partial class PdfExporter
             DrawJoistLayout(canvas, measurement, color, options, drawSegments: true, drawLabels: false);
             return;
         }
+        if (type == "area")
+            return;
 
         if (type == "line" && measurement.Points.Count >= 2)
         {
@@ -78,6 +80,8 @@ public static partial class PdfExporter
             DrawLinePointMarkers(canvas, measurement.Points, color, pointScale);
             return;
         }
+        if (type == "line")
+            return;
 
         foreach (SKPoint point in measurement.Points)
         {
