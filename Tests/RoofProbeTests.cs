@@ -38,6 +38,43 @@ internal static class RoofProbeTests
             throw new InvalidOperationException($"L facets must tile 1200 sqft, got {total:F1} (gap or overlap).");
     }
 
+    public static void WeightedSkeletonUShapeTiles()
+    {
+        List<(double X, double Z)> u =
+            [(0, 0), (40, 0), (40, 30), (30, 30), (30, 10), (10, 10), (10, 30), (0, 30)];
+        List<double> speed = [2.0, 4.0, 3.0, 4.0, 2.0, 4.0, 3.0, 4.0];
+
+        List<RoofWeightedSkeleton.Facet>? facets = RoofWeightedSkeleton.Build(u, speed);
+        if (facets == null)
+            throw new InvalidOperationException("skeleton should build the U.");
+
+        double total = facets.Sum(f => Math.Abs(PolygonArea(f.Polygon)));
+        if (Math.Abs(total - 800.0) > 10.0)
+            throw new InvalidOperationException($"U facets must tile 800 sqft, got {total:F1} (gap or overlap).");
+    }
+
+    public static void WeightedSkeletonComplexFootprintTiles()
+    {
+        // Real "Prairie's Edge" slab-1 footprint (10 vertices, multiple reflex
+        // corners), all eaves with mixed pitches. Facets must tile its area.
+        List<(double X, double Z)> fp =
+        [
+            (144.8, 76.2), (131.1, 76.2), (131.1, 55.8), (117.2, 55.8),
+            (117.2, 50.1), (123.5, 50.1), (123.5, 41.9), (153.4, 41.9),
+            (153.4, 69.6), (145.2, 69.6),
+        ];
+        List<double> speed = [2, 4, 3, 4, 2, 4, 3, 4, 2, 4];
+
+        double area = Math.Abs(PolygonArea(fp));
+        List<RoofWeightedSkeleton.Facet>? facets = RoofWeightedSkeleton.Build(fp, speed);
+        if (facets == null)
+            throw new InvalidOperationException("skeleton should build the complex footprint.");
+
+        double total = facets.Sum(f => Math.Abs(PolygonArea(f.Polygon)));
+        if (Math.Abs(total - area) > Math.Max(8.0, area * 0.02))
+            throw new InvalidOperationException($"complex facets must tile {area:F0} sqft, got {total:F1} (gap or overlap).");
+    }
+
     private static double PolygonArea(List<(double X, double Z)> poly)
     {
         double a = 0;

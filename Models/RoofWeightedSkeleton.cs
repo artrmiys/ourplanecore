@@ -31,6 +31,22 @@ public static class RoofWeightedSkeleton
         if (n < 3 || edgeSpeed.Count != n)
             return null;
 
+        // The sweep needs the winding whose left normal (-dz,dx) points into the
+        // footprint; in these (X,Z) coords that is the SignedAreaXz < 0 winding.
+        // Reverse the other winding (and its per-edge speeds) to match.
+        if (SignedAreaXz(footprintCcw) > 0)
+        {
+            var rp = new List<(double X, double Z)>(n);
+            var rs = new List<double>(n);
+            for (int i = 0; i < n; i++)
+            {
+                rp.Add(footprintCcw[(n - i) % n]);
+                rs.Add(edgeSpeed[(n - 1 - i + n) % n]);
+            }
+            footprintCcw = rp;
+            edgeSpeed = rs;
+        }
+
         var edges = new Edge[n];
         for (int i = 0; i < n; i++)
         {
@@ -72,7 +88,7 @@ public static class RoofWeightedSkeleton
         int guard = 0;
         int guardMax = 80 * n + 400;
 
-        while (active.Count > 2 && events.Count > 0)
+        while (events.Count > 0)
         {
             if (++guard > guardMax)
                 return null;
@@ -161,20 +177,37 @@ public static class RoofWeightedSkeleton
             }
         }
 
-        // Terminal: the remaining 2 vertices are a ridge segment; 3 (or a tiny
-        // remainder) meet at a peak.
-        var rest = active.Where(v => !v.Processed).ToList();
-        if (rest.Count == 2)
+        // Terminal: after splits the wavefront may be several independent loops.
+        // Finalize each on its own - a 2-vertex loop is a ridge, 3+ meet at a
+        // peak.
+        var seen = new HashSet<Vertex>();
+        foreach (Vertex s in active)
         {
-            Vertex u = rest[0], w = rest[1];
-            arcs.Add(new Arc(u.BornPos, w.BornPos, u.Right.Index, u.Left.Index));
-        }
-        else if (rest.Count >= 3)
-        {
-            Vec apex = Centroid(rest);
-            foreach (Vertex v in rest)
+            if (s.Processed || seen.Contains(s))
+                continue;
+
+            var loop = new List<Vertex>();
+            Vertex c = s;
+            int g = 0;
+            do
             {
-                arcs.Add(new Arc(v.BornPos, apex, v.Left.Index, v.Right.Index));
+                if (c.Processed)
+                    break;
+                loop.Add(c);
+                seen.Add(c);
+                c = c.Next!;
+            }
+            while (c != null && !ReferenceEquals(c, s) && ++g < active.Count + 2);
+
+            if (loop.Count == 2)
+            {
+                arcs.Add(new Arc(loop[0].BornPos, loop[1].BornPos, loop[0].Right.Index, loop[0].Left.Index));
+            }
+            else if (loop.Count >= 3)
+            {
+                Vec apex = Centroid(loop);
+                foreach (Vertex v in loop)
+                    arcs.Add(new Arc(v.BornPos, apex, v.Left.Index, v.Right.Index));
             }
         }
 
@@ -274,6 +307,14 @@ public static class RoofWeightedSkeleton
         return new Vec(x / vs.Count, z / vs.Count);
     }
 
+    private static double SignedAreaXz(IReadOnlyList<(double X, double Z)> poly)
+    {
+        double a = 0;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+            a += (poly[j].X + poly[i].X) * (poly[j].Z - poly[i].Z);
+        return a / 2.0;
+    }
+
     private static double SignedArea(List<(double X, double Z)> poly)
     {
         double a = 0;
@@ -285,6 +326,10 @@ public static class RoofWeightedSkeleton
     private static void QueueEdgeEvent(List<Event> events, Vertex v)
     {
         if (v.Processed || v.Next == null || v.Next.Processed)
+            return;
+        // A 2-vertex loop is a finished ridge (its two edges are parallel and
+        // never collide); leave it for the per-loop terminal step.
+        if (ReferenceEquals(v.Next.Next, v))
             return;
         if (TryVertexCollision(v, v.Next, out double t, out Vec p) &&
             t > v.StartTime - Eps && t > v.Next.StartTime - Eps)
