@@ -52,10 +52,6 @@
     <None Include="Tools\python_deps\pypdfium2_raw\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Tools\tesseract\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\ourplanecore.ico" />
-    <Resource Include="Assets\logo-256.png" />
-    <Resource Include="Assets\logo-128.png" />
-    <Resource Include="Assets\logo-64.png" />
-    <Resource Include="Assets\logo-32.png" />
   </ItemGroup>
 
   <ItemGroup>
