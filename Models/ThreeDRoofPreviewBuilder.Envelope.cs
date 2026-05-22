@@ -223,19 +223,26 @@ public static partial class ThreeDRoofPreviewBuilder
         if (facets == null)
             return null;
 
+        List<SlopePlane> eavePlanes = edgePlane.Where(p => p != null).Select(p => p!).Distinct().ToList();
+
         var result = new List<EnvelopeFace>();
         double covered = 0;
         foreach (RoofWeightedSkeleton.Facet facet in facets)
         {
-            SlopePlane? plane = edgePlane[facet.EdgeIndex];
-            if (plane == null)
-                continue; // gable edge has no sloped facet
-
             List<P2> poly = facet.Polygon.Select(p => new P2(p.X, p.Z)).ToList();
             if (poly.Count < 3 || Math.Abs(SignedArea(poly)) < 0.05)
                 continue;
             if (SignedArea(poly) < 0)
                 poly.Reverse();
+
+            // A gable (rake) edge is vertical and carries no slope of its own,
+            // but the strip of plan it owns is roofed by the neighbouring slope.
+            // Assign it the lowest front-facing eave plane over its centroid (the
+            // lower-envelope answer) so the footprint stays fully sloped.
+            SlopePlane? plane = edgePlane[facet.EdgeIndex] ?? LowestPlaneAt(eavePlanes, Centroid2(poly));
+            if (plane == null)
+                continue;
+
             covered += Math.Abs(SignedArea(poly));
             result.Add(new EnvelopeFace(plane, poly, roofBase));
         }
@@ -249,6 +256,38 @@ public static partial class ThreeDRoofPreviewBuilder
 
     private static bool EdgeMatches(P2 s, P2 e, P2 a, P2 b) =>
         Distance(s, a) < 0.2 && Distance(e, b) < 0.2;
+
+    private static P2 Centroid2(IReadOnlyList<P2> poly)
+    {
+        double x = 0, z = 0;
+        foreach (P2 p in poly)
+        {
+            x += p.X;
+            z += p.Z;
+        }
+        return new P2(x / poly.Count, z / poly.Count);
+    }
+
+    // Lowest front-facing (height >= 0) eave plane over a point - the lower
+    // envelope's answer for who roofs a gable strip.
+    private static SlopePlane? LowestPlaneAt(IReadOnlyList<SlopePlane> planes, P2 point)
+    {
+        SlopePlane? best = null;
+        double bestH = double.PositiveInfinity;
+        foreach (SlopePlane plane in planes)
+        {
+            double h = plane.HeightAt(point);
+            if (h < -0.01)
+                continue;
+            if (h < bestH)
+            {
+                bestH = h;
+                best = plane;
+            }
+        }
+
+        return best;
+    }
 
     private static List<EnvelopeFace> MergeCoplanarFaces(
         List<EnvelopeFace> pieces,
