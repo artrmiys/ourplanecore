@@ -100,6 +100,7 @@ var tests = new List<(string Name, Action Run)>
     ("3d roof generation requires eave edges", ThreeDRoofGenerationRequiresEaveEdges),
     ("3d roof eave pitch generates complex footprint mesh", ThreeDRoofEavePitchGeneratesComplexFootprintMesh),
     ("3d roof eave pitch generates rake gable triangles", ThreeDRoofEavePitchGeneratesRakeGableTriangles),
+    ("3d roof weighted skeleton convex rectangle tiles", RoofProbeTests.WeightedSkeletonConvexRectangleTiles),
     ("3d roof parallel eaves offset ridge by pitch", RoofProbeTests.ParallelEavesOffsetRidgeByPitch),
     ("3d roof l shape mixed eave rake probe", RoofProbeTests.LShapeMixedEaveRakeBuilds),
     ("3d roof u shape multiple valleys probe", RoofProbeTests.UShapeMultipleValleysBuilds),

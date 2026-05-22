@@ -2,6 +2,33 @@ using OurPlaneCore;
 
 internal static class RoofProbeTests
 {
+    public static void WeightedSkeletonConvexRectangleTiles()
+    {
+        // 40x30 hip rectangle, mixed pitch: N/S 6/12 (speed 2), E/W 3/12
+        // (speed 4). The four facets must tile the rectangle exactly (sum of
+        // plan areas == 1200, so no gap and no overlap).
+        List<(double X, double Z)> rect = [(0, 0), (40, 0), (40, 30), (0, 30)];
+        List<double> speed = [2.0, 4.0, 2.0, 4.0];
+
+        List<RoofWeightedSkeleton.Facet>? facets = RoofWeightedSkeleton.Build(rect, speed);
+        if (facets == null)
+            throw new InvalidOperationException("skeleton should build a convex rectangle.");
+        if (facets.Count != 4)
+            throw new InvalidOperationException($"hip rectangle should make 4 facets, got {facets.Count}.");
+
+        double total = facets.Sum(f => Math.Abs(PolygonArea(f.Polygon)));
+        if (Math.Abs(total - 1200.0) > 5.0)
+            throw new InvalidOperationException($"facets must tile 1200 sqft, got {total:F1} (gap or overlap).");
+    }
+
+    private static double PolygonArea(List<(double X, double Z)> poly)
+    {
+        double a = 0;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+            a += (poly[j].X + poly[i].X) * (poly[j].Z - poly[i].Z);
+        return a / 2.0;
+    }
+
     public static void LShapeMixedEaveRakeBuilds()
     {
         var model = new ThreeDWallModel
