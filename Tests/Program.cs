@@ -26,6 +26,8 @@ var tests = new List<(string Name, Action Run)>
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
+    ("beam length rounds up below and above eight feet", BeamLengthRoundsUpBelowAndAboveEightFeet),
+    ("beam default name keeps size suffix outside selection", BeamDefaultNameKeepsSizeSuffixOutsideSelection),
     ("takeoff creation policy chooses safe parents", TakeoffCreationPolicyChoosesSafeParents),
     ("takeoff section order moves single up", TakeoffSectionOrderMovesSingleUp),
     ("takeoff section order moves single down", TakeoffSectionOrderMovesSingleDown),
@@ -759,6 +761,23 @@ static void TakeoffItemNormalizesCountTotals()
     });
 
     AssertEqual("2 ea", item.TotalLabel(0), "count total label");
+}
+
+static void BeamLengthRoundsUpBelowAndAboveEightFeet()
+{
+    AssertEqual("8", BeamTakeoffService.FormatOrderLengthFeet(7.01), "below eight rounds to next foot");
+    AssertEqual("8", BeamTakeoffService.FormatOrderLengthFeet(8.0), "eight stays eight");
+    AssertEqual("10", BeamTakeoffService.FormatOrderLengthFeet(8.01), "above eight rounds to next two feet");
+    AssertEqual("12", BeamTakeoffService.FormatOrderLengthFeet(11.3), "larger beam rounds to even foot");
+}
+
+static void BeamDefaultNameKeepsSizeSuffixOutsideSelection()
+{
+    string name = BeamTakeoffService.BuildDefaultCountName("Framing", "10", out int selectionLength);
+
+    AssertEqual("Framing Beam 10", name, "beam default name");
+    AssertEqual("Framing Beam", name[..selectionLength], "editable prefix");
+    AssertEqual(" 10", name[selectionLength..], "size suffix stays after selected text");
 }
 
 static void TakeoffCreationPolicyChoosesSafeParents()

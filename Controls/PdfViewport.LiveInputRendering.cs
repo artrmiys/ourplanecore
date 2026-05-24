@@ -212,7 +212,7 @@ public sealed partial class PdfViewport
 
     private void DrawLiveRecordLengthLabels(SKCanvas canvas)
     {
-        if (_tool == ViewerTool.Ruler)
+        if (_tool is ViewerTool.Ruler or ViewerTool.Beam)
         {
             DrawLiveRulerLengthLabel(canvas);
             return;

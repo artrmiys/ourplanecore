@@ -87,6 +87,7 @@ public partial class MainWindow
         Add("tool.line", "Line Tool", "Tools", Shortcut("l"), "Record line measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.area", "Area Tool", "Tools", Shortcut("a"), "Record area measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.joistArea", "J Area Tool", "Tools", Shortcut("j"), "Create a joist area takeoff and record area measurements.", hasJob && hasPage, "Open a job and select a page first.");
+        Add("tool.beam", "Beam Tool", "Tools", "", "Measure a beam length, create a Count item, and place the first Count mark.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.areaCut", "Area Cut Tool", "Tools", Shortcut("x"), "Cut a hole out of the selected area measurement.", hasPage, "Select a page first.");
         Add("tool.toggleRecord", "Toggle Record", "Tools", "Space", "Toggle digitizer record mode for the current drawing tool.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.toggleSnap", "Toggle Snap", "Tools", "F3", "Toggle snap to existing takeoff points.");
@@ -184,6 +185,7 @@ public partial class MainWindow
             case "tool.line": SetTool("line", forceNewTakeoff: true); break;
             case "tool.area": SetTool("area", forceNewTakeoff: true); break;
             case "tool.joistArea": SetTool("joistarea", forceNewTakeoff: true); break;
+            case "tool.beam": SetTool("beam"); break;
             case "tool.areaCut": SetTool("areacut"); break;
             case "tool.toggleRecord":
                 if (_recordButton != null)

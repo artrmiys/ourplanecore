@@ -408,6 +408,9 @@
             <RadioButton x:Name="BtnJoistArea" Content="J Area" Click="BtnTool_Click" Tag="joistarea"
                          GroupName="DrawingTool" ToolTip="Create a new Joist Area item and start recording (J)"
                          Style="{StaticResource ToolRadio}"/>
+            <RadioButton x:Name="BtnBeam" Content="Beam" Click="BtnTool_Click" Tag="beam"
+                         GroupName="DrawingTool" ToolTip="Measure a beam length, create a Count item, and place the first Count mark"
+                         Style="{StaticResource ToolRadio}"/>
             <RadioButton x:Name="BtnAreaCut" Content="Cut" Click="BtnTool_Click" Tag="areacut"
                          GroupName="DrawingTool" ToolTip="Cut Area holes or erase Line pieces (X, F9 toggles box)"
                          Style="{StaticResource ToolRadio}"/>

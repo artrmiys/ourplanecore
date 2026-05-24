@@ -318,6 +318,7 @@ public partial class MainWindow : Window
         _viewport.ThreeDRoofGuideAdded += OnThreeDRoofGuideAdded;
         _viewport.ThreeDRoofGuideSelectionRequested += OnThreeDRoofGuideSelectionRequested;
         _viewport.JoistDirectionCaptured += OnJoistDirectionCaptured;
+        _viewport.BeamMeasurementCompleted += OnBeamMeasurementCompleted;
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChanged;
         ViewportSurfaceHost.Children.Add(_viewport);
 
@@ -337,6 +338,7 @@ public partial class MainWindow : Window
             ["line"]  = BtnLine,
             ["area"]  = BtnArea,
             ["joistarea"] = BtnJoistArea,
+            ["beam"] = BtnBeam,
             ["areacut"] = BtnAreaCut,
         };
         SetupToolButtonContent();
@@ -353,6 +355,7 @@ public partial class MainWindow : Window
         BtnLine.ToolTip = $"Line item ({KeyboardShortcutKeys.EnglishLayoutDisplay("l")})";
         BtnArea.ToolTip = $"Area item ({KeyboardShortcutKeys.EnglishLayoutDisplay("a")})";
         BtnJoistArea.ToolTip = $"Joist area ({KeyboardShortcutKeys.EnglishLayoutDisplay("j")})";
+        BtnBeam.ToolTip = "Beam: measure length, create Count item, and place first Count mark";
         BtnAreaCut.ToolTip = $"Area cut ({KeyboardShortcutKeys.EnglishLayoutDisplay("x")})";
         SetupRecordButton();
         SetupEstimateTable();
