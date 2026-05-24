@@ -1,5 +1,39 @@
 ﻿# Development Log
 
+## 2026-05-24 Beam, Openings, and Current-Job PlanSwift Import
+
+- Added the `Beam` takeoff workflow next to `J Area`. `B` starts Beam mode,
+  the user measures two endpoints, the app leaves a dimension/Ruler-style
+  annotation, opens Count creation with the measured/order size appended after
+  a space, and places the first Count mark with a larger offset from the
+  dimension label.
+- Added `Openings` mode. `O` starts Openings, the user measures a rectangle,
+  the app leaves width and height dimension annotations, opens Count creation
+  with a size-only name like `3.0x4.2`, and places the first Count mark in the
+  rectangle center.
+- Added current-job PlanSwift import through
+  `Open / Import -> Import PlanSwift to Current Job...`. This keeps the
+  existing separate-job `PlanSwift` converter unchanged, but the new path
+  imports PlanSwift pages into `Pages\01. planswift` and PlanSwift takeoffs
+  into `Takeoffs\01. planswift` inside the currently open job.
+- Added regression coverage for Beam rounding/name selection, Openings
+  one-decimal size-only names, and current-job PlanSwift bucket placement.
+- Detailed handoff:
+  `docs/TAKEOFF_TOOLS_AND_PLANSWIFT_IMPORT_HANDOFF_2026_05_24.md`.
+- Commits:
+  `ff3e5c1 Add Beam count workflow`,
+  `a9fe52e Add Openings count workflow`,
+  `41cf7dc Add current job PlanSwift import`.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln` with 0 warnings and 0 errors, and
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build` with
+  `229/229` tests passed.
+- Update package refreshed as a compressed single-file build at
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `ACAE2B528D60558AC5575655DEB200F8369AC47D93592B4AF0C80968FE478E01`.
+  Desktop shortcut still targets the update package, and packaged-exe launch
+  verification passed with `0` errors after the latest `Application startup`.
+
 ## 2026-05-15 Ruler, Notes, Takeoffs Bulk Controls, Search
 
 - Changed Ruler hide-on-sheet to snapshot behavior. Pressing the Ruler dot now
