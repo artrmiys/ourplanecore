@@ -28,6 +28,8 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
     ("beam length rounds up below and above eight feet", BeamLengthRoundsUpBelowAndAboveEightFeet),
     ("beam default name keeps size suffix outside selection", BeamDefaultNameKeepsSizeSuffixOutsideSelection),
+    ("opening size formats one decimal", OpeningSizeFormatsOneDecimal),
+    ("opening default name is size only", OpeningDefaultNameIsSizeOnly),
     ("takeoff creation policy chooses safe parents", TakeoffCreationPolicyChoosesSafeParents),
     ("takeoff section order moves single up", TakeoffSectionOrderMovesSingleUp),
     ("takeoff section order moves single down", TakeoffSectionOrderMovesSingleDown),
@@ -778,6 +780,17 @@ static void BeamDefaultNameKeepsSizeSuffixOutsideSelection()
     AssertEqual("Framing Beam 10", name, "beam default name");
     AssertEqual("Framing Beam", name[..selectionLength], "editable prefix");
     AssertEqual(" 10", name[selectionLength..], "size suffix stays after selected text");
+}
+
+static void OpeningSizeFormatsOneDecimal()
+{
+    AssertEqual("7.2x6.8", OpeningTakeoffService.FormatSizeFeet(7.24, 6.75), "opening one decimal size");
+    AssertEqual("3.0x4.2", OpeningTakeoffService.FormatSizeFeet(3.0, 4.24), "opening keeps trailing decimal");
+}
+
+static void OpeningDefaultNameIsSizeOnly()
+{
+    AssertEqual("3.0x4.2", OpeningTakeoffService.BuildDefaultCountName("3.0x4.2"), "opening count name");
 }
 
 static void TakeoffCreationPolicyChoosesSafeParents()

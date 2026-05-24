@@ -56,7 +56,8 @@ public sealed class NewItemDialog : Window
         bool lockType = false,
         string defaultColor = "#FF4444",
         string defaultCountSymbol = CountDisplaySymbol.Circle,
-        int? initialNameSelectionLength = null)
+        int? initialNameSelectionLength = null,
+        int? initialNameCaretIndex = null)
     {
         Title                 = "New Takeoff Item";
         Width                 = 320;
@@ -177,11 +178,19 @@ public sealed class NewItemDialog : Window
         Loaded += (_, _) =>
         {
             nameBox.Focus();
-            int selectionLength = initialNameSelectionLength.GetValueOrDefault(-1);
-            if (selectionLength >= 0 && selectionLength <= nameBox.Text.Length)
+            int caretIndex = initialNameCaretIndex.GetValueOrDefault(-1);
+            if (caretIndex >= 0 && caretIndex <= nameBox.Text.Length)
+                nameBox.Select(caretIndex, 0);
+            else if (initialNameSelectionLength is >= 0 and <= int.MaxValue &&
+                     initialNameSelectionLength.Value <= nameBox.Text.Length)
+            {
+                int selectionLength = initialNameSelectionLength.Value;
                 nameBox.Select(0, selectionLength);
+            }
             else
+            {
                 nameBox.SelectAll();
+            }
         };
     }
 

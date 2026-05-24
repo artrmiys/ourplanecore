@@ -52,10 +52,18 @@ public sealed record BeamMeasurementRequest(
     double OrderLengthFeet,
     string OrderLengthText,
     string PageFolder);
+public sealed record OpeningMeasurementRequest(
+    SKPoint FirstCornerPdf,
+    SKPoint OppositeCornerPdf,
+    SKPoint CountPointPdf,
+    double WidthFeet,
+    double HeightFeet,
+    string SizeText,
+    string PageFolder);
 
 // в”Ђв”Ђ Tool enum в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-public enum ViewerTool { Pan, Select, Scale, Ruler, Beam, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
+public enum ViewerTool { Pan, Select, Scale, Ruler, Beam, Openings, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
 public enum PdfLayerTraceMode { Full, Edge, Point, AllEdges }
 public enum ViewportOverlayHitKind { None, SheetLegend, SheetHeader }
 
@@ -384,6 +392,7 @@ public sealed partial class PdfViewport : SKElement
     public event Action<ViewportAiCropSelectionRequest>?  AiCropNoteSelectionCompleted;
     public event Action<Measurement, SKPoint, SKPoint>?   JoistDirectionCaptured;
     public event Action<BeamMeasurementRequest>?          BeamMeasurementCompleted;
+    public event Action<OpeningMeasurementRequest>?       OpeningMeasurementCompleted;
     public event Action<SheetOverlayTransformChange>?     SheetOverlayTransformChanged;
 
     // в”Ђв”Ђ Constants в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ

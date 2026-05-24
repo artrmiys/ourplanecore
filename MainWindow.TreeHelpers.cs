@@ -791,6 +791,7 @@ public partial class MainWindow
             "area" => MeasurementTypeDisplay("area"),
             "joistarea" => "J Area",
             "beam" => "Beam",
+            "openings" => "Openings",
             "select" => "Select",
             "scale" => "Scale",
             "ruler" => "Ruler",

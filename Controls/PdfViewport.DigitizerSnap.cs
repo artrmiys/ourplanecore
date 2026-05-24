@@ -100,6 +100,7 @@ public sealed partial class PdfViewport
 
     private bool ShouldPreviewAsBox() =>
         _tool == ViewerTool.DrawRect ||
+        _tool == ViewerTool.Openings ||
         _tool == ViewerTool.DrawCloud ||
         _tool == ViewerTool.AreaCut && BoxModeEnabled ||
         BoxModeEnabled && _tool is (ViewerTool.Line or ViewerTool.Area);
@@ -112,7 +113,7 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea &&
+        if (_tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea &&
             _drawPts.Count > 0)
         {
             anchor = _drawPts[^1];

@@ -25,6 +25,7 @@ public sealed partial class PdfViewport
             "scale" => ViewerTool.Scale,
             "ruler" => ViewerTool.Ruler,
             "beam" => ViewerTool.Beam,
+            "openings" => ViewerTool.Openings,
             "drawline" => ViewerTool.DrawLine,
             "drawarrow" => ViewerTool.DrawArrow,
             "drawrect" => ViewerTool.DrawRect,

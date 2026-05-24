@@ -36,6 +36,7 @@ public partial class MainWindow
         BtnArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Area, "Area", glyphBrush);
         BtnJoistArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Joist, "J Area", glyphBrush);
         BtnBeam.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Beam", glyphBrush);
+        BtnOpenings.Content = CreateToolGlyphLabel(MeasurementGlyphKind.CountSquare, "Openings", glyphBrush);
     }
 
     private static FrameworkElement CreateToolGlyphLabel(

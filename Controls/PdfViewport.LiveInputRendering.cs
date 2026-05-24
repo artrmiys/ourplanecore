@@ -218,6 +218,12 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (_tool == ViewerTool.Openings)
+        {
+            DrawLiveOpeningSizeLabels(canvas);
+            return;
+        }
+
         if (_tool is not (ViewerTool.Line or ViewerTool.Area) ||
             _drawPts.Count == 0 ||
             ScaleMetersPerPt <= 0)

@@ -319,6 +319,7 @@ public partial class MainWindow : Window
         _viewport.ThreeDRoofGuideSelectionRequested += OnThreeDRoofGuideSelectionRequested;
         _viewport.JoistDirectionCaptured += OnJoistDirectionCaptured;
         _viewport.BeamMeasurementCompleted += OnBeamMeasurementCompleted;
+        _viewport.OpeningMeasurementCompleted += OnOpeningMeasurementCompleted;
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChanged;
         ViewportSurfaceHost.Children.Add(_viewport);
 
@@ -339,6 +340,7 @@ public partial class MainWindow : Window
             ["area"]  = BtnArea,
             ["joistarea"] = BtnJoistArea,
             ["beam"] = BtnBeam,
+            ["openings"] = BtnOpenings,
             ["areacut"] = BtnAreaCut,
         };
         SetupToolButtonContent();
@@ -347,7 +349,7 @@ public partial class MainWindow : Window
         BtnScale.ToolTip = $"Scale ({KeyboardShortcutKeys.EnglishLayoutDisplay("s")})";
         BtnRuler.ToolTip = $"Ruler ({KeyboardShortcutKeys.EnglishLayoutDisplay("r")})";
         BtnDrawLine.ToolTip = $"Draw line ({KeyboardShortcutKeys.EnglishLayoutDisplay("d")})";
-        BtnDrawRect.ToolTip = $"Draw box ({KeyboardShortcutKeys.EnglishLayoutDisplay("b")})";
+        BtnDrawRect.ToolTip = "Draw box";
         BtnDrawCloud.ToolTip = "Cloud annotation";
         BtnDrawAreaAnnot.ToolTip = "Filled area annotation";
         BtnNote.ToolTip = $"Sheet note ({KeyboardShortcutKeys.EnglishLayoutDisplay("n")})";
@@ -355,7 +357,8 @@ public partial class MainWindow : Window
         BtnLine.ToolTip = $"Line item ({KeyboardShortcutKeys.EnglishLayoutDisplay("l")})";
         BtnArea.ToolTip = $"Area item ({KeyboardShortcutKeys.EnglishLayoutDisplay("a")})";
         BtnJoistArea.ToolTip = $"Joist area ({KeyboardShortcutKeys.EnglishLayoutDisplay("j")})";
-        BtnBeam.ToolTip = "Beam: measure length, create Count item, and place first Count mark";
+        BtnBeam.ToolTip = $"Beam: measure length, create Count item, and place first Count mark ({KeyboardShortcutKeys.EnglishLayoutDisplay("b")})";
+        BtnOpenings.ToolTip = $"Openings: measure box, create Count item, and place the Count mark in the center ({KeyboardShortcutKeys.EnglishLayoutDisplay("o")})";
         BtnAreaCut.ToolTip = $"Area cut ({KeyboardShortcutKeys.EnglishLayoutDisplay("x")})";
         SetupRecordButton();
         SetupEstimateTable();

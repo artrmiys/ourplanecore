@@ -57,6 +57,63 @@ public sealed partial class PdfViewport
             _pageFolder));
     }
 
+    private void AddOpeningMeasurementPoint(SKPoint pdf)
+    {
+        _drawPts.Add(pdf);
+        if (_drawPts.Count < 2)
+        {
+            RequestRepaint();
+            PostRecordPrompt();
+            return;
+        }
+
+        FinalizeOpeningMeasurement();
+    }
+
+    private void FinalizeOpeningMeasurement()
+    {
+        if (_drawPts.Count < 2)
+            return;
+
+        SKPoint first = _drawPts[0];
+        SKPoint opposite = _drawPts[1];
+        SKRect rect = NormalizeRect(first, opposite);
+        if (rect.Width <= ViewportConstants.ZeroLengthEpsilon ||
+            rect.Height <= ViewportConstants.ZeroLengthEpsilon)
+        {
+            CancelDrawing();
+            PostStatus("Openings cancelled: measured box is too small.");
+            return;
+        }
+
+        double widthFeet = rect.Width * ScaleMetersPerPt / 0.3048;
+        double heightFeet = rect.Height * ScaleMetersPerPt / 0.3048;
+        string sizeText = OpeningTakeoffService.FormatSizeFeet(widthFeet, heightFeet);
+        PageAnnotation widthAnnotation = AddDimensionAnnotationFromPoints(
+            new SKPoint(rect.Right, rect.Top),
+            new SKPoint(rect.Left, rect.Top));
+        PageAnnotation heightAnnotation = AddDimensionAnnotationFromPoints(
+            new SKPoint(rect.Left, rect.Top),
+            new SKPoint(rect.Left, rect.Bottom));
+        SKPoint countPoint = new((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
+
+        _drawPts.Clear();
+        _rubberEnd = null;
+        SetSnapPreview(null);
+        RequestRepaint();
+        PostStatus($"Openings measured: {sizeText}. Create Count item.");
+        PageAnnotationAdded?.Invoke(widthAnnotation);
+        PageAnnotationAdded?.Invoke(heightAnnotation);
+        OpeningMeasurementCompleted?.Invoke(new OpeningMeasurementRequest(
+            first,
+            opposite,
+            countPoint,
+            widthFeet,
+            heightFeet,
+            sizeText,
+            _pageFolder));
+    }
+
     private PageAnnotation AddDimensionAnnotationFromPoints(SKPoint start, SKPoint end)
     {
         var annotation = new PageAnnotation
@@ -76,13 +133,44 @@ public sealed partial class PdfViewport
     private SKPoint BeamCountPoint(SKPoint start, SKPoint end)
     {
         SKPoint labelPoint = SegmentLengthLabelPoint(start, end);
-        float offsetX = ScreenToPdfDistance(18f);
-        float offsetY = ScreenToPdfDistance(18f);
+        float offsetX = ScreenToPdfDistance(36f);
+        float offsetY = ScreenToPdfDistance(36f);
         bool horizontal = Math.Abs(end.X - start.X) >= Math.Abs(end.Y - start.Y);
         SKPoint point = horizontal
             ? new SKPoint(labelPoint.X - offsetX, labelPoint.Y - offsetY)
             : new SKPoint(labelPoint.X - offsetX, labelPoint.Y + offsetY);
         return ClampPdfPointToPage(point);
+    }
+
+    private void DrawLiveOpeningSizeLabels(SKCanvas canvas)
+    {
+        if (_drawPts.Count == 0 ||
+            !_rubberEnd.HasValue ||
+            ScaleMetersPerPt <= 0)
+        {
+            return;
+        }
+
+        SKRect rect = NormalizeRect(_drawPts[0], _rubberEnd.Value);
+        if (rect.Width <= ViewportConstants.ZeroLengthEpsilon ||
+            rect.Height <= ViewportConstants.ZeroLengthEpsilon)
+        {
+            return;
+        }
+
+        SKPoint topLeft = new(rect.Left, rect.Top);
+        SKPoint topRight = new(rect.Right, rect.Top);
+        SKPoint bottomLeft = new(rect.Left, rect.Bottom);
+        DrawLiveRecordText(
+            canvas,
+            SegmentLengthLabelPoint(topLeft, topRight),
+            FormatLiveFeet(rect.Width * ScaleMetersPerPt),
+            centered: true);
+        DrawLiveRecordText(
+            canvas,
+            SegmentLengthLabelPoint(topLeft, bottomLeft),
+            FormatLiveFeet(rect.Height * ScaleMetersPerPt),
+            centered: true);
     }
 
     private SKPoint ClampPdfPointToPage(SKPoint point)

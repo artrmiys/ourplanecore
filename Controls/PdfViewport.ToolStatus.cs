@@ -36,7 +36,7 @@ public sealed partial class PdfViewport
     }
 
     private bool IsMissingScaleForLinearArea() =>
-        _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam && ScaleMetersPerPt <= 0;
+        _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings && ScaleMetersPerPt <= 0;
 
     private void PostScaleRequiredStatus()
     {
@@ -45,9 +45,10 @@ public sealed partial class PdfViewport
             ViewerTool.Area => "Area",
             ViewerTool.Ruler => "Ruler",
             ViewerTool.Beam => "Beam",
+            ViewerTool.Openings => "Openings",
             _ => "Line",
         };
-        string mode = _tool is ViewerTool.Ruler or ViewerTool.Beam ? "markup" : "Record";
+        string mode = _tool is ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings ? "markup" : "Record";
         PostStatus($"{tool} {mode} blocked: set sheet scale first with Scale or PDF Auto Scale. Count and drawing markups can be recorded without scale.");
     }
 
@@ -149,6 +150,17 @@ public sealed partial class PdfViewport
                     ? $"Beam: click the first endpoint.{modes}"
                     : $"Beam: click the second endpoint to create the Ruler and Count item.{modes}");
                 break;
+            case ViewerTool.Openings:
+                if (IsMissingScaleForLinearArea())
+                {
+                    PostScaleRequiredStatus();
+                    break;
+                }
+
+                PostStatus(_drawPts.Count == 0
+                    ? $"Openings: click the first corner.{modes}"
+                    : $"Openings: click the opposite corner to create size Rulers and a Count item.{modes}");
+                break;
             case ViewerTool.DrawLine:
                 PostStatus(_drawPts.Count == 0
                     ? $"Draw line: click the first endpoint.{modes}"
@@ -210,6 +222,7 @@ public sealed partial class PdfViewport
             "areacut" => "Cut",
             "dimension" => "Ruler",
             "beam" => "Beam",
+            "openings" => "Openings",
             "arrow" => "Arrow",
             "rectangle" => "Box",
             "cloud" => "Cloud",

@@ -38,6 +38,9 @@ public sealed partial class PdfViewport
             case ViewerTool.Beam:
                 AddBeamMeasurementPoint(pdf);
                 break;
+            case ViewerTool.Openings:
+                AddOpeningMeasurementPoint(pdf);
+                break;
             case ViewerTool.DrawLine:
                 AddTwoPointAnnotation(pdf, "line");
                 break;
