@@ -10,13 +10,19 @@ public static class PlanSwiftSourceFormats
 
 public sealed class PlanSwiftImportOptions
 {
+    public const string DefaultCurrentJobImportFolderName = "01. planswift";
+
     public string SourceJobPath { get; init; } = "";
     public string DestinationParentPath { get; init; } = "";
     public string DestinationJobName { get; init; } = "";
+    public string DestinationJobPath { get; init; } = "";
+    public string ImportRootFolderName { get; init; } = DefaultCurrentJobImportFolderName;
     public bool ConvertPageImages { get; init; } = true;
     public int MaxPages { get; init; }
     public int MaxTakeoffItems { get; init; }
     public int MaxMeasurements { get; init; }
+
+    public bool ImportIntoExistingJob => !string.IsNullOrWhiteSpace(DestinationJobPath);
 }
 
 public sealed record PlanSwiftImportResult(

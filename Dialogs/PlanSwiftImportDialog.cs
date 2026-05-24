@@ -18,6 +18,7 @@ public sealed class PlanSwiftImportDialog : Window
     private readonly TextBlock _statusText;
     private readonly Button _scanButton;
     private readonly Button _importButton;
+    private readonly bool _importIntoCurrentJob;
 
     private PlanSwiftProjectManifest? _manifest;
     private string _scannedSource = "";
@@ -26,9 +27,13 @@ public sealed class PlanSwiftImportDialog : Window
 
     public PlanSwiftProjectManifest? Manifest => _manifest;
 
-    public PlanSwiftImportDialog(string defaultDestinationRoot)
+    public PlanSwiftImportDialog(
+        string defaultDestinationRoot,
+        bool importIntoCurrentJob = false,
+        string currentJobName = "")
     {
-        Title = "Import PlanSwift Job";
+        _importIntoCurrentJob = importIntoCurrentJob;
+        Title = importIntoCurrentJob ? "Import PlanSwift to Current Job" : "Import PlanSwift Job";
         Width = 760;
         Height = 540;
         MinWidth = 640;
@@ -66,20 +71,37 @@ public sealed class PlanSwiftImportDialog : Window
             "Select the source PlanSwift job folder. The original folder is read only for this import.",
             "Select PlanSwift job folder");
 
-        _destinationBox = CreatePathRow(
-            form,
-            "OurPlaneCore jobs root",
-            defaultDestinationRoot,
-            "Select the parent folder where the converted job will be created.",
-            "Select destination jobs folder");
-
-        form.Children.Add(new TextBlock { Text = "Imported job name", Margin = new Thickness(0, 7, 0, 3) });
-        _jobNameBox = new TextBox
+        if (importIntoCurrentJob)
         {
-            MinHeight = 26,
-            ToolTip = "Leave blank to use the PlanSwift job name with an imported suffix.",
-        };
-        form.Children.Add(_jobNameBox);
+            string jobLabel = string.IsNullOrWhiteSpace(currentJobName) ? defaultDestinationRoot : currentJobName.Trim();
+            var destinationText = new TextBlock
+            {
+                Text = $"Destination: current job ({jobLabel}) -> Pages/01. planswift and Takeoffs/01. planswift",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 7, 0, 3),
+            };
+            destinationText.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryForegroundBrush");
+            form.Children.Add(destinationText);
+            _destinationBox = new TextBox { Text = defaultDestinationRoot, Visibility = Visibility.Collapsed };
+            _jobNameBox = new TextBox { Visibility = Visibility.Collapsed };
+        }
+        else
+        {
+            _destinationBox = CreatePathRow(
+                form,
+                "OurPlaneCore jobs root",
+                defaultDestinationRoot,
+                "Select the parent folder where the converted job will be created.",
+                "Select destination jobs folder");
+
+            form.Children.Add(new TextBlock { Text = "Imported job name", Margin = new Thickness(0, 7, 0, 3) });
+            _jobNameBox = new TextBox
+            {
+                MinHeight = 26,
+                ToolTip = "Leave blank to use the PlanSwift job name with an imported suffix.",
+            };
+            form.Children.Add(_jobNameBox);
+        }
 
         _convertImagesBox = new CheckBox
         {
@@ -190,12 +212,21 @@ public sealed class PlanSwiftImportDialog : Window
             PlanSwiftProjectManifest manifest = PlanSwiftProjectScanner.Scan(source);
             _manifest = manifest;
             _scannedSource = source;
-            if (string.IsNullOrWhiteSpace(_jobNameBox.Text))
+            if (!_importIntoCurrentJob && string.IsNullOrWhiteSpace(_jobNameBox.Text))
                 _jobNameBox.Text = $"{manifest.JobName} - imported";
 
             _summaryText.Text = BuildPreview(manifest);
             _statusText.Text = BuildScanStatus(manifest);
-            _importButton.IsEnabled = manifest.Pages.Count > 0 || manifest.TakeoffItems.Count > 0;
+            if (_importIntoCurrentJob &&
+                !string.Equals(manifest.SourceFormat, PlanSwiftSourceFormats.PlanSwift, StringComparison.OrdinalIgnoreCase))
+            {
+                _statusText.Text = "Scan complete, but current-job import supports PlanSwift source job folders only.";
+                _importButton.IsEnabled = false;
+            }
+            else
+            {
+                _importButton.IsEnabled = manifest.Pages.Count > 0 || manifest.TakeoffItems.Count > 0;
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or DirectoryNotFoundException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -211,6 +242,36 @@ public sealed class PlanSwiftImportDialog : Window
     private void AcceptImport()
     {
         PlanSwiftProjectManifest manifest = EnsureFreshScan();
+        if (_importIntoCurrentJob)
+        {
+            if (!string.Equals(manifest.SourceFormat, PlanSwiftSourceFormats.PlanSwift, StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(
+                    "Import to current job supports PlanSwift source job folders only.",
+                    "Import PlanSwift to Current Job",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            string destinationJob = NormalizePath(_destinationBox.Text);
+            if (string.IsNullOrWhiteSpace(destinationJob) || !Directory.Exists(destinationJob))
+            {
+                MessageBox.Show("Current job folder is not available.", "Import PlanSwift to Current Job", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            ImportOptions = new PlanSwiftImportOptions
+            {
+                SourceJobPath = manifest.SourceJobPath,
+                DestinationJobPath = destinationJob,
+                ConvertPageImages = _convertImagesBox.IsChecked == true,
+                ImportRootFolderName = PlanSwiftImportOptions.DefaultCurrentJobImportFolderName,
+            };
+            DialogResult = true;
+            return;
+        }
+
         string destination = NormalizePath(_destinationBox.Text);
         if (string.IsNullOrWhiteSpace(destination))
         {

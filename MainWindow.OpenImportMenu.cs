@@ -18,6 +18,7 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Sample Job", true, CreateSampleJob));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Import PDF(s) to Current Job...", hasJob, () => BtnImport_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Import PlanSwift to Current Job...", hasJob, () => BtnImportPlanSwiftToCurrentJob_Click(sender, new RoutedEventArgs())));
 
         if (sender is Button button)
         {

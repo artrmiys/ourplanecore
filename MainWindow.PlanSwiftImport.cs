@@ -19,6 +19,14 @@ public partial class MainWindow
             "Import PlanSwift Job");
     }
 
+    private async void BtnImportPlanSwiftToCurrentJob_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            ImportPlanSwiftToCurrentJobAsync,
+            "Import PlanSwift to current job failed.",
+            "Import PlanSwift to Current Job");
+    }
+
     private async Task ImportPlanSwiftJobAsync()
     {
         string defaultDestination = Directory.Exists(_settings.JobsRootPath)
@@ -54,6 +62,47 @@ public partial class MainWindow
             $"{result.TakeoffFoldersImported} takeoff folder(s), " +
             $"{result.TakeoffItemsImported} takeoff item(s), " +
             $"{result.MeasurementsImported} measurement(s). Report: {reportPath}";
+        ShowPlanSwiftImportResult(result, reportPath);
+    }
+
+    private async Task ImportPlanSwiftToCurrentJobAsync()
+    {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "Import PlanSwift to Current Job",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string currentJobPath = _currentJob.RootPath;
+        var dialog = new PlanSwiftImportDialog(
+            currentJobPath,
+            importIntoCurrentJob: true,
+            currentJobName: _currentJob.Name)
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        PlanSwiftImportOptions options = dialog.ImportOptions;
+        PlanSwiftImportResult result;
+        using (ShowBusyOverlay("Importing PlanSwift job into current job..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            TxtStatus.Text = "Importing PlanSwift job into the current job. The source folder is read-only.";
+            result = await Task.Run(() => PlanSwiftProjectImporter.Import(options));
+        }
+
+        OpenJob(currentJobPath);
+
+        string reportPath = PlanSwiftImportReportPath(result.DestinationJobPath);
+        TxtStatus.Text =
+            $"Imported PlanSwift into current job: {result.PagesImported} page(s), " +
+            $"{result.TakeoffFoldersImported} takeoff folder(s), " +
+            $"{result.TakeoffItemsImported} takeoff item(s), " +
+            $"{result.MeasurementsImported} measurement(s). " +
+            $"Placed under {PlanSwiftImportOptions.DefaultCurrentJobImportFolderName}. Report: {reportPath}";
         ShowPlanSwiftImportResult(result, reportPath);
     }
 

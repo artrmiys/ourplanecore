@@ -51,6 +51,7 @@ public partial class MainWindow
         Add("file.newJob", "New Job", "File", "", "Create a new OurPlaneCore job folder.");
         Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a small local sample job.");
         Add("file.importPlanSwift", "Import PlanSwift Job", "File", "", "Convert a read-only PlanSwift job into a new OurPlaneCore job.");
+        Add("file.importPlanSwiftCurrent", "Import PlanSwift to Current Job", "File", "", "Import a read-only PlanSwift job under 01. planswift in the current job.", hasJob, "Open or create a job first.");
         Add("file.importPdf", "Import PDF(s)", "File", "", "Import one or many PDF files into the current job.", hasJob, "Open or create a job first.");
         Add("file.exportPdf", "Export PDF", "File", "", "Export selected/all sheets to a PDF.", hasJob, "Open or create a job first.");
         Add("file.save", "Save", "File", "Ctrl+S", "Save current takeoff data.", hasJob, "Open or create a job first.");
@@ -144,6 +145,7 @@ public partial class MainWindow
             case "file.newJob": BtnNewJob_Click(this, new RoutedEventArgs()); break;
             case "file.sampleJob": CreateSampleJob(); break;
             case "file.importPlanSwift": BtnImportPlanSwiftJob_Click(this, new RoutedEventArgs()); break;
+            case "file.importPlanSwiftCurrent": BtnImportPlanSwiftToCurrentJob_Click(this, new RoutedEventArgs()); break;
             case "file.importPdf": BtnImport_Click(this, new RoutedEventArgs()); break;
             case "file.exportPdf": BtnExportPdf_Click(this, new RoutedEventArgs()); break;
             case "file.save": BtnSave_Click(this, new RoutedEventArgs()); break;

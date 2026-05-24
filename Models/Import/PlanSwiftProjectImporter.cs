@@ -16,12 +16,33 @@ public static partial class PlanSwiftProjectImporter
         ValidateOptions(options);
 
         PlanSwiftProjectManifest manifest = PlanSwiftProjectScanner.Scan(options.SourceJobPath);
+        if (options.ImportIntoExistingJob)
+        {
+            if (string.Equals(manifest.SourceFormat, PlanSwiftSourceFormats.OurPlaneCore, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Import into the current job supports PlanSwift source job folders only.");
+
+            OurPlaneCoreJob existingJob = OurPlaneCoreJobStore.LoadJob(options.DestinationJobPath);
+            string pageImportRoot = EnsureImportRootFolder(existingJob.PagesRoot, options.ImportRootFolderName, isTakeoffRoot: false);
+            string takeoffImportRoot = EnsureImportRootFolder(existingJob.TakeoffsRoot, options.ImportRootFolderName, isTakeoffRoot: true);
+            return ImportManifestIntoJob(options, manifest, existingJob, pageImportRoot, takeoffImportRoot);
+        }
+
         if (string.Equals(manifest.SourceFormat, PlanSwiftSourceFormats.OurPlaneCore, StringComparison.OrdinalIgnoreCase))
             return ImportExistingOurPlaneCoreJob(options, manifest);
 
-        var messages = manifest.Warnings.ToList();
         string jobName = ResolveDestinationJobName(options, manifest);
         OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(options.DestinationParentPath, jobName);
+        return ImportManifestIntoJob(options, manifest, job, job.PagesRoot, job.TakeoffsRoot);
+    }
+
+    private static PlanSwiftImportResult ImportManifestIntoJob(
+        PlanSwiftImportOptions options,
+        PlanSwiftProjectManifest manifest,
+        OurPlaneCoreJob job,
+        string pagesRoot,
+        string takeoffsRoot)
+    {
+        var messages = manifest.Warnings.ToList();
 
         string tempRoot = Path.Combine(Path.GetTempPath(), "ourplanecore_planswift_import", Guid.NewGuid().ToString("N"));
         var pageByGuid = new Dictionary<string, ImportedPlanSwiftPage>(StringComparer.OrdinalIgnoreCase);
@@ -32,9 +53,9 @@ public static partial class PlanSwiftProjectImporter
 
         try
         {
-            ImportPages(options, manifest, job, tempRoot, pageByGuid, messages, ref importedPages);
-            ImportTakeoffs(options, manifest, job, pageByGuid, importedTakeoffsBySource, messages, ref importedItems, ref importedMeasurements);
-            ImportSegments(options, manifest, job, pageByGuid, importedTakeoffsBySource, messages, ref importedItems, ref importedMeasurements);
+            ImportPages(options, manifest, job, pagesRoot, tempRoot, pageByGuid, messages, ref importedPages);
+            ImportTakeoffs(options, manifest, job, takeoffsRoot, pageByGuid, importedTakeoffsBySource, messages, ref importedItems, ref importedMeasurements);
+            ImportSegments(options, manifest, job, takeoffsRoot, pageByGuid, importedTakeoffsBySource, messages, ref importedItems, ref importedMeasurements);
         }
         finally
         {
@@ -59,6 +80,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
         OurPlaneCoreJob job,
+        string pagesRoot,
         string tempRoot,
         Dictionary<string, ImportedPlanSwiftPage> pageByGuid,
         List<string> messages,
@@ -79,7 +101,7 @@ public static partial class PlanSwiftProjectImporter
         IEnumerable<PlanSwiftPageRecord> pages = Limit(pagesWithTakeoffs, options.MaxPages);
         foreach (PlanSwiftPageRecord page in pages)
         {
-            string parent = EnsureRelativeFolder(job.PagesRoot, page.ParentRelativeFolder);
+            string parent = EnsureRelativeFolder(pagesRoot, page.ParentRelativeFolder);
             string tempPdf = Path.Combine(tempRoot, "pages", $"{Guid.NewGuid():N}.pdf");
             PlanSwiftPageNormalization? imageNormalization = null;
             if (File.Exists(page.ImagePath))
@@ -163,6 +185,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
         OurPlaneCoreJob job,
+        string takeoffsRoot,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
         Dictionary<string, TakeoffItem> importedTakeoffsBySource,
         List<string> messages,
@@ -171,7 +194,7 @@ public static partial class PlanSwiftProjectImporter
     {
         foreach (PlanSwiftFolderRecord folder in manifest.TakeoffFolders)
         {
-            string parent = EnsureRelativeFolder(job.TakeoffsRoot, folder.ParentRelativeFolder);
+            string parent = EnsureRelativeFolder(takeoffsRoot, folder.ParentRelativeFolder);
             string importedFolder = OurPlaneCoreJobStore.EnsureFolder(parent, folder.Name);
             OurPlaneCoreJobStore.SetProperty(importedFolder, "SmartNodeKind", "folder");
             if (folder.OrderIndex > 0)
@@ -184,7 +207,7 @@ public static partial class PlanSwiftProjectImporter
             if (options.MaxMeasurements > 0 && importedMeasurements >= options.MaxMeasurements)
                 break;
 
-            string parent = EnsureRelativeFolder(job.TakeoffsRoot, item.ParentRelativeFolder);
+            string parent = EnsureRelativeFolder(takeoffsRoot, item.ParentRelativeFolder);
             string itemName = UniqueChildDisplayName(parent, item.Name);
             TakeoffItem imported = OurPlaneCoreJobStore.CreateTakeoffItem(
                 job,
@@ -225,6 +248,7 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
         OurPlaneCoreJob job,
+        string takeoffsRoot,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
         IReadOnlyDictionary<string, TakeoffItem> importedTakeoffsBySource,
         List<string> messages,
@@ -250,7 +274,7 @@ public static partial class PlanSwiftProjectImporter
                 continue;
             }
 
-            string parent = EnsureRelativeFolder(job.TakeoffsRoot, segment.ParentRelativeFolder);
+            string parent = EnsureRelativeFolder(takeoffsRoot, segment.ParentRelativeFolder);
             string itemName = UniqueChildDisplayName(parent, SegmentTakeoffName(segment));
             TakeoffItem imported = OurPlaneCoreJobStore.CreateTakeoffItem(
                 job,
@@ -857,6 +881,17 @@ public static partial class PlanSwiftProjectImporter
         return current;
     }
 
+    private static string EnsureImportRootFolder(string root, string requestedName, bool isTakeoffRoot)
+    {
+        string name = string.IsNullOrWhiteSpace(requestedName)
+            ? PlanSwiftImportOptions.DefaultCurrentJobImportFolderName
+            : requestedName.Trim();
+        string folder = OurPlaneCoreJobStore.EnsureFolder(root, name);
+        if (isTakeoffRoot)
+            OurPlaneCoreJobStore.SetProperty(folder, "SmartNodeKind", "folder");
+        return folder;
+    }
+
     private static IReadOnlyList<string> SplitRelativePath(string relativePath) =>
         string.IsNullOrWhiteSpace(relativePath)
             ? []
@@ -911,6 +946,13 @@ public static partial class PlanSwiftProjectImporter
             throw new ArgumentException("Source PlanSwift job path is required.", nameof(options));
         if (!Directory.Exists(options.SourceJobPath))
             throw new DirectoryNotFoundException(options.SourceJobPath);
+        if (options.ImportIntoExistingJob)
+        {
+            if (!Directory.Exists(options.DestinationJobPath))
+                throw new DirectoryNotFoundException(options.DestinationJobPath);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(options.DestinationParentPath))
             throw new ArgumentException("Destination parent path is required.", nameof(options));
 

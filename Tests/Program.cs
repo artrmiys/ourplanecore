@@ -198,6 +198,7 @@ var tests = new List<(string Name, Action Run)>
     ("planswift import preserves holes box and containers", PlanSwiftImportTests.ImportPreservesPlanSwiftHolesBoxAndContainers),
     ("planswift import preserves segments and source metadata", PlanSwiftImportTests.ImportPreservesSegmentsAndSourceMetadata),
     ("planswift import joist segments use linked area section directions", PlanSwiftImportTests.ImportJoistSegmentsUseLinkedAreaSectionDirections),
+    ("planswift import into current job uses planswift buckets", PlanSwiftImportTests.ImportIntoCurrentJobUsesPlanSwiftBuckets),
     ("planswift import copies existing ourplanecore job takeoffs", PlanSwiftImportTests.ImportCopiesExistingOurPlaneCoreJobTakeoffs),
     ("planswift txt export writes every root item", PlanSwiftTxtExportWritesEveryRootItem),
     ("planswift export hides generated import notes", PlanSwiftExportHidesGeneratedImportNotes),

@@ -248,6 +248,72 @@ internal static class PlanSwiftImportTests
         });
     }
 
+    public static void ImportIntoCurrentJobUsesPlanSwiftBuckets()
+    {
+        WithTempParent(parent =>
+        {
+            string sourceJob = Path.Combine(parent, "PlanSwift Job");
+            CreateSyntheticPlanSwiftJob(sourceJob);
+
+            OurPlaneCoreJob currentJob = OurPlaneCoreJobStore.CreateJob(parent, "Current OPC Job");
+            string existingPdf = Path.Combine(parent, "existing.pdf");
+            WriteTestPdf(existingPdf);
+            PageInfo existingPage = OurPlaneCoreJobStore.CreatePageFromPdf(
+                currentJob,
+                existingPdf,
+                "Existing Page",
+                currentJob.PagesRoot,
+                pdfPage: 0,
+                scaleMetersPerPt: 0.25);
+            TakeoffItem existingItem = OurPlaneCoreJobStore.CreateTakeoffItem(
+                currentJob,
+                currentJob.TakeoffsRoot,
+                "Existing Walls",
+                "#444444",
+                "line");
+            existingItem.Measurements.Add(new Measurement
+            {
+                MType = "line",
+                Color = existingItem.Color,
+                PageFolder = existingPage.FolderPath,
+                ScaleMetersPerPt = existingPage.ScaleMetersPerPt,
+                Points = [new SKPoint(0, 0), new SKPoint(2, 0)],
+            });
+            OurPlaneCoreJobStore.SaveTakeoffItem(existingItem);
+
+            PlanSwiftImportResult result = PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
+            {
+                SourceJobPath = sourceJob,
+                DestinationJobPath = currentJob.RootPath,
+                ConvertPageImages = false,
+            });
+
+            AssertEqual(currentJob.RootPath, result.DestinationJobPath, "current job remains import destination");
+            AssertEqual("1", result.PagesImported.ToString(), "imported page count");
+            AssertEqual("1", result.TakeoffItemsImported.ToString(), "imported item count");
+            AssertEqual("1", result.MeasurementsImported.ToString(), "imported measurement count");
+
+            string pageBucket = Path.Combine(currentJob.PagesRoot, PlanSwiftImportOptions.DefaultCurrentJobImportFolderName);
+            string takeoffBucket = Path.Combine(currentJob.TakeoffsRoot, PlanSwiftImportOptions.DefaultCurrentJobImportFolderName);
+            AssertTrue(Directory.Exists(pageBucket), "page import bucket exists");
+            AssertTrue(Directory.Exists(takeoffBucket), "takeoff import bucket exists");
+
+            OurPlaneCoreJob reloaded = OurPlaneCoreJobStore.LoadJob(currentJob.RootPath);
+            IReadOnlyList<PageInfo> pages = CollectPages(reloaded.PagesRoot);
+            AssertTrue(pages.Any(page => page.Name == "Existing Page" && !page.FolderPath.StartsWith(pageBucket, StringComparison.OrdinalIgnoreCase)), "existing page stays outside PlanSwift bucket");
+            PageInfo importedPage = pages.Single(page => page.Name == "A100");
+            AssertTrue(importedPage.FolderPath.StartsWith(pageBucket, StringComparison.OrdinalIgnoreCase), "imported page lives under 01. planswift page bucket");
+
+            IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(reloaded);
+            AssertTrue(items.Any(item => item.Name == "Existing Walls" && !item.FolderPath.StartsWith(takeoffBucket, StringComparison.OrdinalIgnoreCase)), "existing takeoff stays outside PlanSwift bucket");
+            TakeoffItem importedItem = items.Single(item => item.Name == "Walls");
+            AssertTrue(importedItem.FolderPath.StartsWith(takeoffBucket, StringComparison.OrdinalIgnoreCase), "imported takeoff lives under 01. planswift takeoff bucket");
+            Measurement importedMeasurement = importedItem.Measurements.Single();
+            AssertEqual(importedPage.FolderPath, importedMeasurement.PageFolder, "imported measurement page binding uses imported bucket page");
+            AssertEqual(importedItem.FolderPath, importedMeasurement.TakeoffFolder, "imported measurement takeoff binding uses imported bucket item");
+        });
+    }
+
     public static void ImportCopiesExistingOurPlaneCoreJobTakeoffs()
     {
         WithTempParent(parent =>
