@@ -280,6 +280,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeThreeDViewer();
+        _newCountSymbol = CountDisplaySymbol.Normalize(_settings.DefaultCountSymbol);
 
         _viewport = new PdfViewport
         {
@@ -287,6 +288,7 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Stretch,
             ActiveAnnotationColor = _annotationColor,
             ActiveAnnotationStrokeWidth = _annotationStrokeWidth,
+            ActiveCountSymbol = _newCountSymbol,
         };
         _viewport.StatusChanged      += msg => TxtStatus.Text = msg;
         _viewport.ScaleChanged       += OnScaleChanged;

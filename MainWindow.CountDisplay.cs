@@ -254,10 +254,17 @@ public partial class MainWindow
 
     private void SetNewCountSymbol(string symbol)
     {
+        RememberNewCountSymbol(symbol);
+        TxtStatus.Text = $"New Count display: {CountDisplaySymbol.Title(_newCountSymbol)}.";
+    }
+
+    private void RememberNewCountSymbol(string symbol)
+    {
         _newCountSymbol = CountDisplaySymbol.Normalize(symbol);
+        _settings.DefaultCountSymbol = _newCountSymbol;
         _viewport.ActiveCountSymbol = _newCountSymbol;
         UpdateDefaultCountSymbolButton();
-        TxtStatus.Text = $"New Count display: {CountDisplaySymbol.Title(_newCountSymbol)}.";
+        SaveAppSettings();
     }
 
     private void ApplyNewCountSymbolToItemIfNeeded(TakeoffItem item, string measurementType)

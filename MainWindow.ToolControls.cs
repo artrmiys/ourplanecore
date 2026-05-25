@@ -509,9 +509,7 @@ public partial class MainWindow
 
         if (mtype == "point")
         {
-            _newCountSymbol = CountDisplaySymbol.Normalize(dlg.ItemCountSymbol);
-            _viewport.ActiveCountSymbol = _newCountSymbol;
-            UpdateDefaultCountSymbolButton();
+            RememberNewCountSymbol(dlg.ItemCountSymbol);
         }
 
         var newItem = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, mtype, parentFolder);

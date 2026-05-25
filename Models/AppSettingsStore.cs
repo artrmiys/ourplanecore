@@ -32,6 +32,7 @@ public sealed class AppSettings
     public bool SimplifyViewportNavigation { get; set; } = false;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
+    public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
     public double ViewportPointSizeScale { get; set; } = 2.0;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
@@ -129,6 +130,7 @@ public static class AppSettingsStore
             NormalizeJobsRoots(settings);
             NormalizeRecentJobs(settings);
             NormalizeOutputSettings(settings);
+            NormalizeTakeoffDefaults(settings);
             return settings;
         }
         catch (Exception ex)
@@ -142,6 +144,7 @@ public static class AppSettingsStore
     {
         NormalizeJobsRoots(settings);
         NormalizeOutputSettings(settings);
+        NormalizeTakeoffDefaults(settings);
         string? dir = Path.GetDirectoryName(SettingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
@@ -370,6 +373,11 @@ public static class AppSettingsStore
             fallback: 1.2,
             min: 0.25,
             max: PdfExportScaleMax);
+    }
+
+    public static void NormalizeTakeoffDefaults(AppSettings settings)
+    {
+        settings.DefaultCountSymbol = CountDisplaySymbol.Normalize(settings.DefaultCountSymbol);
     }
 
     public static void NormalizeJobsRoots(AppSettings settings)

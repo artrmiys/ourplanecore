@@ -29,11 +29,15 @@ public partial class MainWindow
         var dlg = new NewItemDialog(
             measurementType,
             DefaultTakeoffNameForFolder(measurementType, parentFolder),
-            defaultColor: defaultColor)
+            defaultColor: defaultColor,
+            defaultCountSymbol: _newCountSymbol)
         {
             Owner = this,
         };
         if (dlg.ShowDialog() != true) return;
+
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(dlg.ItemType) == "point")
+            RememberNewCountSymbol(dlg.ItemCountSymbol);
 
         TakeoffAutoRouteResult route = TakeoffAutoRoutingService.ResolveRoute(
             _currentJob,

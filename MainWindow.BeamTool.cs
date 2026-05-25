@@ -45,9 +45,7 @@ public partial class MainWindow
             return;
         }
 
-        _newCountSymbol = CountDisplaySymbol.Normalize(dialog.ItemCountSymbol);
-        _viewport.ActiveCountSymbol = _newCountSymbol;
-        UpdateDefaultCountSymbolButton();
+        RememberNewCountSymbol(dialog.ItemCountSymbol);
 
         TakeoffItem item = CreateUniqueTakeoffItem(dialog.ItemName, dialog.ItemColor, "point", parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
@@ -109,9 +107,7 @@ public partial class MainWindow
             return;
         }
 
-        _newCountSymbol = CountDisplaySymbol.Normalize(dialog.ItemCountSymbol);
-        _viewport.ActiveCountSymbol = _newCountSymbol;
-        UpdateDefaultCountSymbolButton();
+        RememberNewCountSymbol(dialog.ItemCountSymbol);
 
         TakeoffItem item = CreateUniqueTakeoffItem(dialog.ItemName, dialog.ItemColor, "point", parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);

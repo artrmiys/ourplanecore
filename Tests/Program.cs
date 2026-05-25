@@ -214,6 +214,7 @@ var tests = new List<(string Name, Action Run)>
     ("app settings job roots dedupe", AppSettingsJobRootsDedupe),
     ("job picker roots classify local cloud network", JobPickerRootsClassifyLocalCloudNetwork),
     ("app settings path can use env override", AppSettingsPathCanUseEnvOverride),
+    ("app settings count symbol persists", AppSettingsCountSymbolPersists),
     ("atomic write ignores stale fixed temp path", AtomicWriteIgnoresStaleFixedTempPath),
     ("app settings recent job preserves pin and thumbnail", AppSettingsRecentPreservesPinAndThumbnail),
     ("app settings removes recent job by path", AppSettingsRemovesRecentJobByPath),
@@ -2817,6 +2818,34 @@ static void AppSettingsPathCanUseEnvOverride()
     finally
     {
         Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, previous);
+    }
+}
+
+static void AppSettingsCountSymbolPersists()
+{
+    string? previous = Environment.GetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable);
+    string dir = Path.Combine(Path.GetTempPath(), "opc_settings_count_symbol", Guid.NewGuid().ToString("N"));
+    string overridePath = Path.Combine(dir, "settings.json");
+    try
+    {
+        Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, overridePath);
+        var settings = new AppSettings { DefaultCountSymbol = CountDisplaySymbol.Cross };
+        AppSettingsStore.Save(settings);
+
+        AppSettings loaded = AppSettingsStore.Load();
+        AssertEqual(CountDisplaySymbol.Cross, loaded.DefaultCountSymbol, "default count symbol persisted");
+
+        loaded.DefaultCountSymbol = "invalid";
+        AppSettingsStore.Save(loaded);
+        AssertEqual(
+            CountDisplaySymbol.Circle,
+            AppSettingsStore.Load().DefaultCountSymbol,
+            "invalid default count symbol falls back");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, previous);
+        TryDeleteDirectory(dir);
     }
 }
 
