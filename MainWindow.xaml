@@ -377,7 +377,7 @@
                          GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff arrow markup"
                          Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
             <RadioButton x:Name="BtnDrawRect"  Content="Box"  Click="BtnTool_Click" Tag="drawrect"
-                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff box markup (B)"
+                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff box markup"
                          Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
             <RadioButton x:Name="BtnDrawCloud"  Content="Cloud"  Click="BtnTool_Click" Tag="drawcloud"
                          GroupName="DrawingTool" ToolTip="Draw a cloud annotation"
