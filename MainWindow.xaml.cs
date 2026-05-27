@@ -429,6 +429,7 @@ public partial class MainWindow : Window
         Dispatcher.InvokeAsync(async () =>
         {
             TryOpenLastJobFromSettings();
+            await TryRunGuideScreenshotCaptureAsync();
             await TryRunViewportPageStressSmokeAsync();
             await TryRunTakeoffsMoveSmokeAsync();
         }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
