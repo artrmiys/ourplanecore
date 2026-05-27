@@ -204,6 +204,7 @@ var tests = new List<(string Name, Action Run)>
     ("planswift import copies existing ourplanecore job takeoffs", PlanSwiftImportTests.ImportCopiesExistingOurPlaneCoreJobTakeoffs),
     ("planswift txt export writes every root item", PlanSwiftTxtExportWritesEveryRootItem),
     ("planswift export hides generated import notes", PlanSwiftExportHidesGeneratedImportNotes),
+    ("pdf import source finder finds nested pdf files", PdfImportSourceFinderFindsNestedPdfFiles),
     ("active excel export matrix keeps numbers", ActiveExcelExportMatrixKeepsNumbers),
     ("joist pitch persists on takeoff item", JoistPitchPersistsOnTakeoffItem),
     ("joist pitch applies item properties", JoistPitchAppliesItemProperties),
@@ -2792,6 +2793,32 @@ static void AppSettingsRemovesJobRootByPath()
 
     AssertEqual("0", AppSettingsStore.CurrentJobsRootPaths(settings).Count.ToString(), "removed final root");
     AssertEqual("", settings.JobsRootPath, "current root cleared");
+}
+
+static void PdfImportSourceFinderFindsNestedPdfFiles()
+{
+    string root = Path.Combine(Path.GetTempPath(), "opc_pdf_recursive", Guid.NewGuid().ToString("N"));
+    string nested = Path.Combine(root, "Nested");
+    Directory.CreateDirectory(nested);
+    try
+    {
+        File.WriteAllText(Path.Combine(root, "A.PDF"), "%PDF-1.4");
+        File.WriteAllText(Path.Combine(nested, "B.pdf"), "%PDF-1.4");
+        File.WriteAllText(Path.Combine(nested, "ignore.txt"), "not a pdf");
+
+        IReadOnlyList<string> files = PdfImportSourceFinder.FindPdfFilesRecursive(root);
+        var relative = files
+            .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
+            .ToList();
+
+        AssertEqual("2", files.Count.ToString(), "recursive pdf count");
+        AssertEqual("A.PDF", relative[0], "top-level pdf first");
+        AssertEqual("Nested/B.pdf", relative[1], "nested pdf found");
+    }
+    finally
+    {
+        TryDeleteDirectory(root);
+    }
 }
 
 static void JobPickerRootsClassifyLocalCloudNetwork()

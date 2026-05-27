@@ -227,23 +227,35 @@ public partial class MainWindow
 
     private void CreateJobFromDialog(string? preferredParent = null)
     {
-        string? parent = ResolveNewJobParent(preferredParent);
-        parent ??= SelectFolder("Choose parent folder for the new job", NewJobInitialFolder(preferredParent));
-        if (parent == null)
+        string? pdfFolder = SelectFolder("Select folder with PDFs for the new job", NewJobInitialFolder(preferredParent));
+        if (pdfFolder == null)
             return;
 
-        string? name = ShowInputDialog("Job name:", "New Job", "New Job");
+        IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(pdfFolder);
+        if (pdfPaths.Count == 0)
+        {
+            MessageBox.Show("No PDF files were found in the selected folder or its subfolders.",
+                            "New Job",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+            return;
+        }
+
+        string? name = ShowInputDialog("Job name:", DefaultNewJobName(pdfFolder), "New Job");
         if (string.IsNullOrWhiteSpace(name))
             return;
 
+        string parent = ResolveNewJobParent(preferredParent) ?? SampleJobService.DefaultJobsRoot;
+
         try
         {
+            Directory.CreateDirectory(parent);
             _settings.JobsRootPath = parent;
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
             var job = OurPlaneCoreJobStore.CreateJob(parent, name);
             OpenJob(job.RootPath);
-            QueuePdfImportForNewJob();
+            QueuePdfImportForNewJob(pdfPaths, pdfFolder);
         }
         catch (Exception ex)
         {
@@ -252,12 +264,25 @@ public partial class MainWindow
         }
     }
 
-    private void QueuePdfImportForNewJob()
+    private void QueuePdfImportForNewJob(IReadOnlyList<string> pdfPaths, string pdfFolder)
     {
-        TxtStatus.Text = "New job created. Select PDF file(s) to import.";
+        TxtStatus.Text = $"New job created. Importing {pdfPaths.Count} PDF file(s) from {pdfFolder}.";
         Dispatcher.BeginInvoke(
-            new Action(() => BtnImport_Click(this, new RoutedEventArgs())),
+            new Action(async () =>
+            {
+                await RunAsyncUiHandler(
+                    () => ImportPdfPathsAsync(pdfPaths, this, confirmPageNames: false),
+                    "Import PDF failed.",
+                    "Import PDF");
+            }),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private static string DefaultNewJobName(string pdfFolder)
+    {
+        string clean = pdfFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string name = Path.GetFileName(clean);
+        return string.IsNullOrWhiteSpace(name) ? "New Job" : name;
     }
 
     private string? ResolveNewJobParent(string? preferredParent)

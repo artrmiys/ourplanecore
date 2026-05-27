@@ -28,6 +28,14 @@ public partial class MainWindow
             "Import PDF");
     }
 
+    private async void BtnImportPdfFolder_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => ImportPdfFolderToCurrentJobAsync(sender),
+            "Import PDF folder failed.",
+            "Import PDF Folder");
+    }
+
     private async Task ImportPdfAsync(object sender)
     {
         if (_currentJob == null)
@@ -49,6 +57,40 @@ public partial class MainWindow
         if (pdfPaths.Count == 0)
             return;
 
+        await ImportPdfPathsAsync(pdfPaths, sender);
+    }
+
+    private async Task ImportPdfFolderToCurrentJobAsync(object sender)
+    {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "Import PDF Folder",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string? folder = SelectFolder("Select folder with PDF files", NewPdfImportInitialFolder());
+        if (folder == null)
+            return;
+
+        IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(folder);
+        if (pdfPaths.Count == 0)
+        {
+            MessageBox.Show("No PDF files were found in the selected folder or its subfolders.",
+                            "Import PDF Folder",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+            return;
+        }
+
+        await ImportPdfPathsAsync(pdfPaths, sender, confirmPageNames: false);
+    }
+
+    private async Task ImportPdfPathsAsync(
+        IReadOnlyList<string> pdfPaths,
+        object sender,
+        bool confirmPageNames = true)
+    {
         IReadOnlyList<PdfImportPlan> plans = BuildPdfImportPlans(pdfPaths, out IReadOnlyList<string> skipped);
         if (plans.Count == 0)
         {
@@ -57,10 +99,22 @@ public partial class MainWindow
             return;
         }
 
-        if (!ConfirmPdfImportPageNames(plans, skipped))
+        if (confirmPageNames && !ConfirmPdfImportPageNames(plans, skipped))
             return;
 
         await ImportPdfPlansAsync(plans, skipped, sender);
+    }
+
+    private string? NewPdfImportInitialFolder()
+    {
+        if (_currentJob?.RootPath is { } root && Directory.Exists(root))
+            return root;
+
+        if (!string.IsNullOrWhiteSpace(_settings.JobsRootPath) && Directory.Exists(_settings.JobsRootPath))
+            return _settings.JobsRootPath;
+
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        return Directory.Exists(desktop) ? desktop : null;
     }
 
     private IReadOnlyList<PdfImportPlan> BuildPdfImportPlans(
