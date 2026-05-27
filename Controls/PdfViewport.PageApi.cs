@@ -89,56 +89,14 @@ public sealed partial class PdfViewport
         _docnetRenderVersion++;
         QueuePdfSnapPointLoad(force: true);
 
-        float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
-        string previewCacheKey = DocnetRenderCacheKey(_pdfPath, _pdfIndex, previewScale);
-        bool queueLayerAfterPreview = ShouldQueueInitialLayerRender();
-        bool hasCachedPreview = DocnetRenderCache.TryGet(previewCacheKey, out CachedBitmapRender cachedPreview);
-        if (!hasCachedPreview)
-        {
-            string instantCacheKey = DocnetRenderCacheKey(
-                _pdfPath,
-                _pdfIndex,
-                ViewportRenderPolicy.InstantPagePreviewRenderScale);
-            hasCachedPreview = DocnetRenderCache.TryGet(instantCacheKey, out cachedPreview);
-        }
-
-        if (hasCachedPreview)
-        {
-            ApplyCachedBitmapRender(cachedPreview);
-            Dispatcher.InvokeAsync(() =>
-            {
-                if (restoreView.HasValue)
-                    RestoreViewState(restoreView.Value);
-                else
-                    ZoomFit();
-                if (queueLayerAfterPreview)
-                {
-                    QueueInitialLayerDiscoveryOrRender(
-                        resetLayerStates: true,
-                        renderScale: CurrentRenderScale(),
-                        statusAfter: loadedStatus,
-                        fireLayersAfter: true);
-                }
-                else
-                {
-                    _showingPreviousPageDuringSwitch = false;
-                    PostStatus(loadedStatus);
-                    RequestRepaint();
-                }
-            });
-        }
-        else
-        {
-            QueueDocnetRender(
-                ViewportRenderPolicy.InstantPagePreviewRenderScale,
-                restoreView,
-                fitAfter: !restoreView.HasValue,
-                queueLayerAfter: queueLayerAfterPreview,
-                resetLayerStates: true,
-                statusAfter: loadedStatus,
-                fireLayersAfter: true);
-        }
+        QueueLayerRender(
+            resetLayerStates: true,
+            renderScale: ViewportRenderPolicy.InstantPagePreviewRenderScale,
+            statusAfter: loadedStatus,
+            fireLayersAfter: true,
+            restoreView: restoreView,
+            fitAfter: !restoreView.HasValue);
 
         PostStatus($"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
         RequestRepaint();
@@ -147,8 +105,4 @@ public sealed partial class PdfViewport
         FireLayersChanged();
     }
 
-    private bool ShouldQueueInitialLayerRender()
-    {
-        return true;
-    }
 }

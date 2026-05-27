@@ -335,6 +335,8 @@ public sealed partial class PdfViewport : SKElement
         Dictionary<int, bool> LayerStates,
         HashSet<int> HighlightedLayers,
         IReadOnlyList<PdfLayerInfo>? CachedLayers,
+        ViewState? RestoreView,
+        bool FitAfter,
         string? StatusAfter,
         bool FireLayersAfter);
 

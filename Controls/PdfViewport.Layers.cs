@@ -220,7 +220,6 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        bool needsFit = _pdfW <= 0 || _pdfH <= 0;
         _pageBitmap?.Dispose();
         _pageBitmap = bitmap;
         _pdfW = render.WidthPt;
@@ -250,8 +249,6 @@ public sealed partial class PdfViewport
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
         RequestRepaint();
-        if (needsFit)
-            Dispatcher.InvokeAsync(ZoomFit);
         return true;
     }
 
@@ -259,7 +256,9 @@ public sealed partial class PdfViewport
         bool resetLayerStates,
         float renderScale,
         string? statusAfter = null,
-        bool fireLayersAfter = false)
+        bool fireLayersAfter = false,
+        ViewState? restoreView = null,
+        bool fitAfter = false)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath))
             return;
@@ -275,6 +274,8 @@ public sealed partial class PdfViewport
             EffectiveLayerStates(),
             EffectiveHighlightedLayers(),
             LayerRenderCachedLayers(),
+            restoreView,
+            fitAfter,
             statusAfter,
             fireLayersAfter);
 
@@ -430,6 +431,7 @@ public sealed partial class PdfViewport
                 {
                     if (ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates))
                     {
+                        ApplyLayerRenderContinuation(completion.Request);
                         if (completion.Request.FireLayersAfter)
                             FireLayersChanged();
                         if (!string.IsNullOrWhiteSpace(completion.Request.StatusAfter))
@@ -463,6 +465,14 @@ public sealed partial class PdfViewport
             if (_pendingLayerRender != null)
                 _ = StartNextLayerRenderAsync();
         }
+    }
+
+    private void ApplyLayerRenderContinuation(LayerRenderRequest request)
+    {
+        if (request.RestoreView.HasValue)
+            RestoreViewState(request.RestoreView.Value);
+        else if (request.FitAfter)
+            ZoomFit();
     }
 
     private void ReportSlowLayerRender(LayerRenderRequest request, long elapsedMs)

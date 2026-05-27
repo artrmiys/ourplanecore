@@ -86,6 +86,9 @@ public sealed partial class PdfViewport
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfW <= 0 || _pdfH <= 0)
             return;
 
+        if (_showingPreviousPageDuringSwitch && !_usingLayerRenderer)
+            return;
+
         float desired = CurrentRenderScale();
         if (!force && _renderedScale > 0)
         {
