@@ -109,7 +109,7 @@ public sealed class PdfSheetMetadata
 
         string key = EffectiveSheetKey.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(key))
-            return "-";
+            return "";
         string suffix = Suffix.Trim().ToLowerInvariant();
         return string.IsNullOrWhiteSpace(Suffix)
             ? key
@@ -643,7 +643,7 @@ public static class PdfSheetMetadataService
     {
         string compact = Regex.Replace((value ?? "").Trim(), @"\s+", " ");
         return string.IsNullOrWhiteSpace(compact)
-            ? "-"
+            ? ""
             : compact.ToLowerInvariant();
     }
 

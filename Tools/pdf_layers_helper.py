@@ -41,7 +41,7 @@ AI_ALLOWED_SCALES = [
 ]
 AI_SCALE_SUFFIXES = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw", "shw"}
 AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t"}
-SHEET_PREFIXES = {"a", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l", "id", "fp", "fa", "fs"}
+SHEET_PREFIXES = {"a", "ar", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l", "id", "fp", "fa", "fs"}
 SHEET_LABEL_RE = re.compile(
     r"\b([A-Z]{1,3}-?\d{1,4}(?:\.(?:R\d+[A-Z]?|[0-9]?U\d+[A-Z]?|\d+[A-Z]{0,2}))?[A-Z]{0,2})\b",
     flags=re.IGNORECASE,
@@ -357,6 +357,78 @@ def _title_block_words(words: list, max_x: float, max_y: float) -> list:
     ]
 
 
+def _word_box(word: object) -> tuple[float, float, float, float]:
+    return (float(word[0]), float(word[1]), float(word[2]), float(word[3]))
+
+
+def _word_size(word: object) -> float:
+    x0, y0, x1, y1 = _word_box(word)
+    return max(abs(x1 - x0), abs(y1 - y0))
+
+
+def _line_text_near_word(words: list, target: object) -> str:
+    x0, y0, x1, y1 = _word_box(target)
+    height = max(8.0, abs(y1 - y0))
+    center_y = (y0 + y1) / 2.0
+    line_words = [
+        w for w in words
+        if abs(((float(w[1]) + float(w[3])) / 2.0) - center_y) <= max(14.0, height * 0.45)
+    ]
+    return _words_text(line_words)
+
+
+def _looks_like_footer_noise(text: str | None) -> bool:
+    return bool(re.search(
+        r"(?:\.rvt\b|project\s+files|files\\|c:\\|@|\\\d{2}-\d{4}|revit)",
+        text or "",
+        flags=re.IGNORECASE,
+    ))
+
+
+def _prominent_sheet_label_from_title_block(
+    words: list,
+    max_x: float,
+    max_y: float,
+) -> tuple[str | None, object | None]:
+    scored: list[tuple[float, str, object]] = []
+    for word in words:
+        label = str(word[4]).strip()
+        if not _valid_sheet_label(label):
+            continue
+
+        x0, y0, _, _ = _word_box(word)
+        size = _word_size(word)
+        if y0 >= max_y * 0.92 and (size < 32 or _looks_like_footer_noise(_line_text_near_word(words, word))):
+            continue
+
+        in_top_right_title = x0 >= max_x * 0.86 and y0 <= max_y * 0.18
+        in_bottom_right_title = x0 >= max_x * 0.86 and y0 >= max_y * 0.70 and size >= 30
+        if not in_top_right_title and not in_bottom_right_title:
+            continue
+
+        score = min(size, 90.0) * 3.0
+        if in_top_right_title:
+            score += 520.0
+        if in_bottom_right_title:
+            score += 360.0
+        if x0 >= max_x * 0.94:
+            score += 160.0
+        if size >= 40:
+            score += 120.0
+        if y0 >= max_y * 0.90:
+            score -= 140.0
+
+        scored.append((score, label, word))
+
+    if not scored:
+        return None, None
+
+    score, label, word = max(scored, key=lambda item: item[0])
+    if score < 450.0:
+        return None, None
+    return label, word
+
+
 def _same_row(left: object, right: object, tolerance: float = 12.0) -> bool:
     return abs(float(left[1]) - float(right[1])) <= tolerance
 
@@ -410,6 +482,45 @@ def _extract_sheet_label_from_title_block(words: list, max_x: float, max_y: floa
     below = [w for w in search_words if float(w[1]) >= y0 + 4 or float(w[0]) > x1 + 4]
     candidates = _sheet_label_candidates(_words_text(below))
     return candidates[0] if candidates else None
+
+
+def _extract_title_near_sheet_label(words: list, sheet_label_word: object | None, max_x: float, max_y: float) -> str:
+    if sheet_label_word is None:
+        return ""
+
+    x0, y0, x1, y1 = _word_box(sheet_label_word)
+    if x0 < max_x * 0.86 or y0 > max_y * 0.22:
+        return ""
+
+    left = max(max_x * 0.875, x0 - 270.0)
+    right = max(left, x0 - 18.0)
+    top = max(0.0, y0 - 28.0)
+    bottom = min(max_y, max(y1 + 115.0, max_y * 0.075))
+    skip = {
+        "drawing", "number", "no", "date", "phase", "project", "#",
+        "drawn", "checked", "by", "scale", "revisions",
+    }
+    title_words = []
+    for word in words:
+        token = str(word[4]).strip()
+        clean = token.lower().rstrip(":")
+        if clean in skip:
+            continue
+        if _sheet_display_key(token) == _sheet_display_key(str(sheet_label_word[4])):
+            continue
+        wx0, wy0, _, _ = _word_box(word)
+        if left <= wx0 <= right and top <= wy0 <= bottom and _word_size(word) >= 18:
+            title_words.append(word)
+
+    if not title_words:
+        return ""
+
+    centers_y = [(float(w[1]) + float(w[3])) / 2.0 for w in title_words]
+    if max(centers_y) - min(centers_y) <= 24.0:
+        ordered = sorted(title_words, key=lambda w: float(w[0]))
+    else:
+        ordered = sorted(title_words, key=lambda w: (-float(w[1]), float(w[0])))
+    return _clean_sheet_title(" ".join(str(w[4]) for w in ordered))
 
 
 def _extract_title_from_title_block(words: list, sheet_label: str | None, max_x: float, max_y: float) -> str:
@@ -687,7 +798,7 @@ def _metadata_layers(doc: fitz.Document, doc_key: tuple[str, int, int, str], pag
 
 def _rename_candidate(sheet_key: str, suffix: str | None) -> str:
     if not sheet_key:
-        return "-"
+        return ""
     return f"{sheet_key} {suffix}".strip() if suffix else sheet_key
 
 
@@ -1757,16 +1868,18 @@ def sheetmeta_data(req: dict) -> dict:
     bottom_text = _words_text(bottom_words)
     page_label = _extract_sheet_label_from_page_label(page)
     filename_label = _extract_sheet_label_from_filename(pdf_path)
+    prominent_label, prominent_label_word = _prominent_sheet_label_from_title_block(words, max_x, max_y)
     sheet_label = (
         _extract_sheet_label_from_title_block(words, max_x, max_y)
+        or prominent_label
         or page_label
         or filename_label
-        or _extract_sheet_label_from_text(bottom_text)
     )
     sheet_key = _sheet_key(sheet_label)
     sheet_display_key = _sheet_display_key(sheet_label)
     filename_title = _filename_title(pdf_path, sheet_label or filename_label) if doc.page_count <= 1 or filename_label else ""
     sheet_title = (
+        _extract_title_near_sheet_label(words, prominent_label_word, max_x, max_y) or
         _extract_title_from_title_block(words, sheet_label, max_x, max_y)
         or _extract_pdf_title(words, text, sheet_label, bottom_y0, max_x, max_y)
         or filename_title

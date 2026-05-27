@@ -167,6 +167,7 @@ var tests = new List<(string Name, Action Run)>
     ("count display symbol persists on takeoff and measurements", StorageTests.CountDisplaySymbolPersistsOnTakeoffAndMeasurements),
     ("takeoff corrupt measurements json is quarantined", StorageTests.TakeoffCorruptMeasurementsJsonIsQuarantined),
     ("pdf metadata page name and scale gate", PdfMetadataPageNameAndScaleGate),
+    ("pdf metadata leaves unknown page names blank", PdfMetadataLeavesUnknownPageNamesBlank),
     ("pdf metadata preserves dotted sheet labels", PdfMetadataPreservesDottedSheetLabels),
     ("pdf scale parser handles architectural scale", PdfScaleParserHandlesArchitecturalScale),
     ("pdf scale parser handles mixed fraction scale", PdfScaleParserHandlesMixedFractionScale),
@@ -2164,6 +2165,13 @@ static void PdfMetadataPageNameAndScaleGate()
 
     metadata.SkipScale = true;
     AssertFalse(metadata.CanApplyScale(), "skip scale blocks scale apply");
+}
+
+static void PdfMetadataLeavesUnknownPageNamesBlank()
+{
+    var metadata = new PdfSheetMetadata();
+
+    AssertEqual("", metadata.ProposedPageName(), "unknown sheet should not propose dash page name");
 }
 
 static void PdfMetadataPreservesDottedSheetLabels()

@@ -213,17 +213,6 @@ public sealed partial class PdfViewport
 
     private bool ApplyLayerRenderResult(PdfLayerRenderResult render, bool resetLayerStates)
     {
-        if (render.Layers.Count == 0 && _pageBitmap != null)
-        {
-            _cachedLayers ??= [];
-            _layers = [];
-            _usingLayerRenderer = false;
-            _showingPreviousPageDuringSwitch = false;
-            RequestRepaint();
-            PdfLayersDiscovered?.Invoke(_cachedLayers);
-            return true;
-        }
-
         var bitmap = SKBitmap.Decode(render.ImageBytes);
         if (bitmap == null)
         {
@@ -257,6 +246,8 @@ public sealed partial class PdfViewport
         if (_pdfSnapEnabled && resetLayerStates)
             QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
         RequestRepaint();
         if (needsFit)
@@ -296,20 +287,7 @@ public sealed partial class PdfViewport
         string? statusAfter,
         bool fireLayersAfter)
     {
-        if (_cachedLayers != null)
-        {
-            if (_cachedLayers.Count > 0)
-            {
-                QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter);
-                return;
-            }
-
-            CompleteLayerlessRender(statusAfter, fireLayersAfter);
-            return;
-        }
-
-        _cachedLayers = [];
-        CompleteLayerlessRender(statusAfter, fireLayersAfter);
+        QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter);
     }
 
     public void DiscoverPdfLayersOnDemand()
@@ -387,7 +365,7 @@ public sealed partial class PdfViewport
             PdfLayersDiscovered?.Invoke(_cachedLayers);
             if (_cachedLayers.Count == 0)
             {
-                CompleteLayerlessRender(statusAfter, fireLayersAfter);
+                QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter);
                 return;
             }
 

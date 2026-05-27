@@ -149,9 +149,6 @@ public sealed partial class PdfViewport
 
     private bool ShouldQueueInitialLayerRender()
     {
-        if (_cachedLayers == null)
-            return true;
-
-        return _cachedLayers.Count > 0;
+        return true;
     }
 }
