@@ -184,6 +184,27 @@ public static class AppSettingsStore
         NormalizeJobsRoots(settings);
     }
 
+    public static void RemoveJobsRoot(AppSettings settings, string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return;
+
+        string key = NormalizePath(rootPath);
+        var roots = (settings.JobsRootPaths ?? [])
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Where(path => !string.Equals(NormalizePath(path), key, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(settings.JobsRootPath) &&
+            string.Equals(NormalizePath(settings.JobsRootPath), key, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.JobsRootPath = roots.FirstOrDefault() ?? "";
+        }
+
+        settings.JobsRootPaths = roots;
+        NormalizeJobsRoots(settings);
+    }
+
     public static void AddRecentJob(AppSettings settings, string jobPath, string jobName)
     {
         if (string.IsNullOrWhiteSpace(jobPath))

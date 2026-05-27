@@ -56,6 +56,12 @@
                            TextDecorations="Underline"
                            MouseLeftButtonUp="ManageLink_Click"
                            ToolTip="Pick a folder of OurPlaneCore jobs to browse"/>
+                <Button x:Name="RemoveFolderButton" Content="Remove folder"
+                        Style="{StaticResource TopCommandButton}"
+                        MinWidth="94" Padding="10,2" Height="24"
+                        Margin="10,0,0,0"
+                        Click="RemoveFolderButton_Click"
+                        ToolTip="Remove the selected source folder from this list. Files stay on disk."/>
             </StackPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="OpenButton" Content="Open"

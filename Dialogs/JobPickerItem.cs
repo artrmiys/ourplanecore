@@ -29,7 +29,7 @@ public sealed class JobPickerItem : INotifyPropertyChanged
     public string ThumbnailPath { get; init; } = "";
     public DateTime? LastOpenedUtc { get; init; }
     public bool Exists { get; init; }
-    public string RootPath { get; init; } = "";
+    public string RootPath { get; set; } = "";
 
     public bool IsPinned
     {

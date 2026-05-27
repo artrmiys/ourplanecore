@@ -17,6 +17,7 @@ public partial class JobPickerDialog : Window
     private readonly List<JobPickerItem> _items;
     private readonly Action<string, string, bool>? _pinChanged;
     private readonly Action<string>? _removeRecent;
+    private readonly Action<string>? _removeJobsRoot;
     private readonly List<string> _jobsRootPaths;
     private readonly List<JobRootChip> _chips = [];
 
@@ -29,11 +30,13 @@ public partial class JobPickerDialog : Window
         string jobsRootPath,
         Action<string, string, bool>? pinChanged = null,
         Action<string>? removeRecent = null,
+        Action<string>? removeJobsRoot = null,
         IEnumerable<string>? jobsRootPaths = null)
     {
         _items = items.ToList();
         _pinChanged = pinChanged;
         _removeRecent = removeRecent;
+        _removeJobsRoot = removeJobsRoot;
         _jobsRootPaths = NormalizeRoots(jobsRootPaths ?? BuildRootList(jobsRootPath, _items));
 
         InitializeComponent();
@@ -108,6 +111,8 @@ public partial class JobPickerDialog : Window
         // "All Jobs" is selected by default.
         if (_chips.Count > 0)
             _chips[0].IsSelected = true;
+
+        UpdateFolderActions();
     }
 
     private void AppendChip(JobRootChip chip)
@@ -137,12 +142,21 @@ public partial class JobPickerDialog : Window
             foreach (JobRootChip other in _chips)
                 other.IsSelected = ReferenceEquals(other, chip);
             ApplyFilter();
+            UpdateFolderActions();
         };
         return box;
     }
 
     private static System.Windows.DependencyProperty ToggleButton_IsCheckedProperty() =>
         System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty;
+
+    private void UpdateFolderActions()
+    {
+        RemoveFolderButton.IsEnabled = _removeJobsRoot != null && SelectedRootChip() != null;
+    }
+
+    private JobRootChip? SelectedRootChip() =>
+        _chips.FirstOrDefault(chip => chip.IsSelected && !string.IsNullOrWhiteSpace(chip.Path));
 
     // ───────────────────────── filter / view ─────────────────────────
 
@@ -334,6 +348,17 @@ public partial class JobPickerDialog : Window
         AcceptAction(JobPickerAction.BrowseJobsFolder);
     private void ManageLink_Click(object sender, MouseButtonEventArgs e) =>
         AcceptAction(JobPickerAction.BrowseJobsFolder);
+    private void RemoveFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        JobRootChip? chip = SelectedRootChip();
+        if (chip == null)
+            return;
+
+        string rootPath = NormalizePath(chip.Path);
+        _removeJobsRoot?.Invoke(rootPath);
+        RemoveJobsRootFromDialog(rootPath);
+    }
+
     private void SampleLink_Click(object sender, MouseButtonEventArgs e) =>
         AcceptAction(JobPickerAction.CreateSample);
 
@@ -376,6 +401,32 @@ public partial class JobPickerDialog : Window
 
         string? firstUsableRoot = _jobsRootPaths.FirstOrDefault(IsUsableRoot);
         return firstUsableRoot == null ? "" : NormalizePath(firstUsableRoot);
+    }
+
+    private void RemoveJobsRootFromDialog(string rootPath)
+    {
+        string key = NormalizePath(rootPath);
+        _jobsRootPaths.RemoveAll(path => PathsEqual(path, key));
+
+        for (int i = _items.Count - 1; i >= 0; i--)
+        {
+            JobPickerItem item = _items[i];
+            if (!PathsEqual(item.RootPath, key))
+                continue;
+
+            if (item.IsRecent || item.IsPinned)
+            {
+                item.RootPath = "";
+                item.SourceLabel = "Recent";
+            }
+            else
+            {
+                _items.RemoveAt(i);
+            }
+        }
+
+        BuildSourceChips();
+        ApplyFilter();
     }
 
     // ───────────────────────── helpers ─────────────────────────
@@ -424,6 +475,11 @@ public partial class JobPickerDialog : Window
 
     private static bool IsUsableRoot(string? rootPath) =>
         !string.IsNullOrWhiteSpace(rootPath) && Directory.Exists(rootPath);
+
+    private static bool PathsEqual(string left, string right) =>
+        !string.IsNullOrWhiteSpace(left) &&
+        !string.IsNullOrWhiteSpace(right) &&
+        string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizePath(string path)
     {

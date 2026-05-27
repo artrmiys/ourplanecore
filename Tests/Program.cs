@@ -214,6 +214,7 @@ var tests = new List<(string Name, Action Run)>
     ("job recovery snapshot copies metadata only", JobRecoverySnapshotCopiesMetadataOnly),
     ("job recovery snapshot pruning keeps newest", JobRecoverySnapshotPruningKeepsNewest),
     ("app settings job roots dedupe", AppSettingsJobRootsDedupe),
+    ("app settings removes job root by path", AppSettingsRemovesJobRootByPath),
     ("job picker roots classify local cloud network", JobPickerRootsClassifyLocalCloudNetwork),
     ("app settings path can use env override", AppSettingsPathCanUseEnvOverride),
     ("app settings count symbol persists", AppSettingsCountSymbolPersists),
@@ -2772,6 +2773,25 @@ static void AppSettingsJobRootsDedupe()
     AppSettingsStore.AddJobsRoot(settings, root + Path.DirectorySeparatorChar);
 
     AssertEqual("1", AppSettingsStore.CurrentJobsRootPaths(settings).Count.ToString(), "deduped roots");
+}
+
+static void AppSettingsRemovesJobRootByPath()
+{
+    var settings = new AppSettings();
+    string root1 = Path.Combine(Path.GetTempPath(), "opc_jobs_remove_1");
+    string root2 = Path.Combine(Path.GetTempPath(), "opc_jobs_remove_2");
+    AppSettingsStore.AddJobsRoot(settings, root1);
+    AppSettingsStore.AddJobsRoot(settings, root2);
+
+    AppSettingsStore.RemoveJobsRoot(settings, root2 + Path.DirectorySeparatorChar);
+
+    AssertEqual("1", AppSettingsStore.CurrentJobsRootPaths(settings).Count.ToString(), "removed one root");
+    AssertEqual(Path.GetFullPath(root1), settings.JobsRootPath, "current root falls back");
+
+    AppSettingsStore.RemoveJobsRoot(settings, root1);
+
+    AssertEqual("0", AppSettingsStore.CurrentJobsRootPaths(settings).Count.ToString(), "removed final root");
+    AssertEqual("", settings.JobsRootPath, "current root cleared");
 }
 
 static void JobPickerRootsClassifyLocalCloudNetwork()

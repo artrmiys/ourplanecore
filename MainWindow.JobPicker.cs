@@ -22,6 +22,7 @@ public partial class MainWindow
             _settings.JobsRootPath,
             SetRecentJobPinned,
             RemoveRecentJob,
+            RemoveJobsRoot,
             AppSettingsStore.CurrentJobsRootPaths(_settings))
         {
             Owner = this,
@@ -213,6 +214,7 @@ public partial class MainWindow
             _settings.JobsRootPath,
             SetRecentJobPinned,
             RemoveRecentJob,
+            RemoveJobsRoot,
             AppSettingsStore.CurrentJobsRootPaths(_settings))
         {
             Owner = this,
@@ -382,6 +384,12 @@ public partial class MainWindow
     private void RemoveRecentJob(string jobPath)
     {
         AppSettingsStore.RemoveRecentJob(_settings, jobPath);
+        SaveAppSettings();
+    }
+
+    private void RemoveJobsRoot(string rootPath)
+    {
+        AppSettingsStore.RemoveJobsRoot(_settings, rootPath);
         SaveAppSettings();
     }
 
