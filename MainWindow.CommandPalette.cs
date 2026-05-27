@@ -49,7 +49,7 @@ public partial class MainWindow
         Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
         Add("file.newJob", "New Job", "File", "", "Create a new OurPlaneCore job folder.");
-        Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a small local sample job.");
+        Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a guided local sample project.");
         Add("file.importPlanSwift", "Import PlanSwift Job", "File", "", "Convert a read-only PlanSwift job into a new OurPlaneCore job.");
         Add("file.importPlanSwiftCurrent", "Import PlanSwift to Current Job", "File", "", "Import a read-only PlanSwift job under 01. planswift in the current job.", hasJob, "Open or create a job first.");
         Add("file.importPdf", "Import PDF(s)", "File", "", "Import one or many PDF files into the current job.", hasJob, "Open or create a job first.");
@@ -114,6 +114,7 @@ public partial class MainWindow
 
         Add("takeoffs.newFolder", "New Takeoff Folder", "Takeoffs", "", "Create a takeoff folder under the selected/root folder.", hasJob, "Open or create a job first.");
         Add("takeoffs.newItem", "New Takeoff Item", "Takeoffs", Shortcut("t"), "Create a takeoff item under the selected/root folder.", hasJob, "Open or create a job first.");
+        Add("takeoffs.refresh", "Refresh Takeoffs Tree", "Takeoffs", "", "Reload the Takeoffs tree from the current job folder.", hasJob, "Open or create a job first.");
         Add("takeoffs.activeFind", "Show Active Takeoff", "Takeoffs", "", "Scroll the Takeoffs tree to the active target item.", _activeItem != null, "Select a takeoff item first.");
         Add("takeoffs.activeProperties", "Active Takeoff Properties", "Takeoffs", "", "Edit properties for the active target item.", _activeItem != null, "Select a takeoff item first.");
         Add("takeoffs.activeRecord", "Record Active Takeoff", "Takeoffs", "Space", "Start or stop recording into the active target item.", _activeItem != null && hasPage, "Select a takeoff item and sheet first.");
@@ -220,6 +221,7 @@ public partial class MainWindow
 
             case "takeoffs.newFolder": BtnNewTakeoffFolder_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.newItem": BtnNewItem_Click(this, new RoutedEventArgs()); break;
+            case "takeoffs.refresh": BtnRefreshTakeoffsTree_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.activeFind": BtnActiveTakeoffFind_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.activeProperties": BtnActiveTakeoffProperties_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.activeRecord": BtnActiveTakeoffRecord_Click(this, new RoutedEventArgs()); break;

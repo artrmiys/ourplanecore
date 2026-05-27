@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Text;
 using SkiaSharp;
 
 namespace OurPlaneCore;
@@ -24,23 +23,27 @@ public static class SampleJobService
     public static OurPlaneCoreJob CreateSampleJob(string parentDir)
     {
         Directory.CreateDirectory(parentDir);
-        string jobName = UniqueJobName(parentDir, "Sample Job");
+        string jobName = UniqueJobName(parentDir, "OurPlaneCore Guide Sample");
         OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parentDir, jobName);
 
-        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplanecore_sample_{Guid.NewGuid():N}.pdf");
+        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplanecore_guide_sample_{Guid.NewGuid():N}.pdf");
         try
         {
-            WriteSamplePdf(tempPdf);
-            string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
-            PageInfo page = OurPlaneCoreJobStore.CreatePageFromPdf(
+            SampleJobGuideBuilder.WriteGuidePdf(tempPdf);
+            string guideFolder = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, SampleJobGuideBuilder.GuideFolderName);
+            IReadOnlyList<PageInfo> pages = OurPlaneCoreJobStore.ImportPdf(
                 job,
                 tempPdf,
-                "A101 Sample Plan",
-                importFolder,
-                pdfPage: 0,
-                scaleMetersPerPt: SampleScaleMetersPerPt);
+                SampleJobGuideBuilder.PageNames,
+                guideFolder);
 
-            CreateSampleTakeoffs(job, page);
+            PageInfo planPage = pages[^1];
+            planPage.ScaleMetersPerPt = SampleScaleMetersPerPt;
+            OurPlaneCoreJobStore.SavePageScale(planPage.FolderPath, SampleScaleMetersPerPt);
+
+            CreateSampleTakeoffs(job, planPage);
+            CreateSampleAnnotations(planPage);
+            SampleJobGuideBuilder.WriteGuideFiles(job);
         }
         finally
         {
@@ -49,7 +52,9 @@ public static class SampleJobService
                 if (File.Exists(tempPdf))
                     File.Delete(tempPdf);
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         return OurPlaneCoreJobStore.LoadJob(job.RootPath);
@@ -57,86 +62,274 @@ public static class SampleJobService
 
     private static void CreateSampleTakeoffs(OurPlaneCoreJob job, PageInfo page)
     {
-        string generalFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "GENERAL");
-        string openingsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "OPENINGS");
+        string sqftsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string wallsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string openingsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "openings");
+        string joistsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "joists");
+        string roofFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "rf");
 
-        TakeoffItem exterior = OurPlaneCoreJobStore.CreateTakeoffItem(
+        CreateMeasuredTakeoff(
             job,
-            generalFolder,
-            "Sample Exterior Walls",
-            "#2196F3",
-            "line");
-        exterior.UnitPrice = 14.50;
-        exterior.Notes = "Sample line takeoff around the exterior wall outline.";
-        exterior.Measurements.Add(new Measurement
-        {
-            Name = "Exterior wall loop",
-            MType = "line",
-            Color = exterior.Color,
-            PageFolder = page.FolderPath,
-            TakeoffFolder = exterior.FolderPath,
-            ScaleMetersPerPt = SampleScaleMetersPerPt,
-            Points =
-            [
-                new SKPoint(120, 140),
-                new SKPoint(672, 140),
-                new SKPoint(672, 470),
-                new SKPoint(120, 470),
-                new SKPoint(120, 140),
-            ],
-        });
-        OurPlaneCoreJobStore.SaveTakeoffItem(exterior);
-
-        TakeoffItem floor = OurPlaneCoreJobStore.CreateTakeoffItem(
-            job,
-            generalFolder,
-            "Sample Floor Area",
+            sqftsFolder,
+            page,
+            "1F Floor Area",
             "#4CAF50",
-            "area");
-        floor.UnitPrice = 6.25;
-        floor.Notes = "Sample area takeoff for the main plan footprint.";
-        floor.Measurements.Add(new Measurement
-        {
-            Name = "Main footprint",
-            MType = "area",
-            Color = floor.Color,
-            PageFolder = page.FolderPath,
-            TakeoffFolder = floor.FolderPath,
-            ScaleMetersPerPt = SampleScaleMetersPerPt,
-            Points =
-            [
-                new SKPoint(120, 140),
-                new SKPoint(672, 140),
-                new SKPoint(672, 470),
-                new SKPoint(120, 470),
-            ],
-        });
-        OurPlaneCoreJobStore.SaveTakeoffItem(floor);
+            "area",
+            6.25,
+            "Sample area takeoff for the main plan footprint.",
+            null,
+            new Measurement
+            {
+                Name = "Main footprint",
+                Points =
+                [
+                    new SKPoint(120, 140),
+                    new SKPoint(672, 140),
+                    new SKPoint(672, 470),
+                    new SKPoint(120, 470),
+                ],
+            });
 
-        TakeoffItem doors = OurPlaneCoreJobStore.CreateTakeoffItem(
+        CreateMeasuredTakeoff(
+            job,
+            wallsFolder,
+            page,
+            "Exterior Walls",
+            "#2196F3",
+            "line",
+            14.50,
+            "Sample line takeoff around the exterior wall outline.",
+            null,
+            new Measurement
+            {
+                Name = "Exterior wall loop",
+                Points =
+                [
+                    new SKPoint(120, 140),
+                    new SKPoint(672, 140),
+                    new SKPoint(672, 470),
+                    new SKPoint(120, 470),
+                    new SKPoint(120, 140),
+                ],
+            });
+
+        CreateMeasuredTakeoff(
             job,
             openingsFolder,
-            "Sample Doors",
+            page,
+            "Doors",
             "#FF9800",
-            "point");
-        doors.UnitPrice = 350.0;
-        doors.Notes = "Sample count takeoff for door openings.";
-        doors.Measurements.Add(new Measurement
+            "point",
+            350.0,
+            "Sample Count takeoff for door openings.",
+            item => item.CountSymbol = CountDisplaySymbol.Cross,
+            new Measurement
+            {
+                Name = "Door count",
+                Points =
+                [
+                    new SKPoint(392, 140),
+                    new SKPoint(672, 305),
+                    new SKPoint(396, 470),
+                ],
+            });
+
+        CreateMeasuredTakeoff(
+            job,
+            openingsFolder,
+            page,
+            "Windows",
+            "#7E57C2",
+            "point",
+            285.0,
+            "Sample Count takeoff for window openings.",
+            item => item.CountSymbol = CountDisplaySymbol.Square,
+            new Measurement
+            {
+                Name = "Window count",
+                Points =
+                [
+                    new SKPoint(120, 230),
+                    new SKPoint(258, 470),
+                    new SKPoint(534, 140),
+                    new SKPoint(672, 410),
+                ],
+            });
+
+        CreateMeasuredTakeoff(
+            job,
+            joistsFolder,
+            page,
+            "2x10 Joists 16 OC",
+            "#009688",
+            "area",
+            3.95,
+            "Sample joist area with a locked direction.",
+            item =>
+            {
+                item.IsJoistTakeoff = true;
+                item.JoistType = "2x10";
+                item.JoistSpacingInches = 16;
+                item.JoistDirectionDegrees = 0;
+                item.JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestFoot;
+                item.JoistShowLabels = true;
+            },
+            new Measurement
+            {
+                Name = "Office joists",
+                JoistDirectionLocked = true,
+                JoistDirectionDegrees = 0,
+                Points =
+                [
+                    new SKPoint(120, 305),
+                    new SKPoint(396, 305),
+                    new SKPoint(396, 470),
+                    new SKPoint(120, 470),
+                ],
+            });
+
+        CreateMeasuredTakeoff(
+            job,
+            roofFolder,
+            page,
+            "RF Roof Area",
+            "#8BC34A",
+            "area",
+            7.10,
+            "Sample roof area footprint for 3D roof experiments.",
+            null,
+            new Measurement
+            {
+                Name = "Roof footprint",
+                Points =
+                [
+                    new SKPoint(98, 120),
+                    new SKPoint(694, 120),
+                    new SKPoint(694, 492),
+                    new SKPoint(98, 492),
+                ],
+            });
+
+        CreateMeasuredTakeoff(
+            job,
+            roofFolder,
+            page,
+            "Front Eave Guide",
+            "#E53935",
+            "line",
+            0,
+            "Measured roof guide: eave edge for review before roof generation.",
+            null,
+            new Measurement
+            {
+                Name = "Front eave",
+                Points =
+                [
+                    new SKPoint(120, 140),
+                    new SKPoint(672, 140),
+                ],
+            });
+
+        CreateMeasuredTakeoff(
+            job,
+            roofFolder,
+            page,
+            "Left Rake Guide",
+            "#C2185B",
+            "line",
+            0,
+            "Measured roof guide: rake edge for review before roof generation.",
+            null,
+            new Measurement
+            {
+                Name = "Left rake",
+                Points =
+                [
+                    new SKPoint(120, 140),
+                    new SKPoint(396, 78),
+                    new SKPoint(672, 140),
+                ],
+            });
+    }
+
+    private static TakeoffItem CreateMeasuredTakeoff(
+        OurPlaneCoreJob job,
+        string parentFolder,
+        PageInfo page,
+        string name,
+        string color,
+        string measurementType,
+        double unitPrice,
+        string notes,
+        Action<TakeoffItem>? configure,
+        params Measurement[] measurements)
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, color, measurementType);
+        item.UnitPrice = unitPrice;
+        item.Notes = notes;
+        configure?.Invoke(item);
+
+        foreach (Measurement measurement in measurements)
         {
-            Name = "Door count",
-            MType = "point",
-            Color = doors.Color,
-            PageFolder = page.FolderPath,
-            TakeoffFolder = doors.FolderPath,
-            ScaleMetersPerPt = SampleScaleMetersPerPt,
-            Points =
+            measurement.MType = measurementType;
+            measurement.Color = color;
+            measurement.PageFolder = page.FolderPath;
+            measurement.TakeoffFolder = item.FolderPath;
+            measurement.ScaleMetersPerPt = SampleScaleMetersPerPt;
+            measurement.CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
+            item.Measurements.Add(measurement);
+        }
+
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        return item;
+    }
+
+    private static void CreateSampleAnnotations(PageInfo page)
+    {
+        OurPlaneCoreJobStore.SavePageAnnotations(
+            page.FolderPath,
             [
-                new SKPoint(392, 140),
-                new SKPoint(672, 305),
-                new SKPoint(396, 470),
-            ],
-        });
-        OurPlaneCoreJobStore.SaveTakeoffItem(doors);
+                new PageAnnotation
+                {
+                    Kind = "note",
+                    Text = "Start here: select the sample takeoffs, then try Record, Export, Takeoff Manager, and 3D.",
+                    Color = "#1565C0",
+                    PageFolder = page.FolderPath,
+                    ScaleMetersPerPt = SampleScaleMetersPerPt,
+                    Points = [new SKPoint(90, 100)],
+                },
+                new PageAnnotation
+                {
+                    Kind = "dimension",
+                    Text = "Sample dimension",
+                    Color = "#455A64",
+                    StrokeWidth = 1.6,
+                    PageFolder = page.FolderPath,
+                    ScaleMetersPerPt = SampleScaleMetersPerPt,
+                    Points =
+                    [
+                        new SKPoint(120, 504),
+                        new SKPoint(672, 504),
+                    ],
+                },
+                new PageAnnotation
+                {
+                    Kind = "rectangle",
+                    Text = "Try Box mode here",
+                    Color = "#9C27B0",
+                    StrokeWidth = 1.6,
+                    PageFolder = page.FolderPath,
+                    ScaleMetersPerPt = SampleScaleMetersPerPt,
+                    Points =
+                    [
+                        new SKPoint(404, 150),
+                        new SKPoint(524, 150),
+                        new SKPoint(524, 298),
+                        new SKPoint(404, 298),
+                    ],
+                },
+            ]);
     }
 
     private static string UniqueJobName(string parentDir, string baseName)
@@ -150,66 +343,5 @@ public static class SampleJobService
         }
 
         return candidate;
-    }
-
-    private static void WriteSamplePdf(string path)
-    {
-        string contents = """
-            q
-            1 1 1 rg 0 0 792 612 re f
-            0.12 0.14 0.16 RG 2 w
-            120 140 m 672 140 l 672 470 l 120 470 l h S
-            0.55 0.55 0.55 RG 1 w
-            120 305 m 672 305 l S
-            396 140 m 396 470 l S
-            258 305 m 258 470 l S
-            534 140 m 534 305 l S
-            0.10 0.35 0.70 RG 4 w
-            392 140 m 430 140 l S
-            672 305 m 672 345 l S
-            396 470 m 438 470 l S
-            0 0 0 rg
-            BT /F1 22 Tf 72 552 Td (OurPlaneCore Sample Job) Tj ET
-            BT /F1 12 Tf 72 528 Td (Use Select, Ctrl+Shift+P, Ctrl+Shift+O, Snap, Ortho, and Estimating.) Tj ET
-            BT /F1 11 Tf 130 485 Td (Office) Tj ET
-            BT /F1 11 Tf 410 485 Td (Open Area) Tj ET
-            BT /F1 11 Tf 130 285 Td (Storage) Tj ET
-            BT /F1 11 Tf 410 285 Td (Shop) Tj ET
-            BT /F1 10 Tf 120 110 Td (Scale in app: 1/8 in = 1 ft. Sample takeoffs are preloaded.) Tj ET
-            Q
-            """;
-
-        byte[] contentBytes = Encoding.ASCII.GetBytes(contents.Replace("\r\n", "\n"));
-        var objects = new[]
-        {
-            "<< /Type /Catalog /Pages 2 0 R >>",
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-            $"<< /Length {contentBytes.Length.ToString(CultureInfo.InvariantCulture)} >>\nstream\n{contents.Replace("\r\n", "\n")}\nendstream",
-        };
-
-        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        WriteAscii(stream, "%PDF-1.4\n");
-        var offsets = new long[objects.Length + 1];
-        for (int i = 0; i < objects.Length; i++)
-        {
-            offsets[i + 1] = stream.Position;
-            WriteAscii(stream, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
-        }
-
-        long xrefOffset = stream.Position;
-        WriteAscii(stream, $"xref\n0 {objects.Length + 1}\n");
-        WriteAscii(stream, "0000000000 65535 f \n");
-        for (int i = 1; i < offsets.Length; i++)
-            WriteAscii(stream, $"{offsets[i].ToString("D10", CultureInfo.InvariantCulture)} 00000 n \n");
-        WriteAscii(stream, $"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF\n");
-    }
-
-    private static void WriteAscii(Stream stream, string text)
-    {
-        byte[] bytes = Encoding.ASCII.GetBytes(text);
-        stream.Write(bytes, 0, bytes.Length);
     }
 }

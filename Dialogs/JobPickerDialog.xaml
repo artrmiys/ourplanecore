@@ -47,7 +47,7 @@
                            Foreground="{DynamicResource SecondaryForegroundBrush}"
                            TextDecorations="Underline"
                            MouseLeftButtonUp="SampleLink_Click"
-                           ToolTip="Create a sample job in the configured Jobs folder"/>
+                           ToolTip="Create a guided sample project in the configured Jobs folder"/>
                 <TextBlock Text=" · " Margin="6,0" FontSize="11"
                            Foreground="{DynamicResource SecondaryForegroundBrush}"/>
                 <TextBlock x:Name="ManageLink" Text="Manage folders…"

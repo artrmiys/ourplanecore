@@ -436,6 +436,29 @@ internal static class TakeoffsTreeRegressionTests
             "measurement paste fallback name must not append Paste as a visible suffix");
     }
 
+    public static void TakeoffsTreeRefreshButtonIsWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string commands = ReadRepoFile("MainWindow.TakeoffsCommands.cs");
+        string palette = ReadRepoFile("MainWindow.CommandPalette.cs");
+
+        AssertTrue(
+            xaml.Contains("x:Name=\"BtnRefreshTakeoffsTree\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnRefreshTakeoffsTree_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("ToolTip=\"Refresh Takeoffs tree\"", StringComparison.Ordinal),
+            "Takeoffs tree header must expose an R refresh button like the Pages tree");
+        AssertTrue(
+            commands.Contains("LoadTakeoffsForJob();", StringComparison.Ordinal) &&
+            commands.Contains("ClearTakeoffPositionDropCue();", StringComparison.Ordinal) &&
+            commands.Contains("ClearTakeoffFolderDropCue();", StringComparison.Ordinal) &&
+            commands.Contains("Takeoffs tree refreshed.", StringComparison.Ordinal),
+            "Takeoffs refresh button should use the existing safe reload path and clear drag cues");
+        AssertTrue(
+            palette.Contains("\"takeoffs.refresh\"", StringComparison.Ordinal) &&
+            palette.Contains("BtnRefreshTakeoffsTree_Click(this, new RoutedEventArgs())", StringComparison.Ordinal),
+            "Command Palette should expose the Takeoffs refresh action");
+    }
+
     public static void TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired()
     {
         string xaml = ReadRepoFile("MainWindow.xaml");
