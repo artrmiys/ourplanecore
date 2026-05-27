@@ -1,5 +1,36 @@
 ﻿# Development Log
 
+## 2026-05-27 Open Jobs, PDF Import, Render, and Sheet Naming
+
+- Added Open Jobs folder removal near `Manage folders`; this removes a root
+  folder from the saved list only and does not delete disk files.
+- Changed new job creation to select the PDF folder first, then ask for the job
+  name, and added recursive PDF discovery for both new jobs and
+  `Import PDF Folder to Current Job...`.
+- Fixed Caretta PDF rendering artifacts by making the first visible page render
+  use clean PyMuPDF instead of Docnet. Docnet remains only as fallback, and
+  queued Docnet renders are invalidated after a clean PyMuPDF frame applies.
+- Kept page open responsive by rendering a clean low-scale PyMuPDF preview first
+  (`0.35`) and then rerendering at normal quality.
+- Improved sheet metadata extraction so prominent title-block sheet ids like
+  `G001`, `AR001`, and `A451` win over Revit/file-path footer text such as
+  `A26`; unknown pages no longer auto-rename to `-`.
+- Verification passed:
+  `.\Tools\python\python.exe -m py_compile .\Tools\pdf_layers_helper.py`,
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`235/235`), compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `2C1DF76A22D41B9B60A4E58745D3AD36615E61EE019D2355728AD81F9DFB565A`, and
+  packaged launch log check with `0` errors and `DocnetSlowCount=0`.
+- Commits:
+  `b0ad839 Add job folder removal`,
+  `0678432 Import PDFs from job folders`,
+  `8d60fc2 Fix PDF render and sheet naming`,
+  `da31009 Use clean PDF preview on page open`.
+- Detailed handoff:
+  `docs/OPEN_JOBS_PDF_IMPORT_RENDER_HANDOFF_2026_05_27.md`.
+
 ## 2026-05-24 Beam, Openings, and Current-Job PlanSwift Import
 
 - Added the `Beam` takeoff workflow next to `J Area`. `B` starts Beam mode,
