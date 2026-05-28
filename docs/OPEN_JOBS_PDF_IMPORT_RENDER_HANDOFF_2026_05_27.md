@@ -217,6 +217,8 @@ Final results:
 - If page open still feels slow on very large PDFs, the next performance step
   should be an explicit persisted render cache for clean PyMuPDF preview images,
   keyed by source PDF path, modified time, page index, and scale.
+  Implemented on 2026-05-28 in
+  `docs/PDF_PREVIEW_CACHE_HANDOFF_2026_05_28.md`.
 - Do not return to Docnet as a visible first frame for problem PDFs; it fixes
   perceived speed but reintroduces the artifact flash.
 - The untracked file `Assets/ourplanecore.ico.bak_20260522_132816` remains

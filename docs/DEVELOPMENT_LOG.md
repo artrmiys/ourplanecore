@@ -1,5 +1,31 @@
 ﻿# Development Log
 
+## 2026-05-28 PDF Preview Cache
+
+- Added a persisted clean PyMuPDF preview cache for the first low-scale page
+  image. The cache stores PNG plus metadata under
+  `%LOCALAPPDATA%\OurPlaneCore\render-cache\pymupdf-preview`, keyed by source
+  PDF path, modified time, length, page index, and preview scale.
+- Wired `LoadPage` to apply a cached preview before queueing the normal
+  PyMuPDF refresh render. The refresh render still runs, so layer state,
+  discovery, snap reload, and normal quality rerender behavior remain
+  unchanged.
+- Kept Docnet out of the visible first-frame path; this preserves the Caretta
+  green/purple/black artifact fix.
+- Added regression coverage for cache round-trip/invalidation and source wiring
+  that requires the cache to be applied before `QueueLayerRender(...)`.
+- Verification passed: `git diff --check`, `dotnet build .\ourplanecore.sln`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`240/240`), compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `3A9BB509B994FA219D2F8F5C620149A148C6BB962AABC2EAE11F0B4CF7236EB1`,
+  and packaged launch log check with `0` errors after the latest
+  `Application startup.`.
+- Code commit: `a6e00a4 Add persisted PDF preview cache`.
+- Detailed handoff:
+  `docs/PDF_PREVIEW_CACHE_HANDOFF_2026_05_28.md`.
+
 ## 2026-05-28 Bookmarks Dock Return
 
 - Fixed the left Pages panel Bookmarks dock control without adding a separate
