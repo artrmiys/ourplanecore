@@ -3,10 +3,12 @@
 ## Status
 
 - Code commit: `eae0c21 Add PDF takeoff import and edge snap`.
+- Follow-up commit: `c795a43 Add PDF takeoff import preview`.
 - Safety checkpoint before the risky slice: `checkpoint/before-sheet-overlay-cache-edge-pdf-scope-20260528-1940`.
+- Safety checkpoint before the preview follow-up: `checkpoint/before-pdf-takeoff-import-preview-20260528-1950`.
 - Deployed package: `%USERPROFILE%\Desktop\updates\OurPlaneCore\ourplanecore.exe`.
-- Deployed exe size: `176,949,755` bytes.
-- SHA256: `5A92251C47FC185CB19B3475F90A142D4C011FDB49EE1AD9534BA053DD13F76F`.
+- Deployed exe size: `176,580,303` bytes.
+- SHA256: `4DB2D0866709FA19F7882C03F7D8832C24407D4683F21286B83568D16A611841`.
 - Rollback file kept: `ourplanecore.exe.bak` (`417,528,789` bytes, the previous unsqueezed package from the same feature build).
 - Desktop shortcut target and working directory were verified against the update package folder.
 
@@ -25,6 +27,9 @@ The app now has a first-class PDF takeoff import command:
 Import behavior:
 
 - The user selects a folder; PDFs are scanned recursively.
+- The scan is read-only first. Before writing job files, the user sees a confirmation preview with PDFs found, pages to import, measurement count, destination buckets, and the largest type/color groups.
+- If the user cancels the preview, no pages, folders, takeoff items, or measurements are created.
+- If the PDFs contain no supported annotation geometry, the app reports that clearly instead of throwing an import failure.
 - Imported pages are created under the selected Pages scope, inside a `from pdf` bucket.
 - Imported takeoff items are created under the selected Takeoffs scope, inside a `from pdf` bucket.
 - Each PDF gets its own folder, and takeoff items are grouped by annotation kind plus color, for example `Line #E52237`, `Area #6AD928`, `Point #0000FF`.
@@ -108,6 +113,21 @@ Results:
 - Conflict-marker scan: no findings.
 - `git diff --check`: no whitespace errors; only existing CRLF conversion warnings.
 
+Follow-up preview iteration verification:
+
+```powershell
+dotnet build .\ourplanecore.sln
+dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build
+git diff --check
+```
+
+Results:
+
+- Build: `0 Warning(s)`, `0 Error(s)`.
+- Tests: `248/248 tests passed`.
+- Conflict-marker scan on touched files: no findings.
+- `git diff --check`: no whitespace errors; only existing CRLF conversion warnings.
+
 ## Package Verification
 
 Compressed publish command:
@@ -116,11 +136,18 @@ Compressed publish command:
 dotnet publish .\ourplanecore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o .\publish\ourplanecore-working-single-20260528-1944-compressed
 ```
 
+Final compressed publish for the preview follow-up:
+
+```powershell
+dotnet publish .\ourplanecore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o .\publish\ourplanecore-working-single-20260528-1958-compressed
+```
+
 Packaged app launch check:
 
-- Test launch PID: `13032`.
+- Initial test launch PID: `13032`.
+- Final preview-follow-up test launch PID: `16608`.
 - Log file: `%APPDATA%\OurPlaneCore\logs\app-20260528.log`.
-- Latest startup marker line: `533`.
+- Final startup marker line: `540`.
 - `ERROR` entries after that marker: `0`.
 - Startup tail included `Loaded takeoffs tree with 358 item(s)`.
 - The test process was closed after verification so the deployed exe is not locked.
