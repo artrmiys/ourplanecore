@@ -1,5 +1,22 @@
 ﻿# Development Log
 
+## 2026-05-28 PDF Render Performance Status
+
+- Verified the current post-fix render performance state without code changes.
+- Confirmed from code and logs that persisted PyMuPDF preview cache hits are
+  happening, but refresh/full-scale PyMuPDF renders still run afterward and are
+  now the main visible lag source on Caretta repeat opens.
+- Confirmed the remaining bottlenecks:
+  - `WorkerSemaphore = new(1, 1)` still serializes all PyMuPDF worker traffic;
+  - hidden-layer renders still reopen a fresh `fitz.Document`;
+  - layer discovery fallback remains, but checked Caretta pages already have
+    cached empty layer metadata, so it is not the main repeat-open cost there.
+- Verification passed: `git diff --check`, conflict/TODO scan, and
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  (`0 warnings / 0 errors`).
+- Detailed status:
+  `docs/PDF_RENDER_PERF_STATUS_2026_05_28.md`.
+
 ## 2026-05-28 PDF Inline Render Round Trip
 
 - Added a distribution-safe inline PNG path for bounded PyMuPDF render images:
