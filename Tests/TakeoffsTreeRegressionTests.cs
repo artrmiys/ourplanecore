@@ -612,6 +612,24 @@ internal static class TakeoffsTreeRegressionTests
             "Alt vertex selection guidance should include Count objects");
     }
 
+    public static void PdfSnapDuplicateLoadGuardIsWired()
+    {
+        string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+
+        AssertTrue(
+            pdfSnap.Contains("_pdfSnapInProgressCacheKey", StringComparison.Ordinal) &&
+            pdfSnap.Contains("string.Equals(_pdfSnapInProgressCacheKey, cacheKey", StringComparison.Ordinal) &&
+            pdfSnap.Contains("_pdfSnapInProgressCacheKey = cacheKey;", StringComparison.Ordinal) &&
+            pdfSnap.Contains("_pdfSnapInProgressCacheKey = \"\";", StringComparison.Ordinal),
+            "current sheet PDF Snap loads should skip duplicate in-flight cache keys");
+        AssertTrue(
+            pdfSnap.Contains("_overlayPdfSnapInProgressCacheKey", StringComparison.Ordinal) &&
+            pdfSnap.Contains("string.Equals(_overlayPdfSnapInProgressCacheKey, cacheKey", StringComparison.Ordinal) &&
+            pdfSnap.Contains("_overlayPdfSnapInProgressCacheKey = cacheKey;", StringComparison.Ordinal) &&
+            pdfSnap.Contains("_overlayPdfSnapInProgressCacheKey = \"\";", StringComparison.Ordinal),
+            "overlay PDF Snap loads should skip duplicate in-flight cache keys");
+    }
+
     public static void PagesTreeSelectedSheetScaleMenuIsWired()
     {
         string commands = ReadRepoFile("MainWindow.PagesCommands.cs");

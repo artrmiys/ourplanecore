@@ -11,6 +11,7 @@ public sealed partial class PdfViewport
     private bool _pdfSnapEnabled;
     private PdfSnapPointIndex _pdfSnapIndex = PdfSnapPointIndex.Empty;
     private string _pdfSnapCacheKey = "";
+    private string _pdfSnapInProgressCacheKey = "";
     private bool _pdfSnapLoadInProgress;
     private bool _pdfSnapReloadPending;
     private int _pdfSnapLoadVersion;
@@ -20,6 +21,7 @@ public sealed partial class PdfViewport
     private IReadOnlyList<PdfLayerInfo>? _overlayPdfSnapLayers;
     private PdfSnapPointIndex _overlayPdfSnapIndex = PdfSnapPointIndex.Empty;
     private string _overlayPdfSnapCacheKey = "";
+    private string _overlayPdfSnapInProgressCacheKey = "";
     private bool _overlayPdfSnapLoadInProgress;
     private bool _overlayPdfSnapReloadPending;
     private int _overlayPdfSnapLoadVersion;
@@ -53,6 +55,7 @@ public sealed partial class PdfViewport
     {
         _pdfSnapIndex = PdfSnapPointIndex.Empty;
         _pdfSnapCacheKey = "";
+        _pdfSnapInProgressCacheKey = "";
         _pdfSnapReloadPending = false;
         _pdfSnapLoadVersion++;
     }
@@ -84,6 +87,7 @@ public sealed partial class PdfViewport
     {
         _overlayPdfSnapIndex = PdfSnapPointIndex.Empty;
         _overlayPdfSnapCacheKey = "";
+        _overlayPdfSnapInProgressCacheKey = "";
         _overlayPdfSnapReloadPending = false;
         _overlayPdfSnapLoadVersion++;
     }
@@ -100,11 +104,15 @@ public sealed partial class PdfViewport
 
         if (_pdfSnapLoadInProgress)
         {
+            if (string.Equals(_pdfSnapInProgressCacheKey, cacheKey, StringComparison.Ordinal))
+                return;
+
             _pdfSnapReloadPending = true;
             return;
         }
 
         _pdfSnapLoadInProgress = true;
+        _pdfSnapInProgressCacheKey = cacheKey;
         int version = ++_pdfSnapLoadVersion;
         _ = LoadPdfSnapPointsAsync(version, _pdfPath, _pdfIndex, _pageFolder, layers, cacheKey);
     }
@@ -145,6 +153,7 @@ public sealed partial class PdfViewport
         finally
         {
             _pdfSnapLoadInProgress = false;
+            _pdfSnapInProgressCacheKey = "";
             if (_pdfSnapReloadPending)
             {
                 _pdfSnapReloadPending = false;
@@ -175,11 +184,15 @@ public sealed partial class PdfViewport
 
         if (_overlayPdfSnapLoadInProgress)
         {
+            if (string.Equals(_overlayPdfSnapInProgressCacheKey, cacheKey, StringComparison.Ordinal))
+                return;
+
             _overlayPdfSnapReloadPending = true;
             return;
         }
 
         _overlayPdfSnapLoadInProgress = true;
+        _overlayPdfSnapInProgressCacheKey = cacheKey;
         int version = ++_overlayPdfSnapLoadVersion;
         _ = LoadOverlayPdfSnapPointsAsync(
             version,
@@ -226,6 +239,7 @@ public sealed partial class PdfViewport
         finally
         {
             _overlayPdfSnapLoadInProgress = false;
+            _overlayPdfSnapInProgressCacheKey = "";
             if (_overlayPdfSnapReloadPending)
             {
                 _overlayPdfSnapReloadPending = false;
