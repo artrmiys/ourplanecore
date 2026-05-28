@@ -1,5 +1,27 @@
 ﻿# Development Log
 
+## 2026-05-28 Underlayment / Sheet Overlay Clarity
+
+- Sharpened the sheet overlay/underlay viewport path in
+  `Controls/PdfViewport.SheetOverlay.cs`.
+- The overlay bitmap no longer uses `SKFilterQuality.Low` during fast
+  navigation. Fast frames now use `Medium`, settled frames use `High`, and
+  bitmap antialiasing is disabled for crisper reference linework.
+- Added regression coverage:
+  `TakeoffsTreeRegressionTests.SheetOverlayRenderingUsesSharperSampling`.
+- Verification passed: `git diff --check`, conflict/TODO scan,
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`243/243`),
+  compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `9DCFEF64D6F8F75C62BEE38A7850981F9550102FFE1DCBC328CBAC8BEE756211`,
+  shortcut target/workdir check, and packaged launch log check with `0` errors
+  after the latest `Application startup.`.
+- Code commit: `efb0bd1 Sharpen sheet overlay rendering`.
+- Detailed handoff:
+  `docs/UNDERLAYMENT_CLARITY_HANDOFF_2026_05_28.md`.
+
 ## 2026-05-28 PDF Render Performance Status
 
 - Verified the current post-fix render performance state without code changes.
