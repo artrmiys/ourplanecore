@@ -29,6 +29,47 @@ internal static class TakeoffsTreeRegressionTests
             "TryAutoLoad must refuse to run while a job is open");
     }
 
+    public static void PageOpenDefersHeavyUiWork()
+    {
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
+        string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
+        string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
+
+        AssertFalse(
+            loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
+            "page open must not re-read source.json after LoadPageFromTab already loaded the page");
+
+        int loadPage = loadMethod.IndexOf("_viewport.LoadPage(", StringComparison.Ordinal);
+        int visibility = loadMethod.IndexOf("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal);
+        int deferred = loadMethod.IndexOf("QueueDeferredPageOpenWork", StringComparison.Ordinal);
+        AssertTrue(
+            loadPage >= 0 && visibility > loadPage && deferred > visibility,
+            "page open should load the viewport, apply takeoff visibility, then defer slower UI refresh work");
+
+        AssertFalse(
+            loadMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal) ||
+            loadMethod.Contains("LoadPageAnnotations(", StringComparison.Ordinal) ||
+            loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
+            loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
+            "page open should not run overlays, annotations, takeoff tree refresh, or settings save in the immediate path");
+
+        AssertTrue(
+            queueMethod.Contains("Dispatcher.BeginInvoke", StringComparison.Ordinal) &&
+            queueMethod.Contains("DispatcherPriority.Background", StringComparison.Ordinal) &&
+            queueMethod.Contains("RunDeferredPageOpenWork", StringComparison.Ordinal),
+            "slow page-open follow-up work should be scheduled at background dispatcher priority");
+
+        AssertTrue(
+            deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("QueueNearbyPagePreviewPrefetch(viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("LoadSheetOverlay(viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
+            "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
+    }
+
     public static void SectionSelectionKeyHandlesLegacyUnfiledItem()
     {
         Type mainWindowType = typeof(MainWindow);

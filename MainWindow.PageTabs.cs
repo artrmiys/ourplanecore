@@ -15,6 +15,7 @@ public partial class MainWindow
     private const int MaxBatchSheetOpenCount = 64;
     private string _pagePreviewPrefetchJobRoot = "";
     private IReadOnlyList<PageInfo> _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
+    private int _pageOpenDeferredVersion;
 
     private void PageTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -298,8 +299,9 @@ public partial class MainWindow
 
     private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)
     {
-        using PageOpenTrace? trace = BeginPageOpenTrace(page.Name);
-        PageInfo viewportPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        PageOpenTrace? trace = BeginPageOpenTrace(page.Name);
+        PageInfo viewportPage = page;
+        int deferredVersion = ++_pageOpenDeferredVersion;
         _currentPage = viewportPage;
         _currentPdfPath = viewportPage.PdfPath;
         TxtStatusPage.Text = viewportPage.Name;
@@ -314,27 +316,90 @@ public partial class MainWindow
             viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
             restoreView);
         trace?.Mark("decode");
-        QueueNearbyPagePreviewPrefetch(viewportPage);
         ApplyViewportPageTakeoffVisibility(viewportPage);
-        LoadSheetOverlay(viewportPage);
-        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
-        ApplyRulerVisibilityToViewport();
-        RefreshAiMarkersOverlay();
-        RefreshThreeDRoofGuideOverlay();
-        SelectPageTreeNodeSilently(viewportPage.FolderPath);
         _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
-        SaveAppSettings();
-        trace?.Mark("overlays+settings");
-
-        bool autoLoaded = _currentJob == null && _takeoffItems.Count == 0 && TryAutoLoad();
-        if (!autoLoaded)
-            RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems);
-        trace?.Mark("takeoff-refresh");
-        RefreshFloatingPageSetup(viewportPage.FolderPath);
-        ShowDuplicateSheetMeasurementHint(viewportPage);
+        QueueDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace);
     }
+
+    private void QueueDeferredPageOpenWork(
+        int deferredVersion,
+        PageInfo viewportPage,
+        IReadOnlyList<TakeoffItem> scaledItems,
+        PageOpenTrace? trace)
+    {
+        try
+        {
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    try
+                    {
+                        RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Warn(ex, $"Deferred page open work failed for {viewportPage.Name}");
+                    }
+                }),
+                System.Windows.Threading.DispatcherPriority.Background);
+        }
+        catch
+        {
+            trace?.Dispose();
+            throw;
+        }
+    }
+
+    private void RunDeferredPageOpenWork(
+        int deferredVersion,
+        PageInfo viewportPage,
+        IReadOnlyList<TakeoffItem> scaledItems,
+        PageOpenTrace? trace)
+    {
+        try
+        {
+            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                return;
+
+            QueueNearbyPagePreviewPrefetch(viewportPage);
+            trace?.Mark("prefetch");
+            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                return;
+
+            LoadSheetOverlay(viewportPage);
+            _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
+            ApplyRulerVisibilityToViewport();
+            RefreshAiMarkersOverlay();
+            RefreshThreeDRoofGuideOverlay();
+            SelectPageTreeNodeSilently(viewportPage.FolderPath);
+            SaveAppSettings();
+            trace?.Mark("overlays+settings");
+            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                return;
+
+            bool autoLoaded = _currentJob == null && _takeoffItems.Count == 0 && TryAutoLoad();
+            if (!autoLoaded)
+                RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems);
+            trace?.Mark("takeoff-refresh");
+            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                return;
+
+            RefreshFloatingPageSetup(viewportPage.FolderPath);
+            ShowDuplicateSheetMeasurementHint(viewportPage);
+            trace?.Mark("floating+hint");
+        }
+        finally
+        {
+            trace?.Dispose();
+        }
+    }
+
+    private bool IsCurrentPageOpen(int deferredVersion, string pageFolder) =>
+        deferredVersion == _pageOpenDeferredVersion &&
+        _currentPage != null &&
+        IsSamePageFolder(_currentPage.FolderPath, pageFolder);
 
     private void ShowDuplicateSheetMeasurementHint(PageInfo page)
     {
