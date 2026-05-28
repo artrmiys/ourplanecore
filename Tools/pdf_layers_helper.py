@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import sys
@@ -1793,11 +1794,39 @@ def _highlight(base: fitz.Pixmap, off_all: fitz.Pixmap, hi_only: fitz.Pixmap) ->
     return bytes(base_bytes)
 
 
+def _render_image_payload(base: fitz.Pixmap, image_path: str, inline_image: bool, inline_max_pixels: int) -> dict:
+    pixel_count = int(base.width) * int(base.height)
+    if inline_image and inline_max_pixels > 0 and pixel_count <= inline_max_pixels:
+        try:
+            png_bytes = base.tobytes("png")
+            return {
+                "image": "",
+                "image_base64": base64.b64encode(png_bytes).decode("ascii"),
+            }
+        except Exception:
+            pass
+
+    if not image_path:
+        return {
+            "ok": False,
+            "error": "render image path is empty",
+        }
+
+    Path(image_path).parent.mkdir(parents=True, exist_ok=True)
+    base.save(image_path)
+    return {
+        "image": image_path,
+        "image_base64": "",
+    }
+
+
 def render_data(req: dict) -> dict:
     pdf_path = req["pdf"]
     page_index = int(req.get("page", 0))
     scale = float(req.get("scale", 2.0))
-    image_path = req["image"]
+    image_path = req.get("image") or ""
+    inline_image = bool(req.get("inline_image", False))
+    inline_max_pixels = int(req.get("inline_image_max_pixels") or 0)
     states = {str(k): bool(v) for k, v in (req.get("layers") or {}).items()}
     highlight_xrefs = {int(x) for x in req.get("highlight", [])}
 
@@ -1820,13 +1849,15 @@ def render_data(req: dict) -> dict:
         samples = _highlight(base, off_all, hi_only)
         base = fitz.Pixmap(fitz.csRGB, base.width, base.height, samples, False)
 
-    Path(image_path).parent.mkdir(parents=True, exist_ok=True)
-    base.save(image_path)
+    image_payload = _render_image_payload(base, image_path, inline_image, inline_max_pixels)
+    if image_payload.get("ok") is False:
+        return image_payload
+
     return {
         "ok": True,
         "width_pt": width_pt,
         "height_pt": height_pt,
-        "image": image_path,
+        **image_payload,
         "layers": layers,
     }
 

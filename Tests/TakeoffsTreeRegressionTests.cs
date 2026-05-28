@@ -709,6 +709,34 @@ internal static class TakeoffsTreeRegressionTests
             "preview cache should be keyed by source identity and written atomically through temp files");
     }
 
+    public static void PdfLayerRenderUsesPortableInlineImageProtocol()
+    {
+        string service = ReadRepoFile("Models/PdfLayerRenderService.cs");
+        string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
+
+        AssertTrue(
+            service.Contains("InlineImage = true", StringComparison.Ordinal) &&
+            service.Contains("InlineRenderImageMaxPixels", StringComparison.Ordinal) &&
+            service.Contains("ImageBase64", StringComparison.Ordinal) &&
+            service.Contains("Convert.FromBase64String(response.ImageBase64)", StringComparison.Ordinal),
+            "C# layer rendering should request bounded inline PNG data and decode image_base64 responses");
+        AssertTrue(
+            service.Contains("File.ReadAllBytes(response.Image)", StringComparison.Ordinal) &&
+            service.Contains("PyMuPDF did not produce a rendered image.", StringComparison.Ordinal),
+            "C# layer rendering should keep the old temp-file image fallback for large renders and older helpers");
+        AssertFalse(
+            service.Contains("if (!File.Exists(response.Image))", StringComparison.Ordinal),
+            "render responses must not require a temp image file when inline image data is present");
+
+        AssertTrue(
+            helper.Contains("import base64", StringComparison.Ordinal) &&
+            helper.Contains("def _render_image_payload", StringComparison.Ordinal) &&
+            helper.Contains("base.tobytes(\"png\")", StringComparison.Ordinal) &&
+            helper.Contains("\"image_base64\"", StringComparison.Ordinal) &&
+            helper.Contains("base.save(image_path)", StringComparison.Ordinal),
+            "Python helper should return inline PNG data for bounded renders and fall back to the existing PNG file path");
+    }
+
     public static void PagesTreeSelectedSheetScaleMenuIsWired()
     {
         string commands = ReadRepoFile("MainWindow.PagesCommands.cs");

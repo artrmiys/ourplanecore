@@ -60,6 +60,7 @@ public static class PdfLayerRenderService
     private static readonly Dictionary<string, PdfLayerRenderResult> RenderCache = [];
     private static readonly Queue<string> RenderCacheOrder = [];
     private const int MaxRenderCacheEntries = 12;
+    private const int InlineRenderImageMaxPixels = 3_000_000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -167,6 +168,8 @@ public static class PdfLayerRenderService
                 Page = pageIndex,
                 Scale = renderScale,
                 Image = imagePath,
+                InlineImage = true,
+                InlineImageMaxPixels = InlineRenderImageMaxPixels,
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
                 VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
@@ -182,15 +185,12 @@ public static class PdfLayerRenderService
                 return false;
             }
 
-            if (!File.Exists(response.Image))
-            {
-                error = "PyMuPDF did not produce a rendered image.";
+            if (!TryReadRenderImageBytes(response, out byte[] imageBytes, out error))
                 return false;
-            }
 
             result = new PdfLayerRenderResult
             {
-                ImageBytes = File.ReadAllBytes(response.Image),
+                ImageBytes = imageBytes,
                 WidthPt = response.WidthPt,
                 HeightPt = response.HeightPt,
                 Layers = response.Layers
@@ -217,6 +217,36 @@ public static class PdfLayerRenderService
             }
             catch { }
         }
+    }
+
+    private static bool TryReadRenderImageBytes(RenderResponse response, out byte[] imageBytes, out string error)
+    {
+        imageBytes = [];
+        error = "";
+
+        if (!string.IsNullOrWhiteSpace(response.ImageBase64))
+        {
+            try
+            {
+                imageBytes = Convert.FromBase64String(response.ImageBase64);
+                return imageBytes.Length > 0;
+            }
+            catch (FormatException ex)
+            {
+                AppLog.Warn(ex, "PyMuPDF returned invalid inline render image data");
+                error = "PyMuPDF returned invalid inline render image data.";
+                return false;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(response.Image) || !File.Exists(response.Image))
+        {
+            error = "PyMuPDF did not produce a rendered image.";
+            return false;
+        }
+
+        imageBytes = File.ReadAllBytes(response.Image);
+        return imageBytes.Length > 0;
     }
 
     private static bool TryGetCachedRender(string key, out PdfLayerRenderResult result)
@@ -746,6 +776,8 @@ public static class PdfLayerRenderService
         public int Page { get; set; }
         public double Scale { get; set; }
         public string Image { get; set; } = "";
+        public bool InlineImage { get; set; }
+        public int InlineImageMaxPixels { get; set; }
         public Dictionary<string, bool> Layers { get; set; } = [];
         public List<int> Highlight { get; set; } = [];
         public List<LayerDto>? VisibleLayers { get; set; }
@@ -788,6 +820,7 @@ public static class PdfLayerRenderService
         public float WidthPt { get; set; }
         public float HeightPt { get; set; }
         public string Image { get; set; } = "";
+        public string ImageBase64 { get; set; } = "";
         public List<LayerDto> Layers { get; set; } = [];
     }
 
