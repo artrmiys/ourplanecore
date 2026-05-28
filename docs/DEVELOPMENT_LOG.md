@@ -2,24 +2,28 @@
 
 ## 2026-05-28 Bookmarks Dock Return
 
-- Fixed the left Pages panel Bookmarks dock control after the first version was
-  too easy to miss. `Bookmarks` is now a separate full-width button below
-  `Tabs / Detach / Tile M2`, with a small state dot matching the Tile M2 style.
-- Changed the docked Bookmarks header return control from a tiny `x` to an
-  explicit `Tab` button. Returning from docked mode now selects the normal
-  `Bookmarks` tab so the user can see where it went.
+- Fixed the left Pages panel Bookmarks dock control without adding a separate
+  large button. The normal tab now reads `Bkm` and has a small circle toggle
+  directly in the tab header.
+- In docked mode, the docked Bookmarks header has the same small circle control;
+  clicking it returns Bookmarks to the tab list. Returning from docked mode
+  selects the `Bkm` tab so the user can see where it went.
+- Hid the Bookmarks list column headers `Name`, `Page`, and `View` while keeping
+  the row values.
 - Kept the `BK` shortcut regression covered through the existing dual-layout
-  shortcut path and expanded the source regression for the dock button, return
-  button, tab reselection, and status messages.
+  shortcut path and expanded the source regression for the compact dock circle,
+  no-large-button rule, tab reselection, hidden column headers, and status
+  messages.
 - Verification passed: `git diff --check`, `dotnet build .\ourplanecore.sln`
   (`0 warnings / 0 errors`),
   `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
   (`238/238`), compressed single-file publish/deploy to
   `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
-  `1C27F168D0CD550ED321D7FA57F696B9D307C1C2490E97A371804D80F9F30B19`,
+  `60FF6304A298F73621C126265CA04C128CB8DE6413DE9B2B993C55B1C5284312`,
   and packaged launch log check with `0` errors after the latest
   `Application startup.`.
-- Commit: `3f15285 Fix bookmarks dock return`.
+- Commits: `3f15285 Fix bookmarks dock return`,
+  `922c474 Move bookmarks dock toggle into tab`.
 - Detailed handoff:
   `docs/BOOKMARKS_DOCK_HANDOFF_2026_05_28.md`.
 

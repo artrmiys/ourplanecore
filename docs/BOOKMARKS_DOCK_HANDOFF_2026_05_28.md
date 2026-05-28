@@ -3,41 +3,45 @@
 ## Scope
 
 User issue: Bookmarks still felt impossible to detach/return in the left Pages
-panel. The first implementation worked mechanically, but the control was a
-small fourth button in the `Tabs / Detach / Tile M2` row and the docked panel
-only had a tiny `x` return button.
+panel. The first implementation worked mechanically, but the control placement
+was wrong for the target layout.
 
-This pass makes the Bookmarks dock control explicit and reversible:
+Final user-approved direction:
 
-- `Bookmarks` is now its own full-width button below `Tabs / Detach / Tile M2`.
-- A small state dot on the right mirrors the `Tile M2` pattern and shows whether
-  Bookmarks is currently docked below Pages.
-- The docked Bookmarks panel now has a visible `Tab` button that returns the
-  panel to the normal left-side tabs.
-- Returning from docked mode selects the `Bookmarks` tab, so the user can see
-  where it went.
+- Do not add a separate large `Bookmarks` button below `Tabs / Detach / Tile M2`.
+- Keep the Pages quick-action row compact.
+- Put only a small circle toggle directly into the `Bkm` tab header.
+- In docked mode, use the small circle in the docked Bookmarks header to return
+  Bookmarks to the tab list.
+- Hide the Bookmarks list column headers `Name`, `Page`, and `View`.
+- Returning from docked mode selects the `Bkm` tab, so the user can see where it
+  went.
 - Status text reports `Bookmarks docked below Pages.` and
   `Bookmarks returned to the Pages tabs.`
 
 ## Implementation
 
-Code commit: `3f15285 Fix bookmarks dock return`.
+Code commits:
+
+- `3f15285 Fix bookmarks dock return`
+- `922c474 Move bookmarks dock toggle into tab`
 
 Touched files:
 
 - `MainWindow.xaml`
   - Restored the first quick-action row to three columns.
-  - Added `BtnToggleBookmarksDock` as a separate Bookmarks button.
-  - Kept `BtnDockBookmarksBelowPages` as the small state/toggle dot.
-  - Changed the docked-panel return control from `x` to `Tab`.
+  - Removed the separate large `BtnToggleBookmarksDock` button.
+  - Added shared `BookmarkDockToggleButton` styling for the small circle.
+  - Kept `BtnDockBookmarksBelowPages` as the docked-header circle toggle.
 - `MainWindow.Bookmarks.cs`
-  - Added `BtnToggleBookmarksDock_Click`.
-  - Made the dock close handler robust even if the toggle state is already off.
+  - Builds the Bookmarks tab header as `Bkm` plus a small circle toggle.
+  - Synchronizes the tab-header and docked-header circle states.
   - Re-selects `_bookmarksTab` when returning Bookmarks to tabs.
+  - Hides the `GridView` column header row for `Name`, `Page`, and `View`.
 - `Tests/TakeoffsTreeRegressionTests.cs`
-  - Updated the Bookmarks wiring regression to require the separate button,
-    toggle dot, dock host, `Tab` return button, state toggle handler, tab
-    reselection, and existing `BK` shortcut path.
+  - Updated the Bookmarks wiring regression to require the compact circle
+    control, reject the separate large button, require tab reselection, require
+    hidden column headers, and keep the existing `BK` shortcut path.
 
 Existing shortcut coverage still verifies:
 
@@ -66,9 +70,9 @@ Results:
 Deployed package:
 
 - Path: `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`
-- Size: `176,553,489` bytes (`168.37 MB`)
+- Size: `176,553,666` bytes (`168.37 MB`)
 - SHA256:
-  `1C27F168D0CD550ED321D7FA57F696B9D307C1C2490E97A371804D80F9F30B19`
+  `60FF6304A298F73621C126265CA04C128CB8DE6413DE9B2B993C55B1C5284312`
 - `ourplanecore.exe.bak`: exists and was preserved.
 - Desktop shortcut target:
   `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`
