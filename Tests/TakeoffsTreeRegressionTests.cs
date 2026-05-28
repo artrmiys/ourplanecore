@@ -737,6 +737,23 @@ internal static class TakeoffsTreeRegressionTests
             "Python helper should return inline PNG data for bounded renders and fall back to the existing PNG file path");
     }
 
+    public static void SheetOverlayRenderingUsesSharperSampling()
+    {
+        string source = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string method = SliceMethod(source, "private void DrawSheetOverlay(SKCanvas canvas)");
+
+        AssertTrue(
+            method.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
+            method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal),
+            "sheet overlay underlay should use medium/high sampling instead of low-quality blur");
+        AssertFalse(
+            method.Contains("SKFilterQuality.Low", StringComparison.Ordinal),
+            "sheet overlay underlay should not switch to low-quality sampling during navigation");
+        AssertTrue(
+            method.Contains("IsAntialias = false", StringComparison.Ordinal),
+            "bitmap sheet overlays should avoid antialias softening");
+    }
+
     public static void PagesTreeSelectedSheetScaleMenuIsWired()
     {
         string commands = ReadRepoFile("MainWindow.PagesCommands.cs");

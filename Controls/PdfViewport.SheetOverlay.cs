@@ -194,8 +194,9 @@ public sealed partial class PdfViewport
 
         using var paint = new SKPaint
         {
-            IsAntialias = true,
-            FilterQuality = _renderNavigationFastFrame ? SKFilterQuality.Low : SKFilterQuality.Medium,
+            // Sheet overlays are alignment references; keep linework crisp.
+            IsAntialias = false,
+            FilterQuality = _renderNavigationFastFrame ? SKFilterQuality.Medium : SKFilterQuality.High,
         };
 
         float width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;
