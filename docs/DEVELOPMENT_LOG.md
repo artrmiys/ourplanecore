@@ -1,5 +1,33 @@
 ﻿# Development Log
 
+## 2026-05-28 PDF Full Render Cache
+
+- Extended the persisted PyMuPDF cache from only the first `0.35` preview to
+  bounded clean rerenders up to render scale `2.25`.
+- The cache is clean-only: hidden PDF layer states and highlighted layers do
+  not use it. Unknown layer metadata also does not bypass worker discovery.
+- Cache bounds:
+  - max render scale: `2.25`;
+  - max estimated rendered pixels: `30,000,000`;
+  - max PNG bytes per cached render: `96,000,000`;
+  - existing total cache pruning still applies.
+- Added cache-hit application before queueing the Python worker for non-reset
+  clean layer renders, with log line `Viewport PyMuPDF render cache hit`.
+- Verification passed: `git diff --check`, conflict/TODO scan,
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`244/244`),
+  compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `BB5AE3C191CC79283BA9407271DE16EEF6E1C3E987D0F06B446C7C0E0BBC85F6`,
+  shortcut target/workdir check, and two packaged launch log checks with `0`
+  errors after the latest `Application startup.`.
+- Checkpoint before code:
+  `checkpoint/before-full-render-cache-20260528-184340`.
+- Code commit: `7b03854 Cache clean PDF rerenders`.
+- Detailed handoff:
+  `docs/PDF_FULL_RENDER_CACHE_HANDOFF_2026_05_28.md`.
+
 ## 2026-05-28 Underlayment / Sheet Overlay Clarity
 
 - Sharpened the sheet overlay/underlay viewport path in
