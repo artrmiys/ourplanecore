@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using OurPlaneCore.Controls;
@@ -18,10 +19,12 @@ public partial class MainWindow
     private Button? _bookmarkOpenButton;
     private Button? _bookmarkRenameButton;
     private Button? _bookmarkDeleteButton;
+    private ToggleButton? _bookmarksTabDockToggle;
     private TabItem? _bookmarksTab;
     private FrameworkElement? _bookmarkPanel;
     private GridLength _bookmarksDockRowHeight = new(190);
     private bool _syncingBookmarkSelection;
+    private bool _syncingBookmarkDockToggle;
 
     private void InitializeBookmarksTab()
     {
@@ -38,6 +41,7 @@ public partial class MainWindow
             ItemContainerStyle = BuildBookmarkListItemStyle(),
             View = new GridView
             {
+                ColumnHeaderContainerStyle = BuildHiddenBookmarkColumnHeaderStyle(),
                 Columns =
                 {
                     new GridViewColumn { Header = "Name", Width = 94, DisplayMemberBinding = new Binding(nameof(PageBookmarkRow.Name)) },
@@ -79,33 +83,58 @@ public partial class MainWindow
 
         _bookmarksTab = new TabItem
         {
-            Header = "Bookmarks",
+            Header = BuildBookmarksTabHeader(),
             Content = panel,
         };
         PagesSideTabs.Items.Add(_bookmarksTab);
         RefreshBookmarkList();
     }
 
-    private void BtnDockBookmarksBelowPages_Changed(object sender, RoutedEventArgs e) =>
-        ApplyBookmarksDockMode(BtnDockBookmarksBelowPages.IsChecked == true);
-
-    private void BtnToggleBookmarksDock_Click(object sender, RoutedEventArgs e)
+    private FrameworkElement BuildBookmarksTabHeader()
     {
-        BtnDockBookmarksBelowPages.IsChecked = BtnDockBookmarksBelowPages.IsChecked != true;
+        var header = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        header.Children.Add(new TextBlock
+        {
+            Text = "Bkm",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0),
+        });
+
+        _bookmarksTabDockToggle = CreateBookmarkDockToggle("Dock Bookmarks below Pages");
+        header.Children.Add(_bookmarksTabDockToggle);
+        return header;
     }
 
-    private void BtnBookmarksDockClose_Click(object sender, RoutedEventArgs e)
+    private ToggleButton CreateBookmarkDockToggle(string tooltip)
     {
-        if (BtnDockBookmarksBelowPages.IsChecked == true)
-            BtnDockBookmarksBelowPages.IsChecked = false;
-        else
-            ApplyBookmarksDockMode(false);
+        var toggle = new ToggleButton
+        {
+            Style = (Style)FindResource("BookmarkDockToggleButton"),
+            ToolTip = tooltip,
+        };
+        toggle.Checked += BookmarkDockToggle_Changed;
+        toggle.Unchecked += BookmarkDockToggle_Changed;
+        return toggle;
+    }
+
+    private void BookmarkDockToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncingBookmarkDockToggle || sender is not ToggleButton toggle)
+            return;
+
+        ApplyBookmarksDockMode(toggle.IsChecked == true);
     }
 
     private void ApplyBookmarksDockMode(bool docked)
     {
         if (_bookmarksTab == null || _bookmarkPanel == null)
             return;
+
+        SetBookmarksDockToggleState(docked);
 
         if (docked)
         {
@@ -149,6 +178,21 @@ public partial class MainWindow
         TxtStatus.Text = "Bookmarks returned to the Pages tabs.";
     }
 
+    private void SetBookmarksDockToggleState(bool docked)
+    {
+        _syncingBookmarkDockToggle = true;
+        try
+        {
+            if (_bookmarksTabDockToggle != null)
+                _bookmarksTabDockToggle.IsChecked = docked;
+            BtnDockBookmarksBelowPages.IsChecked = docked;
+        }
+        finally
+        {
+            _syncingBookmarkDockToggle = false;
+        }
+    }
+
     private static Style BuildBookmarkListItemStyle()
     {
         var style = new Style(typeof(ListViewItem));
@@ -166,6 +210,15 @@ public partial class MainWindow
         selected.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("ControlActiveForegroundBrush")));
         style.Triggers.Add(selected);
 
+        return style;
+    }
+
+    private static Style BuildHiddenBookmarkColumnHeaderStyle()
+    {
+        var style = new Style(typeof(GridViewColumnHeader));
+        style.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Collapsed));
+        style.Setters.Add(new Setter(FrameworkElement.HeightProperty, 0.0));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
         return style;
     }
 
