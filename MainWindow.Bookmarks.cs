@@ -89,9 +89,17 @@ public partial class MainWindow
     private void BtnDockBookmarksBelowPages_Changed(object sender, RoutedEventArgs e) =>
         ApplyBookmarksDockMode(BtnDockBookmarksBelowPages.IsChecked == true);
 
+    private void BtnToggleBookmarksDock_Click(object sender, RoutedEventArgs e)
+    {
+        BtnDockBookmarksBelowPages.IsChecked = BtnDockBookmarksBelowPages.IsChecked != true;
+    }
+
     private void BtnBookmarksDockClose_Click(object sender, RoutedEventArgs e)
     {
-        BtnDockBookmarksBelowPages.IsChecked = false;
+        if (BtnDockBookmarksBelowPages.IsChecked == true)
+            BtnDockBookmarksBelowPages.IsChecked = false;
+        else
+            ApplyBookmarksDockMode(false);
     }
 
     private void ApplyBookmarksDockMode(bool docked)
@@ -118,6 +126,7 @@ public partial class MainWindow
             BookmarksDockRow.Height = _bookmarksDockRowHeight.Value > 0
                 ? _bookmarksDockRowHeight
                 : new GridLength(190);
+            TxtStatus.Text = "Bookmarks docked below Pages.";
             return;
         }
 
@@ -130,12 +139,14 @@ public partial class MainWindow
             _bookmarksTab.Content = _bookmarkPanel;
             PagesSideTabs.Items.Add(_bookmarksTab);
         }
+        PagesSideTabs.SelectedItem = _bookmarksTab;
 
         BookmarksDockPanel.Visibility = Visibility.Collapsed;
         BookmarksDockSplitter.Visibility = Visibility.Collapsed;
         BookmarksDockSplitterRow.Height = new GridLength(0);
         BookmarksDockRow.MinHeight = 0;
         BookmarksDockRow.Height = new GridLength(0);
+        TxtStatus.Text = "Bookmarks returned to the Pages tabs.";
     }
 
     private static Style BuildBookmarkListItemStyle()

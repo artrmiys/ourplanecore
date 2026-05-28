@@ -574,7 +574,7 @@
                                   VerticalScrollBarVisibility="Auto"
                                   MaxHeight="320">
                         <StackPanel Margin="4">
-                            <UniformGrid Columns="4" Margin="0,0,0,4">
+                            <UniformGrid Columns="3" Margin="0,0,0,4">
                                 <Button x:Name="BtnPagesOpenTabs"
                                         Content="Tabs"
                                         Click="BtnPagesOpenTabs_Click"
@@ -631,14 +631,49 @@
                                                   </ToggleButton.Template>
                                     </ToggleButton>
                                 </Grid>
+                            </UniformGrid>
+                            <Grid Margin="0,0,0,4">
+                                <Button x:Name="BtnToggleBookmarksDock"
+                                        Content="Bookmarks"
+                                        Click="BtnToggleBookmarksDock_Click"
+                                        Padding="5,3,22,3"
+                                        FontSize="11"
+                                        ToolTip="Show Bookmarks as a separate panel below Pages"/>
                                 <ToggleButton x:Name="BtnDockBookmarksBelowPages"
-                                              Content="Bkmk"
+                                              Width="14"
+                                              Height="14"
+                                              Padding="0"
+                                              Margin="0,0,4,0"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Focusable="False"
                                               Checked="BtnDockBookmarksBelowPages_Changed"
                                               Unchecked="BtnDockBookmarksBelowPages_Changed"
-                                              Padding="4,3"
-                                              FontSize="11"
-                                              ToolTip="Show Bookmarks as a separate panel below Pages"/>
-                            </UniformGrid>
+                                              ToolTip="Bookmarks below Pages">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                            <Grid>
+                                                <Ellipse Stroke="{DynamicResource ControlBorderBrush}"
+                                                         StrokeThickness="1"
+                                                         Fill="{DynamicResource ControlBackgroundBrush}"/>
+                                                <Ellipse x:Name="BookmarksDockDot"
+                                                         Width="7"
+                                                         Height="7"
+                                                         Fill="#2563EB"
+                                                         Visibility="Collapsed"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Fill" TargetName="BookmarksDockDot" Value="#1D4ED8"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter Property="Visibility" TargetName="BookmarksDockDot" Value="Visible"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+                            </Grid>
 
                         </StackPanel>
                     </ScrollViewer>
@@ -810,11 +845,11 @@
                             <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
                                 <DockPanel LastChildFill="True">
                                     <Button DockPanel.Dock="Right"
-                                            Content="x"
+                                            Content="Tab"
                                             Click="BtnBookmarksDockClose_Click"
-                                            Width="22"
-                                            MinWidth="22"
-                                            Padding="0"
+                                            Width="34"
+                                            MinWidth="34"
+                                            Padding="4,0"
                                             Margin="2,0,0,0"
                                             FontSize="11"
                                             ToolTip="Return Bookmarks to the tab list"/>
