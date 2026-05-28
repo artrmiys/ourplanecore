@@ -30,16 +30,28 @@ public partial class MainWindow
     private sealed class PdfTakeoffImportRunResult
     {
         public string SourceFolder { get; init; } = "";
-        public string PagesFolder { get; init; } = "";
-        public string TakeoffsFolder { get; init; } = "";
+        public string PagesFolder { get; set; } = "";
+        public string TakeoffsFolder { get; set; } = "";
         public string ReportPath { get; set; } = "";
+        public bool Cancelled { get; set; }
+        public bool HadSupportedAnnotations { get; set; }
         public int PdfsScanned { get; set; }
+        public int PdfsWithSupportedAnnotations { get; set; }
+        public int PagesToImport { get; set; }
+        public int MeasurementsToImport { get; set; }
+        public int TakeoffGroupsToImport { get; set; }
         public int PdfsImported { get; set; }
         public int PagesImported { get; set; }
         public int TakeoffItemsImported { get; set; }
         public int MeasurementsImported { get; set; }
         public string FirstImportedPageFolder { get; set; } = "";
         public List<string> Messages { get; } = [];
+    }
+
+    private sealed class PdfTakeoffImportScanResult
+    {
+        public PdfTakeoffImportRunResult Run { get; init; } = new();
+        public List<PdfTakeoffImportSource> Sources { get; init; } = [];
     }
 
     private async void BtnImportPdfTakeoffs_Click(object sender, RoutedEventArgs e)
@@ -80,9 +92,17 @@ public partial class MainWindow
         try
         {
             PdfTakeoffImportRunResult result = await ScanAndImportPdfTakeoffsAsync(folder, pdfPaths);
+            if (result.Cancelled || !result.HadSupportedAnnotations)
+            {
+                TxtStatus.Text = result.HadSupportedAnnotations
+                    ? "PDF takeoff import cancelled before writing job files."
+                    : "No supported PDF takeoff annotations were found.";
+                ShowPdfTakeoffImportResult(result);
+                return;
+            }
+
             ReloadPagesTree();
             LoadTakeoffsForJob();
-
             if (!string.IsNullOrWhiteSpace(result.FirstImportedPageFolder))
                 SelectPageByFolder(result.FirstImportedPageFolder);
 
@@ -103,17 +123,55 @@ public partial class MainWindow
     {
         string pageParent = GetSelectedImportFolder();
         string takeoffParent = CurrentTakeoffParentFolder();
-        string pagesFolder = EnsurePdfTakeoffImportBucket(pageParent, _currentJob!.PagesRoot);
-        string takeoffsFolder = EnsurePdfTakeoffImportBucket(takeoffParent, _currentJob.TakeoffsRoot);
+        string pagesFolderPreview = PreviewPdfTakeoffImportBucketPath(pageParent, _currentJob!.PagesRoot);
+        string takeoffsFolderPreview = PreviewPdfTakeoffImportBucketPath(takeoffParent, _currentJob.TakeoffsRoot);
         var run = new PdfTakeoffImportRunResult
         {
             SourceFolder = sourceFolder,
-            PagesFolder = pagesFolder,
-            TakeoffsFolder = takeoffsFolder,
+            PagesFolder = pagesFolderPreview,
+            TakeoffsFolder = takeoffsFolderPreview,
             PdfsScanned = pdfPaths.Count,
         };
-        var sources = new List<PdfTakeoffImportSource>();
+        PdfTakeoffImportScanResult scan = await ScanPdfTakeoffSourcesAsync(run, pdfPaths);
 
+        if (scan.Sources.Count == 0)
+            return scan.Run;
+
+        scan.Run.HadSupportedAnnotations = true;
+        if (!ConfirmPdfTakeoffImport(scan.Run, scan.Sources))
+        {
+            scan.Run.Cancelled = true;
+            scan.Run.Messages.Add("Import cancelled after preview; no job files were written.");
+            return scan.Run;
+        }
+
+        string pagesFolder = EnsurePdfTakeoffImportBucket(pageParent, _currentJob.PagesRoot);
+        string takeoffsFolder = EnsurePdfTakeoffImportBucket(takeoffParent, _currentJob.TakeoffsRoot);
+        scan.Run.PagesFolder = pagesFolder;
+        scan.Run.TakeoffsFolder = takeoffsFolder;
+
+        using (ShowBusyOverlay($"Importing PDF takeoffs from {scan.Sources.Count} PDF file(s)..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            for (int index = 0; index < scan.Sources.Count; index++)
+            {
+                PdfTakeoffImportSource source = scan.Sources[index];
+                string pdfName = Path.GetFileName(source.PdfPath);
+                BusyOverlayText.Text = $"Importing PDF takeoffs {index + 1}/{scan.Sources.Count}: {pdfName}";
+                TxtStatus.Text = BusyOverlayText.Text;
+                ImportPdfTakeoffSource(source, pagesFolder, takeoffsFolder, sourceFolder, scan.Run);
+            }
+        }
+
+        scan.Run.ReportPath = WritePdfTakeoffImportReport(scan.Run, scan.Sources);
+        return scan.Run;
+    }
+
+    private async Task<PdfTakeoffImportScanResult> ScanPdfTakeoffSourcesAsync(
+        PdfTakeoffImportRunResult run,
+        IReadOnlyList<string> pdfPaths)
+    {
+        var scanResult = new PdfTakeoffImportScanResult { Run = run };
         using (ShowBusyOverlay($"Scanning {pdfPaths.Count} PDF file(s) for takeoff annotations..."))
         {
             await WaitForBusyOverlayRenderAsync();
@@ -124,38 +182,29 @@ public partial class MainWindow
                 BusyOverlayText.Text = $"Scanning PDF takeoffs {index + 1}/{pdfPaths.Count}: {pdfName}";
                 TxtStatus.Text = BusyOverlayText.Text;
 
-                var scan = await PdfTakeoffAnnotationImportService.TryReadAsync(pdfPath);
-                if (!scan.Ok)
+                var read = await PdfTakeoffAnnotationImportService.TryReadAsync(pdfPath);
+                if (!read.Ok)
                 {
-                    run.Messages.Add($"{pdfName}: scan failed - {scan.Error}");
+                    run.Messages.Add($"{pdfName}: scan failed - {read.Error}");
                     continue;
                 }
 
-                int measurementCount = scan.Result.Pages.Sum(page => page.Measurements.Count);
+                int measurementCount = read.Result.Pages.Sum(page => page.Measurements.Count);
                 if (measurementCount == 0)
                 {
                     run.Messages.Add($"{pdfName}: no supported measurement annotations found.");
                     continue;
                 }
 
-                sources.Add(new PdfTakeoffImportSource(pdfPath, scan.Result));
-            }
-
-            if (sources.Count == 0)
-                throw new InvalidOperationException("No supported PDF takeoff annotations were found.");
-
-            for (int index = 0; index < sources.Count; index++)
-            {
-                PdfTakeoffImportSource source = sources[index];
-                string pdfName = Path.GetFileName(source.PdfPath);
-                BusyOverlayText.Text = $"Importing PDF takeoffs {index + 1}/{sources.Count}: {pdfName}";
-                TxtStatus.Text = BusyOverlayText.Text;
-                ImportPdfTakeoffSource(source, pagesFolder, takeoffsFolder, sourceFolder, run);
+                scanResult.Sources.Add(new PdfTakeoffImportSource(pdfPath, read.Result));
             }
         }
 
-        run.ReportPath = WritePdfTakeoffImportReport(run, sources);
-        return run;
+        run.PdfsWithSupportedAnnotations = scanResult.Sources.Count;
+        run.PagesToImport = scanResult.Sources.Sum(source => source.Annotations.PageCount);
+        run.MeasurementsToImport = scanResult.Sources.Sum(source => source.Annotations.Pages.Sum(page => page.Measurements.Count));
+        run.TakeoffGroupsToImport = CountPdfTakeoffImportGroups(scanResult.Sources);
+        return scanResult;
     }
 
     private string EnsurePdfTakeoffImportBucket(string parentFolder, string rootFolder)
@@ -168,6 +217,76 @@ public partial class MainWindow
 
         return OurPlaneCoreJobStore.EnsureFolder(parent, PdfTakeoffImportFolderName);
     }
+
+    private static string PreviewPdfTakeoffImportBucketPath(string parentFolder, string rootFolder)
+    {
+        string parent = string.IsNullOrWhiteSpace(parentFolder) || !Directory.Exists(parentFolder)
+            ? rootFolder
+            : parentFolder;
+        if (string.Equals(OurPlaneCoreJobStore.DisplayName(parent), PdfTakeoffImportFolderName, StringComparison.OrdinalIgnoreCase))
+            return parent;
+
+        string folderName = OurPlaneCoreJobStore.SanitizeName(PdfTakeoffImportFolderName, 120);
+        return Path.Combine(parent, folderName);
+    }
+
+    private static int CountPdfTakeoffImportGroups(IReadOnlyList<PdfTakeoffImportSource> sources) =>
+        sources
+            .SelectMany(source => source.Annotations.Pages)
+            .SelectMany(page => page.Measurements)
+            .GroupBy(measurement => new PdfTakeoffImportGroupKey(measurement.Type, measurement.Color))
+            .Count();
+
+    private bool ConfirmPdfTakeoffImport(PdfTakeoffImportRunResult run, IReadOnlyList<PdfTakeoffImportSource> sources)
+    {
+        var summary = new StringBuilder();
+        summary.AppendLine("PDF Takeoffs preview");
+        summary.AppendLine();
+        summary.AppendLine($"PDFs scanned: {run.PdfsScanned}");
+        summary.AppendLine($"PDFs with takeoffs: {run.PdfsWithSupportedAnnotations}");
+        summary.AppendLine($"Pages to import: {run.PagesToImport}");
+        summary.AppendLine($"Takeoff groups: {run.TakeoffGroupsToImport}");
+        summary.AppendLine($"Measurements: {run.MeasurementsToImport}");
+        summary.AppendLine();
+        summary.AppendLine("Destination:");
+        summary.AppendLine($"Pages: {run.PagesFolder}");
+        summary.AppendLine($"Takeoffs: {run.TakeoffsFolder}");
+        summary.AppendLine();
+        summary.AppendLine("Top groups:");
+        foreach (string line in BuildPdfTakeoffPreviewGroupLines(sources).Take(12))
+            summary.AppendLine(line);
+        int groupCount = run.TakeoffGroupsToImport;
+        if (groupCount > 12)
+            summary.AppendLine($"... {groupCount - 12} more group(s)");
+        if (run.Messages.Count > 0)
+        {
+            summary.AppendLine();
+            summary.AppendLine("Scan messages:");
+            foreach (string message in run.Messages.Take(5))
+                summary.AppendLine("- " + message);
+            if (run.Messages.Count > 5)
+                summary.AppendLine($"- ... {run.Messages.Count - 5} more");
+        }
+
+        summary.AppendLine();
+        summary.AppendLine("Continue import?");
+        MessageBoxResult result = MessageBox.Show(
+            summary.ToString(),
+            "Confirm PDF Takeoffs Import",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        return result == MessageBoxResult.Yes;
+    }
+
+    private static IEnumerable<string> BuildPdfTakeoffPreviewGroupLines(IReadOnlyList<PdfTakeoffImportSource> sources) =>
+        sources
+            .SelectMany(source => source.Annotations.Pages)
+            .SelectMany(page => page.Measurements)
+            .GroupBy(measurement => new PdfTakeoffImportGroupKey(measurement.Type, measurement.Color))
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key.Type, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(group => group.Key.Color, StringComparer.OrdinalIgnoreCase)
+            .Select(group => $"- {PdfTakeoffImportItemName(group.Key.Type, group.Key.Color)}: {group.Count()}");
 
     private void ImportPdfTakeoffSource(
         PdfTakeoffImportSource source,
@@ -331,6 +450,10 @@ public partial class MainWindow
             "## Summary",
             "",
             $"- PDFs scanned: {run.PdfsScanned.ToString(CultureInfo.InvariantCulture)}",
+            $"- PDFs with supported annotations: {run.PdfsWithSupportedAnnotations.ToString(CultureInfo.InvariantCulture)}",
+            $"- Pages previewed for import: {run.PagesToImport.ToString(CultureInfo.InvariantCulture)}",
+            $"- Takeoff groups previewed: {run.TakeoffGroupsToImport.ToString(CultureInfo.InvariantCulture)}",
+            $"- Measurements previewed: {run.MeasurementsToImport.ToString(CultureInfo.InvariantCulture)}",
             $"- PDFs imported: {run.PdfsImported.ToString(CultureInfo.InvariantCulture)}",
             $"- Pages imported: {run.PagesImported.ToString(CultureInfo.InvariantCulture)}",
             $"- Takeoff items imported: {run.TakeoffItemsImported.ToString(CultureInfo.InvariantCulture)}",
@@ -373,12 +496,31 @@ public partial class MainWindow
     private void ShowPdfTakeoffImportResult(PdfTakeoffImportRunResult result)
     {
         var summary = new StringBuilder();
-        summary.AppendLine($"Imported PDFs: {result.PdfsImported}");
-        summary.AppendLine($"Pages: {result.PagesImported}");
-        summary.AppendLine($"Takeoff items: {result.TakeoffItemsImported}");
-        summary.AppendLine($"Measurements: {result.MeasurementsImported}");
-        summary.AppendLine();
-        summary.AppendLine($"Report: {result.ReportPath}");
+        if (!result.HadSupportedAnnotations)
+        {
+            summary.AppendLine("No supported PDF takeoff annotations were found.");
+            summary.AppendLine();
+            summary.AppendLine($"PDFs scanned: {result.PdfsScanned}");
+        }
+        else if (result.Cancelled)
+        {
+            summary.AppendLine("Import cancelled before writing job files.");
+            summary.AppendLine();
+            summary.AppendLine($"PDFs with takeoffs: {result.PdfsWithSupportedAnnotations}");
+            summary.AppendLine($"Pages previewed: {result.PagesToImport}");
+            summary.AppendLine($"Takeoff groups previewed: {result.TakeoffGroupsToImport}");
+            summary.AppendLine($"Measurements previewed: {result.MeasurementsToImport}");
+        }
+        else
+        {
+            summary.AppendLine($"Imported PDFs: {result.PdfsImported}");
+            summary.AppendLine($"Pages: {result.PagesImported}");
+            summary.AppendLine($"Takeoff items: {result.TakeoffItemsImported}");
+            summary.AppendLine($"Measurements: {result.MeasurementsImported}");
+            summary.AppendLine();
+            summary.AppendLine($"Report: {result.ReportPath}");
+        }
+
         if (result.Messages.Count > 0)
         {
             summary.AppendLine();
@@ -389,7 +531,10 @@ public partial class MainWindow
                 summary.AppendLine($"- ... {result.Messages.Count - 8} more");
         }
 
-        MessageBox.Show(summary.ToString(), "PDF Takeoffs Import Complete",
+        string title = result.Cancelled || !result.HadSupportedAnnotations
+            ? "PDF Takeoffs Import"
+            : "PDF Takeoffs Import Complete";
+        MessageBox.Show(summary.ToString(), title,
                         MessageBoxButton.OK, MessageBoxImage.Information);
     }
 }

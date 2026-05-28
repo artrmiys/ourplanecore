@@ -664,6 +664,12 @@ internal static class TakeoffsTreeRegressionTests
             importer.Contains("pdf_takeoff_import_", StringComparison.Ordinal),
             "PDF takeoff import should bucket pages/takeoffs, group by type/color, preserve scale, and write a markdown report");
         AssertTrue(
+            importer.Contains("PreviewPdfTakeoffImportBucketPath", StringComparison.Ordinal) &&
+            importer.Contains("ConfirmPdfTakeoffImport", StringComparison.Ordinal) &&
+            importer.Contains("Import cancelled after preview; no job files were written.", StringComparison.Ordinal) &&
+            importer.Contains("No supported PDF takeoff annotations were found.", StringComparison.Ordinal),
+            "PDF takeoff import must scan first, show a confirmation preview, and avoid writing job files when cancelled or empty");
+        AssertTrue(
             service.Contains("\"pdftakeoffs\"", StringComparison.Ordinal) &&
             helper.Contains("pdf_takeoff_annotations_data", StringComparison.Ordinal) &&
             helper.Contains("elif action == \"pdftakeoffs\"", StringComparison.Ordinal),
