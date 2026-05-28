@@ -1,5 +1,28 @@
 ﻿# Development Log
 
+## 2026-05-28 Bookmarks Dock Return
+
+- Fixed the left Pages panel Bookmarks dock control after the first version was
+  too easy to miss. `Bookmarks` is now a separate full-width button below
+  `Tabs / Detach / Tile M2`, with a small state dot matching the Tile M2 style.
+- Changed the docked Bookmarks header return control from a tiny `x` to an
+  explicit `Tab` button. Returning from docked mode now selects the normal
+  `Bookmarks` tab so the user can see where it went.
+- Kept the `BK` shortcut regression covered through the existing dual-layout
+  shortcut path and expanded the source regression for the dock button, return
+  button, tab reselection, and status messages.
+- Verification passed: `git diff --check`, `dotnet build .\ourplanecore.sln`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`238/238`), compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `1C27F168D0CD550ED321D7FA57F696B9D307C1C2490E97A371804D80F9F30B19`,
+  and packaged launch log check with `0` errors after the latest
+  `Application startup.`.
+- Commit: `3f15285 Fix bookmarks dock return`.
+- Detailed handoff:
+  `docs/BOOKMARKS_DOCK_HANDOFF_2026_05_28.md`.
+
 ## 2026-05-27 Open Jobs, PDF Import, Render, and Sheet Naming
 
 - Added Open Jobs folder removal near `Manage folders`; this removes a root
