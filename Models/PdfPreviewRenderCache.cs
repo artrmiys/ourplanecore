@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OurPlaneCore.Controls;
 
 namespace OurPlaneCore;
 
@@ -13,6 +14,9 @@ public static class PdfPreviewRenderCache
     public const string CacheRootEnvironmentVariable = "OURPLANECORE_PDF_PREVIEW_CACHE_ROOT";
     private const int MaxEntries = 512;
     private const long MaxBytes = 1_500_000_000;
+    private const float MaxPersistedRenderScale = 2.25f;
+    private const long MaxPersistedRenderPixels = 30_000_000;
+    private const long MaxPersistedRenderImageBytes = 96_000_000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -24,9 +28,18 @@ public static class PdfPreviewRenderCache
         string pdfPath,
         int pageIndex,
         float renderScale,
+        out PdfLayerRenderResult result) =>
+        TryReadCleanRender(pdfPath, pageIndex, renderScale, out result);
+
+    public static bool TryReadCleanRender(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
         out PdfLayerRenderResult result)
     {
         result = new PdfLayerRenderResult();
+        if (!IsPersistedRenderScale(renderScale))
+            return false;
         if (!TryBuildCachePaths(pdfPath, pageIndex, renderScale, out CachePaths paths, out PreviewCacheIdentity identity))
             return false;
 
@@ -56,13 +69,16 @@ public static class PdfPreviewRenderCache
                 ImageBytes = imageBytes,
                 WidthPt = metadata.WidthPt,
                 HeightPt = metadata.HeightPt,
-                Layers = [],
+                Layers = metadata.Layers
+                    .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn))
+                    .ToList(),
+                LayersCaptured = metadata.LayersCaptured,
             };
             return result.WidthPt > 0 && result.HeightPt > 0;
         }
         catch (Exception ex)
         {
-            AppLog.Warn(ex, $"PyMuPDF preview cache read failed for {pdfPath} page {pageIndex + 1}");
+            AppLog.Warn(ex, $"PyMuPDF render cache read failed for {pdfPath} page {pageIndex + 1}");
             TryDelete(paths);
             result = new PdfLayerRenderResult();
             return false;
@@ -73,9 +89,18 @@ public static class PdfPreviewRenderCache
         string pdfPath,
         int pageIndex,
         float renderScale,
+        PdfLayerRenderResult result) =>
+        TryWriteCleanRender(pdfPath, pageIndex, renderScale, result);
+
+    public static void TryWriteCleanRender(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
         PdfLayerRenderResult result)
     {
         if (result.ImageBytes.Length == 0 || result.WidthPt <= 0 || result.HeightPt <= 0)
+            return;
+        if (!IsPersistedRenderScale(renderScale) || !IsRenderSizeCacheable(renderScale, result))
             return;
         if (!TryBuildCachePaths(pdfPath, pageIndex, renderScale, out CachePaths paths, out PreviewCacheIdentity identity))
             return;
@@ -95,6 +120,15 @@ public static class PdfPreviewRenderCache
                 RenderScale = identity.RenderScale,
                 WidthPt = result.WidthPt,
                 HeightPt = result.HeightPt,
+                LayersCaptured = result.LayersCaptured,
+                Layers = result.Layers
+                    .Select(layer => new PdfLayerInfo
+                    {
+                        Number = layer.Number,
+                        Name = layer.Name,
+                        IsOn = layer.IsOn,
+                    })
+                    .ToList(),
                 CreatedUtc = DateTime.UtcNow,
             };
 
@@ -106,11 +140,11 @@ public static class PdfPreviewRenderCache
         }
         catch (Exception ex)
         {
-            AppLog.Warn(ex, $"PyMuPDF preview cache write failed for {pdfPath} page {pageIndex + 1}");
+            AppLog.Warn(ex, $"PyMuPDF render cache write failed for {pdfPath} page {pageIndex + 1}");
         }
     }
 
-    public static bool IsCleanPreviewRequest(
+    public static bool IsCleanRenderRequest(
         string pdfPath,
         int pageIndex,
         double renderScale,
@@ -121,6 +155,17 @@ public static class PdfPreviewRenderCache
                pageIndex >= 0 &&
                layerStates.Count == 0 &&
                highlightedLayers.Count == 0 &&
+               IsPersistedRenderScale(renderScale);
+    }
+
+    public static bool IsCleanPreviewRequest(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers)
+    {
+        return IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers) &&
                Math.Abs(renderScale - ViewportRenderPolicy.InstantPagePreviewRenderScale) < 0.001;
     }
 
@@ -168,6 +213,24 @@ public static class PdfPreviewRenderCache
     }
 
     private static float NormalizeScale(double scale) => (float)Math.Round(scale, 3);
+
+    private static bool IsPersistedRenderScale(double renderScale)
+    {
+        float scale = NormalizeScale(renderScale);
+        return scale >= ViewportRenderPolicy.InstantPagePreviewRenderScale - 0.001f &&
+               scale <= MaxPersistedRenderScale + 0.001f;
+    }
+
+    private static bool IsRenderSizeCacheable(float renderScale, PdfLayerRenderResult result)
+    {
+        if (result.ImageBytes.LongLength > MaxPersistedRenderImageBytes)
+            return false;
+
+        long widthPx = Math.Max(1, (long)Math.Ceiling(result.WidthPt * renderScale));
+        long heightPx = Math.Max(1, (long)Math.Ceiling(result.HeightPt * renderScale));
+        return widthPx <= int.MaxValue / Math.Max(1, heightPx) &&
+               widthPx * heightPx <= MaxPersistedRenderPixels;
+    }
 
     private static string Hash(string value)
     {
@@ -264,6 +327,8 @@ public static class PdfPreviewRenderCache
         public float RenderScale { get; set; }
         public float WidthPt { get; set; }
         public float HeightPt { get; set; }
+        public bool LayersCaptured { get; set; }
+        public List<PdfLayerInfo> Layers { get; set; } = [];
         public DateTime CreatedUtc { get; set; }
 
         public bool Matches(PreviewCacheIdentity identity) =>

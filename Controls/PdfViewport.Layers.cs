@@ -97,6 +97,70 @@ public sealed partial class PdfViewport
         return true;
     }
 
+    private bool TryApplyPersistedCleanLayerRender(LayerRenderRequest request)
+    {
+        if (request.ResetLayerStates)
+            return false;
+        if (!PdfPreviewRenderCache.IsCleanRenderRequest(
+                request.PdfPath,
+                request.PdfIndex,
+                request.RenderScale,
+                request.LayerStates,
+                request.HighlightedLayers))
+        {
+            return false;
+        }
+        if (!PdfPreviewRenderCache.TryReadCleanRender(
+                request.PdfPath,
+                request.PdfIndex,
+                request.RenderScale,
+                out PdfLayerRenderResult render))
+        {
+            return false;
+        }
+        if (!render.LayersCaptured && _cachedLayers == null)
+            return false;
+
+        var bitmap = SKBitmap.Decode(render.ImageBytes);
+        if (bitmap == null)
+            return false;
+
+        if (_cachedLayers == null && render.LayersCaptured)
+        {
+            _cachedLayers = render.Layers
+                .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
+                .ToList();
+            PdfLayersDiscovered?.Invoke(_cachedLayers);
+        }
+
+        _pageBitmap?.Dispose();
+        _pageBitmap = bitmap;
+        _pdfW = render.WidthPt;
+        _pdfH = render.HeightPt;
+        _bitmapScale = _pdfW > 0 ? _pageBitmap.Width / _pdfW : request.RenderScale;
+        _renderedScale = _bitmapScale;
+        if (_cachedLayers != null)
+        {
+            UpdateLayerSnapshot(_cachedLayers
+                .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn)));
+        }
+
+        _usingLayerRenderer = true;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
+        _showingPreviousPageDuringSwitch = false;
+        ApplyLayerRenderContinuation(request);
+        if (request.FireLayersAfter)
+            FireLayersChanged();
+        if (!string.IsNullOrWhiteSpace(request.StatusAfter))
+            PostStatus(request.StatusAfter);
+        AppLog.Info(
+            $"Viewport PyMuPDF render cache hit; page='{request.PageFolder}'; " +
+            $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; scale={request.RenderScale:0.###}");
+        RequestRepaint();
+        return true;
+    }
+
     private void ApplyInitialPreviewView(ViewState? restoreView, bool fitAfter)
     {
         if (restoreView.HasValue)
@@ -313,7 +377,7 @@ public sealed partial class PdfViewport
             return;
 
         int version = ++_layerRenderVersion;
-        _pendingLayerRender = new LayerRenderRequest(
+        LayerRenderRequest request = new(
             version,
             _pdfPath,
             _pdfIndex,
@@ -328,6 +392,13 @@ public sealed partial class PdfViewport
             statusAfter,
             fireLayersAfter);
 
+        if (TryApplyPersistedCleanLayerRender(request))
+        {
+            _pendingLayerRender = null;
+            return;
+        }
+
+        _pendingLayerRender = request;
         _ = StartNextLayerRenderAsync();
     }
 

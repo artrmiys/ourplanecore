@@ -234,6 +234,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("pdf preview render cache round trips", PdfPreviewRenderCacheRoundTrips),
     ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
+    ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
     ("sheet overlay rendering uses sharper sampling", TakeoffsTreeRegressionTests.SheetOverlayRenderingUsesSharperSampling),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
@@ -3065,7 +3066,8 @@ static void PdfPreviewRenderCacheRoundTrips()
             ImageBytes = [1, 2, 3, 4],
             WidthPt = 612,
             HeightPt = 792,
-            Layers = [],
+            Layers = [new PdfLayer(7, "A-WALL", true)],
+            LayersCaptured = true,
         };
 
         AssertFalse(
@@ -3091,6 +3093,22 @@ static void PdfPreviewRenderCacheRoundTrips()
                 new Dictionary<int, bool>(),
                 []),
             "normal quality rerender should not write the first-preview cache");
+        AssertTrue(
+            PdfPreviewRenderCache.IsCleanRenderRequest(
+                pdf,
+                0,
+                1.0,
+                new Dictionary<int, bool>(),
+                []),
+            "normal clean PyMuPDF render should be cacheable for repeat opens");
+        AssertFalse(
+            PdfPreviewRenderCache.IsCleanRenderRequest(
+                pdf,
+                0,
+                1.0,
+                new Dictionary<int, bool> { [7] = false },
+                []),
+            "hidden PDF layer states should not use the clean render cache");
 
         PdfPreviewRenderCache.TryWriteCleanPreview(
             pdf,
@@ -3108,6 +3126,15 @@ static void PdfPreviewRenderCacheRoundTrips()
         AssertEqual("4", cached.ImageBytes.Length.ToString(), "cached preview image bytes length");
         AssertClose(612, cached.WidthPt, "cached preview width");
         AssertClose(792, cached.HeightPt, "cached preview height");
+        AssertTrue(cached.LayersCaptured, "cached clean render should preserve layer discovery state");
+        AssertEqual("1", cached.Layers.Count.ToString(), "cached clean render layers");
+
+        PdfPreviewRenderCache.TryWriteCleanRender(pdf, 0, 1.0f, render);
+        AssertTrue(
+            PdfPreviewRenderCache.TryReadCleanRender(pdf, 0, 1.0f, out PdfLayerRenderResult fullCached),
+            "written full-scale clean render cache should hit");
+        AssertClose(612, fullCached.WidthPt, "cached full render width");
+        AssertEqual("A-WALL", fullCached.Layers[0].Name, "cached full render layer name");
 
         File.SetLastWriteTimeUtc(pdf, new DateTime(2026, 5, 28, 10, 1, 0, DateTimeKind.Utc));
         AssertFalse(

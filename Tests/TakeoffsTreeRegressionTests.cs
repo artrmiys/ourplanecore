@@ -699,14 +699,41 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("Viewport PyMuPDF preview cache hit", StringComparison.Ordinal),
             "viewport should read and apply cached clean PyMuPDF previews without using Docnet");
         AssertTrue(
-            service.Contains("PdfPreviewRenderCache.IsCleanPreviewRequest", StringComparison.Ordinal) &&
-            service.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal),
-            "successful clean PyMuPDF preview renders should populate the persisted preview cache");
+            service.Contains("PdfPreviewRenderCache.IsCleanRenderRequest", StringComparison.Ordinal) &&
+            service.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal),
+            "successful clean PyMuPDF renders should populate the persisted render cache");
         AssertTrue(
             cache.Contains("CacheRootEnvironmentVariable", StringComparison.Ordinal) &&
             cache.Contains("LastWriteTimeUtc.Ticks", StringComparison.Ordinal) &&
             cache.Contains("File.Move(tempImage, paths.ImagePath, overwrite: true)", StringComparison.Ordinal),
             "preview cache should be keyed by source identity and written atomically through temp files");
+    }
+
+    public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()
+    {
+        string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string service = ReadRepoFile("Models/PdfLayerRenderService.cs");
+        string cache = ReadRepoFile("Models/PdfPreviewRenderCache.cs");
+
+        int applyCache = layers.IndexOf("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal);
+        int assignPending = layers.IndexOf("_pendingLayerRender = request", StringComparison.Ordinal);
+        AssertTrue(
+            applyCache >= 0 && assignPending > applyCache,
+            "clean full-scale render cache should be applied before queueing the PyMuPDF worker");
+        AssertTrue(
+            layers.Contains("Viewport PyMuPDF render cache hit", StringComparison.Ordinal) &&
+            layers.Contains("!render.LayersCaptured && _cachedLayers == null", StringComparison.Ordinal),
+            "full render cache hits should be logged and must not bypass unknown layer discovery");
+        AssertTrue(
+            service.Contains("LayersCaptured = true", StringComparison.Ordinal) &&
+            service.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal),
+            "PyMuPDF render results should persist clean renders with captured layer metadata");
+        AssertTrue(
+            cache.Contains("MaxPersistedRenderScale", StringComparison.Ordinal) &&
+            cache.Contains("MaxPersistedRenderPixels", StringComparison.Ordinal) &&
+            cache.Contains("MaxPersistedRenderImageBytes", StringComparison.Ordinal) &&
+            cache.Contains("IsCleanRenderRequest", StringComparison.Ordinal),
+            "persisted full render cache should be bounded and limited to clean render requests");
     }
 
     public static void PdfLayerRenderUsesPortableInlineImageProtocol()

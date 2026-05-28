@@ -19,6 +19,7 @@ public sealed class PdfLayerRenderResult
     public float WidthPt { get; init; }
     public float HeightPt { get; init; }
     public IReadOnlyList<PdfLayer> Layers { get; init; } = [];
+    public bool LayersCaptured { get; init; }
 }
 
 public sealed class PdfLayerTraceResult
@@ -196,10 +197,11 @@ public static class PdfLayerRenderService
                 Layers = response.Layers
                     .Select(l => new PdfLayer(l.Xref, l.Name, l.On, highlightedLayers.Contains(l.Xref)))
                     .ToList(),
+                LayersCaptured = true,
             };
             AddCachedRender(cacheKey, result);
-            if (PdfPreviewRenderCache.IsCleanPreviewRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
-                PdfPreviewRenderCache.TryWriteCleanPreview(pdfPath, pageIndex, (float)renderScale, result);
+            if (PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+                PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
             return true;
         }
         catch (Exception ex)
