@@ -243,6 +243,7 @@ public sealed partial class PdfViewport
         _boxVertexMode = false;
         _areaCutMeasurement = null;
         SetSnapPreview(null);
+        ClearEdgeSnapPreview();
         if (_draggingVertex && IsMouseCaptured)
             ReleaseMouseCapture();
         if (clearSelection)

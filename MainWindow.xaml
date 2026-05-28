@@ -61,6 +61,8 @@
                                     ToolTip="Open jobs, switch job folders, create jobs, or import PDF/PlanSwift into the current job"/>
                             <Button Content="PlanSwift" Click="BtnImportPlanSwiftJob_Click" Style="{StaticResource TopCommandButton}"
                                     ToolTip="Separate PlanSwift job converter"/>
+                            <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Import PDF pages and measurement annotations as takeoffs"/>
                         </StackPanel>
                         <Separator/>
                         <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
@@ -89,6 +91,8 @@
                             <TextBlock Text="Add" Style="{StaticResource TopCommandLabel}"/>
                             <Button Content="Add Pages" Click="BtnPageAddPages_Click" Style="{StaticResource TopCommandButton}"
                                     ToolTip="Import PDF pages into the current job"/>
+                            <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Import PDF pages plus PDF measurement annotations into takeoffs"/>
                         </StackPanel>
                         <Separator/>
                         <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
@@ -1253,6 +1257,7 @@
                         </WrapPanel.Resources>
                         <TextBlock Text="PDF" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Import PDF(s)" Click="BtnImport_Click" ToolTip="Add one or many PDF files to the current job"/>
+                        <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" ToolTip="Import PDF measurement annotations into takeoff items"/>
                         <Button Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
                         <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>

@@ -225,7 +225,14 @@ public sealed partial class PdfViewport
                 return;
             }
 
-            var pdf = ResolveDigitizerPoint(ScreenToPdf((float)pos.X, (float)pos.Y), updatePreview: true);
+            SKPoint rawPdf = ScreenToPdf((float)pos.X, (float)pos.Y);
+            if (TryCommitEdgeSnapPreview(rawPdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            var pdf = ResolveDigitizerPoint(rawPdf, updatePreview: true);
             if (_tool != ViewerTool.AreaCut)
                 ClearSelection();
 
@@ -447,16 +454,19 @@ public sealed partial class PdfViewport
             return;
         }
 
+        SKPoint rawPointerPdf = pointerPdf;
         if (_pageBitmap != null &&
             _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
             !IsMissingScaleForLinearArea())
         {
             pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
             _lastPointerPdf = pointerPdf;
+            UpdateEdgeSnapPreview(rawPointerPdf);
         }
         else
         {
             SetSnapPreview(null);
+            ClearEdgeSnapPreview();
         }
 
         // Rubber-band
@@ -479,6 +489,7 @@ public sealed partial class PdfViewport
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         _cursorGuideVisible = false;
+        ClearEdgeSnapPreview();
         RequestRepaint();
         base.OnMouseLeave(e);
     }
@@ -600,6 +611,12 @@ public sealed partial class PdfViewport
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         Key key = KeyboardShortcutKeys.EffectiveKey(e);
+        if (key == Key.Tab && TryCycleEdgeSnapPreview())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (_pdfLayerTraceEnabled && key == Key.Tab)
         {
             if (_pdfLayerTraceChoosingLayer)

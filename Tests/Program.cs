@@ -237,6 +237,10 @@ var tests = new List<(string Name, Action Run)>
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
     ("sheet overlay rendering uses sharper sampling", TakeoffsTreeRegressionTests.SheetOverlayRenderingUsesSharperSampling),
+    ("sheet overlay persisted cache is wired", TakeoffsTreeRegressionTests.SheetOverlayPersistedCacheIsWired),
+    ("pdf takeoff import command is wired", TakeoffsTreeRegressionTests.PdfTakeoffImportCommandIsWired),
+    ("viewport edge snap command is wired", TakeoffsTreeRegressionTests.ViewportEdgeSnapCommandIsWired),
+    ("sheet overlay render cache round trips", SheetOverlayRenderCacheRoundTrips),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
     ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
@@ -3149,6 +3153,84 @@ static void PdfPreviewRenderCacheRoundTrips()
     {
         Environment.SetEnvironmentVariable(
             PdfPreviewRenderCache.CacheRootEnvironmentVariable,
+            string.IsNullOrWhiteSpace(oldRoot) ? null : oldRoot);
+        TryDeleteDirectory(root);
+    }
+}
+
+static void SheetOverlayRenderCacheRoundTrips()
+{
+    string oldRoot = Environment.GetEnvironmentVariable(SheetOverlayRenderCache.CacheRootEnvironmentVariable) ?? "";
+    string root = Path.Combine(Path.GetTempPath(), "opc_sheet_overlay_cache_tests", Guid.NewGuid().ToString("N"));
+    string pdf = Path.Combine(root, "overlay.pdf");
+    try
+    {
+        Directory.CreateDirectory(root);
+        Environment.SetEnvironmentVariable(SheetOverlayRenderCache.CacheRootEnvironmentVariable, Path.Combine(root, "cache"));
+        File.WriteAllText(pdf, "%PDF-1.4 sheet overlay cache test");
+        File.SetLastWriteTimeUtc(pdf, new DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc));
+
+        var page = new PageInfo
+        {
+            Name = "Base",
+            FolderPath = Path.Combine(root, "Pages", "Base"),
+            OverlayColor = "#38E5FF",
+            OverlayOpacity = 0.62,
+        };
+        var overlayPage = new PageInfo
+        {
+            Name = "Overlay",
+            FolderPath = Path.Combine(root, "Pages", "Overlay"),
+            PdfPath = pdf,
+            PdfPage = 0,
+            PdfLayers =
+            [
+                new PdfLayerInfo { Number = 11, Name = "A-WALL", IsOn = true },
+                new PdfLayerInfo { Number = 12, Name = "A-OLD", IsOn = false },
+            ],
+        };
+
+        using var bitmap = new SKBitmap(3, 2, SKColorType.Rgba8888, SKAlphaType.Premul);
+        bitmap.Erase(SKColors.Transparent);
+        bitmap.SetPixel(1, 1, new SKColor(0x38, 0xE5, 0xFF, 0xB0));
+
+        AssertFalse(
+            SheetOverlayRenderCache.TryRead(page, overlayPage, 1.25f, out _, out _, out _),
+            "empty sheet overlay cache should miss");
+
+        SheetOverlayRenderCache.TryWrite(page, overlayPage, 1.25f, bitmap, 612, 792);
+        AssertTrue(
+            SheetOverlayRenderCache.TryRead(
+                page,
+                overlayPage,
+                1.25f,
+                out SKBitmap? cached,
+                out float widthPt,
+                out float heightPt),
+            "written sheet overlay cache should hit");
+        using (cached)
+        {
+            AssertEqual("3", cached?.Width.ToString() ?? "", "cached overlay bitmap width");
+            AssertEqual("2", cached?.Height.ToString() ?? "", "cached overlay bitmap height");
+        }
+        AssertClose(612, widthPt, "cached overlay width pt");
+        AssertClose(792, heightPt, "cached overlay height pt");
+
+        var changedPage = new PageInfo
+        {
+            Name = "Base",
+            FolderPath = page.FolderPath,
+            OverlayColor = page.OverlayColor,
+            OverlayOpacity = 0.75,
+        };
+        AssertFalse(
+            SheetOverlayRenderCache.TryRead(changedPage, overlayPage, 1.25f, out _, out _, out _),
+            "changing overlay opacity should invalidate the tinted overlay cache");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            SheetOverlayRenderCache.CacheRootEnvironmentVariable,
             string.IsNullOrWhiteSpace(oldRoot) ? null : oldRoot);
         TryDeleteDirectory(root);
     }

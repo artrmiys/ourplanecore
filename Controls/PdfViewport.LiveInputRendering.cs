@@ -23,6 +23,7 @@ public sealed partial class PdfViewport
     private void DrawInProgress(SKCanvas canvas)
     {
         DrawPdfLayerTraceOverlay(canvas);
+        DrawEdgeSnapPreview(canvas);
 
         using var tempPaint = new SKPaint
         {

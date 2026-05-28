@@ -54,6 +54,7 @@ public partial class MainWindow
         Add("file.importPlanSwiftCurrent", "Import PlanSwift to Current Job", "File", "", "Import a read-only PlanSwift job under 01. planswift in the current job.", hasJob, "Open or create a job first.");
         Add("file.importPdf", "Import PDF(s)", "File", "", "Import one or many PDF files into the current job.", hasJob, "Open or create a job first.");
         Add("file.importPdfFolder", "Import PDF Folder", "File", "", "Recursively import every PDF file from a selected folder into the current job.", hasJob, "Open or create a job first.");
+        Add("file.importPdfTakeoffs", "Import PDF Takeoffs", "File", "", "Import PDF pages and PDF measurement annotations into takeoff items by type/color.", hasJob, "Open or create a job first.");
         Add("file.exportPdf", "Export PDF", "File", "", "Export selected/all sheets to a PDF.", hasJob, "Open or create a job first.");
         Add("file.save", "Save", "File", "Ctrl+S", "Save current takeoff data.", hasJob, "Open or create a job first.");
         Add("file.exportCsv", "Export CSV", "File", "", "Export takeoff rows to CSV.", hasJob, "Open or create a job first.");
@@ -150,6 +151,7 @@ public partial class MainWindow
             case "file.importPlanSwiftCurrent": BtnImportPlanSwiftToCurrentJob_Click(this, new RoutedEventArgs()); break;
             case "file.importPdf": BtnImport_Click(this, new RoutedEventArgs()); break;
             case "file.importPdfFolder": BtnImportPdfFolder_Click(this, new RoutedEventArgs()); break;
+            case "file.importPdfTakeoffs": BtnImportPdfTakeoffs_Click(this, new RoutedEventArgs()); break;
             case "file.exportPdf": BtnExportPdf_Click(this, new RoutedEventArgs()); break;
             case "file.save": BtnSave_Click(this, new RoutedEventArgs()); break;
             case "file.exportCsv": BtnExportCsv_Click(this, new RoutedEventArgs()); break;

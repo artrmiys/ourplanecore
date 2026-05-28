@@ -486,6 +486,23 @@ public partial class MainWindow
             return true;
         }
 
+        if (SheetOverlayRenderCache.TryRead(
+                page,
+                overlayPage,
+                renderScale,
+                out SKBitmap? persisted,
+                out widthPt,
+                out heightPt) &&
+            persisted != null)
+        {
+            overlayBitmap = persisted;
+            overlayName = overlayPage.Name;
+            _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
+            AppLog.Info(
+                $"Sheet overlay cache hit; base='{page.FolderPath}'; overlay='{overlayPage.FolderPath}'; scale={renderScale:0.###}");
+            return true;
+        }
+
         if (!allowRender)
         {
             error = "overlay is not cached yet.";
@@ -529,6 +546,7 @@ public partial class MainWindow
         heightPt = render.HeightPt;
         overlayName = overlayPage.Name;
         _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
+        SheetOverlayRenderCache.TryWrite(page, overlayPage, renderScale, overlayBitmap, widthPt, heightPt);
         return true;
     }
 

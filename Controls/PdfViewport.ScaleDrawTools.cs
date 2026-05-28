@@ -130,6 +130,7 @@ public sealed partial class PdfViewport
         _drawPts.Clear();
         _rubberEnd = null;
         SetSnapPreview(null);
+        ClearEdgeSnapPreview();
         RequestRepaint();
         PostStatus($"Added {EntryTitle(m.MType)}  {m.Label(ScaleMetersPerPt, UnitMode)}");
         MeasurementAdded?.Invoke(m);

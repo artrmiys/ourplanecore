@@ -620,6 +620,79 @@ internal static class TakeoffsTreeRegressionTests
         });
     }
 
+    public static void SheetOverlayPersistedCacheIsWired()
+    {
+        string overlay = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string cache = ReadRepoFile("Models/SheetOverlayRenderCache.cs");
+
+        AssertTrue(
+            overlay.Contains("SheetOverlayRenderCache.TryRead", StringComparison.Ordinal) &&
+            overlay.Contains("Sheet overlay cache hit", StringComparison.Ordinal) &&
+            overlay.Contains("SheetOverlayRenderCache.TryWrite", StringComparison.Ordinal),
+            "sheet overlay rendering must read persisted cache before rendering and write it after tinting");
+        AssertTrue(
+            cache.Contains("OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT", StringComparison.Ordinal) &&
+            cache.Contains("render-cache", StringComparison.Ordinal) &&
+            cache.Contains("sheet-overlay", StringComparison.Ordinal) &&
+            cache.Contains("LayerStateKey", StringComparison.Ordinal),
+            "sheet overlay cache must be portable and keyed by source PDF identity, render state, tint, opacity, and layers");
+    }
+
+    public static void PdfTakeoffImportCommandIsWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string menu = ReadRepoFile("MainWindow.OpenImportMenu.cs");
+        string palette = ReadRepoFile("MainWindow.CommandPalette.cs");
+        string importer = ReadRepoFile("MainWindow.PdfTakeoffImport.cs");
+        string service = ReadRepoFile("Models/PdfTakeoffAnnotationImportService.cs");
+        string helper = ReadRepoFile("Tools/pdf_layers_helper.py");
+
+        AssertTrue(
+            xaml.Contains("Content=\"PDF Takeoffs\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnImportPdfTakeoffs_Click\"", StringComparison.Ordinal),
+            "toolbar must expose the PDF Takeoffs import button beside the PDF/PlanSwift import surface");
+        AssertTrue(
+            menu.Contains("Import PDF Takeoffs from Folder", StringComparison.Ordinal) &&
+            palette.Contains("\"file.importPdfTakeoffs\"", StringComparison.Ordinal) &&
+            palette.Contains("BtnImportPdfTakeoffs_Click(this, new RoutedEventArgs())", StringComparison.Ordinal),
+            "Open/Import menu and command palette must expose PDF Takeoffs import");
+        AssertTrue(
+            importer.Contains("PdfTakeoffImportFolderName = \"from pdf\"", StringComparison.Ordinal) &&
+            importer.Contains("PdfTakeoffAnnotationImportService.TryReadAsync", StringComparison.Ordinal) &&
+            importer.Contains("PdfTakeoffImportGroupKey(m.Annotation.Type, m.Annotation.Color)", StringComparison.Ordinal) &&
+            importer.Contains("OurPlaneCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
+            importer.Contains("pdf_takeoff_import_", StringComparison.Ordinal),
+            "PDF takeoff import should bucket pages/takeoffs, group by type/color, preserve scale, and write a markdown report");
+        AssertTrue(
+            service.Contains("\"pdftakeoffs\"", StringComparison.Ordinal) &&
+            helper.Contains("pdf_takeoff_annotations_data", StringComparison.Ordinal) &&
+            helper.Contains("elif action == \"pdftakeoffs\"", StringComparison.Ordinal),
+            "PDF takeoff annotation extraction must use the existing PyMuPDF worker protocol");
+    }
+
+    public static void ViewportEdgeSnapCommandIsWired()
+    {
+        string edge = ReadRepoFile("Controls/PdfViewport.EdgeSnap.cs");
+        string input = ReadRepoFile("Controls/PdfViewport.Input.cs");
+        string live = ReadRepoFile("Controls/PdfViewport.LiveInputRendering.cs");
+
+        AssertTrue(
+            edge.Contains("TryFindEdgeSnapCandidate", StringComparison.Ordinal) &&
+            edge.Contains("ActivePageMeasurementSegmentsNear", StringComparison.Ordinal) &&
+            edge.Contains("BuildAdjacentEdgeSnapPoints", StringComparison.Ordinal) &&
+            edge.Contains("ClosedContour", StringComparison.Ordinal),
+            "edge snap should search existing measurement segments and support edge/adjacent/contour previews");
+        AssertTrue(
+            input.Contains("TryCommitEdgeSnapPreview(rawPdf)", StringComparison.Ordinal) &&
+            input.Contains("UpdateEdgeSnapPreview(rawPointerPdf)", StringComparison.Ordinal) &&
+            input.Contains("key == Key.Tab && TryCycleEdgeSnapPreview()", StringComparison.Ordinal),
+            "edge snap must hook hover, click commit, and Tab cycle in the viewport input path");
+        AssertTrue(
+            live.Contains("DrawEdgeSnapPreview(canvas)", StringComparison.Ordinal) &&
+            edge.Contains("FinalizeDrawing();", StringComparison.Ordinal),
+            "edge snap preview should render on the canvas and commit through normal measurement finalization");
+    }
+
     public static void ViewportCountHotGripsAndTightHitTestAreWired()
     {
         string constants = ReadRepoFile(Path.Combine("Models", "ViewportConstants.cs"));

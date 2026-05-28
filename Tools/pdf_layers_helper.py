@@ -1882,6 +1882,204 @@ def list_layers(input_path: str, output_path: str) -> None:
     _write_json(output_path, list_layers_data(_load_json(input_path)))
 
 
+_PDF_NUMBER_RE = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+
+
+def _pdf_numbers_from_array(raw: str, key: str) -> list[float]:
+    match = re.search(rf"/{re.escape(key)}\s*\[([^\]]*)\]", raw, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return []
+
+    numbers: list[float] = []
+    for number in _PDF_NUMBER_RE.findall(match.group(1)):
+        try:
+            numbers.append(float(number))
+        except ValueError:
+            continue
+    return numbers
+
+
+def _pdf_takeoff_scale_m_per_pt(raw: str) -> float:
+    x_match = re.search(r"/X\s*\[\s*<<(?P<body>.*?)>>", raw, flags=re.IGNORECASE | re.DOTALL)
+    if not x_match:
+        return 0.0
+
+    body = x_match.group("body")
+    c_match = re.search(r"/C\s*(?P<c>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)", body, flags=re.IGNORECASE)
+    if not c_match:
+        return 0.0
+
+    try:
+        value = float(c_match.group("c"))
+    except ValueError:
+        return 0.0
+
+    unit_match = re.search(r"/U\s*(?:\((?P<paren>[^)]*)\)|/(?P<name>[A-Za-z]+))", body, flags=re.IGNORECASE)
+    unit = ((unit_match.group("paren") or unit_match.group("name")) if unit_match else "ft").strip().lower()
+    unit_factor = {
+        "ft": 0.3048,
+        "feet": 0.3048,
+        "foot": 0.3048,
+        "in": 0.0254,
+        "inch": 0.0254,
+        "inches": 0.0254,
+        "m": 1.0,
+        "meter": 1.0,
+        "meters": 1.0,
+        "cm": 0.01,
+        "mm": 0.001,
+    }.get(unit, 0.3048)
+    scale = value * unit_factor
+    return scale if scale > 0 else 0.0
+
+
+def _pdf_takeoff_points_from_raw(numbers: list[float], page_height: float) -> list[dict]:
+    points: list[dict] = []
+    for index in range(0, len(numbers) - 1, 2):
+        x = float(numbers[index])
+        y = float(page_height - numbers[index + 1])
+        if not points or abs(points[-1]["x"] - x) > 0.01 or abs(points[-1]["y"] - y) > 0.01:
+            points.append({"x": x, "y": y})
+    return points
+
+
+def _pdf_takeoff_color_hex(annot) -> str:
+    colors = getattr(annot, "colors", None) or {}
+    for key in ("stroke", "fill"):
+        value = colors.get(key)
+        if not value or len(value) < 3:
+            continue
+
+        rgb: list[int] = []
+        for channel in value[:3]:
+            try:
+                c = float(channel)
+            except (TypeError, ValueError):
+                c = 0.0
+            if c <= 1.0:
+                c *= 255.0
+            rgb.append(max(0, min(255, int(round(c)))))
+        return "#{:02X}{:02X}{:02X}".format(rgb[0], rgb[1], rgb[2])
+    return "#E52237"
+
+
+def _pdf_takeoff_subtype(annot, raw: str) -> str:
+    match = re.search(r"/Subtype\s*/(?P<subtype>[A-Za-z]+)", raw)
+    if match:
+        return "/" + match.group("subtype")
+
+    annot_type = getattr(annot, "type", None)
+    if isinstance(annot_type, (tuple, list)) and len(annot_type) > 1:
+        return "/" + str(annot_type[1])
+    return ""
+
+
+def _pdf_takeoff_annotation_id(annot) -> str:
+    xref = int(getattr(annot, "xref", 0) or 0)
+    info = getattr(annot, "info", None) or {}
+    name = str(info.get("name") or info.get("id") or "").strip()
+    if name:
+        return name
+    return f"xref:{xref}" if xref > 0 else ""
+
+
+def _pdf_takeoff_circle_center(annot) -> list[dict]:
+    rect = getattr(annot, "rect", None)
+    if rect is None:
+        return []
+    return [{"x": float((rect.x0 + rect.x1) / 2.0), "y": float((rect.y0 + rect.y1) / 2.0)}]
+
+
+def _pdf_takeoff_annotation_data(doc: fitz.Document, page, annot) -> dict | None:
+    raw = doc.xref_object(int(annot.xref), compressed=False) if int(getattr(annot, "xref", 0) or 0) > 0 else ""
+    subtype = _pdf_takeoff_subtype(annot, raw)
+    page_height = float(page.rect.height)
+    measurement_type = ""
+    points: list[dict] = []
+
+    if subtype == "/Line":
+        measurement_type = "line"
+        points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "L"), page_height)
+    elif subtype == "/PolyLine":
+        measurement_type = "line"
+        points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "Vertices"), page_height)
+    elif subtype == "/Polygon":
+        measurement_type = "area"
+        points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "Vertices"), page_height)
+        if len(points) >= 2 and abs(points[0]["x"] - points[-1]["x"]) <= 0.01 and abs(points[0]["y"] - points[-1]["y"]) <= 0.01:
+            points = points[:-1]
+    elif subtype == "/Circle":
+        measurement_type = "point"
+        points = _pdf_takeoff_circle_center(annot)
+    else:
+        return None
+
+    if measurement_type == "point" and len(points) < 1:
+        return None
+    if measurement_type == "line" and len(points) < 2:
+        return None
+    if measurement_type == "area" and len(points) < 3:
+        return None
+
+    info = getattr(annot, "info", None) or {}
+    return {
+        "type": measurement_type,
+        "color": _pdf_takeoff_color_hex(annot),
+        "points": points,
+        "scale_m_per_pt": _pdf_takeoff_scale_m_per_pt(raw),
+        "content": str(info.get("content") or "").strip(),
+        "subject": str(info.get("subject") or "").strip(),
+        "annotation_id": _pdf_takeoff_annotation_id(annot),
+        "source_subtype": subtype,
+    }
+
+
+def pdf_takeoff_annotations_data(req: dict) -> dict:
+    pdf_path = req["pdf"]
+    max_measurements = int(req.get("max_measurements") or 0)
+    doc, _doc_key = _get_doc(pdf_path, "pdf_takeoffs")
+    pages: list[dict] = []
+    total = 0
+
+    for page_index in range(doc.page_count):
+        page = doc.load_page(page_index)
+        page_measurements: list[dict] = []
+        annot = page.first_annot
+        while annot:
+            parsed = _pdf_takeoff_annotation_data(doc, page, annot)
+            if parsed is not None:
+                page_measurements.append(parsed)
+                total += 1
+                if max_measurements > 0 and total >= max_measurements:
+                    annot = None
+                    break
+            annot = annot.next if annot else None
+
+        page_scale = next((float(m.get("scale_m_per_pt") or 0.0) for m in page_measurements if float(m.get("scale_m_per_pt") or 0.0) > 0), 0.0)
+        pages.append({
+            "page_index": page_index,
+            "width_pt": float(page.rect.width),
+            "height_pt": float(page.rect.height),
+            "scale_m_per_pt": page_scale,
+            "measurements": page_measurements,
+        })
+
+        if max_measurements > 0 and total >= max_measurements:
+            break
+
+    return {
+        "ok": True,
+        "pdf_path": pdf_path,
+        "page_count": doc.page_count,
+        "total_measurements": total,
+        "pages": pages,
+    }
+
+
+def pdf_takeoff_annotations(input_path: str, output_path: str) -> None:
+    _write_json(output_path, pdf_takeoff_annotations_data(_load_json(input_path)))
+
+
 def sheetmeta_data(req: dict) -> dict:
     pdf_path = req["pdf"]
     page_index = int(req.get("page", 0))
@@ -2038,6 +2236,8 @@ def worker_loop() -> int:
                 response = trace_layer_data(req)
             elif action == "sheetmeta":
                 response = sheetmeta_data(req)
+            elif action == "pdftakeoffs":
+                response = pdf_takeoff_annotations_data(req)
             else:
                 response = {"ok": False, "error": f"unknown action: {action}"}
             out = {"id": msg.get("id"), "response": response}
@@ -2058,8 +2258,8 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta"}:
-        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta", "pdftakeoffs"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|pdftakeoffs|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
@@ -2072,6 +2272,8 @@ def main() -> int:
             _write_json(sys.argv[3], pdf_snap_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "layertrace":
             _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "pdftakeoffs":
+            pdf_takeoff_annotations(sys.argv[2], sys.argv[3])
         else:
             sheetmeta(sys.argv[2], sys.argv[3])
         return 0
