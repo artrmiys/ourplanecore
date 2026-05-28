@@ -1,5 +1,33 @@
 ﻿# Development Log
 
+## 2026-05-28 PDF Inline Render Round Trip
+
+- Added a distribution-safe inline PNG path for bounded PyMuPDF render images:
+  C# requests `inline_image=true` with a `3,000,000` pixel cap, Python returns
+  `image_base64` for small/medium renders, and C# decodes that before falling
+  back to the old temp-file `page.png` path.
+- Kept the old temp PNG path for large renders and unexpected helper behavior,
+  avoiding named pipes, shared memory, new dependencies, or local machine
+  assumptions.
+- Added regression coverage for the portable inline protocol and fallback
+  wiring.
+- Verification passed:
+  `.\Tools\python\python.exe -m py_compile .\Tools\pdf_layers_helper.py`,
+  `git diff --check`, `dotnet build .\ourplanecore.sln`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`242/242`), direct helper inline/fallback smoke, compressed single-file
+  publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `FDE0FCF63BF5C3B7555DE5C4DB9C0C0CC1190B1E7341BE11DED326E547A26EDE`,
+  and packaged viewport smoke with `0` errors after the latest
+  `Application startup.`.
+- Git checkpoint before the change:
+  `checkpoint/before-inline-png-render-20260528-175239`.
+- Code commit: `a6d55e0 Inline bounded PDF render images`.
+- Detailed handoff:
+  `docs/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`.
+
 ## 2026-05-28 Page Open UI Performance
 
 - Added a git checkpoint before the risky page-open performance change:

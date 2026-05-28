@@ -110,7 +110,9 @@ Packaged app validation:
 Still not changed in this slice:
 
 - global `WorkerSemaphore = new(1, 1)` for PyMuPDF worker traffic;
-- temp PNG round-trip between Python and C#;
+- temp PNG round-trip between Python and C# was partially reduced later on
+  2026-05-28 for bounded renders; see
+  `docs/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`;
 - `fitz.Document` recreation when hidden layers are applied;
 - `Bitmap.Copy()` on Docnet in-memory cache hits;
 - synchronous page-open work in `LoadPageIntoViewport` was partially reduced
