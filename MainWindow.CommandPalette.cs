@@ -64,7 +64,7 @@ public partial class MainWindow
         Add("view.fit", "Fit Page", "View", Shortcut("f"), "Fit the active page to the viewport.", hasPage, "Select a page first.");
         Add("view.zoomIn", "Zoom In", "View", "Ctrl++", "Zoom into the active page.", hasPage, "Select a page first.");
         Add("view.zoomOut", "Zoom Out", "View", "Ctrl+-", "Zoom out of the active page.", hasPage, "Select a page first.");
-        Add("view.addBookmark", "Add Bookmark", "View", Shortcut("bk"), "Name and save the active sheet and current zoom/pan as a bookmark.", hasPage, "Select a page first.");
+        Add("view.addBookmark", "Add Bookmark", "View", KeyboardShortcutKeys.DualLayoutDisplay("bk"), "Name and save the active sheet and current zoom/pan as a bookmark.", hasPage, "Select a page first.");
         Add("view.toggleTheme", "Toggle Dark Theme", "View", "", "Switch between light and dark UI theme.");
         Add("view.viewportBackground", "Page Background", "View", "", "Open page background presets.");
         Add("view.toggleInbox", "Toggle AI Inbox", "View", "", "Collapse or expand the AI Inbox panel.");

@@ -635,13 +635,14 @@ public partial class MainWindow
         if (_updatingTransformSliders || _viewport == null)
             return;
 
-        double delta = e.NewValue - _lastTransformRotateSliderValue;
+        double newValue = ResolveTransformRotateSliderValue(e.NewValue);
+        double delta = newValue - _lastTransformRotateSliderValue;
         if (Math.Abs(delta) < 0.001)
             return;
 
         if (_viewport.RotateSelectedBy(delta))
         {
-            _lastTransformRotateSliderValue = e.NewValue;
+            _lastTransformRotateSliderValue = newValue;
         }
         else
         {
@@ -649,6 +650,28 @@ public partial class MainWindow
         }
 
         UpdateTransformEditControls();
+    }
+
+    private double ResolveTransformRotateSliderValue(double value)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            return value;
+
+        double snapped = TransformEditConstraints.SnapRotationDegrees(value);
+        if (Math.Abs(snapped - value) < 0.001)
+            return snapped;
+
+        _updatingTransformSliders = true;
+        try
+        {
+            SliderRotateSelection.Value = snapped;
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
+
+        return snapped;
     }
 
     private void SliderScaleSelection_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

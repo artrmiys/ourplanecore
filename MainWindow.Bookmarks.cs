@@ -18,12 +18,18 @@ public partial class MainWindow
     private Button? _bookmarkOpenButton;
     private Button? _bookmarkRenameButton;
     private Button? _bookmarkDeleteButton;
+    private TabItem? _bookmarksTab;
+    private FrameworkElement? _bookmarkPanel;
+    private GridLength _bookmarksDockRowHeight = new(190);
     private bool _syncingBookmarkSelection;
 
     private void InitializeBookmarksTab()
     {
         if (PagesSideTabs == null)
             return;
+
+        BtnDockBookmarksBelowPages.ToolTip =
+            $"Show Bookmarks as a separate panel below Pages; {KeyboardShortcutKeys.DualLayoutDisplay("bk")} adds a bookmark.";
 
         _bookmarkList = new ListView
         {
@@ -69,14 +75,67 @@ public partial class MainWindow
         panel.Children.Add(toolbar);
         panel.Children.Add(_bookmarkStatusText);
         panel.Children.Add(_bookmarkList);
+        _bookmarkPanel = panel;
 
-        var tab = new TabItem
+        _bookmarksTab = new TabItem
         {
             Header = "Bookmarks",
             Content = panel,
         };
-        PagesSideTabs.Items.Add(tab);
+        PagesSideTabs.Items.Add(_bookmarksTab);
         RefreshBookmarkList();
+    }
+
+    private void BtnDockBookmarksBelowPages_Changed(object sender, RoutedEventArgs e) =>
+        ApplyBookmarksDockMode(BtnDockBookmarksBelowPages.IsChecked == true);
+
+    private void BtnBookmarksDockClose_Click(object sender, RoutedEventArgs e)
+    {
+        BtnDockBookmarksBelowPages.IsChecked = false;
+    }
+
+    private void ApplyBookmarksDockMode(bool docked)
+    {
+        if (_bookmarksTab == null || _bookmarkPanel == null)
+            return;
+
+        if (docked)
+        {
+            if (PagesSideTabs.SelectedItem == _bookmarksTab)
+                PagesSideTabs.SelectedIndex = 0;
+
+            if (PagesSideTabs.Items.Contains(_bookmarksTab))
+            {
+                _bookmarksTab.Content = null;
+                PagesSideTabs.Items.Remove(_bookmarksTab);
+            }
+
+            BookmarksDockContentHost.Content = _bookmarkPanel;
+            BookmarksDockSplitter.Visibility = Visibility.Visible;
+            BookmarksDockPanel.Visibility = Visibility.Visible;
+            BookmarksDockSplitterRow.Height = new GridLength(4);
+            BookmarksDockRow.MinHeight = 120;
+            BookmarksDockRow.Height = _bookmarksDockRowHeight.Value > 0
+                ? _bookmarksDockRowHeight
+                : new GridLength(190);
+            return;
+        }
+
+        if (BookmarksDockRow.ActualHeight >= 80)
+            _bookmarksDockRowHeight = new GridLength(BookmarksDockRow.ActualHeight);
+
+        BookmarksDockContentHost.Content = null;
+        if (!PagesSideTabs.Items.Contains(_bookmarksTab))
+        {
+            _bookmarksTab.Content = _bookmarkPanel;
+            PagesSideTabs.Items.Add(_bookmarksTab);
+        }
+
+        BookmarksDockPanel.Visibility = Visibility.Collapsed;
+        BookmarksDockSplitter.Visibility = Visibility.Collapsed;
+        BookmarksDockSplitterRow.Height = new GridLength(0);
+        BookmarksDockRow.MinHeight = 0;
+        BookmarksDockRow.Height = new GridLength(0);
     }
 
     private static Style BuildBookmarkListItemStyle()
@@ -260,7 +319,7 @@ public partial class MainWindow
         RefreshBookmarkList(bookmark.Id);
         TxtStatus.Text = promptForName
             ? $"Added bookmark '{bookmark.Name}'."
-            : $"Added bookmark '{bookmark.Name}' ({KeyboardShortcutKeys.EnglishLayoutDisplay("bk")}).";
+            : $"Added bookmark '{bookmark.Name}' ({KeyboardShortcutKeys.DualLayoutDisplay("bk")}).";
     }
 
     private void BtnBookmarkOpen_Click(object sender, RoutedEventArgs e) =>

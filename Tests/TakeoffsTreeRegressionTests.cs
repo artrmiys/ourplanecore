@@ -459,6 +459,28 @@ internal static class TakeoffsTreeRegressionTests
             "Command Palette should expose the Takeoffs refresh action");
     }
 
+    public static void BookmarksDockPanelAndShortcutAreWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string bookmarks = ReadRepoFile("MainWindow.Bookmarks.cs");
+        string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
+
+        AssertTrue(
+            xaml.Contains("x:Name=\"BtnDockBookmarksBelowPages\"", StringComparison.Ordinal) &&
+            xaml.Contains("Checked=\"BtnDockBookmarksBelowPages_Changed\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"BookmarksDockContentHost\"", StringComparison.Ordinal),
+            "left panel must expose a Bookmarks toggle and dock content host");
+        AssertTrue(
+            bookmarks.Contains("ApplyBookmarksDockMode", StringComparison.Ordinal) &&
+            bookmarks.Contains("PagesSideTabs.Items.Remove(_bookmarksTab)", StringComparison.Ordinal) &&
+            bookmarks.Contains("BookmarksDockContentHost.Content = _bookmarkPanel", StringComparison.Ordinal),
+            "Bookmarks tab content must move into the docked panel without duplicating the list");
+        AssertTrue(
+            shortcuts.Contains("string.Equals(sequence, \"bk\"", StringComparison.Ordinal) &&
+            shortcuts.Contains("AddBookmarkFromShortcut();", StringComparison.Ordinal),
+            "global BK sequence must invoke AddBookmarkFromShortcut");
+    }
+
     public static void TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired()
     {
         string xaml = ReadRepoFile("MainWindow.xaml");

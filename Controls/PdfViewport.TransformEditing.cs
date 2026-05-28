@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 using OurPlaneCore;
 using SkiaSharp;
 
@@ -198,14 +199,20 @@ public sealed partial class PdfViewport
         else
         {
             float angle = AngleFromCenter(_transformCenter, pdf);
-            float delta = angle - _transformStartAngle;
+            double deltaDegrees = (angle - _transformStartAngle) * 180.0 / Math.PI;
+            bool snapped = IsTransformRotationSnapActive();
+            if (snapped)
+                deltaDegrees = TransformEditConstraints.SnapRotationDegrees(deltaDegrees);
+
+            float delta = (float)(deltaDegrees * Math.PI / 180.0);
             float cos = MathF.Cos(delta);
             float sin = MathF.Sin(delta);
-            double deltaDegrees = delta * 180.0 / Math.PI;
             ApplyTransformFromOriginal(
                 point => RotatePoint(point, _transformCenter, cos, sin),
                 rotationDegrees: deltaDegrees);
-            PostStatus($"Rotating selection: {delta * 180f / MathF.PI:0.#} deg.");
+            PostStatus(snapped
+                ? $"Rotating selection: {deltaDegrees:0.#} deg. (15 deg snap)"
+                : $"Rotating selection: {deltaDegrees:0.#} deg.");
         }
 
         RequestRepaint();
@@ -579,4 +586,6 @@ public sealed partial class PdfViewport
              or TransformHandleKind.ScaleTop
              or TransformHandleKind.ScaleBottom;
 
+    private static bool IsTransformRotationSnapActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
 }

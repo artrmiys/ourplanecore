@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -9,6 +10,10 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private static readonly TimeSpan GlobalShortcutSequenceTimeout = TimeSpan.FromMilliseconds(900);
+    private string _globalShortcutSequence = "";
+    private DateTime _globalShortcutSequenceAtUtc = DateTime.MinValue;
+
     private void MainWindow_GlobalPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.IsRepeat ||
@@ -26,7 +31,16 @@ public partial class MainWindow
         }
 
         if (Keyboard.Modifiers != ModifierKeys.None)
+        {
+            ClearGlobalShortcutSequence();
             return;
+        }
+
+        if (HandleGlobalShortcutSequence(key))
+        {
+            e.Handled = true;
+            return;
+        }
 
         switch (key)
         {
@@ -39,6 +53,45 @@ public partial class MainWindow
                 e.Handled = true;
                 break;
         }
+    }
+
+    private bool HandleGlobalShortcutSequence(Key key)
+    {
+        string token = KeyboardShortcutKeys.SequenceToken(key);
+        if (string.IsNullOrEmpty(token))
+        {
+            ClearGlobalShortcutSequence();
+            return false;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        string previous = now - _globalShortcutSequenceAtUtc <= GlobalShortcutSequenceTimeout
+            ? _globalShortcutSequence
+            : "";
+        string sequence = previous + token;
+
+        if (string.Equals(sequence, "bk", StringComparison.Ordinal))
+        {
+            ClearGlobalShortcutSequence();
+            AddBookmarkFromShortcut();
+            return true;
+        }
+
+        if ("bk".StartsWith(sequence, StringComparison.Ordinal))
+        {
+            _globalShortcutSequence = sequence;
+            _globalShortcutSequenceAtUtc = now;
+            return false;
+        }
+
+        ClearGlobalShortcutSequence();
+        return false;
+    }
+
+    private void ClearGlobalShortcutSequence()
+    {
+        _globalShortcutSequence = "";
+        _globalShortcutSequenceAtUtc = DateTime.MinValue;
     }
 
     private bool HandleGlobalModifiedShortcut(Key key)

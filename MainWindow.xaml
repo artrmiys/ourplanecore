@@ -461,8 +461,9 @@
                     Maximum="180"
                     Value="0"
                     TickFrequency="15"
+                    Style="{StaticResource RibbonSlider}"
                     ValueChanged="SliderRotateSelection_ValueChanged"
-                    ToolTip="Rotate selected geometry around its center"/>
+                    ToolTip="Rotate selected geometry around its center; hold Shift for 15 deg steps"/>
             <Button x:Name="BtnResetRotateSelection" Content="0" Click="BtnResetRotateSelection_Click"
                     ToolTip="Center rotate slider for another relative adjustment"
                     Style="{StaticResource ToolBtn}" MinWidth="24"/>
@@ -473,6 +474,7 @@
                     Maximum="3"
                     Value="1"
                     TickFrequency="0.25"
+                    Style="{StaticResource RibbonSlider}"
                     ValueChanged="SliderScaleSelection_ValueChanged"
                     ToolTip="Scale selected geometry around its center"/>
             <Button x:Name="BtnResetScaleSelection" Content="1x" Click="BtnResetScaleSelection_Click"
@@ -572,7 +574,7 @@
                                   VerticalScrollBarVisibility="Auto"
                                   MaxHeight="320">
                         <StackPanel Margin="4">
-                            <UniformGrid Columns="3" Margin="0,0,0,4">
+                            <UniformGrid Columns="4" Margin="0,0,0,4">
                                 <Button x:Name="BtnPagesOpenTabs"
                                         Content="Tabs"
                                         Click="BtnPagesOpenTabs_Click"
@@ -626,9 +628,16 @@
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
-                                        </ToggleButton.Template>
+                                                  </ToggleButton.Template>
                                     </ToggleButton>
                                 </Grid>
+                                <ToggleButton x:Name="BtnDockBookmarksBelowPages"
+                                              Content="Bkmk"
+                                              Checked="BtnDockBookmarksBelowPages_Changed"
+                                              Unchecked="BtnDockBookmarksBelowPages_Changed"
+                                              Padding="4,3"
+                                              FontSize="11"
+                                              ToolTip="Show Bookmarks as a separate panel below Pages"/>
                             </UniformGrid>
 
                         </StackPanel>
@@ -692,93 +701,131 @@
                                     ToolTip="Create standard PlanSwift page folders under selected Pages folder"/>
                         </UniformGrid>
                     </StackPanel>
-                    <TabControl x:Name="PagesSideTabs"
-                                AutomationProperties.AutomationId="PagesSideTabs"
-                                Background="{DynamicResource PanelBackgroundBrush}"
-                                Foreground="{DynamicResource ControlForegroundBrush}"
-                                BorderBrush="{DynamicResource ControlBorderBrush}"
-                                Margin="2,0,2,2">
-                        <TabItem Header="Pages">
-                            <DockPanel>
-                                <TextBox x:Name="PagesTreeSearchBox"
-                                         DockPanel.Dock="Top"
-                                         Height="23"
-                                         Margin="4,4,4,2"
-                                         FontSize="11"
-                                         TextChanged="PagesTreeSearchBox_TextChanged"
-                                         ToolTip="Search Pages by sheet name"/>
-                                <TreeView x:Name="PagesTree"
-                                          AutomationProperties.AutomationId="PagesTree"
-                                          SelectedItemChanged="PagesTree_SelectedItemChanged"
-                                          VirtualizingPanel.IsVirtualizing="True"
-                                          VirtualizingPanel.VirtualizationMode="Recycling"
-                                          ScrollViewer.CanContentScroll="True"
-                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                          HorizontalAlignment="Stretch"
-                                          Margin="2"/>
-                            </DockPanel>
-                        </TabItem>
-                        <TabItem Header="PDF Layers">
-                            <DockPanel Margin="4">
-                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,3">
-                                    <Button x:Name="BtnLayersLoad"
-                                            Content="Load"
-                                            Click="BtnLayersLoad_Click"
-                                            Padding="3,1"
-                                            Margin="0,0,4,0"
-                                            FontSize="10"
-                                            ToolTip="Scan PDF layers for the active page on demand"/>
-                                    <Button x:Name="BtnLayersOn"
-                                            Content="All On"
-                                            Click="BtnLayersOn_Click"
-                                            Padding="3,1"
-                                            Margin="0,0,4,0"
-                                            FontSize="10"/>
-                                    <Button x:Name="BtnLayersOff"
-                                            Content="All Off"
-                                            Click="BtnLayersOff_Click"
-                                            Padding="3,1"
-                                            FontSize="10"/>
-                                    <Button x:Name="BtnLayersClearHi"
-                                            Content="Clear Hi"
-                                            Click="BtnLayersClearHi_Click"
-                                            Padding="3,1"
-                                            Margin="4,0,0,0"
-                                            FontSize="10"/>
-                                </StackPanel>
-                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,3">
-                                    <ToggleButton x:Name="BtnLayerTraceMode"
-                                                  Content="Layer Trace"
-                                                  Click="BtnLayerTraceMode_Click"
-                                                  Padding="3,1"
-                                                  Margin="0,0,4,0"
-                                                  FontSize="10"/>
-                                    <Button x:Name="BtnLayerTraceCycle"
-                                            Content="Full"
-                                            Click="BtnLayerTraceCycle_Click"
-                                            Padding="3,1"
-                                            Margin="0,0,4,0"
-                                            FontSize="10"/>
-                                    <Button x:Name="BtnLayerTraceApply"
-                                            Content="Apply"
-                                            Click="BtnLayerTraceApply_Click"
-                                            Padding="3,1"
-                                            FontSize="10"/>
-                                </StackPanel>
-                                <TextBlock x:Name="TxtLayerTraceStatus"
-                                           DockPanel.Dock="Top"
-                                           Text="Select a layer for Layer Trace."
-                                           FontSize="10"
-                                           Foreground="Gray"
-                                           TextWrapping="Wrap"
-                                           Margin="0,0,0,4"/>
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <StackPanel x:Name="LayersPanel" Margin="0"/>
-                                </ScrollViewer>
-                            </DockPanel>
-                        </TabItem>
-                    </TabControl>
+                    <Grid x:Name="PagesAndBookmarksHost" Margin="2,0,2,2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition x:Name="BookmarksDockSplitterRow" Height="0"/>
+                            <RowDefinition x:Name="BookmarksDockRow" Height="0" MinHeight="0"/>
+                        </Grid.RowDefinitions>
+                        <TabControl x:Name="PagesSideTabs"
+                                    Grid.Row="0"
+                                    AutomationProperties.AutomationId="PagesSideTabs"
+                                    Background="{DynamicResource PanelBackgroundBrush}"
+                                    Foreground="{DynamicResource ControlForegroundBrush}"
+                                    BorderBrush="{DynamicResource ControlBorderBrush}">
+                            <TabItem Header="Pages">
+                                <DockPanel>
+                                    <TextBox x:Name="PagesTreeSearchBox"
+                                             DockPanel.Dock="Top"
+                                             Height="23"
+                                             Margin="4,4,4,2"
+                                             FontSize="11"
+                                             TextChanged="PagesTreeSearchBox_TextChanged"
+                                             ToolTip="Search Pages by sheet name"/>
+                                    <TreeView x:Name="PagesTree"
+                                              AutomationProperties.AutomationId="PagesTree"
+                                              SelectedItemChanged="PagesTree_SelectedItemChanged"
+                                              VirtualizingPanel.IsVirtualizing="True"
+                                              VirtualizingPanel.VirtualizationMode="Recycling"
+                                              ScrollViewer.CanContentScroll="True"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                              HorizontalAlignment="Stretch"
+                                              Margin="2"/>
+                                </DockPanel>
+                            </TabItem>
+                            <TabItem Header="PDF Layers">
+                                <DockPanel Margin="4">
+                                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,3">
+                                        <Button x:Name="BtnLayersLoad"
+                                                Content="Load"
+                                                Click="BtnLayersLoad_Click"
+                                                Padding="3,1"
+                                                Margin="0,0,4,0"
+                                                FontSize="10"
+                                                ToolTip="Scan PDF layers for the active page on demand"/>
+                                        <Button x:Name="BtnLayersOn"
+                                                Content="All On"
+                                                Click="BtnLayersOn_Click"
+                                                Padding="3,1"
+                                                Margin="0,0,4,0"
+                                                FontSize="10"/>
+                                        <Button x:Name="BtnLayersOff"
+                                                Content="All Off"
+                                                Click="BtnLayersOff_Click"
+                                                Padding="3,1"
+                                                FontSize="10"/>
+                                        <Button x:Name="BtnLayersClearHi"
+                                                Content="Clear Hi"
+                                                Click="BtnLayersClearHi_Click"
+                                                Padding="3,1"
+                                                Margin="4,0,0,0"
+                                                FontSize="10"/>
+                                    </StackPanel>
+                                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,3">
+                                        <ToggleButton x:Name="BtnLayerTraceMode"
+                                                      Content="Layer Trace"
+                                                      Click="BtnLayerTraceMode_Click"
+                                                      Padding="3,1"
+                                                      Margin="0,0,4,0"
+                                                      FontSize="10"/>
+                                        <Button x:Name="BtnLayerTraceCycle"
+                                                Content="Full"
+                                                Click="BtnLayerTraceCycle_Click"
+                                                Padding="3,1"
+                                                Margin="0,0,4,0"
+                                                FontSize="10"/>
+                                        <Button x:Name="BtnLayerTraceApply"
+                                                Content="Apply"
+                                                Click="BtnLayerTraceApply_Click"
+                                                Padding="3,1"
+                                                FontSize="10"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtLayerTraceStatus"
+                                               DockPanel.Dock="Top"
+                                               Text="Select a layer for Layer Trace."
+                                               FontSize="10"
+                                               Foreground="Gray"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,4"/>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="LayersPanel" Margin="0"/>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </TabItem>
+                        </TabControl>
+                        <GridSplitter x:Name="BookmarksDockSplitter"
+                                      Grid.Row="1"
+                                      Height="4"
+                                      HorizontalAlignment="Stretch"
+                                      Background="{DynamicResource SplitterBrush}"
+                                      ResizeDirection="Rows"
+                                      ResizeBehavior="PreviousAndNext"
+                                      Visibility="Collapsed"/>
+                        <DockPanel x:Name="BookmarksDockPanel"
+                                   Grid.Row="2"
+                                   MinHeight="120"
+                                   Background="{DynamicResource PanelBackgroundBrush}"
+                                   Visibility="Collapsed">
+                            <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
+                                <DockPanel LastChildFill="True">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="x"
+                                            Click="BtnBookmarksDockClose_Click"
+                                            Width="22"
+                                            MinWidth="22"
+                                            Padding="0"
+                                            Margin="2,0,0,0"
+                                            FontSize="11"
+                                            ToolTip="Return Bookmarks to the tab list"/>
+                                    <TextBlock Text="Bookmarks"
+                                               Style="{StaticResource PanelHeader}"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </Border>
+                            <ContentControl x:Name="BookmarksDockContentHost"/>
+                        </DockPanel>
+                    </Grid>
                 </DockPanel>
 
                 <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"

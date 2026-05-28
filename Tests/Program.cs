@@ -77,6 +77,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression nested rows resolve drop target", TakeoffsTreeRegressionTests.NestedTreeRowsResolveToOwningDropTargets),
     ("takeoff tree regression measurement paste keeps source name", TakeoffsTreeRegressionTests.MeasurementPasteNewTakeoffKeepsSourceName),
     ("takeoff tree refresh button is wired", TakeoffsTreeRegressionTests.TakeoffsTreeRefreshButtonIsWired),
+    ("bookmarks dock panel and shortcut are wired", TakeoffsTreeRegressionTests.BookmarksDockPanelAndShortcutAreWired),
     ("takeoff tree search bulk visibility and markup selection are wired", TakeoffsTreeRegressionTests.TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
     ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
@@ -226,6 +227,7 @@ var tests = new List<(string Name, Action Run)>
     ("openai response parser extracts output text", OpenAiResponseParserExtractsOutputText),
     ("openai response parser reports incomplete max tokens", OpenAiResponseParserReportsIncompleteMaxTokens),
     ("keyboard shortcut keys use english display text", KeyboardShortcutKeysUseEnglishDisplayText),
+    ("transform rotation snap uses fifteen degree steps", TransformRotationSnapUsesFifteenDegreeSteps),
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
@@ -3000,8 +3002,18 @@ static void OpenAiResponseParserReportsIncompleteMaxTokens()
 static void KeyboardShortcutKeysUseEnglishDisplayText()
 {
     AssertEqual("BK", KeyboardShortcutKeys.EnglishLayoutDisplay("bk"), "bookmark shortcut display");
+    AssertEqual("\u0438\u043B", KeyboardShortcutKeys.RussianLayoutText("bk"), "bookmark russian layout text");
+    AssertEqual("BK / \u0418\u041B", KeyboardShortcutKeys.DualLayoutDisplay("bk"), "bookmark dual layout display");
     AssertEqual("E", KeyboardShortcutKeys.EnglishLayoutDisplay("e"), "select shortcut display");
     AssertEqual("T", KeyboardShortcutKeys.EnglishLayoutDisplay("t"), "new item shortcut display");
+}
+
+static void TransformRotationSnapUsesFifteenDegreeSteps()
+{
+    AssertClose(0, TransformEditConstraints.SnapRotationDegrees(7.4), "rotation snap below half step");
+    AssertClose(15, TransformEditConstraints.SnapRotationDegrees(7.5), "rotation snap half step");
+    AssertClose(-15, TransformEditConstraints.SnapRotationDegrees(-7.5), "negative rotation snap half step");
+    AssertClose(180, TransformEditConstraints.SnapRotationDegrees(179), "rotation snap near maximum");
 }
 
 static void PdfMetadataNeedsFallbackWhenScaleUnresolved()
