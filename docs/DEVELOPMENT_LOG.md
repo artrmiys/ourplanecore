@@ -1,5 +1,31 @@
 ﻿# Development Log
 
+## 2026-05-28 Page Open UI Performance
+
+- Added a git checkpoint before the risky page-open performance change:
+  `checkpoint/before-page-open-ui-perf-20260528-173336` at `24ffaa7`.
+- Reduced synchronous work in `LoadPageIntoViewport`: the method now reuses the
+  `PageInfo` already loaded by `LoadPageFromTab` instead of re-reading
+  `source.json`, then loads the viewport and applies takeoff/page visibility
+  immediately.
+- Deferred slower follow-up work to background dispatcher priority behind a
+  stale-page guard: nearby preview prefetch, sheet overlay, page annotations,
+  ruler/AI/3D overlays, Pages tree selection, settings save, takeoff visual
+  refresh, floating page setup, and duplicate sheet measurement hints.
+- Added regression coverage that locks down the immediate/deferred split and
+  prevents the duplicate page metadata read from returning.
+- Verification passed: `git diff --check`, `dotnet build .\ourplanecore.sln`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`241/241`), compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `F5C3FFCA2255AFA91982F751A644E09954EBC191281C1DFA538D36E9EF58F0A6`,
+  and packaged launch log check with `0` errors after the latest
+  `Application startup.`.
+- Code commit: `e0b9539 Defer page open UI refresh work`.
+- Detailed handoff:
+  `docs/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`.
+
 ## 2026-05-28 PDF Preview Cache
 
 - Added a persisted clean PyMuPDF preview cache for the first low-scale page
