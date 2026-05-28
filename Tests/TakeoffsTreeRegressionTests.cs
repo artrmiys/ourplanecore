@@ -639,6 +639,35 @@ internal static class TakeoffsTreeRegressionTests
             "overlay PDF Snap loads should skip duplicate in-flight cache keys");
     }
 
+    public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()
+    {
+        string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
+        string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string service = ReadRepoFile("Models/PdfLayerRenderService.cs");
+        string cache = ReadRepoFile("Models/PdfPreviewRenderCache.cs");
+
+        int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
+        int queueRender = pageApi.IndexOf("QueueLayerRender(", StringComparison.Ordinal);
+        AssertTrue(
+            cacheApply >= 0 && queueRender > cacheApply,
+            "persisted clean preview cache should be applied before queueing the PyMuPDF refresh render");
+        AssertTrue(
+            layers.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
+            layers.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) &&
+            layers.Contains("ApplyInitialPreviewView", StringComparison.Ordinal) &&
+            layers.Contains("Viewport PyMuPDF preview cache hit", StringComparison.Ordinal),
+            "viewport should read and apply cached clean PyMuPDF previews without using Docnet");
+        AssertTrue(
+            service.Contains("PdfPreviewRenderCache.IsCleanPreviewRequest", StringComparison.Ordinal) &&
+            service.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal),
+            "successful clean PyMuPDF preview renders should populate the persisted preview cache");
+        AssertTrue(
+            cache.Contains("CacheRootEnvironmentVariable", StringComparison.Ordinal) &&
+            cache.Contains("LastWriteTimeUtc.Ticks", StringComparison.Ordinal) &&
+            cache.Contains("File.Move(tempImage, paths.ImagePath, overwrite: true)", StringComparison.Ordinal),
+            "preview cache should be keyed by source identity and written atomically through temp files");
+    }
+
     public static void PagesTreeSelectedSheetScaleMenuIsWired()
     {
         string commands = ReadRepoFile("MainWindow.PagesCommands.cs");

@@ -231,6 +231,8 @@ var tests = new List<(string Name, Action Run)>
     ("transform rotation snap uses fifteen degree steps", TransformRotationSnapUsesFifteenDegreeSteps),
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
+    ("pdf preview render cache round trips", PdfPreviewRenderCacheRoundTrips),
+    ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
     ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
@@ -3041,6 +3043,85 @@ static void PdfMetadataSkipScaleAvoidsFallback()
     };
 
     AssertFalse(PdfSheetMetadataService.NeedsFallback(metadata), "skip scale detail should not need fallback");
+}
+
+static void PdfPreviewRenderCacheRoundTrips()
+{
+    string oldRoot = Environment.GetEnvironmentVariable(PdfPreviewRenderCache.CacheRootEnvironmentVariable) ?? "";
+    string root = Path.Combine(Path.GetTempPath(), "opc_preview_cache_tests", Guid.NewGuid().ToString("N"));
+    string pdf = Path.Combine(root, "source.pdf");
+    try
+    {
+        Directory.CreateDirectory(root);
+        Environment.SetEnvironmentVariable(PdfPreviewRenderCache.CacheRootEnvironmentVariable, Path.Combine(root, "cache"));
+        File.WriteAllText(pdf, "%PDF-1.4 preview cache test");
+        File.SetLastWriteTimeUtc(pdf, new DateTime(2026, 5, 28, 10, 0, 0, DateTimeKind.Utc));
+
+        var render = new PdfLayerRenderResult
+        {
+            ImageBytes = [1, 2, 3, 4],
+            WidthPt = 612,
+            HeightPt = 792,
+            Layers = [],
+        };
+
+        AssertFalse(
+            PdfPreviewRenderCache.TryReadCleanPreview(
+                pdf,
+                0,
+                ViewportRenderPolicy.InstantPagePreviewRenderScale,
+                out _),
+            "empty preview cache should miss");
+        AssertTrue(
+            PdfPreviewRenderCache.IsCleanPreviewRequest(
+                pdf,
+                0,
+                ViewportRenderPolicy.InstantPagePreviewRenderScale,
+                new Dictionary<int, bool>(),
+                []),
+            "initial clean PyMuPDF preview should be cacheable");
+        AssertFalse(
+            PdfPreviewRenderCache.IsCleanPreviewRequest(
+                pdf,
+                0,
+                1.0,
+                new Dictionary<int, bool>(),
+                []),
+            "normal quality rerender should not write the first-preview cache");
+
+        PdfPreviewRenderCache.TryWriteCleanPreview(
+            pdf,
+            0,
+            ViewportRenderPolicy.InstantPagePreviewRenderScale,
+            render);
+
+        AssertTrue(
+            PdfPreviewRenderCache.TryReadCleanPreview(
+                pdf,
+                0,
+                ViewportRenderPolicy.InstantPagePreviewRenderScale,
+                out PdfLayerRenderResult cached),
+            "written preview cache should hit");
+        AssertEqual("4", cached.ImageBytes.Length.ToString(), "cached preview image bytes length");
+        AssertClose(612, cached.WidthPt, "cached preview width");
+        AssertClose(792, cached.HeightPt, "cached preview height");
+
+        File.SetLastWriteTimeUtc(pdf, new DateTime(2026, 5, 28, 10, 1, 0, DateTimeKind.Utc));
+        AssertFalse(
+            PdfPreviewRenderCache.TryReadCleanPreview(
+                pdf,
+                0,
+                ViewportRenderPolicy.InstantPagePreviewRenderScale,
+                out _),
+            "changing the source PDF modified time should invalidate the preview cache");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            PdfPreviewRenderCache.CacheRootEnvironmentVariable,
+            string.IsNullOrWhiteSpace(oldRoot) ? null : oldRoot);
+        TryDeleteDirectory(root);
+    }
 }
 
 static void ViewportRenderScaleChoosesNextQualityStep()

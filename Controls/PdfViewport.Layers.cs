@@ -67,6 +67,55 @@ public sealed partial class PdfViewport
         _showingPreviousPageDuringSwitch = false;
     }
 
+    private bool TryApplyPersistedPreviewRender(
+        string pdfPath,
+        int pdfIndex,
+        float renderScale,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pdfIndex, renderScale, out PdfLayerRenderResult render))
+            return false;
+
+        var bitmap = SKBitmap.Decode(render.ImageBytes);
+        if (bitmap == null)
+            return false;
+
+        _pageBitmap?.Dispose();
+        _pageBitmap = bitmap;
+        _pdfW = render.WidthPt;
+        _pdfH = render.HeightPt;
+        _bitmapScale = _pdfW > 0 ? _pageBitmap.Width / _pdfW : renderScale;
+        _renderedScale = _bitmapScale;
+        _usingLayerRenderer = true;
+        _showingPreviousPageDuringSwitch = false;
+        ApplyInitialPreviewView(restoreView, fitAfter);
+        AppLog.Info(
+            $"Viewport PyMuPDF preview cache hit; page='{_pageFolder}'; " +
+            $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
+        RequestRepaint();
+        return true;
+    }
+
+    private void ApplyInitialPreviewView(ViewState? restoreView, bool fitAfter)
+    {
+        if (restoreView.HasValue)
+        {
+            _zoom = Math.Clamp(restoreView.Value.Zoom, ZoomMin, ZoomMax);
+            _panX = restoreView.Value.PanX;
+            _panY = restoreView.Value.PanY;
+            ClampPanToPage();
+            return;
+        }
+
+        if (!fitAfter || _pdfW <= 0 || ViewportCanvasWidth < 2 || ViewportCanvasHeight < 2)
+            return;
+
+        _zoom = Math.Min(ViewportCanvasWidth / _pdfW, ViewportCanvasHeight / _pdfH) * 0.95f;
+        _panX = 0;
+        _panY = 0;
+    }
+
     private void QueueDocnetRender(
         float renderScale,
         ViewState? restoreView = null,

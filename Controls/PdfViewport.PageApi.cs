@@ -89,16 +89,26 @@ public sealed partial class PdfViewport
         _docnetRenderVersion++;
         QueuePdfSnapPointLoad(force: true);
 
+        float previewScale = ViewportRenderPolicy.InstantPagePreviewRenderScale;
+        bool previewCacheHit = TryApplyPersistedPreviewRender(
+            pdfPath,
+            pageIndex,
+            previewScale,
+            restoreView,
+            fitAfter: !restoreView.HasValue);
+
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         QueueLayerRender(
             resetLayerStates: true,
-            renderScale: ViewportRenderPolicy.InstantPagePreviewRenderScale,
+            renderScale: previewScale,
             statusAfter: loadedStatus,
             fireLayersAfter: true,
             restoreView: restoreView,
             fitAfter: !restoreView.HasValue);
 
-        PostStatus($"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+        PostStatus(previewCacheHit
+            ? $"Cached preview: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
+            : $"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
         RequestRepaint();
 
         // Fire layers event

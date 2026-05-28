@@ -198,6 +198,8 @@ public static class PdfLayerRenderService
                     .ToList(),
             };
             AddCachedRender(cacheKey, result);
+            if (PdfPreviewRenderCache.IsCleanPreviewRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+                PdfPreviewRenderCache.TryWriteCleanPreview(pdfPath, pageIndex, (float)renderScale, result);
             return true;
         }
         catch (Exception ex)
