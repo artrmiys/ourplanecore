@@ -1,5 +1,42 @@
 # PDF Takeoff Import, Edge Snap, Sheet Overlay Cache - 2026-05-28
 
+## Final User-Facing State
+
+This feature set is implemented, committed, packaged, deployed, and startup-verified in the user-facing update build.
+
+Latest commits:
+
+- `578ef55 Import PDF dimensions as rulers`
+- `c0b1331 Document PDF takeoff ruler import`
+
+Installed build:
+
+- Path: `%USERPROFILE%\Desktop\updates\OurPlaneCore\ourplanecore.exe`
+- Size: `176,586,347` bytes
+- SHA256: `A40F5C9037073B574AAE228CC10C8804AC3BD093A743CD554220A7DF2D1F5F61`
+- Desktop shortcut target: `%USERPROFILE%\Desktop\updates\OurPlaneCore\ourplanecore.exe`
+- Desktop shortcut working directory: `%USERPROFILE%\Desktop\updates\OurPlaneCore`
+- Rollback kept: `ourplanecore.exe.bak`
+
+Ready behavior:
+
+- `PDF Takeoffs` is available without an open job and defaults to creating a new job from the selected PDF folder.
+- The import dialog also supports an explicit `Import into current job` mode when a job is open.
+- Page names come from the same PDF sheet metadata naming path as normal PDF import; default names are used only as fallback.
+- Scale is wired through page-level `/Measure`, annotation `/Measure`, then sheet metadata fallback.
+- PDF `/Line` annotations import as sheet ruler/dimension annotations with source color and resolved page scale.
+- PDF `/PolyLine`, `/Polygon`, and `/Circle` annotations import as editable OurPlaneCore takeoff measurements with source color preserved.
+- Supported source PDF measurement annotations are removed from the imported clean background copy, so the sheet does not show duplicate PDF markups behind the new OurPlaneCore objects.
+- Source PDFs are not modified.
+
+Latest verification:
+
+- `python -m py_compile .\Tools\pdf_layers_helper.py`
+- `dotnet build .\ourplanecore.sln` -> `0 Warning(s)`, `0 Error(s)`
+- `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build` -> `248/248 tests passed`
+- Seton sample scan -> `315` rulers, `354` editable takeoff annotations, `669` supported PDF annotations removed from clean copies, `0` supported annotations remaining after clean.
+- Packaged exe launch -> process alive, `ERROR=0` after latest `Application startup.`, startup log showed loaded takeoffs and viewport cache activity.
+
 ## Status
 
 - Code commit: `eae0c21 Add PDF takeoff import and edge snap`.
