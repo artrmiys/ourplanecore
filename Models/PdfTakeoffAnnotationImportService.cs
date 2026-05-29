@@ -27,6 +27,7 @@ public sealed class PdfTakeoffAnnotationPage
 public sealed class PdfTakeoffAnnotationMeasurement
 {
     public string Type { get; init; } = "line";
+    public string Role { get; init; } = "takeoff";
     public string Color { get; init; } = "#E52237";
     public IReadOnlyList<SKPoint> Points { get; init; } = [];
     public double ScaleMPerPt { get; init; }
@@ -96,6 +97,70 @@ public static class PdfTakeoffAnnotationImportService
         }
     }
 
+    public static Task<(bool Ok, PdfTakeoffCleanCopyResult Result, string Error)> TryCreateCleanCopyAsync(
+        string pdfPath,
+        string outputPath) =>
+        Task.Run(() =>
+        {
+            bool ok = TryCreateCleanCopy(pdfPath, outputPath, out PdfTakeoffCleanCopyResult result, out string error);
+            return (ok, result, error);
+        });
+
+    public static bool TryCreateCleanCopy(
+        string pdfPath,
+        string outputPath,
+        out PdfTakeoffCleanCopyResult result,
+        out string error)
+    {
+        result = new PdfTakeoffCleanCopyResult();
+        error = "";
+
+        if (string.IsNullOrWhiteSpace(pdfPath) || !File.Exists(pdfPath))
+        {
+            error = "PDF file was not found.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            error = "Clean PDF output path is empty.";
+            return false;
+        }
+
+        try
+        {
+            var request = new PdfTakeoffCleanCopyRequest { Pdf = pdfPath, Output = outputPath };
+            if (!PdfLayerRenderService.TryInvokeHelper(
+                    "pdftakeoffclean",
+                    request,
+                    out PdfTakeoffCleanCopyResponse? response,
+                    out error))
+            {
+                return false;
+            }
+
+            if (response == null || !response.Ok)
+            {
+                error = response?.Error ?? "PyMuPDF did not create a clean PDF copy.";
+                return false;
+            }
+
+            result = new PdfTakeoffCleanCopyResult
+            {
+                PdfPath = response.PdfPath,
+                OutputPath = response.OutputPath,
+                RemovedAnnotations = response.RemovedAnnotations,
+            };
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"PDF takeoff clean-copy failed for {pdfPath}");
+            error = ex.Message;
+            return false;
+        }
+    }
+
     private static PdfTakeoffAnnotationPage NormalizePage(PdfTakeoffAnnotationPageDto page) =>
         new()
         {
@@ -115,6 +180,7 @@ public static class PdfTakeoffAnnotationImportService
         return new PdfTakeoffAnnotationMeasurement
         {
             Type = type,
+            Role = NormalizeRole(measurement.Role),
             Color = NormalizeHexColor(measurement.Color),
             Points = measurement.Points.Select(point => new SKPoint(point.X, point.Y)).ToList(),
             ScaleMPerPt = measurement.ScaleMPerPt > 0 ? measurement.ScaleMPerPt : 0,
@@ -123,6 +189,12 @@ public static class PdfTakeoffAnnotationImportService
             AnnotationId = measurement.AnnotationId ?? "",
             SourceSubtype = measurement.SourceSubtype ?? "",
         };
+    }
+
+    private static string NormalizeRole(string? value)
+    {
+        string clean = (value ?? "").Trim().ToLowerInvariant();
+        return clean == "dimension" ? "dimension" : "takeoff";
     }
 
     private static bool HasEnoughPoints(string type, IReadOnlyList<SKPoint> points) =>
@@ -159,6 +231,19 @@ public static class PdfTakeoffAnnotationImportService
         public string Pdf { get; init; } = "";
     }
 
+    private sealed class PdfTakeoffCleanCopyRequest
+    {
+        public string Pdf { get; init; } = "";
+        public string Output { get; init; } = "";
+    }
+
+    public sealed class PdfTakeoffCleanCopyResult
+    {
+        public string PdfPath { get; init; } = "";
+        public string OutputPath { get; init; } = "";
+        public int RemovedAnnotations { get; init; }
+    }
+
     private sealed class PdfTakeoffAnnotationResponse
     {
         public bool Ok { get; init; }
@@ -181,6 +266,7 @@ public static class PdfTakeoffAnnotationImportService
     private sealed class PdfTakeoffAnnotationMeasurementDto
     {
         public string Type { get; init; } = "line";
+        public string Role { get; init; } = "takeoff";
         public string Color { get; init; } = "#E52237";
         public double ScaleMPerPt { get; init; }
         public string Content { get; init; } = "";
@@ -188,6 +274,15 @@ public static class PdfTakeoffAnnotationImportService
         public string AnnotationId { get; init; } = "";
         public string SourceSubtype { get; init; } = "";
         public List<PdfTakeoffAnnotationPointDto> Points { get; init; } = [];
+    }
+
+    private sealed class PdfTakeoffCleanCopyResponse
+    {
+        public bool Ok { get; init; }
+        public string Error { get; init; } = "";
+        public string PdfPath { get; init; } = "";
+        public string OutputPath { get; init; } = "";
+        public int RemovedAnnotations { get; init; }
     }
 
     private sealed class PdfTakeoffAnnotationPointDto

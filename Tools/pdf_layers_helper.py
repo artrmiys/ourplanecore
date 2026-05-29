@@ -1995,10 +1995,12 @@ def _pdf_takeoff_annotation_data(doc: fitz.Document, page, annot) -> dict | None
     subtype = _pdf_takeoff_subtype(annot, raw)
     page_height = float(page.rect.height)
     measurement_type = ""
+    role = "takeoff"
     points: list[dict] = []
 
     if subtype == "/Line":
         measurement_type = "line"
+        role = "dimension"
         points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "L"), page_height)
     elif subtype == "/PolyLine":
         measurement_type = "line"
@@ -2024,6 +2026,7 @@ def _pdf_takeoff_annotation_data(doc: fitz.Document, page, annot) -> dict | None
     info = getattr(annot, "info", None) or {}
     return {
         "type": measurement_type,
+        "role": role,
         "color": _pdf_takeoff_color_hex(annot),
         "points": points,
         "scale_m_per_pt": _pdf_takeoff_scale_m_per_pt(raw),
@@ -2078,6 +2081,42 @@ def pdf_takeoff_annotations_data(req: dict) -> dict:
 
 def pdf_takeoff_annotations(input_path: str, output_path: str) -> None:
     _write_json(output_path, pdf_takeoff_annotations_data(_load_json(input_path)))
+
+
+def pdf_takeoff_clean_copy_data(req: dict) -> dict:
+    pdf_path = req["pdf"]
+    output_path = req["output"]
+    remove_supported = bool(req.get("remove_supported", True))
+    if not output_path:
+        return {"ok": False, "error": "output path is empty"}
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open(pdf_path)
+    removed = 0
+    if remove_supported:
+        for page_index in range(doc.page_count):
+            page = doc.load_page(page_index)
+            annot = page.first_annot
+            while annot:
+                next_annot = annot.next
+                raw = doc.xref_object(int(annot.xref), compressed=False) if int(getattr(annot, "xref", 0) or 0) > 0 else ""
+                if _pdf_takeoff_annotation_data(doc, page, annot) is not None:
+                    page.delete_annot(annot)
+                    removed += 1
+                annot = next_annot
+
+    doc.save(output_path, garbage=4, deflate=True)
+    doc.close()
+    return {
+        "ok": True,
+        "pdf_path": pdf_path,
+        "output_path": output_path,
+        "removed_annotations": removed,
+    }
+
+
+def pdf_takeoff_clean_copy(input_path: str, output_path: str) -> None:
+    _write_json(output_path, pdf_takeoff_clean_copy_data(_load_json(input_path)))
 
 
 def sheetmeta_data(req: dict) -> dict:
@@ -2238,6 +2277,8 @@ def worker_loop() -> int:
                 response = sheetmeta_data(req)
             elif action == "pdftakeoffs":
                 response = pdf_takeoff_annotations_data(req)
+            elif action == "pdftakeoffclean":
+                response = pdf_takeoff_clean_copy_data(req)
             else:
                 response = {"ok": False, "error": f"unknown action: {action}"}
             out = {"id": msg.get("id"), "response": response}
@@ -2258,8 +2299,8 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta", "pdftakeoffs"}:
-        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|pdftakeoffs|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta", "pdftakeoffs", "pdftakeoffclean"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
@@ -2274,6 +2315,8 @@ def main() -> int:
             _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "pdftakeoffs":
             pdf_takeoff_annotations(sys.argv[2], sys.argv[3])
+        elif sys.argv[1] == "pdftakeoffclean":
+            pdf_takeoff_clean_copy(sys.argv[2], sys.argv[3])
         else:
             sheetmeta(sys.argv[2], sys.argv[3])
         return 0

@@ -19,7 +19,7 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Import PDF(s) to Current Job...", hasJob, () => BtnImport_Click(sender, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Import PDF Folder to Current Job...", hasJob, () => BtnImportPdfFolder_Click(sender, new RoutedEventArgs())));
-        menu.Items.Add(MakeMenuItem("Import PDF Takeoffs from Folder...", hasJob, () => BtnImportPdfTakeoffs_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Import PDF Takeoffs...", true, () => BtnImportPdfTakeoffs_Click(sender, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Import PlanSwift to Current Job...", hasJob, () => BtnImportPlanSwiftToCurrentJob_Click(sender, new RoutedEventArgs())));
 
         if (sender is Button button)

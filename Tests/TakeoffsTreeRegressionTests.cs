@@ -644,6 +644,8 @@ internal static class TakeoffsTreeRegressionTests
         string menu = ReadRepoFile("MainWindow.OpenImportMenu.cs");
         string palette = ReadRepoFile("MainWindow.CommandPalette.cs");
         string importer = ReadRepoFile("MainWindow.PdfTakeoffImport.cs");
+        string dialog = ReadRepoFile("Dialogs/PdfTakeoffImportDialog.cs");
+        string options = ReadRepoFile("Models/PdfTakeoffImportOptions.cs");
         string service = ReadRepoFile("Models/PdfTakeoffAnnotationImportService.cs");
         string helper = ReadRepoFile("Tools/pdf_layers_helper.py");
 
@@ -652,34 +654,50 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Click=\"BtnImportPdfTakeoffs_Click\"", StringComparison.Ordinal),
             "toolbar must expose the PDF Takeoffs import button beside the PDF/PlanSwift import surface");
         AssertTrue(
-            menu.Contains("Import PDF Takeoffs from Folder", StringComparison.Ordinal) &&
+            menu.Contains("Import PDF Takeoffs...", StringComparison.Ordinal) &&
             palette.Contains("\"file.importPdfTakeoffs\"", StringComparison.Ordinal) &&
             palette.Contains("BtnImportPdfTakeoffs_Click(this, new RoutedEventArgs())", StringComparison.Ordinal),
-            "Open/Import menu and command palette must expose PDF Takeoffs import");
+            "Open/Import menu and command palette must expose PDF Takeoffs import without requiring an already-open job");
         AssertTrue(
             importer.Contains("PdfTakeoffImportFolderName = \"from pdf\"", StringComparison.Ordinal) &&
             importer.Contains("PdfTakeoffAnnotationImportService.TryReadAsync", StringComparison.Ordinal) &&
             importer.Contains("PdfTakeoffImportGroupKey(m.Annotation.Type, m.Annotation.Color)", StringComparison.Ordinal) &&
             importer.Contains("OurPlaneCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
+            importer.Contains("PdfSheetMetadataService.TryAnalyzePage", StringComparison.Ordinal) &&
             importer.Contains("pdf_takeoff_import_", StringComparison.Ordinal),
-            "PDF takeoff import should bucket pages/takeoffs, group by type/color, preserve scale, and write a markdown report");
+            "PDF takeoff import should bucket pages/takeoffs, group by type/color, preserve scale/page names, and write a markdown report");
         AssertTrue(
             importer.Contains("PreviewPdfTakeoffImportBucketPath", StringComparison.Ordinal) &&
             importer.Contains("ConfirmPdfTakeoffImport", StringComparison.Ordinal) &&
             importer.Contains("Import cancelled after preview; no job files were written.", StringComparison.Ordinal) &&
-            importer.Contains("No supported PDF takeoff annotations were found.", StringComparison.Ordinal),
+            importer.Contains("No supported PDF takeoff/ruler annotations were found.", StringComparison.Ordinal),
             "PDF takeoff import must scan first, show a confirmation preview, and avoid writing job files when cancelled or empty");
         AssertTrue(
             importer.Contains("CountPdfTakeoffImportItems", StringComparison.Ordinal) &&
             importer.Contains("sources.Sum(source => source.Annotations.Pages", StringComparison.Ordinal) &&
             importer.Contains("Takeoff items to create", StringComparison.Ordinal) &&
-            importer.Contains("Top groups across PDFs", StringComparison.Ordinal),
+            importer.Contains("Top takeoff groups across PDFs", StringComparison.Ordinal),
             "PDF takeoff import preview count must match the per-PDF takeoff items the import will actually create");
         AssertTrue(
+            options.Contains("CreateNewJob", StringComparison.Ordinal) &&
+            options.Contains("ImportIntoCurrentJob", StringComparison.Ordinal) &&
+            dialog.Contains("Create new job from PDF takeoffs", StringComparison.Ordinal) &&
+            dialog.Contains("Import into current job", StringComparison.Ordinal),
+            "PDF takeoff import must default to creating a new job and keep current-job import as an explicit mode");
+        AssertTrue(
+            importer.Contains("Kind = \"dimension\"", StringComparison.Ordinal) &&
+            importer.Contains("PageAnnotationStore.SavePageAnnotations", StringComparison.Ordinal) &&
+            importer.Contains("TryCreateCleanCopyAsync", StringComparison.Ordinal) &&
+            importer.Contains("Clean PDF annotations removed", StringComparison.Ordinal),
+            "PDF dimensions must import as ruler annotations and supported source annotations must be removable from the imported PDF background");
+        AssertTrue(
             service.Contains("\"pdftakeoffs\"", StringComparison.Ordinal) &&
+            service.Contains("\"pdftakeoffclean\"", StringComparison.Ordinal) &&
+            service.Contains("Role = NormalizeRole", StringComparison.Ordinal) &&
             helper.Contains("pdf_takeoff_annotations_data", StringComparison.Ordinal) &&
-            helper.Contains("elif action == \"pdftakeoffs\"", StringComparison.Ordinal),
-            "PDF takeoff annotation extraction must use the existing PyMuPDF worker protocol");
+            helper.Contains("pdf_takeoff_clean_copy_data", StringComparison.Ordinal) &&
+            helper.Contains("role = \"dimension\"", StringComparison.Ordinal),
+            "PDF takeoff annotation extraction and clean-copy creation must use the existing PyMuPDF worker protocol");
     }
 
     public static void ViewportEdgeSnapCommandIsWired()
