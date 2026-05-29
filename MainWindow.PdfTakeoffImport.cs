@@ -39,7 +39,7 @@ public partial class MainWindow
         public int PdfsWithSupportedAnnotations { get; set; }
         public int PagesToImport { get; set; }
         public int MeasurementsToImport { get; set; }
-        public int TakeoffGroupsToImport { get; set; }
+        public int TakeoffItemsToCreate { get; set; }
         public int PdfsImported { get; set; }
         public int PagesImported { get; set; }
         public int TakeoffItemsImported { get; set; }
@@ -203,7 +203,7 @@ public partial class MainWindow
         run.PdfsWithSupportedAnnotations = scanResult.Sources.Count;
         run.PagesToImport = scanResult.Sources.Sum(source => source.Annotations.PageCount);
         run.MeasurementsToImport = scanResult.Sources.Sum(source => source.Annotations.Pages.Sum(page => page.Measurements.Count));
-        run.TakeoffGroupsToImport = CountPdfTakeoffImportGroups(scanResult.Sources);
+        run.TakeoffItemsToCreate = CountPdfTakeoffImportItems(scanResult.Sources);
         return scanResult;
     }
 
@@ -230,12 +230,11 @@ public partial class MainWindow
         return Path.Combine(parent, folderName);
     }
 
-    private static int CountPdfTakeoffImportGroups(IReadOnlyList<PdfTakeoffImportSource> sources) =>
-        sources
-            .SelectMany(source => source.Annotations.Pages)
+    private static int CountPdfTakeoffImportItems(IReadOnlyList<PdfTakeoffImportSource> sources) =>
+        sources.Sum(source => source.Annotations.Pages
             .SelectMany(page => page.Measurements)
             .GroupBy(measurement => new PdfTakeoffImportGroupKey(measurement.Type, measurement.Color))
-            .Count();
+            .Count());
 
     private bool ConfirmPdfTakeoffImport(PdfTakeoffImportRunResult run, IReadOnlyList<PdfTakeoffImportSource> sources)
     {
@@ -245,17 +244,18 @@ public partial class MainWindow
         summary.AppendLine($"PDFs scanned: {run.PdfsScanned}");
         summary.AppendLine($"PDFs with takeoffs: {run.PdfsWithSupportedAnnotations}");
         summary.AppendLine($"Pages to import: {run.PagesToImport}");
-        summary.AppendLine($"Takeoff groups: {run.TakeoffGroupsToImport}");
+        summary.AppendLine($"Takeoff items to create: {run.TakeoffItemsToCreate}");
         summary.AppendLine($"Measurements: {run.MeasurementsToImport}");
         summary.AppendLine();
         summary.AppendLine("Destination:");
         summary.AppendLine($"Pages: {run.PagesFolder}");
         summary.AppendLine($"Takeoffs: {run.TakeoffsFolder}");
         summary.AppendLine();
-        summary.AppendLine("Top groups:");
-        foreach (string line in BuildPdfTakeoffPreviewGroupLines(sources).Take(12))
+        summary.AppendLine("Top groups across PDFs:");
+        List<string> previewGroupLines = BuildPdfTakeoffPreviewGroupLines(sources).ToList();
+        foreach (string line in previewGroupLines.Take(12))
             summary.AppendLine(line);
-        int groupCount = run.TakeoffGroupsToImport;
+        int groupCount = previewGroupLines.Count;
         if (groupCount > 12)
             summary.AppendLine($"... {groupCount - 12} more group(s)");
         if (run.Messages.Count > 0)
@@ -452,7 +452,7 @@ public partial class MainWindow
             $"- PDFs scanned: {run.PdfsScanned.ToString(CultureInfo.InvariantCulture)}",
             $"- PDFs with supported annotations: {run.PdfsWithSupportedAnnotations.ToString(CultureInfo.InvariantCulture)}",
             $"- Pages previewed for import: {run.PagesToImport.ToString(CultureInfo.InvariantCulture)}",
-            $"- Takeoff groups previewed: {run.TakeoffGroupsToImport.ToString(CultureInfo.InvariantCulture)}",
+            $"- Takeoff items previewed: {run.TakeoffItemsToCreate.ToString(CultureInfo.InvariantCulture)}",
             $"- Measurements previewed: {run.MeasurementsToImport.ToString(CultureInfo.InvariantCulture)}",
             $"- PDFs imported: {run.PdfsImported.ToString(CultureInfo.InvariantCulture)}",
             $"- Pages imported: {run.PagesImported.ToString(CultureInfo.InvariantCulture)}",
@@ -508,7 +508,7 @@ public partial class MainWindow
             summary.AppendLine();
             summary.AppendLine($"PDFs with takeoffs: {result.PdfsWithSupportedAnnotations}");
             summary.AppendLine($"Pages previewed: {result.PagesToImport}");
-            summary.AppendLine($"Takeoff groups previewed: {result.TakeoffGroupsToImport}");
+            summary.AppendLine($"Takeoff items previewed: {result.TakeoffItemsToCreate}");
             summary.AppendLine($"Measurements previewed: {result.MeasurementsToImport}");
         }
         else

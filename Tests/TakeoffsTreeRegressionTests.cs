@@ -670,6 +670,12 @@ internal static class TakeoffsTreeRegressionTests
             importer.Contains("No supported PDF takeoff annotations were found.", StringComparison.Ordinal),
             "PDF takeoff import must scan first, show a confirmation preview, and avoid writing job files when cancelled or empty");
         AssertTrue(
+            importer.Contains("CountPdfTakeoffImportItems", StringComparison.Ordinal) &&
+            importer.Contains("sources.Sum(source => source.Annotations.Pages", StringComparison.Ordinal) &&
+            importer.Contains("Takeoff items to create", StringComparison.Ordinal) &&
+            importer.Contains("Top groups across PDFs", StringComparison.Ordinal),
+            "PDF takeoff import preview count must match the per-PDF takeoff items the import will actually create");
+        AssertTrue(
             service.Contains("\"pdftakeoffs\"", StringComparison.Ordinal) &&
             helper.Contains("pdf_takeoff_annotations_data", StringComparison.Ordinal) &&
             helper.Contains("elif action == \"pdftakeoffs\"", StringComparison.Ordinal),
