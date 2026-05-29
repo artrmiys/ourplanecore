@@ -4,11 +4,13 @@
 
 - Code commit: `eae0c21 Add PDF takeoff import and edge snap`.
 - Follow-up commit: `c795a43 Add PDF takeoff import preview`.
+- Follow-up commit: `2158bd0 Fix PDF takeoff preview counts`.
 - Safety checkpoint before the risky slice: `checkpoint/before-sheet-overlay-cache-edge-pdf-scope-20260528-1940`.
 - Safety checkpoint before the preview follow-up: `checkpoint/before-pdf-takeoff-import-preview-20260528-1950`.
+- Safety checkpoint before the preview count fix: `checkpoint/before-pdf-takeoff-preview-count-fix-20260528-2052`.
 - Deployed package: `%USERPROFILE%\Desktop\updates\OurPlaneCore\ourplanecore.exe`.
-- Deployed exe size: `176,580,303` bytes.
-- SHA256: `4DB2D0866709FA19F7882C03F7D8832C24407D4683F21286B83568D16A611841`.
+- Deployed exe size: `176,580,211` bytes.
+- SHA256: `2459FBFAC0E6A71C8A7DA07C75F0723651AA0E5BE7621D00D9EA5882258340DF`.
 - Rollback file kept: `ourplanecore.exe.bak` (`417,528,789` bytes, the previous unsqueezed package from the same feature build).
 - Desktop shortcut target and working directory were verified against the update package folder.
 
@@ -30,6 +32,7 @@ Import behavior:
 - The scan is read-only first. Before writing job files, the user sees a confirmation preview with PDFs found, pages to import, measurement count, destination buckets, and the largest type/color groups.
 - If the user cancels the preview, no pages, folders, takeoff items, or measurements are created.
 - If the PDFs contain no supported annotation geometry, the app reports that clearly instead of throwing an import failure.
+- The preview `Takeoff items to create` count matches the real import behavior: groups are counted per PDF folder, not once globally across all PDFs.
 - Imported pages are created under the selected Pages scope, inside a `from pdf` bucket.
 - Imported takeoff items are created under the selected Takeoffs scope, inside a `from pdf` bucket.
 - Each PDF gets its own folder, and takeoff items are grouped by annotation kind plus color, for example `Line #E52237`, `Area #6AD928`, `Point #0000FF`.
@@ -95,6 +98,17 @@ Temp job storage smoke:
 - Saved measurements: `669`.
 - Reload confirmed: `loadedItems=47`, `loadedMeasurements=669`.
 
+Preview count check after the follow-up fix:
+
+| PDF | Takeoff items to create | Measurements |
+| --- | ---: | ---: |
+| `framing.pdf` | 13 | 260 |
+| `interior.pdf` | 3 | 34 |
+| `roof+eve and rake+SQFT.pdf` | 14 | 142 |
+| `siding+exterior.pdf` | 5 | 62 |
+| `walls+gables+windows and doors.pdf` | 12 | 171 |
+| Total | 47 | 669 |
+
 ## Verification Commands
 
 Passed:
@@ -128,6 +142,8 @@ Results:
 - Conflict-marker scan on touched files: no findings.
 - `git diff --check`: no whitespace errors; only existing CRLF conversion warnings.
 
+Preview count fix verification used the same build/test commands and a direct Seton PDF scan. The scan confirmed `47` takeoff items to create and `669` measurements, matching the temp job import smoke.
+
 ## Package Verification
 
 Compressed publish command:
@@ -142,12 +158,19 @@ Final compressed publish for the preview follow-up:
 dotnet publish .\ourplanecore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o .\publish\ourplanecore-working-single-20260528-1958-compressed
 ```
 
+Final compressed publish for the preview count fix:
+
+```powershell
+dotnet publish .\ourplanecore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o .\publish\ourplanecore-working-single-20260528-2058-compressed
+```
+
 Packaged app launch check:
 
 - Initial test launch PID: `13032`.
 - Final preview-follow-up test launch PID: `16608`.
+- Final preview-count-fix test launch PID: `17752`.
 - Log file: `%APPDATA%\OurPlaneCore\logs\app-20260528.log`.
-- Final startup marker line: `540`.
+- Final startup marker line: `547`.
 - `ERROR` entries after that marker: `0`.
 - Startup tail included `Loaded takeoffs tree with 358 item(s)`.
 - The test process was closed after verification so the deployed exe is not locked.
