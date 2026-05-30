@@ -18,6 +18,21 @@
         <Geometry x:Key="IconSparkle">M8,2 L9.2,6.8 L14,8 L9.2,9.2 L8,14 L6.8,9.2 L2,8 L6.8,6.8 Z</Geometry>
         <Geometry x:Key="IconCrop">M5,2 L5,11 L14,11 M2,5 L11,5 L11,14</Geometry>
         <Geometry x:Key="IconPlus">M8,2.5 L8,13.5 M2.5,8 L13.5,8</Geometry>
+        <!-- Page tab icons -->
+        <Geometry x:Key="IconAddPages">M4,2.5 L9,2.5 L11.5,5 L11.5,13.5 L4,13.5 Z M9,2.5 L9,5 L11.5,5 M7.7,8 L7.7,11.5 M6,9.7 L9.4,9.7</Geometry>
+        <Geometry x:Key="IconBlankSheet">M4,2.5 L10,2.5 L12.5,5 L12.5,13.5 L4,13.5 Z M10,2.5 L10,5 L12.5,5</Geometry>
+        <Geometry x:Key="IconRotateRight">M11.5,4.6 A4.6,4.6 0 1 0 12.6,9.2 M11.5,4.6 L8.9,4.3 M11.5,4.6 L11.3,7.2</Geometry>
+        <Geometry x:Key="IconRotateLeft">M4.5,4.6 A4.6,4.6 0 1 1 3.4,9.2 M4.5,4.6 L7.1,4.3 M4.5,4.6 L4.7,7.2</Geometry>
+        <Geometry x:Key="IconRotate180">M3,8.5 A5,5 0 0 1 13,8.5 M13,8.5 L11.4,7.2 M13,8.5 L14.4,7 M3,8.5 L4.6,9.8 M3,8.5 L1.6,10</Geometry>
+        <Geometry x:Key="IconLevel">M8,2.2 L8,13.8 M2.2,8 L13.8,8 M8,8 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0</Geometry>
+        <Geometry x:Key="IconFlipH">M8,2 L8,14 M3,5 L6,8 L3,11 Z M13,5 L10,8 L13,11 Z</Geometry>
+        <Geometry x:Key="IconFlipV">M2,8 L14,8 M5,3 L8,6 L11,3 Z M5,13 L8,10 L11,13 Z</Geometry>
+        <Geometry x:Key="IconInvert">M8,3 A5,5 0 1 1 7.99,3 Z M8,3 L8,13</Geometry>
+        <Geometry x:Key="IconCopy">M5.5,5.5 L11.5,5.5 L11.5,13.5 L5.5,13.5 Z M3.5,3.5 L9.5,3.5 L9.5,5.5 M3.5,3.5 L3.5,11.5 L5.5,11.5</Geometry>
+        <Geometry x:Key="IconRename">M3,13 L3,10.5 L10.5,3 L13,5.5 L5.5,13 Z M9,4.5 L11.5,7</Geometry>
+        <Geometry x:Key="IconOrigin">M8,3 L8,13 M3,8 L13,8 M8,8 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0</Geometry>
+        <Geometry x:Key="IconOffset">M4,4 L4,9 M4,4 L9,4 M4,4 L10,10 M10,10 L10,6.5 M10,10 L6.5,10</Geometry>
+        <Geometry x:Key="IconClose">M4,4 L12,12 M12,4 L4,12</Geometry>
 
         <Style x:Key="RibbonIcon" TargetType="Path">
             <Setter Property="Width" Value="14"/>
@@ -186,14 +201,17 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Add Pages" Click="BtnPageAddPages_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Import PDF pages into the current job"/>
-                                    <Button Content="Blank Sheet" Click="BtnNewBlankPage_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Create an empty sheet in the current job without selecting a PDF"/>
+                                    <Button Click="BtnPageAddPages_Click" Style="{StaticResource TopCommandButton}" ToolTip="Import PDF pages into the current job">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconAddPages}"/><TextBlock Text="Add Pages" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnNewBlankPage_Click" Style="{StaticResource TopCommandButton}" ToolTip="Create an empty sheet in the current job without selecting a PDF">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconBlankSheet}"/><TextBlock Text="Blank Sheet" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Import PDF pages plus PDF measurement annotations into takeoffs"/>
+                                    <Button Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}" ToolTip="Import PDF pages plus PDF measurement annotations into takeoffs">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSheetMeasure}"/><TextBlock Text="PDF Takeoffs" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
@@ -207,18 +225,23 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Left" Click="BtnPageRotateLeft_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Rotate the active page left"/>
-                                    <Button Content="Right" Click="BtnPageRotateRight_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Rotate the active page right"/>
-                                    <Button Content="180" Click="BtnPageRotate180_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Rotate the active page 180 degrees"/>
+                                    <Button Click="BtnPageRotateLeft_Click" Style="{StaticResource TopCommandButton}" ToolTip="Rotate the active page left">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRotateLeft}"/><TextBlock Text="Left" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPageRotateRight_Click" Style="{StaticResource TopCommandButton}" ToolTip="Rotate the active page right">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRotateRight}"/><TextBlock Text="Right" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPageRotate180_Click" Style="{StaticResource TopCommandButton}" ToolTip="Rotate the active page 180 degrees">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRotate180}"/><TextBlock Text="180" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Level" Click="BtnPageLevel_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Reset page view to fit and clear temporary drawing input"/>
-                                    <Button Content="Batch Rotate" Click="BtnPageBatchRotate_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Rotate selected pages"/>
+                                    <Button Click="BtnPageLevel_Click" Style="{StaticResource TopCommandButton}" ToolTip="Reset page view to fit and clear temporary drawing input">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconLevel}"/><TextBlock Text="Level" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPageBatchRotate_Click" Style="{StaticResource TopCommandButton}" ToolTip="Rotate selected pages">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRotateRight}"/><TextBlock Text="Batch Rotate" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
@@ -232,12 +255,14 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Vertical" Click="BtnPageFlipVertical_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Flip the active page vertically"/>
+                                    <Button Click="BtnPageFlipVertical_Click" Style="{StaticResource TopCommandButton}" ToolTip="Flip the active page vertically">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFlipV}"/><TextBlock Text="Vertical" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Horizontal" Click="BtnPageFlipHorizontal_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Flip the active page horizontally"/>
+                                    <Button Click="BtnPageFlipHorizontal_Click" Style="{StaticResource TopCommandButton}" ToolTip="Flip the active page horizontally">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFlipH}"/><TextBlock Text="Horizontal" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
@@ -251,14 +276,17 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Invert" Click="BtnPageInvert_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Invert the active page colors"/>
-                                    <Button Content="Copy" Click="BtnPageCopyToClipboard_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Copy a rendered PNG of the active page to the clipboard"/>
+                                    <Button Click="BtnPageInvert_Click" Style="{StaticResource TopCommandButton}" ToolTip="Invert the active page colors">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconInvert}"/><TextBlock Text="Invert" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPageCopyToClipboard_Click" Style="{StaticResource TopCommandButton}" ToolTip="Copy a rendered PNG of the active page to the clipboard">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconCopy}"/><TextBlock Text="Copy" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Crop New Page" Click="BtnPageCropNew_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Create a new page from the currently visible viewport area"/>
+                                    <Button Click="BtnPageCropNew_Click" Style="{StaticResource TopCommandButton}" ToolTip="Create a new page from the currently visible viewport area">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconCrop}"/><TextBlock Text="Crop New Page" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
@@ -272,16 +300,20 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Batch Rename" Click="BtnPageBatchRename_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Rename selected pages in order"/>
-                                    <Button Content="Set Origin" Click="BtnPageSetOrigin_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Mark the current visible page center as the page origin"/>
+                                    <Button Click="BtnPageBatchRename_Click" Style="{StaticResource TopCommandButton}" ToolTip="Rename selected pages in order">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRename}"/><TextBlock Text="Batch Rename" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPageSetOrigin_Click" Style="{StaticResource TopCommandButton}" ToolTip="Mark the current visible page center as the page origin">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconOrigin}"/><TextBlock Text="Set Origin" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Offset Origin" Click="BtnPageOffsetOrigin_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Nudge the stored page origin"/>
-                                    <Button Content="Close Page" Click="BtnPageClose_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Close the active page tab"/>
+                                    <Button Click="BtnPageOffsetOrigin_Click" Style="{StaticResource TopCommandButton}" ToolTip="Nudge the stored page origin">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconOffset}"/><TextBlock Text="Offset Origin" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPageClose_Click" Style="{StaticResource TopCommandButton}" ToolTip="Close the active page tab">
+                                        <StackPanel Orientation="Horizontal"><Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconClose}"/><TextBlock Text="Close Page" VerticalAlignment="Center"/></StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
