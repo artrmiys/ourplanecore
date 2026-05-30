@@ -91,6 +91,8 @@
                             <TextBlock Text="Add" Style="{StaticResource TopCommandLabel}"/>
                             <Button Content="Add Pages" Click="BtnPageAddPages_Click" Style="{StaticResource TopCommandButton}"
                                     ToolTip="Import PDF pages into the current job"/>
+                            <Button Content="Blank Sheet" Click="BtnNewBlankPage_Click" Style="{StaticResource TopCommandButton}"
+                                    ToolTip="Create an empty sheet in the current job without selecting a PDF"/>
                             <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
                                     ToolTip="Import PDF pages plus PDF measurement annotations into takeoffs"/>
                         </StackPanel>
@@ -730,6 +732,13 @@
                                     FontSize="11"
                                     ToolTip="Create standard PlanSwift page folders under selected Pages folder"/>
                         </UniformGrid>
+                        <Button x:Name="BtnNewBlankPage"
+                                Content="Blank Sheet"
+                                Click="BtnNewBlankPage_Click"
+                                Padding="5,3"
+                                Margin="0,4,0,0"
+                                FontSize="11"
+                                ToolTip="Create an empty sheet under the selected Pages folder"/>
                     </StackPanel>
                     <Grid x:Name="PagesAndBookmarksHost" Margin="2,0,2,2">
                         <Grid.RowDefinitions>

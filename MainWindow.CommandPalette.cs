@@ -48,7 +48,8 @@ public partial class MainWindow
         Add("file.open", "Open / Import", "File", "Ctrl+O", "Open the job picker. The top toolbar button also contains PDF import.");
         Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
-        Add("file.newJob", "New Job", "File", "", "Create a new OurPlaneCore job folder.");
+        Add("file.newJob", "New PDF Job", "File", "", "Create a new OurPlaneCore job from a folder of PDFs.");
+        Add("file.blankJob", "Blank Job", "File", "", "Create an empty OurPlaneCore job without selecting PDFs.");
         Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a guided local sample project.");
         Add("file.importPlanSwift", "Import PlanSwift Job", "File", "", "Convert a read-only PlanSwift job into a new OurPlaneCore job.");
         Add("file.importPlanSwiftCurrent", "Import PlanSwift to Current Job", "File", "", "Import a read-only PlanSwift job under 01. planswift in the current job.", hasJob, "Open or create a job first.");
@@ -102,6 +103,7 @@ public partial class MainWindow
         Add("edit.pasteMeasurements", "Paste Measurements", "Edit", "Ctrl+V", "Paste copied measurements to the active page.", _measurementClipboard != null && hasPage, "Copy measurements and select a page first.");
 
         Add("pages.sortArchStruct", "Sort Pages A/S", "Pages", "", "Move A sheets to Arch, S sheets to Struct, and trailing '-' sheets to others.", hasJob, "Open or create a job first.");
+        Add("pages.blankSheet", "Blank Sheet", "Pages", "", "Create an empty sheet in the current job.", hasJob, "Open or create a job first.");
         Add("pages.sortSuffix", "Sort Pages D/Sec/WT", "Pages", "", "Move suffix sheets into details/sections/units and reorder v/wt/ft/sv/sw at Pages root.", hasJob, "Open or create a job first.");
         Add("pages.repairLinks", "Repair Measurement Links", "Pages", "", "Reconnect stale measurement page links after page renames/imports.", hasJob, "Open or create a job first.");
         Add("pages.autoFolders", "Auto Page Folders", "Pages", "", "Create the standard page folder tree.", hasJob, "Open or create a job first.");
@@ -146,6 +148,7 @@ public partial class MainWindow
             case "file.openRecent": ShowRecentJobPicker(); break;
             case "file.openJobsFolder": BtnOpenJobsFolder_Click(this, new RoutedEventArgs()); break;
             case "file.newJob": BtnNewJob_Click(this, new RoutedEventArgs()); break;
+            case "file.blankJob": BtnBlankJob_Click(this, new RoutedEventArgs()); break;
             case "file.sampleJob": CreateSampleJob(); break;
             case "file.importPlanSwift": BtnImportPlanSwiftJob_Click(this, new RoutedEventArgs()); break;
             case "file.importPlanSwiftCurrent": BtnImportPlanSwiftToCurrentJob_Click(this, new RoutedEventArgs()); break;
@@ -208,6 +211,7 @@ public partial class MainWindow
             case "edit.pasteMeasurements": PasteMeasurementsFromClipboard(); break;
 
             case "pages.sortArchStruct": BtnSortPagesArchStruct_Click(this, new RoutedEventArgs()); break;
+            case "pages.blankSheet": BtnNewBlankPage_Click(this, new RoutedEventArgs()); break;
             case "pages.sortSuffix": BtnSortPagesSuffix_Click(this, new RoutedEventArgs()); break;
             case "pages.repairLinks": BtnRepairMeasurementPageLinks_Click(this, new RoutedEventArgs()); break;
             case "pages.autoFolders": BtnAutoPageFolders_Click(this, new RoutedEventArgs()); break;

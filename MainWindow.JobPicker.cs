@@ -171,6 +171,9 @@ public partial class MainWindow
             case JobPickerAction.NewJob:
                 CreateJobFromDialog(selectedJobsRootPath);
                 break;
+            case JobPickerAction.BlankJob:
+                CreateBlankJobFromDialog(selectedJobsRootPath);
+                break;
             case JobPickerAction.CreateSample:
                 CreateSampleJob();
                 break;
@@ -276,6 +279,32 @@ public partial class MainWindow
                     "Import PDF");
             }),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void CreateBlankJobFromDialog(string? preferredParent = null)
+    {
+        string? name = ShowInputDialog("Job name:", "New Job", "Blank Job");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        string parent = ResolveNewJobParent(preferredParent) ?? SampleJobService.DefaultJobsRoot;
+
+        try
+        {
+            Directory.CreateDirectory(parent);
+            _settings.JobsRootPath = parent;
+            AppSettingsStore.AddJobsRoot(_settings, parent);
+            SaveAppSettings();
+
+            OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parent, name);
+            OpenJob(job.RootPath);
+            TxtStatus.Text = $"Blank job created: {job.Name}. Use Blank Sheet to add an empty sheet.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Cannot create blank job:\n{ex.Message}", "Blank Job",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private static string DefaultNewJobName(string pdfFolder)

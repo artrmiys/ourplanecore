@@ -202,7 +202,7 @@ public partial class JobPickerDialog : Window
         if (JobsList.SelectedItem is not JobPickerItem item)
         {
             DetailsText.Text = _items.Count == 0
-                ? "No jobs found. Create a Sample Job, create a New Job, or add a Jobs Folder."
+                ? "No jobs found. Create a Sample Job, create a PDF Job, create a Blank Job, or add a Jobs Folder."
                 : "";
             OpenButton.IsEnabled = false;
             return;
@@ -344,6 +344,8 @@ public partial class JobPickerDialog : Window
     private void OpenButton_Click(object sender, RoutedEventArgs e) => AcceptOpen();
     private void NewJobButton_Click(object sender, RoutedEventArgs e) =>
         AcceptAction(JobPickerAction.NewJob, ResolveSelectedJobsRootPath());
+    private void BlankJobButton_Click(object sender, RoutedEventArgs e) =>
+        AcceptAction(JobPickerAction.BlankJob, ResolveSelectedJobsRootPath());
     private void AddFolderButton_Click(object sender, RoutedEventArgs e) =>
         AcceptAction(JobPickerAction.BrowseJobsFolder);
     private void ManageLink_Click(object sender, MouseButtonEventArgs e) =>

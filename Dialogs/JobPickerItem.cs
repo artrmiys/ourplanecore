@@ -15,6 +15,7 @@ public enum JobPickerAction
     BrowseJob,
     BrowseJobsFolder,
     NewJob,
+    BlankJob,
     CreateSample,
 }
 

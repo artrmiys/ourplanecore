@@ -68,10 +68,16 @@
                         Style="{StaticResource TopCommandButton}"
                         MinWidth="80" Padding="14,2" Height="26"
                         IsDefault="True" Click="OpenButton_Click"/>
-                <Button x:Name="NewJobButton" Content="New job"
+                <Button x:Name="NewJobButton" Content="PDF job"
                         Style="{StaticResource TopCommandButton}"
                         MinWidth="80" Padding="14,2" Height="26"
+                        ToolTip="Create a new job from a folder of PDFs"
                         Click="NewJobButton_Click"/>
+                <Button x:Name="BlankJobButton" Content="Blank job"
+                        Style="{StaticResource TopCommandButton}"
+                        MinWidth="86" Padding="14,2" Height="26"
+                        ToolTip="Create an empty job without selecting PDFs"
+                        Click="BlankJobButton_Click"/>
                 <Button x:Name="CancelButton" Content="Cancel"
                         Style="{StaticResource TopCommandButton}"
                         MinWidth="80" Padding="14,2" Height="26"

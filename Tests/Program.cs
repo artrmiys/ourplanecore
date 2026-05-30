@@ -150,6 +150,7 @@ var tests = new List<(string Name, Action Run)>
     ("tree expansion restores snapshot across reload", TreeExpansionStateTests.RestoresSnapshotAcrossReload),
     ("tree expansion rebases moved descendants", TreeExpansionStateTests.RebasesMovedDescendants),
     ("job layout create and load ensures base folders", StorageTests.JobLayoutCreateAndLoadEnsuresBaseFolders),
+    ("blank page creation writes renderable pdf and metadata", StorageTests.BlankPageCreationWritesRenderablePdfAndMetadata),
     ("page import writes layer manifest and metadata", StorageTests.PageImportWritesLayerManifestAndMetadata),
     ("page import keeps multiple pdf sources in one folder", StorageTests.PageImportKeepsMultiplePdfSourcesInOneFolder),
     ("material extraction writes rows and summary csvs", MaterialExtractionServiceTests.WritesRowsAndSummaryCsvs),

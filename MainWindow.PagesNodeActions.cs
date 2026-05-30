@@ -23,6 +23,20 @@ public partial class MainWindow
         CreatePageFolder(targetFolder);
     }
 
+    private void BtnNewBlankPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentJob == null)
+        {
+            MessageBox.Show("Open or create a job first.", "Blank Sheet",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string targetFolder = PageFolderCreationTarget(PagesTree.SelectedItem as TreeViewItem) ??
+                              _currentJob.PagesRoot;
+        CreateBlankPage(targetFolder);
+    }
+
     private void NewPageFolder(TreeViewItem item)
     {
         string? targetFolder = PageFolderCreationTarget(item);
@@ -30,6 +44,18 @@ public partial class MainWindow
             return;
 
         CreatePageFolder(targetFolder);
+    }
+
+    private void NewBlankPage(TreeViewItem item)
+    {
+        if (_currentJob == null)
+            return;
+
+        string? targetFolder = PageFolderCreationTarget(item) ?? _currentJob.PagesRoot;
+        if (targetFolder == null)
+            return;
+
+        CreateBlankPage(targetFolder);
     }
 
     private string? PageFolderCreationTarget(TreeViewItem? item)
@@ -69,6 +95,29 @@ public partial class MainWindow
         catch (Exception ex)
         {
             ShowOperationError("New Folder", ex);
+        }
+    }
+
+    private void CreateBlankPage(string parentFolder)
+    {
+        if (_currentJob == null || !IsPathInsidePagesRoot(parentFolder))
+            return;
+
+        string? name = ShowInputDialog("Sheet name:", "Blank Sheet", "Blank Sheet");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        try
+        {
+            PageInfo page = OurPlaneCoreJobStore.CreateBlankPage(_currentJob, name, parentFolder);
+            ReloadPagesTree(page.FolderPath);
+            OpenPageInActiveTab(page);
+            RefreshFloatingPageSetup(page.FolderPath);
+            TxtStatus.Text = $"Blank sheet created: {page.Name}.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError("Blank Sheet", ex);
         }
     }
 

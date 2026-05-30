@@ -14,7 +14,8 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Open Job / Recent...", true, ShowRecentJobPicker));
         menu.Items.Add(MakeMenuItem("Browse Job Folder...", true, OpenJobFromFolderDialog));
         menu.Items.Add(MakeMenuItem("Jobs Root Folder...", true, OpenJobFromJobsRootDialog));
-        menu.Items.Add(MakeMenuItem("New Job...", true, () => CreateJobFromDialog()));
+        menu.Items.Add(MakeMenuItem("New Job from PDF Folder...", true, () => CreateJobFromDialog()));
+        menu.Items.Add(MakeMenuItem("Blank Job...", true, () => CreateBlankJobFromDialog()));
         menu.Items.Add(MakeMenuItem("Sample Job", true, CreateSampleJob));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Import PDF(s) to Current Job...", hasJob, () => BtnImport_Click(sender, new RoutedEventArgs())));

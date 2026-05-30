@@ -46,6 +46,12 @@ public static class OurPlaneCoreJobStore
         double scaleMetersPerPt = 0) =>
         PageStore.CreatePageFromPdf(job, pdfSourcePath, displayName, destinationFolder, pdfPage, scaleMetersPerPt);
 
+    public static PageInfo CreateBlankPage(
+        OurPlaneCoreJob job,
+        string displayName,
+        string destinationFolder) =>
+        PageStore.CreateBlankPage(job, displayName, destinationFolder);
+
     public static SourceInfo? ReadSource(string pageFolder) =>
         PageStore.ReadSource(pageFolder);
 

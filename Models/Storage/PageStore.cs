@@ -84,6 +84,51 @@ internal static class PageStore
         };
     }
 
+    public static PageInfo CreateBlankPage(
+        OurPlaneCoreJob job,
+        string displayName,
+        string destinationFolder,
+        float widthPt = BlankPagePdfService.DefaultWidthPt,
+        float heightPt = BlankPagePdfService.DefaultHeightPt)
+    {
+        string cleanName = string.IsNullOrWhiteSpace(displayName)
+            ? "Blank Sheet"
+            : displayName.Trim();
+        string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
+        string pdfFileName = $"{OurPlaneCoreJobStore.SanitizeName(cleanName, 80)}.blank.pdf";
+        string pdfDest = OurPlaneCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, pdfFileName));
+        BlankPagePdfService.WriteBlankPdf(pdfDest, widthPt, heightPt);
+
+        string pageFolder = OurPlaneCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlaneCoreJobStore.SanitizeName(cleanName, 120)));
+        Directory.CreateDirectory(pageFolder);
+
+        OurPlaneCoreJobStore.WriteItemDataXml(pageFolder, "Page", cleanName, OurPlaneCoreJobStore.GetNextOrderIndex(destinationFolder));
+        WriteSource(pageFolder, pdfDest, 0, 0);
+        WriteSourcePdfMetadata(pageFolder, new PdfSheetMetadata
+        {
+            GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            Source = "manual-blank",
+            PdfPath = pdfDest,
+            PageIndex = 0,
+            PageNumber = 1,
+            WidthPt = widthPt,
+            HeightPt = heightPt,
+            SheetLabel = cleanName,
+            RenameCandidate = cleanName,
+            SkipScale = true,
+            Confidence = "manual",
+        });
+
+        return new PageInfo
+        {
+            Name = cleanName,
+            FolderPath = pageFolder,
+            PdfPath = pdfDest,
+            PdfPage = 0,
+            ScaleMetersPerPt = 0,
+        };
+    }
+
     public static SourceInfo? ReadSource(string pageFolder)
     {
         string path = Path.Combine(pageFolder, "source.json");

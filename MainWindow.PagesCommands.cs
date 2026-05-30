@@ -110,6 +110,7 @@ public partial class MainWindow
                                Directory.EnumerateDirectories(folder.FolderPath).Any();
             IReadOnlyList<PageInfo> folderLegendPages = LegendPagesInFolder(folder.FolderPath);
 
+            menu.Items.Add(MakeMenuItem("New Blank Sheet", true, () => NewBlankPage(item)));
             menu.Items.Add(MakeMenuItem("New Folder", true, () => NewPageFolder(item)));
             menu.Items.Add(MakeMenuItem("Rename Folder", !isRoot && selectedCount <= 1, () => RenamePagesNode(item)));
             menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Folder", !isRoot || selectedCount > 1, () => DeletePagesNode(item)));
@@ -177,6 +178,7 @@ public partial class MainWindow
             menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
             menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", true, () => DeletePagesNode(item)));
             menu.Items.Add(MakeMenuItem("Duplicate Page", selectedCount <= 1, () => DuplicatePageNode(item)));
+            menu.Items.Add(MakeMenuItem("New Blank Sheet in Parent", selectedCount <= 1, () => NewBlankPage(item)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeSubmenu(
                 "Clipboard",

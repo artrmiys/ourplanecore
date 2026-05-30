@@ -117,6 +117,11 @@ public partial class MainWindow
         CreateJobFromDialog();
     }
 
+    private void BtnBlankJob_Click(object sender, RoutedEventArgs e)
+    {
+        CreateBlankJobFromDialog();
+    }
+
     private void OpenJob(string rootPath, string? initialPageFolder = null)
     {
         PrepareCurrentJobForSwitch();

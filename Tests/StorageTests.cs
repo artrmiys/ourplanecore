@@ -1,4 +1,6 @@
 using OurPlaneCore;
+using Docnet.Core;
+using Docnet.Core.Models;
 using SkiaSharp;
 using System.Xml.Linq;
 
@@ -73,6 +75,35 @@ internal static class StorageTests
             AssertEqual("A101", reloaded.SheetLabel, "metadata sheet label");
             AssertClose(0.25, reloaded.SelectedScaleMetersPerPt, "metadata selected scale");
             AssertEqual("2", reloaded.Layers.Count.ToString(), "metadata layers");
+        });
+    }
+
+    public static void BlankPageCreationWritesRenderablePdfAndMetadata()
+    {
+        WithTempJob("Blank Page", job =>
+        {
+            PageInfo page = OurPlaneCoreJobStore.CreateBlankPage(job, "Blank A", job.PagesRoot);
+
+            AssertEqual("Blank A", page.Name, "blank page name");
+            AssertTrue(File.Exists(page.PdfPath), "blank pdf should be created");
+            AssertEqual("0", page.PdfPage.ToString(), "blank page index");
+            AssertClose(0, page.ScaleMetersPerPt, "blank page starts unscaled");
+
+            SourceInfo source = OurPlaneCoreJobStore.ReadSource(page.FolderPath)
+                ?? throw new InvalidOperationException("blank source missing");
+            AssertFalse(Path.IsPathRooted(source.Pdf), "blank source pdf path should be relative");
+            AssertTrue(source.Pdf.EndsWith(".blank.pdf", StringComparison.OrdinalIgnoreCase), "blank source pdf suffix");
+
+            PdfSheetMetadata metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
+                ?? throw new InvalidOperationException("blank metadata missing");
+            AssertEqual("manual-blank", metadata.Source, "blank metadata source");
+            AssertEqual("Blank A", metadata.SheetLabel, "blank metadata sheet label");
+            AssertEqual("Blank A", metadata.RenameCandidate, "blank metadata rename candidate");
+            AssertClose(36 * 72, metadata.WidthPt, "blank metadata width");
+            AssertClose(24 * 72, metadata.HeightPt, "blank metadata height");
+
+            using var doc = DocLib.Instance.GetDocReader(page.PdfPath, new PageDimensions(1.0));
+            AssertEqual("1", doc.GetPageCount().ToString(), "blank pdf page count");
         });
     }
 
