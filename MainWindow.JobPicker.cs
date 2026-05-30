@@ -39,6 +39,7 @@ public partial class MainWindow
         if (_currentJob != null)
             return;
 
+        UpdateNoJobOverlay();   // show the empty-state Start card behind the picker
         ShowRecentJobPicker();
     }
 

@@ -17,6 +17,7 @@
         <Geometry x:Key="IconClipboard">M5.2,3.2 L4,3.2 L4,13.6 L12,13.6 L12,3.2 L10.8,3.2 M6.2,2.4 L9.8,2.4 L9.8,4.4 L6.2,4.4 Z M6,7.4 L10,7.4 M6,10 L10,10</Geometry>
         <Geometry x:Key="IconSparkle">M8,2 L9.2,6.8 L14,8 L9.2,9.2 L8,14 L6.8,9.2 L2,8 L6.8,6.8 Z</Geometry>
         <Geometry x:Key="IconCrop">M5,2 L5,11 L14,11 M2,5 L11,5 L11,14</Geometry>
+        <Geometry x:Key="IconPlus">M8,2.5 L8,13.5 M2.5,8 L13.5,8</Geometry>
 
         <Style x:Key="RibbonIcon" TargetType="Path">
             <Setter Property="Width" Value="14"/>
@@ -1009,6 +1010,83 @@
                           Grid.Row="1"
                           Background="#FFFFFF"
                           ClipToBounds="True"/>
+
+                    <!-- Empty-state Start card: shown when no job is open -->
+                    <Grid x:Name="NoJobOverlay"
+                          Grid.Row="1"
+                          Panel.ZIndex="20"
+                          Background="{DynamicResource WindowBackgroundBrush}"
+                          Visibility="Collapsed">
+                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Width="560"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="34,30">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Border Width="26" Height="26" CornerRadius="6"
+                                            Background="{DynamicResource BrandAccentBrush}" Margin="0,0,11,0"/>
+                                    <TextBlock Text="OurPlaneCore" FontSize="20" FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource ControlForegroundBrush}"/>
+                                </StackPanel>
+                                <TextBlock Text="Construction takeoff — start by opening or creating a job."
+                                           Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                           FontSize="12.5" Margin="0,0,0,20"/>
+                                <UniformGrid Columns="2">
+                                    <Button Click="StartOpenRecent_Click" Height="58" Margin="0,0,8,8" Padding="14,8"
+                                            HorizontalContentAlignment="Left"
+                                            ToolTip="Pick from recently used jobs">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFolderOpen}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="Open a recent job" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="Recently used" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="StartNewBlank_Click" Height="58" Margin="0,0,0,8" Padding="14,8"
+                                            HorizontalContentAlignment="Left"
+                                            ToolTip="Create an empty job; add sheets later">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconPlus}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="New blank job" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="Start empty" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="StartNewFromPdf_Click" Height="58" Margin="0,0,8,0" Padding="14,8"
+                                            HorizontalContentAlignment="Left"
+                                            ToolTip="Create a job from a folder of PDF drawings">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSheetMeasure}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="New job from PDFs" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="Import a folder of drawings" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="StartSample_Click" Height="58" Padding="14,8"
+                                            HorizontalContentAlignment="Left"
+                                            ToolTip="Open the bundled sample job to explore">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSparkle}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="Open sample job" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="Explore a demo" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Button>
+                                </UniformGrid>
+                                <TextBlock Text="You can also use Open / Import in the ribbon at any time."
+                                           Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                           FontSize="11" Margin="0,18,0,0" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                     <Border x:Name="ViewportLayerTraceBar"
                             Grid.Row="1"
                             HorizontalAlignment="Right"

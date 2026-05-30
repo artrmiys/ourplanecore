@@ -176,6 +176,7 @@ public partial class MainWindow
         ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
         RefreshJobHeaderLabels();
+        UpdateNoJobOverlay();   // a job is now open — hide the empty-state Start card
         TxtStatus.Text = BuildMeasurementRepairStatus($"Loaded job: {_currentJob.Name}");
         LoadObservationsInbox();
         RefreshMassingDraftPanel();
