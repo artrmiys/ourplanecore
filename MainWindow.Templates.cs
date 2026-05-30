@@ -24,7 +24,7 @@ public partial class MainWindow
 
     private void InitializeTemplatesTab()
     {
-        if (PagesSideTabs == null)
+        if (_rightWorkspaceTabs == null)
             return;
 
         _templateList = new ListBox
@@ -66,10 +66,10 @@ public partial class MainWindow
 
         _templatesTab = new TabItem
         {
-            Header = BuildTemplatesTabHeader(),
+            Header = "Templates",
             Content = panel,
         };
-        PagesSideTabs.Items.Add(_templatesTab);
+        _rightWorkspaceTabs.Items.Add(_templatesTab);
 
         _takeoffTemplates.Clear();
         _takeoffTemplates.AddRange(TakeoffTemplateStore.Load());
