@@ -366,6 +366,7 @@ public partial class MainWindow : Window
         SetupEstimateTable();
         InstallOutputSettingsTab();
         InitializeBookmarksTab();
+        InitializeTemplatesTab();
         ApplyToolSelection("select");
         ApplyRulerVisibilityToViewport();
         UpdateDefaultCountSymbolButton();
