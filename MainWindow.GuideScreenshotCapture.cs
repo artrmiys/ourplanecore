@@ -120,7 +120,7 @@ public partial class MainWindow
         // Focused crops so the guide can call out buttons clearly. Rendering a deep child visual
         // in isolation comes out blank in WPF, so we render the root and crop the child's bounds.
         await CaptureCropAsync(outputDir, manifest, TakeoffsPanel, "03-takeoffs-panel");
-        await CaptureCropAsync(outputDir, manifest, MainToolBar, "04-viewport-toolbar");
+        await CaptureCropAsync(outputDir, manifest, BottomToolStrip, "04-viewport-toolbar");
 
         // Manager / settings surfaces.
         await CaptureWorkspaceTabAsync(outputDir, manifest, "SheetManager", "20-sheet-manager", timeoutMs);

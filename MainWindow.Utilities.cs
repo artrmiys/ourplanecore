@@ -197,7 +197,7 @@ public partial class MainWindow
 
         Background = new SolidColorBrush(window);
         RootDock.Background = new SolidColorBrush(window);
-        MainToolBar.Background = new SolidColorBrush(toolbar);
+        BottomToolStrip.Background = new SolidColorBrush(toolbar);
         MainStatusBar.Background = new SolidColorBrush(status);
         PagesPanel.Background = new SolidColorBrush(panel);
         TakeoffsPanel.Background = new SolidColorBrush(panel);

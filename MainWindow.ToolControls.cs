@@ -36,8 +36,8 @@ public partial class MainWindow
         _recordButton.Checked += (_, _) => OnRecordToggled(on: true);
         _recordButton.Unchecked += (_, _) => OnRecordToggled(on: false);
 
-        int areaIndex = MainToolBar.Items.IndexOf(BtnAreaCut);
-        MainToolBar.Items.Insert(areaIndex >= 0 ? areaIndex + 1 : MainToolBar.Items.Count, _recordButton);
+        int areaIndex = ToolStripRow1.Children.IndexOf(BtnAreaCut);
+        ToolStripRow1.Children.Insert(areaIndex >= 0 ? areaIndex + 1 : ToolStripRow1.Children.Count, _recordButton);
     }
 
     // Estimating setup moved to MainWindow.Estimating.cs

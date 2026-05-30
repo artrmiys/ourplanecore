@@ -22,6 +22,15 @@ public partial class MainWindow
     private GridLength _templatesDockRowHeight = new(190);
     private bool _syncingTemplatesDockToggle;
 
+    // Right-side bottom dock host (mirrors the Bookmarks dock, but under the Takeoffs tabs).
+    private Grid? _templatesRightHostGrid;
+    private GridSplitter? _templatesRightSplitter;
+    private DockPanel? _templatesRightDock;
+    private ContentControl? _templatesRightDockHost;
+    private RowDefinition? _templatesRightSplitterRow;
+    private RowDefinition? _templatesRightDockRow;
+    private ToggleButton? _templatesDockReturnToggle;
+
     private void InitializeTemplatesTab()
     {
         if (_rightWorkspaceTabs == null)
@@ -66,14 +75,85 @@ public partial class MainWindow
 
         _templatesTab = new TabItem
         {
-            Header = "Templates",
+            Header = BuildTemplatesTabHeader(),
             Content = panel,
         };
         _rightWorkspaceTabs.Items.Add(_templatesTab);
 
+        InstallTemplatesRightDock();
+
         _takeoffTemplates.Clear();
         _takeoffTemplates.AddRange(TakeoffTemplateStore.Load());
         RefreshTemplateList();
+    }
+
+    // Wraps the right-side workspace TabControl in a Grid so Templates can pop out
+    // into a resizable panel docked at the bottom (the Bookmarks-below-Pages pattern).
+    private void InstallTemplatesRightDock()
+    {
+        if (_rightWorkspaceTabs == null || _rightWorkspaceTabs.Parent is not Panel hostPanel)
+            return;
+
+        int idx = hostPanel.Children.IndexOf(_rightWorkspaceTabs);
+        hostPanel.Children.Remove(_rightWorkspaceTabs);
+
+        _templatesRightSplitterRow = new RowDefinition { Height = new GridLength(0) };
+        _templatesRightDockRow = new RowDefinition { Height = new GridLength(0), MinHeight = 0 };
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(_templatesRightSplitterRow);
+        grid.RowDefinitions.Add(_templatesRightDockRow);
+
+        Grid.SetRow(_rightWorkspaceTabs, 0);
+        grid.Children.Add(_rightWorkspaceTabs);
+
+        _templatesRightSplitter = new GridSplitter
+        {
+            Height = 4,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ResizeDirection = GridResizeDirection.Rows,
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+            Visibility = Visibility.Collapsed,
+        };
+        _templatesRightSplitter.SetResourceReference(Control.BackgroundProperty, "SplitterBrush");
+        Grid.SetRow(_templatesRightSplitter, 1);
+        grid.Children.Add(_templatesRightSplitter);
+
+        _templatesRightDock = new DockPanel { MinHeight = 120, Visibility = Visibility.Collapsed };
+        _templatesRightDock.SetResourceReference(Panel.BackgroundProperty, "PanelBackgroundBrush");
+
+        var headerBorder = new Border { Style = (Style)FindResource("PanelHeaderBorder") };
+        DockPanel.SetDock(headerBorder, Dock.Top);
+        var headerDock = new DockPanel { LastChildFill = true };
+        _templatesDockReturnToggle = new ToggleButton
+        {
+            Style = (Style)FindResource("BookmarkDockToggleButton"),
+            Margin = new Thickness(2, 0, 0, 0),
+            IsChecked = true,
+            ToolTip = "Return Templates to the tab list",
+        };
+        _templatesDockReturnToggle.Checked += TemplatesDockToggle_Changed;
+        _templatesDockReturnToggle.Unchecked += TemplatesDockToggle_Changed;
+        DockPanel.SetDock(_templatesDockReturnToggle, Dock.Right);
+        headerDock.Children.Add(_templatesDockReturnToggle);
+        headerDock.Children.Add(new TextBlock
+        {
+            Text = "Templates",
+            Style = (Style)FindResource("PanelHeader"),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        headerBorder.Child = headerDock;
+        _templatesRightDock.Children.Add(headerBorder);
+
+        _templatesRightDockHost = new ContentControl();
+        _templatesRightDock.Children.Add(_templatesRightDockHost);
+
+        Grid.SetRow(_templatesRightDock, 2);
+        grid.Children.Add(_templatesRightDock);
+
+        _templatesRightHostGrid = grid;
+        hostPanel.Children.Insert(idx, grid);
     }
 
     private FrameworkElement BuildTemplatesTabHeader()
@@ -85,12 +165,12 @@ public partial class MainWindow
         };
         header.Children.Add(new TextBlock
         {
-            Text = "Tpl",
+            Text = "Templates",
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 5, 0),
         });
 
-        _templatesTabDockToggle = CreateTemplatesDockToggle("Dock Templates below Pages");
+        _templatesTabDockToggle = CreateTemplatesDockToggle("Pop Templates out into a panel docked below Takeoffs");
         header.Children.Add(_templatesTabDockToggle);
         return header;
     }
@@ -117,51 +197,54 @@ public partial class MainWindow
 
     private void ApplyTemplatesDockMode(bool docked)
     {
-        if (_templatesTab == null || _templatePanel == null)
+        if (_templatesTab == null || _templatePanel == null || _rightWorkspaceTabs == null
+            || _templatesRightDock == null || _templatesRightDockHost == null
+            || _templatesRightSplitter == null || _templatesRightSplitterRow == null
+            || _templatesRightDockRow == null)
             return;
 
         SetTemplatesDockToggleState(docked);
 
         if (docked)
         {
-            if (PagesSideTabs.SelectedItem == _templatesTab)
-                PagesSideTabs.SelectedIndex = 0;
+            if (_rightWorkspaceTabs.SelectedItem == _templatesTab)
+                _rightWorkspaceTabs.SelectedIndex = 0;
 
-            if (PagesSideTabs.Items.Contains(_templatesTab))
+            if (_rightWorkspaceTabs.Items.Contains(_templatesTab))
             {
                 _templatesTab.Content = null;
-                PagesSideTabs.Items.Remove(_templatesTab);
+                _rightWorkspaceTabs.Items.Remove(_templatesTab);
             }
 
-            TemplatesDockContentHost.Content = _templatePanel;
-            TemplatesDockSplitter.Visibility = Visibility.Visible;
-            TemplatesDockPanel.Visibility = Visibility.Visible;
-            TemplatesDockSplitterRow.Height = new GridLength(4);
-            TemplatesDockRow.MinHeight = 120;
-            TemplatesDockRow.Height = _templatesDockRowHeight.Value > 0
+            _templatesRightDockHost.Content = _templatePanel;
+            _templatesRightSplitter.Visibility = Visibility.Visible;
+            _templatesRightDock.Visibility = Visibility.Visible;
+            _templatesRightSplitterRow.Height = new GridLength(4);
+            _templatesRightDockRow.MinHeight = 120;
+            _templatesRightDockRow.Height = _templatesDockRowHeight.Value > 0
                 ? _templatesDockRowHeight
                 : new GridLength(190);
-            TxtStatus.Text = "Templates docked below Pages.";
+            TxtStatus.Text = "Templates docked below Takeoffs.";
             return;
         }
 
-        if (TemplatesDockRow.ActualHeight >= 80)
-            _templatesDockRowHeight = new GridLength(TemplatesDockRow.ActualHeight);
+        if (_templatesRightDockRow.ActualHeight >= 80)
+            _templatesDockRowHeight = new GridLength(_templatesRightDockRow.ActualHeight);
 
-        TemplatesDockContentHost.Content = null;
-        if (!PagesSideTabs.Items.Contains(_templatesTab))
+        _templatesRightDockHost.Content = null;
+        if (!_rightWorkspaceTabs.Items.Contains(_templatesTab))
         {
             _templatesTab.Content = _templatePanel;
-            PagesSideTabs.Items.Add(_templatesTab);
+            _rightWorkspaceTabs.Items.Add(_templatesTab);
         }
-        PagesSideTabs.SelectedItem = _templatesTab;
+        _rightWorkspaceTabs.SelectedItem = _templatesTab;
 
-        TemplatesDockPanel.Visibility = Visibility.Collapsed;
-        TemplatesDockSplitter.Visibility = Visibility.Collapsed;
-        TemplatesDockSplitterRow.Height = new GridLength(0);
-        TemplatesDockRow.MinHeight = 0;
-        TemplatesDockRow.Height = new GridLength(0);
-        TxtStatus.Text = "Templates returned to the Pages tabs.";
+        _templatesRightDock.Visibility = Visibility.Collapsed;
+        _templatesRightSplitter.Visibility = Visibility.Collapsed;
+        _templatesRightSplitterRow.Height = new GridLength(0);
+        _templatesRightDockRow.MinHeight = 0;
+        _templatesRightDockRow.Height = new GridLength(0);
+        TxtStatus.Text = "Templates returned to the Takeoffs tabs.";
     }
 
     private void SetTemplatesDockToggleState(bool docked)
@@ -171,7 +254,8 @@ public partial class MainWindow
         {
             if (_templatesTabDockToggle != null)
                 _templatesTabDockToggle.IsChecked = docked;
-            BtnDockTemplatesBelowPages.IsChecked = docked;
+            if (_templatesDockReturnToggle != null)
+                _templatesDockReturnToggle.IsChecked = docked;
         }
         finally
         {
