@@ -1146,9 +1146,11 @@
                                         </StackPanel>
                                     </Button>
                                 </UniformGrid>
-                                <TextBlock Text="You can also use Open / Import in the ribbon at any time."
-                                           Foreground="{DynamicResource SecondaryForegroundBrush}"
-                                           FontSize="11" Margin="0,18,0,0" HorizontalAlignment="Center"/>
+                                <TextBlock Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                           FontSize="11" Margin="0,18,0,0" HorizontalAlignment="Center">
+                                    <Run Text="Open / Import is always in the ribbon"/>
+                                    <Run Text="  ·  press "/><Run Text="F1" FontFamily="Consolas" Foreground="{DynamicResource AccentBrush}"/><Run Text=" for keyboard shortcuts"/>
+                                </TextBlock>
                             </StackPanel>
                         </Border>
                     </Grid>
