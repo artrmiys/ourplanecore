@@ -23,12 +23,12 @@
                             <Ellipse x:Name="BookmarksDockDot"
                                      Width="7"
                                      Height="7"
-                                     Fill="#2563EB"
+                                     Fill="{DynamicResource AccentBrush}"
                                      Visibility="Collapsed"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Fill" TargetName="BookmarksDockDot" Value="#1D4ED8"/>
+                                <Setter Property="Fill" TargetName="BookmarksDockDot" Value="{DynamicResource AccentHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter Property="Visibility" TargetName="BookmarksDockDot" Value="Visible"/>
@@ -460,12 +460,12 @@
                                 <Ellipse x:Name="RulerSheetVisibilityDot"
                                          Width="7"
                                          Height="7"
-                                         Fill="#2563EB"
+                                         Fill="{DynamicResource AccentBrush}"
                                          Visibility="Collapsed"/>
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Stroke" TargetName="RulerSheetVisibilityDot" Value="#1D4ED8"/>
+                                    <Setter Property="Stroke" TargetName="RulerSheetVisibilityDot" Value="{DynamicResource AccentHoverBrush}"/>
                                 </Trigger>
                                 <Trigger Property="IsChecked" Value="True">
                                     <Setter Property="Visibility" TargetName="RulerSheetVisibilityDot" Value="Visible"/>
@@ -1662,7 +1662,7 @@
                              StrokeThickness="4"/>
                     <Ellipse Width="42"
                              Height="42"
-                             Stroke="#2563EB"
+                             Stroke="{DynamicResource AccentBrush}"
                              StrokeThickness="4"
                              StrokeDashArray="2 4"
                              StrokeStartLineCap="Round"
