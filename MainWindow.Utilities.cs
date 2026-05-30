@@ -125,68 +125,74 @@ public partial class MainWindow
         // Colors below follow docs/BLUEBEAM_DESIGN_SYSTEM.md §4 role tokens
         // (light / dark pairs). Keep this method the single source of runtime
         // color; App.xaml only holds startup fallbacks.
-        Color window   = dark ? Color.FromRgb(31, 34, 40)   : Color.FromRgb(250, 250, 250); // surface
-        Color toolbar  = dark ? Color.FromRgb(34, 38, 45)   : Color.FromRgb(221, 227, 234); // ribbon-tab
-        Color panel    = dark ? Color.FromRgb(24, 27, 32)   : Color.FromRgb(236, 239, 243); // surface-alt
-        Color status   = dark ? Color.FromRgb(34, 38, 45)   : Color.FromRgb(221, 227, 234); // ribbon-tab
-        Color tree     = dark ? Color.FromRgb(39, 43, 50)   : Colors.White;                 // surface-elevated
-        Color splitter = dark ? Color.FromRgb(42, 46, 54)   : Color.FromRgb(200, 204, 210); // border
-        Brush foreground = new SolidColorBrush(dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40)); // text
+        // OurCore design code (blue + sage) on a NEUTRAL dark base (user wants
+        // the dark theme black/charcoal, not navy). Surfaces are neutral grey
+        // (#161616..#262626); the blue #4EA1FF and sage #8FB89A appear ONLY as
+        // accents (selected/active) and the brand underline — never as a fill.
+        Color window   = dark ? Color.FromRgb(22, 22, 22)    : Color.FromRgb(250, 250, 250); // base
+        Color toolbar  = dark ? Color.FromRgb(32, 32, 32)    : Color.FromRgb(221, 227, 234); // ribbon
+        Color panel    = dark ? Color.FromRgb(28, 28, 28)    : Color.FromRgb(236, 239, 243); // surface-alt
+        Color status   = dark ? Color.FromRgb(32, 32, 32)    : Color.FromRgb(221, 227, 234); // ribbon
+        Color tree     = dark ? Color.FromRgb(38, 38, 38)    : Colors.White;                 // elevated (row)
+        Color splitter = dark ? Color.FromRgb(56, 56, 56)    : Color.FromRgb(200, 204, 210); // border
+        Brush foreground = new SolidColorBrush(dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
         Color rowSelection = MuteRowHighlight(
-            dark ? Color.FromRgb(47, 74, 102) : Color.FromRgb(220, 233, 245),  // accent-soft
+            dark ? Color.FromRgb(36, 67, 100) : Color.FromRgb(220, 233, 245),  // info-soft (blue = selected)
             tree);
         UpdateAppBrush("WindowBackgroundBrush", window);
         UpdateAppBrush("PanelBackgroundBrush", panel);
         UpdateAppBrush("SurfaceBackgroundBrush", tree);
         UpdateAppBrush("SplitterBrush", splitter);
-        UpdateAppBrush("SecondaryForegroundBrush", dark ? Color.FromRgb(144, 153, 170) : Color.FromRgb(85, 91, 98)); // text-2
-        UpdateAppBrush("ScrollBarTrackBrush", dark ? Color.FromRgb(35, 39, 46)  : Color.FromRgb(229, 231, 235)); // border-soft
-        UpdateAppBrush("ScrollBarThumbBrush", dark ? Color.FromRgb(91, 100, 120) : Color.FromRgb(138, 144, 153)); // text-3
-        UpdateAppBrush("ControlForegroundBrush", dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40)); // text
-        UpdateAppBrush("ControlBackgroundBrush", dark ? Color.FromRgb(39, 43, 50) : Color.FromRgb(245, 246, 248));
-        UpdateAppBrush("ControlBorderBrush", dark ? Color.FromRgb(58, 63, 73) : Color.FromRgb(156, 163, 172)); // border-strong
-        UpdateAppBrush("ControlHoverBackgroundBrush", dark ? Color.FromRgb(50, 56, 67) : Color.FromRgb(232, 236, 241));
-        UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(58, 65, 77) : Color.FromRgb(221, 227, 234));
-        UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(41, 55, 71) : Color.FromRgb(220, 233, 245)); // accent-soft
-        UpdateAppBrush("ControlActiveForegroundBrush", dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40)); // text
+        UpdateAppBrush("SecondaryForegroundBrush", dark ? Color.FromRgb(160, 160, 160) : Color.FromRgb(85, 91, 98)); // txt-2
+        UpdateAppBrush("ScrollBarTrackBrush", dark ? Color.FromRgb(42, 42, 42)  : Color.FromRgb(229, 231, 235)); // border-soft
+        UpdateAppBrush("ScrollBarThumbBrush", dark ? Color.FromRgb(112, 112, 112) : Color.FromRgb(138, 144, 153)); // txt-3
+        UpdateAppBrush("ControlForegroundBrush", dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
+        UpdateAppBrush("ControlBackgroundBrush", dark ? Color.FromRgb(38, 38, 38) : Color.FromRgb(245, 246, 248)); // row
+        UpdateAppBrush("ControlBorderBrush", dark ? Color.FromRgb(64, 64, 64) : Color.FromRgb(156, 163, 172)); // border-strong
+        UpdateAppBrush("ControlHoverBackgroundBrush", dark ? Color.FromRgb(44, 44, 44) : Color.FromRgb(232, 236, 241)); // row-hi
+        UpdateAppBrush("ControlPressedBackgroundBrush", dark ? Color.FromRgb(54, 54, 54) : Color.FromRgb(221, 227, 234));
+        UpdateAppBrush("ControlActiveBackgroundBrush", dark ? Color.FromRgb(36, 67, 100) : Color.FromRgb(220, 233, 245)); // info-soft (selected)
+        UpdateAppBrush("ControlActiveForegroundBrush", dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
         UpdateAppBrush("RowSelectionBrush", rowSelection);
         UpdateAppBrush(SystemColors.HighlightBrushKey, rowSelection);
-        UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
         UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, MuteRowHighlight(
-            dark ? Color.FromRgb(41, 55, 71) : Color.FromRgb(220, 233, 245),
+            dark ? Color.FromRgb(36, 67, 100) : Color.FromRgb(220, 233, 245),
             tree));
-        UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
         UpdateAppBrush(SystemColors.MenuBrushKey, dark ? tree : Colors.White);
-        UpdateAppBrush(SystemColors.MenuTextBrushKey, dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.MenuTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
         UpdateAppBrush(SystemColors.WindowBrushKey, dark ? tree : Colors.White);
-        UpdateAppBrush(SystemColors.WindowTextBrushKey, dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
-        UpdateAppBrush(SystemColors.ControlBrushKey, dark ? Color.FromRgb(39, 43, 50) : Color.FromRgb(245, 246, 248));
-        UpdateAppBrush(SystemColors.ControlTextBrushKey, dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
-        UpdateAppBrush(SystemColors.GrayTextBrushKey, dark ? Color.FromRgb(91, 100, 120) : Color.FromRgb(138, 144, 153)); // text-3
-        UpdateAppBrush(SystemColors.InfoBrushKey, dark ? Color.FromRgb(39, 43, 50) : Color.FromRgb(245, 246, 248));
-        UpdateAppBrush(SystemColors.InfoTextBrushKey, dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
-        UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(91, 168, 232) : Color.FromRgb(31, 111, 178)); // accent
-        UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(122, 184, 238) : Color.FromRgb(26, 94, 151)); // accent-hover
-        UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(74, 151, 216) : Color.FromRgb(21, 78, 128));
+        UpdateAppBrush(SystemColors.WindowTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.ControlBrushKey, dark ? Color.FromRgb(38, 38, 38) : Color.FromRgb(245, 246, 248));
+        UpdateAppBrush(SystemColors.ControlTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush(SystemColors.GrayTextBrushKey, dark ? Color.FromRgb(112, 112, 112) : Color.FromRgb(138, 144, 153)); // txt-3
+        UpdateAppBrush(SystemColors.InfoBrushKey, dark ? Color.FromRgb(38, 38, 38) : Color.FromRgb(245, 246, 248));
+        UpdateAppBrush(SystemColors.InfoTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush("AccentBrush", dark ? Color.FromRgb(78, 161, 255) : Color.FromRgb(31, 111, 178)); // info (selected)
+        UpdateAppBrush("AccentHoverBrush", dark ? Color.FromRgb(111, 180, 255) : Color.FromRgb(26, 94, 151));
+        UpdateAppBrush("AccentPressedBrush", dark ? Color.FromRgb(61, 138, 232) : Color.FromRgb(21, 78, 128));
         UpdateAppBrush("AccentForegroundBrush", Colors.White);
-        UpdateAppBrush("ToolbarBandBrush", dark ? Color.FromRgb(34, 38, 45) : Color.FromRgb(221, 227, 234)); // ribbon-tab
-        UpdateAppBrush("ManagerHeaderBrush", dark ? Color.FromRgb(42, 47, 56) : Color.FromRgb(230, 234, 240));
-        UpdateAppBrush("SubtleButtonBackgroundBrush", dark ? Color.FromRgb(42, 47, 56) : Color.FromRgb(240, 242, 245));
-        UpdateAppBrush("DataGridAltRowBrush", dark ? Color.FromRgb(27, 30, 36) : Color.FromRgb(247, 249, 252)); // markups-zebra
-        UpdateAppBrush("CommitBrush", dark ? Color.FromRgb(74, 222, 128) : Color.FromRgb(30, 126, 52)); // success
-        UpdateAppBrush("CommitHoverBrush", dark ? Color.FromRgb(102, 230, 153) : Color.FromRgb(26, 110, 45));
-        UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(60, 203, 110) : Color.FromRgb(21, 90, 36));
+        // Sage brand signal — used for the active sub-tab underline + applied badge.
+        UpdateAppBrush("BrandAccentBrush", dark ? Color.FromRgb(143, 184, 154) : Color.FromRgb(106, 142, 116)); // sage
+        UpdateAppBrush("ToolbarBandBrush", dark ? Color.FromRgb(32, 32, 32) : Color.FromRgb(221, 227, 234)); // ribbon
+        UpdateAppBrush("ManagerHeaderBrush", dark ? Color.FromRgb(40, 40, 40) : Color.FromRgb(230, 234, 240));
+        UpdateAppBrush("SubtleButtonBackgroundBrush", dark ? Color.FromRgb(40, 40, 40) : Color.FromRgb(240, 242, 245));
+        UpdateAppBrush("DataGridAltRowBrush", dark ? Color.FromRgb(30, 30, 30) : Color.FromRgb(247, 249, 252)); // zebra
+        UpdateAppBrush("CommitBrush", dark ? Color.FromRgb(77, 204, 139) : Color.FromRgb(30, 126, 52)); // success (ok)
+        UpdateAppBrush("CommitHoverBrush", dark ? Color.FromRgb(102, 214, 160) : Color.FromRgb(26, 110, 45));
+        UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(60, 180, 120) : Color.FromRgb(21, 90, 36));
 
         // Tree row state — theme-aware (paired light/dark variants).
-        // Semantic hues kept (amber=active, green=on-page, etc.); only the
-        // accent row stripe is bound to the spec accent token.
+        // Semantic hues kept (amber=active, green=on-page, etc.); the active
+        // takeoff stripe is bound to the sage brand signal (OurCore "чуть шире").
         UpdateAppBrush("RowOnPageBrush",        MuteRowHighlight(dark ? Color.FromRgb(34, 64, 46)   : Color.FromRgb(214, 245, 222), tree));
         UpdateAppBrush("RowActiveBrush",        MuteTreeCrossHighlight(dark ? Color.FromRgb(82, 64, 24)   : Color.FromRgb(255, 236, 190), tree));
-        UpdateAppBrush("RowMultiSelectBrush",   MuteTreeCrossHighlight(dark ? Color.FromRgb(41, 55, 71)   : Color.FromRgb(220, 233, 245), tree));
+        UpdateAppBrush("RowMultiSelectBrush",   MuteTreeCrossHighlight(dark ? Color.FromRgb(36, 67, 100)   : Color.FromRgb(220, 233, 245), tree));
         UpdateAppBrush("RowDropOkBrush",        MuteRowHighlight(dark ? Color.FromRgb(40, 86, 58)   : Color.FromRgb(204, 245, 218), tree));
         UpdateAppBrush("RowDropBadBrush",       MuteRowHighlight(dark ? Color.FromRgb(110, 48, 48)  : Color.FromRgb(255, 214, 214), tree));
-        UpdateAppBrush("RowFlagForegroundBrush",dark ? Color.FromRgb(230, 232, 236) : Color.FromRgb(31, 35, 40));
-        UpdateAppBrush("RowActiveAccentBrush",  MuteRowHighlight(dark ? Color.FromRgb(91, 168, 232) : Color.FromRgb(31, 111, 178), tree)); // accent
+        UpdateAppBrush("RowFlagForegroundBrush",dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
+        UpdateAppBrush("RowActiveAccentBrush",  MuteRowHighlight(dark ? Color.FromRgb(143, 184, 154) : Color.FromRgb(106, 142, 116), tree)); // sage
         SetupToolButtonContent();
 
         Background = new SolidColorBrush(window);
@@ -200,7 +206,7 @@ public partial class MainWindow
         PagesTree.Foreground = foreground;
         TakeoffsTree.Foreground = foreground;
         TxtStatus.Foreground = foreground;
-        TxtScaleInfo.Foreground = new SolidColorBrush(dark ? Color.FromRgb(91, 168, 232) : Color.FromRgb(31, 111, 178)); // accent
+        TxtScaleInfo.Foreground = new SolidColorBrush(dark ? Color.FromRgb(78, 161, 255) : Color.FromRgb(31, 111, 178)); // info
         ObservationsListView.Background  = new SolidColorBrush(tree);
         ObservationsListView.Foreground  = foreground;
         if (_estimateList != null)
@@ -244,6 +250,18 @@ public partial class MainWindow
     private static void UpdateAppBrush(object key, Color color)
     {
         Application.Current.Resources[key] = new SolidColorBrush(color);
+    }
+
+    // Opens a button's attached ContextMenu on left-click, so a plain Button can
+    // act as a compact dropdown (used to declutter the Pages/Takeoffs toolbars).
+    private void DropdownButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button b && b.ContextMenu is ContextMenu menu)
+        {
+            menu.PlacementTarget = b;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
     }
 
     private static Color MuteRowHighlight(Color color, Color surface) =>

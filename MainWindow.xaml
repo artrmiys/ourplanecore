@@ -674,40 +674,7 @@
 
                         </StackPanel>
                     </ScrollViewer>
-                    <StackPanel DockPanel.Dock="Bottom" Margin="4,4">
-                        <TextBlock Text="Page Setup"
-                                   FontWeight="Normal"
-                                   FontSize="12"
-                                   Margin="0,0,0,6"/>
-                        <UniformGrid Columns="3" Margin="0,0,0,4">
-                            <Button x:Name="BtnSortPagesArchStruct"
-                                    Content="Sort A/S"
-                                    Click="BtnSortPagesArchStruct_Click"
-                                    Padding="4,3"
-                                    Margin="0,0,3,0"
-                                    FontSize="11"
-                                    ToolTip="Move imported A sheets to Arch, S sheets to Struct, and trailing '-' sheets to others"/>
-                            <Button x:Name="BtnSortPagesSuffix"
-                                    Content="D/Sec/WT"
-                                    Click="BtnSortPagesSuffix_Click"
-                                    Padding="4,3"
-                                    Margin="0,0,3,0"
-                                    FontSize="11"
-                                    ToolTip="Sort suffix sheets inside the selected Pages folder; if no folder is selected, sort all Pages"/>
-                            <Button x:Name="BtnRepairMeasurementPageLinks"
-                                    Content="Repair"
-                                    Click="BtnRepairMeasurementPageLinks_Click"
-                                    Padding="4,3"
-                                    FontSize="11"
-                                    ToolTip="Reconnect saved measurements to the current page folders"/>
-                        </UniformGrid>
-                        <Button x:Name="BtnFloatingPageSetup"
-                                Content="Name / Scale"
-                                Click="BtnFloatingPageSetup_Click"
-                                Padding="5,3"
-                                Margin="0,0,0,4"
-                                FontSize="11"
-                                ToolTip="Open floating page setup"/>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="4,6,4,4">
                         <ComboBox x:Name="ComboFolderTemplateMode"
                                   SelectionChanged="ComboFolderTemplateMode_SelectionChanged"
                                   FontSize="11"
@@ -718,27 +685,39 @@
                             <ComboBoxItem Content="EWP"/>
                         </ComboBox>
                         <UniformGrid Columns="2">
-                            <Button x:Name="BtnNewPageFolder"
-                                    Content="New Folder"
-                                    Click="BtnNewPageFolder_Click"
+                            <Button x:Name="BtnNewPageMenu"
+                                    Content="+ New  ▾"
+                                    Click="DropdownButton_Click"
                                     Padding="5,3"
-                                    FontSize="11"
                                     Margin="0,0,4,0"
-                                    ToolTip="Create a page folder under the selected Pages folder"/>
-                            <Button x:Name="BtnAutoPageFolders"
-                                    Content="Auto Folders"
-                                    Click="BtnAutoPageFolders_Click"
+                                    FontSize="11"
+                                    ToolTip="Create pages and folders">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="New Folder" Click="BtnNewPageFolder_Click"/>
+                                        <MenuItem Header="Blank Sheet" Click="BtnNewBlankPage_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Auto Folders" Click="BtnAutoPageFolders_Click"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                            <Button x:Name="BtnPageSetupMenu"
+                                    Content="Setup  ▾"
+                                    Click="DropdownButton_Click"
                                     Padding="5,3"
                                     FontSize="11"
-                                    ToolTip="Create standard PlanSwift page folders under selected Pages folder"/>
+                                    ToolTip="Page setup and sorting actions">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Name / Scale…" Click="BtnFloatingPageSetup_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Sort: A → Arch / S → Struct" Click="BtnSortPagesArchStruct_Click"/>
+                                        <MenuItem Header="Sort: D / Sec / WT suffix" Click="BtnSortPagesSuffix_Click"/>
+                                        <MenuItem Header="Repair page links" Click="BtnRepairMeasurementPageLinks_Click"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
                         </UniformGrid>
-                        <Button x:Name="BtnNewBlankPage"
-                                Content="Blank Sheet"
-                                Click="BtnNewBlankPage_Click"
-                                Padding="5,3"
-                                Margin="0,4,0,0"
-                                FontSize="11"
-                                ToolTip="Create an empty sheet under the selected Pages folder"/>
                     </StackPanel>
                     <Grid x:Name="PagesAndBookmarksHost" Margin="2,0,2,2">
                         <Grid.RowDefinitions>
@@ -1063,17 +1042,16 @@
                         <TextBlock x:Name="TxtTotal" Text="Total: вЂ”"
                                    FontWeight="Normal" FontSize="12" Margin="0,0,0,6"/>
                         <Grid Margin="0,0,0,4">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Button Content="New Folder" Click="BtnNewTakeoffFolder_Click"
+                            <Button Grid.Column="0"
+                                    Content="New Folder"
+                                    Click="BtnNewTakeoffFolder_Click"
                                     Padding="5,3" Margin="0,0,4,0"/>
                             <Button x:Name="BtnNewTakeoffItem"
                                     Grid.Column="1"
@@ -1081,19 +1059,28 @@
                                     Click="BtnNewItem_Click"
                                     Padding="5,3"
                                     ToolTip="Create a takeoff item (T)"/>
-                            <Button x:Name="BtnTakeoffRoofBase"
-                                    Grid.Column="2"
-                                    Content="Roof Base"
-                                    Click="Btn3dRfRoof_Click"
-                                    Padding="5,3"
-                                    Margin="6,0,0,0"
-                                    HorizontalAlignment="Left"
-                                    ToolTip="Create a roof base layer from the selected area takeoff(s)"/>
-                            <Button x:Name="BtnRightExportMenu"
+                            <Button x:Name="BtnTakeoffMoreMenu"
                                     Grid.Column="3"
+                                    Content="More  ▾"
+                                    Click="DropdownButton_Click"
+                                    Padding="5,3"
+                                    Margin="6,0,4,0"
+                                    ToolTip="More takeoff actions">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Roof Base from area" Click="Btn3dRfRoof_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Auto Tree" Click="BtnAutoTakeoffTree_Click"/>
+                                        <MenuItem Header="From Pages" Click="BtnAutoTakeoffFromPages_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Export to current Excel cell" Click="BtnExportCurrentExcel_Click"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                            <Button x:Name="BtnRightExportMenu"
+                                    Grid.Column="4"
                                     Click="BtnRightExportMenu_Click"
                                     Padding="5,3"
-                                    Margin="6,0,0,0"
                                     MinWidth="82"
                                     HorizontalAlignment="Right"
                                     ToolTip="Save or export quantities">
@@ -1108,28 +1095,7 @@
                                           VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
-                            <Button Grid.Row="1"
-                                    Grid.Column="3"
-                                    Content="Current Excel"
-                                    Click="BtnExportCurrentExcel_Click"
-                                    Padding="5,3"
-                                    Margin="6,3,0,0"
-                                    MinWidth="82"
-                                    HorizontalAlignment="Right"
-                                    ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
                         </Grid>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <Button x:Name="BtnAutoTakeoffTree"
-                                    Content="Auto Tree"
-                                    Click="BtnAutoTakeoffTree_Click"
-                                    Padding="5,3" Margin="0,0,4,0"
-                                    ToolTip="Create the standard PlanSwift takeoff folder tree under the selected folder"/>
-                            <Button x:Name="BtnAutoTakeoffFromPages"
-                                    Content="From Pages"
-                                    Click="BtnAutoTakeoffFromPages_Click"
-                                    Padding="5,3"
-                                    ToolTip="Create takeoff top folders from CAPS page/folder names, then add the standard tree"/>
-                        </StackPanel>
                     </StackPanel>
                     <DockPanel x:Name="TakeoffsTreeHost">
                         <TextBox x:Name="TakeoffsTreeSearchBox"
