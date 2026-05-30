@@ -16,4 +16,13 @@ public partial class MainWindow
         if (NoJobOverlay != null)
             NoJobOverlay.Visibility = _currentJob == null ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    // F1 keyboard shortcuts cheat-sheet.
+    private void ToggleShortcutsOverlay()
+    {
+        if (ShortcutsOverlay == null)
+            return;
+        ShortcutsOverlay.Visibility =
+            ShortcutsOverlay.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+    }
 }

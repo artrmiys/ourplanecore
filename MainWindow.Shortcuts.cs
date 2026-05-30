@@ -16,14 +16,28 @@ public partial class MainWindow
 
     private void MainWindow_GlobalPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.IsRepeat ||
-            e.Handled ||
-            ShouldSkipTakeoffShortcut(e.OriginalSource as DependencyObject))
+        if (e.IsRepeat || e.Handled)
+            return;
+
+        Key key = KeyboardShortcutKeys.EffectiveKey(e);
+
+        // F1 toggles the shortcuts overlay; Esc closes it (works regardless of focus).
+        if (key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None)
         {
+            ToggleShortcutsOverlay();
+            e.Handled = true;
+            return;
+        }
+        if (key == Key.Escape && ShortcutsOverlay is { Visibility: Visibility.Visible })
+        {
+            ShortcutsOverlay.Visibility = Visibility.Collapsed;
+            e.Handled = true;
             return;
         }
 
-        Key key = KeyboardShortcutKeys.EffectiveKey(e);
+        if (ShouldSkipTakeoffShortcut(e.OriginalSource as DependencyObject))
+            return;
+
         if (HandleGlobalModifiedShortcut(key))
         {
             e.Handled = true;

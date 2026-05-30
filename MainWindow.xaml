@@ -34,6 +34,39 @@
         <Geometry x:Key="IconOffset">M4,4 L4,9 M4,4 L9,4 M4,4 L10,10 M10,10 L10,6.5 M10,10 L6.5,10</Geometry>
         <Geometry x:Key="IconClose">M4,4 L12,12 M12,4 L4,12</Geometry>
 
+        <!-- Keyboard key chip for the F1 shortcuts overlay -->
+        <Style x:Key="KbdKey" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="MinWidth" Value="20"/>
+            <Setter Property="Margin" Value="0,0,9,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="KbdText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+        <Style x:Key="KbdAction" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        </Style>
+        <Style x:Key="KbdRow" TargetType="DockPanel">
+            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="LastChildFill" Value="True"/>
+        </Style>
+        <Style x:Key="KbdColHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
         <Style x:Key="RibbonIcon" TargetType="Path">
             <Setter Property="Width" Value="14"/>
             <Setter Property="Height" Value="14"/>
@@ -1119,6 +1152,70 @@
                             </StackPanel>
                         </Border>
                     </Grid>
+                    <!-- F1 keyboard shortcuts overlay -->
+                    <Grid x:Name="ShortcutsOverlay" Grid.Row="1" Panel.ZIndex="30"
+                          Background="#B0000000" Visibility="Collapsed">
+                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1" CornerRadius="10" Padding="28,22">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,16" LastChildFill="False">
+                                    <TextBlock DockPanel.Dock="Left" Text="Keyboard shortcuts"
+                                               FontSize="17" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource ControlForegroundBrush}"/>
+                                    <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                                               Text="Esc to close  ·  F1 toggles"
+                                               FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                </DockPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="230"/>
+                                        <ColumnDefinition Width="250"/>
+                                        <ColumnDefinition Width="250"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- TOOLS -->
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                                        <TextBlock Style="{StaticResource KbdColHeader}" Text="TOOLS"/>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="V"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Pan"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="E"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Select"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="S"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Scale"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="R"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Ruler"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="P"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Count"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="L"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Line"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="A"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Area"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="J"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Joist Area"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="X"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Area Cut"/></DockPanel>
+                                    </StackPanel>
+                                    <!-- VIEWPORT -->
+                                    <StackPanel Grid.Column="1" Margin="0,0,20,0">
+                                        <TextBlock Style="{StaticResource KbdColHeader}" Text="VIEWPORT &amp; DRAW"/>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Space"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Start / stop recording"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="T"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="New takeoff item"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="C"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Complete drawing"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Fit page"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F3"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Snap to points"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F8"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Ortho"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F9"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Box mode"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Esc"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Cancel current action"/></DockPanel>
+                                    </StackPanel>
+                                    <!-- EDIT / GLOBAL -->
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource KbdColHeader}" Text="EDIT &amp; GLOBAL"/>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+O"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Open job"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+S"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Save"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+Z"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Undo"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+C"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Copy"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+V"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Paste"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F2"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Rename in tree"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Del"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Delete selected"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+Shift+P"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Command palette"/></DockPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
                     <Border x:Name="ViewportLayerTraceBar"
                             Grid.Row="1"
                             HorizontalAlignment="Right"
