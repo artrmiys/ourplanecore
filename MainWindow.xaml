@@ -54,96 +54,169 @@
             <TabItem Header="Main">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal" Margin="6,3">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,9,0">
-                            <TextBlock Text="Job" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Open / Import" Click="BtnOpenImportMenu_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Open jobs, switch job folders, create jobs, or import PDF/PlanSwift into the current job"/>
-                            <Button Content="PlanSwift" Click="BtnImportPlanSwiftJob_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Separate PlanSwift job converter"/>
-                            <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Import PDF pages and measurement annotations as takeoffs"/>
+                    <StackPanel Orientation="Horizontal" Margin="6,1">
+
+                        <!-- GROUP: JOB -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Open / Import" Click="BtnOpenImportMenu_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Open jobs, switch job folders, create jobs, or import PDF/PlanSwift into the current job"/>
+                                    <Button Content="PlanSwift" Click="BtnImportPlanSwiftJob_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Separate PlanSwift job converter"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Import PDF pages and measurement annotations as takeoffs"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="JOB" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="PDF" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Export" Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Export selected/all sheets to a PDF"/>
-                            <Button Content="Name" Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Preview and apply PDF sheet names"/>
-                            <Button Content="Scale" Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Preview and apply PDF sheet scale"/>
-                            <Button Content="Name+Scale" Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Preview and apply PDF sheet names and scale"/>
-                            <Button Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Queue GPT fallback for missing PDF sheet metadata"/>
-                            <Button Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: PDF -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Export" Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Export selected/all sheets to a PDF"/>
+                                    <Button Content="Name" Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Preview and apply PDF sheet names"/>
+                                    <Button Content="Scale" Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Preview and apply PDF sheet scale"/>
+                                    <Button Content="Name+Scale" Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Preview and apply PDF sheet names and scale"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Queue GPT fallback for missing PDF sheet metadata"/>
+                                    <Button Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="PDF" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
+
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
             <TabItem Header="Page">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled">
-                    <StackPanel Orientation="Horizontal" Margin="6,3">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,9,0">
-                            <TextBlock Text="Add" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Add Pages" Click="BtnPageAddPages_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Import PDF pages into the current job"/>
-                            <Button Content="Blank Sheet" Click="BtnNewBlankPage_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Create an empty sheet in the current job without selecting a PDF"/>
-                            <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Import PDF pages plus PDF measurement annotations into takeoffs"/>
+                    <StackPanel Orientation="Horizontal" Margin="6,1">
+
+                        <!-- GROUP: ADD -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Add Pages" Click="BtnPageAddPages_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Import PDF pages into the current job"/>
+                                    <Button Content="Blank Sheet" Click="BtnNewBlankPage_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Create an empty sheet in the current job without selecting a PDF"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Import PDF pages plus PDF measurement annotations into takeoffs"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="ADD" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Rename / Sort" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Batch Rename" Click="BtnPageBatchRename_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Rename selected pages in order"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: ROTATE -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Left" Click="BtnPageRotateLeft_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Rotate the active page left"/>
+                                    <Button Content="Right" Click="BtnPageRotateRight_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Rotate the active page right"/>
+                                    <Button Content="180" Click="BtnPageRotate180_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Rotate the active page 180 degrees"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Level" Click="BtnPageLevel_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Reset page view to fit and clear temporary drawing input"/>
+                                    <Button Content="Batch Rotate" Click="BtnPageBatchRotate_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Rotate selected pages"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="ROTATE" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Rotate" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Left" Click="BtnPageRotateLeft_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Rotate the active page left"/>
-                            <Button Content="Right" Click="BtnPageRotateRight_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Rotate the active page right"/>
-                            <Button Content="180" Click="BtnPageRotate180_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Rotate the active page 180 degrees"/>
-                            <Button Content="Level" Click="BtnPageLevel_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Reset page view to fit and clear temporary drawing input"/>
-                            <Button Content="Batch Rotate" Click="BtnPageBatchRotate_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Rotate selected pages"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: FLIP -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Vertical" Click="BtnPageFlipVertical_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Flip the active page vertically"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Horizontal" Click="BtnPageFlipHorizontal_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Flip the active page horizontally"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="FLIP" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Flip" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Vertical" Click="BtnPageFlipVertical_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Flip the active page vertically"/>
-                            <Button Content="Horizontal" Click="BtnPageFlipHorizontal_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Flip the active page horizontally"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: IMAGE -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Invert" Click="BtnPageInvert_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Invert the active page colors"/>
+                                    <Button Content="Copy" Click="BtnPageCopyToClipboard_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Copy a rendered PNG of the active page to the clipboard"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Crop New Page" Click="BtnPageCropNew_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Create a new page from the currently visible viewport area"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="IMAGE" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Image Tools" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Invert" Click="BtnPageInvert_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Invert the active page colors"/>
-                            <Button Content="Crop New Page" Click="BtnPageCropNew_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Create a new page from the currently visible viewport area"/>
-                            <Button Content="Copy" Click="BtnPageCopyToClipboard_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Copy a rendered PNG of the active page to the clipboard"/>
+
+                        <Border Style="{StaticResource RibbonGroupSep}"/>
+
+                        <!-- GROUP: PAGE -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Batch Rename" Click="BtnPageBatchRename_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Rename selected pages in order"/>
+                                    <Button Content="Set Origin" Click="BtnPageSetOrigin_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Mark the current visible page center as the page origin"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button Content="Offset Origin" Click="BtnPageOffsetOrigin_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Nudge the stored page origin"/>
+                                    <Button Content="Close Page" Click="BtnPageClose_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Close the active page tab"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="PAGE" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
                         </StackPanel>
-                        <Separator/>
-                        <StackPanel Orientation="Horizontal" Margin="9,0,9,0">
-                            <TextBlock Text="Other" Style="{StaticResource TopCommandLabel}"/>
-                            <Button Content="Set Origin" Click="BtnPageSetOrigin_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Mark the current visible page center as the page origin"/>
-                            <Button Content="Offset Origin" Click="BtnPageOffsetOrigin_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Nudge the stored page origin"/>
-                            <Button Content="Close Page" Click="BtnPageClose_Click" Style="{StaticResource TopCommandButton}"
-                                    ToolTip="Close the active page tab"/>
-                        </StackPanel>
+
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -588,6 +661,27 @@
                     <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBorder}">
                         <DockPanel LastChildFill="True">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="BtnPagesOpenMenu"
+                                        Content="Open  ▾"
+                                        Click="DropdownButton_Click"
+                                        Padding="7,2"
+                                        Margin="0,0,4,0"
+                                        FontSize="11"
+                                        ToolTip="Open the selected Pages sheets">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Open as Tabs" Click="BtnPagesOpenTabs_Click"/>
+                                            <MenuItem Header="Detach to windows" Click="BtnPagesDetach_Click"/>
+                                            <Separator/>
+                                            <MenuItem Header="Tile on Monitor 2" Click="BtnPagesTileSecondMonitor_Click"/>
+                                            <MenuItem x:Name="BtnPagesTileSecondMonitorVertical"
+                                                      Header="Tile M2: vertical layout"
+                                                      IsCheckable="True"
+                                                      Checked="BtnPagesTileSecondMonitorVertical_Changed"
+                                                      Unchecked="BtnPagesTileSecondMonitorVertical_Changed"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
                                 <Button x:Name="BtnRefreshPagesTree"
                                         Content="R"
                                         Click="BtnRefreshPagesTree_Click"
@@ -621,71 +715,6 @@
                                        VerticalAlignment="Center"/>
                         </DockPanel>
                     </Border>
-                    <ScrollViewer DockPanel.Dock="Top"
-                                  VerticalScrollBarVisibility="Auto"
-                                  MaxHeight="320">
-                        <StackPanel Margin="4">
-                            <UniformGrid Columns="3" Margin="0,0,0,4">
-                                <Button x:Name="BtnPagesOpenTabs"
-                                        Content="Tabs"
-                                        Click="BtnPagesOpenTabs_Click"
-                                        Padding="4,3"
-                                        Margin="0,0,3,0"
-                                        FontSize="11"
-                                        ToolTip="Open selected Pages sheets as viewport tabs"/>
-                                <Button x:Name="BtnPagesDetach"
-                                        Content="Detach"
-                                        Click="BtnPagesDetach_Click"
-                                        Padding="4,3"
-                                        Margin="0,0,3,0"
-                                        FontSize="11"
-                                        ToolTip="Open selected Pages sheets in detached windows"/>
-                                <Grid>
-                                    <Button x:Name="BtnPagesTileSecondMonitor"
-                                            Content="Tile M2"
-                                            Click="BtnPagesTileSecondMonitor_Click"
-                                            Padding="4,3,19,3"
-                                            FontSize="11"
-                                            ToolTip="Open selected Pages sheets in detached windows and tile them on monitor 2"/>
-                                    <ToggleButton x:Name="BtnPagesTileSecondMonitorVertical"
-                                                  Width="14"
-                                                  Height="14"
-                                                  Padding="0"
-                                                  Margin="0,0,4,0"
-                                                  HorizontalAlignment="Right"
-                                                  VerticalAlignment="Center"
-                                                  Focusable="False"
-                                                  Checked="BtnPagesTileSecondMonitorVertical_Changed"
-                                                  Unchecked="BtnPagesTileSecondMonitorVertical_Changed"
-                                                  ToolTip="Vertical Tile M2 layout">
-                                        <ToggleButton.Template>
-                                            <ControlTemplate TargetType="{x:Type ToggleButton}">
-                                                <Grid>
-                                                    <Ellipse Stroke="{DynamicResource ControlBorderBrush}"
-                                                             StrokeThickness="1"
-                                                             Fill="{DynamicResource ControlBackgroundBrush}"/>
-                                                    <Ellipse x:Name="TileM2VerticalDot"
-                                                             Width="7"
-                                                             Height="7"
-                                                             Fill="#2563EB"
-                                                             Visibility="Collapsed"/>
-                                                </Grid>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Stroke" TargetName="TileM2VerticalDot" Value="#1D4ED8"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsChecked" Value="True">
-                                                        <Setter Property="Visibility" TargetName="TileM2VerticalDot" Value="Visible"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                                  </ToggleButton.Template>
-                                    </ToggleButton>
-                                </Grid>
-                            </UniformGrid>
-
-                        </StackPanel>
-                    </ScrollViewer>
                     <StackPanel DockPanel.Dock="Bottom" Margin="4,6,4,4">
                         <ComboBox x:Name="ComboFolderTemplateMode"
                                   SelectionChanged="ComboFolderTemplateMode_SelectionChanged"
