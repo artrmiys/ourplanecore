@@ -564,19 +564,10 @@
         <StackPanel x:Name="BottomToolStrip" DockPanel.Dock="Bottom"
                     Background="{DynamicResource ControlBackgroundBrush}">
 
-        <!-- Row 1: drawing & measurement tools -->
+        <!-- Row 1: drawing & measurement tools (centered) -->
         <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,3,6,2">
-        <DockPanel LastChildFill="True">
-            <!-- Zoom anchored to the far right edge -->
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="Fit"  Click="BtnFit_Click"    ToolTip="Fit page (F)"
-                        Style="{StaticResource ToolBtn}"/>
-                <Button Content="+"    Click="BtnZoomIn_Click"  ToolTip="Zoom in (Ctrl++)"
-                        MinWidth="28" Style="{StaticResource ToolBtn}"/>
-                <Button Content="-"    Click="BtnZoomOut_Click" ToolTip="Zoom out (Ctrl+-)"
-                        MinWidth="28" Style="{StaticResource ToolBtn}"/>
-            </StackPanel>
-            <WrapPanel x:Name="ToolStripRow1" Orientation="Horizontal" VerticalAlignment="Center">
+            <WrapPanel x:Name="ToolStripRow1" Orientation="Horizontal"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
 
             <TextBlock x:Name="TxtJobName" VerticalAlignment="Center"
                        Text="— no job —" FontSize="11" Margin="4,0"
@@ -710,16 +701,21 @@
                           Checked="BtnBoxMode_Checked" Unchecked="BtnBoxMode_Unchecked"
                           Padding="6,2" MinWidth="44"/>
 
+            <Border Style="{StaticResource ToolDiv}"/>
+            <Button Content="Fit"  Click="BtnFit_Click"    ToolTip="Fit page (F)"
+                    Style="{StaticResource ToolBtn}"/>
+            <Button Content="+"    Click="BtnZoomIn_Click"  ToolTip="Zoom in (Ctrl++)"
+                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
+            <Button Content="-"    Click="BtnZoomOut_Click" ToolTip="Zoom out (Ctrl+-)"
+                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
+
             </WrapPanel>
-        </DockPanel>
         </Border>
 
-        <!-- Row 2: Transform (inline), sheet scale, AI, status -->
+        <!-- Row 2: Transform (inline), sheet scale, AI, status (centered) -->
         <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,2,6,3">
-        <DockPanel LastChildFill="True">
-            <TextBlock x:Name="TxtTool" DockPanel.Dock="Right" VerticalAlignment="Center"
-                       Text="  Tool: Pan" FontSize="11" Margin="8,0,2,0"/>
-            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <WrapPanel Orientation="Horizontal"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
 
             <TextBlock Text="Transform" VerticalAlignment="Center" FontSize="11" Margin="2,0,6,0"
                        Foreground="{DynamicResource SecondaryForegroundBrush}"/>
@@ -778,8 +774,11 @@
                     Click="BtnOpenAiSettings_Click"
                     Style="{StaticResource ToolBtn}"/>
 
+            <Border Style="{StaticResource ToolDiv}"/>
+            <TextBlock x:Name="TxtTool" VerticalAlignment="Center"
+                       Text="Tool: Pan" FontSize="11" Margin="2,0"/>
+
             </WrapPanel>
-        </DockPanel>
         </Border>
         </StackPanel>
 
