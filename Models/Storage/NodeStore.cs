@@ -228,8 +228,18 @@ internal static class NodeStore
 
     public static void SortChildren(string parentFolder, bool descending)
     {
+        SortChildren(parentFolder, descending, NaturalNameComparer);
+    }
+
+    public static void SortTakeoffChildren(string parentFolder, bool descending)
+    {
+        SortChildren(parentFolder, descending, TakeoffDetailReferenceNameComparer.Instance);
+    }
+
+    private static void SortChildren(string parentFolder, bool descending, IComparer<string> displayNameComparer)
+    {
         var children = Directory.EnumerateDirectories(parentFolder)
-            .OrderBy(OurPlaneCoreJobStore.DisplayName, NaturalNameComparer)
+            .OrderBy(OurPlaneCoreJobStore.DisplayName, displayNameComparer)
             .ToList();
         if (descending) children.Reverse();
         ApplySiblingOrder(children);

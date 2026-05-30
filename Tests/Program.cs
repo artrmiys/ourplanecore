@@ -87,6 +87,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
     ("takeoff auto routing sorts page legend labels", TakeoffAutoRoutingSortsPageLegendLabels),
+    ("takeoff detail refs sort by sheet then detail", TakeoffDetailRefsSortBySheetThenDetail),
     ("sample guide project creates guide pages and screenshots", SampleJobGuideTests.CreatesGuidePagesScreenshotsAndTakeoffs),
     ("sheet legend live auto ignores stored auto order", SheetLegendLiveAutoIgnoresStoredAutoOrder),
     ("massing direct sqfts uses floor labels", MassingDirectSqftsUsesFloorLabels),
@@ -1179,6 +1180,10 @@ static void TakeoffAutoRoutingSortsPageLegendLabels()
         new TakeoffItem { Name = "ext 9.98", MeasurementType = "line" },
         new TakeoffItem { Name = "2x8 walls", MeasurementType = "line" },
         new TakeoffItem { Name = "corners", MeasurementType = "line" },
+        new TakeoffItem { Name = "14/S502", MeasurementType = "line" },
+        new TakeoffItem { Name = "13/S101", MeasurementType = "line" },
+        new TakeoffItem { Name = "2/S102", MeasurementType = "line" },
+        new TakeoffItem { Name = "14/S101", MeasurementType = "line" },
         new TakeoffItem { Name = "1st", MeasurementType = "area" },
         new TakeoffItem { Name = "count 10", MeasurementType = "point" },
         new TakeoffItem { Name = "count 2", MeasurementType = "point" },
@@ -1189,7 +1194,37 @@ static void TakeoffAutoRoutingSortsPageLegendLabels()
         TakeoffAutoRoutingService.SortPageLegendItems(items)
             .Select(item => item.Name));
 
-    AssertEqual("corners,ext 9.98,2x8 walls,2x4 walls,base,1st,porch,count 1,count 2,count 10", order, "page legend label sort");
+    AssertEqual(
+        "corners,ext 9.98,2x8 walls,2x4 walls,13/S101,14/S101,2/S102,14/S502,base,1st,porch,count 1,count 2,count 10",
+        order,
+        "page legend label sort");
+}
+
+static void TakeoffDetailRefsSortBySheetThenDetail()
+{
+    var items = new[]
+    {
+        new TakeoffItem { Name = "14/S502", MeasurementType = "line" },
+        new TakeoffItem { Name = "13/S101", MeasurementType = "line" },
+        new TakeoffItem { Name = "2/S102", MeasurementType = "line" },
+        new TakeoffItem { Name = "14/S101", MeasurementType = "line" },
+    };
+
+    string legendOrder = string.Join(",",
+        TakeoffAutoRoutingService.SortPageLegendItems(items)
+            .Select(item => item.Name));
+    AssertEqual("13/S101,14/S101,2/S102,14/S502", legendOrder, "detail refs legend order");
+
+    WithTempJob("detail_ref_sort", job =>
+    {
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S502", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S101", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S102", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S101", "#FF4444", "line");
+
+        OurPlaneCoreJobStore.SortTakeoffChildren(job.TakeoffsRoot, descending: false);
+        AssertTakeoffChildOrder(job.TakeoffsRoot, "13/S101,14/S101,2/S102,14/S502", "detail refs takeoff tree order");
+    });
 }
 
 static void SheetLegendLiveAutoIgnoresStoredAutoOrder()

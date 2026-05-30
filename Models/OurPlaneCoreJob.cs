@@ -201,6 +201,9 @@ public static class OurPlaneCoreJobStore
     public static void SortChildren(string parentFolder, bool descending) =>
         NodeStore.SortChildren(parentFolder, descending);
 
+    public static void SortTakeoffChildren(string parentFolder, bool descending) =>
+        NodeStore.SortTakeoffChildren(parentFolder, descending);
+
     public static void NormalizeOrder(string parentFolder) =>
         NodeStore.NormalizeOrder(parentFolder);
 

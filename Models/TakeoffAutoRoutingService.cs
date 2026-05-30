@@ -146,7 +146,7 @@ public static class TakeoffAutoRoutingService
             .ThenBy(entry => entry.Key.Group)
             .ThenBy(entry => entry.Key.Rank)
             .ThenBy(entry => entry.Key.Secondary)
-            .ThenBy(entry => entry.Key.Name, NaturalNameComparer)
+            .ThenBy(entry => entry.Key.Name, TakeoffDetailReferenceNameComparer.Instance)
             .Select(entry => entry.Item)
             .ToList();
 

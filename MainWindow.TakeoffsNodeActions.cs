@@ -332,7 +332,7 @@ public partial class MainWindow
     {
         try
         {
-            OurPlaneCoreJobStore.SortChildren(folderPath, descending);
+            OurPlaneCoreJobStore.SortTakeoffChildren(folderPath, descending);
             if (!TryRefreshTakeoffTreeParentOrderFast(folderPath, _takeoffsMultiSelection))
                 LoadTakeoffsForJob();
         }
