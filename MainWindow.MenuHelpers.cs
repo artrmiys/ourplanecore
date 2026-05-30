@@ -19,4 +19,16 @@ public partial class MainWindow
             item.Items.Add(child);
         return item;
     }
+
+    // Non-clickable caption used to label a section inside a context menu.
+    private static MenuItem MakeMenuHeader(string text)
+    {
+        return new MenuItem
+        {
+            Header = text,
+            IsEnabled = false,
+            FontWeight = System.Windows.FontWeights.SemiBold,
+            FontSize = 10.5,
+        };
+    }
 }

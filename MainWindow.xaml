@@ -7,6 +7,32 @@
         Background="{DynamicResource WindowBackgroundBrush}">
     <!-- Ribbon vocabulary (TopCommand*, Ribbon*) lives in App.xaml so dialogs can share it. -->
     <Window.Resources>
+        <!-- OurCore ribbon icon set (16x16, single-stroke, no fill, inherits button color) -->
+        <Geometry x:Key="IconFolderOpen">M2,4.8 L6,4.8 L7.4,6.3 L14,6.3 L14,12.6 L2,12.6 Z M2,12.6 L4,8.6 L15.4,8.6 L13.4,12.6</Geometry>
+        <Geometry x:Key="IconImport">M8,2.5 L8,9.6 M5,6.6 L8,9.8 L11,6.6 M3,12.8 L13,12.8</Geometry>
+        <Geometry x:Key="IconSheetMeasure">M4,2.5 L10,2.5 L12.5,5 L12.5,13.5 L4,13.5 Z M10,2.5 L10,5 L12.5,5 M6,8.6 L11,8.6 M6,10.8 L9.2,10.8</Geometry>
+        <Geometry x:Key="IconExport">M8,9.8 L8,2.6 M5,5.8 L8,2.6 L11,5.8 M3,12.8 L13,12.8</Geometry>
+        <Geometry x:Key="IconTag">M3,3.2 L8.6,3.2 L13.2,7.8 L8.6,12.4 L3,12.4 Z M5.6,5.8 A0.95,0.95 0 1 1 5.59,5.8 Z</Geometry>
+        <Geometry x:Key="IconRuler">M2,6 L6,2 L14,10 L10,14 Z M4.4,5.6 L5.7,6.9 M6.2,3.8 L7.5,5.1 M8,5.6 L9.3,6.9 M9.8,3.8 L11.1,5.1</Geometry>
+        <Geometry x:Key="IconClipboard">M5.2,3.2 L4,3.2 L4,13.6 L12,13.6 L12,3.2 L10.8,3.2 M6.2,2.4 L9.8,2.4 L9.8,4.4 L6.2,4.4 Z M6,7.4 L10,7.4 M6,10 L10,10</Geometry>
+        <Geometry x:Key="IconSparkle">M8,2 L9.2,6.8 L14,8 L9.2,9.2 L8,14 L6.8,9.2 L2,8 L6.8,6.8 Z</Geometry>
+        <Geometry x:Key="IconCrop">M5,2 L5,11 L14,11 M2,5 L11,5 L11,14</Geometry>
+
+        <Style x:Key="RibbonIcon" TargetType="Path">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Height" Value="14"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <Setter Property="StrokeThickness" Value="1.35"/>
+            <Setter Property="StrokeLineJoin" Value="Round"/>
+            <Setter Property="StrokeStartLineCap" Value="Round"/>
+            <Setter Property="StrokeEndLineCap" Value="Round"/>
+            <Setter Property="Fill" Value="Transparent"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+
         <Style x:Key="BookmarkDockToggleButton" TargetType="{x:Type ToggleButton}">
             <Setter Property="Width" Value="14"/>
             <Setter Property="Height" Value="14"/>
@@ -60,14 +86,29 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Open / Import" Click="BtnOpenImportMenu_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Open jobs, switch job folders, create jobs, or import PDF/PlanSwift into the current job"/>
-                                    <Button Content="PlanSwift" Click="BtnImportPlanSwiftJob_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Separate PlanSwift job converter"/>
+                                    <Button Click="BtnOpenImportMenu_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Open jobs, switch job folders, create jobs, or import PDF/PlanSwift into the current job">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFolderOpen}"/>
+                                            <TextBlock Text="Open / Import" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="BtnImportPlanSwiftJob_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Separate PlanSwift job converter">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconImport}"/>
+                                            <TextBlock Text="PlanSwift" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Import PDF pages and measurement annotations as takeoffs"/>
+                                    <Button Click="BtnImportPdfTakeoffs_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Import PDF pages and measurement annotations as takeoffs">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSheetMeasure}"/>
+                                            <TextBlock Text="PDF Takeoffs" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
@@ -81,20 +122,50 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="Export" Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Export selected/all sheets to a PDF"/>
-                                    <Button Content="Name" Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Preview and apply PDF sheet names"/>
-                                    <Button Content="Scale" Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Preview and apply PDF sheet scale"/>
-                                    <Button Content="Name+Scale" Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Preview and apply PDF sheet names and scale"/>
+                                    <Button Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Export selected/all sheets to a PDF">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconExport}"/>
+                                            <TextBlock Text="Export" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Preview and apply PDF sheet names">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconTag}"/>
+                                            <TextBlock Text="Name" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Preview and apply PDF sheet scale">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRuler}"/>
+                                            <TextBlock Text="Scale" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Preview and apply PDF sheet names and scale">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconClipboard}"/>
+                                            <TextBlock Text="Name+Scale" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Queue GPT fallback for missing PDF sheet metadata"/>
-                                    <Button Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Style="{StaticResource TopCommandButton}"
-                                            ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale"/>
+                                    <Button Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Queue GPT fallback for missing PDF sheet metadata">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSparkle}"/>
+                                            <TextBlock Text="AI Fill" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="BtnPdfMetadataCropHints_Click" Style="{StaticResource TopCommandButton}"
+                                            ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconCrop}"/>
+                                            <TextBlock Text="Crop Hints" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">
