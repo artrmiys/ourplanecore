@@ -121,8 +121,9 @@
         <TabControl x:Name="TopMainTabs"
                     DockPanel.Dock="Top"
                     ItemContainerStyle="{StaticResource CommandTabItem}"
-                    MinHeight="104"
-                    MaxHeight="112"
+                    Template="{StaticResource SegmentedTabControl}"
+                    MinHeight="110"
+                    MaxHeight="120"
                     FontSize="11"
                     Background="{DynamicResource ControlBackgroundBrush}"
                     BorderBrush="{DynamicResource ControlBorderBrush}">
@@ -541,7 +542,7 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem MinWidth="150">
-                <TextBlock x:Name="TxtStatusPage" Text="вЂ”"/>
+                <TextBlock x:Name="TxtStatusPage" Text="—"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
@@ -554,7 +555,7 @@
         <ToolBar x:Name="MainToolBar" DockPanel.Dock="Bottom" Background="{DynamicResource ControlBackgroundBrush}">
 
             <TextBlock x:Name="TxtJobName" VerticalAlignment="Center"
-                       Text="вЂ” no job вЂ”" FontSize="11" Margin="4,0"
+                       Text="— no job —" FontSize="11" Margin="4,0"
                        FontWeight="Normal"/>
 
             <Separator/>
@@ -751,7 +752,7 @@
                      KeyDown="TxtScaleRatio_KeyDown"/>
             <Button Content="Set" Click="BtnSetScale_Click"
                     ToolTip="Apply scale" Style="{StaticResource ToolBtn}"/>
-            <Button Content="в–ѕ Presets" Click="BtnScalePresets_Click"
+            <Button Content="▾ Presets" Click="BtnScalePresets_Click"
                     ToolTip="Common scale presets" Style="{StaticResource ToolBtn}"/>
             <TextBlock x:Name="TxtScaleInfo" VerticalAlignment="Center"
                        FontSize="11" Margin="4,0"/>
@@ -1391,7 +1392,7 @@
                         </DockPanel>
                     </Border>
                     <StackPanel DockPanel.Dock="Bottom" Margin="4,4">
-                        <TextBlock x:Name="TxtTotal" Text="Total: вЂ”"
+                        <TextBlock x:Name="TxtTotal" Text="Total: —"
                                    FontWeight="Normal" FontSize="12" Margin="0,0,0,6"/>
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
