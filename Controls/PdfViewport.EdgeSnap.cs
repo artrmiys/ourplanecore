@@ -11,7 +11,13 @@ public sealed partial class PdfViewport
     private EdgeSnapPreview? _edgeSnapPreview;
     private int _edgeSnapCycleMode;
 
-    private bool UpdateEdgeSnapPreview(SKPoint rawPdf)
+    private const int EdgeSnapModeVertices = 0;
+    private const int EdgeSnapModeSingleEdge = 1;
+    private const int EdgeSnapModeAdjacentEdges = 2;
+    private const int EdgeSnapModeContour = 3;
+    private const int EdgeSnapModeCount = 4;
+
+    private bool UpdateEdgeSnapPreview(SKPoint rawPdf, bool resetModeForNewCandidate = true)
     {
         if (!CanUseEdgeSnapPreview())
         {
@@ -30,10 +36,18 @@ public sealed partial class PdfViewport
             _edgeSnapCandidate.SegmentIndex != candidate.SegmentIndex ||
             _edgeSnapCandidate.Closed != candidate.Closed)
         {
-            _edgeSnapCycleMode = 0;
+            if (resetModeForNewCandidate)
+                _edgeSnapCycleMode = EdgeSnapModeVertices;
         }
 
         _edgeSnapCandidate = candidate;
+        if (_edgeSnapCycleMode == EdgeSnapModeVertices)
+        {
+            _edgeSnapPreview = null;
+            RequestRepaint();
+            return true;
+        }
+
         _edgeSnapPreview = BuildEdgeSnapPreview(candidate, _edgeSnapCycleMode);
         SetSnapPreview(null);
         RequestRepaint();
@@ -45,19 +59,26 @@ public sealed partial class PdfViewport
         if (!_lastPointerPdf.HasValue || !CanUseEdgeSnapPreview())
             return false;
 
-        _edgeSnapCycleMode = (_edgeSnapCycleMode + 1) % 3;
-        return UpdateEdgeSnapPreview(_lastPointerPdf.Value);
+        _edgeSnapCycleMode = (_edgeSnapCycleMode + 1) % EdgeSnapModeCount;
+        bool found = UpdateEdgeSnapPreview(_lastPointerPdf.Value, resetModeForNewCandidate: false);
+        if (found)
+            PostStatus($"Edge Snap: {EdgeSnapModeTitle(_edgeSnapCycleMode)}. Tab cycles vertices / edge / edges / contour.");
+        return found;
     }
 
     private bool TryCommitEdgeSnapPreview(SKPoint rawPdf)
     {
-        if (!UpdateEdgeSnapPreview(rawPdf) || _edgeSnapPreview == null)
+        if (!UpdateEdgeSnapPreview(rawPdf) ||
+            _edgeSnapCycleMode == EdgeSnapModeVertices ||
+            _edgeSnapPreview == null)
+        {
             return false;
+        }
 
         List<SKPoint> points = _edgeSnapPreview.Points.Select(ClonePoint).ToList();
         if (_tool == ViewerTool.Line)
         {
-            if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == 2 && points.Count >= 3)
+            if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == EdgeSnapModeContour && points.Count >= 3)
                 points.Add(points[0]);
             if (points.Count < 2)
                 return false;
@@ -74,10 +95,15 @@ public sealed partial class PdfViewport
             if (points.Count < 2)
                 return false;
 
+            bool finalizeClosedContour =
+                _edgeSnapPreview.ClosedContour &&
+                _edgeSnapPreview.Mode == EdgeSnapModeContour &&
+                points.Count >= 3;
+
             _drawPts.Clear();
             _drawPts.AddRange(points);
             ClearEdgeSnapPreview();
-            if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == 2 && points.Count >= 3)
+            if (finalizeClosedContour)
                 FinalizeDrawing();
             else
             {
@@ -102,12 +128,12 @@ public sealed partial class PdfViewport
 
     private void ClearEdgeSnapPreview()
     {
-        if (_edgeSnapCandidate == null && _edgeSnapPreview == null && _edgeSnapCycleMode == 0)
+        if (_edgeSnapCandidate == null && _edgeSnapPreview == null && _edgeSnapCycleMode == EdgeSnapModeVertices)
             return;
 
         _edgeSnapCandidate = null;
         _edgeSnapPreview = null;
-        _edgeSnapCycleMode = 0;
+        _edgeSnapCycleMode = EdgeSnapModeVertices;
         RequestRepaint();
     }
 
@@ -200,15 +226,15 @@ public sealed partial class PdfViewport
     {
         List<SKPoint> points = mode switch
         {
-            1 => BuildAdjacentEdgeSnapPoints(candidate),
-            2 => candidate.Contour.Select(ClonePoint).ToList(),
+            EdgeSnapModeAdjacentEdges => BuildAdjacentEdgeSnapPoints(candidate),
+            EdgeSnapModeContour => candidate.Contour.Select(ClonePoint).ToList(),
             _ => BuildSingleEdgeSnapPoints(candidate),
         };
 
         string label = mode switch
         {
-            1 => "edge+",
-            2 => candidate.Closed ? "contour" : "polyline",
+            EdgeSnapModeAdjacentEdges => "edges",
+            EdgeSnapModeContour => candidate.Closed ? "contour" : "polyline",
             _ => "edge",
         };
         return new EdgeSnapPreview(points, mode, candidate.Closed, label);
@@ -261,7 +287,7 @@ public sealed partial class PdfViewport
         path.MoveTo(_edgeSnapPreview.Points[0]);
         for (int i = 1; i < _edgeSnapPreview.Points.Count; i++)
             path.LineTo(_edgeSnapPreview.Points[i]);
-        if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == 2)
+        if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == EdgeSnapModeContour)
             path.Close();
 
         using var glow = new SKPaint
@@ -312,6 +338,14 @@ public sealed partial class PdfViewport
     }
 
     private static SKPoint ClonePoint(SKPoint point) => new(point.X, point.Y);
+
+    private static string EdgeSnapModeTitle(int mode) => mode switch
+    {
+        EdgeSnapModeSingleEdge => "edge",
+        EdgeSnapModeAdjacentEdges => "edges",
+        EdgeSnapModeContour => "contour",
+        _ => "vertices",
+    };
 
     private static bool SamePointPair(SKPoint a, SKPoint b, SKPoint start, SKPoint end) =>
         EdgeSamePoint(a, start) && EdgeSamePoint(b, end) ||
