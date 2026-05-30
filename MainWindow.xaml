@@ -566,6 +566,14 @@
 
         <!-- Row 1: drawing & measurement tools (centered) -->
         <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,3,6,2">
+            <DockPanel LastChildFill="True">
+            <Button x:Name="BtnExportCurrentExcelCell" DockPanel.Dock="Right"
+                    Content="→ Excel cell"
+                    Click="BtnExportCurrentExcel_Click"
+                    Style="{StaticResource ToolBtn}"
+                    VerticalAlignment="Center"
+                    Margin="8,0,2,0"
+                    ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
             <WrapPanel x:Name="ToolStripRow1" Orientation="Horizontal"
                        HorizontalAlignment="Center" VerticalAlignment="Center">
 
@@ -710,18 +718,11 @@
                     MinWidth="28" Style="{StaticResource ToolBtn}"/>
 
             </WrapPanel>
+            </DockPanel>
         </Border>
 
-        <!-- Row 2: Transform (inline), sheet scale, AI, status (centered) + Excel cell pinned right -->
+        <!-- Row 2: Transform (inline), sheet scale, AI, status (centered) -->
         <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,2,6,3">
-            <DockPanel LastChildFill="True">
-            <Button x:Name="BtnExportCurrentExcelCell" DockPanel.Dock="Right"
-                    Content="→ Excel cell"
-                    Click="BtnExportCurrentExcel_Click"
-                    Style="{StaticResource ToolBtn}"
-                    VerticalAlignment="Center"
-                    Margin="8,0,2,0"
-                    ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
             <WrapPanel Orientation="Horizontal"
                        HorizontalAlignment="Center" VerticalAlignment="Center">
 
@@ -787,7 +788,6 @@
                        Text="Tool: Pan" FontSize="11" Margin="2,0"/>
 
             </WrapPanel>
-            </DockPanel>
         </Border>
         </StackPanel>
 
