@@ -485,40 +485,52 @@
 
             <Separator/>
 
-            <!-- Transform selected measurements / markups -->
-            <TextBlock Text="Edit" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}" Margin="2,0,4,0"/>
-            <Button x:Name="BtnMirrorHorizontal" Content="Flip H" Click="BtnMirrorHorizontal_Click"
-                    ToolTip="Mirror selected measurements/markups horizontally"
-                    Style="{StaticResource ToolBtn}" MinWidth="52"/>
-            <Button x:Name="BtnMirrorVertical" Content="Flip V" Click="BtnMirrorVertical_Click"
-                    ToolTip="Mirror selected measurements/markups vertically"
-                    Style="{StaticResource ToolBtn}" MinWidth="52"/>
-            <TextBlock Text="Rot" VerticalAlignment="Center" FontSize="11" Margin="6,0,2,0"/>
-            <Slider x:Name="SliderRotateSelection"
-                    Width="100"
-                    Minimum="-180"
-                    Maximum="180"
-                    Value="0"
-                    TickFrequency="15"
-                    Style="{StaticResource RibbonSlider}"
-                    ValueChanged="SliderRotateSelection_ValueChanged"
-                    ToolTip="Rotate selected geometry around its center; hold Shift for 15 deg steps"/>
-            <Button x:Name="BtnResetRotateSelection" Content="0" Click="BtnResetRotateSelection_Click"
-                    ToolTip="Center rotate slider for another relative adjustment"
-                    Style="{StaticResource ToolBtn}" MinWidth="24"/>
-            <TextBlock Text="Scale" VerticalAlignment="Center" FontSize="11" Margin="6,0,2,0"/>
-            <Slider x:Name="SliderScaleSelection"
-                    Width="90"
-                    Minimum="0.25"
-                    Maximum="3"
-                    Value="1"
-                    TickFrequency="0.25"
-                    Style="{StaticResource RibbonSlider}"
-                    ValueChanged="SliderScaleSelection_ValueChanged"
-                    ToolTip="Scale selected geometry around its center"/>
-            <Button x:Name="BtnResetScaleSelection" Content="1x" Click="BtnResetScaleSelection_Click"
-                    ToolTip="Center scale slider for another relative adjustment"
-                    Style="{StaticResource ToolBtn}" MinWidth="30"/>
+            <!-- Transform selected measurements / markups (compact dropdown popup) -->
+            <ToggleButton x:Name="BtnTransformPopup" Content="Transform  ▾"
+                          ToolTip="Flip, rotate and scale the selected geometry"
+                          Padding="8,2" MinWidth="92"/>
+            <Popup IsOpen="{Binding IsChecked, ElementName=BtnTransformPopup}"
+                   PlacementTarget="{Binding ElementName=BtnTransformPopup}"
+                   Placement="Top" StaysOpen="False" AllowsTransparency="True">
+                <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                        BorderBrush="{DynamicResource ControlBorderBrush}"
+                        BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnMirrorHorizontal" Content="Flip H" Click="BtnMirrorHorizontal_Click"
+                                ToolTip="Mirror selected measurements/markups horizontally"
+                                Style="{StaticResource ToolBtn}" MinWidth="52"/>
+                        <Button x:Name="BtnMirrorVertical" Content="Flip V" Click="BtnMirrorVertical_Click"
+                                ToolTip="Mirror selected measurements/markups vertically"
+                                Style="{StaticResource ToolBtn}" MinWidth="52"/>
+                        <TextBlock Text="Rot" VerticalAlignment="Center" FontSize="11" Margin="10,0,2,0"/>
+                        <Slider x:Name="SliderRotateSelection"
+                                Width="100"
+                                Minimum="-180"
+                                Maximum="180"
+                                Value="0"
+                                TickFrequency="15"
+                                Style="{StaticResource RibbonSlider}"
+                                ValueChanged="SliderRotateSelection_ValueChanged"
+                                ToolTip="Rotate selected geometry around its center; hold Shift for 15 deg steps"/>
+                        <Button x:Name="BtnResetRotateSelection" Content="0" Click="BtnResetRotateSelection_Click"
+                                ToolTip="Center rotate slider for another relative adjustment"
+                                Style="{StaticResource ToolBtn}" MinWidth="24"/>
+                        <TextBlock Text="Scale" VerticalAlignment="Center" FontSize="11" Margin="10,0,2,0"/>
+                        <Slider x:Name="SliderScaleSelection"
+                                Width="90"
+                                Minimum="0.25"
+                                Maximum="3"
+                                Value="1"
+                                TickFrequency="0.25"
+                                Style="{StaticResource RibbonSlider}"
+                                ValueChanged="SliderScaleSelection_ValueChanged"
+                                ToolTip="Scale selected geometry around its center"/>
+                        <Button x:Name="BtnResetScaleSelection" Content="1x" Click="BtnResetScaleSelection_Click"
+                                ToolTip="Center scale slider for another relative adjustment"
+                                Style="{StaticResource ToolBtn}" MinWidth="30"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
 
             <Separator/>
 
