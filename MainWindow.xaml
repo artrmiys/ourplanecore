@@ -122,8 +122,8 @@
                     DockPanel.Dock="Top"
                     ItemContainerStyle="{StaticResource CommandTabItem}"
                     Template="{StaticResource SegmentedTabControl}"
-                    MinHeight="110"
-                    MaxHeight="120"
+                    MinHeight="96"
+                    MaxHeight="106"
                     FontSize="11"
                     Background="{DynamicResource ControlBackgroundBrush}"
                     BorderBrush="{DynamicResource ControlBorderBrush}">
