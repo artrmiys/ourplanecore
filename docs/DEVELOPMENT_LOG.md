@@ -1,5 +1,58 @@
 ﻿# Development Log
 
+## 2026-05-30 Blank Job / Blank Sheet
+
+- Added a no-PDF job creation path and blank sheet creation inside normal
+  OurPlaneCore jobs.
+- Existing PDF job creation remains folder-first and recursive. The new route
+  is explicit:
+  - Open Job dialog: `Blank job`;
+  - `Open / Import`: `Blank Job...`;
+  - Page tab, Pages side panel, Pages tree context menu, and command palette:
+    `Blank Sheet`.
+- Blank sheets create an internal generated `*.blank.pdf` under the job
+  `sources` folder and still write normal `Data.xml`, `source.json`, and
+  `source_pdf.json`. This keeps viewport tabs, scale, measurements, export, and
+  thumbnails on the existing page contract.
+- Blank sheet defaults to a landscape `36 in x 24 in` PDF page and starts
+  unscaled; the user can rename/scale it through existing Page Setup.
+- Optimization check:
+  - today's app log still shows viewport PyMuPDF/layer render as the primary
+    visible lag source, with repeated `Viewport slow layer render` entries and
+    a packaged validation run showing `Viewport slow layer render 1057ms`;
+  - no render-pipeline optimization was mixed into this feature change.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`250/250`), compressed single-file publish/deploy to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `D9B24F614A91D80A35F340A06823BF06C114B11659697C379EAF9FC40E296A0C`, shortcut
+  target/workdir check, and packaged launch log check with `0` errors after
+  the latest `Application startup.`.
+- Code commit: `5a2eb9e Add blank job and sheet`.
+- Detailed handoff:
+  `docs/BLANK_JOB_BLANK_SHEET_HANDOFF_2026_05_30.md`.
+
+## 2026-05-30 Detail Reference Sorting
+
+- Added detail reference sorting for takeoff names like `14/S502` and
+  `13/S101`.
+- Rule:
+  - sort first by the sheet after `/` (`S101`, `S502`);
+  - then sort by the detail number before `/`;
+  - apply only to that detail-reference shape;
+  - keep natural name sorting for normal takeoff names.
+- Applied to live sheet legend/page takeoff auto order and Takeoffs tree child
+  sorting. Pages tree sorting was not changed.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`249/249`), compressed package deploy, SHA256
+  `494E5ECF70EDBF33B72813BC999697643FAD7F4C03A77AE628EF569243F52DDF`, shortcut
+  check, and packaged launch log check with `0` errors after the latest
+  `Application startup.`.
+- Code commit: `3bc8b93 Sort detail refs by sheet`.
+
 ## 2026-05-28 PDF Full Render Cache
 
 - Extended the persisted PyMuPDF cache from only the first `0.35` preview to
