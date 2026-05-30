@@ -106,6 +106,7 @@ public partial class MainWindow
             Margin = new Thickness(2),
         };
         _rightWorkspaceTabs = tabs;
+        tabs.ItemContainerStyle = (Style)FindResource("WorkspaceTabItem");
         tabs.SetResourceReference(Control.BackgroundProperty, "PanelBackgroundBrush");
         tabs.SetResourceReference(Control.ForegroundProperty, "ControlForegroundBrush");
         tabs.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");

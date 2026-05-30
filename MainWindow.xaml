@@ -909,6 +909,7 @@
                         <TabControl x:Name="PagesSideTabs"
                                     Grid.Row="0"
                                     AutomationProperties.AutomationId="PagesSideTabs"
+                                    ItemContainerStyle="{StaticResource WorkspaceTabItem}"
                                     Background="{DynamicResource PanelBackgroundBrush}"
                                     Foreground="{DynamicResource ControlForegroundBrush}"
                                     BorderBrush="{DynamicResource ControlBorderBrush}">
