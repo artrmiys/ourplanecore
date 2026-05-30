@@ -80,6 +80,9 @@ public partial class MainWindow
         estimateActions.Children.Add(_estimateSelectButton);
         estimateActions.Children.Add(_estimateGoToPageButton);
         estimateActions.Children.Add(_estimatePropertiesButton);
+        estimateActions.Children.Add(EstimateActionButton("→ Excel cell",
+            "Write the selected takeoff folder/item to the active cell in an already open Excel workbook",
+            () => BtnExportCurrentExcel_Click(this, new RoutedEventArgs())));
         DockPanel.SetDock(estimateActions, Dock.Right);
         estimateToolbar.Children.Add(estimateActions);
         estimateToolbar.Children.Add(_estimateFilterBox);
