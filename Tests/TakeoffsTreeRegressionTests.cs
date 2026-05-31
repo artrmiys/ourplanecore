@@ -240,7 +240,7 @@ internal static class TakeoffsTreeRegressionTests
             pagesSource.Contains("RefreshPageTreeRowsByFolderKeys(pageFolders", StringComparison.Ordinal),
             "targeted selection refresh should repaint touched page rows without rebuilding linked takeoff nodes");
 
-        string helpersSource = ReadRepoFile("MainWindow.TreeHelpers.cs");
+        string helpersSource = ReadRepoFile("MainWindow.EstimateRows.cs");
         AssertTrue(
             helpersSource.Contains("private void UpdateTotalDisplay(bool refreshEstimate = true)", StringComparison.Ordinal) &&
             helpersSource.Contains("if (refreshEstimate)", StringComparison.Ordinal),
