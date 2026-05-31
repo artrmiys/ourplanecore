@@ -845,6 +845,14 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("Viewport PyMuPDF render cache hit", StringComparison.Ordinal) &&
             layers.Contains("!render.LayersCaptured && _cachedLayers == null", StringComparison.Ordinal),
             "full render cache hits should be logged and must not bypass unknown layer discovery");
+        AssertFalse(
+            layers.Contains("if (request.ResetLayerStates)\r\n            return false", StringComparison.Ordinal) ||
+            layers.Contains("if (request.ResetLayerStates)\n            return false", StringComparison.Ordinal),
+            "initial reset layer renders should be allowed to use captured clean render cache hits");
+        AssertTrue(
+            layers.Contains("if (request.ResetLayerStates)", StringComparison.Ordinal) &&
+            layers.Contains("_layerStates.Clear();", StringComparison.Ordinal),
+            "cached clean render hits should rebuild reset layer state from cached layer metadata");
         AssertTrue(
             service.Contains("LayersCaptured = true", StringComparison.Ordinal) &&
             service.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal),

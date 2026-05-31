@@ -99,8 +99,6 @@ public sealed partial class PdfViewport
 
     private bool TryApplyPersistedCleanLayerRender(LayerRenderRequest request)
     {
-        if (request.ResetLayerStates)
-            return false;
         if (!PdfPreviewRenderCache.IsCleanRenderRequest(
                 request.PdfPath,
                 request.PdfIndex,
@@ -125,12 +123,16 @@ public sealed partial class PdfViewport
         if (bitmap == null)
             return false;
 
-        if (_cachedLayers == null && render.LayersCaptured)
-        {
-            _cachedLayers = render.Layers
+        IReadOnlyList<PdfLayerInfo>? capturedLayers = render.LayersCaptured
+            ? render.Layers
                 .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
-                .ToList();
-            PdfLayersDiscovered?.Invoke(_cachedLayers);
+                .ToList()
+            : null;
+
+        if (_cachedLayers == null && capturedLayers != null)
+        {
+            _cachedLayers = capturedLayers;
+            PdfLayersDiscovered?.Invoke(capturedLayers);
         }
 
         _pageBitmap?.Dispose();
@@ -139,12 +141,26 @@ public sealed partial class PdfViewport
         _pdfH = render.HeightPt;
         _bitmapScale = _pdfW > 0 ? _pageBitmap.Width / _pdfW : request.RenderScale;
         _renderedScale = _bitmapScale;
-        if (_cachedLayers != null)
+        if (request.ResetLayerStates)
+        {
+            _layerStates.Clear();
+            IEnumerable<PdfLayerInfo> resetLayers = capturedLayers ?? _cachedLayers ?? Array.Empty<PdfLayerInfo>();
+            foreach (PdfLayerInfo layer in resetLayers)
+                _layerStates[layer.Number] = layer.IsOn;
+        }
+
+        if (render.LayersCaptured)
+        {
+            UpdateLayerSnapshot(render.Layers);
+        }
+        else if (_cachedLayers != null)
         {
             UpdateLayerSnapshot(_cachedLayers
                 .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn)));
         }
 
+        if (_pdfSnapEnabled && request.ResetLayerStates)
+            QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
