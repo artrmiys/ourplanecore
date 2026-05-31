@@ -35,6 +35,7 @@ internal static class TakeoffsTreeRegressionTests
         string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
         string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
+        string prefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetchDeferred(");
 
         AssertFalse(
             loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
@@ -62,12 +63,18 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("QueueNearbyPagePreviewPrefetch(viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("LoadSheetOverlay(viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
+
+        AssertTrue(
+            prefetchMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
+            prefetchMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            prefetchMethod.Contains("QueueNearbyPagePreviewPrefetch(viewportPage)", StringComparison.Ordinal),
+            "nearby preview prefetch should be queued after page-open critical work and guarded against stale pages");
     }
 
     public static void ProgrammaticPageSelectionOpensViewportDirectly()

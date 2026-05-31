@@ -381,8 +381,8 @@ public partial class MainWindow
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            QueueNearbyPagePreviewPrefetch(viewportPage);
-            trace?.Mark("prefetch");
+            QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
+            trace?.Mark("prefetch-queued");
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
@@ -418,6 +418,24 @@ public partial class MainWindow
         deferredVersion == _pageOpenDeferredVersion &&
         _currentPage != null &&
         IsSamePageFolder(_currentPage.FolderPath, pageFolder);
+
+    private void QueueNearbyPagePreviewPrefetchDeferred(int deferredVersion, PageInfo viewportPage)
+    {
+        Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                try
+                {
+                    if (IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                        QueueNearbyPagePreviewPrefetch(viewportPage);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, $"Nearby page preview prefetch failed for {viewportPage.Name}");
+                }
+            }),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
 
     private void ShowDuplicateSheetMeasurementHint(PageInfo page)
     {
