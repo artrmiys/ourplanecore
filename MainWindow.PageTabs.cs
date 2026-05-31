@@ -53,6 +53,24 @@ public partial class MainWindow
         LoadPageFromTab(tab, page);
     }
 
+    private void OpenPageByFolder(string folderPath)
+    {
+        if (_currentPage != null &&
+            IsSamePageFolder(_currentPage.FolderPath, folderPath))
+        {
+            return;
+        }
+
+        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folderPath);
+        if (page == null)
+        {
+            TxtStatus.Text = $"Page no longer exists: {OurPlaneCoreJobStore.DisplayName(folderPath)}.";
+            return;
+        }
+
+        OpenPageInActiveTab(page);
+    }
+
     private void OpenPageInNewTab(PageInfo page) =>
         OpenPagesInNewTabs([page], "Pages tree");
 

@@ -70,6 +70,25 @@ internal static class TakeoffsTreeRegressionTests
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
     }
 
+    public static void ProgrammaticPageSelectionOpensViewportDirectly()
+    {
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string selectMethod = SliceMethod(pagesTree, "private void SelectPageByFolder(string folderPath)");
+        string openMethod = SliceMethod(pageTabs, "private void OpenPageByFolder(string folderPath)");
+
+        AssertTrue(
+            selectMethod.Contains("OpenPageByFolder(folderPath)", StringComparison.Ordinal),
+            "programmatic page selection should not rely only on TreeView SelectedItemChanged to open the viewport");
+        AssertTrue(
+            openMethod.Contains("OurPlaneCoreJobStore.TryReadPage(folderPath)", StringComparison.Ordinal) &&
+            openMethod.Contains("OpenPageInActiveTab(page)", StringComparison.Ordinal),
+            "direct programmatic page open should read the selected page and load it through the normal page tab path");
+        AssertTrue(
+            openMethod.Contains("IsSamePageFolder(_currentPage.FolderPath, folderPath)", StringComparison.Ordinal),
+            "direct page-open fallback should avoid duplicate reloads when the selection event already opened the page");
+    }
+
     public static void SectionSelectionKeyHandlesLegacyUnfiledItem()
     {
         Type mainWindowType = typeof(MainWindow);

@@ -391,14 +391,21 @@ public partial class MainWindow
 
     private void SelectPageByFolder(string folderPath)
     {
+        bool selected = false;
         WithTreeExpansionTrackingSuppressed(() =>
         {
             foreach (TreeViewItem item in PagesTree.Items)
             {
                 if (SelectPageByFolder(item, folderPath))
+                {
+                    selected = true;
                     return;
+                }
             }
         });
+
+        if (selected)
+            OpenPageByFolder(folderPath);
     }
 
     private static bool SelectPageByFolder(TreeViewItem item, string folderPath)

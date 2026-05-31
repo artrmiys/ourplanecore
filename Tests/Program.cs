@@ -59,6 +59,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression job save avoids legacy pdf sidecar", TakeoffsTreeRegressionTests.JobSaveDoesNotWriteLegacyPdfSidecar),
     ("takeoff tree regression job page load gates legacy autoload", TakeoffsTreeRegressionTests.JobPageLoadGatesLegacyAutoLoad),
     ("page open defers heavy ui work", TakeoffsTreeRegressionTests.PageOpenDefersHeavyUiWork),
+    ("programmatic page selection opens viewport directly", TakeoffsTreeRegressionTests.ProgrammaticPageSelectionOpensViewportDirectly),
     ("takeoff tree regression section key handles legacy unfiled item", TakeoffsTreeRegressionTests.SectionSelectionKeyHandlesLegacyUnfiledItem),
     ("takeoff tree regression job load builds before clearing tree", TakeoffsTreeRegressionTests.JobLoadBuildsTakeoffsBeforeClearingTree),
     ("takeoff tree regression page clear keeps loaded takeoffs", TakeoffsTreeRegressionTests.PageClearDoesNotClearLoadedTakeoffs),
