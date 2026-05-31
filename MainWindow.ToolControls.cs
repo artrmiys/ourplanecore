@@ -200,7 +200,7 @@ public partial class MainWindow
             "note" => "Note",
             _ => "Annotation",
         };
-        BtnAnnotationMenu.Content = tool == "Annotation" ? "Annotation" : $"Annot: {tool}";
+        BtnAnnotationMenu.Content = tool == "Annotation" ? "Annot" : $"A: {tool}";
         BtnAnnotationMenu.ToolTip = $"Annotation tools. Color {_annotationColor}, thickness {_annotationStrokeWidth:0.#} px.";
     }
 
@@ -434,13 +434,13 @@ public partial class MainWindow
         try
         {
             BtnSnap.IsChecked = _viewport.SnapEnabled;
-            BtnSnap.Content = _viewport.SnapEnabled ? "Snap On" : "Snap";
+            BtnSnap.Content = "Snap";
             BtnPdfSnap.IsChecked = _viewport.PdfSnapEnabled;
-            BtnPdfSnap.Content = _viewport.PdfSnapEnabled ? "PDF Snap On" : "PDF Snap";
+            BtnPdfSnap.Content = "PDF";
             BtnOrtho.IsChecked = _viewport.OrthoEnabled;
-            BtnOrtho.Content = _viewport.OrthoEnabled ? "Ortho On" : "Ortho";
+            BtnOrtho.Content = "Ortho";
             BtnBoxMode.IsChecked = _viewport.BoxModeEnabled;
-            BtnBoxMode.Content = _viewport.BoxModeEnabled ? "Box On" : "Box";
+            BtnBoxMode.Content = "Box";
         }
         finally
         {

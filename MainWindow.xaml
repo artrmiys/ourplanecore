@@ -559,7 +559,7 @@
             </StatusBarItem>
         </StatusBar>
 
-        <!-- в”Ђв”Ђ Toolbar в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <!-- Toolbar -->
         <!-- Bottom command strip: two full-width rows (spread edge to edge) -->
         <StackPanel x:Name="BottomToolStrip" DockPanel.Dock="Bottom"
                     Background="{DynamicResource ControlBackgroundBrush}">
@@ -568,7 +568,7 @@
         <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,3,6,2">
             <DockPanel LastChildFill="True">
             <Button x:Name="BtnExportCurrentExcelCell" DockPanel.Dock="Right"
-                    Content="→ Excel cell"
+                    Content="Excel"
                     Click="BtnExportCurrentExcel_Click"
                     Style="{StaticResource ToolBtn}"
                     VerticalAlignment="Center"
@@ -579,7 +579,9 @@
 
             <TextBlock x:Name="TxtJobName" VerticalAlignment="Center"
                        Text="— no job —" FontSize="11" Margin="4,0"
-                       FontWeight="Normal"/>
+                       FontWeight="Normal"
+                       MaxWidth="118"
+                       TextTrimming="CharacterEllipsis"/>
 
             <Border Style="{StaticResource ToolDiv}"/>
 
@@ -637,11 +639,11 @@
                 </ToggleButton>
             </Grid>
             <Button x:Name="BtnAnnotationMenu"
-                    Content="Annotation"
+                    Content="Annot"
                     Click="BtnAnnotationMenu_Click"
                     ToolTip="Annotation tools, color, and thickness"
                     Style="{StaticResource ToolBtn}"
-                    MinWidth="82"
+                    MinWidth="58"
                     Padding="6,2"/>
             <Border Style="{StaticResource ToolDiv}"/>
             <RadioButton x:Name="BtnDrawLine"  Content="Draw"  Click="BtnTool_Click" Tag="drawline"
@@ -685,7 +687,7 @@
             <RadioButton x:Name="BtnBeam" Content="Beam" Click="BtnTool_Click" Tag="beam"
                          GroupName="DrawingTool" ToolTip="Measure a beam length, create a Count item, and place the first Count mark (B)"
                          Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnOpenings" Content="Openings" Click="BtnTool_Click" Tag="openings"
+            <RadioButton x:Name="BtnOpenings" Content="Open" Click="BtnTool_Click" Tag="openings"
                          GroupName="DrawingTool" ToolTip="Measure an opening box, create a Count item, and place the Count mark in the center (O)"
                          Style="{StaticResource ToolRadio}"/>
             <RadioButton x:Name="BtnAreaCut" Content="Cut" Click="BtnTool_Click" Tag="areacut"
@@ -696,10 +698,10 @@
                           ToolTip="Snap to existing takeoff points (F3)"
                           Checked="BtnSnap_Checked" Unchecked="BtnSnap_Unchecked"
                           Padding="6,2" MinWidth="48"/>
-            <ToggleButton x:Name="BtnPdfSnap" Content="PDF Snap"
+            <ToggleButton x:Name="BtnPdfSnap" Content="PDF"
                           ToolTip="Snap to PDF vector corners and points (Ctrl+F3)"
                           Checked="BtnPdfSnap_Checked" Unchecked="BtnPdfSnap_Unchecked"
-                          Padding="6,2" MinWidth="64"/>
+                          Padding="6,2" MinWidth="44"/>
             <ToggleButton x:Name="BtnOrtho" Content="Ortho"
                           ToolTip="Lock Line/Area to 90/45 degrees (F8, Shift temporarily toggles)"
                           Checked="BtnOrtho_Checked" Unchecked="BtnOrtho_Unchecked"
@@ -708,14 +710,6 @@
                           ToolTip="Draw Line/Area measurements by two opposite box corners (F9)"
                           Checked="BtnBoxMode_Checked" Unchecked="BtnBoxMode_Unchecked"
                           Padding="6,2" MinWidth="44"/>
-
-            <Border Style="{StaticResource ToolDiv}"/>
-            <Button Content="Fit"  Click="BtnFit_Click"    ToolTip="Fit page (F)"
-                    Style="{StaticResource ToolBtn}"/>
-            <Button Content="+"    Click="BtnZoomIn_Click"  ToolTip="Zoom in (Ctrl++)"
-                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
-            <Button Content="-"    Click="BtnZoomOut_Click" ToolTip="Zoom out (Ctrl+-)"
-                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
 
             </WrapPanel>
             </DockPanel>
@@ -768,7 +762,7 @@
             <!-- Sheet scale -->
             <Label Content="Scale:" VerticalAlignment="Center" Padding="0"/>
             <TextBox x:Name="TxtScaleRatio" Width="112" VerticalAlignment="Center"
-                     Text="100" ToolTip="Scale ratio (1:N) вЂ” press Enter to apply"
+                     Text="100" ToolTip="Scale ratio (1:N) - press Enter to apply"
                      KeyDown="TxtScaleRatio_KeyDown"/>
             <Button Content="Set" Click="BtnSetScale_Click"
                     ToolTip="Apply scale" Style="{StaticResource ToolBtn}"/>
@@ -784,6 +778,14 @@
                     Style="{StaticResource ToolBtn}"/>
 
             <Border Style="{StaticResource ToolDiv}"/>
+            <Button Content="Fit"  Click="BtnFit_Click"    ToolTip="Fit page (F)"
+                    Style="{StaticResource ToolBtn}"/>
+            <Button Content="+"    Click="BtnZoomIn_Click"  ToolTip="Zoom in (Ctrl++)"
+                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
+            <Button Content="-"    Click="BtnZoomOut_Click" ToolTip="Zoom out (Ctrl+-)"
+                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
+
+            <Border Style="{StaticResource ToolDiv}"/>
             <TextBlock x:Name="TxtTool" VerticalAlignment="Center"
                        Text="Tool: Pan" FontSize="11" Margin="2,0"/>
 
@@ -791,7 +793,7 @@
         </Border>
         </StackPanel>
 
-        <!-- в”Ђв”Ђ Main area: 3-column content + AI Inbox в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <!-- Main area: 3-column content + AI Inbox -->
         <TabControl x:Name="WorkspaceTabs"
                     SelectionChanged="WorkspaceTabs_SelectionChanged"
                     ItemContainerStyle="{StaticResource WorkspaceTabItem}"
@@ -806,7 +808,7 @@
                 <RowDefinition x:Name="InboxRow" Height="30" MinHeight="30"/>
             </Grid.RowDefinitions>
 
-            <!-- в”Ђв”Ђ Row 0: 3-column layout в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
+            <!-- Row 0: 3-column layout -->
             <Grid Grid.Row="0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="PagesColumn" Width="200" MinWidth="120"/>
@@ -1511,19 +1513,19 @@
                 </DockPanel>
             </Grid>
 
-            <!-- в”Ђв”Ђ Row 1: Inbox splitter в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
+            <!-- Row 1: Inbox splitter -->
             <GridSplitter x:Name="InboxSplitter" Grid.Row="1" Height="4"
                           HorizontalAlignment="Stretch" Background="{DynamicResource SplitterBrush}"
                           ResizeBehavior="PreviousAndNext"/>
 
-            <!-- в”Ђв”Ђ Row 2: AI Inbox в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ -->
+            <!-- Row 2: AI Inbox -->
             <Grid x:Name="InboxPanel" Grid.Row="2" Background="{DynamicResource SurfaceBackgroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Inbox header bar вЂ” same background as toolbar/statusbar, set via ApplyTheme -->
+                <!-- Inbox header bar - same background as toolbar/statusbar, set via ApplyTheme -->
                 <Border x:Name="InboxHeaderBorder" Grid.Row="0"
                         BorderBrush="{DynamicResource ControlBorderBrush}"
                         BorderThickness="0,1,0,0">
@@ -1560,7 +1562,7 @@
                         <TextBlock x:Name="TxtInboxTitle" Text="AI Inbox"
                                    FontWeight="Normal" VerticalAlignment="Center"
                                    FontSize="12"/>
-                        <!-- Count badge вЂ” subtle accent pill -->
+                        <!-- Count badge - subtle accent pill -->
                         <Border x:Name="InboxBadge" CornerRadius="8"
                                 Background="{DynamicResource ControlActiveBackgroundBrush}"
                                 Padding="5,1" Margin="8,0,0,0"
@@ -2017,4 +2019,3 @@
     </Grid>
     </Grid>
 </Window>
-

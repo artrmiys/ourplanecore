@@ -11,30 +11,29 @@ public partial class MainWindow
         var menu = new ContextMenu();
         bool hasJob = _currentJob != null;
 
-        // ── Open an existing job ───────────────────────────────
+        // Open an existing job.
         menu.Items.Add(MakeMenuHeader("OPEN A JOB"));
-        menu.Items.Add(MakeMenuItem("Recent jobs…", true, ShowRecentJobPicker));
-        menu.Items.Add(MakeMenuItem("Open a job from a folder…", true, OpenJobFromFolderDialog));
+        menu.Items.Add(MakeMenuItem("Recent jobs...", true, ShowRecentJobPicker));
+        menu.Items.Add(MakeMenuItem("Open a job from a folder...", true, OpenJobFromFolderDialog));
 
-        // ── Create a new job ───────────────────────────────────
+        // Create a new job.
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuHeader("CREATE A NEW JOB"));
-        menu.Items.Add(MakeMenuItem("Blank job  —  start empty, add sheets later", true, () => CreateBlankJobFromDialog()));
-        menu.Items.Add(MakeMenuItem("New job from a folder of PDFs…", true, () => CreateJobFromDialog()));
-        menu.Items.Add(MakeMenuItem("Sample job  (demo to explore)", true, CreateSampleJob));
+        menu.Items.Add(MakeMenuItem("Blank job - start empty, add sheets later", true, () => CreateBlankJobFromDialog()));
+        menu.Items.Add(MakeMenuItem("New job from a folder of PDFs...", true, () => CreateJobFromDialog()));
+        menu.Items.Add(MakeMenuItem("Import PDF Takeoffs...", true, () => BtnImportPdfTakeoffs_Click(sender, new RoutedEventArgs())));
+        menu.Items.Add(MakeMenuItem("Sample job (demo to explore)", true, CreateSampleJob));
 
-        // ── Import into the job that's already open ─────────────
+        // Import into the job that's already open.
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeSubmenu("Import into the current job",
-            MakeMenuItem("PDF file(s)…", hasJob, () => BtnImport_Click(sender, new RoutedEventArgs())),
-            MakeMenuItem("Folder of PDFs…", hasJob, () => BtnImportPdfFolder_Click(sender, new RoutedEventArgs())),
-            MakeMenuItem("PlanSwift project…", hasJob, () => BtnImportPlanSwiftToCurrentJob_Click(sender, new RoutedEventArgs())),
-            new Separator(),
-            MakeMenuItem("PDF with takeoffs / annotations…", true, () => BtnImportPdfTakeoffs_Click(sender, new RoutedEventArgs()))));
+            MakeMenuItem("PDF file(s)...", hasJob, () => BtnImport_Click(sender, new RoutedEventArgs())),
+            MakeMenuItem("Folder of PDFs...", hasJob, () => BtnImportPdfFolder_Click(sender, new RoutedEventArgs())),
+            MakeMenuItem("PlanSwift project...", hasJob, () => BtnImportPlanSwiftToCurrentJob_Click(sender, new RoutedEventArgs()))));
 
-        // ── Manage where jobs live ─────────────────────────────
+        // Manage where jobs live.
         menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Manage job folders…", true, OpenJobFromJobsRootDialog));
+        menu.Items.Add(MakeMenuItem("Manage job folders...", true, OpenJobFromJobsRootDialog));
 
         if (sender is Button button)
         {
