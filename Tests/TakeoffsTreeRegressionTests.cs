@@ -629,6 +629,15 @@ internal static class TakeoffsTreeRegressionTests
             ReadRepoFile("MainWindow.PageTakeoffLegend.MoveSort.cs"),
             ReadRepoFile("MainWindow.PageTakeoffLegend.Visibility.cs"));
 
+    private static string ReadPdfLayerRenderServiceSources() =>
+        string.Concat(
+            ReadRepoFile("Models/PdfLayerRenderService.cs"),
+            ReadRepoFile("Models/PdfLayerRenderService.Layers.cs"),
+            ReadRepoFile("Models/PdfLayerRenderService.Protocol.cs"),
+            ReadRepoFile("Models/PdfLayerRenderService.Render.cs"),
+            ReadRepoFile("Models/PdfLayerRenderService.Worker.cs"),
+            ReadRepoFile("Models/PdfLayerRenderResults.cs"));
+
     public static void SheetOverlayPersistedCacheIsWired()
     {
         string overlay = ReadRepoFile("MainWindow.SheetOverlay.cs");
@@ -796,7 +805,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
-        string service = ReadRepoFile("Models/PdfLayerRenderService.cs");
+        string service = ReadPdfLayerRenderServiceSources();
         string cache = ReadRepoFile("Models/PdfPreviewRenderCache.cs");
 
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
@@ -824,7 +833,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()
     {
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
-        string service = ReadRepoFile("Models/PdfLayerRenderService.cs");
+        string service = ReadPdfLayerRenderServiceSources();
         string cache = ReadRepoFile("Models/PdfPreviewRenderCache.cs");
 
         int applyCache = layers.IndexOf("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal);
@@ -850,7 +859,7 @@ internal static class TakeoffsTreeRegressionTests
 
     public static void PdfLayerRenderUsesPortableInlineImageProtocol()
     {
-        string service = ReadRepoFile("Models/PdfLayerRenderService.cs");
+        string service = ReadPdfLayerRenderServiceSources();
         string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
 
         AssertTrue(

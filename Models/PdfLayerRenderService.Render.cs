@@ -1,0 +1,198 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
+using OurPlaneCore.Controls;
+using SkiaSharp;
+
+namespace OurPlaneCore;
+
+public static partial class PdfLayerRenderService
+{
+    internal static bool TryRender(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        out PdfLayerRenderResult result,
+        out string error)
+    {
+        result = new PdfLayerRenderResult();
+        error = "";
+        string cacheKey = BuildRenderCacheKey(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers);
+        if (TryGetCachedRender(cacheKey, out result))
+            return true;
+
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
+        string inputPath = Path.Combine(tempDir, "input.json");
+        string outputPath = Path.Combine(tempDir, "output.json");
+        string imagePath = Path.Combine(tempDir, "page.png");
+
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var request = new RenderRequest
+            {
+                Pdf = pdfPath,
+                Page = pageIndex,
+                Scale = renderScale,
+                Image = imagePath,
+                InlineImage = true,
+                InlineImageMaxPixels = InlineRenderImageMaxPixels,
+                Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
+                Highlight = highlightedLayers.ToList(),
+                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+            };
+
+            if (!TryInvokeWorker("render", request, out RenderResponse? response, out error) &&
+                !TryRunFileCommand("render", request, inputPath, outputPath, out response, out error))
+                return false;
+
+            if (response == null || !response.Ok)
+            {
+                error = response?.Error ?? "PyMuPDF did not return a render response.";
+                return false;
+            }
+
+            if (!TryReadRenderImageBytes(response, out byte[] imageBytes, out error))
+                return false;
+
+            result = new PdfLayerRenderResult
+            {
+                ImageBytes = imageBytes,
+                WidthPt = response.WidthPt,
+                HeightPt = response.HeightPt,
+                Layers = response.Layers
+                    .Select(l => new PdfLayer(l.Xref, l.Name, l.On, highlightedLayers.Contains(l.Xref)))
+                    .ToList(),
+                LayersCaptured = true,
+            };
+            AddCachedRender(cacheKey, result);
+            if (PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+                PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"TryRender failed for {pdfPath} page {pageIndex}");
+            error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch { }
+        }
+    }
+
+    private static bool TryReadRenderImageBytes(RenderResponse response, out byte[] imageBytes, out string error)
+    {
+        imageBytes = [];
+        error = "";
+
+        if (!string.IsNullOrWhiteSpace(response.ImageBase64))
+        {
+            try
+            {
+                imageBytes = Convert.FromBase64String(response.ImageBase64);
+                return imageBytes.Length > 0;
+            }
+            catch (FormatException ex)
+            {
+                AppLog.Warn(ex, "PyMuPDF returned invalid inline render image data");
+                error = "PyMuPDF returned invalid inline render image data.";
+                return false;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(response.Image) || !File.Exists(response.Image))
+        {
+            error = "PyMuPDF did not produce a rendered image.";
+            return false;
+        }
+
+        imageBytes = File.ReadAllBytes(response.Image);
+        return imageBytes.Length > 0;
+    }
+
+    private static bool TryGetCachedRender(string key, out PdfLayerRenderResult result)
+    {
+        lock (RenderCacheLock)
+        {
+            if (RenderCache.TryGetValue(key, out result!))
+                return true;
+        }
+
+        result = new PdfLayerRenderResult();
+        return false;
+    }
+
+    private static void AddCachedRender(string key, PdfLayerRenderResult result)
+    {
+        lock (RenderCacheLock)
+        {
+            if (RenderCache.ContainsKey(key))
+                return;
+
+            RenderCache[key] = result;
+            RenderCacheOrder.Enqueue(key);
+            while (RenderCache.Count > MaxRenderCacheEntries && RenderCacheOrder.Count > 0)
+            {
+                string oldKey = RenderCacheOrder.Dequeue();
+                RenderCache.Remove(oldKey);
+            }
+        }
+    }
+
+    private static string BuildRenderCacheKey(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers)
+    {
+        var info = new FileInfo(pdfPath);
+        var sb = new StringBuilder();
+        sb.Append(info.FullName.ToLowerInvariant())
+          .Append('|').Append(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)
+          .Append('|').Append(info.Exists ? info.Length : 0)
+          .Append('|').Append(pageIndex)
+          .Append('|').Append(Math.Round(renderScale, 3));
+
+        sb.Append("|layers:");
+        foreach (var kvp in layerStates.OrderBy(kvp => kvp.Key))
+            sb.Append(kvp.Key).Append('=').Append(kvp.Value ? '1' : '0').Append(';');
+
+        sb.Append("|hi:");
+        foreach (int layer in highlightedLayers.OrderBy(v => v))
+            sb.Append(layer).Append(';');
+
+        sb.Append("|visible:");
+        if (cachedLayers != null)
+        {
+            foreach (var layer in cachedLayers.OrderBy(l => l.Number))
+                sb.Append(layer.Number).Append('=').Append(layer.IsOn ? '1' : '0').Append(':').Append(layer.Name).Append(';');
+        }
+
+        return sb.ToString();
+    }
+}
