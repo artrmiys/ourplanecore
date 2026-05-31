@@ -503,11 +503,12 @@ internal static class TakeoffsTreeRegressionTests
     public static void BookmarksDockPanelAndShortcutAreWired()
     {
         string xaml = ReadRepoFile("MainWindow.xaml");
+        string mainWindowResources = ReadRepoFile("Resources/MainWindowResources.xaml");
         string bookmarks = ReadRepoFile("MainWindow.Bookmarks.cs");
         string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
 
         AssertTrue(
-            xaml.Contains("x:Key=\"BookmarkDockToggleButton\"", StringComparison.Ordinal) &&
+            mainWindowResources.Contains("x:Key=\"BookmarkDockToggleButton\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"BtnDockBookmarksBelowPages\"", StringComparison.Ordinal) &&
             xaml.Contains("Checked=\"BookmarkDockToggle_Changed\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"BookmarksDockContentHost\"", StringComparison.Ordinal) &&
@@ -536,7 +537,7 @@ internal static class TakeoffsTreeRegressionTests
         string xaml = ReadRepoFile("MainWindow.xaml");
         string treeSearch = ReadRepoFile("MainWindow.TreeSearch.cs");
         string takeoffsClipboard = ReadRepoFile("MainWindow.TakeoffsClipboard.cs");
-        string pageLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.cs");
+        string pageLegend = ReadPageTakeoffLegendSources();
         string viewportSelectionState = ReadRepoFile("Controls/PdfViewport.SelectionState.cs");
         string viewportMeasurementApi = ReadRepoFile("Controls/PdfViewport.MeasurementApi.cs");
 
@@ -565,7 +566,7 @@ internal static class TakeoffsTreeRegressionTests
 
     public static void PageTakeoffLayersAndAltVertexModeAreWired()
     {
-        string pageLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.cs");
+        string pageLegend = ReadPageTakeoffLegendSources();
         AssertTrue(
             pageLegend.Contains("RenameLinkedPageTakeoff", StringComparison.Ordinal) &&
             pageLegend.Contains("LayerOrderedTakeoffsForPage", StringComparison.Ordinal) &&
@@ -617,8 +618,16 @@ internal static class TakeoffsTreeRegressionTests
                 "walls,areas",
                 string.Join(",", PageTakeoffLayerOrderStore.Load(pageFolder)),
                 "takeoff layer sidecar should persist distinct order");
-        });
+            });
     }
+
+    private static string ReadPageTakeoffLegendSources() =>
+        string.Concat(
+            ReadRepoFile("MainWindow.PageTakeoffLegend.cs"),
+            ReadRepoFile("MainWindow.PageTakeoffLegend.ContextMenu.cs"),
+            ReadRepoFile("MainWindow.PageTakeoffLegend.DragDrop.cs"),
+            ReadRepoFile("MainWindow.PageTakeoffLegend.MoveSort.cs"),
+            ReadRepoFile("MainWindow.PageTakeoffLegend.Visibility.cs"));
 
     public static void SheetOverlayPersistedCacheIsWired()
     {
