@@ -1,5 +1,38 @@
 ﻿# Development Log
 
+## 2026-05-31 Refactor / UX Stabilization Handoff
+
+- Fixed the visible command-tab clipping issue from the prior UX pass by
+  containing the selected highlight so the right side of the button chrome no
+  longer gets cut off.
+- Continued safe no-behavior refactoring to reduce large-file risk:
+  - split `MainWindow.ThreeDWalls`, `MainWindow.ThreeDRoof`, and
+    `MainWindow.PageTakeoffLegend` into focused partial owners;
+  - extracted app/window resource dictionaries from `App.xaml` and
+    `MainWindow.xaml`;
+  - split `SmartContextStore`, `PlanSwiftProjectImporter`,
+    `PdfLayerRenderService`, and `SmartLearningStore` into model / workflow /
+    IO / protocol owners.
+- Updated source-wiring regression tests after the partial splits.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
+  (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj /p:OutDir=.\cache\test_run\ /p:UseAppHost=false`
+  (`250/250`), `git diff --check`, and conflict/TODO/NotImplemented scan.
+- Published and deployed the compressed single-file exe to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, SHA256
+  `C2B11CE908FFFDAED6AA094EADA7E8AE78B33715490CFE0EA6C151B2D2331286`.
+- Shortcut target and working directory were restored to the update folder.
+- Packaged launch validation had `0` errors after the latest
+  `Application startup.` and loaded takeoffs. A fresh `Viewport` log line did
+  not appear in the short hidden validation launch, so the next session should
+  do a normal visible shortcut smoke by opening a sheet.
+- Code commits:
+  `c3abc9a Split large UI and context surfaces` and
+  `9b71181 Split import render and learning stores`.
+- Detailed handoff:
+  `docs/REFACTOR_UX_HANDOFF_2026_05_31.md`.
+
 ## 2026-05-30 Blank Job / Blank Sheet
 
 - Added a no-PDF job creation path and blank sheet creation inside normal
