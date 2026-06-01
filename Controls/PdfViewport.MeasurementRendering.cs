@@ -203,7 +203,6 @@ public sealed partial class PdfViewport
 
         return measurement.MType == "area" &&
                measurement.JoistEnabled &&
-               measurement.JoistShowLabels &&
                ShouldDrawJoistLabels();
     }
 

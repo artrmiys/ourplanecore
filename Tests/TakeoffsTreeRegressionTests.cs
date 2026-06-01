@@ -757,9 +757,11 @@ internal static class TakeoffsTreeRegressionTests
             drawLabels.Contains("drawAllLabels || ShouldDrawDenseMeasurementLabel(measurement)", StringComparison.Ordinal) &&
             denseFilter.Contains("IsMeasurementSelected(measurement)", StringComparison.Ordinal) &&
             denseFilter.Contains("measurement.JoistEnabled", StringComparison.Ordinal) &&
-            denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal) &&
             denseFilter.Contains("ShouldDrawJoistLabels()", StringComparison.Ordinal),
-            "dense viewport label suppression must still allow selected and joist labels to render");
+            "dense viewport label suppression must still allow selected and joist summary labels to render");
+        AssertFalse(
+            denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
+            "dense viewport joist summary labels must not depend on the per-joist segment label toggle");
     }
 
     public static void PageTakeoffSelectionSyncsTakeoffsTree()
