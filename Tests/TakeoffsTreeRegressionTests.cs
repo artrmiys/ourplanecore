@@ -99,6 +99,22 @@ internal static class TakeoffsTreeRegressionTests
             "direct page-open fallback should avoid duplicate reloads when the selection event already opened the page");
     }
 
+    public static void PageTreeClickOpensViewportDirectly()
+    {
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string clickMethod = SliceMethod(pagesTree, "private void PagesTree_PreviewMouseLeftButtonDown");
+        string openMethod = SliceMethod(pagesTree, "private void SelectPageTreeItemAndOpenIfPage");
+
+        AssertTrue(
+            clickMethod.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
+            "page-tree mouse clicks should not rely only on WPF SelectedItemChanged to open the viewport");
+        AssertTrue(
+            openMethod.Contains("item.Tag is not PageInfo page", StringComparison.Ordinal) &&
+            openMethod.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
+            openMethod.Contains("OpenPageInActiveTab(page)", StringComparison.Ordinal),
+            "direct page-tree click open should select the row and load the clicked sheet through the normal page tab path");
+    }
+
     public static void PageReloadInvalidatesPreviewPrefetchCache()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");

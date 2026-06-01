@@ -560,7 +560,7 @@ public partial class MainWindow
             _pagesMultiSelection.Count > 1 &&
             _pagesMultiSelection.Contains(path))
         {
-            item.IsSelected = true;
+            SelectPageTreeItemAndOpenIfPage(item);
             ApplyPagesMultiSelectionVisuals();
             return;
         }
@@ -571,7 +571,7 @@ public partial class MainWindow
             SelectPagesRange(_pagesRangeAnchorPath, path, additive);
             _pagesRangeAnchorPath = path;
             _pageTakeoffMultiSelection.Clear();
-            item.IsSelected = true;
+            SelectPageTreeItemAndOpenIfPage(item);
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;
@@ -583,7 +583,7 @@ public partial class MainWindow
                 _pagesMultiSelection.Remove(path);
             _pagesRangeAnchorPath = path;
             _pageTakeoffMultiSelection.Clear();
-            item.IsSelected = true;
+            SelectPageTreeItemAndOpenIfPage(item);
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;
@@ -595,6 +595,17 @@ public partial class MainWindow
         _pagesRangeAnchorPath = path;
         _pageTakeoffMultiSelection.Clear();
         ApplyPagesMultiSelectionVisuals();
+        SelectPageTreeItemAndOpenIfPage(item);
+    }
+
+    private void SelectPageTreeItemAndOpenIfPage(TreeViewItem item)
+    {
+        if (item.Tag is not PageInfo page)
+            return;
+
+        SelectPagesTreeItemSilently(item);
+        TryRefreshDirtyPageTakeoffIndicator(page.FolderPath);
+        OpenPageInActiveTab(page);
     }
 
     private bool CanArmPagesTreeDrag(TreeViewItem item, DependencyObject? source)
