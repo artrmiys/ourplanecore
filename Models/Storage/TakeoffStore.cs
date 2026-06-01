@@ -71,7 +71,7 @@ internal static class TakeoffStore
             "line");
         bool isJoistTakeoff = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistEnabled"));
         string? joistShowLabels = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabels");
-        string? joistShowLabelsExplicit = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabelsExplicit");
+        string? joistShowLabelsUserSet = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabelsUserSet");
 
         var item = new TakeoffItem
         {
@@ -90,7 +90,8 @@ internal static class TakeoffStore
             JoistAddEndJoist = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistAddEndJoist"), fallback: true),
             JoistPitch = JoistTakeoffCalculator.NormalizePitch(OurPlaneCoreJobStore.ReadProperty(folder, "JoistPitch")),
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(OurPlaneCoreJobStore.ReadProperty(folder, "JoistLengthRounding")),
-            JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsExplicit, measurementType, isJoistTakeoff),
+            JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsUserSet, measurementType, isJoistTakeoff),
+            JoistShowLabelsUserSet = ParseBool(joistShowLabelsUserSet),
             JoistDetailedLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
         };
         item.Measurements.AddRange(measurements);
@@ -122,7 +123,7 @@ internal static class TakeoffStore
             new KeyValuePair<string, string>("JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch)),
             new KeyValuePair<string, string>("JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding)),
             new KeyValuePair<string, string>("JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture)),
-            new KeyValuePair<string, string>("JoistShowLabelsExplicit", true.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistShowLabelsUserSet", item.JoistShowLabelsUserSet.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("MeasurementCount", item.Measurements.Count.ToString()),
             new KeyValuePair<string, string>("MeasuredPageCount", MeasuredPageCount(item).ToString()),
@@ -294,7 +295,7 @@ internal static class TakeoffStore
 
     private static bool ParseJoistShowLabels(
         string? value,
-        string? explicitValue,
+        string? userSetValue,
         string measurementType,
         bool isJoistTakeoff)
     {
@@ -302,7 +303,7 @@ internal static class TakeoffStore
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
         if (bool.TryParse(value, out bool parsed))
         {
-            if (parsed || ParseBool(explicitValue))
+            if (parsed || ParseBool(userSetValue))
                 return parsed;
 
             return isJoistArea && JoistTakeoffDefaults.ShowLabels;

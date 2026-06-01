@@ -92,6 +92,7 @@ public partial class MainWindow
                 item.JoistShowLabels != joistEdit.ShowLabels ||
                 item.JoistDetailedLabels != joistEdit.DetailedLabels;
             bool wasJoistArea = item.IsJoistArea;
+            bool joistShowLabelsChangedByDialog = item.JoistShowLabels != joistEdit.ShowLabels;
             item.IsJoistTakeoff = joistEdit.Enabled && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
             item.JoistType = joistEdit.JoistType.Trim();
             item.JoistSpacingInches = joistEdit.SpacingInches > 0 ? joistEdit.SpacingInches : 16;
@@ -101,6 +102,8 @@ public partial class MainWindow
             item.JoistPitch = JoistTakeoffCalculator.NormalizePitch(joistEdit.Pitch);
             item.JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(joistEdit.LengthRounding);
             item.JoistShowLabels = joistEdit.ShowLabels;
+            if (item.IsJoistArea && joistShowLabelsChangedByDialog)
+                item.JoistShowLabelsUserSet = true;
             item.JoistDetailedLabels = joistEdit.DetailedLabels;
             OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             if (colorChanged)

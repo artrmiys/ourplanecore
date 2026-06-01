@@ -90,6 +90,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff template presets and collapsed depth are wired", TakeoffsTreeRegressionTests.TakeoffTemplatePresetsAndCollapsedDepthAreWired),
     ("takeoff tree search bulk visibility and markup selection are wired", TakeoffsTreeRegressionTests.TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
+    ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
     ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),
@@ -207,6 +208,7 @@ var tests = new List<(string Name, Action Run)>
     ("joist area defaults use compact labels and foot rounding", JoistAreaDefaultsUseCompactLabelsAndFootRounding),
     ("legacy joist item without label flag shows labels", LegacyJoistItemWithoutLabelFlagShowsLabels),
     ("legacy joist item old false label flag migrates to labels", LegacyJoistItemOldFalseLabelFlagMigratesToLabels),
+    ("legacy joist item old explicit false label flag migrates to labels", LegacyJoistItemOldExplicitFalseLabelFlagMigratesToLabels),
     ("joist item explicit false label flag stays hidden", JoistItemExplicitFalseLabelFlagStaysHidden),
     ("folder template openings have numbered children", FolderTemplateOpeningsHaveNumberedChildren),
     ("settings manager folder template edits auto persist", TakeoffsTreeRegressionTests.SettingsManagerFolderTemplateEditsAutoPersist),
@@ -2717,6 +2719,34 @@ static void LegacyJoistItemOldFalseLabelFlagMigratesToLabels()
     });
 }
 
+static void LegacyJoistItemOldExplicitFalseLabelFlagMigratesToLabels()
+{
+    WithTempJob("Legacy Joist Explicit False Labels", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        SetDataXmlProperty(item.FolderPath, "JoistEnabled", "True");
+        SetDataXmlProperty(item.FolderPath, "JoistShowLabels", "False");
+        SetDataXmlProperty(item.FolderPath, "JoistShowLabelsExplicit", "True");
+        OurPlaneCoreJobStore.SaveMeasurements(item.FolderPath, new[]
+        {
+            new Measurement
+            {
+                MType = "area",
+                JoistDirectionLocked = true,
+                ScaleMetersPerPt = 0.3048,
+                Points = SimpleJoistAreaPolygon().ToList(),
+            },
+        });
+
+        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+            ?? throw new InvalidOperationException("legacy explicit joist item not loaded");
+
+        AssertTrue(loaded.JoistShowLabels, "legacy explicit false joist item labels migrate on");
+        AssertTrue(loaded.Measurements[0].JoistShowLabels, "legacy explicit false joist measurement labels migrate on");
+        AssertFalse(loaded.JoistShowLabelsUserSet, "legacy explicit marker should not become a user label choice");
+    });
+}
+
 static void JoistItemExplicitFalseLabelFlagStaysHidden()
 {
     WithTempJob("Explicit Joist Hidden Labels", job =>
@@ -2724,6 +2754,7 @@ static void JoistItemExplicitFalseLabelFlagStaysHidden()
         TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         JoistTakeoffDefaults.ApplyToNewJoistArea(item);
         item.JoistShowLabels = false;
+        item.JoistShowLabelsUserSet = true;
         item.Measurements.Add(new Measurement
         {
             MType = "area",

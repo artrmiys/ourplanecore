@@ -748,6 +748,20 @@ internal static class TakeoffsTreeRegressionTests
             });
     }
 
+    public static void DenseViewportLabelsKeepJoistAndSelectedLabels()
+    {
+        string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
+        string drawLabels = SliceMethod(rendering, "private void DrawMeasurementLabels(");
+        string denseFilter = SliceMethod(rendering, "private bool ShouldDrawDenseMeasurementLabel(");
+        AssertTrue(
+            drawLabels.Contains("drawAllLabels || ShouldDrawDenseMeasurementLabel(measurement)", StringComparison.Ordinal) &&
+            denseFilter.Contains("IsMeasurementSelected(measurement)", StringComparison.Ordinal) &&
+            denseFilter.Contains("measurement.JoistEnabled", StringComparison.Ordinal) &&
+            denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal) &&
+            denseFilter.Contains("ShouldDrawJoistLabels()", StringComparison.Ordinal),
+            "dense viewport label suppression must still allow selected and joist labels to render");
+    }
+
     public static void PageTakeoffSelectionSyncsTakeoffsTree()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");

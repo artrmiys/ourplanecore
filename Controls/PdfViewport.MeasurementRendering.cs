@@ -178,21 +178,33 @@ public sealed partial class PdfViewport
         IReadOnlyList<Measurement> activeMeasurements,
         IReadOnlyList<Measurement>? visibleMeasurements)
     {
-        if (!ViewportRenderPolicy.ShouldDrawMeasurementLabels(
-                _zoom,
-                activeMeasurements.Count,
-                _renderNavigationFastFrame) ||
-            ShouldReduceOverlayDetailForInteraction())
+        if (ShouldReduceOverlayDetailForInteraction())
         {
             return;
         }
 
+        bool drawAllLabels = ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+            _zoom,
+            activeMeasurements.Count,
+            _renderNavigationFastFrame);
         IReadOnlyList<Measurement> labelMeasurements =
             visibleMeasurements ?? VisibleMeasurements(visiblePdf);
         foreach (var measurement in labelMeasurements)
         {
-            DrawMeasurementTopLabels(canvas, measurement);
+            if (drawAllLabels || ShouldDrawDenseMeasurementLabel(measurement))
+                DrawMeasurementTopLabels(canvas, measurement);
         }
+    }
+
+    private bool ShouldDrawDenseMeasurementLabel(Measurement measurement)
+    {
+        if (IsMeasurementSelected(measurement))
+            return true;
+
+        return measurement.MType == "area" &&
+               measurement.JoistEnabled &&
+               measurement.JoistShowLabels &&
+               ShouldDrawJoistLabels();
     }
 
     private IReadOnlyList<Measurement> VisibleMeasurements(SKRect visiblePdf)

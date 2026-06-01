@@ -27,7 +27,7 @@ internal sealed class ProjectFile
         public string          JoistPitch { get; set; } = "";
         public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
         public bool?           JoistShowLabels { get; set; }
-        public bool            JoistShowLabelsExplicit { get; set; }
+        public bool            JoistShowLabelsUserSet { get; set; }
         public bool?           JoistDetailedLabels { get; set; } = true;
         public List<MeasDto>   Measurements { get; set; } = [];
     }
@@ -79,7 +79,7 @@ internal sealed class ProjectFile
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                 JoistShowLabels = item.JoistShowLabels,
-                JoistShowLabelsExplicit = true,
+                JoistShowLabelsUserSet = item.JoistShowLabelsUserSet,
                 JoistDetailedLabels = item.JoistDetailedLabels,
             };
             foreach (var m in item.Measurements)
@@ -149,9 +149,10 @@ internal sealed class ProjectFile
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(dto.JoistLengthRounding),
                 JoistShowLabels = ResolveJoistShowLabels(
                     dto.JoistShowLabels,
-                    dto.JoistShowLabelsExplicit,
+                    dto.JoistShowLabelsUserSet,
                     dto.MeasurementType,
                     dto.IsJoistTakeoff),
+                JoistShowLabelsUserSet = dto.JoistShowLabelsUserSet,
                 JoistDetailedLabels = dto.JoistDetailedLabels ?? true,
             };
             foreach (var md in dto.Measurements)
@@ -183,7 +184,7 @@ internal sealed class ProjectFile
 
     private static bool ResolveJoistShowLabels(
         bool? value,
-        bool explicitValue,
+        bool userSet,
         string measurementType,
         bool isJoistTakeoff)
     {
@@ -191,7 +192,7 @@ internal sealed class ProjectFile
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
         if (value.HasValue)
         {
-            if (value.Value || explicitValue)
+            if (value.Value || userSet)
                 return value.Value;
 
             return isJoistArea && JoistTakeoffDefaults.ShowLabels;
