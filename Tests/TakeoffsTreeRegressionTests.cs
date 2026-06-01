@@ -1121,6 +1121,9 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
             rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
             "paint should use sharper upscale sampling and overlay the high-DPI detail tile");
+        AssertFalse(
+            rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal),
+            "main PDF bitmap paint must not switch to low-quality sampling while panning at high zoom");
         AssertTrue(
             transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("bool needsDetailRender", StringComparison.Ordinal) &&
@@ -1140,8 +1143,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
             detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&
-            detail.Contains("MaxDetailRenderTileEntries = 12", StringComparison.Ordinal) &&
-            detail.Contains("MaxDetailRenderTileBytes = 900_000_000", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileEntries = 24", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileBytes = 1_800_000_000", StringComparison.Ordinal) &&
             detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
@@ -1154,14 +1157,18 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap)", StringComparison.Ordinal),
             "full layer render PNG decode should be done before UI-thread bitmap application");
         AssertTrue(
-            layers.Contains("TryApplyLayerBitmapCache(request)", StringComparison.Ordinal) &&
+            layers.Contains("TryApplyLayerBitmapCache(request, out bool exactLayerCacheHit)", StringComparison.Ordinal) &&
+            layers.Contains("ShouldPreserveDetailDuringLayerRender(request)", StringComparison.Ordinal) &&
             layers.Contains("CacheLayerBitmapRender(completion.Request)", StringComparison.Ordinal) &&
             layers.Contains("CacheLayerBitmapRender(completion.Request, completion.Result, decodedBitmap)", StringComparison.Ordinal) &&
             layers.Contains("PdfLayerRenderResult render,", StringComparison.Ordinal) &&
+            layers.Contains("layer-memory-best", StringComparison.Ordinal) &&
             layers.Contains("layer-memory", StringComparison.Ordinal) &&
             renderCache.Contains("LayerRenderBitmapCache", StringComparison.Ordinal) &&
+            renderCache.Contains("TryGetBest", StringComparison.Ordinal) &&
+            renderCache.Contains("LayerRenderBitmapCacheSignature", StringComparison.Ordinal) &&
             renderCache.Contains("10_500_000_000L", StringComparison.Ordinal),
-            "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including completed stale high-zoom renders");
+            "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including best-scale fallback and completed stale high-zoom renders");
         AssertTrue(
             service.Contains("public RectDto? Clip { get; set; }", StringComparison.Ordinal) &&
             service.Contains("Clip = hasClip ? RectDto.FromSKRect", StringComparison.Ordinal) &&

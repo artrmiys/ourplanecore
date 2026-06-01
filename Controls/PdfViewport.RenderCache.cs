@@ -170,15 +170,38 @@ public sealed partial class PdfViewport
             {
                 if (_entries.TryGetValue(key, out CacheEntry? entry))
                 {
-                    entry.LastUsed = ++_clock;
-                    render = new CachedLayerBitmapRender(
-                        entry.WidthPt,
-                        entry.HeightPt,
-                        entry.BitmapScale,
-                        entry.Bitmap.Copy(),
-                        entry.Layers
-                            .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn, layer.IsHighlighted))
-                            .ToList());
+                    render = CopyEntry(entry);
+                    return true;
+                }
+            }
+
+            render = new CachedLayerBitmapRender(0, 0, 1, new SKBitmap(), []);
+            return false;
+        }
+
+        public bool TryGetBest(string signature, float requestedScale, out CachedLayerBitmapRender render)
+        {
+            lock (_gate)
+            {
+                CacheEntry? best = null;
+                float minimumUsefulScale = Math.Max(1.0f, requestedScale * 0.70f);
+                foreach (CacheEntry entry in _entries.Values)
+                {
+                    if (!string.Equals(entry.Signature, signature, StringComparison.Ordinal))
+                        continue;
+                    if (entry.BitmapScale < minimumUsefulScale)
+                        continue;
+                    if (best == null ||
+                        entry.BitmapScale > best.BitmapScale ||
+                        Math.Abs(entry.BitmapScale - best.BitmapScale) < 0.01f && entry.LastUsed > best.LastUsed)
+                    {
+                        best = entry;
+                    }
+                }
+
+                if (best != null)
+                {
+                    render = CopyEntry(best);
                     return true;
                 }
             }
@@ -195,6 +218,7 @@ public sealed partial class PdfViewport
 
         public void Put(
             string key,
+            string signature,
             float widthPt,
             float heightPt,
             float bitmapScale,
@@ -216,6 +240,7 @@ public sealed partial class PdfViewport
                     existing.WidthPt = widthPt;
                     existing.HeightPt = heightPt;
                     existing.BitmapScale = bitmapScale;
+                    existing.Signature = signature;
                     existing.Bitmap = copy;
                     existing.Layers = layerCopy;
                     existing.EstimatedBytes = bytes;
@@ -226,6 +251,7 @@ public sealed partial class PdfViewport
                 }
 
                 _entries[key] = new CacheEntry(
+                    signature,
                     widthPt,
                     heightPt,
                     bitmapScale,
@@ -236,6 +262,19 @@ public sealed partial class PdfViewport
                 _totalBytes += bytes;
                 Trim();
             }
+        }
+
+        private CachedLayerBitmapRender CopyEntry(CacheEntry entry)
+        {
+            entry.LastUsed = ++_clock;
+            return new CachedLayerBitmapRender(
+                entry.WidthPt,
+                entry.HeightPt,
+                entry.BitmapScale,
+                entry.Bitmap.Copy(),
+                entry.Layers
+                    .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn, layer.IsHighlighted))
+                    .ToList());
         }
 
         private void Trim()
@@ -268,6 +307,7 @@ public sealed partial class PdfViewport
         private sealed class CacheEntry
         {
             public CacheEntry(
+                string signature,
                 float widthPt,
                 float heightPt,
                 float bitmapScale,
@@ -276,6 +316,7 @@ public sealed partial class PdfViewport
                 long estimatedBytes,
                 long lastUsed)
             {
+                Signature = signature;
                 WidthPt = widthPt;
                 HeightPt = heightPt;
                 BitmapScale = bitmapScale;
@@ -285,6 +326,7 @@ public sealed partial class PdfViewport
                 LastUsed = lastUsed;
             }
 
+            public string Signature { get; set; }
             public float WidthPt { get; set; }
             public float HeightPt { get; set; }
             public float BitmapScale { get; set; }
@@ -316,6 +358,14 @@ public sealed partial class PdfViewport
             request.HighlightedLayers,
             request.CachedLayers);
 
+    private static string LayerRenderBitmapCacheSignature(LayerRenderRequest request) =>
+        LayerRenderBitmapCacheSignature(
+            request.PdfPath,
+            request.PdfIndex,
+            request.LayerStates,
+            request.HighlightedLayers,
+            request.CachedLayers);
+
     private static string LayerRenderBitmapCacheKey(
         string pdfPath,
         int pageIndex,
@@ -332,6 +382,39 @@ public sealed partial class PdfViewport
             info.Exists ? info.Length.ToString(CultureInfo.InvariantCulture) : "0",
             pageIndex.ToString(CultureInfo.InvariantCulture),
             Math.Round(renderScale, 3).ToString(CultureInfo.InvariantCulture),
+            "layers",
+        };
+        foreach (var pair in layerStates.OrderBy(pair => pair.Key))
+            parts.Add($"{pair.Key}={(pair.Value ? 1 : 0)}");
+
+        parts.Add("hi");
+        foreach (int layer in highlightedLayers.OrderBy(value => value))
+            parts.Add(layer.ToString(CultureInfo.InvariantCulture));
+
+        parts.Add("visible");
+        if (cachedLayers != null)
+        {
+            foreach (PdfLayerInfo layer in cachedLayers.OrderBy(layer => layer.Number))
+                parts.Add($"{layer.Number}={(layer.IsOn ? 1 : 0)}:{layer.Name}");
+        }
+
+        return string.Join('|', parts);
+    }
+
+    private static string LayerRenderBitmapCacheSignature(
+        string pdfPath,
+        int pageIndex,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers)
+    {
+        var info = new FileInfo(pdfPath);
+        var parts = new List<string>
+        {
+            info.FullName.ToLowerInvariant(),
+            info.Exists ? info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) : "0",
+            info.Exists ? info.Length.ToString(CultureInfo.InvariantCulture) : "0",
+            pageIndex.ToString(CultureInfo.InvariantCulture),
             "layers",
         };
         foreach (var pair in layerStates.OrderBy(pair => pair.Key))
