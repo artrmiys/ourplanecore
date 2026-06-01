@@ -515,12 +515,26 @@ public partial class MainWindow
         _syncingPageTreeSelection = true;
         try
         {
+            item.Focus();
             item.IsSelected = true;
         }
         finally
         {
             _syncingPageTreeSelection = false;
         }
+    }
+
+    private bool HasActivePagesMultiSelection() => _pagesMultiSelection.Count > 1;
+
+    private void SyncPageTreeNodeForViewportOpen(string pageFolder)
+    {
+        if (HasActivePagesMultiSelection())
+        {
+            ApplyPagesMultiSelectionVisuals();
+            return;
+        }
+
+        SelectPageTreeNodeSilently(pageFolder);
     }
 
     private void PagesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -568,7 +582,7 @@ public partial class MainWindow
             _pagesMultiSelection.Count > 1 &&
             _pagesMultiSelection.Contains(path))
         {
-            SelectPagesTreeItemSilently(item);
+            item.IsSelected = true;
             ApplyPagesMultiSelectionVisuals();
             return;
         }
@@ -579,7 +593,7 @@ public partial class MainWindow
             SelectPagesRange(_pagesRangeAnchorPath, path, additive);
             _pagesRangeAnchorPath = path;
             _pageTakeoffMultiSelection.Clear();
-            SelectPagesTreeItemSilently(item);
+            item.IsSelected = true;
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;
@@ -591,7 +605,7 @@ public partial class MainWindow
                 _pagesMultiSelection.Remove(path);
             _pagesRangeAnchorPath = path;
             _pageTakeoffMultiSelection.Clear();
-            SelectPagesTreeItemSilently(item);
+            item.IsSelected = true;
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;
@@ -632,9 +646,11 @@ public partial class MainWindow
                IsPathInsidePagesRoot(path, allowRoot: false);
     }
 
+    // ContainerFromElement(PagesTree, source) resolves nested sheet headers to
+    // their parent folder, so prefer the nearest visual TreeViewItem first.
     private TreeViewItem? FindPagesTreeItemFromSource(DependencyObject? source) =>
-        ItemsControl.ContainerFromElement(PagesTree, source) as TreeViewItem ??
-        FindAncestor<TreeViewItem>(source);
+        FindAncestor<TreeViewItem>(source) ??
+        ItemsControl.ContainerFromElement(PagesTree, source) as TreeViewItem;
 
     private static bool IsPageOverlayVisibilityToggleSource(DependencyObject? source)
     {

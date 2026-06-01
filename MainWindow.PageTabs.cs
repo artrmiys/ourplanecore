@@ -397,7 +397,7 @@ public partial class MainWindow
             ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();
             RefreshThreeDRoofGuideOverlay();
-            SelectPageTreeNodeSilently(viewportPage.FolderPath);
+            SyncPageTreeNodeForViewportOpen(viewportPage.FolderPath);
             SaveAppSettings();
             trace?.Mark("overlays+settings");
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))

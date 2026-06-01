@@ -118,6 +118,12 @@ internal static class TakeoffsTreeRegressionTests
             pagesTree.Contains("ItemsControl.ContainerFromElement(PagesTree, source)", StringComparison.Ordinal) &&
             pagesTree.Contains("Background = Brushes.Transparent", StringComparison.Ordinal),
             "page-tree hit testing should resolve clicks from the full row/header surface, not only text glyphs");
+        string hitTestMethod = SliceMethod(pagesTree, "private TreeViewItem? FindPagesTreeItemFromSource");
+        int ancestorIndex = hitTestMethod.IndexOf("FindAncestor<TreeViewItem>(source)", StringComparison.Ordinal);
+        int containerIndex = hitTestMethod.IndexOf("ItemsControl.ContainerFromElement(PagesTree, source)", StringComparison.Ordinal);
+        AssertTrue(
+            ancestorIndex >= 0 && containerIndex > ancestorIndex,
+            "nested sheet hit testing must prefer the nearest TreeViewItem; ContainerFromElement can resolve a child sheet click to its parent folder");
         AssertTrue(
             resources.Contains("<Setter Property=\"HorizontalContentAlignment\" Value=\"Stretch\"/>", StringComparison.Ordinal),
             "tree rows should stretch their content so blank row area remains clickable");
@@ -133,16 +139,29 @@ internal static class TakeoffsTreeRegressionTests
         string plainBlock = clickMethod[plainBranch..];
         AssertTrue(
             shiftBlock.Contains("SelectPagesRange(_pagesRangeAnchorPath, path, additive)", StringComparison.Ordinal) &&
-            shiftBlock.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
+            shiftBlock.Contains("item.IsSelected = true", StringComparison.Ordinal) &&
+            !shiftBlock.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
             !shiftBlock.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
-            "Shift range selection should update the pages multi-selection without opening the target sheet");
+            "Shift range selection should use normal WPF selection and must not direct-open or suppress the selected item event");
         AssertTrue(
-            ctrlBlock.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
+            ctrlBlock.Contains("item.IsSelected = true", StringComparison.Ordinal) &&
+            !ctrlBlock.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
             !ctrlBlock.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
-            "Ctrl page selection should toggle the multi-selection without opening the target sheet");
+            "Ctrl page selection should use normal WPF selection and must not direct-open or suppress the selected item event");
         AssertTrue(
             plainBlock.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
             "plain page clicks should still directly open the clicked sheet");
+
+        AssertTrue(
+            pagesTree.Contains("private bool HasActivePagesMultiSelection() => _pagesMultiSelection.Count > 1;", StringComparison.Ordinal) &&
+            pagesTree.Contains("private void SyncPageTreeNodeForViewportOpen", StringComparison.Ordinal),
+            "deferred viewport-to-tree sync should have a guard that preserves active page multi-selection");
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
+        AssertTrue(
+            deferredMethod.Contains("SyncPageTreeNodeForViewportOpen(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            !deferredMethod.Contains("SelectPageTreeNodeSilently(viewportPage.FolderPath)", StringComparison.Ordinal),
+            "deferred page-open sync must not overwrite active page multi-selection");
     }
 
     public static void PageReloadInvalidatesPreviewPrefetchCache()
