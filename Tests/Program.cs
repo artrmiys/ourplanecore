@@ -3432,6 +3432,12 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
             "ordinary zoom should use a refresh render, not an expensive clipped detail render");
+        AssertFalse(
+            ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(0.35f),
+            "cheap preview should still be allowed to refresh to a normal base bitmap");
+        AssertTrue(
+            ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(1.0f),
+            "deep zoom should rely on clipped detail once a normal base bitmap exists");
         AssertClose(
             4.0,
             ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),

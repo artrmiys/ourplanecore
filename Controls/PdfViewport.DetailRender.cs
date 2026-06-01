@@ -18,6 +18,7 @@ public sealed partial class PdfViewport
     private long _detailTileClock;
     private long _detailTileBytes;
     private DetailRenderRequest? _pendingDetailRender;
+    private DetailRenderRequest? _activeDetailRender;
     private bool _detailRenderInProgress;
     private int _detailRenderVersion;
     private const int MaxDetailRenderTileEntries = 64;
@@ -71,10 +72,13 @@ public sealed partial class PdfViewport
         if (request == null)
             return;
 
+        if (!force && IsSameDetailRequest(_activeDetailRender, request))
+            return;
+
         if (!force && IsSameDetailRequest(_pendingDetailRender, request))
             return;
 
-        _pendingDetailRender = request;
+        _pendingDetailRender = request with { Version = ++_detailRenderVersion };
         _ = StartNextDetailRenderAsync();
     }
 
@@ -107,7 +111,7 @@ public sealed partial class PdfViewport
         if (!force && DetailRenderCoversCurrentView(targetScale))
             return false;
 
-        int version = ++_detailRenderVersion;
+        int version = _detailRenderVersion + 1;
         request = new DetailRenderRequest(
             version,
             _pdfPath,
@@ -150,6 +154,7 @@ public sealed partial class PdfViewport
 
         DetailRenderRequest request = _pendingDetailRender;
         _pendingDetailRender = null;
+        _activeDetailRender = request;
         _detailRenderInProgress = true;
         try
         {
@@ -191,6 +196,8 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            if (ReferenceEquals(_activeDetailRender, request))
+                _activeDetailRender = null;
             _detailRenderInProgress = false;
             if (_pendingDetailRender != null)
                 _ = StartNextDetailRenderAsync();

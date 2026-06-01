@@ -97,6 +97,8 @@ public sealed partial class PdfViewport
         if (needsDetailRender)
         {
             QueueDetailRenderIfNeeded(force);
+            if (ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale))
+                return;
             if (!force && _isFastNavigating)
                 return;
         }

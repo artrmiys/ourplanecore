@@ -118,6 +118,9 @@ public static class ViewportRenderPolicy
         return zoom >= bitmapScale * DetailRenderMinScaleGain;
     }
 
+    public static bool ShouldSkipFullRefreshDuringDetail(float bitmapScale) =>
+        bitmapScale >= ResponsiveMinRenderScale * 0.95f;
+
     public static float SelectDetailRenderScale(
         float zoom,
         float clipWidthPt,

@@ -1125,6 +1125,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderMaxScale = 16.0f", StringComparison.Ordinal) &&
             policy.Contains("SelectDetailRenderScale", StringComparison.Ordinal) &&
             policy.Contains("ShouldUseZoomRefreshRender", StringComparison.Ordinal) &&
+            policy.Contains("ShouldSkipFullRefreshDuringDetail", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
@@ -1146,6 +1147,7 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
+            transform.Contains("ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
         AssertTrue(
@@ -1157,12 +1159,14 @@ internal static class TakeoffsTreeRegressionTests
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
             viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),
             "navigation idle should run the real idle path so clipped detail renders are scheduled after wheel zoom");
-        AssertFalse(
-            transform.Contains("QueueDetailRenderIfNeeded(force);\r\n            return;", StringComparison.Ordinal) ||
-            transform.Contains("QueueDetailRenderIfNeeded(force);\n            return;", StringComparison.Ordinal),
-            "detail rendering must not block the bounded full refresh that keeps 180-250% zoom usable while detail tiles render");
+        AssertTrue(
+            transform.Contains("if (ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale))", StringComparison.Ordinal),
+            "deep zoom should skip expensive full-sheet refresh once a normal 1x base bitmap exists");
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
+            detail.Contains("_activeDetailRender", StringComparison.Ordinal) &&
+            detail.Contains("IsSameDetailRequest(_activeDetailRender, request)", StringComparison.Ordinal) &&
+            detail.Contains("_detailRenderVersion + 1", StringComparison.Ordinal) &&
             detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&
             detail.Contains("MaxDetailRenderTileEntries = 64", StringComparison.Ordinal) &&
             detail.Contains("ResolveViewportRamBudget(2_400_000_000L, 4_800_000_000L, 0.07)", StringComparison.Ordinal) &&
