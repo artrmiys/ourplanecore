@@ -64,7 +64,60 @@ public sealed class TakeoffTemplate
 
 public sealed class TakeoffTemplateConfig
 {
-    public const int CurrentBuiltInVersion = 3;
+    public const int CurrentBuiltInVersion = 4;
+
+    internal static readonly IReadOnlyList<string> WallPresetNames =
+    [
+        "corners",
+        "ext",
+        "ext 2x6",
+        "ext 2x4",
+        "ext 2x8",
+        "cor",
+        "cor 2x4",
+        "cor 2x6",
+        "cor 2x8",
+        "cor (2) 2x4",
+        "cor (2) 2x6",
+        "cor (2) 2x8",
+        "dem",
+        "furring",
+        "2x4 x",
+        "2x6 x",
+        "2x8 x",
+        "2x4 half",
+        "2x6 half",
+    ];
+
+    internal static readonly IReadOnlyList<string> ShaftWallPresetNames =
+    [
+        "shaft 1st",
+        "shaft 2nd",
+        "shaft 3rd",
+        "shaft 4th",
+        "shaft 5th",
+    ];
+
+    internal static readonly IReadOnlyList<string> FramingPresetNames =
+    [
+        "Blocking for Drywall",
+        "Blocking for Trusses",
+        "Ribbon Board",
+        "Rim Board",
+        "Blocking",
+        "Ledger",
+        "1x3 Cross Blocking",
+        "Plate",
+        "Frame",
+    ];
+
+    internal static readonly IReadOnlySet<string> DeprecatedRootFolderNames = new HashSet<string>(
+        ["units", "shear walls - holdowns - ties", "siding", "trims", "drywalls"],
+        StringComparer.OrdinalIgnoreCase);
+
+    internal static readonly IReadOnlySet<string> DeprecatedWallPresetNames = new HashSet<string>(
+        ["unit", "corr", "parapet", "shaft"],
+        StringComparer.OrdinalIgnoreCase);
 
     public int BuiltInVersion { get; set; }
     public TakeoffTemplate Template { get; set; } = BuildDefaultTemplate();
@@ -114,17 +167,20 @@ public sealed class TakeoffTemplateConfig
                     Area("rf mtl x", "#546E7A"),
                     Area("roof", "#263238"),
                     Area("overframe x", "#78909C")),
-                Folder("units",
-                    Line("Unit", "#607D8B")),
                 Folder("walls",
                     WallPreset("corners"),
-                    WallPreset("unit"),
                     WallPreset("ext"),
+                    WallPreset("ext 2x6"),
+                    WallPreset("ext 2x4"),
+                    WallPreset("ext 2x8"),
                     WallPreset("cor"),
-                    WallPreset("corr"),
+                    WallPreset("cor 2x4"),
+                    WallPreset("cor 2x6"),
+                    WallPreset("cor 2x8"),
+                    WallPreset("cor (2) 2x4"),
+                    WallPreset("cor (2) 2x6"),
+                    WallPreset("cor (2) 2x8"),
                     WallPreset("dem"),
-                    WallPreset("parapet"),
-                    WallPreset("shaft"),
                     WallPreset("furring"),
                     WallPreset("2x4 x"),
                     WallPreset("2x6 x"),
@@ -145,7 +201,7 @@ public sealed class TakeoffTemplateConfig
                     Folder("gable stick",
                         Area("gable stick", "#5D4037"))),
                 Folder("parapets",
-                    Line("parapet", "#7E57C2")),
+                    ParapetPreset()),
                 Folder("trussheel",
                     Line("Truss Heel", "#00ACC1"),
                     Line("Eve Heel", "#26C6DA")),
@@ -169,80 +225,67 @@ public sealed class TakeoffTemplateConfig
                     Area("Gable Sheathing", "#1976D2"),
                     Line("Roof Types", "#303F9F")),
                 Folder("framing",
-                    Line("Blocking for Drywall", "#2196F3"),
-                    Line("Blocking for Trusses", "#1E88E5"),
-                    Line("Ribbon Board", "#1976D2"),
-                    Line("Rim Board", "#0D47A1"),
-                    Line("Blocking", "#00BCD4"),
-                    Line("Ledger", "#009688"),
-                    Line("1x3 Cross Blocking", "#3F51B5"),
-                    Line("Plate", "#FF9800"),
-                    Line("Frame", "#795548"),
-                    Line("Post", "#8BC34A"),
-                    Line("Beam", "#7CB342"),
-                    Line("Joist", "#689F38"),
-                    Line("Stair", "#558B2F"),
-                    Line("Subfloor", "#33691E"),
-                    Line("Bracing", "#00897B"),
-                    Line("Bolts", "#00796B"),
-                    Line("Screws", "#00695C"),
-                    Line("Steel Beam Web Fillers", "#004D40"),
-                    FramingFloor("1st floor framing"),
-                    FramingFloor("2nd floor framing"),
-                    FramingFloor("3rd floor framing"),
-                    FramingFloor("4th floor framing"),
-                    FramingFloor("5th floor framing"),
-                    FramingFloor("loft framing"),
-                    Folder("roof framing",
-                        Line("Ridge", "#5E35B1"),
-                        Line("Header", "#512DA8"),
-                        Line("Hip", "#4527A0"),
-                        Line("Valley", "#3949AB"),
-                        Line("Dormer", "#303F9F"),
-                        Line("Overframes", "#283593"),
-                        Line("Dbl Rafters", "#1A237E"),
-                        Line("Trpl Rafters", "#3F51B5"),
-                        Line("Canopy", "#2196F3"),
-                        Area("Roof Sheathing", "#1976D2"))),
-                Folder("shear walls - holdowns - ties",
-                    Line("Shear Wall", "#FDD835"),
-                    Point("Holddown", "#FBC02D"),
-                    Point("Tie", "#F9A825")),
-                Folder("siding",
-                    Area("Siding", "#8D6E63"),
-                    Line("Siding Trim", "#795548")),
-                Folder("trims",
-                    Line("Exterior Trim", "#6D4C41"),
-                    Line("Interior Trim", "#5D4037"),
-                    Line("Base", "#4E342E"),
-                    Line("Casing", "#3E2723"),
-                    Line("Crown", "#A1887F")),
-                Folder("drywalls",
-                    Area("Drywall", "#90A4AE"),
-                    Line("Drywall Trim", "#78909C")),
+                    FramingPreset("Blocking for Drywall"),
+                    FramingPreset("Blocking for Trusses"),
+                    FramingPreset("Ribbon Board"),
+                    FramingPreset("Rim Board"),
+                    FramingPreset("Blocking"),
+                    FramingPreset("Ledger"),
+                    FramingPreset("1x3 Cross Blocking"),
+                    FramingPreset("Plate"),
+                    FramingPreset("Frame")),
             ],
         };
     }
 
     private static TakeoffTemplateNode WallFloor(string name) =>
-        Folder(name,
-            WallPreset("corners"),
-            WallPreset("unit"),
-            WallPreset("ext"),
-            WallPreset("cor"),
-            WallPreset("corr"),
-            WallPreset("dem"),
-            WallPreset("parapet"),
-            WallPreset("shaft"),
-            WallPreset("furring"),
-            WallPreset("2x4 x"),
-            WallPreset("2x6 x"),
-            WallPreset("2x8 x"),
-            WallPreset("2x4 half"),
-            WallPreset("2x6 half"));
+        string.Equals(name, "shaft walls", StringComparison.OrdinalIgnoreCase)
+            ? ShaftWallsFolder(name)
+            : Folder(name,
+                WallPreset("corners"),
+                WallPreset("ext"),
+                WallPreset("ext 2x6"),
+                WallPreset("ext 2x4"),
+                WallPreset("ext 2x8"),
+                WallPreset("cor"),
+                WallPreset("cor 2x4"),
+                WallPreset("cor 2x6"),
+                WallPreset("cor 2x8"),
+                WallPreset("cor (2) 2x4"),
+                WallPreset("cor (2) 2x6"),
+                WallPreset("cor (2) 2x8"),
+                WallPreset("dem"),
+                WallPreset("furring"),
+                WallPreset("2x4 x"),
+                WallPreset("2x6 x"),
+                WallPreset("2x8 x"),
+                WallPreset("2x4 half"),
+                WallPreset("2x6 half"));
 
-    private static TakeoffTemplateNode WallPreset(string name) =>
-        Line(name, WallPresetColor(name));
+    private static TakeoffTemplateNode ShaftWallsFolder(string name) =>
+        Folder(name,
+            ShaftWallPreset("shaft 1st"),
+            ShaftWallPreset("shaft 2nd"),
+            ShaftWallPreset("shaft 3rd"),
+            ShaftWallPreset("shaft 4th"),
+            ShaftWallPreset("shaft 5th"));
+
+    internal static TakeoffTemplateNode WallPreset(string name)
+    {
+        string color = WallPresetColor(name);
+        return string.Equals(name, "corners", StringComparison.OrdinalIgnoreCase)
+            ? Point(name, color)
+            : Line(name, color);
+    }
+
+    internal static TakeoffTemplateNode ShaftWallPreset(string name) =>
+        Line(name, ShaftWallPresetColor(name));
+
+    internal static TakeoffTemplateNode FramingPreset(string name) =>
+        Line(name, FramingPresetColor(name));
+
+    internal static TakeoffTemplateNode ParapetPreset() =>
+        Line("prpt 0.0 0.0 0.0", "#7E57C2");
 
     private static string WallPresetColor(string name) =>
         TryWallPresetColor(name, out string color) ? color : "#FF4444";
@@ -252,13 +295,18 @@ public sealed class TakeoffTemplateConfig
         color = name.Trim().ToLowerInvariant() switch
         {
             "corners" => "#FF1744",
-            "unit" => "#00B8D4",
             "ext" => "#2E7D32",
+            "ext 2x6" => "#00B8D4",
+            "ext 2x4" => "#00C853",
+            "ext 2x8" => "#64DD17",
             "cor" => "#FF9100",
-            "corr" => "#651FFF",
+            "cor 2x4" => "#FF6D00",
+            "cor 2x6" => "#FFD600",
+            "cor 2x8" => "#AEEA00",
+            "cor (2) 2x4" => "#651FFF",
+            "cor (2) 2x6" => "#2962FF",
+            "cor (2) 2x8" => "#0091EA",
             "dem" => "#2962FF",
-            "parapet" => "#C51162",
-            "shaft" => "#00C853",
             "furring" => "#6D4C41",
             "2x4 x" => "#D500F9",
             "2x6 x" => "#FFD600",
@@ -270,26 +318,31 @@ public sealed class TakeoffTemplateConfig
         return color.Length > 0;
     }
 
-    private static TakeoffTemplateNode FramingFloor(string name) =>
-        Folder(name,
-            Line("Post", "#8BC34A"),
-            Line("Beam", "#7CB342"),
-            Line("Joist", "#689F38"),
-            Line("Stair", "#558B2F"),
-            Line("Subfloor", "#33691E"),
-            Line("Rim Board", "#0D47A1"),
-            Line("Ribbon Board", "#1976D2"),
-            Line("Blocking", "#00BCD4"),
-            Line("Blocking for Drywall", "#2196F3"),
-            Line("Blocking for Trusses", "#1E88E5"),
-            Line("1x3 Cross Blocking", "#3F51B5"),
-            Line("Ledger", "#009688"),
-            Line("Plate", "#FF9800"),
-            Line("Frame", "#795548"),
-            Line("Bracing", "#00897B"),
-            Line("Bolts", "#00796B"),
-            Line("Screws", "#00695C"),
-            Line("Steel Beam Web Fillers", "#004D40"));
+    private static string ShaftWallPresetColor(string name) =>
+        name.Trim().ToLowerInvariant() switch
+        {
+            "shaft 1st" => "#00C853",
+            "shaft 2nd" => "#00BFA5",
+            "shaft 3rd" => "#00B8D4",
+            "shaft 4th" => "#0091EA",
+            "shaft 5th" => "#2962FF",
+            _ => "#00C853",
+        };
+
+    private static string FramingPresetColor(string name) =>
+        name.Trim().ToLowerInvariant() switch
+        {
+            "blocking for drywall" => "#2196F3",
+            "blocking for trusses" => "#1E88E5",
+            "ribbon board" => "#1976D2",
+            "rim board" => "#0D47A1",
+            "blocking" => "#00BCD4",
+            "ledger" => "#009688",
+            "1x3 cross blocking" => "#3F51B5",
+            "plate" => "#FF9800",
+            "frame" => "#795548",
+            _ => "#2196F3",
+        };
 
     private static TakeoffTemplateNode Folder(string name, params TakeoffTemplateNode[] children) =>
         new()
@@ -418,8 +471,8 @@ public static class TakeoffTemplateStore
         {
             int previousBuiltInVersion = clone.BuiltInVersion;
             MergeBuiltInDefaults(clone.Template.Roots, TakeoffTemplateConfig.BuildDefaultTemplate().Roots);
-            if (previousBuiltInVersion < 3)
-                ApplyBuiltInWallPaletteUpgrade(clone.Template.Roots);
+            if (previousBuiltInVersion < 4)
+                ApplyBuiltInTemplateCleanupV4(clone.Template.Roots);
             clone.BuiltInVersion = TakeoffTemplateConfig.CurrentBuiltInVersion;
         }
         NormalizeNodeIds(clone.Template.Roots);
@@ -447,35 +500,112 @@ public static class TakeoffTemplateStore
         }
     }
 
-    private static void ApplyBuiltInWallPaletteUpgrade(IEnumerable<TakeoffTemplateNode> roots)
+    private static void ApplyBuiltInTemplateCleanupV4(List<TakeoffTemplateNode> roots)
     {
-        foreach (TakeoffTemplateNode node in roots)
+        roots.RemoveAll(node =>
+            node.IsFolder &&
+            TakeoffTemplateConfig.DeprecatedRootFolderNames.Contains(node.Name));
+
+        foreach (TakeoffTemplateNode node in roots.ToList())
         {
-            if (node.IsFolder &&
-                string.Equals(node.Name, "walls", StringComparison.OrdinalIgnoreCase))
+            if (!node.IsFolder)
+                continue;
+
+            if (string.Equals(node.Name, "walls", StringComparison.OrdinalIgnoreCase))
             {
-                ApplyWallPalette(node);
+                ApplyWallsTemplateV4(node);
+            }
+            else if (string.Equals(node.Name, "parapets", StringComparison.OrdinalIgnoreCase))
+            {
+                ReplaceFolderItems(node, [TakeoffTemplateConfig.ParapetPreset()], keepCustomItems: false);
+            }
+            else if (string.Equals(node.Name, "framing", StringComparison.OrdinalIgnoreCase))
+            {
+                ReplaceFolderItems(
+                    node,
+                    TakeoffTemplateConfig.FramingPresetNames.Select(TakeoffTemplateConfig.FramingPreset),
+                    keepCustomItems: false);
             }
             else
             {
-                ApplyBuiltInWallPaletteUpgrade(node.Children);
+                ApplyBuiltInTemplateCleanupV4(node.Children);
             }
         }
     }
 
-    private static void ApplyWallPalette(TakeoffTemplateNode folder)
+    private static void ApplyWallsTemplateV4(TakeoffTemplateNode folder)
     {
-        foreach (TakeoffTemplateNode child in folder.Children)
+        ApplyWallPresetFolderV4(folder);
+        foreach (TakeoffTemplateNode child in folder.Children.ToList())
         {
-            if (child.IsFolder)
+            if (!child.IsFolder)
+                continue;
+
+            if (string.Equals(child.Name, "shaft walls", StringComparison.OrdinalIgnoreCase))
+                ApplyShaftWallsTemplateV4(child);
+            else
+                ApplyWallPresetFolderV4(child);
+        }
+    }
+
+    private static void ApplyWallPresetFolderV4(TakeoffTemplateNode folder)
+    {
+        folder.Children.RemoveAll(child =>
+            !child.IsFolder &&
+            TakeoffTemplateConfig.DeprecatedWallPresetNames.Contains(child.Name));
+
+        ReplaceFolderItems(
+            folder,
+            TakeoffTemplateConfig.WallPresetNames.Select(TakeoffTemplateConfig.WallPreset),
+            keepCustomItems: true);
+    }
+
+    private static void ApplyShaftWallsTemplateV4(TakeoffTemplateNode folder)
+    {
+        ReplaceFolderItems(
+            folder,
+            TakeoffTemplateConfig.ShaftWallPresetNames.Select(TakeoffTemplateConfig.ShaftWallPreset),
+            keepCustomItems: false);
+    }
+
+    private static void ReplaceFolderItems(
+        TakeoffTemplateNode folder,
+        IEnumerable<TakeoffTemplateNode> desiredItems,
+        bool keepCustomItems)
+    {
+        var desired = desiredItems.Select(item => item.Clone()).ToList();
+        var desiredNames = desired
+            .Select(item => item.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingByName = folder.Children
+            .Where(child => !child.IsFolder && desiredNames.Contains(child.Name))
+            .GroupBy(child => child.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var next = new List<TakeoffTemplateNode>();
+        foreach (TakeoffTemplateNode desiredItem in desired)
+        {
+            if (existingByName.TryGetValue(desiredItem.Name, out TakeoffTemplateNode? existing))
             {
-                ApplyWallPalette(child);
+                existing.IsFolder = false;
+                existing.MeasurementType = desiredItem.MeasurementType;
+                existing.Color = desiredItem.Color;
+                existing.CountSymbol = desiredItem.CountSymbol;
+                next.Add(existing);
                 continue;
             }
 
-            if (TakeoffTemplateConfig.TryWallPresetColor(child.Name, out string color))
-                child.Color = color;
+            next.Add(desiredItem);
         }
+
+        if (keepCustomItems)
+            next.AddRange(folder.Children.Where(child => !child.IsFolder && !desiredNames.Contains(child.Name)));
+
+        if (keepCustomItems)
+            next.AddRange(folder.Children.Where(child => child.IsFolder));
+
+        folder.Children.Clear();
+        folder.Children.AddRange(next);
     }
 
     private static void NormalizeNodeIds(IEnumerable<TakeoffTemplateNode> nodes)
