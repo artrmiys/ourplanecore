@@ -1133,6 +1133,11 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
         AssertTrue(
+            pageApi.Contains("QueueLayerRender(", StringComparison.Ordinal) &&
+            pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueDetailRenderIfNeeded(force: true)", StringComparison.Ordinal),
+            "cached preview page opens should schedule clipped high-detail immediately instead of waiting for the full-sheet high render");
+        AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
             viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),
             "navigation idle should run the real idle path so clipped detail renders are scheduled after wheel zoom");
@@ -1143,8 +1148,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
             detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&
-            detail.Contains("MaxDetailRenderTileEntries = 24", StringComparison.Ordinal) &&
-            detail.Contains("MaxDetailRenderTileBytes = 1_800_000_000", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileEntries = 64", StringComparison.Ordinal) &&
+            detail.Contains("ResolveViewportRamBudget(2_400_000_000L, 4_800_000_000L, 0.07)", StringComparison.Ordinal) &&
             detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
@@ -1164,10 +1169,14 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("PdfLayerRenderResult render,", StringComparison.Ordinal) &&
             layers.Contains("layer-memory-best", StringComparison.Ordinal) &&
             layers.Contains("layer-memory", StringComparison.Ordinal) &&
+            layers.Contains("ShouldKeepHighScaleLayerBitmapInCache", StringComparison.Ordinal) &&
+            layers.Contains("ApplyLayerRenderMetadataOnly", StringComparison.Ordinal) &&
+            layers.Contains("layer-memory-deferred", StringComparison.Ordinal) &&
             renderCache.Contains("LayerRenderBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("TryGetBest", StringComparison.Ordinal) &&
             renderCache.Contains("LayerRenderBitmapCacheSignature", StringComparison.Ordinal) &&
-            renderCache.Contains("10_500_000_000L", StringComparison.Ordinal),
+            renderCache.Contains("ResolveLayerBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
+            renderCache.Contains("24_000_000_000L", StringComparison.Ordinal),
             "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including best-scale fallback and completed stale high-zoom renders");
         AssertTrue(
             service.Contains("public RectDto? Clip { get; set; }", StringComparison.Ordinal) &&

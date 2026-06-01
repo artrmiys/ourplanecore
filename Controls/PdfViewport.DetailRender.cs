@@ -20,8 +20,9 @@ public sealed partial class PdfViewport
     private DetailRenderRequest? _pendingDetailRender;
     private bool _detailRenderInProgress;
     private int _detailRenderVersion;
-    private const int MaxDetailRenderTileEntries = 24;
-    private const long MaxDetailRenderTileBytes = 1_800_000_000;
+    private const int MaxDetailRenderTileEntries = 64;
+    private static readonly long MaxDetailRenderTileBytes =
+        ResolveViewportRamBudget(2_400_000_000L, 4_800_000_000L, 0.07);
 
     private sealed record DetailRenderRequest(
         int Version,

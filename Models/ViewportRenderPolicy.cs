@@ -57,9 +57,9 @@ public static class ViewportRenderPolicy
 
     private static RenderQuality CurrentQuality => _qualityMode switch
     {
-        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 768f),
-        MaxQualityMode => new RenderQuality(4.0f, 320_000_000f, DetailRenderMaxScale, 320_000_000f, 2048f),
-        _ => new RenderQuality(3.0f, 192_000_000f, 12.0f, 192_000_000f, 1536f),
+        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f),
+        MaxQualityMode => new RenderQuality(4.0f, 320_000_000f, DetailRenderMaxScale, 320_000_000f, 1024f),
+        _ => new RenderQuality(3.0f, 192_000_000f, 12.0f, 192_000_000f, 768f),
     };
 
     public static bool ShouldUseFastNavigationFrame(

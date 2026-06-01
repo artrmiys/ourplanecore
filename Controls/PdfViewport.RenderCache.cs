@@ -10,10 +10,30 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 24, maxBytes: 1_250_000_000);
-    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 180, maxBytes: 10_500_000_000L);
+    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 48, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
+    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 320, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
+
+    private static long ResolveDocnetRenderCacheBudgetBytes() =>
+        ResolveViewportRamBudget(1_500_000_000L, 4_000_000_000L, 0.06);
+
+    private static long ResolveLayerBitmapCacheBudgetBytes() =>
+        ResolveViewportRamBudget(12_000_000_000L, 24_000_000_000L, 0.38);
+
+    private static long ResolveViewportRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
+    {
+        long availableBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (availableBytes <= 0)
+            return maximumBytes;
+
+        double desiredBytes = availableBytes * targetRatio;
+        if (double.IsNaN(desiredBytes) || desiredBytes <= 0)
+            return maximumBytes;
+
+        long budgetBytes = desiredBytes >= long.MaxValue ? maximumBytes : (long)desiredBytes;
+        return Math.Clamp(budgetBytes, minimumBytes, maximumBytes);
+    }
 
     private sealed record CachedBitmapRender(
         float WidthPt,

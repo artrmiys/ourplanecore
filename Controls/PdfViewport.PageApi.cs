@@ -109,6 +109,7 @@ public sealed partial class PdfViewport
                 restoreView: restoreView,
                 fitAfter: !restoreView.HasValue,
                 allowImmediateCache: false);
+            QueueDetailRenderIfNeeded(force: true);
         }
         else if (!TryApplyPersistedDefaultCleanRender(
             ViewportRenderPolicy.ResponsiveMinRenderScale,

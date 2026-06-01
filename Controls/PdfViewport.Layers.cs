@@ -217,6 +217,23 @@ public sealed partial class PdfViewport
             }
         }
 
+        if (ShouldKeepHighScaleLayerBitmapInCache(request, cached.BitmapScale))
+        {
+            ApplyLayerRenderMetadataOnly(request, cached.WidthPt, cached.HeightPt, cached.Layers);
+            cached.Bitmap.Dispose();
+            ReportViewportRenderProfile(
+                exactHit ? "layer-memory-deferred" : "layer-memory-best-deferred",
+                request.PageFolder,
+                request.PdfPath,
+                request.PdfIndex,
+                request.RenderScale,
+                elapsedMs: 0,
+                fromCache: true,
+                clipRect: null);
+            RequestRepaint();
+            return true;
+        }
+
         _pageBitmap?.Dispose();
         _pageBitmap = cached.Bitmap;
         _pdfW = cached.WidthPt;
@@ -248,7 +265,7 @@ public sealed partial class PdfViewport
         if (_pdfSnapEnabled && request.ResetLayerStates)
             QueuePdfSnapPointLoad(force: true);
         ApplyLayerRenderContinuation(request);
-        QueueDetailRenderIfNeeded(force: true);
+        QueueDetailRenderIfNeeded(force: request.ResetLayerStates || request.HighlightedLayers.Count > 0);
         if (request.FireLayersAfter)
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
@@ -264,6 +281,61 @@ public sealed partial class PdfViewport
             clipRect: null);
         RequestRepaint();
         return true;
+    }
+
+    private bool ShouldKeepHighScaleLayerBitmapInCache(LayerRenderRequest request, float bitmapScale)
+    {
+        if (request.RenderScale < 3.0f ||
+            bitmapScale < 3.0f ||
+            _zoom < ViewportRenderPolicy.DetailRenderMinZoom ||
+            _pageBitmap == null ||
+            _bitmapScale <= 0)
+        {
+            return false;
+        }
+
+        bool currentBitmapSharpEnough = _bitmapScale >= Math.Min(_zoom, bitmapScale) * 0.90f;
+        return currentBitmapSharpEnough || ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale);
+    }
+
+    private void ApplyLayerRenderMetadataOnly(
+        LayerRenderRequest request,
+        float widthPt,
+        float heightPt,
+        IReadOnlyList<PdfLayer> layers)
+    {
+        _pdfW = widthPt;
+        _pdfH = heightPt;
+        _renderedScale = Math.Max(_renderedScale, request.RenderScale);
+        _usingLayerRenderer = true;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
+        _showingPreviousPageDuringSwitch = false;
+
+        if (request.ResetLayerStates)
+        {
+            _layerStates.Clear();
+            foreach (PdfLayer layer in layers)
+                _layerStates[layer.Number] = layer.IsOn;
+        }
+
+        UpdateLayerSnapshot(layers);
+        if (_cachedLayers == null)
+        {
+            _cachedLayers = layers
+                .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
+                .ToList();
+            PdfLayersDiscovered?.Invoke(_cachedLayers);
+        }
+
+        if (_pdfSnapEnabled && request.ResetLayerStates)
+            QueuePdfSnapPointLoad(force: true);
+        ApplyLayerRenderContinuation(request);
+        QueueDetailRenderIfNeeded(force: request.ResetLayerStates || request.HighlightedLayers.Count > 0);
+        if (request.FireLayersAfter)
+            FireLayersChanged();
+        if (!string.IsNullOrWhiteSpace(request.StatusAfter))
+            PostStatus(request.StatusAfter);
     }
 
     private void ApplyInitialPreviewView(ViewState? restoreView, bool fitAfter)
@@ -724,6 +796,20 @@ public sealed partial class PdfViewport
             {
                 if (completion.Ok)
                 {
+                    if (decodedBitmap != null &&
+                        ShouldKeepHighScaleLayerBitmapInCache(completion.Request, completion.Request.RenderScale))
+                    {
+                        CacheLayerBitmapRender(completion.Request, completion.Result, decodedBitmap);
+                        ApplyLayerRenderMetadataOnly(
+                            completion.Request,
+                            completion.Result.WidthPt,
+                            completion.Result.HeightPt,
+                            completion.Result.Layers);
+                        decodedBitmap.Dispose();
+                        decodedBitmap = null;
+                        return;
+                    }
+
                     bool applied = ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap);
                     if (applied)
                     {
