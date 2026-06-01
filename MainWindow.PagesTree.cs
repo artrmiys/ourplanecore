@@ -27,6 +27,7 @@ public partial class MainWindow
 
     private void ReloadPagesTree(string? selectPath = null, bool selectSilently = false)
     {
+        InvalidatePagePreviewPrefetchCache();
         PagesTree.Items.Clear();
         _pageTakeoffMultiSelection.Clear();
         _pageTakeoffRangeAnchorKey = null;
@@ -404,7 +405,7 @@ public partial class MainWindow
             }
         });
 
-        if (selected)
+        if (selected || OurPlaneCoreJobStore.IsPageFolder(folderPath))
             OpenPageByFolder(folderPath);
     }
 

@@ -17,6 +17,12 @@ public partial class MainWindow
     private IReadOnlyList<PageInfo> _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     private int _pageOpenDeferredVersion;
 
+    private void InvalidatePagePreviewPrefetchCache()
+    {
+        _pagePreviewPrefetchJobRoot = "";
+        _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
+    }
+
     private void PageTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_updatingPageTabs || !ReferenceEquals(e.OriginalSource, PageTabs))

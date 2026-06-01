@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -259,7 +260,9 @@ public partial class MainWindow
 
         _currentPage = null;
         _currentPdfPath = "";
-        ReloadPagesTree(selectAfter ?? _currentJob?.PagesRoot);
+        ReloadPagesTree();
+        if (!string.IsNullOrWhiteSpace(selectAfter))
+            SelectPageByFolder(selectAfter);
         TxtStatus.Text = $"PDF metadata applied: {renamed} renamed, {scaled} scaled, {failed} failed.";
         return new PdfMetadataApplySummary(renamed, scaled, failed);
     }
@@ -307,10 +310,34 @@ public partial class MainWindow
         bool defaultRename,
         bool defaultScale)
     {
-        foreach (var result in results.Where(result => result.Ok && result.Metadata != null))
+        var candidates = results
+            .Where(result => result.Ok && result.Metadata != null)
+            .Select(result => new
+            {
+                Result = result,
+                Metadata = result.Metadata!,
+                ProposedName = result.Metadata!.ProposedPageName(),
+            })
+            .ToList();
+        var duplicateNames = candidates
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.ProposedName))
+            .GroupBy(entry => NormalizePathForCompare(entry.ProposedName), StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in candidates)
         {
-            PdfSheetMetadata metadata = result.Metadata!;
-            string proposedName = metadata.ProposedPageName();
+            PdfMetadataPageResult result = entry.Result;
+            PdfSheetMetadata metadata = entry.Metadata;
+            string proposedName = entry.ProposedName;
+            bool duplicateName = duplicateNames.Contains(NormalizePathForCompare(proposedName));
+            if (duplicateName)
+            {
+                proposedName = SourceQualifiedDuplicatePageName(proposedName, result.Page);
+                if (!string.Equals(proposedName, entry.ProposedName, StringComparison.OrdinalIgnoreCase))
+                    metadata.Warnings.Add("duplicate sheet number disambiguated by source PDF");
+            }
             bool canRename = !string.IsNullOrWhiteSpace(proposedName) &&
                              !string.Equals(proposedName, result.Page.Name, StringComparison.OrdinalIgnoreCase);
             bool nameConflict = HasPageNameConflict(result.Page.FolderPath, proposedName);
@@ -342,6 +369,31 @@ public partial class MainWindow
                 ApplyScale = defaultScale && canScale && !learnedConflict,
             };
         }
+    }
+
+    private static string SourceQualifiedDuplicatePageName(string proposedName, PageInfo page)
+    {
+        string source = CleanDuplicateSourceName(Path.GetFileNameWithoutExtension(page.PdfPath));
+        if (string.IsNullOrWhiteSpace(source) ||
+            proposedName.Contains(source, StringComparison.OrdinalIgnoreCase))
+        {
+            return proposedName;
+        }
+
+        string combined = $"{proposedName} - {source}";
+        return combined.Length <= 110
+            ? combined
+            : combined[..110].Trim().TrimEnd('-').Trim();
+    }
+
+    private static string CleanDuplicateSourceName(string sourceName)
+    {
+        string clean = (sourceName ?? "").Replace('_', ' ');
+        clean = Regex.Replace(clean, @"\s*\(\d+\)\s*$", "");
+        clean = Regex.Replace(clean, @"\b\d{1,2}[-.]\d{1,2}[-.]\d{2,4}\b", "");
+        clean = Regex.Replace(clean, @"\s*-\s*", " - ");
+        clean = Regex.Replace(clean, @"\s+", " ").Trim(' ', '-');
+        return clean.Trim();
     }
 
     private static string PdfMetadataDecisionReason(

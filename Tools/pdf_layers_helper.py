@@ -2196,6 +2196,10 @@ def sheetmeta_data(req: dict) -> dict:
     elif not selected_scale and re.search(r"\b(?:NTS|NOT\s+TO\s+SCALE)\b", text, flags=re.IGNORECASE):
         skip_scale = True
         warnings.append("page scale is NTS")
+    elif not selected_scale and not skip_scale and not suffix and len(body_scales) == 1:
+        selected_scale = _choose_best_scale(body_scales)
+        if selected_scale:
+            warnings.append("scale selected from only PDF body scale")
     elif not selected_scale and not skip_scale and suffix in AI_SCALE_SUFFIXES:
         selected_scale = _infer_scale_from_title(suffix_text, suffix)
         if selected_scale:

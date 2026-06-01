@@ -88,12 +88,30 @@ internal static class TakeoffsTreeRegressionTests
             selectMethod.Contains("OpenPageByFolder(folderPath)", StringComparison.Ordinal),
             "programmatic page selection should not rely only on TreeView SelectedItemChanged to open the viewport");
         AssertTrue(
+            selectMethod.Contains("selected || OurPlaneCoreJobStore.IsPageFolder(folderPath)", StringComparison.Ordinal),
+            "programmatic page selection should still open a valid page when the row is hidden or already selected");
+        AssertTrue(
             openMethod.Contains("OurPlaneCoreJobStore.TryReadPage(folderPath)", StringComparison.Ordinal) &&
             openMethod.Contains("OpenPageInActiveTab(page)", StringComparison.Ordinal),
             "direct programmatic page open should read the selected page and load it through the normal page tab path");
         AssertTrue(
             openMethod.Contains("IsSamePageFolder(_currentPage.FolderPath, folderPath)", StringComparison.Ordinal),
             "direct page-open fallback should avoid duplicate reloads when the selection event already opened the page");
+    }
+
+    public static void PageReloadInvalidatesPreviewPrefetchCache()
+    {
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+
+        AssertTrue(
+            SliceMethod(pagesTree, "private void ReloadPagesTree")
+                .Contains("InvalidatePagePreviewPrefetchCache();", StringComparison.Ordinal),
+            "page-tree reload should invalidate cached prefetch page lists after import, rename, move, or delete");
+        AssertTrue(
+            pageTabs.Contains("private void InvalidatePagePreviewPrefetchCache()", StringComparison.Ordinal) &&
+            pageTabs.Contains("_pagePreviewPrefetchPages = Array.Empty<PageInfo>();", StringComparison.Ordinal),
+            "preview prefetch cache invalidation should clear the cached page list");
     }
 
     public static void SectionSelectionKeyHandlesLegacyUnfiledItem()
