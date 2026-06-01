@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 
@@ -13,9 +14,14 @@ public sealed partial class PdfViewport
     private SKRect _detailPdfRect;
     private float _detailBitmapScale;
     private string _detailPageKey = "";
+    private readonly List<DetailRenderTile> _detailTiles = [];
+    private long _detailTileClock;
+    private long _detailTileBytes;
     private DetailRenderRequest? _pendingDetailRender;
     private bool _detailRenderInProgress;
     private int _detailRenderVersion;
+    private const int MaxDetailRenderTileEntries = 12;
+    private const long MaxDetailRenderTileBytes = 900_000_000;
 
     private sealed record DetailRenderRequest(
         int Version,
@@ -28,6 +34,16 @@ public sealed partial class PdfViewport
         HashSet<int> HighlightedLayers,
         IReadOnlyList<PdfLayerInfo>? CachedLayers);
 
+    private sealed class DetailRenderTile
+    {
+        public required SKBitmap Bitmap { get; init; }
+        public SKRect PdfRect { get; init; }
+        public float BitmapScale { get; init; }
+        public string PageKey { get; init; } = "";
+        public long EstimatedBytes { get; init; }
+        public long LastUsed { get; set; }
+    }
+
     private void ClearDetailRender()
     {
         _pendingDetailRender = null;
@@ -37,7 +53,10 @@ public sealed partial class PdfViewport
 
     private void ClearDetailRenderBitmap()
     {
-        _detailBitmap?.Dispose();
+        foreach (DetailRenderTile tile in _detailTiles)
+            tile.Bitmap.Dispose();
+        _detailTiles.Clear();
+        _detailTileBytes = 0;
         _detailBitmap = null;
         _detailPdfRect = SKRect.Empty;
         _detailBitmapScale = 0;
@@ -103,18 +122,24 @@ public sealed partial class PdfViewport
 
     private bool DetailRenderCoversCurrentView(float targetScale)
     {
-        if (_detailBitmap == null ||
-            _detailBitmapScale <= 0 ||
-            !string.Equals(_detailPageKey, DetailPageKey(_pdfPath, _pdfIndex, _pageFolder), StringComparison.OrdinalIgnoreCase))
+        SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
+        string pageKey = DetailPageKey(_pdfPath, _pdfIndex, _pageFolder);
+        foreach (DetailRenderTile tile in _detailTiles)
         {
-            return false;
+            if (!string.Equals(tile.PageKey, pageKey, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (tile.BitmapScale < targetScale * 0.92f)
+                continue;
+
+            if (!RectContains(tile.PdfRect, visible, tolerancePt: 0.5f))
+                continue;
+
+            tile.LastUsed = ++_detailTileClock;
+            return true;
         }
 
-        if (_detailBitmapScale < targetScale * 0.92f)
-            return false;
-
-        SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
-        return RectContains(_detailPdfRect, visible, tolerancePt: 0.5f);
+        return false;
     }
 
     private async Task StartNextDetailRenderAsync()
@@ -150,8 +175,12 @@ public sealed partial class PdfViewport
             if (!IsCurrentDetailRequest(request))
                 return;
 
+            SKBitmap? decodedBitmap = null;
             if (renderResult.Ok)
-                ApplyDetailRenderResult(request, renderResult.Result);
+                decodedBitmap = await Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes));
+
+            if (renderResult.Ok)
+                ApplyDetailRenderResult(request, renderResult.Result, decodedBitmap);
             else if (!string.IsNullOrWhiteSpace(renderResult.Error))
                 AppLog.Warn($"Viewport detail render unavailable: {renderResult.Error}");
         }
@@ -167,9 +196,8 @@ public sealed partial class PdfViewport
         }
     }
 
-    private void ApplyDetailRenderResult(DetailRenderRequest request, PdfLayerRenderResult render)
+    private void ApplyDetailRenderResult(DetailRenderRequest request, PdfLayerRenderResult render, SKBitmap? bitmap)
     {
-        var bitmap = SKBitmap.Decode(render.ImageBytes);
         if (bitmap == null)
         {
             AppLog.Warn("Viewport detail render returned an unreadable image.");
@@ -189,42 +217,93 @@ public sealed partial class PdfViewport
             return;
         }
 
-        _detailBitmap?.Dispose();
         _detailBitmap = bitmap;
         _detailPdfRect = clip;
         _detailBitmapScale = clip.Width > 0 ? bitmap.Width / clip.Width : request.RenderScale;
         _detailPageKey = DetailPageKey(request.PdfPath, request.PdfIndex, request.PageFolder);
+        AddDetailRenderTile(bitmap, clip, _detailBitmapScale, _detailPageKey);
         RequestRepaint();
     }
 
     private void DrawDetailRenderTile(SKCanvas canvas)
     {
-        if (_detailBitmap == null ||
-            _detailBitmapScale <= 0 ||
-            _detailPdfRect.Width <= 0 ||
-            _detailPdfRect.Height <= 0 ||
-            !string.Equals(_detailPageKey, DetailPageKey(_pdfPath, _pdfIndex, _pageFolder), StringComparison.OrdinalIgnoreCase))
+        if (_detailTiles.Count == 0)
         {
             return;
         }
 
         SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
-        if (!Intersects(_detailPdfRect, visible))
-            return;
-
-        using var paint = new SKPaint
+        string pageKey = DetailPageKey(_pdfPath, _pdfIndex, _pageFolder);
+        foreach (DetailRenderTile tile in _detailTiles.ToList())
         {
-            IsAntialias = false,
-            FilterQuality = _zoom > _detailBitmapScale * 1.05f ? SKFilterQuality.High : SKFilterQuality.Medium,
-        };
-        var src = new SKRect(0, 0, _detailBitmap.Width, _detailBitmap.Height);
-        var dst = new SKRect(
-            (_detailPdfRect.Left - _panX) * _zoom,
-            (_detailPdfRect.Top - _panY) * _zoom,
-            (_detailPdfRect.Right - _panX) * _zoom,
-            (_detailPdfRect.Bottom - _panY) * _zoom);
-        canvas.DrawBitmap(_detailBitmap, src, dst, paint);
+            if (!string.Equals(tile.PageKey, pageKey, StringComparison.OrdinalIgnoreCase) ||
+                tile.BitmapScale <= 0 ||
+                tile.PdfRect.Width <= 0 ||
+                tile.PdfRect.Height <= 0 ||
+                !Intersects(tile.PdfRect, visible))
+            {
+                continue;
+            }
+
+            tile.LastUsed = ++_detailTileClock;
+            using var paint = new SKPaint
+            {
+                IsAntialias = false,
+                FilterQuality = _zoom > tile.BitmapScale * 1.05f ? SKFilterQuality.High : SKFilterQuality.Medium,
+            };
+            var src = new SKRect(0, 0, tile.Bitmap.Width, tile.Bitmap.Height);
+            var dst = new SKRect(
+                (tile.PdfRect.Left - _panX) * _zoom,
+                (tile.PdfRect.Top - _panY) * _zoom,
+                (tile.PdfRect.Right - _panX) * _zoom,
+                (tile.PdfRect.Bottom - _panY) * _zoom);
+            canvas.DrawBitmap(tile.Bitmap, src, dst, paint);
+        }
     }
+
+    private void AddDetailRenderTile(SKBitmap bitmap, SKRect clip, float bitmapScale, string pageKey)
+    {
+        long estimatedBytes = EstimateBitmapBytes(bitmap);
+        _detailTiles.Add(new DetailRenderTile
+        {
+            Bitmap = bitmap,
+            PdfRect = clip,
+            BitmapScale = bitmapScale,
+            PageKey = pageKey,
+            EstimatedBytes = estimatedBytes,
+            LastUsed = ++_detailTileClock,
+        });
+        _detailTileBytes += estimatedBytes;
+        TrimDetailRenderTiles();
+    }
+
+    private void TrimDetailRenderTiles()
+    {
+        while (_detailTiles.Count > MaxDetailRenderTileEntries || _detailTileBytes > MaxDetailRenderTileBytes)
+        {
+            DetailRenderTile? oldest = _detailTiles
+                .OrderBy(tile => tile.LastUsed)
+                .FirstOrDefault(tile => !ReferenceEquals(tile.Bitmap, _detailBitmap))
+                ?? _detailTiles.OrderBy(tile => tile.LastUsed).FirstOrDefault();
+            if (oldest == null)
+                return;
+
+            _detailTileBytes -= oldest.EstimatedBytes;
+            _detailTiles.Remove(oldest);
+            if (ReferenceEquals(oldest.Bitmap, _detailBitmap))
+            {
+                DetailRenderTile? newest = _detailTiles.LastOrDefault();
+                _detailBitmap = newest?.Bitmap;
+                _detailPdfRect = newest?.PdfRect ?? SKRect.Empty;
+                _detailBitmapScale = newest?.BitmapScale ?? 0;
+                _detailPageKey = newest?.PageKey ?? "";
+            }
+            oldest.Bitmap.Dispose();
+        }
+    }
+
+    private static long EstimateBitmapBytes(SKBitmap bitmap) =>
+        (long)Math.Max(0, bitmap.Width) * Math.Max(0, bitmap.Height) * 4;
 
     private void ReportViewportRenderProfile(
         string kind,

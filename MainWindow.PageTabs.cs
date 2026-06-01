@@ -340,6 +340,7 @@ public partial class MainWindow
             viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
             restoreView);
         trace?.Mark("decode");
+        TryApplyCachedSheetOverlay(viewportPage);
         ApplyViewportPageTakeoffVisibility(viewportPage);
         _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
@@ -392,7 +393,7 @@ public partial class MainWindow
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            LoadSheetOverlay(viewportPage);
+            LoadSheetOverlay(_currentPage ?? viewportPage);
             _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
             ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();

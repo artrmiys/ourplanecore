@@ -95,7 +95,11 @@ public sealed partial class PdfViewport
 
         bool needsDetailRender = ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale);
         if (needsDetailRender)
+        {
             QueueDetailRenderIfNeeded(force);
+            if (!force && _isFastNavigating)
+                return;
+        }
 
         float desired = CurrentRenderScale();
         if (!force && _renderedScale > 0)

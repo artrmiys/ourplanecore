@@ -96,6 +96,7 @@ public partial class MainWindow
             _takeoffSectionMultiSelection.Clear();
             foreach (string path in paths)
                 _takeoffsMultiSelection.Add(path);
+            ExpandTakeoffFolderAncestorsWithoutTracking(focusNode);
             focusNode.IsSelected = true;
             focusNode.BringIntoView();
         }

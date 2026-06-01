@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -19,6 +20,8 @@ public partial class MainWindow
     private const string ViewportPageStressSmokeTimeoutEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS";
     private const string ViewportPageStressSmokeReturnCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT";
     private const string ViewportPageStressSmokeTabCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT";
+    private const string ViewportPageStressSmokeTargetZoomEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM";
+    private const string ViewportPageStressSmokePanStepsEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS";
 
     private async Task TryRunViewportPageStressSmokeAsync()
     {
@@ -202,6 +205,27 @@ public partial class MainWindow
     private async Task ExerciseViewportZoomAsync()
     {
         var start = _viewport.CaptureViewState();
+        float targetZoom = ReadEnvironmentFloat(ViewportPageStressSmokeTargetZoomEnv, 0, 0, 20);
+        if (targetZoom > 0)
+        {
+            int panSteps = ReadEnvironmentInt(ViewportPageStressSmokePanStepsEnv, 4, 0, 20);
+            _viewport.RestoreViewState(new PdfViewport.ViewState(targetZoom, start.PanX, start.PanY));
+            await YieldViewportSmokeFrameAsync();
+            for (int i = 0; i < panSteps; i++)
+            {
+                var current = _viewport.CaptureViewState();
+                _viewport.RestoreViewState(new PdfViewport.ViewState(
+                    targetZoom,
+                    current.PanX + 36,
+                    current.PanY + 24));
+                await YieldViewportSmokeFrameAsync();
+            }
+
+            _viewport.RestoreViewState(start);
+            await YieldViewportSmokeFrameAsync();
+            return;
+        }
+
         _viewport.ZoomIn();
         await YieldViewportSmokeFrameAsync();
         _viewport.ZoomIn();
@@ -291,6 +315,14 @@ public partial class MainWindow
     {
         string value = Environment.GetEnvironmentVariable(name) ?? "";
         return int.TryParse(value, out int parsed) ? Math.Clamp(parsed, min, max) : fallback;
+    }
+
+    private static float ReadEnvironmentFloat(string name, float fallback, float min, float max)
+    {
+        string value = Environment.GetEnvironmentVariable(name) ?? "";
+        return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed)
+            ? Math.Clamp(parsed, min, max)
+            : fallback;
     }
 
     private static void WriteViewportPageStressSmokeReport(ViewportPageStressSmokeReport report)

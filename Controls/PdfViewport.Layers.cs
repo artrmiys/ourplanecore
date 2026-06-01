@@ -184,11 +184,66 @@ public sealed partial class PdfViewport
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
             PostStatus(request.StatusAfter);
+        CacheLayerBitmapRender(request);
         AppLog.Info(
             $"Viewport PyMuPDF render cache hit; page='{request.PageFolder}'; " +
             $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; scale={request.RenderScale:0.###}");
         ReportViewportRenderProfile(
             "layer",
+            request.PageFolder,
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            elapsedMs: 0,
+            fromCache: true,
+            clipRect: null);
+        RequestRepaint();
+        return true;
+    }
+
+    private bool TryApplyLayerBitmapCache(LayerRenderRequest request)
+    {
+        if (!LayerBitmapCache.TryGet(LayerRenderBitmapCacheKey(request), out CachedLayerBitmapRender cached))
+            return false;
+
+        _pageBitmap?.Dispose();
+        _pageBitmap = cached.Bitmap;
+        _pdfW = cached.WidthPt;
+        _pdfH = cached.HeightPt;
+        _bitmapScale = cached.BitmapScale;
+        _renderedScale = cached.BitmapScale;
+        _usingLayerRenderer = true;
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
+        _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
+
+        if (request.ResetLayerStates)
+        {
+            _layerStates.Clear();
+            foreach (PdfLayer layer in cached.Layers)
+                _layerStates[layer.Number] = layer.IsOn;
+        }
+
+        UpdateLayerSnapshot(cached.Layers);
+        if (_cachedLayers == null)
+        {
+            _cachedLayers = cached.Layers
+                .Select(layer => new PdfLayerInfo { Number = layer.Number, Name = layer.Name, IsOn = layer.IsOn })
+                .ToList();
+            PdfLayersDiscovered?.Invoke(_cachedLayers);
+        }
+
+        if (_pdfSnapEnabled && request.ResetLayerStates)
+            QueuePdfSnapPointLoad(force: true);
+        ApplyLayerRenderContinuation(request);
+        QueueDetailRenderIfNeeded(force: true);
+        if (request.FireLayersAfter)
+            FireLayersChanged();
+        if (!string.IsNullOrWhiteSpace(request.StatusAfter))
+            PostStatus(request.StatusAfter);
+        ReportViewportRenderProfile(
+            "layer-memory",
             request.PageFolder,
             request.PdfPath,
             request.PdfIndex,
@@ -375,9 +430,12 @@ public sealed partial class PdfViewport
         return ApplyLayerRenderResult(render, resetLayerStates);
     }
 
-    private bool ApplyLayerRenderResult(PdfLayerRenderResult render, bool resetLayerStates)
+    private bool ApplyLayerRenderResult(
+        PdfLayerRenderResult render,
+        bool resetLayerStates,
+        SKBitmap? decodedBitmap = null)
     {
-        var bitmap = SKBitmap.Decode(render.ImageBytes);
+        var bitmap = decodedBitmap ?? SKBitmap.Decode(render.ImageBytes);
         if (bitmap == null)
         {
             PostStatus("Layer renderer returned an unreadable image.");
@@ -445,6 +503,12 @@ public sealed partial class PdfViewport
             fitAfter,
             statusAfter,
             fireLayersAfter);
+
+        if (TryApplyLayerBitmapCache(request))
+        {
+            _pendingLayerRender = null;
+            return;
+        }
 
         if (allowImmediateCache && TryApplyPersistedCleanLayerRender(request))
         {
@@ -619,6 +683,9 @@ public sealed partial class PdfViewport
                 request.HighlightedLayers,
                 request.CachedLayers);
             renderWatch.Stop();
+            SKBitmap? decodedBitmap = null;
+            if (renderResult.Ok)
+                decodedBitmap = await Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes));
             ReportSlowLayerRender(request, renderWatch.ElapsedMilliseconds);
             LayerRenderCompletion completion = new(
                 request,
@@ -633,14 +700,21 @@ public sealed partial class PdfViewport
             {
                 if (completion.Ok)
                 {
-                    if (ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates))
+                    bool applied = ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap);
+                    if (applied)
                     {
+                        decodedBitmap = null;
+                        CacheLayerBitmapRender(completion.Request);
                         ApplyLayerRenderContinuation(completion.Request);
                         QueueDetailRenderIfNeeded(force: true);
                         if (completion.Request.FireLayersAfter)
                             FireLayersChanged();
                         if (!string.IsNullOrWhiteSpace(completion.Request.StatusAfter))
                             PostStatus(completion.Request.StatusAfter);
+                    }
+                    else
+                    {
+                        decodedBitmap?.Dispose();
                     }
                 }
                 else if (!string.IsNullOrWhiteSpace(completion.Error))
@@ -650,6 +724,12 @@ public sealed partial class PdfViewport
                         completion.Request.RenderScale,
                         statusAfter: completion.Request.StatusAfter);
                 }
+            }
+            else
+            {
+                if (completion.Ok && decodedBitmap != null)
+                    CacheLayerBitmapRender(completion.Request, completion.Result, decodedBitmap);
+                decodedBitmap?.Dispose();
             }
         }
         catch (Exception ex)
@@ -678,6 +758,38 @@ public sealed partial class PdfViewport
             RestoreViewState(request.RestoreView.Value);
         else if (request.FitAfter)
             ZoomFit();
+    }
+
+    private void CacheLayerBitmapRender(LayerRenderRequest request)
+    {
+        if (_pageBitmap == null || _pdfW <= 0 || _pdfH <= 0 || _bitmapScale <= 0)
+            return;
+
+        LayerBitmapCache.Put(
+            LayerRenderBitmapCacheKey(request),
+            _pdfW,
+            _pdfH,
+            _bitmapScale,
+            _pageBitmap,
+            _layers);
+    }
+
+    private void CacheLayerBitmapRender(
+        LayerRenderRequest request,
+        PdfLayerRenderResult render,
+        SKBitmap bitmap)
+    {
+        if (render.WidthPt <= 0 || render.HeightPt <= 0 || bitmap.Width <= 0 || bitmap.Height <= 0)
+            return;
+
+        float bitmapScale = bitmap.Width / render.WidthPt;
+        LayerBitmapCache.Put(
+            LayerRenderBitmapCacheKey(request),
+            render.WidthPt,
+            render.HeightPt,
+            bitmapScale,
+            bitmap,
+            render.Layers);
     }
 
     private void ReportSlowLayerRender(LayerRenderRequest request, long elapsedMs)

@@ -679,6 +679,7 @@ public partial class MainWindow
         {
             SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
+            SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: false);
             return;
         }
 
@@ -689,6 +690,7 @@ public partial class MainWindow
             _pageTakeoffRangeAnchorKey = key;
             SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
+            SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: false);
             Dispatcher.InvokeAsync(() => SelectSelectedPageTakeoffMeasurementsOnCanvas(node));
             e.Handled = true;
             return;
@@ -701,6 +703,7 @@ public partial class MainWindow
             _pageTakeoffRangeAnchorKey = key;
             SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
+            SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: false);
             Dispatcher.InvokeAsync(() => SelectSelectedPageTakeoffMeasurementsOnCanvas(node));
             e.Handled = true;
             return;
@@ -710,6 +713,7 @@ public partial class MainWindow
         _pageTakeoffMultiSelection.Add(key);
         _pageTakeoffRangeAnchorKey = key;
         ApplyPagesMultiSelectionVisuals();
+        SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: true);
     }
 
     private static void ExpandTreeItemAndAncestors(TreeViewItem item)

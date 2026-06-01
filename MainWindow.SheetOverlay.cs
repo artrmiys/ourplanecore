@@ -334,18 +334,29 @@ public partial class MainWindow
             return;
         }
 
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
-        _viewport.SetSheetOverlay(
-            bitmap,
-            widthPt,
-            heightPt,
-            overlayName,
-            (float)page.OverlayOffsetXPt,
-            (float)page.OverlayOffsetYPt,
-            (float)page.OverlayScale,
-            overlayPage?.PdfPath ?? "",
-            overlayPage?.PdfPage ?? 0,
-            OverlaySnapLayers(overlayPage));
+        ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName);
+    }
+
+    private void TryApplyCachedSheetOverlay(PageInfo page)
+    {
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
+            return;
+
+        if (!TryBuildSheetOverlayBitmap(
+                page,
+                ViewportRenderPolicy.SheetOverlayViewportRenderScale,
+                allowRender: false,
+                out SKBitmap? bitmap,
+                out float widthPt,
+                out float heightPt,
+                out string overlayName,
+                out _) ||
+            bitmap == null)
+        {
+            return;
+        }
+
+        ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName);
     }
 
     private async Task LoadSheetOverlayAsync(PageInfo page, int version)
@@ -379,15 +390,30 @@ public partial class MainWindow
         }
 
         PageInfo target = _currentPage;
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(target.OverlayPageFolder);
-        _viewport.SetSheetOverlay(
+        ApplySheetOverlayBitmapToViewport(
+            target,
             result.Bitmap,
             result.WidthPt,
             result.HeightPt,
-            result.OverlayName,
-            (float)target.OverlayOffsetXPt,
-            (float)target.OverlayOffsetYPt,
-            (float)target.OverlayScale,
+            result.OverlayName);
+    }
+
+    private void ApplySheetOverlayBitmapToViewport(
+        PageInfo page,
+        SKBitmap bitmap,
+        float widthPt,
+        float heightPt,
+        string overlayName)
+    {
+        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
+        _viewport.SetSheetOverlay(
+            bitmap,
+            widthPt,
+            heightPt,
+            overlayName,
+            (float)page.OverlayOffsetXPt,
+            (float)page.OverlayOffsetYPt,
+            (float)page.OverlayScale,
             overlayPage?.PdfPath ?? "",
             overlayPage?.PdfPage ?? 0,
             OverlaySnapLayers(overlayPage));

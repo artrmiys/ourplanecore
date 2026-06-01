@@ -54,6 +54,9 @@ internal static class TakeoffsTreeRegressionTests
             loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
             loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "page open should not run overlays, annotations, takeoff tree refresh, or settings save in the immediate path");
+        AssertTrue(
+            loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage)", StringComparison.Ordinal),
+            "page open should restore cached sheet overlays immediately without starting a heavy overlay render");
 
         AssertTrue(
             queueMethod.Contains("Dispatcher.BeginInvoke", StringComparison.Ordinal) &&
@@ -64,7 +67,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("LoadSheetOverlay(viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("LoadSheetOverlay(_currentPage ?? viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
@@ -745,6 +748,26 @@ internal static class TakeoffsTreeRegressionTests
             });
     }
 
+    public static void PageTakeoffSelectionSyncsTakeoffsTree()
+    {
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pageLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.ContextMenu.cs");
+        string navigation = ReadRepoFile("MainWindow.TakeoffSelectionNavigation.cs");
+
+        AssertTrue(
+            pagesTree.Contains("SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: false)", StringComparison.Ordinal) &&
+            pagesTree.Contains("SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: true)", StringComparison.Ordinal),
+            "Pages tree linked-takeoff clicks must sync Shift/Ctrl and single selection into the Takeoffs tree");
+        AssertTrue(
+            pageLegend.Contains("private IReadOnlyList<PageTakeoffNode> SyncTakeoffsTreeSelectionFromPageTakeoffs(", StringComparison.Ordinal) &&
+            pageLegend.Contains("ActivateTakeoffItem(anchor.Takeoff)", StringComparison.Ordinal) &&
+            pageLegend.Contains("SelectTakeoffItemsSilently(selectedTakeoffs, anchor.Takeoff)", StringComparison.Ordinal),
+            "linked page takeoff selection must reuse the real Takeoffs-tree selection state");
+        AssertTrue(
+            navigation.Contains("ExpandTakeoffFolderAncestorsWithoutTracking(focusNode)", StringComparison.Ordinal),
+            "silent Takeoffs-tree selection should reveal selected takeoffs inside folders");
+    }
+
     private static string ReadPageTakeoffLegendSources() =>
         string.Concat(
             ReadRepoFile("MainWindow.PageTakeoffLegend.cs"),
@@ -1066,6 +1089,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PdfDetailClipRenderIsWired()
     {
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string transform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
         string viewport = ReadRepoFile("Controls/PdfViewport.cs");
@@ -1115,11 +1139,29 @@ internal static class TakeoffsTreeRegressionTests
             "detail rendering must not block the bounded full refresh that keeps 180-250% zoom usable while detail tiles render");
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
+            detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileEntries = 12", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileBytes = 900_000_000", StringComparison.Ordinal) &&
+            detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
+            detail.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
-            "viewport should own a versioned clipped detail render request with telemetry and cancellation");
+            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, and decode them off the UI path");
+        AssertTrue(
+            layers.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
+            layers.Contains("ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap)", StringComparison.Ordinal),
+            "full layer render PNG decode should be done before UI-thread bitmap application");
+        AssertTrue(
+            layers.Contains("TryApplyLayerBitmapCache(request)", StringComparison.Ordinal) &&
+            layers.Contains("CacheLayerBitmapRender(completion.Request)", StringComparison.Ordinal) &&
+            layers.Contains("CacheLayerBitmapRender(completion.Request, completion.Result, decodedBitmap)", StringComparison.Ordinal) &&
+            layers.Contains("PdfLayerRenderResult render,", StringComparison.Ordinal) &&
+            layers.Contains("layer-memory", StringComparison.Ordinal) &&
+            renderCache.Contains("LayerRenderBitmapCache", StringComparison.Ordinal) &&
+            renderCache.Contains("10_500_000_000L", StringComparison.Ordinal),
+            "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including completed stale high-zoom renders");
         AssertTrue(
             service.Contains("public RectDto? Clip { get; set; }", StringComparison.Ordinal) &&
             service.Contains("Clip = hasClip ? RectDto.FromSKRect", StringComparison.Ordinal) &&
@@ -1153,6 +1195,18 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             method.Contains("IsAntialias = false", StringComparison.Ordinal),
             "bitmap sheet overlays should avoid antialias softening");
+    }
+
+    public static void ViewportStressSmokeCanExerciseHighZoomPan()
+    {
+        string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");
+
+        AssertTrue(
+            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM", StringComparison.Ordinal) &&
+            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS", StringComparison.Ordinal) &&
+            source.Contains("ReadEnvironmentFloat", StringComparison.Ordinal) &&
+            source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal),
+            "viewport stress smoke must support hidden absolute zoom and pan checks for 350% regressions");
     }
 
     public static void PagesTreeSelectedSheetScaleMenuIsWired()

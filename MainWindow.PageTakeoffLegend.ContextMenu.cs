@@ -122,26 +122,43 @@ public partial class MainWindow
 
     private void SelectLinkedPageTakeoff(PageTakeoffNode node)
     {
-        if (TryBlockTakeoffSwitchDuringRecord(node.Takeoff))
-            return;
-
         if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, node.Page.FolderPath))
             OpenPageInActiveTab(node.Page);
 
-        var selectedNodes = SelectedPageTakeoffNodes(node, fallbackToAnchor: true);
+        var selectedNodes = SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: true);
+        if (selectedNodes.Count == 0)
+            return;
+
+        Dispatcher.InvokeAsync(() => SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, node.Page));
+        if (selectedNodes.Count <= 1)
+            TxtStatus.Text = $"Linked takeoff selected for {node.Page.Name}: {node.Takeoff.Name}.";
+    }
+
+    private IReadOnlyList<PageTakeoffNode> SyncTakeoffsTreeSelectionFromPageTakeoffs(
+        PageTakeoffNode anchor,
+        bool fallbackToAnchor)
+    {
+        if (TryBlockTakeoffSwitchDuringRecord(anchor.Takeoff))
+            return [];
+
+        var selectedNodes = SelectedPageTakeoffNodes(anchor, fallbackToAnchor);
+        if (selectedNodes.Count == 0 && fallbackToAnchor)
+            selectedNodes = [anchor];
+
         var selectedTakeoffs = selectedNodes
             .Select(selectedNode => selectedNode.Takeoff)
             .Where(takeoff => !string.IsNullOrWhiteSpace(takeoff.FolderPath))
             .GroupBy(takeoff => NormalizePath(takeoff.FolderPath), StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
-        ActivateTakeoffItem(node.Takeoff);
-        SelectTakeoffItemsSilently(selectedTakeoffs.Count > 0 ? selectedTakeoffs : [node.Takeoff], node.Takeoff);
+        if (selectedTakeoffs.Count == 0)
+            selectedTakeoffs = [anchor.Takeoff];
+
+        ActivateTakeoffItem(anchor.Takeoff);
+        SelectTakeoffItemsSilently(selectedTakeoffs, anchor.Takeoff);
         RefreshActiveTakeoffVisuals();
-        UpdateTotalDisplay();
-        Dispatcher.InvokeAsync(() => SelectPageTakeoffMeasurementsOnCanvas(selectedNodes, node.Page));
-        if (selectedNodes.Count <= 1)
-            TxtStatus.Text = $"Linked takeoff selected for {node.Page.Name}: {node.Takeoff.Name}.";
+        UpdateTotalDisplay(refreshEstimate: false);
+        return selectedNodes;
     }
 
     private void SelectPageTakeoffMeasurementsOnCanvas(PageTakeoffNode node)
