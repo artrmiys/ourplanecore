@@ -10,6 +10,7 @@ public static class ViewportRenderPolicy
     public const float ResponsiveMinRenderScale = 1.0f;
     public const float ResponsiveMaxRenderScale = 2.25f;
     public const float ResponsiveMaxRenderPixels = 24_000_000f;
+    public const float ZoomRefreshMinZoom = 0.30f;
     public const bool DetailRenderEnabled = true;
     public const float DetailRenderMinZoom = 1.0f;
     public const float DetailRenderMinScaleGain = 1.18f;
@@ -72,6 +73,17 @@ public static class ViewportRenderPolicy
     {
         if (!DetailRenderEnabled || zoom < DetailRenderMinZoom || bitmapScale <= 0)
             return false;
+
+        return zoom >= bitmapScale * DetailRenderMinScaleGain;
+    }
+
+    public static bool ShouldUseZoomRefreshRender(float zoom, float bitmapScale)
+    {
+        if (zoom < ZoomRefreshMinZoom || bitmapScale <= 0)
+            return false;
+
+        if (bitmapScale < ResponsiveMinRenderScale * 0.95f)
+            return true;
 
         return zoom >= bitmapScale * DetailRenderMinScaleGain;
     }

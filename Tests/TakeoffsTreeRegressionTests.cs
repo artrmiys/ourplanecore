@@ -1074,9 +1074,11 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             policy.Contains("DetailRenderEnabled = true", StringComparison.Ordinal) &&
+            policy.Contains("ZoomRefreshMinZoom = 0.30f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMinZoom = 1.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxScale = 16.0f", StringComparison.Ordinal) &&
             policy.Contains("SelectDetailRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("ShouldUseZoomRefreshRender", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
@@ -1089,10 +1091,16 @@ internal static class TakeoffsTreeRegressionTests
             "paint should use sharper upscale sampling and overlay the high-DPI detail tile");
         AssertTrue(
             transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
-            transform.Contains("_zoom < ViewportRenderPolicy.DetailRenderMinZoom", StringComparison.Ordinal) &&
+            transform.Contains("bool needsDetailRender", StringComparison.Ordinal) &&
+            transform.Contains("_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom", StringComparison.Ordinal) &&
+            transform.Contains("ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
-            "zoom and pan idle should schedule detail renders instead of whole-sheet high zoom renders");
+            "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
+        AssertFalse(
+            transform.Contains("QueueDetailRenderIfNeeded(force);\r\n            return;", StringComparison.Ordinal) ||
+            transform.Contains("QueueDetailRenderIfNeeded(force);\n            return;", StringComparison.Ordinal),
+            "detail rendering must not block the bounded full refresh that keeps 180-250% zoom usable while detail tiles render");
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&

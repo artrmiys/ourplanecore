@@ -3299,6 +3299,15 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         0.0,
         ViewportRenderPolicy.SelectDetailRenderScale(0.5f, 2000f, 1200f, 0.15f),
         "fit zoom should not trigger expensive detail rendering");
+    AssertFalse(
+        ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.21f, 0.35f),
+        "fit zoom should keep the instant preview instead of starting a full refresh");
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.32f, 0.35f),
+        "ordinary zoom from fit should upgrade the 0.35 preview to a sharper refresh render");
+    AssertFalse(
+        ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
+        "ordinary zoom should use a refresh render, not an expensive clipped detail render");
     AssertClose(
         4.0,
         ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
