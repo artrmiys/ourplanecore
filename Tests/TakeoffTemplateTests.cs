@@ -30,6 +30,14 @@ internal static class TakeoffTemplateTests
         AssertTemplateItem(config, ["trussheel"], "Truss Heel", "line");
         AssertTemplateItem(config, ["walls", "1st floor walls"], "corners", "line");
         AssertTemplateItem(config, ["walls", "1st floor walls"], "ext", "line");
+        AssertTemplateColor(config, ["walls"], "corners", "#FF1744");
+        AssertTemplateColor(config, ["walls"], "ext", "#2E7D32");
+        AssertTemplateColor(config, ["walls", "1st floor walls"], "dem", "#2962FF");
+        AssertTemplateColor(config, ["walls", "1st floor walls"], "2x6 x", "#FFD600");
+        AssertDistinctTemplateColors(
+            config,
+            ["walls"],
+            ["corners", "unit", "ext", "cor", "corr", "dem", "2x6 x", "2x8 x"]);
         AssertTemplateItem(config, ["framing", "1st floor framing"], "Rim Board", "line");
         AssertTemplateItem(config, ["framing", "1st floor framing"], "Blocking for Drywall", "line");
         AssertTemplateItem(config, ["framing", "roof framing"], "Canopy", "line");
@@ -64,6 +72,28 @@ internal static class TakeoffTemplateTests
                             },
                         ],
                     },
+                    new TakeoffTemplateNode
+                    {
+                        Name = "walls",
+                        IsFolder = true,
+                        Children =
+                        [
+                            new TakeoffTemplateNode
+                            {
+                                Name = "ext",
+                                IsFolder = false,
+                                MeasurementType = "line",
+                                Color = "#FF4444",
+                            },
+                            new TakeoffTemplateNode
+                            {
+                                Name = "custom wall",
+                                IsFolder = false,
+                                MeasurementType = "line",
+                                Color = "#010203",
+                            },
+                        ],
+                    },
                 ],
             },
         };
@@ -84,6 +114,8 @@ internal static class TakeoffTemplateTests
         AssertTemplateItem(upgraded, ["sqfts"], "overframe x", "area");
         AssertTemplateItem(upgraded, ["eves rakes", "rakes"], "Rake", "line");
         AssertTemplateItem(upgraded, ["walls", "1st floor walls"], "corners", "line");
+        AssertTemplateColor(upgraded, ["walls"], "ext", "#2E7D32");
+        AssertTemplateColor(upgraded, ["walls"], "custom wall", "#010203");
         AssertTemplateItem(upgraded, ["framing", "1st floor framing"], "Rim Board", "line");
         AssertTemplateItem(upgraded, ["framing", "roof framing"], "Canopy", "line");
         AssertEqual(
@@ -153,12 +185,42 @@ internal static class TakeoffTemplateTests
         string name,
         string measurementType)
     {
+        TakeoffTemplateNode item = FindTemplateItem(config, folderPath, name);
+        AssertEqual(measurementType, item.MeasurementType, $"{name} measurement type");
+    }
+
+    private static void AssertTemplateColor(
+        TakeoffTemplateConfig config,
+        IReadOnlyList<string> folderPath,
+        string name,
+        string color)
+    {
+        TakeoffTemplateNode item = FindTemplateItem(config, folderPath, name);
+        AssertEqual(color, item.Color, $"{name} template color");
+    }
+
+    private static void AssertDistinctTemplateColors(
+        TakeoffTemplateConfig config,
+        IReadOnlyList<string> folderPath,
+        IReadOnlyList<string> names)
+    {
+        var colors = names
+            .Select(name => FindTemplateItem(config, folderPath, name).Color)
+            .ToList();
+        AssertEqual(colors.Count.ToString(), colors.Distinct(StringComparer.OrdinalIgnoreCase).Count().ToString(),
+            $"{string.Join("/", folderPath)} colors should be unique across checked wall presets");
+    }
+
+    private static TakeoffTemplateNode FindTemplateItem(
+        TakeoffTemplateConfig config,
+        IReadOnlyList<string> folderPath,
+        string name)
+    {
         TakeoffTemplateNode folder = FindFolder(config.Template.Roots, folderPath);
-        TakeoffTemplateNode item = folder.Children
+        return folder.Children
             .FirstOrDefault(node => !node.IsFolder &&
                                     string.Equals(node.Name, name, StringComparison.Ordinal))
             ?? throw new InvalidOperationException($"template preset missing under {string.Join("/", folderPath)}: {name}");
-        AssertEqual(measurementType, item.MeasurementType, $"{name} measurement type");
     }
 
     private static TakeoffTemplateNode FindFolder(

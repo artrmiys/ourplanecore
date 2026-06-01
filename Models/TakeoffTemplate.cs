@@ -64,7 +64,7 @@ public sealed class TakeoffTemplate
 
 public sealed class TakeoffTemplateConfig
 {
-    public const int CurrentBuiltInVersion = 2;
+    public const int CurrentBuiltInVersion = 3;
 
     public int BuiltInVersion { get; set; }
     public TakeoffTemplate Template { get; set; } = BuildDefaultTemplate();
@@ -117,20 +117,20 @@ public sealed class TakeoffTemplateConfig
                 Folder("units",
                     Line("Unit", "#607D8B")),
                 Folder("walls",
-                    Line("corners", "#E91E63"),
-                    Line("unit", "#AD1457"),
-                    Line("ext", "#FF4444"),
-                    Line("cor", "#F06292"),
-                    Line("corr", "#EC407A"),
-                    Line("dem", "#AB47BC"),
-                    Line("parapet", "#8E24AA"),
-                    Line("shaft", "#7B1FA2"),
-                    Line("furring", "#6A1B9A"),
-                    Line("2x4 x", "#EF5350"),
-                    Line("2x6 x", "#D32F2F"),
-                    Line("2x8 x", "#B71C1C"),
-                    Line("2x4 half", "#BA68C8"),
-                    Line("2x6 half", "#8E24AA"),
+                    WallPreset("corners"),
+                    WallPreset("unit"),
+                    WallPreset("ext"),
+                    WallPreset("cor"),
+                    WallPreset("corr"),
+                    WallPreset("dem"),
+                    WallPreset("parapet"),
+                    WallPreset("shaft"),
+                    WallPreset("furring"),
+                    WallPreset("2x4 x"),
+                    WallPreset("2x6 x"),
+                    WallPreset("2x8 x"),
+                    WallPreset("2x4 half"),
+                    WallPreset("2x6 half"),
                     WallFloor("basement foor walls"),
                     WallFloor("1st floor walls"),
                     WallFloor("2nd floor walls"),
@@ -226,20 +226,49 @@ public sealed class TakeoffTemplateConfig
 
     private static TakeoffTemplateNode WallFloor(string name) =>
         Folder(name,
-            Line("corners", "#E91E63"),
-            Line("unit", "#AD1457"),
-            Line("ext", "#FF4444"),
-            Line("cor", "#F06292"),
-            Line("corr", "#EC407A"),
-            Line("dem", "#AB47BC"),
-            Line("parapet", "#8E24AA"),
-            Line("shaft", "#7B1FA2"),
-            Line("furring", "#6A1B9A"),
-            Line("2x4 x", "#EF5350"),
-            Line("2x6 x", "#D32F2F"),
-            Line("2x8 x", "#B71C1C"),
-            Line("2x4 half", "#BA68C8"),
-            Line("2x6 half", "#8E24AA"));
+            WallPreset("corners"),
+            WallPreset("unit"),
+            WallPreset("ext"),
+            WallPreset("cor"),
+            WallPreset("corr"),
+            WallPreset("dem"),
+            WallPreset("parapet"),
+            WallPreset("shaft"),
+            WallPreset("furring"),
+            WallPreset("2x4 x"),
+            WallPreset("2x6 x"),
+            WallPreset("2x8 x"),
+            WallPreset("2x4 half"),
+            WallPreset("2x6 half"));
+
+    private static TakeoffTemplateNode WallPreset(string name) =>
+        Line(name, WallPresetColor(name));
+
+    private static string WallPresetColor(string name) =>
+        TryWallPresetColor(name, out string color) ? color : "#FF4444";
+
+    internal static bool TryWallPresetColor(string name, out string color)
+    {
+        color = name.Trim().ToLowerInvariant() switch
+        {
+            "corners" => "#FF1744",
+            "unit" => "#00B8D4",
+            "ext" => "#2E7D32",
+            "cor" => "#FF9100",
+            "corr" => "#651FFF",
+            "dem" => "#2962FF",
+            "parapet" => "#C51162",
+            "shaft" => "#00C853",
+            "furring" => "#6D4C41",
+            "2x4 x" => "#D500F9",
+            "2x6 x" => "#FFD600",
+            "2x8 x" => "#00BFA5",
+            "2x4 half" => "#FF6D00",
+            "2x6 half" => "#0091EA",
+            _ => "",
+        };
+        return color.Length > 0;
+    }
 
     private static TakeoffTemplateNode FramingFloor(string name) =>
         Folder(name,
@@ -387,7 +416,10 @@ public static class TakeoffTemplateStore
             clone.Template = TakeoffTemplateConfig.BuildDefaultTemplate();
         if (clone.BuiltInVersion < TakeoffTemplateConfig.CurrentBuiltInVersion)
         {
+            int previousBuiltInVersion = clone.BuiltInVersion;
             MergeBuiltInDefaults(clone.Template.Roots, TakeoffTemplateConfig.BuildDefaultTemplate().Roots);
+            if (previousBuiltInVersion < 3)
+                ApplyBuiltInWallPaletteUpgrade(clone.Template.Roots);
             clone.BuiltInVersion = TakeoffTemplateConfig.CurrentBuiltInVersion;
         }
         NormalizeNodeIds(clone.Template.Roots);
@@ -412,6 +444,37 @@ public static class TakeoffTemplateStore
 
             if (existing.IsFolder)
                 MergeBuiltInDefaults(existing.Children, defaultNode.Children);
+        }
+    }
+
+    private static void ApplyBuiltInWallPaletteUpgrade(IEnumerable<TakeoffTemplateNode> roots)
+    {
+        foreach (TakeoffTemplateNode node in roots)
+        {
+            if (node.IsFolder &&
+                string.Equals(node.Name, "walls", StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyWallPalette(node);
+            }
+            else
+            {
+                ApplyBuiltInWallPaletteUpgrade(node.Children);
+            }
+        }
+    }
+
+    private static void ApplyWallPalette(TakeoffTemplateNode folder)
+    {
+        foreach (TakeoffTemplateNode child in folder.Children)
+        {
+            if (child.IsFolder)
+            {
+                ApplyWallPalette(child);
+                continue;
+            }
+
+            if (TakeoffTemplateConfig.TryWallPresetColor(child.Name, out string color))
+                child.Color = color;
         }
     }
 
