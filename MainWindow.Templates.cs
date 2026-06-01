@@ -16,6 +16,9 @@ public partial class MainWindow
     private TreeView? _settingsTemplateTree;
     private TextBlock? _templateStatusText;
     private TextBlock? _settingsTemplateStatusText;
+    private ComboBox? _templatePresetCombo;
+    private ComboBox? _settingsTemplatePresetCombo;
+    private bool _syncingTemplatePresetCombo;
     private ToggleButton? _templatesTabDockToggle;
     private TabItem? _templatesTab;
     private FrameworkElement? _templatePanel;
@@ -99,8 +102,38 @@ public partial class MainWindow
     private FrameworkElement BuildTakeoffTemplateToolbar(TreeView tree, bool settingsMode)
     {
         var toolbar = new StackPanel { Margin = new Thickness(0, 0, 0, 3) };
+        var presetRow = TemplateToolbarRow();
         var createRow = TemplateToolbarRow();
         var editRow = TemplateToolbarRow();
+
+        presetRow.Children.Add(new TextBlock
+        {
+            Text = "Template:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 2),
+            FontSize = 10,
+        });
+        var presetCombo = new ComboBox
+        {
+            Width = 142,
+            Height = 21,
+            Margin = new Thickness(0, 0, 4, 2),
+            DisplayMemberPath = nameof(TakeoffTemplate.Name),
+            SelectedValuePath = nameof(TakeoffTemplate.Id),
+        };
+        presetCombo.SelectionChanged += (_, _) => SelectTakeoffTemplatePresetFromCombo(presetCombo);
+        if (settingsMode)
+            _settingsTemplatePresetCombo = presetCombo;
+        else
+            _templatePresetCombo = presetCombo;
+        presetRow.Children.Add(presetCombo);
+
+        if (settingsMode)
+        {
+            presetRow.Children.Add(TemplateButton("New", (_, _) => AddTakeoffTemplatePreset(), "Copy the current template into a new named template", minWidth: 38));
+            presetRow.Children.Add(TemplateButton("Rename", (_, _) => RenameTakeoffTemplatePreset(), "Rename the selected template", minWidth: 50));
+            presetRow.Children.Add(TemplateButton("Delete", (_, _) => DeleteTakeoffTemplatePreset(), "Delete the selected non-default template", minWidth: 48));
+        }
 
         if (!settingsMode)
             createRow.Children.Add(TemplateButton("Create", (_, _) => CreateTakeoffFromTemplateSelection(tree), "Create a new takeoff item from the selected template item", primary: true, minWidth: 48));
@@ -114,6 +147,7 @@ public partial class MainWindow
         editRow.Children.Add(TemplateButton("Del", (_, _) => DeleteTemplateNode(tree), "Delete the selected template node"));
         editRow.Children.Add(TemplateButton("Reset", (_, _) => ResetTakeoffTemplateToDefault(), "Reset this template tree to the built-in presets"));
 
+        toolbar.Children.Add(presetRow);
         toolbar.Children.Add(createRow);
         toolbar.Children.Add(editRow);
 
@@ -329,10 +363,51 @@ public partial class MainWindow
 
     private void RefreshTakeoffTemplateEditors(string? selectedNodeId = null)
     {
+        RefreshTakeoffTemplatePresetCombos();
         RefreshTakeoffTemplateTree(_templateTree, selectedNodeId);
         RefreshTakeoffTemplateTree(_settingsTemplateTree, selectedNodeId);
         RefreshTakeoffTemplateStatus();
         UpdateTakeoffTemplateEditorButtons();
+    }
+
+    private void RefreshTakeoffTemplatePresetCombos()
+    {
+        _takeoffTemplateConfig.EnsureTemplatePresets();
+        RefreshTakeoffTemplatePresetCombo(_templatePresetCombo);
+        RefreshTakeoffTemplatePresetCombo(_settingsTemplatePresetCombo);
+    }
+
+    private void RefreshTakeoffTemplatePresetCombo(ComboBox? combo)
+    {
+        if (combo == null)
+            return;
+
+        _syncingTemplatePresetCombo = true;
+        try
+        {
+            combo.ItemsSource = null;
+            combo.ItemsSource = _takeoffTemplateConfig.Templates;
+            combo.SelectedValue = _takeoffTemplateConfig.ActiveTemplateId;
+        }
+        finally
+        {
+            _syncingTemplatePresetCombo = false;
+        }
+    }
+
+    private void SelectTakeoffTemplatePresetFromCombo(ComboBox combo)
+    {
+        if (_syncingTemplatePresetCombo || combo.SelectedValue is not string templateId)
+            return;
+
+        string previous = _takeoffTemplateConfig.ActiveTemplateId;
+        _takeoffTemplateConfig.SelectTemplate(templateId);
+        if (string.Equals(previous, _takeoffTemplateConfig.ActiveTemplateId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        SaveTakeoffTemplateConfigToCurrentScope();
+        RefreshTakeoffTemplateEditors();
+        TxtStatus.Text = $"Template selected: {_takeoffTemplateConfig.ActiveTemplate().Name}.";
     }
 
     private void RefreshTakeoffTemplateTree(TreeView? tree, string? selectedNodeId)
@@ -343,22 +418,22 @@ public partial class MainWindow
         tree.Items.Clear();
         bool allowCreate = ReferenceEquals(tree, _templateTree);
         foreach (TakeoffTemplateNode root in TemplateRoots())
-            tree.Items.Add(BuildTemplateTreeItem(root, tree, allowCreate));
+            tree.Items.Add(BuildTemplateTreeItem(root, tree, allowCreate, depth: 0));
 
         if (!string.IsNullOrWhiteSpace(selectedNodeId))
             SelectTemplateTreeItemById(tree, selectedNodeId);
     }
 
     private List<TakeoffTemplateNode> TemplateRoots() =>
-        _takeoffTemplateConfig.Template.Roots;
+        _takeoffTemplateConfig.ActiveTemplate().Roots;
 
-    private TreeViewItem BuildTemplateTreeItem(TakeoffTemplateNode node, TreeView ownerTree, bool allowCreate)
+    private TreeViewItem BuildTemplateTreeItem(TakeoffTemplateNode node, TreeView ownerTree, bool allowCreate, int depth)
     {
         var item = new TreeViewItem
         {
             Header = BuildTemplateNodeHeader(node),
             Tag = node,
-            IsExpanded = true,
+            IsExpanded = depth == 0,
         };
         item.MouseDoubleClick += (_, e) =>
         {
@@ -370,7 +445,7 @@ public partial class MainWindow
         };
         item.ContextMenu = BuildTemplateNodeContextMenu(node, ownerTree, allowCreate);
         foreach (TakeoffTemplateNode child in node.Children)
-            item.Items.Add(BuildTemplateTreeItem(child, ownerTree, allowCreate));
+            item.Items.Add(BuildTemplateTreeItem(child, ownerTree, allowCreate, depth + 1));
         return item;
     }
 
@@ -447,12 +522,13 @@ public partial class MainWindow
 
     private void RefreshTakeoffTemplateStatus()
     {
+        TakeoffTemplate activeTemplate = _takeoffTemplateConfig.ActiveTemplate();
         int itemCount = CountTemplateItems(TemplateRoots(), countFolders: false);
         int folderCount = CountTemplateItems(TemplateRoots(), countFolders: true) - itemCount;
         string scope = _currentJob != null && TakeoffTemplateStore.LoadJobOverride(_currentJob) != null
             ? "this job override"
             : "global/default";
-        string text = $"{folderCount} folder(s), {itemCount} preset item(s). Edits save to {scope}. Double-click an item to create a new takeoff.";
+        string text = $"Template: {activeTemplate.Name}. {folderCount} folder(s), {itemCount} preset item(s). Edits save to {scope}. Double-click an item to create a new takeoff.";
         if (_templateStatusText != null)
             _templateStatusText.Text = text;
         if (_settingsTemplateStatusText != null)
@@ -693,31 +769,39 @@ public partial class MainWindow
 
     private void ResetTakeoffTemplateToDefault()
     {
+        string templateName = _takeoffTemplateConfig.ActiveTemplate().Name;
         var confirm = MessageBox.Show(
-            "Reset takeoff templates to the built-in preset tree?",
+            $"Reset template '{templateName}' to the built-in preset tree?",
             "Reset Takeoff Templates",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
             return;
 
-        _takeoffTemplateConfig = TakeoffTemplateConfig.BuildDefault();
-        PersistTakeoffTemplateEditorChange("Takeoff templates reset to built-in defaults.");
+        _takeoffTemplateConfig.ResetActiveTemplateToBuiltIn();
+        PersistTakeoffTemplateEditorChange($"Template '{templateName}' reset to built-in defaults.");
     }
 
     private void PersistTakeoffTemplateEditorChange(string status, string? selectedNodeId = null)
     {
-        if (_currentJob != null && TakeoffTemplateStore.LoadJobOverride(_currentJob) != null)
-            TakeoffTemplateStore.SaveJobOverride(_currentJob, _takeoffTemplateConfig);
-        else
-            TakeoffTemplateStore.SaveGlobalConfig(_takeoffTemplateConfig);
+        SaveTakeoffTemplateConfigToCurrentScope();
 
         RefreshTakeoffTemplateEditors(selectedNodeId);
         TxtStatus.Text = status;
     }
 
+    private void SaveTakeoffTemplateConfigToCurrentScope()
+    {
+        _takeoffTemplateConfig.SyncActiveTemplateSnapshot();
+        if (_currentJob != null && TakeoffTemplateStore.LoadJobOverride(_currentJob) != null)
+            TakeoffTemplateStore.SaveJobOverride(_currentJob, _takeoffTemplateConfig);
+        else
+            TakeoffTemplateStore.SaveGlobalConfig(_takeoffTemplateConfig);
+    }
+
     private void SaveTakeoffTemplateGlobal()
     {
+        _takeoffTemplateConfig.SyncActiveTemplateSnapshot();
         TakeoffTemplateStore.SaveGlobalConfig(_takeoffTemplateConfig);
         RefreshTakeoffTemplateEditors();
         TxtStatus.Text = "Saved takeoff templates as global default.";
@@ -731,6 +815,7 @@ public partial class MainWindow
             return;
         }
 
+        _takeoffTemplateConfig.SyncActiveTemplateSnapshot();
         TakeoffTemplateStore.SaveJobOverride(_currentJob, _takeoffTemplateConfig);
         RefreshTakeoffTemplateEditors();
         TxtStatus.Text = "Saved takeoff templates as this job's override.";
@@ -747,6 +832,65 @@ public partial class MainWindow
         TakeoffTemplateStore.ClearJobOverride(_currentJob);
         ReloadTakeoffTemplateConfig();
         TxtStatus.Text = "Cleared this job's takeoff template override.";
+    }
+
+    private void AddTakeoffTemplatePreset()
+    {
+        string? name = ShowInputDialog("Template name:", "New Template", "New Takeoff Template");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        TakeoffTemplate template = _takeoffTemplateConfig.AddTemplateCopy(name);
+        SaveTakeoffTemplateConfigToCurrentScope();
+        RefreshTakeoffTemplateEditors();
+        TxtStatus.Text = $"Template created: {template.Name}.";
+    }
+
+    private void RenameTakeoffTemplatePreset()
+    {
+        if (_takeoffTemplateConfig.ActiveTemplateIsDefault())
+        {
+            TxtStatus.Text = "Default template cannot be renamed.";
+            return;
+        }
+
+        TakeoffTemplate active = _takeoffTemplateConfig.ActiveTemplate();
+        string? name = ShowInputDialog("Template name:", active.Name, "Rename Takeoff Template");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        _takeoffTemplateConfig.RenameActiveTemplate(name);
+        SaveTakeoffTemplateConfigToCurrentScope();
+        RefreshTakeoffTemplateEditors();
+        TxtStatus.Text = $"Template renamed: {_takeoffTemplateConfig.ActiveTemplate().Name}.";
+    }
+
+    private void DeleteTakeoffTemplatePreset()
+    {
+        TakeoffTemplate active = _takeoffTemplateConfig.ActiveTemplate();
+        if (_takeoffTemplateConfig.ActiveTemplateIsDefault())
+        {
+            TxtStatus.Text = "Default template cannot be deleted.";
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"Delete template '{active.Name}'?",
+            "Delete Takeoff Template",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        if (!_takeoffTemplateConfig.RemoveActiveTemplate())
+        {
+            TxtStatus.Text = "Template was not deleted.";
+            return;
+        }
+
+        SaveTakeoffTemplateConfigToCurrentScope();
+        RefreshTakeoffTemplateEditors();
+        TxtStatus.Text = "Template deleted. Default selected.";
     }
 
     private void SelectTemplateTreeItemById(TreeView tree, string nodeId)

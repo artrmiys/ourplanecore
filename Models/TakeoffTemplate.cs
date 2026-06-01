@@ -62,9 +62,10 @@ public sealed class TakeoffTemplate
     }
 }
 
-public sealed class TakeoffTemplateConfig
+public sealed partial class TakeoffTemplateConfig
 {
     public const int CurrentBuiltInVersion = 5;
+    public const string DefaultTemplateName = "Default";
 
     internal static readonly IReadOnlyList<string> WallPresetNames =
     [
@@ -126,23 +127,37 @@ public sealed class TakeoffTemplateConfig
         StringComparer.OrdinalIgnoreCase);
 
     public int BuiltInVersion { get; set; }
+    public string ActiveTemplateId { get; set; } = "";
+    public List<TakeoffTemplate> Templates { get; set; } = new();
     public TakeoffTemplate Template { get; set; } = BuildDefaultTemplate();
 
     public TakeoffTemplateConfig Clone()
     {
-        return new TakeoffTemplateConfig
+        var clone = new TakeoffTemplateConfig
         {
             BuiltInVersion = BuiltInVersion,
+            ActiveTemplateId = ActiveTemplateId,
+            Templates = (Templates ?? new List<TakeoffTemplate>()).Select(template => template.Clone()).ToList(),
             Template = (Template ?? BuildDefaultTemplate()).Clone(),
         };
+        clone.EnsureTemplatePresets();
+        return clone;
     }
 
-    public static TakeoffTemplateConfig BuildDefault() =>
-        new()
+    public static TakeoffTemplateConfig BuildDefault()
+    {
+        TakeoffTemplate template = BuildDefaultTemplate();
+        template.Name = DefaultTemplateName;
+        var config = new TakeoffTemplateConfig
         {
             BuiltInVersion = CurrentBuiltInVersion,
-            Template = BuildDefaultTemplate(),
+            ActiveTemplateId = template.Id,
+            Template = template.Clone(),
+            Templates = [template],
         };
+        config.EnsureTemplatePresets();
+        return config;
+    }
 
     public static TakeoffTemplate BuildDefaultTemplate()
     {
@@ -489,17 +504,21 @@ public static class TakeoffTemplateStore
     private static TakeoffTemplateConfig Upgrade(TakeoffTemplateConfig config)
     {
         var clone = config.Clone();
-        if (clone.Template.Roots.Count == 0)
-            clone.Template = TakeoffTemplateConfig.BuildDefaultTemplate();
+        clone.EnsureTemplatePresets();
+        TakeoffTemplate defaultTemplate = clone.DefaultTemplate();
+        if (defaultTemplate.Roots.Count == 0)
+            defaultTemplate.Roots = TakeoffTemplateConfig.BuildDefaultTemplate().Roots;
         if (clone.BuiltInVersion < TakeoffTemplateConfig.CurrentBuiltInVersion)
         {
             int previousBuiltInVersion = clone.BuiltInVersion;
-            MergeBuiltInDefaults(clone.Template.Roots, TakeoffTemplateConfig.BuildDefaultTemplate().Roots);
+            MergeBuiltInDefaults(defaultTemplate.Roots, TakeoffTemplateConfig.BuildDefaultTemplate().Roots);
             if (previousBuiltInVersion < 4)
-                ApplyBuiltInTemplateCleanupV4(clone.Template.Roots);
+                ApplyBuiltInTemplateCleanupV4(defaultTemplate.Roots);
             clone.BuiltInVersion = TakeoffTemplateConfig.CurrentBuiltInVersion;
         }
-        NormalizeNodeIds(clone.Template.Roots);
+        foreach (TakeoffTemplate template in clone.Templates)
+            NormalizeNodeIds(template.Roots);
+        clone.SyncActiveTemplateSnapshot();
         return clone;
     }
 
@@ -665,7 +684,9 @@ public static class TakeoffTemplateStore
     private static void SaveConfig(string path, TakeoffTemplateConfig config)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(config ?? TakeoffTemplateConfig.BuildDefault(), JsonOptions));
+        TakeoffTemplateConfig writable = (config ?? TakeoffTemplateConfig.BuildDefault()).Clone();
+        writable.SyncActiveTemplateSnapshot();
+        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(writable, JsonOptions));
     }
 }
 

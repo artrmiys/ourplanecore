@@ -230,6 +230,21 @@ internal static class TakeoffsTreeRegressionTests
             "page folder and auto tree edit actions should autosave as the global default");
     }
 
+    public static void TakeoffTemplatePresetsAndCollapsedDepthAreWired()
+    {
+        string source = ReadRepoFile("MainWindow.Templates.cs");
+        AssertTrue(
+            source.Contains("AddTakeoffTemplatePreset", StringComparison.Ordinal) &&
+            source.Contains("_takeoffTemplateConfig.AddTemplateCopy", StringComparison.Ordinal) &&
+            source.Contains("SelectTakeoffTemplatePresetFromCombo", StringComparison.Ordinal),
+            "takeoff template settings should expose named template preset creation and switching");
+        AssertTrue(
+            source.Contains("BuildTemplateTreeItem(root, tree, allowCreate, depth: 0)", StringComparison.Ordinal) &&
+            source.Contains("IsExpanded = depth == 0", StringComparison.Ordinal) &&
+            source.Contains("BuildTemplateTreeItem(child, ownerTree, allowCreate, depth + 1)", StringComparison.Ordinal),
+            "takeoff template tree should expand top-level folders while nested folders start collapsed");
+    }
+
     public static void FastRefreshDisabledForDataSafety()
     {
         string source = ReadRepoFile("MainWindow.TakeoffsTreeFastRefresh.cs");

@@ -247,6 +247,62 @@ internal static class TakeoffTemplateTests
             "upgraded template built-in version");
     }
 
+    public static void LegacyTemplateMigratesToDefaultPreset()
+    {
+        var legacyConfig = new TakeoffTemplateConfig
+        {
+            Template = new TakeoffTemplate
+            {
+                Name = "User Changed Template",
+                Roots =
+                [
+                    new TakeoffTemplateNode
+                    {
+                        Name = "custom root",
+                        IsFolder = true,
+                        Children =
+                        [
+                            new TakeoffTemplateNode
+                            {
+                                Name = "custom line",
+                                IsFolder = false,
+                                MeasurementType = "line",
+                                Color = "#123456",
+                            },
+                        ],
+                    },
+                ],
+            },
+        };
+
+        legacyConfig.EnsureTemplatePresets();
+
+        AssertEqual("1", legacyConfig.Templates.Count.ToString(), "legacy template preset count");
+        AssertEqual(TakeoffTemplateConfig.DefaultTemplateName, legacyConfig.ActiveTemplate().Name, "legacy template preset name");
+        AssertTemplateItem(legacyConfig, ["custom root"], "custom line", "line");
+    }
+
+    public static void NamedTemplatePresetsCanSwitchWithoutChangingDefault()
+    {
+        TakeoffTemplateConfig config = TakeoffTemplateConfig.BuildDefault();
+        string defaultId = config.ActiveTemplateId;
+
+        TakeoffTemplate custom = config.AddTemplateCopy("Custom Walls");
+        custom.Roots.Add(new TakeoffTemplateNode
+        {
+            Name = "custom only",
+            IsFolder = true,
+        });
+
+        config.SelectTemplate(defaultId);
+        AssertEqual(TakeoffTemplateConfig.DefaultTemplateName, config.ActiveTemplate().Name, "default preset remains selectable");
+        AssertTemplateMissingFolder(config, ["custom only"]);
+
+        config.SelectTemplate(custom.Id);
+        AssertEqual("Custom Walls", config.ActiveTemplate().Name, "custom preset selected");
+        FindFolder(config.Template.Roots, ["custom only"]);
+    }
+
     public static void RoutingUsesExistingFolderOrRootFallback()
     {
         string root = Path.Combine(Path.GetTempPath(), "opc_takeoff_template_tests", Guid.NewGuid().ToString("N"));
