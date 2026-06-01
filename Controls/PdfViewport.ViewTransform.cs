@@ -48,6 +48,7 @@ public sealed partial class PdfViewport
 
         _navigationIdleTimer.Stop();
         _isFastNavigating = false;
+        QueueDetailRenderIfNeeded(force: false);
         RequestRepaint();
     }
 
@@ -89,6 +90,15 @@ public sealed partial class PdfViewport
         if (_showingPreviousPageDuringSwitch && !_usingLayerRenderer)
             return;
 
+        if (_zoom < ViewportRenderPolicy.DetailRenderMinZoom)
+            return;
+
+        if (ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale))
+        {
+            QueueDetailRenderIfNeeded(force);
+            return;
+        }
+
         float desired = CurrentRenderScale();
         if (!force && _renderedScale > 0)
         {
@@ -118,12 +128,19 @@ public sealed partial class PdfViewport
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfW <= 0 || _pdfH <= 0)
             return;
 
+        if (_zoom < ViewportRenderPolicy.DetailRenderMinZoom)
+            return;
+
         if (!force && _renderedScale > 0)
         {
             float desired = CurrentRenderScale();
             float ratio = desired / _renderedScale;
-            if (ratio > 0.72f && ratio < 1.38f)
+            if (!ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale) &&
+                ratio > 0.72f &&
+                ratio < 1.38f)
+            {
                 return;
+            }
         }
 
         _zoomRerenderForce = _zoomRerenderForce || force;

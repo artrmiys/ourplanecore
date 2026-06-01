@@ -10,6 +10,12 @@ public static class ViewportRenderPolicy
     public const float ResponsiveMinRenderScale = 1.0f;
     public const float ResponsiveMaxRenderScale = 2.25f;
     public const float ResponsiveMaxRenderPixels = 24_000_000f;
+    public const bool DetailRenderEnabled = true;
+    public const float DetailRenderMinZoom = 1.0f;
+    public const float DetailRenderMinScaleGain = 1.18f;
+    public const float DetailRenderMaxScale = 16.0f;
+    public const float DetailRenderMaxPixels = 18_000_000f;
+    public const float DetailRenderPaddingScreenPx = 128f;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;
@@ -60,6 +66,34 @@ public static class ViewportRenderPolicy
         }
 
         return maxScale;
+    }
+
+    public static bool ShouldUseDetailRender(float zoom, float bitmapScale)
+    {
+        if (!DetailRenderEnabled || zoom < DetailRenderMinZoom || bitmapScale <= 0)
+            return false;
+
+        return zoom >= bitmapScale * DetailRenderMinScaleGain;
+    }
+
+    public static float SelectDetailRenderScale(
+        float zoom,
+        float clipWidthPt,
+        float clipHeightPt,
+        float bitmapScale)
+    {
+        if (!ShouldUseDetailRender(zoom, bitmapScale) || clipWidthPt <= 0 || clipHeightPt <= 0)
+            return 0;
+
+        float target = Math.Clamp(zoom, bitmapScale * DetailRenderMinScaleGain, DetailRenderMaxScale);
+        float clipPoints = clipWidthPt * clipHeightPt;
+        if (clipPoints > 0)
+        {
+            float budgetScale = MathF.Sqrt(DetailRenderMaxPixels / clipPoints);
+            target = Math.Min(target, budgetScale);
+        }
+
+        return target >= bitmapScale * DetailRenderMinScaleGain ? Math.Max(target, bitmapScale) : 0;
     }
 
     private static float PixelBudgetMaxRenderScale(float pageWidthPt, float pageHeightPt)

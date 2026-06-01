@@ -1061,6 +1061,58 @@ internal static class TakeoffsTreeRegressionTests
             "Python helper should return inline PNG data for bounded renders and fall back to the existing PNG file path");
     }
 
+    public static void PdfDetailClipRenderIsWired()
+    {
+        string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
+        string transform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
+        string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
+        string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
+        string service = ReadPdfLayerRenderServiceSources();
+        string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
+
+        AssertTrue(
+            policy.Contains("DetailRenderEnabled = true", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMinZoom = 1.0f", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMaxScale = 16.0f", StringComparison.Ordinal) &&
+            policy.Contains("SelectDetailRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal),
+            "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
+        AssertTrue(
+            pageApi.Contains("renderScale: previewScale", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.InstantPagePreviewRenderScale", StringComparison.Ordinal),
+            "interactive page opens should keep the base refresh cheap and leave deep zoom sharpness to detail rendering");
+        AssertTrue(
+            rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
+            rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
+            "paint should use sharper upscale sampling and overlay the high-DPI detail tile");
+        AssertTrue(
+            transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
+            transform.Contains("_zoom < ViewportRenderPolicy.DetailRenderMinZoom", StringComparison.Ordinal) &&
+            transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
+            transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
+            "zoom and pan idle should schedule detail renders instead of whole-sheet high zoom renders");
+        AssertTrue(
+            detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
+            detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
+            detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
+            detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
+            detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
+            "viewport should own a versioned clipped detail render request with telemetry and cancellation");
+        AssertTrue(
+            service.Contains("public RectDto? Clip { get; set; }", StringComparison.Ordinal) &&
+            service.Contains("Clip = hasClip ? RectDto.FromSKRect", StringComparison.Ordinal) &&
+            service.Contains("response.Clip?.ToSKRect()", StringComparison.Ordinal) &&
+            service.Contains("!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest", StringComparison.Ordinal),
+            "layer render protocol should pass clip rectangles without polluting the persisted whole-sheet cache");
+        AssertTrue(
+            helper.Contains("raw_clip = req.get(\"clip\")", StringComparison.Ordinal) &&
+            helper.Contains("page.get_pixmap(matrix=matrix, clip=clip, alpha=False)", StringComparison.Ordinal) &&
+            helper.Contains("\"clip\": clip_payload", StringComparison.Ordinal),
+            "Python helper should render the requested visible PDF clip with PyMuPDF");
+    }
+
     public static void SheetOverlayRenderingUsesSharperSampling()
     {
         string source = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));

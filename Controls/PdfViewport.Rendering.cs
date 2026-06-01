@@ -63,7 +63,11 @@ public sealed partial class PdfViewport
                 using var bitmapPaint = new SKPaint
                 {
                     IsAntialias = true,
-                    FilterQuality = _renderNavigationFastFrame ? SKFilterQuality.Low : SKFilterQuality.Medium,
+                    FilterQuality = _renderNavigationFastFrame
+                        ? SKFilterQuality.Low
+                        : _zoom > _bitmapScale * 1.05f
+                            ? SKFilterQuality.High
+                            : SKFilterQuality.Medium,
                 };
 
                 float visibleW = ViewportCanvasWidth / Math.Max(_zoom, 0.001f);
@@ -83,6 +87,7 @@ public sealed partial class PdfViewport
                         (srcBottom / _bitmapScale - _panY) * _zoom);
                     DrawPagePaperUnderlay(canvas, dst);
                     canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
+                    DrawDetailRenderTile(canvas);
                     DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);
                 }

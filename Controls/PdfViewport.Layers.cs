@@ -52,6 +52,7 @@ public sealed partial class PdfViewport
         _usingLayerRenderer = false;
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
     }
 
     private void ApplyCachedBitmapRender(CachedBitmapRender render)
@@ -65,6 +66,7 @@ public sealed partial class PdfViewport
         _usingLayerRenderer = false;
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
     }
 
     private bool TryApplyPersistedPreviewRender(
@@ -89,10 +91,20 @@ public sealed partial class PdfViewport
         _renderedScale = _bitmapScale;
         _usingLayerRenderer = true;
         _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
         AppLog.Info(
             $"Viewport PyMuPDF preview cache hit; page='{_pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
+        ReportViewportRenderProfile(
+            "preview",
+            _pageFolder,
+            pdfPath,
+            pdfIndex,
+            renderScale,
+            elapsedMs: 0,
+            fromCache: true,
+            clipRect: null);
         RequestRepaint();
         return true;
     }
@@ -165,7 +177,9 @@ public sealed partial class PdfViewport
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
         ApplyLayerRenderContinuation(request);
+        QueueDetailRenderIfNeeded(force: true);
         if (request.FireLayersAfter)
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
@@ -173,6 +187,15 @@ public sealed partial class PdfViewport
         AppLog.Info(
             $"Viewport PyMuPDF render cache hit; page='{request.PageFolder}'; " +
             $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; scale={request.RenderScale:0.###}");
+        ReportViewportRenderProfile(
+            "layer",
+            request.PageFolder,
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            elapsedMs: 0,
+            fromCache: true,
+            clipRect: null);
         RequestRepaint();
         return true;
     }
@@ -259,6 +282,7 @@ public sealed partial class PdfViewport
                 else if (render != null)
                     ApplyDocnetRenderResult(render);
                 ApplyDocnetRenderContinuation(request);
+                QueueDetailRenderIfNeeded(force: true);
                 RequestRepaint();
             }
             else if (render != null)
@@ -295,7 +319,7 @@ public sealed partial class PdfViewport
         {
             QueueInitialLayerDiscoveryOrRender(
                 request.ResetLayerStates,
-                CurrentRenderScale(),
+                ViewportRenderPolicy.InstantPagePreviewRenderScale,
                 request.StatusAfter,
                 request.FireLayersAfter,
                 allowImmediateCache: false);
@@ -308,6 +332,16 @@ public sealed partial class PdfViewport
 
     private void ReportSlowPdfRender(string kind, DocnetRenderRequest request, long elapsedMs, bool fromCache)
     {
+        ReportViewportRenderProfile(
+            kind,
+            request.PageFolder,
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            elapsedMs,
+            fromCache,
+            clipRect: null);
+
         if (fromCache || elapsedMs < ViewportRenderPolicy.SlowRenderLogMs)
             return;
 
@@ -378,6 +412,7 @@ public sealed partial class PdfViewport
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
         RequestRepaint();
         return true;
     }
@@ -394,6 +429,7 @@ public sealed partial class PdfViewport
         if (string.IsNullOrWhiteSpace(_pdfPath))
             return;
 
+        ClearDetailRender();
         int version = ++_layerRenderVersion;
         LayerRenderRequest request = new(
             version,
@@ -600,6 +636,7 @@ public sealed partial class PdfViewport
                     if (ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates))
                     {
                         ApplyLayerRenderContinuation(completion.Request);
+                        QueueDetailRenderIfNeeded(force: true);
                         if (completion.Request.FireLayersAfter)
                             FireLayersChanged();
                         if (!string.IsNullOrWhiteSpace(completion.Request.StatusAfter))
@@ -645,6 +682,16 @@ public sealed partial class PdfViewport
 
     private void ReportSlowLayerRender(LayerRenderRequest request, long elapsedMs)
     {
+        ReportViewportRenderProfile(
+            "layer",
+            request.PageFolder,
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            elapsedMs,
+            fromCache: false,
+            clipRect: null);
+
         if (elapsedMs < ViewportRenderPolicy.SlowRenderLogMs)
             return;
 

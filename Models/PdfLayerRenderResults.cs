@@ -18,6 +18,7 @@ public sealed class PdfLayerRenderResult
     public byte[] ImageBytes { get; init; } = [];
     public float WidthPt { get; init; }
     public float HeightPt { get; init; }
+    public SKRect? ClipRect { get; init; }
     public IReadOnlyList<PdfLayer> Layers { get; init; } = [];
     public bool LayersCaptured { get; init; }
 }

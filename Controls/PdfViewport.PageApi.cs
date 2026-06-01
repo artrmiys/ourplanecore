@@ -87,6 +87,7 @@ public sealed partial class PdfViewport
         _layerRenderVersion++;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
+        ClearDetailRender();
         QueuePdfSnapPointLoad(force: true);
 
         float previewScale = ViewportRenderPolicy.InstantPagePreviewRenderScale;

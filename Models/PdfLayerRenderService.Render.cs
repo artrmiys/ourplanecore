@@ -23,19 +23,45 @@ public static partial class PdfLayerRenderService
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
         out PdfLayerRenderResult result,
-        out string error)
-    {
-        result = new PdfLayerRenderResult();
-        error = "";
-        string cacheKey = BuildRenderCacheKey(
+        out string error) =>
+        TryRender(
             pdfPath,
             pageIndex,
             renderScale,
             layerStates,
             highlightedLayers,
-            cachedLayers);
-        if (TryGetCachedRender(cacheKey, out result))
-            return true;
+            cachedLayers,
+            null,
+            out result,
+            out error);
+
+    internal static bool TryRender(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect,
+        out PdfLayerRenderResult result,
+        out string error)
+    {
+        result = new PdfLayerRenderResult();
+        error = "";
+        bool hasClip = IsUsableClip(clipRect);
+        string cacheKey = "";
+        if (!hasClip)
+        {
+            cacheKey = BuildRenderCacheKey(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                layerStates,
+                highlightedLayers,
+                cachedLayers);
+            if (TryGetCachedRender(cacheKey, out result))
+                return true;
+        }
 
         string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
@@ -56,6 +82,7 @@ public static partial class PdfLayerRenderService
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
                 VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+                Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
             if (!TryInvokeWorker("render", request, out RenderResponse? response, out error) &&
@@ -76,13 +103,17 @@ public static partial class PdfLayerRenderService
                 ImageBytes = imageBytes,
                 WidthPt = response.WidthPt,
                 HeightPt = response.HeightPt,
+                ClipRect = response.Clip?.ToSKRect() ?? (hasClip ? clipRect!.Value : null),
                 Layers = response.Layers
                     .Select(l => new PdfLayer(l.Xref, l.Name, l.On, highlightedLayers.Contains(l.Xref)))
                     .ToList(),
                 LayersCaptured = true,
             };
-            AddCachedRender(cacheKey, result);
-            if (PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+            if (!hasClip)
+            {
+                AddCachedRender(cacheKey, result);
+            }
+            if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
                 PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
             return true;
         }
@@ -195,4 +226,9 @@ public static partial class PdfLayerRenderService
 
         return sb.ToString();
     }
+
+    private static bool IsUsableClip(SKRect? clipRect) =>
+        clipRect.HasValue &&
+        clipRect.Value.Width > 0.1f &&
+        clipRect.Value.Height > 0.1f;
 }

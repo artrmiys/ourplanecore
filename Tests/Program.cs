@@ -248,6 +248,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
+    ("pdf detail clip render is wired", TakeoffsTreeRegressionTests.PdfDetailClipRenderIsWired),
     ("sheet overlay rendering uses sharper sampling", TakeoffsTreeRegressionTests.SheetOverlayRenderingUsesSharperSampling),
     ("sheet overlay persisted cache is wired", TakeoffsTreeRegressionTests.SheetOverlayPersistedCacheIsWired),
     ("pdf takeoff import command is wired", TakeoffsTreeRegressionTests.PdfTakeoffImportCommandIsWired),
@@ -3294,6 +3295,17 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         ViewportRenderPolicy.SelectRenderScale(8.0f, steps, pageWidthPt: 2592f, pageHeightPt: 3456f),
         "large sheets stay inside the viewport render pixel budget",
         tolerance: 0.001);
+    AssertClose(
+        0.0,
+        ViewportRenderPolicy.SelectDetailRenderScale(0.5f, 2000f, 1200f, 0.15f),
+        "fit zoom should not trigger expensive detail rendering");
+    AssertClose(
+        4.0,
+        ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
+        "deep zoom detail render should match the viewport zoom when inside the clip pixel budget");
+    AssertTrue(
+        ViewportRenderPolicy.SelectDetailRenderScale(16.0f, 3200f, 2200f, 1.0f) < 2.0f,
+        "very large visible clips should be capped by the detail render pixel budget");
 }
 
 static void ViewportBackgroundDefaultsToOpaqueWhite()

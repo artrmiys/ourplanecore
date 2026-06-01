@@ -37,7 +37,8 @@ public static partial class PdfLayerRenderService
         double renderScale,
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
-        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect = null) =>
         Task.Run(() =>
         {
             bool ok = TryRender(
@@ -47,6 +48,7 @@ public static partial class PdfLayerRenderService
                 layerStates,
                 highlightedLayers,
                 cachedLayers,
+                clipRect,
                 out PdfLayerRenderResult result,
                 out string error);
             return (ok, result, error);

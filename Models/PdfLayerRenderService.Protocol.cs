@@ -26,6 +26,7 @@ public static partial class PdfLayerRenderService
         public Dictionary<string, bool> Layers { get; set; } = [];
         public List<int> Highlight { get; set; } = [];
         public List<LayerDto>? VisibleLayers { get; set; }
+        public RectDto? Clip { get; set; }
     }
 
     private sealed class LayerListRequest
@@ -67,6 +68,7 @@ public static partial class PdfLayerRenderService
         public string Image { get; set; } = "";
         public string ImageBase64 { get; set; } = "";
         public List<LayerDto> Layers { get; set; } = [];
+        public RectDto? Clip { get; set; }
     }
 
     private sealed class LayerListResponse
@@ -121,6 +123,16 @@ public static partial class PdfLayerRenderService
         public float Y0 { get; set; }
         public float X1 { get; set; }
         public float Y1 { get; set; }
+
+        public static RectDto FromSKRect(SKRect rect) => new()
+        {
+            X0 = rect.Left,
+            Y0 = rect.Top,
+            X1 = rect.Right,
+            Y1 = rect.Bottom,
+        };
+
+        public SKRect ToSKRect() => new(X0, Y0, X1, Y1);
     }
 
     private sealed class WorkerRequest<TRequest>

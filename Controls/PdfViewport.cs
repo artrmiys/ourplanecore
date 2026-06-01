@@ -473,6 +473,7 @@ public sealed partial class PdfViewport : SKElement
         _layerRenderVersion++;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
+        ClearDetailRender();
         _showingPreviousPageDuringSwitch = false;
         _pageBitmap?.Dispose();
         _pageBitmap = null;

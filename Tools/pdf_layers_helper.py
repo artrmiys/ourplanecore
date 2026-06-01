@@ -1731,11 +1731,49 @@ def _apply_states(doc: fitz.Document, states: dict[str, bool], doc_key: tuple[st
             continue
 
 
-def _render_samples(doc: fitz.Document, page_index: int, scale: float) -> tuple[fitz.Pixmap, float, float]:
+def _clip_from_request(page: fitz.Page, raw_clip: dict | None) -> fitz.Rect | None:
+    if not raw_clip:
+        return None
+
+    page_rect = page.rect
+    try:
+        clip = fitz.Rect(
+            float(raw_clip.get("x0", 0.0)),
+            float(raw_clip.get("y0", 0.0)),
+            float(raw_clip.get("x1", 0.0)),
+            float(raw_clip.get("y1", 0.0)),
+        )
+    except Exception:
+        return None
+
+    clip = clip & page_rect
+    if clip.is_empty or clip.width <= 0 or clip.height <= 0:
+        return None
+    return clip
+
+
+def _clip_payload(clip: fitz.Rect | None) -> dict | None:
+    if clip is None:
+        return None
+    return {
+        "x0": float(clip.x0),
+        "y0": float(clip.y0),
+        "x1": float(clip.x1),
+        "y1": float(clip.y1),
+    }
+
+
+def _render_samples(
+    doc: fitz.Document,
+    page_index: int,
+    scale: float,
+    raw_clip: dict | None = None,
+) -> tuple[fitz.Pixmap, float, float, dict | None]:
     page = doc.load_page(page_index)
     matrix = fitz.Matrix(scale, scale)
-    pix = page.get_pixmap(matrix=matrix, alpha=False)
-    return pix, float(page.rect.width), float(page.rect.height)
+    clip = _clip_from_request(page, raw_clip)
+    pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=False)
+    return pix, float(page.rect.width), float(page.rect.height), _clip_payload(clip)
 
 
 def _render_samples_for_states(
@@ -1745,7 +1783,8 @@ def _render_samples_for_states(
     states: dict[str, bool],
     layers: list[dict],
     role: str,
-) -> tuple[fitz.Pixmap, float, float]:
+    raw_clip: dict | None = None,
+) -> tuple[fitz.Pixmap, float, float, dict | None]:
     has_hidden_layers = any(not on for on in states.values())
     if has_hidden_layers:
         doc = fitz.open(pdf_path)
@@ -1753,13 +1792,13 @@ def _render_samples_for_states(
             _apply_render_states(doc, None, states)
             hidden_layer_names = _layer_names_from_states(doc, states, layers)
             _filter_page_content_for_hidden_layers(doc, page_index, hidden_layer_names)
-            return _render_samples(doc, page_index, scale)
+            return _render_samples(doc, page_index, scale, raw_clip)
         finally:
             doc.close()
 
     doc, doc_key = _get_doc(pdf_path, role)
     _apply_render_states(doc, doc_key, states)
-    return _render_samples(doc, page_index, scale)
+    return _render_samples(doc, page_index, scale, raw_clip)
 
 
 def _set_all_layers(
@@ -1829,13 +1868,22 @@ def render_data(req: dict) -> dict:
     inline_max_pixels = int(req.get("inline_image_max_pixels") or 0)
     states = {str(k): bool(v) for k, v in (req.get("layers") or {}).items()}
     highlight_xrefs = {int(x) for x in req.get("highlight", [])}
+    raw_clip = req.get("clip")
 
     layers = _cached_layers(req.get("visible_layers"))
     if layers is None:
         discovery_doc, discovery_key = _get_doc(pdf_path, "discover")
         layers = _filter_layers_for_page(discovery_doc, discovery_key, page_index, _layers(discovery_doc))
 
-    base, width_pt, height_pt = _render_samples_for_states(pdf_path, page_index, scale, states, layers, "base")
+    base, width_pt, height_pt, clip_payload = _render_samples_for_states(
+        pdf_path,
+        page_index,
+        scale,
+        states,
+        layers,
+        "base",
+        raw_clip,
+    )
 
     if highlight_xrefs:
         off_states = {str(int(layer["xref"])): False for layer in layers}
@@ -1843,8 +1891,24 @@ def render_data(req: dict) -> dict:
             str(int(layer["xref"])): int(layer["xref"]) in highlight_xrefs
             for layer in layers
         }
-        off_all, _, _ = _render_samples_for_states(pdf_path, page_index, scale, off_states, layers, "highlight_off")
-        hi_only, _, _ = _render_samples_for_states(pdf_path, page_index, scale, hi_states, layers, "highlight_hi")
+        off_all, _, _, _ = _render_samples_for_states(
+            pdf_path,
+            page_index,
+            scale,
+            off_states,
+            layers,
+            "highlight_off",
+            raw_clip,
+        )
+        hi_only, _, _, _ = _render_samples_for_states(
+            pdf_path,
+            page_index,
+            scale,
+            hi_states,
+            layers,
+            "highlight_hi",
+            raw_clip,
+        )
 
         samples = _highlight(base, off_all, hi_only)
         base = fitz.Pixmap(fitz.csRGB, base.width, base.height, samples, False)
@@ -1857,6 +1921,7 @@ def render_data(req: dict) -> dict:
         "ok": True,
         "width_pt": width_pt,
         "height_pt": height_pt,
+        "clip": clip_payload,
         **image_payload,
         "layers": layers,
     }
