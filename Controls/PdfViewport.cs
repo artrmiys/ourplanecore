@@ -126,7 +126,7 @@ public sealed partial class PdfViewport : SKElement
     public  double   ScaleMetersPerPt { get; set; } = 0.0;
     public  string   ActiveColor      { get; set; } = "#FF4444";
     public  string   ActiveAnnotationColor { get; set; } = "#FF4444";
-    public  double   ActiveAnnotationStrokeWidth { get; set; } = 1.8;
+    public  double   ActiveAnnotationStrokeWidth { get; set; } = 5.0;
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  string   ActiveCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;

@@ -77,7 +77,7 @@ public partial class MainWindow : Window
 
     private readonly Dictionary<string, RadioButton> _toolBtns;
     private string _annotationColor = "#FF4444";
-    private double _annotationStrokeWidth = 1.8;
+    private double _annotationStrokeWidth = 5.0;
     private ToggleButton? _recordButton;
     private bool _updatingRulerVisibilityButton;
     private ListView? _estimateList;

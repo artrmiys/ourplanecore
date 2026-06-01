@@ -120,7 +120,7 @@ public sealed partial class PdfViewport
     {
         double value = annotation.StrokeWidth is >= 0.75 and <= 12.0
             ? annotation.StrokeWidth
-            : 1.8;
+            : 5.0;
         if (selected)
             value += 0.9;
         return ScreenToPdfDistance((float)Math.Clamp(value, 0.75, 12.9));

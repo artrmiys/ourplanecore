@@ -104,7 +104,7 @@ public static partial class PdfExporter
     {
         double value = annotation.StrokeWidth is >= 0.75 and <= 12.0
             ? annotation.StrokeWidth
-            : 1.8;
+            : 5.0;
         return (float)Math.Clamp(value * 0.75, 0.75, 9.0);
     }
 

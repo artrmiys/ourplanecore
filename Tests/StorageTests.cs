@@ -232,6 +232,7 @@ internal static class StorageTests
             AssertEqual("rectangle", loaded[0].Kind, "annotation kind normalized");
             AssertEqual("Field note", loaded[0].Text, "annotation text preserved");
             AssertEqual("#1565C0", loaded[0].Color, "annotation default color");
+            AssertClose(5.0, loaded[0].StrokeWidth, "annotation default stroke width");
             AssertEqual(page.FolderPath, loaded[0].PageFolder, "annotation page default");
             AssertClose(0.25, loaded[0].ScaleMetersPerPt, "annotation scale");
             AssertTrue(loaded[0].Hidden, "annotation hidden flag preserved");

@@ -89,5 +89,5 @@ internal static class PageAnnotationStore
     }
 
     private static double NormalizeStrokeWidth(double value) =>
-        value is >= 0.75 and <= 12.0 ? value : 1.8;
+        value is >= 0.75 and <= 12.0 ? value : 5.0;
 }

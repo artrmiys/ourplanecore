@@ -75,25 +75,7 @@ public partial class MainWindow
             _templateStatusText = status;
         }
 
-        var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        if (!settingsMode)
-            toolbar.Children.Add(TemplateButton("Create", (_, _) => CreateTakeoffFromTemplateSelection(tree), "Create a new takeoff item from the selected template item", primary: true));
-        toolbar.Children.Add(TemplateButton("Add Folder", (_, _) => AddTemplateFolder(tree), "Add a folder to the template tree"));
-        toolbar.Children.Add(TemplateButton("Add Line", (_, _) => AddTemplateItem(tree, "line"), "Add a Line preset"));
-        toolbar.Children.Add(TemplateButton("Add Area", (_, _) => AddTemplateItem(tree, "area"), "Add an Area preset"));
-        toolbar.Children.Add(TemplateButton("Add Count", (_, _) => AddTemplateItem(tree, "point"), "Add a Count preset"));
-        toolbar.Children.Add(TemplateButton("Edit", (_, _) => EditTemplateNode(tree), "Edit the selected template node"));
-        toolbar.Children.Add(TemplateButton("Duplicate", (_, _) => DuplicateTemplateNode(tree), "Duplicate the selected template node"));
-        toolbar.Children.Add(TemplateButton("Delete", (_, _) => DeleteTemplateNode(tree), "Delete the selected template node"));
-        toolbar.Children.Add(TemplateButton("Reset", (_, _) => ResetTakeoffTemplateToDefault(), "Reset this template tree to the built-in presets"));
-
-        if (settingsMode)
-        {
-            toolbar.Children.Add(new Separator { Width = 10, Opacity = 0 });
-            toolbar.Children.Add(TemplateButton("Save global", (_, _) => SaveTakeoffTemplateGlobal(), "Save this template tree as the global default", primary: true));
-            toolbar.Children.Add(TemplateButton("Save this job", (_, _) => SaveTakeoffTemplateJob(), "Save this template tree as a per-job override"));
-            toolbar.Children.Add(TemplateButton("Clear job override", (_, _) => ClearTakeoffTemplateJobOverride(), "Return this job to the global/default template tree"));
-        }
+        FrameworkElement toolbar = BuildTakeoffTemplateToolbar(tree, settingsMode);
 
         var panel = new DockPanel { Margin = new Thickness(settingsMode ? 2 : 4) };
         DockPanel.SetDock(toolbar, Dock.Top);
@@ -114,15 +96,57 @@ public partial class MainWindow
             Margin = new Thickness(0, 0, 0, 2),
         };
 
-    private Button TemplateButton(string content, RoutedEventHandler handler, string tooltip, bool primary = false)
+    private FrameworkElement BuildTakeoffTemplateToolbar(TreeView tree, bool settingsMode)
+    {
+        var toolbar = new StackPanel { Margin = new Thickness(0, 0, 0, 3) };
+        var createRow = TemplateToolbarRow();
+        var editRow = TemplateToolbarRow();
+
+        if (!settingsMode)
+            createRow.Children.Add(TemplateButton("Create", (_, _) => CreateTakeoffFromTemplateSelection(tree), "Create a new takeoff item from the selected template item", primary: true, minWidth: 48));
+        createRow.Children.Add(TemplateButton("Folder", (_, _) => AddTemplateFolder(tree), "Add a folder to the template tree"));
+        createRow.Children.Add(TemplateButton("Line", (_, _) => AddTemplateItem(tree, "line"), "Add a Line preset"));
+        createRow.Children.Add(TemplateButton("Area", (_, _) => AddTemplateItem(tree, "area"), "Add an Area preset"));
+        createRow.Children.Add(TemplateButton("Count", (_, _) => AddTemplateItem(tree, "point"), "Add a Count preset"));
+
+        editRow.Children.Add(TemplateButton("Edit", (_, _) => EditTemplateNode(tree), "Edit the selected template node"));
+        editRow.Children.Add(TemplateButton("Dup", (_, _) => DuplicateTemplateNode(tree), "Duplicate the selected template node"));
+        editRow.Children.Add(TemplateButton("Del", (_, _) => DeleteTemplateNode(tree), "Delete the selected template node"));
+        editRow.Children.Add(TemplateButton("Reset", (_, _) => ResetTakeoffTemplateToDefault(), "Reset this template tree to the built-in presets"));
+
+        toolbar.Children.Add(createRow);
+        toolbar.Children.Add(editRow);
+
+        if (settingsMode)
+        {
+            var saveRow = TemplateToolbarRow();
+            saveRow.Children.Add(TemplateButton("Global", (_, _) => SaveTakeoffTemplateGlobal(), "Save this template tree as the global default", primary: true, minWidth: 48));
+            saveRow.Children.Add(TemplateButton("Job", (_, _) => SaveTakeoffTemplateJob(), "Save this template tree as a per-job override"));
+            saveRow.Children.Add(TemplateButton("Clear", (_, _) => ClearTakeoffTemplateJobOverride(), "Return this job to the global/default template tree"));
+            toolbar.Children.Add(saveRow);
+        }
+
+        return toolbar;
+    }
+
+    private static WrapPanel TemplateToolbarRow() =>
+        new()
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 1),
+        };
+
+    private Button TemplateButton(string content, RoutedEventHandler handler, string tooltip, bool primary = false, double minWidth = 40)
     {
         var button = new Button
         {
             Content = content,
             ToolTip = tooltip,
-            Margin = new Thickness(0, 0, 4, 4),
-            Padding = new Thickness(7, 3, 7, 3),
-            FontSize = 11,
+            Height = 20,
+            MinWidth = minWidth,
+            Margin = new Thickness(0, 0, 3, 2),
+            Padding = new Thickness(4, 1, 4, 1),
+            FontSize = 10,
             Style = TryFindResource(primary ? "ManagerPrimaryButton" : "ManagerButton") as Style,
         };
         button.Click += handler;

@@ -64,18 +64,26 @@ public sealed class TakeoffTemplate
 
 public sealed class TakeoffTemplateConfig
 {
+    public const int CurrentBuiltInVersion = 2;
+
+    public int BuiltInVersion { get; set; }
     public TakeoffTemplate Template { get; set; } = BuildDefaultTemplate();
 
     public TakeoffTemplateConfig Clone()
     {
         return new TakeoffTemplateConfig
         {
+            BuiltInVersion = BuiltInVersion,
             Template = (Template ?? BuildDefaultTemplate()).Clone(),
         };
     }
 
     public static TakeoffTemplateConfig BuildDefault() =>
-        new() { Template = BuildDefaultTemplate() };
+        new()
+        {
+            BuiltInVersion = CurrentBuiltInVersion,
+            Template = BuildDefaultTemplate(),
+        };
 
     public static TakeoffTemplate BuildDefaultTemplate()
     {
@@ -102,18 +110,64 @@ public sealed class TakeoffTemplateConfig
                     Area("cantilevered", "#3F51B5"),
                     Area("flat", "#607D8B"),
                     Area("rf", "#455A64"),
-                    Area("rf mtl x", "#546E7A")),
+                    Area("rf x", "#37474F"),
+                    Area("rf mtl x", "#546E7A"),
+                    Area("roof", "#263238"),
+                    Area("overframe x", "#78909C")),
+                Folder("units",
+                    Line("Unit", "#607D8B")),
                 Folder("walls",
                     Line("corners", "#E91E63"),
+                    Line("unit", "#AD1457"),
                     Line("ext", "#FF4444"),
                     Line("cor", "#F06292"),
                     Line("corr", "#EC407A"),
                     Line("dem", "#AB47BC"),
+                    Line("parapet", "#8E24AA"),
+                    Line("shaft", "#7B1FA2"),
+                    Line("furring", "#6A1B9A"),
                     Line("2x4 x", "#EF5350"),
                     Line("2x6 x", "#D32F2F"),
                     Line("2x8 x", "#B71C1C"),
                     Line("2x4 half", "#BA68C8"),
-                    Line("2x6 half", "#8E24AA")),
+                    Line("2x6 half", "#8E24AA"),
+                    WallFloor("basement foor walls"),
+                    WallFloor("1st floor walls"),
+                    WallFloor("2nd floor walls"),
+                    WallFloor("3rd floor walls"),
+                    WallFloor("4th floor walls"),
+                    WallFloor("5th floor walls"),
+                    WallFloor("shaft walls")),
+                Folder("gables",
+                    Area("gable", "#8D6E63"),
+                    Folder("gable trusses",
+                        Area("gable truss", "#6D4C41")),
+                    Folder("gable stick",
+                        Area("gable stick", "#5D4037"))),
+                Folder("parapets",
+                    Line("parapet", "#7E57C2")),
+                Folder("trussheel",
+                    Line("Truss Heel", "#00ACC1"),
+                    Line("Eve Heel", "#26C6DA")),
+                Folder("openings",
+                    Point("Window", "#43A047"),
+                    Point("Door", "#2E7D32"),
+                    Line("Header", "#558B2F")),
+                Folder("eves rakes",
+                    Folder("eves",
+                        Line("Eve", "#039BE5"),
+                        Line("Eave", "#0288D1")),
+                    Folder("rakes",
+                        Line("Rake", "#0277BD")),
+                    Line("Returns", "#01579B")),
+                Folder("roof misc",
+                    Line("Ridge", "#5E35B1"),
+                    Line("Valley", "#512DA8"),
+                    Line("Hip", "#4527A0"),
+                    Line("Flashing", "#3949AB"),
+                    Area("Roof Sheathing", "#1E88E5"),
+                    Area("Gable Sheathing", "#1976D2"),
+                    Line("Roof Types", "#303F9F")),
                 Folder("framing",
                     Line("Blocking for Drywall", "#2196F3"),
                     Line("Blocking for Trusses", "#1E88E5"),
@@ -123,10 +177,90 @@ public sealed class TakeoffTemplateConfig
                     Line("Ledger", "#009688"),
                     Line("1x3 Cross Blocking", "#3F51B5"),
                     Line("Plate", "#FF9800"),
-                    Line("Frame", "#795548")),
+                    Line("Frame", "#795548"),
+                    Line("Post", "#8BC34A"),
+                    Line("Beam", "#7CB342"),
+                    Line("Joist", "#689F38"),
+                    Line("Stair", "#558B2F"),
+                    Line("Subfloor", "#33691E"),
+                    Line("Bracing", "#00897B"),
+                    Line("Bolts", "#00796B"),
+                    Line("Screws", "#00695C"),
+                    Line("Steel Beam Web Fillers", "#004D40"),
+                    FramingFloor("1st floor framing"),
+                    FramingFloor("2nd floor framing"),
+                    FramingFloor("3rd floor framing"),
+                    FramingFloor("4th floor framing"),
+                    FramingFloor("5th floor framing"),
+                    FramingFloor("loft framing"),
+                    Folder("roof framing",
+                        Line("Ridge", "#5E35B1"),
+                        Line("Header", "#512DA8"),
+                        Line("Hip", "#4527A0"),
+                        Line("Valley", "#3949AB"),
+                        Line("Dormer", "#303F9F"),
+                        Line("Overframes", "#283593"),
+                        Line("Dbl Rafters", "#1A237E"),
+                        Line("Trpl Rafters", "#3F51B5"),
+                        Line("Canopy", "#2196F3"),
+                        Area("Roof Sheathing", "#1976D2"))),
+                Folder("shear walls - holdowns - ties",
+                    Line("Shear Wall", "#FDD835"),
+                    Point("Holddown", "#FBC02D"),
+                    Point("Tie", "#F9A825")),
+                Folder("siding",
+                    Area("Siding", "#8D6E63"),
+                    Line("Siding Trim", "#795548")),
+                Folder("trims",
+                    Line("Exterior Trim", "#6D4C41"),
+                    Line("Interior Trim", "#5D4037"),
+                    Line("Base", "#4E342E"),
+                    Line("Casing", "#3E2723"),
+                    Line("Crown", "#A1887F")),
+                Folder("drywalls",
+                    Area("Drywall", "#90A4AE"),
+                    Line("Drywall Trim", "#78909C")),
             ],
         };
     }
+
+    private static TakeoffTemplateNode WallFloor(string name) =>
+        Folder(name,
+            Line("corners", "#E91E63"),
+            Line("unit", "#AD1457"),
+            Line("ext", "#FF4444"),
+            Line("cor", "#F06292"),
+            Line("corr", "#EC407A"),
+            Line("dem", "#AB47BC"),
+            Line("parapet", "#8E24AA"),
+            Line("shaft", "#7B1FA2"),
+            Line("furring", "#6A1B9A"),
+            Line("2x4 x", "#EF5350"),
+            Line("2x6 x", "#D32F2F"),
+            Line("2x8 x", "#B71C1C"),
+            Line("2x4 half", "#BA68C8"),
+            Line("2x6 half", "#8E24AA"));
+
+    private static TakeoffTemplateNode FramingFloor(string name) =>
+        Folder(name,
+            Line("Post", "#8BC34A"),
+            Line("Beam", "#7CB342"),
+            Line("Joist", "#689F38"),
+            Line("Stair", "#558B2F"),
+            Line("Subfloor", "#33691E"),
+            Line("Rim Board", "#0D47A1"),
+            Line("Ribbon Board", "#1976D2"),
+            Line("Blocking", "#00BCD4"),
+            Line("Blocking for Drywall", "#2196F3"),
+            Line("Blocking for Trusses", "#1E88E5"),
+            Line("1x3 Cross Blocking", "#3F51B5"),
+            Line("Ledger", "#009688"),
+            Line("Plate", "#FF9800"),
+            Line("Frame", "#795548"),
+            Line("Bracing", "#00897B"),
+            Line("Bolts", "#00796B"),
+            Line("Screws", "#00695C"),
+            Line("Steel Beam Web Fillers", "#004D40"));
 
     private static TakeoffTemplateNode Folder(string name, params TakeoffTemplateNode[] children) =>
         new()
@@ -142,6 +276,9 @@ public sealed class TakeoffTemplateConfig
     private static TakeoffTemplateNode Area(string name, string color) =>
         Item(name, "area", color);
 
+    private static TakeoffTemplateNode Point(string name, string color) =>
+        Item(name, "point", color);
+
     private static TakeoffTemplateNode Item(string name, string measurementType, string color) =>
         new()
         {
@@ -154,8 +291,9 @@ public sealed class TakeoffTemplateConfig
 }
 
 /// <summary>
-/// Global (cross-job) persistence for takeoff templates, kept next to the app
-/// settings at %APPDATA%\OurPlaneCore\templates.json.
+/// Global (cross-job) persistence for takeoff templates. The editable config
+/// lives under SmartContextStore.GlobalRoot/presets; the old list file remains
+/// for backward compatibility with earlier template UI builds.
 /// </summary>
 public static class TakeoffTemplateStore
 {
@@ -247,8 +385,34 @@ public static class TakeoffTemplateStore
         var clone = config.Clone();
         if (clone.Template.Roots.Count == 0)
             clone.Template = TakeoffTemplateConfig.BuildDefaultTemplate();
+        if (clone.BuiltInVersion < TakeoffTemplateConfig.CurrentBuiltInVersion)
+        {
+            MergeBuiltInDefaults(clone.Template.Roots, TakeoffTemplateConfig.BuildDefaultTemplate().Roots);
+            clone.BuiltInVersion = TakeoffTemplateConfig.CurrentBuiltInVersion;
+        }
         NormalizeNodeIds(clone.Template.Roots);
         return clone;
+    }
+
+    private static void MergeBuiltInDefaults(
+        List<TakeoffTemplateNode> targetNodes,
+        IEnumerable<TakeoffTemplateNode> defaultNodes)
+    {
+        foreach (TakeoffTemplateNode defaultNode in defaultNodes)
+        {
+            TakeoffTemplateNode? existing = targetNodes.FirstOrDefault(candidate =>
+                candidate.IsFolder == defaultNode.IsFolder &&
+                string.Equals(candidate.Name, defaultNode.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (existing == null)
+            {
+                targetNodes.Add(defaultNode.Clone());
+                continue;
+            }
+
+            if (existing.IsFolder)
+                MergeBuiltInDefaults(existing.Children, defaultNode.Children);
+        }
     }
 
     private static void NormalizeNodeIds(IEnumerable<TakeoffTemplateNode> nodes)
