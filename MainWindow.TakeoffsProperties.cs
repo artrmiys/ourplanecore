@@ -149,6 +149,9 @@ public partial class MainWindow
         bool initialJoistDetailedLabels = seedJoistEnableDefaults
             ? JoistTakeoffDefaults.DetailedAreaLabel
             : item.JoistDetailedLabels;
+        bool initialJoistShowLabels = seedJoistEnableDefaults
+            ? JoistTakeoffDefaults.ShowLabels
+            : item.JoistShowLabels;
         joistEdit = new JoistTakeoffEdit(
             item.IsJoistArea,
             item.JoistType,
@@ -158,7 +161,7 @@ public partial class MainWindow
             item.JoistAddEndJoist,
             JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
             initialJoistRounding,
-            item.JoistShowLabels,
+            initialJoistShowLabels,
             initialJoistDetailedLabels);
 
         var dialog = new Window
@@ -305,7 +308,7 @@ public partial class MainWindow
         var joistLabelsBox = new CheckBox
         {
             Content = "Label each joist",
-            IsChecked = item.JoistShowLabels,
+            IsChecked = initialJoistShowLabels,
             Margin = new Thickness(0, 3, 0, 3),
             ToolTip = "When off, the area label still shows count and order length.",
         };

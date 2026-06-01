@@ -26,7 +26,8 @@ internal sealed class ProjectFile
         public bool            JoistAddEndJoist { get; set; } = true;
         public string          JoistPitch { get; set; } = "";
         public string          JoistLengthRounding { get; set; } = JoistTakeoffCalculator.RoundingNearestEvenFoot;
-        public bool            JoistShowLabels { get; set; }
+        public bool?           JoistShowLabels { get; set; }
+        public bool            JoistShowLabelsExplicit { get; set; }
         public bool?           JoistDetailedLabels { get; set; } = true;
         public List<MeasDto>   Measurements { get; set; } = [];
     }
@@ -78,6 +79,7 @@ internal sealed class ProjectFile
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(item.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding),
                 JoistShowLabels = item.JoistShowLabels,
+                JoistShowLabelsExplicit = true,
                 JoistDetailedLabels = item.JoistDetailedLabels,
             };
             foreach (var m in item.Measurements)
@@ -145,7 +147,11 @@ internal sealed class ProjectFile
                 JoistAddEndJoist = dto.JoistAddEndJoist,
                 JoistPitch = JoistTakeoffCalculator.NormalizePitch(dto.JoistPitch),
                 JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(dto.JoistLengthRounding),
-                JoistShowLabels = dto.JoistShowLabels,
+                JoistShowLabels = ResolveJoistShowLabels(
+                    dto.JoistShowLabels,
+                    dto.JoistShowLabelsExplicit,
+                    dto.MeasurementType,
+                    dto.IsJoistTakeoff),
                 JoistDetailedLabels = dto.JoistDetailedLabels ?? true,
             };
             foreach (var md in dto.Measurements)
@@ -173,5 +179,24 @@ internal sealed class ProjectFile
         }
         var unit = pf.UnitMode == "Imperial" ? OurPlaneCore.UnitMode.Imperial : OurPlaneCore.UnitMode.Metric;
         return (pf.Scale, unit, items);
+    }
+
+    private static bool ResolveJoistShowLabels(
+        bool? value,
+        bool explicitValue,
+        string measurementType,
+        bool isJoistTakeoff)
+    {
+        bool isJoistArea = isJoistTakeoff &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
+        if (value.HasValue)
+        {
+            if (value.Value || explicitValue)
+                return value.Value;
+
+            return isJoistArea && JoistTakeoffDefaults.ShowLabels;
+        }
+
+        return isJoistArea && JoistTakeoffDefaults.ShowLabels;
     }
 }

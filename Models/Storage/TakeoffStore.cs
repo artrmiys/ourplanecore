@@ -69,6 +69,9 @@ internal static class TakeoffStore
             OurPlaneCoreJobStore.ReadProperty(folder, "MeasurementType") ??
             measurements.FirstOrDefault()?.MType ??
             "line");
+        bool isJoistTakeoff = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistEnabled"));
+        string? joistShowLabels = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabels");
+        string? joistShowLabelsExplicit = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabelsExplicit");
 
         var item = new TakeoffItem
         {
@@ -79,7 +82,7 @@ internal static class TakeoffStore
             CountSymbol = CountDisplaySymbol.Normalize(OurPlaneCoreJobStore.ReadProperty(folder, "CountSymbol")),
             UnitPrice = ParseDouble(OurPlaneCoreJobStore.ReadProperty(folder, "UnitPrice")),
             Notes = OurPlaneCoreJobStore.ReadProperty(folder, "Notes") ?? "",
-            IsJoistTakeoff = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistEnabled")),
+            IsJoistTakeoff = isJoistTakeoff,
             JoistType = OurPlaneCoreJobStore.ReadProperty(folder, "JoistType") ?? "",
             JoistSpacingInches = ParsePositiveDouble(OurPlaneCoreJobStore.ReadProperty(folder, "JoistSpacingInches"), 16),
             JoistDirectionDegrees = ParseDouble(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDirectionDegrees")),
@@ -87,7 +90,7 @@ internal static class TakeoffStore
             JoistAddEndJoist = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistAddEndJoist"), fallback: true),
             JoistPitch = JoistTakeoffCalculator.NormalizePitch(OurPlaneCoreJobStore.ReadProperty(folder, "JoistPitch")),
             JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(OurPlaneCoreJobStore.ReadProperty(folder, "JoistLengthRounding")),
-            JoistShowLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabels")),
+            JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsExplicit, measurementType, isJoistTakeoff),
             JoistDetailedLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
         };
         item.Measurements.AddRange(measurements);
@@ -119,6 +122,7 @@ internal static class TakeoffStore
             new KeyValuePair<string, string>("JoistPitch", JoistTakeoffCalculator.NormalizePitch(item.JoistPitch)),
             new KeyValuePair<string, string>("JoistLengthRounding", JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding)),
             new KeyValuePair<string, string>("JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("JoistShowLabelsExplicit", true.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("MeasurementCount", item.Measurements.Count.ToString()),
             new KeyValuePair<string, string>("MeasuredPageCount", MeasuredPageCount(item).ToString()),
@@ -287,4 +291,23 @@ internal static class TakeoffStore
 
     private static bool ParseBool(string? value, bool fallback) =>
         bool.TryParse(value, out bool parsed) ? parsed : fallback;
+
+    private static bool ParseJoistShowLabels(
+        string? value,
+        string? explicitValue,
+        string measurementType,
+        bool isJoistTakeoff)
+    {
+        bool isJoistArea = isJoistTakeoff &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
+        if (bool.TryParse(value, out bool parsed))
+        {
+            if (parsed || ParseBool(explicitValue))
+                return parsed;
+
+            return isJoistArea && JoistTakeoffDefaults.ShowLabels;
+        }
+
+        return isJoistArea && JoistTakeoffDefaults.ShowLabels;
+    }
 }

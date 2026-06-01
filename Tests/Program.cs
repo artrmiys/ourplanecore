@@ -205,6 +205,9 @@ var tests = new List<(string Name, Action Run)>
     ("joist pitch label explains flat slope and order lengths", JoistPitchLabelExplainsFlatSlopeAndOrderLengths),
     ("joist export uses visible label lines", JoistExportUsesVisibleLabelLines),
     ("joist area defaults use compact labels and foot rounding", JoistAreaDefaultsUseCompactLabelsAndFootRounding),
+    ("legacy joist item without label flag shows labels", LegacyJoistItemWithoutLabelFlagShowsLabels),
+    ("legacy joist item old false label flag migrates to labels", LegacyJoistItemOldFalseLabelFlagMigratesToLabels),
+    ("joist item explicit false label flag stays hidden", JoistItemExplicitFalseLabelFlagStaysHidden),
     ("folder template openings have numbered children", FolderTemplateOpeningsHaveNumberedChildren),
     ("settings manager folder template edits auto persist", TakeoffsTreeRegressionTests.SettingsManagerFolderTemplateEditsAutoPersist),
     ("report template loads synthetic detailed frame list", ReportTemplateServiceTests.LoadsSyntheticDetailedFrameList),
@@ -2649,6 +2652,7 @@ static void JoistAreaDefaultsUseCompactLabelsAndFootRounding()
     {
         MeasurementType = "area",
         JoistLengthRounding = JoistTakeoffCalculator.RoundingNearestEvenFoot,
+        JoistShowLabels = false,
         JoistDetailedLabels = true,
     };
 
@@ -2656,9 +2660,85 @@ static void JoistAreaDefaultsUseCompactLabelsAndFootRounding()
 
     AssertTrue(item.IsJoistTakeoff, "joist default enables item");
     AssertEqual(JoistTakeoffCalculator.RoundingNearestFoot, item.JoistLengthRounding, "joist default rounding");
+    AssertTrue(item.JoistShowLabels, "joist default labels");
     AssertFalse(item.JoistDetailedLabels, "joist default area label");
     AssertTrue(item.JoistDirectionFollowsAreaRotation, "joist default rotate direction");
     AssertTrue(item.JoistAddEndJoist, "joist default end joist");
+}
+
+static void LegacyJoistItemWithoutLabelFlagShowsLabels()
+{
+    WithTempJob("Legacy Joist Labels", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        SetDataXmlProperty(item.FolderPath, "JoistEnabled", "True");
+        OurPlaneCoreJobStore.SaveMeasurements(item.FolderPath, new[]
+        {
+            new Measurement
+            {
+                MType = "area",
+                JoistDirectionLocked = true,
+                ScaleMetersPerPt = 0.3048,
+                Points = SimpleJoistAreaPolygon().ToList(),
+            },
+        });
+
+        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+            ?? throw new InvalidOperationException("legacy joist item not loaded");
+
+        AssertTrue(loaded.JoistShowLabels, "legacy joist item labels");
+        AssertTrue(loaded.Measurements[0].JoistShowLabels, "legacy joist measurement labels");
+    });
+}
+
+static void LegacyJoistItemOldFalseLabelFlagMigratesToLabels()
+{
+    WithTempJob("Legacy Joist False Labels", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        SetDataXmlProperty(item.FolderPath, "JoistEnabled", "True");
+        SetDataXmlProperty(item.FolderPath, "JoistShowLabels", "False");
+        OurPlaneCoreJobStore.SaveMeasurements(item.FolderPath, new[]
+        {
+            new Measurement
+            {
+                MType = "area",
+                JoistDirectionLocked = true,
+                ScaleMetersPerPt = 0.3048,
+                Points = SimpleJoistAreaPolygon().ToList(),
+            },
+        });
+
+        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+            ?? throw new InvalidOperationException("legacy joist item not loaded");
+
+        AssertTrue(loaded.JoistShowLabels, "legacy false joist item labels migrate on");
+        AssertTrue(loaded.Measurements[0].JoistShowLabels, "legacy false joist measurement labels migrate on");
+    });
+}
+
+static void JoistItemExplicitFalseLabelFlagStaysHidden()
+{
+    WithTempJob("Explicit Joist Hidden Labels", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        JoistTakeoffDefaults.ApplyToNewJoistArea(item);
+        item.JoistShowLabels = false;
+        item.Measurements.Add(new Measurement
+        {
+            MType = "area",
+            JoistDirectionLocked = true,
+            ScaleMetersPerPt = 0.3048,
+            Points = SimpleJoistAreaPolygon().ToList(),
+        });
+        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+
+        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+            ?? throw new InvalidOperationException("explicit joist item not loaded");
+
+        AssertFalse(loaded.JoistShowLabels, "explicit joist item labels stay hidden");
+        AssertFalse(loaded.Measurements[0].JoistShowLabels, "explicit joist measurement labels stay hidden");
+    });
 }
 
 static void FolderTemplateOpeningsHaveNumberedChildren()
@@ -3867,6 +3947,37 @@ static string ReadDataGuid(string folder)
     XElement root = XDocument.Load(Path.Combine(folder, "Data.xml")).Root
         ?? throw new InvalidOperationException("missing Data.xml root");
     return root.Attribute("GUID")?.Value ?? "";
+}
+
+static void SetDataXmlProperty(string folder, string propertyName, string value)
+{
+    string path = Path.Combine(folder, "Data.xml");
+    XDocument doc = XDocument.Load(path);
+    XElement root = doc.Root ?? throw new InvalidOperationException("missing Data.xml root");
+    XElement properties = root.Element("Properties") ?? new XElement("Properties");
+    if (properties.Parent == null)
+        root.Add(properties);
+
+    XElement? property = properties
+        .Elements("Property")
+        .FirstOrDefault(element => string.Equals(
+            element.Attribute("Name")?.Value,
+            propertyName,
+            StringComparison.Ordinal));
+    if (property == null)
+    {
+        properties.Add(new XElement(
+            "Property",
+            new XAttribute("Name", propertyName),
+            new XAttribute("Value", value)));
+    }
+    else
+    {
+        property.SetAttributeValue("Value", value);
+    }
+
+    doc.Save(path);
+    File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(1));
 }
 
 static void AssertTrue(bool condition, string message)
