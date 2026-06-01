@@ -37,9 +37,19 @@ internal static class TakeoffTemplateTests
         AssertTemplateItem(config, ["walls", "1st floor walls"], "cor 2x6", "line");
         AssertTemplateItem(config, ["walls", "1st floor walls"], "cor (2) 2x4", "line");
         AssertTemplateItem(config, ["walls", "1st floor walls"], "cor (2) 2x6", "line");
+        AssertTemplateItem(config, ["walls"], "dem 2x4", "line");
+        AssertTemplateItem(config, ["walls"], "dem 2x6", "line");
+        AssertTemplateItem(config, ["walls"], "dem (2) 2x4", "line");
+        AssertTemplateItem(config, ["walls", "1st floor walls"], "dem 2x4", "line");
+        AssertTemplateItem(config, ["walls", "1st floor walls"], "dem 2x6", "line");
+        AssertTemplateItem(config, ["walls", "1st floor walls"], "dem 2x8", "line");
+        AssertTemplateItem(config, ["walls", "1st floor walls"], "dem (2) 2x4", "line");
+        AssertTemplateItem(config, ["walls", "1st floor walls"], "dem (2) 2x6", "line");
+        AssertTemplateItem(config, ["walls", "1st floor walls"], "dem (2) 2x8", "line");
         AssertTemplateColor(config, ["walls"], "corners", "#FF1744");
         AssertTemplateColor(config, ["walls"], "ext", "#2E7D32");
         AssertTemplateColor(config, ["walls", "1st floor walls"], "ext 2x6", "#00B8D4");
+        AssertTemplateColor(config, ["walls", "1st floor walls"], "dem 2x4", "#C51162");
         AssertTemplateMissingItem(config, ["walls"], "unit");
         AssertTemplateMissingItem(config, ["walls"], "corr");
         AssertTemplateMissingItem(config, ["walls"], "parapet");
@@ -217,6 +227,8 @@ internal static class TakeoffTemplateTests
         AssertTemplateItem(upgraded, ["walls", "1st floor walls"], "corners", "point");
         AssertTemplateColor(upgraded, ["walls"], "ext", "#2E7D32");
         AssertTemplateItem(upgraded, ["walls"], "ext 2x6", "line");
+        AssertTemplateItem(upgraded, ["walls"], "dem 2x4", "line");
+        AssertTemplateItem(upgraded, ["walls", "1st floor walls"], "dem (2) 2x6", "line");
         AssertTemplateMissingItem(upgraded, ["walls"], "unit");
         AssertTemplateMissingItem(upgraded, ["walls"], "corr");
         AssertTemplateColor(upgraded, ["walls"], "custom wall", "#010203");

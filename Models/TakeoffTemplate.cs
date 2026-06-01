@@ -64,7 +64,7 @@ public sealed class TakeoffTemplate
 
 public sealed class TakeoffTemplateConfig
 {
-    public const int CurrentBuiltInVersion = 4;
+    public const int CurrentBuiltInVersion = 5;
 
     internal static readonly IReadOnlyList<string> WallPresetNames =
     [
@@ -81,6 +81,12 @@ public sealed class TakeoffTemplateConfig
         "cor (2) 2x6",
         "cor (2) 2x8",
         "dem",
+        "dem 2x4",
+        "dem 2x6",
+        "dem 2x8",
+        "dem (2) 2x4",
+        "dem (2) 2x6",
+        "dem (2) 2x8",
         "furring",
         "2x4 x",
         "2x6 x",
@@ -181,6 +187,12 @@ public sealed class TakeoffTemplateConfig
                     WallPreset("cor (2) 2x6"),
                     WallPreset("cor (2) 2x8"),
                     WallPreset("dem"),
+                    WallPreset("dem 2x4"),
+                    WallPreset("dem 2x6"),
+                    WallPreset("dem 2x8"),
+                    WallPreset("dem (2) 2x4"),
+                    WallPreset("dem (2) 2x6"),
+                    WallPreset("dem (2) 2x8"),
                     WallPreset("furring"),
                     WallPreset("2x4 x"),
                     WallPreset("2x6 x"),
@@ -255,6 +267,12 @@ public sealed class TakeoffTemplateConfig
                 WallPreset("cor (2) 2x6"),
                 WallPreset("cor (2) 2x8"),
                 WallPreset("dem"),
+                WallPreset("dem 2x4"),
+                WallPreset("dem 2x6"),
+                WallPreset("dem 2x8"),
+                WallPreset("dem (2) 2x4"),
+                WallPreset("dem (2) 2x6"),
+                WallPreset("dem (2) 2x8"),
                 WallPreset("furring"),
                 WallPreset("2x4 x"),
                 WallPreset("2x6 x"),
@@ -307,6 +325,12 @@ public sealed class TakeoffTemplateConfig
             "cor (2) 2x6" => "#2962FF",
             "cor (2) 2x8" => "#0091EA",
             "dem" => "#2962FF",
+            "dem 2x4" => "#C51162",
+            "dem 2x6" => "#D500F9",
+            "dem 2x8" => "#AA00FF",
+            "dem (2) 2x4" => "#6200EA",
+            "dem (2) 2x6" => "#304FFE",
+            "dem (2) 2x8" => "#00BFA5",
             "furring" => "#6D4C41",
             "2x4 x" => "#D500F9",
             "2x6 x" => "#FFD600",
