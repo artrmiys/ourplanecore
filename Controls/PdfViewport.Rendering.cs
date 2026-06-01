@@ -114,8 +114,7 @@ public sealed partial class PdfViewport
                     DrawSheetOverlay(canvas);
                 DrawSheetOverlayEditGuides(canvas);
                 DrawCursorGuide(canvas, visiblePdf);
-                if (!_renderNavigationFastFrame)
-                    DrawTransformOverlay(canvas);
+                DrawTransformOverlay(canvas);
                 overlayMs += frameWatch.ElapsedMilliseconds - sectionStart;
 
                 sectionStart = frameWatch.ElapsedMilliseconds;
@@ -124,12 +123,9 @@ public sealed partial class PdfViewport
                 measurementMs += frameWatch.ElapsedMilliseconds - sectionStart;
 
                 sectionStart = frameWatch.ElapsedMilliseconds;
-                if (!_renderNavigationFastFrame)
-                {
-                    DrawPageAnnotations(canvas, visiblePdf);
-                    DrawAiActionDraftPreview(canvas, visiblePdf);
-                    DrawAiMarkers(canvas, visiblePdf);
-                }
+                DrawPageAnnotations(canvas, visiblePdf);
+                DrawAiActionDraftPreview(canvas, visiblePdf);
+                DrawAiMarkers(canvas, visiblePdf);
                 DrawThreeDRoofGuides(canvas, visiblePdf);
                 markupMs += frameWatch.ElapsedMilliseconds - sectionStart;
 

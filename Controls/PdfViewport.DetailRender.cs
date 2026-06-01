@@ -72,7 +72,7 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        SKRect clip = ClampPdfRectToPage(GetVisiblePdfRect(ViewportRenderPolicy.DetailRenderPaddingScreenPx));
+        SKRect clip = ClampPdfRectToPage(GetVisiblePdfRect(ViewportRenderPolicy.CurrentDetailRenderPaddingScreenPx));
         if (clip.Width <= 0 || clip.Height <= 0)
             return false;
 

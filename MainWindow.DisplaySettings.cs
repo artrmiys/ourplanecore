@@ -51,6 +51,26 @@ public partial class MainWindow
         TxtStatus.Text = $"Page paper background: {PageBackgroundLabel(_settings.PageBackground)}.";
     }
 
+    private void ComboViewportRenderQuality_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isApplyingSettings)
+            return;
+
+        string mode = ComboViewportRenderQuality.SelectedIndex switch
+        {
+            0 => ViewportRenderPolicy.BalancedQualityMode,
+            2 => ViewportRenderPolicy.MaxQualityMode,
+            _ => ViewportRenderPolicy.HighQualityMode,
+        };
+
+        _settings.ViewportRenderQuality = mode;
+        ViewportRenderPolicy.ApplyQualityMode(mode);
+        _viewport.RefreshRenderQuality();
+        SaveAppSettings();
+        SyncDisplaySettingsControls();
+        TxtStatus.Text = $"Viewport render quality: {mode}.";
+    }
+
     private void BtnDarkTheme_Checked(object sender, RoutedEventArgs e) =>
         ApplyThemeFromToggle(dark: true);
 
@@ -94,6 +114,7 @@ public partial class MainWindow
     private void ApplyDisplaySettingsToViewport()
     {
         AppSettingsStore.NormalizeOutputSettings(_settings);
+        ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
         _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale);
         _settings.ViewportPointSizeScale = NormalizePointScale(_settings.ViewportPointSizeScale);
@@ -134,6 +155,7 @@ public partial class MainWindow
             ChkDisplayHeaderScaleWithPage.IsChecked = _settings.ScaleSheetHeaderWithPage;
             ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
             ChkDisplaySimplifyNavigation.IsChecked = _settings.SimplifyViewportNavigation;
+            ComboViewportRenderQuality.SelectedIndex = ViewportRenderQualitySelectedIndex(_settings.ViewportRenderQuality);
             ComboDisplayViewportBackground.SelectedIndex = ViewportBackgroundSelectedIndex(_settings.ViewportBackground);
             ComboDisplayPageBackground.SelectedIndex = PageBackgroundSelectedIndex(_settings.PageBackground);
             TxtMeasurementLabelScale.Text = _settings.MeasurementLabelScale.ToString("0.##", CultureInfo.InvariantCulture);
@@ -180,6 +202,14 @@ public partial class MainWindow
         ("Gray", "#F2F2F2"),
         ("Dark", "#2B2B2B"),
     ];
+
+    private static int ViewportRenderQualitySelectedIndex(string mode) =>
+        ViewportRenderPolicy.NormalizeQualityMode(mode) switch
+        {
+            ViewportRenderPolicy.BalancedQualityMode => 0,
+            ViewportRenderPolicy.MaxQualityMode => 2,
+            _ => 1,
+        };
 
     private static int PageBackgroundSelectedIndex(string color)
     {

@@ -57,7 +57,19 @@ public static partial class PdfLayerRenderService
         out TResponse? response,
         out string error)
     {
-        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request).GetAwaiter().GetResult();
+        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, useDetailWorker: false).GetAwaiter().GetResult();
+        response = result.Response;
+        error = result.Error;
+        return result.Ok;
+    }
+
+    private static bool TryInvokeDetailWorker<TRequest, TResponse>(
+        string action,
+        TRequest request,
+        out TResponse? response,
+        out string error)
+    {
+        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, useDetailWorker: true).GetAwaiter().GetResult();
         response = result.Response;
         error = result.Error;
         return result.Ok;
@@ -65,13 +77,15 @@ public static partial class PdfLayerRenderService
 
     private static async Task<(bool Ok, TResponse? Response, string Error)> TryInvokeWorkerAsync<TRequest, TResponse>(
         string action,
-        TRequest request)
+        TRequest request,
+        bool useDetailWorker)
     {
-        await WorkerSemaphore.WaitAsync().ConfigureAwait(false);
+        SemaphoreSlim semaphore = useDetailWorker ? DetailWorkerSemaphore : WorkerSemaphore;
+        await semaphore.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            if (!EnsureWorker(out string error))
+            if (!EnsureWorker(useDetailWorker, out string error))
                 return (false, default, error);
 
             string id = Guid.NewGuid().ToString("N");
@@ -82,24 +96,27 @@ public static partial class PdfLayerRenderService
                 Request = request,
             };
 
-            await WorkerInput!
-                .WriteLineAsync(JsonSerializer.Serialize(envelope, JsonOptions))
+            StreamWriter input = useDetailWorker ? DetailWorkerInput! : WorkerInput!;
+            StreamReader output = useDetailWorker ? DetailWorkerOutput! : WorkerOutput!;
+
+            await input
+                .WriteLineAsync(JsonSerializer.Serialize(envelope, WorkerJsonOptions))
                 .ConfigureAwait(false);
-            await WorkerInput.FlushAsync().ConfigureAwait(false);
+            await input.FlushAsync().ConfigureAwait(false);
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            string? line = await WorkerOutput!.ReadLineAsync(timeout.Token).ConfigureAwait(false);
+            string? line = await output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(line))
             {
-                ResetWorker();
+                ResetWorker(useDetailWorker);
                 return (false, default, "PyMuPDF worker stopped unexpectedly.");
             }
 
-            var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, JsonOptions);
+            var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, WorkerJsonOptions);
             if (workerResponse == null || workerResponse.Id != id)
             {
-                ResetWorker();
+                ResetWorker(useDetailWorker);
                 return (false, default, "PyMuPDF worker returned an invalid response.");
             }
 
@@ -107,30 +124,33 @@ public static partial class PdfLayerRenderService
         }
         catch (OperationCanceledException ex)
         {
-            ResetWorker();
+            ResetWorker(useDetailWorker);
             string error = $"PyMuPDF worker {action} timed out.";
             AppLog.Warn(ex, error);
             return (false, default, error);
         }
         catch (Exception ex)
         {
-            ResetWorker();
+            ResetWorker(useDetailWorker);
             AppLog.Warn(ex, $"PyMuPDF worker {action} failed");
             return (false, default, ex.Message);
         }
         finally
         {
-            WorkerSemaphore.Release();
+            semaphore.Release();
         }
     }
 
-    private static bool EnsureWorker(out string error)
+    private static bool EnsureWorker(bool useDetailWorker, out string error)
     {
         error = "";
-        if (WorkerProcess is { HasExited: false } && WorkerInput != null && WorkerOutput != null)
+        Process? workerProcess = useDetailWorker ? DetailWorkerProcess : WorkerProcess;
+        StreamWriter? workerInput = useDetailWorker ? DetailWorkerInput : WorkerInput;
+        StreamReader? workerOutput = useDetailWorker ? DetailWorkerOutput : WorkerOutput;
+        if (workerProcess is { HasExited: false } && workerInput != null && workerOutput != null)
             return true;
 
-        ResetWorker();
+        ResetWorker(useDetailWorker);
 
         string helperPath = ResolveHelperPath();
         if (helperPath.Length == 0)
@@ -157,39 +177,63 @@ public static partial class PdfLayerRenderService
         psi.ArgumentList.Add(helperPath);
         psi.ArgumentList.Add("worker");
 
-        WorkerProcess = Process.Start(psi);
-        if (WorkerProcess == null)
+        Process? started = Process.Start(psi);
+        if (started == null)
         {
             error = "Could not start python.";
             return false;
         }
 
-        WorkerProcess.ErrorDataReceived += (_, e) =>
+        started.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
-                AppLog.Warn($"[pyhelper] {e.Data}");
+                AppLog.Warn(useDetailWorker ? $"[pyhelper-detail] {e.Data}" : $"[pyhelper] {e.Data}");
         };
-        WorkerProcess.BeginErrorReadLine();
-        WorkerInput = WorkerProcess.StandardInput;
-        WorkerOutput = WorkerProcess.StandardOutput;
+        started.BeginErrorReadLine();
+        if (useDetailWorker)
+        {
+            DetailWorkerProcess = started;
+            DetailWorkerInput = started.StandardInput;
+            DetailWorkerOutput = started.StandardOutput;
+        }
+        else
+        {
+            WorkerProcess = started;
+            WorkerInput = started.StandardInput;
+            WorkerOutput = started.StandardOutput;
+        }
+
         return true;
     }
 
-    private static void ResetWorker()
+    private static void ResetWorker(bool useDetailWorker = false)
     {
-        try { WorkerInput?.Dispose(); } catch { }
-        try { WorkerOutput?.Dispose(); } catch { }
+        Process? process = useDetailWorker ? DetailWorkerProcess : WorkerProcess;
+        StreamWriter? input = useDetailWorker ? DetailWorkerInput : WorkerInput;
+        StreamReader? output = useDetailWorker ? DetailWorkerOutput : WorkerOutput;
+
+        try { input?.Dispose(); } catch { }
+        try { output?.Dispose(); } catch { }
         try
         {
-            if (WorkerProcess is { HasExited: false })
-                WorkerProcess.Kill(entireProcessTree: true);
+            if (process is { HasExited: false })
+                process.Kill(entireProcessTree: true);
         }
         catch { }
-        try { WorkerProcess?.Dispose(); } catch { }
+        try { process?.Dispose(); } catch { }
 
-        WorkerInput = null;
-        WorkerOutput = null;
-        WorkerProcess = null;
+        if (useDetailWorker)
+        {
+            DetailWorkerInput = null;
+            DetailWorkerOutput = null;
+            DetailWorkerProcess = null;
+        }
+        else
+        {
+            WorkerInput = null;
+            WorkerOutput = null;
+            WorkerProcess = null;
+        }
     }
 
     public static void StopWorker()
@@ -202,6 +246,16 @@ public static partial class PdfLayerRenderService
         finally
         {
             WorkerSemaphore.Release();
+        }
+
+        DetailWorkerSemaphore.Wait();
+        try
+        {
+            ResetWorker(useDetailWorker: true);
+        }
+        finally
+        {
+            DetailWorkerSemaphore.Release();
         }
     }
 

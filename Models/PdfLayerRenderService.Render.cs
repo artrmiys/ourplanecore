@@ -85,8 +85,12 @@ public static partial class PdfLayerRenderService
                 Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
-            if (!TryInvokeWorker("render", request, out RenderResponse? response, out error) &&
-                !TryRunFileCommand("render", request, inputPath, outputPath, out response, out error))
+            bool invoked = hasClip
+                ? TryInvokeDetailWorker("render", request, out RenderResponse? response, out error) ||
+                  TryRunFileCommand("render", request, inputPath, outputPath, out response, out error)
+                : TryInvokeWorker("render", request, out response, out error) ||
+                  TryRunFileCommand("render", request, inputPath, outputPath, out response, out error);
+            if (!invoked)
                 return false;
 
             if (response == null || !response.Ok)

@@ -30,6 +30,7 @@ public sealed class AppSettings
     public bool ScaleMeasurementLabelsWithPage { get; set; } = false;
     public bool ScaleSheetHeaderWithPage { get; set; } = false;
     public bool SimplifyViewportNavigation { get; set; } = false;
+    public string ViewportRenderQuality { get; set; } = ViewportRenderPolicy.HighQualityMode;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
     public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
@@ -341,6 +342,7 @@ public static class AppSettingsStore
 
     public static void NormalizeOutputSettings(AppSettings settings)
     {
+        settings.ViewportRenderQuality = ViewportRenderPolicy.NormalizeQualityMode(settings.ViewportRenderQuality);
         settings.ViewportMeasurementStrokeScale = NormalizeScale(
             settings.ViewportMeasurementStrokeScale,
             fallback: 3.0,

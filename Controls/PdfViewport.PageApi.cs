@@ -103,7 +103,7 @@ public sealed partial class PdfViewport
         {
             QueueLayerRender(
                 resetLayerStates: true,
-                renderScale: previewScale,
+                renderScale: CurrentRenderScale(),
                 statusAfter: loadedStatus,
                 fireLayersAfter: true,
                 restoreView: restoreView,

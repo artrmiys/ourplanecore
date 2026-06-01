@@ -396,6 +396,14 @@
                             <StackPanel Orientation="Horizontal" Margin="0,1">
                                 <CheckBox x:Name="ChkDisplayImperial" Content="ft / sf" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Imperial units (ft / sf / ea). Off = metric."/>
+                                <TextBlock Text="Render" Style="{StaticResource RibbonRowLabel}"/>
+                                <ComboBox x:Name="ComboViewportRenderQuality" Width="92" Height="22" FontSize="11" Margin="0,0,5,0"
+                                          SelectionChanged="ComboViewportRenderQuality_SelectionChanged"
+                                          ToolTip="Viewport PDF render RAM/quality profile">
+                                    <ComboBoxItem Content="Balanced"/>
+                                    <ComboBoxItem Content="High"/>
+                                    <ComboBoxItem Content="Max"/>
+                                </ComboBox>
                                 <TextBlock Text="Edge" Style="{StaticResource RibbonRowLabel}"/>
                                 <ComboBox x:Name="ComboDisplayViewportBackground" Width="96" Height="22" FontSize="11" Margin="0,0,5,0"
                                           SelectionChanged="ComboDisplayViewportBackground_SelectionChanged"

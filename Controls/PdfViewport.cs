@@ -458,9 +458,7 @@ public sealed partial class PdfViewport : SKElement
         };
         _navigationIdleTimer.Tick += (_, _) =>
         {
-            _navigationIdleTimer.Stop();
-            _isFastNavigating = false;
-            RequestRepaint();
+            EndFastNavigation();
         };
         Unloaded += PdfViewport_Unloaded;
     }

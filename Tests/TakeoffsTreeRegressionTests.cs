@@ -1041,9 +1041,11 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             service.Contains("InlineImage = true", StringComparison.Ordinal) &&
             service.Contains("InlineRenderImageMaxPixels", StringComparison.Ordinal) &&
+            service.Contains("InlineRenderImageMaxPixels = 24_000_000", StringComparison.Ordinal) &&
+            service.Contains("MaxRenderCacheEntries = 24", StringComparison.Ordinal) &&
             service.Contains("ImageBase64", StringComparison.Ordinal) &&
             service.Contains("Convert.FromBase64String(response.ImageBase64)", StringComparison.Ordinal),
-            "C# layer rendering should request bounded inline PNG data and decode image_base64 responses");
+            "C# layer rendering should request RAM-sized bounded inline PNG data and decode image_base64 responses");
         AssertTrue(
             service.Contains("File.ReadAllBytes(response.Image)", StringComparison.Ordinal) &&
             service.Contains("PyMuPDF did not produce a rendered image.", StringComparison.Ordinal),
@@ -1066,6 +1068,7 @@ internal static class TakeoffsTreeRegressionTests
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
         string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string transform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
+        string viewport = ReadRepoFile("Controls/PdfViewport.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
@@ -1074,6 +1077,9 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             policy.Contains("DetailRenderEnabled = true", StringComparison.Ordinal) &&
+            policy.Contains("CurrentResponsiveMaxRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("new RenderQuality(3.0f, 192_000_000f", StringComparison.Ordinal) &&
+            policy.Contains("new RenderQuality(4.0f, 320_000_000f", StringComparison.Ordinal) &&
             policy.Contains("ZoomRefreshMinZoom = 0.30f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMinZoom = 1.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxScale = 16.0f", StringComparison.Ordinal) &&
@@ -1082,9 +1088,11 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
-            pageApi.Contains("renderScale: previewScale", StringComparison.Ordinal) &&
-            layers.Contains("ViewportRenderPolicy.InstantPagePreviewRenderScale", StringComparison.Ordinal),
-            "interactive page opens should keep the base refresh cheap and leave deep zoom sharpness to detail rendering");
+            pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
+            pageApi.Contains("renderScale: CurrentRenderScale()", StringComparison.Ordinal) &&
+            layers.Contains("QueueInitialLayerDiscoveryOrRender", StringComparison.Ordinal) &&
+            layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
+            "interactive page opens should show the cheap preview first, then queue a current-scale refresh instead of leaving the sheet blurry");
         AssertTrue(
             rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
             rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
@@ -1097,6 +1105,10 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
+        AssertTrue(
+            viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
+            viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),
+            "navigation idle should run the real idle path so clipped detail renders are scheduled after wheel zoom");
         AssertFalse(
             transform.Contains("QueueDetailRenderIfNeeded(force);\r\n            return;", StringComparison.Ordinal) ||
             transform.Contains("QueueDetailRenderIfNeeded(force);\n            return;", StringComparison.Ordinal),
@@ -1112,8 +1124,13 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("public RectDto? Clip { get; set; }", StringComparison.Ordinal) &&
             service.Contains("Clip = hasClip ? RectDto.FromSKRect", StringComparison.Ordinal) &&
             service.Contains("response.Clip?.ToSKRect()", StringComparison.Ordinal) &&
+            service.Contains("bool invoked = hasClip", StringComparison.Ordinal) &&
+            service.Contains("TryInvokeDetailWorker(\"render\", request", StringComparison.Ordinal) &&
+            service.Contains("DetailWorkerSemaphore", StringComparison.Ordinal) &&
+            service.Contains("WorkerJsonOptions", StringComparison.Ordinal) &&
+            service.Contains("JsonSerializer.Serialize(envelope, WorkerJsonOptions)", StringComparison.Ordinal) &&
             service.Contains("!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest", StringComparison.Ordinal),
-            "layer render protocol should pass clip rectangles without polluting the persisted whole-sheet cache");
+            "layer render protocol should pass clip rectangles through a dedicated persistent worker without polluting the persisted whole-sheet cache or sending multiline JSON to the line-based worker");
         AssertTrue(
             helper.Contains("raw_clip = req.get(\"clip\")", StringComparison.Ordinal) &&
             helper.Contains("page.get_pixmap(matrix=matrix, clip=clip, alpha=False)", StringComparison.Ordinal) &&

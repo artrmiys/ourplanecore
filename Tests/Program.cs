@@ -3287,34 +3287,50 @@ static void ViewportRenderScaleChoosesNextQualityStep()
 {
     float[] steps = [0.75f, 1.0f, 1.5f, 2.25f, 3.0f, 4.0f];
 
-    AssertClose(1.0, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom uses the responsive clarity floor");
-    AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
-    AssertClose(2.25, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high zoom uses the responsive render cap");
-    AssertClose(
-        1.637,
-        ViewportRenderPolicy.SelectRenderScale(8.0f, steps, pageWidthPt: 2592f, pageHeightPt: 3456f),
-        "large sheets stay inside the viewport render pixel budget",
-        tolerance: 0.001);
-    AssertClose(
-        0.0,
-        ViewportRenderPolicy.SelectDetailRenderScale(0.5f, 2000f, 1200f, 0.15f),
-        "fit zoom should not trigger expensive detail rendering");
-    AssertFalse(
-        ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.21f, 0.35f),
-        "fit zoom should keep the instant preview instead of starting a full refresh");
-    AssertTrue(
-        ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.32f, 0.35f),
-        "ordinary zoom from fit should upgrade the 0.35 preview to a sharper refresh render");
-    AssertFalse(
-        ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
-        "ordinary zoom should use a refresh render, not an expensive clipped detail render");
-    AssertClose(
-        4.0,
-        ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
-        "deep zoom detail render should match the viewport zoom when inside the clip pixel budget");
-    AssertTrue(
-        ViewportRenderPolicy.SelectDetailRenderScale(16.0f, 3200f, 2200f, 1.0f) < 2.0f,
-        "very large visible clips should be capped by the detail render pixel budget");
+    ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.HighQualityMode);
+    try
+    {
+        AssertClose(1.0, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom uses the responsive clarity floor");
+        AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
+        AssertClose(3.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high quality mode uses a RAM-backed 3x responsive render cap");
+        AssertClose(
+            3.0,
+            ViewportRenderPolicy.SelectRenderScale(8.0f, steps, pageWidthPt: 2592f, pageHeightPt: 3456f),
+            "large sheets can use the high-memory responsive render cap",
+            tolerance: 0.001);
+
+        ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.BalancedQualityMode);
+        AssertClose(2.25, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "balanced mode keeps the old responsive render cap");
+
+        ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.MaxQualityMode);
+        AssertClose(4.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "max mode uses the 4x RAM render cap");
+
+        ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.HighQualityMode);
+        AssertClose(
+            0.0,
+            ViewportRenderPolicy.SelectDetailRenderScale(0.5f, 2000f, 1200f, 0.15f),
+            "fit zoom should not trigger expensive detail rendering");
+        AssertFalse(
+            ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.21f, 0.35f),
+            "fit zoom should keep the instant preview instead of starting a full refresh");
+        AssertTrue(
+            ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.32f, 0.35f),
+            "ordinary zoom from fit should upgrade the 0.35 preview to a sharper refresh render");
+        AssertFalse(
+            ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
+            "ordinary zoom should use a refresh render, not an expensive clipped detail render");
+        AssertClose(
+            4.0,
+            ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
+            "deep zoom detail render should match the viewport zoom when inside the clip pixel budget");
+        AssertTrue(
+            ViewportRenderPolicy.SelectDetailRenderScale(16.0f, 3200f, 2200f, 1.0f) < 6.0f,
+            "very large visible clips should be capped by the detail render pixel budget");
+    }
+    finally
+    {
+        ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.HighQualityMode);
+    }
 }
 
 static void ViewportBackgroundDefaultsToOpaqueWhite()
@@ -3490,11 +3506,11 @@ static void ViewportMeasurementLodLimitsDenseDetails()
 
 static void ViewportLodHidesExpensiveLayersDuringFastFrames()
 {
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldDrawSheetOverlay(
             fastNavigationFrame: true,
             isOverlayEditing: false),
-        "fast navigation should skip sheet overlay until idle");
+        "fast navigation should keep sheet overlays visible over detail renders");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldDrawSheetOverlay(
@@ -3502,11 +3518,11 @@ static void ViewportLodHidesExpensiveLayersDuringFastFrames()
             isOverlayEditing: true),
         "overlay point editing should keep the overlay visible");
 
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldDrawMeasurementGeometry(
             activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementGeometryThreshold + 1,
             fastNavigationFrame: true),
-        "very dense takeoff pages should skip non-selected measurement geometry during navigation");
+        "takeoff geometry should stay visible while high-resolution PDF detail catches up");
 }
 
 static void ViewportMeasurementSpatialIndexFiltersByBounds()

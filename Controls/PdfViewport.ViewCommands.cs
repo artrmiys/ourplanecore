@@ -112,6 +112,13 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    public void RefreshRenderQuality()
+    {
+        ClearDetailRender();
+        ScheduleRerenderForZoom(force: true);
+        RequestRepaint();
+    }
+
     public void ZoomIn()  => ApplyZoom(1.25f, ViewportCanvasWidth / 2f, ViewportCanvasHeight / 2f);
     public void ZoomOut() => ApplyZoom(0.80f, ViewportCanvasWidth / 2f, ViewportCanvasHeight / 2f);
 }

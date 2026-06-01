@@ -9,7 +9,7 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 8, maxBytes: 220_000_000);
+    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 24, maxBytes: 1_250_000_000);
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
 

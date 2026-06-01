@@ -319,7 +319,7 @@ public sealed partial class PdfViewport
         {
             QueueInitialLayerDiscoveryOrRender(
                 request.ResetLayerStates,
-                ViewportRenderPolicy.InstantPagePreviewRenderScale,
+                CurrentRenderScale(),
                 request.StatusAfter,
                 request.FireLayersAfter,
                 allowImmediateCache: false);

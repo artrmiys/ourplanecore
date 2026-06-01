@@ -5,18 +5,21 @@ namespace OurPlaneCore;
 
 public static class ViewportRenderPolicy
 {
+    public const string BalancedQualityMode = "Balanced";
+    public const string HighQualityMode = "High";
+    public const string MaxQualityMode = "Max";
     public const float HighZoomFastFrameThreshold = 2.0f;
     public const float FarZoomFastFrameThreshold = 0.85f;
     public const float ResponsiveMinRenderScale = 1.0f;
     public const float ResponsiveMaxRenderScale = 2.25f;
-    public const float ResponsiveMaxRenderPixels = 24_000_000f;
+    public const float ResponsiveMaxRenderPixels = 96_000_000f;
     public const float ZoomRefreshMinZoom = 0.30f;
     public const bool DetailRenderEnabled = true;
     public const float DetailRenderMinZoom = 1.0f;
     public const float DetailRenderMinScaleGain = 1.18f;
     public const float DetailRenderMaxScale = 16.0f;
-    public const float DetailRenderMaxPixels = 18_000_000f;
-    public const float DetailRenderPaddingScreenPx = 128f;
+    public const float DetailRenderMaxPixels = 96_000_000f;
+    public const float DetailRenderPaddingScreenPx = 1024f;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;
@@ -31,6 +34,33 @@ public static class ViewportRenderPolicy
     public const int SlowRenderLogMs = 220;
     public const int SlowSnapLogMs = 18;
     public const float VisibleGeometryPaddingScreenPx = 96f;
+    private static string _qualityMode = HighQualityMode;
+
+    public static string QualityMode => _qualityMode;
+    public static float CurrentResponsiveMaxRenderScale => CurrentQuality.ResponsiveMaxScale;
+    public static float CurrentDetailRenderPaddingScreenPx => CurrentQuality.DetailPaddingScreenPx;
+
+    public static string NormalizeQualityMode(string? mode)
+    {
+        string clean = (mode ?? "").Trim();
+        if (string.Equals(clean, BalancedQualityMode, StringComparison.OrdinalIgnoreCase))
+            return BalancedQualityMode;
+        if (string.Equals(clean, MaxQualityMode, StringComparison.OrdinalIgnoreCase))
+            return MaxQualityMode;
+        return HighQualityMode;
+    }
+
+    public static void ApplyQualityMode(string? mode)
+    {
+        _qualityMode = NormalizeQualityMode(mode);
+    }
+
+    private static RenderQuality CurrentQuality => _qualityMode switch
+    {
+        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 768f),
+        MaxQualityMode => new RenderQuality(4.0f, 320_000_000f, DetailRenderMaxScale, 320_000_000f, 2048f),
+        _ => new RenderQuality(3.0f, 192_000_000f, 12.0f, 192_000_000f, 1536f),
+    };
 
     public static bool ShouldUseFastNavigationFrame(
         bool simplifyNavigationRendering,
@@ -56,7 +86,7 @@ public static class ViewportRenderPolicy
         if (zoom <= 0 || renderScaleSteps.Count == 0)
             return 1.0f;
 
-        float maxScale = Math.Min(renderScaleSteps[^1], ResponsiveMaxRenderScale);
+        float maxScale = Math.Min(renderScaleSteps[^1], CurrentQuality.ResponsiveMaxScale);
         maxScale = Math.Min(maxScale, PixelBudgetMaxRenderScale(pageWidthPt, pageHeightPt));
         float minScale = Math.Min(ResponsiveMinRenderScale, maxScale);
         float desired = Math.Clamp(zoom, minScale, maxScale);
@@ -97,11 +127,11 @@ public static class ViewportRenderPolicy
         if (!ShouldUseDetailRender(zoom, bitmapScale) || clipWidthPt <= 0 || clipHeightPt <= 0)
             return 0;
 
-        float target = Math.Clamp(zoom, bitmapScale * DetailRenderMinScaleGain, DetailRenderMaxScale);
+        float target = Math.Clamp(zoom, bitmapScale * DetailRenderMinScaleGain, CurrentQuality.DetailMaxScale);
         float clipPoints = clipWidthPt * clipHeightPt;
         if (clipPoints > 0)
         {
-            float budgetScale = MathF.Sqrt(DetailRenderMaxPixels / clipPoints);
+            float budgetScale = MathF.Sqrt(CurrentQuality.DetailMaxPixels / clipPoints);
             target = Math.Min(target, budgetScale);
         }
 
@@ -111,14 +141,14 @@ public static class ViewportRenderPolicy
     private static float PixelBudgetMaxRenderScale(float pageWidthPt, float pageHeightPt)
     {
         if (pageWidthPt <= 0 || pageHeightPt <= 0)
-            return ResponsiveMaxRenderScale;
+            return CurrentQuality.ResponsiveMaxScale;
 
         float pagePoints = pageWidthPt * pageHeightPt;
         if (pagePoints <= 0)
-            return ResponsiveMaxRenderScale;
+            return CurrentQuality.ResponsiveMaxScale;
 
-        float budgetScale = MathF.Sqrt(ResponsiveMaxRenderPixels / pagePoints);
-        return Math.Clamp(budgetScale, ResponsiveMinRenderScale, ResponsiveMaxRenderScale);
+        float budgetScale = MathF.Sqrt(CurrentQuality.ResponsiveMaxPixels / pagePoints);
+        return Math.Clamp(budgetScale, ResponsiveMinRenderScale, CurrentQuality.ResponsiveMaxScale);
     }
 
     public static bool ShouldDrawMeasurementLabels(
@@ -143,17 +173,23 @@ public static class ViewportRenderPolicy
         bool fastNavigationFrame,
         bool isOverlayEditing)
     {
-        return !fastNavigationFrame || isOverlayEditing;
+        return true;
     }
 
     public static bool ShouldDrawMeasurementGeometry(
         int activePageMeasurementCount,
         bool fastNavigationFrame)
     {
-        return !fastNavigationFrame ||
-               activePageMeasurementCount <= DenseMeasurementGeometryThreshold;
+        return true;
     }
 
     public static float VisibleGeometryPaddingPdf(float zoom) =>
         VisibleGeometryPaddingScreenPx / Math.Max(zoom, 0.001f);
+
+    private readonly record struct RenderQuality(
+        float ResponsiveMaxScale,
+        float ResponsiveMaxPixels,
+        float DetailMaxScale,
+        float DetailMaxPixels,
+        float DetailPaddingScreenPx);
 }

@@ -276,6 +276,7 @@ public partial class MainWindow
         _settings.SheetHeaderScale = NormalizeOverlayScale(_settings.SheetHeaderScale);
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
         AppSettingsStore.NormalizeOutputSettings(_settings);
+        ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
         _viewport.SheetLegendAnchor = _settings.SheetLegendAnchor;
         _viewport.SheetLegendScale = _settings.SheetLegendScale;
         _viewport.SheetHeaderScale = _settings.SheetHeaderScale;

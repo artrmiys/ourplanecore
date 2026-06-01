@@ -19,16 +19,25 @@ public static partial class PdfLayerRenderService
     private static Process? WorkerProcess;
     private static StreamWriter? WorkerInput;
     private static StreamReader? WorkerOutput;
+    private static readonly SemaphoreSlim DetailWorkerSemaphore = new(1, 1);
+    private static Process? DetailWorkerProcess;
+    private static StreamWriter? DetailWorkerInput;
+    private static StreamReader? DetailWorkerOutput;
     private static readonly object RenderCacheLock = new();
     private static readonly Dictionary<string, PdfLayerRenderResult> RenderCache = [];
     private static readonly Queue<string> RenderCacheOrder = [];
-    private const int MaxRenderCacheEntries = 12;
-    private const int InlineRenderImageMaxPixels = 3_000_000;
+    private const int MaxRenderCacheEntries = 24;
+    private const int InlineRenderImageMaxPixels = 24_000_000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = true,
+    };
+    private static readonly JsonSerializerOptions WorkerJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = false,
     };
 
     public static Task<(bool Ok, PdfLayerRenderResult Result, string Error)> TryRenderAsync(
