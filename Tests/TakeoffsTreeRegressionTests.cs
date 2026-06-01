@@ -102,6 +102,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PageTreeClickOpensViewportDirectly()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string resources = ReadRepoFile("Resources/AppControlResources.xaml");
         string clickMethod = SliceMethod(pagesTree, "private void PagesTree_PreviewMouseLeftButtonDown");
         string openMethod = SliceMethod(pagesTree, "private void SelectPageTreeItemAndOpenIfPage");
 
@@ -113,6 +114,13 @@ internal static class TakeoffsTreeRegressionTests
             openMethod.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
             openMethod.Contains("OpenPageInActiveTab(page)", StringComparison.Ordinal),
             "direct page-tree click open should select the row and load the clicked sheet through the normal page tab path");
+        AssertTrue(
+            pagesTree.Contains("ItemsControl.ContainerFromElement(PagesTree, source)", StringComparison.Ordinal) &&
+            pagesTree.Contains("Background = Brushes.Transparent", StringComparison.Ordinal),
+            "page-tree hit testing should resolve clicks from the full row/header surface, not only text glyphs");
+        AssertTrue(
+            resources.Contains("<Setter Property=\"HorizontalContentAlignment\" Value=\"Stretch\"/>", StringComparison.Ordinal),
+            "tree rows should stretch their content so blank row area remains clickable");
     }
 
     public static void PageReloadInvalidatesPreviewPrefetchCache()
@@ -903,6 +911,50 @@ internal static class TakeoffsTreeRegressionTests
             cache.Contains("LastWriteTimeUtc.Ticks", StringComparison.Ordinal) &&
             cache.Contains("File.Move(tempImage, paths.ImagePath, overwrite: true)", StringComparison.Ordinal),
             "preview cache should be keyed by source identity and written atomically through temp files");
+    }
+
+    public static void PdfPageOpenUsesDocnetPreviewOnCacheMiss()
+    {
+        string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
+        string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
+        string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
+
+        int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
+        int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
+        int fullCacheFallback = pageApi.IndexOf("TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal);
+        int docnetFallback = pageApi.IndexOf("QueueDocnetRender(", StringComparison.Ordinal);
+        int status = pageApi.IndexOf("PostStatus(previewCacheHit", StringComparison.Ordinal);
+        AssertTrue(
+            cacheApply >= 0 &&
+            cacheBranch > cacheApply &&
+            fullCacheFallback > cacheBranch &&
+            docnetFallback > fullCacheFallback &&
+            status > docnetFallback,
+            "page open should try persisted clean render cache before queueing a fast Docnet preview fallback");
+        AssertTrue(
+            pageApi.Contains("queueLayerAfter: true", StringComparison.Ordinal) &&
+            pageApi.Contains("resetLayerStates: true", StringComparison.Ordinal) &&
+            pageApi.Contains("fireLayersAfter: true", StringComparison.Ordinal),
+            "cache-miss Docnet preview should still queue the normal layer render continuation");
+        AssertTrue(
+            pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
+            layers.Contains("bool allowImmediateCache = true", StringComparison.Ordinal) &&
+            layers.Contains("allowImmediateCache && TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
+            "page open should not synchronously decode a second clean render cache hit after applying the instant preview");
+        AssertTrue(
+            pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
+            pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("FastPageSwitchPreviewRenderScale = 0.15f", StringComparison.Ordinal),
+            "cache-miss page switches should not keep showing the old sheet while the lightweight preview renders");
+        AssertTrue(
+            layers.Contains("private bool TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal) &&
+            layers.Contains("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
+            "page open should be able to synchronously apply a persisted clean full render before falling back to Docnet");
+        AssertTrue(
+            renderCache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            renderCache.Contains("Task.Delay(75)", StringComparison.Ordinal),
+            "nearby sheet prefetch should warm the same lightweight preview cache used by page switching");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()

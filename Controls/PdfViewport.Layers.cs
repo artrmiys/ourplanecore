@@ -22,7 +22,7 @@ public sealed partial class PdfViewport
 
     private static DocnetRenderResult RenderPageBitmapWithDocnet(string pdfPath, int pdfIndex, float renderScale)
     {
-        float scale = Math.Clamp(renderScale, 0.20f, 4.0f);
+        float scale = Math.Clamp(renderScale, 0.10f, 4.0f);
         using var docReader = _docLib.GetDocReader(pdfPath, new PageDimensions(scale));
         using var pageReader = docReader.GetPageReader(pdfIndex);
 
@@ -208,7 +208,7 @@ public sealed partial class PdfViewport
         if (string.IsNullOrWhiteSpace(_pdfPath))
             return;
 
-        float scale = Math.Clamp(renderScale, 0.20f, 4.0f);
+        float scale = Math.Clamp(renderScale, 0.10f, 4.0f);
         int version = ++_docnetRenderVersion;
         _pendingDocnetRender = new DocnetRenderRequest(
             version,
@@ -297,7 +297,8 @@ public sealed partial class PdfViewport
                 request.ResetLayerStates,
                 CurrentRenderScale(),
                 request.StatusAfter,
-                request.FireLayersAfter);
+                request.FireLayersAfter,
+                allowImmediateCache: false);
             return;
         }
 
@@ -387,7 +388,8 @@ public sealed partial class PdfViewport
         string? statusAfter = null,
         bool fireLayersAfter = false,
         ViewState? restoreView = null,
-        bool fitAfter = false)
+        bool fitAfter = false,
+        bool allowImmediateCache = true)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath))
             return;
@@ -408,7 +410,7 @@ public sealed partial class PdfViewport
             statusAfter,
             fireLayersAfter);
 
-        if (TryApplyPersistedCleanLayerRender(request))
+        if (allowImmediateCache && TryApplyPersistedCleanLayerRender(request))
         {
             _pendingLayerRender = null;
             return;
@@ -418,13 +420,43 @@ public sealed partial class PdfViewport
         _ = StartNextLayerRenderAsync();
     }
 
+    private bool TryApplyPersistedDefaultCleanRender(
+        float renderScale,
+        ViewState? restoreView,
+        bool fitAfter,
+        string? statusAfter,
+        bool fireLayersAfter)
+    {
+        if (string.IsNullOrWhiteSpace(_pdfPath))
+            return false;
+
+        int version = ++_layerRenderVersion;
+        LayerRenderRequest request = new(
+            version,
+            _pdfPath,
+            _pdfIndex,
+            _pageFolder,
+            Math.Clamp(renderScale, 0.20f, 4.0f),
+            true,
+            EffectiveLayerStates(),
+            EffectiveHighlightedLayers(),
+            LayerRenderCachedLayers(),
+            restoreView,
+            fitAfter,
+            statusAfter,
+            fireLayersAfter);
+
+        return TryApplyPersistedCleanLayerRender(request);
+    }
+
     private void QueueInitialLayerDiscoveryOrRender(
         bool resetLayerStates,
         float renderScale,
         string? statusAfter,
-        bool fireLayersAfter)
+        bool fireLayersAfter,
+        bool allowImmediateCache = true)
     {
-        QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter);
+        QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter, allowImmediateCache: allowImmediateCache);
     }
 
     public void DiscoverPdfLayersOnDemand()

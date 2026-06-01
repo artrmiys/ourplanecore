@@ -11,6 +11,7 @@ public static class ViewportRenderPolicy
     public const float ResponsiveMaxRenderScale = 2.25f;
     public const float ResponsiveMaxRenderPixels = 24_000_000f;
     public const float InstantPagePreviewRenderScale = 0.35f;
+    public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float SheetOverlayViewportRenderScale = 1.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;

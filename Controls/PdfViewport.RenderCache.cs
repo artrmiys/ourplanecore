@@ -157,7 +157,7 @@ public sealed partial class PdfViewport
         if (string.IsNullOrWhiteSpace(pdfPath) || pageIndex < 0)
             return;
 
-        float renderScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
+        float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
         string cacheKey;
         try
         {
@@ -190,7 +190,7 @@ public sealed partial class PdfViewport
         DocnetRenderResult? render = null;
         try
         {
-            await Task.Delay(350);
+            await Task.Delay(75);
             if (DocnetRenderCache.Contains(cacheKey))
                 return;
 

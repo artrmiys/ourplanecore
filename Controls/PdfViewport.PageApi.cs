@@ -98,13 +98,34 @@ public sealed partial class PdfViewport
             fitAfter: !restoreView.HasValue);
 
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
-        QueueLayerRender(
-            resetLayerStates: true,
-            renderScale: previewScale,
-            statusAfter: loadedStatus,
-            fireLayersAfter: true,
-            restoreView: restoreView,
-            fitAfter: !restoreView.HasValue);
+        if (previewCacheHit)
+        {
+            QueueLayerRender(
+                resetLayerStates: true,
+                renderScale: previewScale,
+                statusAfter: loadedStatus,
+                fireLayersAfter: true,
+                restoreView: restoreView,
+                fitAfter: !restoreView.HasValue,
+                allowImmediateCache: false);
+        }
+        else if (!TryApplyPersistedDefaultCleanRender(
+            ViewportRenderPolicy.ResponsiveMinRenderScale,
+            restoreView,
+            fitAfter: !restoreView.HasValue,
+            loadedStatus,
+            fireLayersAfter: true))
+        {
+            ClearPreviousPageBitmapDuringSwitch();
+            QueueDocnetRender(
+                ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+                restoreView,
+                fitAfter: !restoreView.HasValue,
+                queueLayerAfter: true,
+                resetLayerStates: true,
+                statusAfter: loadedStatus,
+                fireLayersAfter: true);
+        }
 
         PostStatus(previewCacheHit
             ? $"Cached preview: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
@@ -113,6 +134,16 @@ public sealed partial class PdfViewport
 
         // Fire layers event
         FireLayersChanged();
+    }
+
+    private void ClearPreviousPageBitmapDuringSwitch()
+    {
+        _pageBitmap?.Dispose();
+        _pageBitmap = null;
+        _pdfW = 0;
+        _pdfH = 0;
+        _bitmapScale = 0;
+        _renderedScale = 0;
     }
 
 }

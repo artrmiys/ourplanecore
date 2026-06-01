@@ -118,7 +118,11 @@ public partial class MainWindow
 
     private StackPanel BuildPageHeader(PageInfo page)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Background = Brushes.Transparent,
+        };
         panel.Children.Add(new TextBlock
         {
             Text = $"  {page.Name}",
@@ -142,7 +146,11 @@ public partial class MainWindow
 
     private StackPanel BuildPageFolderHeader(PageFolderNode folder, int pageCount)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Background = Brushes.Transparent,
+        };
         panel.Children.Add(new TextBlock
         {
             Text = $"  {folder.Name}",
@@ -433,7 +441,7 @@ public partial class MainWindow
 
     private void PagesTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
+        if (FindPagesTreeItemFromSource(e.OriginalSource as DependencyObject) is not { } item)
             return;
 
         if (item.Tag is PageTakeoffNode pageTakeoff)
@@ -520,7 +528,7 @@ public partial class MainWindow
         _pagesDragStart = e.GetPosition(PagesTree);
         _pagesDragItem = null;
         _pagesDragArmed = false;
-        if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
+        if (FindPagesTreeItemFromSource(e.OriginalSource as DependencyObject) is not { } item)
             return;
 
         _pagesDragItem = item;
@@ -623,6 +631,10 @@ public partial class MainWindow
                Directory.Exists(path) &&
                IsPathInsidePagesRoot(path, allowRoot: false);
     }
+
+    private TreeViewItem? FindPagesTreeItemFromSource(DependencyObject? source) =>
+        ItemsControl.ContainerFromElement(PagesTree, source) as TreeViewItem ??
+        FindAncestor<TreeViewItem>(source);
 
     private static bool IsPageOverlayVisibilityToggleSource(DependencyObject? source)
     {
