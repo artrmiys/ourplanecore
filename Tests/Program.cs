@@ -65,6 +65,8 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression page clear keeps loaded takeoffs", TakeoffsTreeRegressionTests.PageClearDoesNotClearLoadedTakeoffs),
     ("takeoff tree regression section menus build lazily", TakeoffsTreeRegressionTests.TakeoffSectionMenusAreBuiltLazily),
     ("takeoff tree regression joist direction resets from section menu", TakeoffsTreeRegressionTests.JoistDirectionCanBeResetFromSectionMenu),
+    ("takeoff template defaults include framing line presets", TakeoffTemplateTests.DefaultsIncludeFramingLinePresets),
+    ("takeoff template routing falls back to root when folder missing", TakeoffTemplateTests.RoutingUsesExistingFolderOrRootFallback),
     ("takeoff tree regression fast refresh disabled for data safety", TakeoffsTreeRegressionTests.FastRefreshDisabledForDataSafety),
     ("takeoff tree regression selection uses targeted ui refresh", TakeoffsTreeRegressionTests.TakeoffSelectionUsesTargetedUiRefresh),
     ("takeoff tree regression copy uses incremental tree refresh", TakeoffsTreeRegressionTests.TakeoffCopyUsesIncrementalTreeRefresh),

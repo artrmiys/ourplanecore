@@ -1,28 +1,27 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
+using OurPlaneCore.Controls;
 
 namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private readonly List<TakeoffTemplate> _takeoffTemplates = new();
-    private ListBox? _templateList;
+    private TakeoffTemplateConfig _takeoffTemplateConfig = TakeoffTemplateConfig.BuildDefault();
+    private TreeView? _templateTree;
+    private TreeView? _settingsTemplateTree;
     private TextBlock? _templateStatusText;
-    private Button? _templateApplyButton;
-    private Button? _templateRenameButton;
-    private Button? _templateDeleteButton;
+    private TextBlock? _settingsTemplateStatusText;
     private ToggleButton? _templatesTabDockToggle;
     private TabItem? _templatesTab;
     private FrameworkElement? _templatePanel;
     private GridLength _templatesDockRowHeight = new(190);
     private bool _syncingTemplatesDockToggle;
 
-    // Right-side bottom dock host (mirrors the Bookmarks dock, but under the Takeoffs tabs).
     private Grid? _templatesRightHostGrid;
     private GridSplitter? _templatesRightSplitter;
     private DockPanel? _templatesRightDock;
@@ -36,59 +35,131 @@ public partial class MainWindow
         if (_rightWorkspaceTabs == null)
             return;
 
-        _templateList = new ListBox
-        {
-            Margin = new Thickness(0, 4, 0, 0),
-            DisplayMemberPath = nameof(TakeoffTemplate.Name),
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-        };
-        _templateList.SelectionChanged += (_, _) => UpdateTemplateButtons();
-        _templateList.MouseDoubleClick += (_, _) => ApplySelectedTemplate();
-
-        var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        toolbar.Children.Add(TemplateButton("Save Current", BtnTemplateSaveCurrent_Click,
-            "Save the current Takeoffs folder/item tree as a reusable template"));
-        _templateApplyButton = TemplateButton("Apply", BtnTemplateApply_Click,
-            "Create the selected template under the current Takeoffs folder");
-        _templateRenameButton = TemplateButton("Rename", BtnTemplateRename_Click, "Rename the selected template");
-        _templateDeleteButton = TemplateButton("Delete", BtnTemplateDelete_Click, "Delete the selected template");
-        toolbar.Children.Add(_templateApplyButton);
-        toolbar.Children.Add(_templateRenameButton);
-        toolbar.Children.Add(_templateDeleteButton);
-
-        _templateStatusText = new TextBlock
-        {
-            Text = "No templates yet. Build a Takeoffs tree, then Save Current.",
-            FontSize = 10,
-            Foreground = System.Windows.Media.Brushes.Gray,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 2),
-        };
-
-        var panel = new DockPanel { Margin = new Thickness(4) };
-        DockPanel.SetDock(toolbar, Dock.Top);
-        DockPanel.SetDock(_templateStatusText, Dock.Top);
-        panel.Children.Add(toolbar);
-        panel.Children.Add(_templateStatusText);
-        panel.Children.Add(_templateList);
-        _templatePanel = panel;
-
+        _templatePanel = BuildTakeoffTemplateEditorPanel(settingsMode: false);
         _templatesTab = new TabItem
         {
             Header = BuildTemplatesTabHeader(),
-            Content = panel,
+            Content = _templatePanel,
         };
         _rightWorkspaceTabs.Items.Add(_templatesTab);
 
         InstallTemplatesRightDock();
-
-        _takeoffTemplates.Clear();
-        _takeoffTemplates.AddRange(TakeoffTemplateStore.Load());
-        RefreshTemplateList();
+        ReloadTakeoffTemplateConfig();
     }
 
-    // Wraps the right-side workspace TabControl in a Grid so Templates can pop out
-    // into a resizable panel docked at the bottom (the Bookmarks-below-Pages pattern).
+    private void ReloadTakeoffTemplateConfig()
+    {
+        _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
+        RefreshTakeoffTemplateEditors();
+    }
+
+    private FrameworkElement BuildTakeoffTemplateEditorPanel(bool settingsMode)
+    {
+        var tree = new TreeView
+        {
+            Margin = new Thickness(0, 4, 0, 0),
+            BorderThickness = new Thickness(1),
+            BorderBrush = TryFindResource("ControlBorderBrush") as Brush,
+        };
+        tree.SelectedItemChanged += (_, _) => UpdateTakeoffTemplateEditorButtons();
+
+        TextBlock status = TemplateStatusText();
+        if (settingsMode)
+        {
+            _settingsTemplateTree = tree;
+            _settingsTemplateStatusText = status;
+        }
+        else
+        {
+            _templateTree = tree;
+            _templateStatusText = status;
+        }
+
+        var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        if (!settingsMode)
+            toolbar.Children.Add(TemplateButton("Create", (_, _) => CreateTakeoffFromTemplateSelection(tree), "Create a new takeoff item from the selected template item", primary: true));
+        toolbar.Children.Add(TemplateButton("Add Folder", (_, _) => AddTemplateFolder(tree), "Add a folder to the template tree"));
+        toolbar.Children.Add(TemplateButton("Add Line", (_, _) => AddTemplateItem(tree, "line"), "Add a Line preset"));
+        toolbar.Children.Add(TemplateButton("Add Area", (_, _) => AddTemplateItem(tree, "area"), "Add an Area preset"));
+        toolbar.Children.Add(TemplateButton("Add Count", (_, _) => AddTemplateItem(tree, "point"), "Add a Count preset"));
+        toolbar.Children.Add(TemplateButton("Edit", (_, _) => EditTemplateNode(tree), "Edit the selected template node"));
+        toolbar.Children.Add(TemplateButton("Duplicate", (_, _) => DuplicateTemplateNode(tree), "Duplicate the selected template node"));
+        toolbar.Children.Add(TemplateButton("Delete", (_, _) => DeleteTemplateNode(tree), "Delete the selected template node"));
+        toolbar.Children.Add(TemplateButton("Reset", (_, _) => ResetTakeoffTemplateToDefault(), "Reset this template tree to the built-in presets"));
+
+        if (settingsMode)
+        {
+            toolbar.Children.Add(new Separator { Width = 10, Opacity = 0 });
+            toolbar.Children.Add(TemplateButton("Save global", (_, _) => SaveTakeoffTemplateGlobal(), "Save this template tree as the global default", primary: true));
+            toolbar.Children.Add(TemplateButton("Save this job", (_, _) => SaveTakeoffTemplateJob(), "Save this template tree as a per-job override"));
+            toolbar.Children.Add(TemplateButton("Clear job override", (_, _) => ClearTakeoffTemplateJobOverride(), "Return this job to the global/default template tree"));
+        }
+
+        var panel = new DockPanel { Margin = new Thickness(settingsMode ? 2 : 4) };
+        DockPanel.SetDock(toolbar, Dock.Top);
+        DockPanel.SetDock(status, Dock.Top);
+        panel.Children.Add(toolbar);
+        panel.Children.Add(status);
+        panel.Children.Add(tree);
+        return panel;
+    }
+
+    private static TextBlock TemplateStatusText() =>
+        new()
+        {
+            Text = "Template presets are loading.",
+            FontSize = 11,
+            Foreground = Brushes.Gray,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 2),
+        };
+
+    private Button TemplateButton(string content, RoutedEventHandler handler, string tooltip, bool primary = false)
+    {
+        var button = new Button
+        {
+            Content = content,
+            ToolTip = tooltip,
+            Margin = new Thickness(0, 0, 4, 4),
+            Padding = new Thickness(7, 3, 7, 3),
+            FontSize = 11,
+            Style = TryFindResource(primary ? "ManagerPrimaryButton" : "ManagerButton") as Style,
+        };
+        button.Click += handler;
+        return button;
+    }
+
+    private FrameworkElement BuildTemplatesTabHeader()
+    {
+        var header = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        header.Children.Add(new TextBlock
+        {
+            Text = "Templates",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0),
+        });
+
+        _templatesTabDockToggle = CreateTemplatesDockToggle("Pop Templates out into a panel docked below Takeoffs");
+        header.Children.Add(_templatesTabDockToggle);
+        return header;
+    }
+
+    private ToggleButton CreateTemplatesDockToggle(string tooltip)
+    {
+        var toggle = new ToggleButton
+        {
+            Style = (Style)FindResource("BookmarkDockToggleButton"),
+            ToolTip = tooltip,
+        };
+        toggle.Checked += TemplatesDockToggle_Changed;
+        toggle.Unchecked += TemplatesDockToggle_Changed;
+        return toggle;
+    }
+
     private void InstallTemplatesRightDock()
     {
         if (_rightWorkspaceTabs == null || _rightWorkspaceTabs.Parent is not Panel hostPanel)
@@ -154,37 +225,6 @@ public partial class MainWindow
 
         _templatesRightHostGrid = grid;
         hostPanel.Children.Insert(idx, grid);
-    }
-
-    private FrameworkElement BuildTemplatesTabHeader()
-    {
-        var header = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        header.Children.Add(new TextBlock
-        {
-            Text = "Templates",
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 5, 0),
-        });
-
-        _templatesTabDockToggle = CreateTemplatesDockToggle("Pop Templates out into a panel docked below Takeoffs");
-        header.Children.Add(_templatesTabDockToggle);
-        return header;
-    }
-
-    private ToggleButton CreateTemplatesDockToggle(string tooltip)
-    {
-        var toggle = new ToggleButton
-        {
-            Style = (Style)FindResource("BookmarkDockToggleButton"),
-            ToolTip = tooltip,
-        };
-        toggle.Checked += TemplatesDockToggle_Changed;
-        toggle.Unchecked += TemplatesDockToggle_Changed;
-        return toggle;
     }
 
     private void TemplatesDockToggle_Changed(object sender, RoutedEventArgs e)
@@ -263,212 +303,464 @@ public partial class MainWindow
         }
     }
 
-    private Button TemplateButton(string content, RoutedEventHandler handler, string tooltip)
+    private void RefreshTakeoffTemplateEditors(string? selectedNodeId = null)
     {
-        var button = new Button
+        RefreshTakeoffTemplateTree(_templateTree, selectedNodeId);
+        RefreshTakeoffTemplateTree(_settingsTemplateTree, selectedNodeId);
+        RefreshTakeoffTemplateStatus();
+        UpdateTakeoffTemplateEditorButtons();
+    }
+
+    private void RefreshTakeoffTemplateTree(TreeView? tree, string? selectedNodeId)
+    {
+        if (tree == null)
+            return;
+
+        tree.Items.Clear();
+        bool allowCreate = ReferenceEquals(tree, _templateTree);
+        foreach (TakeoffTemplateNode root in TemplateRoots())
+            tree.Items.Add(BuildTemplateTreeItem(root, tree, allowCreate));
+
+        if (!string.IsNullOrWhiteSpace(selectedNodeId))
+            SelectTemplateTreeItemById(tree, selectedNodeId);
+    }
+
+    private List<TakeoffTemplateNode> TemplateRoots() =>
+        _takeoffTemplateConfig.Template.Roots;
+
+    private TreeViewItem BuildTemplateTreeItem(TakeoffTemplateNode node, TreeView ownerTree, bool allowCreate)
+    {
+        var item = new TreeViewItem
         {
-            Content = content,
-            ToolTip = tooltip,
-            Margin = new Thickness(0, 0, 4, 4),
-            Padding = new Thickness(7, 3, 7, 3),
-            FontSize = 11,
+            Header = BuildTemplateNodeHeader(node),
+            Tag = node,
+            IsExpanded = true,
         };
-        button.Click += handler;
-        return button;
+        item.MouseDoubleClick += (_, e) =>
+        {
+            if (allowCreate && !node.IsFolder)
+            {
+                CreateTakeoffFromTemplateNode(node);
+                e.Handled = true;
+            }
+        };
+        item.ContextMenu = BuildTemplateNodeContextMenu(node, ownerTree, allowCreate);
+        foreach (TakeoffTemplateNode child in node.Children)
+            item.Items.Add(BuildTemplateTreeItem(child, ownerTree, allowCreate));
+        return item;
     }
 
-    private void RefreshTemplateList(string? selectId = null)
+    private FrameworkElement BuildTemplateNodeHeader(TakeoffTemplateNode node)
     {
-        if (_templateList == null)
-            return;
-
-        _templateList.ItemsSource = null;
-        _templateList.ItemsSource = _takeoffTemplates;
-
-        if (selectId != null)
-            _templateList.SelectedItem = _takeoffTemplates.FirstOrDefault(t => t.Id == selectId);
-
-        if (_templateStatusText != null)
-        {
-            _templateStatusText.Text = _takeoffTemplates.Count == 0
-                ? "No templates yet. Build a Takeoffs tree, then Save Current."
-                : $"{_takeoffTemplates.Count} template(s). Select a Takeoffs folder, pick one, Apply.";
-        }
-        UpdateTemplateButtons();
-    }
-
-    private void UpdateTemplateButtons()
-    {
-        bool hasSelection = _templateList?.SelectedItem is TakeoffTemplate;
-        if (_templateApplyButton != null) _templateApplyButton.IsEnabled = hasSelection;
-        if (_templateRenameButton != null) _templateRenameButton.IsEnabled = hasSelection;
-        if (_templateDeleteButton != null) _templateDeleteButton.IsEnabled = hasSelection;
-    }
-
-    private void BtnTemplateSaveCurrent_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentJob == null)
-        {
-            MessageBox.Show("Open or create a job first.", "Save Template",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        List<TakeoffTemplateNode> roots = CaptureTakeoffTreeNodes(_currentJob.TakeoffsRoot);
-        if (roots.Count == 0)
-        {
-            MessageBox.Show("The current Takeoffs tree is empty — nothing to save.", "Save Template",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        string? name = ShowInputDialog("Template name:", "Save Template", "My Template");
-        if (string.IsNullOrWhiteSpace(name))
-            return;
-
-        var template = new TakeoffTemplate { Name = name.Trim(), Roots = roots };
-        _takeoffTemplates.Add(template);
-        TakeoffTemplateStore.Save(_takeoffTemplates);
-        RefreshTemplateList(template.Id);
-        TxtStatus.Text = $"Saved template '{template.Name}' ({CountTemplateItems(roots)} items).";
-    }
-
-    private void BtnTemplateApply_Click(object sender, RoutedEventArgs e) => ApplySelectedTemplate();
-
-    private void ApplySelectedTemplate()
-    {
-        if (_templateList?.SelectedItem is not TakeoffTemplate template)
-            return;
-        if (_currentJob == null)
-        {
-            MessageBox.Show("Open or create a job first.", "Apply Template",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        string parentFolder = CurrentTakeoffParentFolder();
-        var confirm = MessageBox.Show(
-            $"Create the '{template.Name}' tree ({CountTemplateItems(template.Roots)} items) under the selected Takeoffs folder?",
-            "Apply Template",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes)
-            return;
-
-        try
-        {
-            int created = 0;
-            foreach (var node in template.Roots)
-                created += ApplyTemplateNode(node, parentFolder);
-            LoadTakeoffsForJob();
-            SelectTakeoffNodeByFolder(parentFolder);
-            TxtStatus.Text = $"Applied template '{template.Name}': created {created} folders/items.";
-        }
-        catch (Exception ex)
-        {
-            ShowOperationError("Apply Template", ex);
-        }
-    }
-
-    private int ApplyTemplateNode(TakeoffTemplateNode node, string parentFolder)
-    {
-        if (_currentJob == null || string.IsNullOrWhiteSpace(node.Name))
-            return 0;
-
+        var panel = new DockPanel { LastChildFill = true };
         if (node.IsFolder)
         {
-            string folderPath = OurPlaneCoreJobStore.CreateTakeoffFolder(_currentJob, parentFolder, node.Name);
-            int count = 1;
-            foreach (var child in node.Children)
-                count += ApplyTemplateNode(child, folderPath);
-            return count;
+            panel.Children.Add(new TextBlock
+            {
+                Text = node.Name,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            return panel;
         }
 
-        string color = string.IsNullOrWhiteSpace(node.Color) ? RandomTakeoffColor(_viewport.ActiveColor) : node.Color!;
-        string type = string.IsNullOrWhiteSpace(node.MeasurementType) ? "line" : node.MeasurementType!;
-        OurPlaneCoreJobStore.CreateTakeoffItem(_currentJob, parentFolder, node.Name, color, type);
-        return 1;
+        var swatch = new Border
+        {
+            Width = 12,
+            Height = 12,
+            Margin = new Thickness(0, 0, 6, 0),
+            Background = BrushFromHex(node.Color, Brushes.Gray),
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(2),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(swatch, Dock.Left);
+        panel.Children.Add(swatch);
+
+        var type = new TextBlock
+        {
+            Text = MeasurementTypeTitle(node.MeasurementType),
+            FontSize = 10,
+            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(type, Dock.Right);
+        panel.Children.Add(type);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = node.Name,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        return panel;
     }
 
-    private List<TakeoffTemplateNode> CaptureTakeoffTreeNodes(string baseFolder)
+    private ContextMenu BuildTemplateNodeContextMenu(TakeoffTemplateNode node, TreeView ownerTree, bool allowCreate)
     {
-        var roots = new List<TakeoffTemplateNode>();
-        if (string.IsNullOrWhiteSpace(baseFolder) || !Directory.Exists(baseFolder))
-            return roots;
-
-        foreach (string dir in Directory.GetDirectories(baseFolder).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
-        {
-            var node = CaptureNode(dir);
-            if (node != null)
-                roots.Add(node);
-        }
-        return roots;
+        var menu = new ContextMenu();
+        if (allowCreate && !node.IsFolder)
+            menu.Items.Add(TemplateMenuItem("Create New Takeoff", () => CreateTakeoffFromTemplateNode(node)));
+        menu.Items.Add(TemplateMenuItem("Add Folder", () => AddTemplateFolder(ownerTree)));
+        menu.Items.Add(TemplateMenuItem("Add Line", () => AddTemplateItem(ownerTree, "line")));
+        menu.Items.Add(TemplateMenuItem("Add Area", () => AddTemplateItem(ownerTree, "area")));
+        menu.Items.Add(TemplateMenuItem("Add Count", () => AddTemplateItem(ownerTree, "point")));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(TemplateMenuItem("Edit", () => EditTemplateNodeByReference(node)));
+        menu.Items.Add(TemplateMenuItem("Duplicate", () => DuplicateTemplateNodeByReference(node)));
+        menu.Items.Add(TemplateMenuItem("Delete", () => DeleteTemplateNodeByReference(node)));
+        return menu;
     }
 
-    private TakeoffTemplateNode? CaptureNode(string dirPath)
+    private static MenuItem TemplateMenuItem(string header, Action action)
     {
-        TakeoffItem? item = _takeoffItems.FirstOrDefault(t =>
-            string.Equals(t.FolderPath, dirPath, StringComparison.OrdinalIgnoreCase));
-
-        var node = new TakeoffTemplateNode { Name = OurPlaneCoreJobStore.DisplayName(dirPath) };
-        if (item != null)
-        {
-            node.IsFolder = false;
-            node.MeasurementType = item.MeasurementType;
-            node.Color = item.Color;
-            return node;
-        }
-
-        node.IsFolder = true;
-        foreach (string child in Directory.GetDirectories(dirPath).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
-        {
-            var childNode = CaptureNode(child);
-            if (childNode != null)
-                node.Children.Add(childNode);
-        }
-        return node;
+        var item = new MenuItem { Header = header };
+        item.Click += (_, _) => action();
+        return item;
     }
 
-    private static int CountTemplateItems(List<TakeoffTemplateNode> nodes)
+    private void RefreshTakeoffTemplateStatus()
+    {
+        int itemCount = CountTemplateItems(TemplateRoots(), countFolders: false);
+        int folderCount = CountTemplateItems(TemplateRoots(), countFolders: true) - itemCount;
+        string scope = _currentJob != null && TakeoffTemplateStore.LoadJobOverride(_currentJob) != null
+            ? "this job override"
+            : "global/default";
+        string text = $"{folderCount} folder(s), {itemCount} preset item(s). Edits save to {scope}. Double-click an item to create a new takeoff.";
+        if (_templateStatusText != null)
+            _templateStatusText.Text = text;
+        if (_settingsTemplateStatusText != null)
+            _settingsTemplateStatusText.Text = text;
+    }
+
+    private void UpdateTakeoffTemplateEditorButtons()
+    {
+        // Toolbars are intentionally always enabled. Commands report a short
+        // status if the current selection cannot be used for that operation.
+    }
+
+    private static int CountTemplateItems(IEnumerable<TakeoffTemplateNode> nodes, bool countFolders)
     {
         int count = 0;
-        foreach (var node in nodes)
+        foreach (TakeoffTemplateNode node in nodes)
         {
-            count++;
-            count += CountTemplateItems(node.Children);
+            if (countFolders || !node.IsFolder)
+                count++;
+            count += CountTemplateItems(node.Children, countFolders);
         }
         return count;
     }
 
-    private void BtnTemplateRename_Click(object sender, RoutedEventArgs e)
-    {
-        if (_templateList?.SelectedItem is not TakeoffTemplate template)
-            return;
+    private TakeoffTemplateNode? SelectedTemplateNode(TreeView? tree) =>
+        (tree?.SelectedItem as TreeViewItem)?.Tag as TakeoffTemplateNode;
 
-        string? name = ShowInputDialog("Template name:", "Rename Template", template.Name);
+    private void AddTemplateFolder(TreeView? tree)
+    {
+        string? name = ShowInputDialog("Folder name:", "New Folder", "Add Template Folder");
         if (string.IsNullOrWhiteSpace(name))
             return;
 
-        template.Name = name.Trim();
-        TakeoffTemplateStore.Save(_takeoffTemplates);
-        RefreshTemplateList(template.Id);
+        var node = new TakeoffTemplateNode
+        {
+            Name = name.Trim(),
+            IsFolder = true,
+        };
+        InsertTemplateNode(tree, node);
+        PersistTakeoffTemplateEditorChange($"Template folder added: {node.Name}.", node.Id);
     }
 
-    private void BtnTemplateDelete_Click(object sender, RoutedEventArgs e)
+    private void AddTemplateItem(TreeView? tree, string measurementType)
     {
-        if (_templateList?.SelectedItem is not TakeoffTemplate template)
+        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+        var dialog = new NewItemDialog(
+            type,
+            DefaultTemplateItemName(type),
+            lockType: true,
+            defaultColor: RandomTakeoffColor(_viewport.ActiveColor),
+            defaultCountSymbol: _newCountSymbol)
+        {
+            Owner = this,
+            Title = "Add Template Preset",
+        };
+        if (dialog.ShowDialog() != true)
             return;
 
+        var node = new TakeoffTemplateNode
+        {
+            Name = dialog.ItemName,
+            IsFolder = false,
+            MeasurementType = dialog.ItemType,
+            Color = dialog.ItemColor,
+            CountSymbol = CountDisplaySymbol.Normalize(dialog.ItemCountSymbol),
+        };
+        InsertTemplateNode(tree, node);
+        PersistTakeoffTemplateEditorChange($"Template preset added: {node.Name}.", node.Id);
+    }
+
+    private static string DefaultTemplateItemName(string measurementType) =>
+        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        {
+            "area" => "Area Preset",
+            "point" => "Count Preset",
+            _ => "Line Preset",
+        };
+
+    private void InsertTemplateNode(TreeView? tree, TakeoffTemplateNode node)
+    {
+        TakeoffTemplateNode? selected = SelectedTemplateNode(tree);
+        if (selected == null)
+        {
+            TemplateRoots().Add(node);
+            return;
+        }
+
+        if (selected.IsFolder)
+        {
+            selected.Children.Add(node);
+            return;
+        }
+
+        if (TryFindTemplateParentList(selected, out List<TakeoffTemplateNode> siblings, out _))
+        {
+            int index = siblings.IndexOf(selected);
+            siblings.Insert(index >= 0 ? index + 1 : siblings.Count, node);
+            return;
+        }
+
+        TemplateRoots().Add(node);
+    }
+
+    private void EditTemplateNode(TreeView? tree)
+    {
+        TakeoffTemplateNode? node = SelectedTemplateNode(tree);
+        if (node == null)
+        {
+            TxtStatus.Text = "Select a template folder or preset first.";
+            return;
+        }
+
+        EditTemplateNodeByReference(node);
+    }
+
+    private void EditTemplateNodeByReference(TakeoffTemplateNode node)
+    {
+        if (node.IsFolder)
+        {
+            string? name = ShowInputDialog("Folder name:", node.Name, "Edit Template Folder");
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            node.Name = name.Trim();
+            PersistTakeoffTemplateEditorChange($"Template folder updated: {node.Name}.", node.Id);
+            return;
+        }
+
+        var dialog = new NewItemDialog(
+            node.MeasurementType,
+            node.Name,
+            lockType: false,
+            defaultColor: node.Color,
+            defaultCountSymbol: node.CountSymbol)
+        {
+            Owner = this,
+            Title = "Edit Template Preset",
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        node.Name = dialog.ItemName;
+        node.MeasurementType = dialog.ItemType;
+        node.Color = dialog.ItemColor;
+        node.CountSymbol = CountDisplaySymbol.Normalize(dialog.ItemCountSymbol);
+        PersistTakeoffTemplateEditorChange($"Template preset updated: {node.Name}.", node.Id);
+    }
+
+    private void DuplicateTemplateNode(TreeView? tree)
+    {
+        TakeoffTemplateNode? node = SelectedTemplateNode(tree);
+        if (node == null)
+        {
+            TxtStatus.Text = "Select a template node first.";
+            return;
+        }
+
+        DuplicateTemplateNodeByReference(node);
+    }
+
+    private void DuplicateTemplateNodeByReference(TakeoffTemplateNode node)
+    {
+        if (!TryFindTemplateParentList(node, out List<TakeoffTemplateNode> siblings, out _))
+            return;
+
+        TakeoffTemplateNode copy = node.Clone();
+        ReassignTemplateNodeIds(copy);
+        int index = siblings.IndexOf(node);
+        siblings.Insert(index >= 0 ? index + 1 : siblings.Count, copy);
+        PersistTakeoffTemplateEditorChange($"Template node duplicated: {copy.Name}.", copy.Id);
+    }
+
+    private static void ReassignTemplateNodeIds(TakeoffTemplateNode node)
+    {
+        node.Id = Guid.NewGuid().ToString("N");
+        foreach (TakeoffTemplateNode child in node.Children)
+            ReassignTemplateNodeIds(child);
+    }
+
+    private void DeleteTemplateNode(TreeView? tree)
+    {
+        TakeoffTemplateNode? node = SelectedTemplateNode(tree);
+        if (node == null)
+        {
+            TxtStatus.Text = "Select a template node first.";
+            return;
+        }
+
+        DeleteTemplateNodeByReference(node);
+    }
+
+    private void DeleteTemplateNodeByReference(TakeoffTemplateNode node)
+    {
         var confirm = MessageBox.Show(
-            $"Delete template '{template.Name}'?",
-            "Delete Template",
+            $"Delete template node '{node.Name}'?",
+            "Delete Template Node",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
             return;
 
-        _takeoffTemplates.Remove(template);
-        TakeoffTemplateStore.Save(_takeoffTemplates);
-        RefreshTemplateList();
+        if (TryFindTemplateParentList(node, out List<TakeoffTemplateNode> siblings, out _))
+            siblings.Remove(node);
+        PersistTakeoffTemplateEditorChange($"Template node deleted: {node.Name}.");
+    }
+
+    private bool TryFindTemplateParentList(
+        TakeoffTemplateNode target,
+        out List<TakeoffTemplateNode> siblings,
+        out TakeoffTemplateNode? parent)
+    {
+        return TryFindTemplateParentList(TemplateRoots(), null, target, out siblings, out parent);
+    }
+
+    private static bool TryFindTemplateParentList(
+        List<TakeoffTemplateNode> nodes,
+        TakeoffTemplateNode? currentParent,
+        TakeoffTemplateNode target,
+        out List<TakeoffTemplateNode> siblings,
+        out TakeoffTemplateNode? parent)
+    {
+        if (nodes.Contains(target))
+        {
+            siblings = nodes;
+            parent = currentParent;
+            return true;
+        }
+
+        foreach (TakeoffTemplateNode node in nodes)
+        {
+            if (TryFindTemplateParentList(node.Children, node, target, out siblings, out parent))
+                return true;
+        }
+
+        siblings = [];
+        parent = null;
+        return false;
+    }
+
+    private void ResetTakeoffTemplateToDefault()
+    {
+        var confirm = MessageBox.Show(
+            "Reset takeoff templates to the built-in preset tree?",
+            "Reset Takeoff Templates",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        _takeoffTemplateConfig = TakeoffTemplateConfig.BuildDefault();
+        PersistTakeoffTemplateEditorChange("Takeoff templates reset to built-in defaults.");
+    }
+
+    private void PersistTakeoffTemplateEditorChange(string status, string? selectedNodeId = null)
+    {
+        if (_currentJob != null && TakeoffTemplateStore.LoadJobOverride(_currentJob) != null)
+            TakeoffTemplateStore.SaveJobOverride(_currentJob, _takeoffTemplateConfig);
+        else
+            TakeoffTemplateStore.SaveGlobalConfig(_takeoffTemplateConfig);
+
+        RefreshTakeoffTemplateEditors(selectedNodeId);
+        TxtStatus.Text = status;
+    }
+
+    private void SaveTakeoffTemplateGlobal()
+    {
+        TakeoffTemplateStore.SaveGlobalConfig(_takeoffTemplateConfig);
+        RefreshTakeoffTemplateEditors();
+        TxtStatus.Text = "Saved takeoff templates as global default.";
+    }
+
+    private void SaveTakeoffTemplateJob()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job to save a per-job template override.";
+            return;
+        }
+
+        TakeoffTemplateStore.SaveJobOverride(_currentJob, _takeoffTemplateConfig);
+        RefreshTakeoffTemplateEditors();
+        TxtStatus.Text = "Saved takeoff templates as this job's override.";
+    }
+
+    private void ClearTakeoffTemplateJobOverride()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job to clear a per-job template override.";
+            return;
+        }
+
+        TakeoffTemplateStore.ClearJobOverride(_currentJob);
+        ReloadTakeoffTemplateConfig();
+        TxtStatus.Text = "Cleared this job's takeoff template override.";
+    }
+
+    private void SelectTemplateTreeItemById(TreeView tree, string nodeId)
+    {
+        foreach (TreeViewItem item in tree.Items.OfType<TreeViewItem>())
+        {
+            if (SelectTemplateTreeItemById(item, nodeId))
+                return;
+        }
+    }
+
+    private static bool SelectTemplateTreeItemById(TreeViewItem item, string nodeId)
+    {
+        if (item.Tag is TakeoffTemplateNode node &&
+            string.Equals(node.Id, nodeId, StringComparison.OrdinalIgnoreCase))
+        {
+            item.IsSelected = true;
+            item.BringIntoView();
+            return true;
+        }
+
+        foreach (TreeViewItem child in item.Items.OfType<TreeViewItem>())
+        {
+            if (SelectTemplateTreeItemById(child, nodeId))
+            {
+                item.IsExpanded = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private FrameworkElement BuildTakeoffTemplatesSettingsPanel() =>
+        BuildTakeoffTemplateEditorPanel(settingsMode: true);
+
+    private void BindTakeoffTemplatesSettings()
+    {
+        RefreshTakeoffTemplateEditors();
     }
 }

@@ -47,6 +47,7 @@ public partial class MainWindow
         "Page Folders",
         "Auto Tree",
         "From Pages",
+        "Takeoff Templates",
         "Sort A/S",
         "Sort D/Sec/WT",
         "Auto Rename / Scale",
@@ -60,6 +61,8 @@ public partial class MainWindow
         SettingsPresetStore.InstallPageSortProvider(_currentJob);
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
+        _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
+        RefreshTakeoffTemplateEditors();
     }
 
     private void RefreshSettingsManager()
@@ -124,6 +127,7 @@ public partial class MainWindow
                 "Page Folders" => BuildPageFoldersPanel(),
                 "Auto Tree" => BuildAutoTreePanel(),
                 "From Pages" => BuildFromPagesPanel(),
+                "Takeoff Templates" => BuildTakeoffTemplatesSettingsPanel(),
                 "Sort A/S" => BuildArchStructPanel(),
                 "Sort D/Sec/WT" => BuildSuffixSortPanel(),
                 "Auto Rename / Scale" => BuildRulesPanel(),
@@ -139,6 +143,7 @@ public partial class MainWindow
             case "Page Folders": BindPageFolders(); break;
             case "Auto Tree": BindAutoTree(); break;
             case "From Pages": BindFromPages(); break;
+            case "Takeoff Templates": BindTakeoffTemplatesSettings(); break;
             case "Sort A/S": BindArchStruct(); break;
             case "Sort D/Sec/WT": BindSuffixSort(); break;
             case "Auto Rename / Scale": LoadRuleRows(); break;
