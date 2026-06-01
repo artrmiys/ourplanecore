@@ -568,7 +568,7 @@ public partial class MainWindow
             _pagesMultiSelection.Count > 1 &&
             _pagesMultiSelection.Contains(path))
         {
-            SelectPageTreeItemAndOpenIfPage(item);
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             return;
         }
@@ -579,7 +579,7 @@ public partial class MainWindow
             SelectPagesRange(_pagesRangeAnchorPath, path, additive);
             _pagesRangeAnchorPath = path;
             _pageTakeoffMultiSelection.Clear();
-            SelectPageTreeItemAndOpenIfPage(item);
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;
@@ -591,7 +591,7 @@ public partial class MainWindow
                 _pagesMultiSelection.Remove(path);
             _pagesRangeAnchorPath = path;
             _pageTakeoffMultiSelection.Clear();
-            SelectPageTreeItemAndOpenIfPage(item);
+            SelectPagesTreeItemSilently(item);
             ApplyPagesMultiSelectionVisuals();
             e.Handled = true;
             return;

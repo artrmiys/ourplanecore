@@ -121,6 +121,28 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             resources.Contains("<Setter Property=\"HorizontalContentAlignment\" Value=\"Stretch\"/>", StringComparison.Ordinal),
             "tree rows should stretch their content so blank row area remains clickable");
+
+        int shiftBranch = clickMethod.IndexOf("if ((modifiers & ModifierKeys.Shift)", StringComparison.Ordinal);
+        int ctrlBranch = clickMethod.IndexOf("if ((modifiers & ModifierKeys.Control)", shiftBranch, StringComparison.Ordinal);
+        int plainBranch = clickMethod.IndexOf("_pagesMultiSelection.Clear();", ctrlBranch, StringComparison.Ordinal);
+        AssertTrue(
+            shiftBranch >= 0 && ctrlBranch > shiftBranch && plainBranch > ctrlBranch,
+            "page-tree click handler should keep distinct shift, control, and plain-click branches");
+        string shiftBlock = clickMethod[shiftBranch..ctrlBranch];
+        string ctrlBlock = clickMethod[ctrlBranch..plainBranch];
+        string plainBlock = clickMethod[plainBranch..];
+        AssertTrue(
+            shiftBlock.Contains("SelectPagesRange(_pagesRangeAnchorPath, path, additive)", StringComparison.Ordinal) &&
+            shiftBlock.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
+            !shiftBlock.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
+            "Shift range selection should update the pages multi-selection without opening the target sheet");
+        AssertTrue(
+            ctrlBlock.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
+            !ctrlBlock.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
+            "Ctrl page selection should toggle the multi-selection without opening the target sheet");
+        AssertTrue(
+            plainBlock.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
+            "plain page clicks should still directly open the clicked sheet");
     }
 
     public static void PageReloadInvalidatesPreviewPrefetchCache()
