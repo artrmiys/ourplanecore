@@ -46,7 +46,7 @@ public sealed partial class PdfViewport
 
     private void DrawJoistLayoutLabels(SKCanvas canvas, Measurement measurement)
     {
-        if (!ShouldDrawJoistLabels() || !measurement.JoistEnabled || !measurement.JoistShowLabels)
+        if (!ShouldDrawJoistSegmentLabels(measurement))
             return;
 
         JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, ScaleMetersPerPt);
@@ -71,4 +71,7 @@ public sealed partial class PdfViewport
                 centered: true);
         }
     }
+
+    private bool ShouldDrawJoistSegmentLabels(Measurement measurement) =>
+        ShouldDrawJoistLabels() && measurement.JoistEnabled && measurement.JoistShowLabels;
 }

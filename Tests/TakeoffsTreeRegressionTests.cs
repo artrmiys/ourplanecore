@@ -751,17 +751,29 @@ internal static class TakeoffsTreeRegressionTests
     public static void DenseViewportLabelsKeepJoistAndSelectedLabels()
     {
         string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
+        string joistRendering = ReadRepoFile("Controls/PdfViewport.JoistRendering.cs");
+        string pdfExporter = ReadRepoFile("Models/PdfExporter.Measurements.cs");
         string drawLabels = SliceMethod(rendering, "private void DrawMeasurementLabels(");
         string denseFilter = SliceMethod(rendering, "private bool ShouldDrawDenseMeasurementLabel(");
+        string topLabels = SliceMethod(rendering, "private void DrawMeasurementTopLabels(");
         AssertTrue(
             drawLabels.Contains("drawAllLabels || ShouldDrawDenseMeasurementLabel(measurement)", StringComparison.Ordinal) &&
             denseFilter.Contains("IsMeasurementSelected(measurement)", StringComparison.Ordinal) &&
             denseFilter.Contains("measurement.JoistEnabled", StringComparison.Ordinal) &&
-            denseFilter.Contains("ShouldDrawJoistLabels()", StringComparison.Ordinal),
+            denseFilter.Contains("ShouldDrawJoistSummaryLabel()", StringComparison.Ordinal) &&
+            topLabels.Contains("isJoistArea ? ShouldDrawJoistSummaryLabel() : ShouldDrawMeasurementLabel(\"area\")", StringComparison.Ordinal),
             "dense viewport label suppression must still allow selected and joist summary labels to render");
         AssertFalse(
             denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "dense viewport joist summary labels must not depend on the per-joist segment label toggle");
+        AssertTrue(
+            joistRendering.Contains("ShouldDrawJoistSegmentLabels(measurement)", StringComparison.Ordinal) &&
+            joistRendering.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
+            "per-joist segment labels, not the joist summary label, must obey the Label each joist item toggle");
+        AssertTrue(
+            pdfExporter.Contains("ShouldExportJoistSummaryLabel(options)", StringComparison.Ordinal) &&
+            pdfExporter.Contains("options.ShowMeasurementLabels", StringComparison.Ordinal),
+            "PDF export must keep joist summary labels separate from per-joist segment labels");
     }
 
     public static void PageTakeoffSelectionSyncsTakeoffsTree()
@@ -1130,10 +1142,10 @@ internal static class TakeoffsTreeRegressionTests
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
-            pageApi.Contains("renderScale: CurrentRenderScale()", StringComparison.Ordinal) &&
+            pageApi.Contains("renderScale: CurrentBaseRenderScale()", StringComparison.Ordinal) &&
             layers.Contains("QueueInitialLayerDiscoveryOrRender", StringComparison.Ordinal) &&
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
-            "interactive page opens should show the cheap preview first, then queue a current-scale refresh instead of leaving the sheet blurry");
+            "interactive page opens should show the cheap preview first, then queue a capped base refresh and clipped detail instead of leaving the sheet blurry");
         AssertTrue(
             rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
             rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
@@ -1165,6 +1177,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
             detail.Contains("_activeDetailRender", StringComparison.Ordinal) &&
+            detail.Contains("DetailRequestCoversCurrentView(_activeDetailRender, request.RenderScale)", StringComparison.Ordinal) &&
+            detail.Contains("DetailRequestCoversCurrentView(_pendingDetailRender, request.RenderScale)", StringComparison.Ordinal) &&
             detail.Contains("IsSameDetailRequest(_activeDetailRender, request)", StringComparison.Ordinal) &&
             detail.Contains("_detailRenderVersion + 1", StringComparison.Ordinal) &&
             detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&

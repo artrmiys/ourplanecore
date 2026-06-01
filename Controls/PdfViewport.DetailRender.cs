@@ -72,6 +72,12 @@ public sealed partial class PdfViewport
         if (request == null)
             return;
 
+        if (!force && DetailRequestCoversCurrentView(_activeDetailRender, request.RenderScale))
+            return;
+
+        if (!force && DetailRequestCoversCurrentView(_pendingDetailRender, request.RenderScale))
+            return;
+
         if (!force && IsSameDetailRequest(_activeDetailRender, request))
             return;
 
@@ -145,6 +151,25 @@ public sealed partial class PdfViewport
         }
 
         return false;
+    }
+
+    private bool DetailRequestCoversCurrentView(DetailRenderRequest? request, float targetScale)
+    {
+        if (request == null)
+            return false;
+
+        if (!string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) ||
+            request.PdfIndex != _pdfIndex ||
+            !string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (request.RenderScale < targetScale * 0.92f)
+            return false;
+
+        SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
+        return RectContains(request.ClipRect, visible, tolerancePt: 0.5f);
     }
 
     private async Task StartNextDetailRenderAsync()

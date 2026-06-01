@@ -109,10 +109,8 @@ public static partial class PdfExporter
         if (type == "area" && measurement.Points.Count >= 3)
         {
             DrawJoistLayout(canvas, measurement, color, options, drawSegments: false, drawLabels: true);
-            // For a joist area the centroid label is the joist summary, so it
-            // follows the Joist toggle; a plain area follows the Area toggle.
             bool showAreaCentroid = measurement.JoistEnabled
-                ? ShouldExportJoistLabels(options)
+                ? ShouldExportJoistSummaryLabel(options)
                 : ShouldExportMeasurementLabel(measurement.MType, options);
             if (showAreaCentroid)
             {
@@ -163,6 +161,9 @@ public static partial class PdfExporter
 
     private static bool ShouldExportJoistLabels(PdfExportOptions options) =>
         options.ShowMeasurementLabels && options.ShowJoistLabels;
+
+    private static bool ShouldExportJoistSummaryLabel(PdfExportOptions options) =>
+        options.ShowMeasurementLabels;
 
     private static float ExportPointScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);

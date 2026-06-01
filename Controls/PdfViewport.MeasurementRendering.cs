@@ -203,7 +203,7 @@ public sealed partial class PdfViewport
 
         return measurement.MType == "area" &&
                measurement.JoistEnabled &&
-               ShouldDrawJoistLabels();
+               ShouldDrawJoistSummaryLabel();
     }
 
     private IReadOnlyList<Measurement> VisibleMeasurements(SKRect visiblePdf)
@@ -256,9 +256,7 @@ public sealed partial class PdfViewport
                 DrawLabel(canvas, points[^1], measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
                 break;
             case "area" when points.Count >= 3:
-                // For a joist area the centroid label is the joist summary, so it
-                // follows the Joist toggle; a plain area follows the Area toggle.
-                if (isJoistArea ? ShouldDrawJoistLabels() : ShouldDrawMeasurementLabel("area"))
+                if (isJoistArea ? ShouldDrawJoistSummaryLabel() : ShouldDrawMeasurementLabel("area"))
                     DrawLabel(canvas, Centroid(points), measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
                 break;
         }
@@ -326,5 +324,8 @@ public sealed partial class PdfViewport
 
     private bool ShouldDrawJoistLabels() =>
         ShowMeasurementLabels && ShowJoistLabels;
+
+    private bool ShouldDrawJoistSummaryLabel() =>
+        ShowMeasurementLabels;
 
 }

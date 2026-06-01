@@ -82,6 +82,14 @@ public sealed partial class PdfViewport
         return ViewportRenderPolicy.SelectRenderScale(_zoom, RenderScaleSteps, _pdfW, _pdfH);
     }
 
+    private float CurrentBaseRenderScale()
+    {
+        float desired = CurrentRenderScale();
+        return ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)
+            ? Math.Min(desired, ViewportRenderPolicy.ResponsiveMinRenderScale)
+            : desired;
+    }
+
     private void RerenderForZoomIfNeeded(bool force)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfW <= 0 || _pdfH <= 0)
@@ -103,7 +111,7 @@ public sealed partial class PdfViewport
                 return;
         }
 
-        float desired = CurrentRenderScale();
+        float desired = CurrentBaseRenderScale();
         if (!force && _renderedScale > 0)
         {
             float ratio = desired / _renderedScale;
@@ -137,7 +145,7 @@ public sealed partial class PdfViewport
 
         if (!force && _renderedScale > 0)
         {
-            float desired = CurrentRenderScale();
+            float desired = CurrentBaseRenderScale();
             float ratio = desired / _renderedScale;
             if (!ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale) &&
                 !ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale) &&
