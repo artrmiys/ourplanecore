@@ -70,7 +70,7 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem(
             selectedCount > 1 ? $"Select {selectedCount} on Canvas" : "Select on Canvas",
             true,
-            () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true))));
+            () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true), anchor)));
         bool isAreaSection =
             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";

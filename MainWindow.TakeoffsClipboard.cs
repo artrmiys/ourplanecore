@@ -55,7 +55,7 @@ public partial class MainWindow
             }
             else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Enter)
             {
-                SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true));
+                SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(sectionNode, fallbackToAnchor: true), sectionNode);
                 e.Handled = true;
             }
             return;

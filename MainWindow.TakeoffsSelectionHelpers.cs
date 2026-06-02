@@ -106,6 +106,27 @@ public partial class MainWindow
             .ToList();
     }
 
+    private static List<TakeoffMeasurementNode> TakeoffSectionNodesWithAnchorFirst(
+        IReadOnlyList<TakeoffMeasurementNode> nodes,
+        TakeoffMeasurementNode anchor)
+    {
+        if (nodes.Count <= 1)
+            return nodes.ToList();
+
+        string anchorKey = TakeoffSectionSelectionKey(anchor);
+        var result = new List<TakeoffMeasurementNode>(nodes.Count);
+        TakeoffMeasurementNode? anchorNode = nodes.FirstOrDefault(node =>
+            string.Equals(TakeoffSectionSelectionKey(node), anchorKey, StringComparison.OrdinalIgnoreCase));
+        if (anchorNode != null)
+            result.Add(anchorNode);
+
+        result.AddRange(nodes.Where(node => !string.Equals(
+            TakeoffSectionSelectionKey(node),
+            anchorKey,
+            StringComparison.OrdinalIgnoreCase)));
+        return result.Count == nodes.Count ? result : nodes.ToList();
+    }
+
     private void SelectTakeoffSectionRange(string? anchorKey, string targetKey, TakeoffItem item, bool additive)
     {
         var candidates = EnumerateVisibleTreeItems(TakeoffsTree)

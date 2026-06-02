@@ -456,6 +456,11 @@ public partial class MainWindow
 
     private void SelectTakeoffSectionMeasurementsOnCanvas(IReadOnlyList<TakeoffMeasurementNode> nodes)
     {
+        SelectTakeoffSectionMeasurementsOnCanvas(nodes, primaryNode: null);
+    }
+
+    private void SelectTakeoffSectionMeasurementsOnCanvas(IReadOnlyList<TakeoffMeasurementNode> nodes, TakeoffMeasurementNode? primaryNode)
+    {
         var measurements = nodes
             .Select(node => node.Measurement)
             .Distinct()
@@ -466,8 +471,7 @@ public partial class MainWindow
         if (TryBlockMeasurementSelectionDuringRecord(measurements))
             return;
 
-        Measurement target = measurements.FirstOrDefault(measurement =>
-            _currentPage != null && IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath)) ?? measurements[0];
+        Measurement target = ResolveTakeoffSectionSelectionTarget(measurements, nodes, primaryNode);
 
         if (!string.IsNullOrWhiteSpace(target.PageFolder) &&
             (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, target.PageFolder)))
@@ -491,6 +495,22 @@ public partial class MainWindow
         TxtStatus.Text = measurements.Count == 1
             ? $"Selected {MeasurementEntryTitle(nodes[0].Item).ToLowerInvariant()} on canvas."
             : $"Selected {measurements.Count} {MeasurementEntryTitlePlural(nodes)} on canvas.";
+    }
+
+    private static Measurement ResolveTakeoffSectionSelectionTarget(
+        IReadOnlyList<Measurement> measurements,
+        IReadOnlyList<TakeoffMeasurementNode> nodes,
+        TakeoffMeasurementNode? primaryNode)
+    {
+        if (primaryNode != null &&
+            nodes.Any(node => ReferenceEquals(node.Measurement, primaryNode.Measurement)) &&
+            measurements.Contains(primaryNode.Measurement))
+        {
+            return primaryNode.Measurement;
+        }
+
+        return measurements.FirstOrDefault(measurement => !string.IsNullOrWhiteSpace(measurement.PageFolder))
+               ?? measurements[0];
     }
 
     private void GoToMeasurementPage(Measurement measurement)
@@ -827,13 +847,15 @@ public partial class MainWindow
     {
         var selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
         TakeoffMeasurementNode? targetNode = selectedNodes.FirstOrDefault(node =>
-            !string.IsNullOrWhiteSpace(node.Measurement.PageFolder));
+            ReferenceEquals(node.Measurement, anchor.Measurement) &&
+            !string.IsNullOrWhiteSpace(node.Measurement.PageFolder)) ??
+            selectedNodes.FirstOrDefault(node => !string.IsNullOrWhiteSpace(node.Measurement.PageFolder));
         if (targetNode == null)
             return;
 
         GoToMeasurementPage(targetNode.Measurement);
         SelectTakeoffSectionNodesSilently(selectedNodes);
-        SelectTakeoffSectionMeasurementsOnCanvas(selectedNodes);
+        SelectTakeoffSectionMeasurementsOnCanvas(selectedNodes, targetNode);
     }
 
     private bool ShowSectionPropertiesDialog(

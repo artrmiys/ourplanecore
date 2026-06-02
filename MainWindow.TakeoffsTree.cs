@@ -340,7 +340,7 @@ public partial class MainWindow
         {
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
-            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false), node));
             return;
         }
 
@@ -351,7 +351,7 @@ public partial class MainWindow
             _takeoffSectionRangeAnchorKey = key;
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
-            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false), node));
             e.Handled = true;
             return;
         }
@@ -363,7 +363,7 @@ public partial class MainWindow
             _takeoffSectionRangeAnchorKey = key;
             item.IsSelected = true;
             ApplyTakeoffPageHighlights();
-            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false)));
+            ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: false), node));
             e.Handled = true;
             return;
         }
@@ -372,7 +372,7 @@ public partial class MainWindow
         _takeoffSectionMultiSelection.Add(key);
         _takeoffSectionRangeAnchorKey = key;
         ApplyTakeoffPageHighlights();
-        ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: true)));
+        ScheduleTakeoffSelectionSync(() => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(node, fallbackToAnchor: true), node));
     }
 
     private void ClearTakeoffFolderSelectionFromBlankClick()
