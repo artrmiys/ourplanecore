@@ -52,8 +52,11 @@ function Set-SmokeSettings {
         [Parameter(Mandatory)] [string]$FirstPagePath
     )
 
-    $settingsDir = Join-Path $env:APPDATA "OurPlaneCore"
-    $settingsPath = Join-Path $settingsDir "settings.json"
+    $settingsPath = $env:OURPLANECORE_SETTINGS_PATH
+    if ([string]::IsNullOrWhiteSpace($settingsPath)) {
+        $settingsPath = Join-Path (Join-Path $env:APPDATA "OurPlaneCore") "settings.json"
+    }
+    $settingsDir = Split-Path -Parent $settingsPath
     $backupPath = "$settingsPath.viewport-page-stress-smoke.bak"
     New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
     if (Test-Path -LiteralPath $settingsPath) {
@@ -130,7 +133,9 @@ function Summarize-Results {
     if ($null -ne $Report.TreeOps) {
         $tree = $Report.TreeOps
         Write-Host ("  tree ops pages: single select {0} ms, bulk select {1} ms ({2}), single move {3}/{4} ms, bulk move {5}/{6} ms" -f $tree.PagesSingleSelectionMs, $tree.PagesBulkSelectionMs, $tree.PagesBulkSelectionCount, $tree.PagesSingleMoveDownMs, $tree.PagesSingleMoveRestoreMs, $tree.PagesBulkMoveDownMs, $tree.PagesBulkMoveRestoreMs)
+        Write-Host ("  tree ops pages detail: single set/event/layout/visual {0}/{1}/{2}/{3} ms, bulk set/event/layout/visual {4}/{5}/{6}/{7} ms" -f $tree.PagesSingleSelectionSetMs, $tree.PagesSingleSelectionEventMs, $tree.PagesSingleSelectionLayoutMs, $tree.PagesSingleSelectionVisualMs, $tree.PagesBulkSelectionSetMs, $tree.PagesBulkSelectionEventMs, $tree.PagesBulkSelectionLayoutMs, $tree.PagesBulkSelectionVisualMs)
         Write-Host ("  tree ops takeoffs: single select {0} ms, bulk select {1} ms ({2}), single move {3}/{4} ms, bulk move {5}/{6} ms" -f $tree.TakeoffsSingleSelectionMs, $tree.TakeoffsBulkSelectionMs, $tree.TakeoffsBulkSelectionCount, $tree.TakeoffsSingleMoveDownMs, $tree.TakeoffsSingleMoveRestoreMs, $tree.TakeoffsBulkMoveDownMs, $tree.TakeoffsBulkMoveRestoreMs)
+        Write-Host ("  tree ops takeoffs detail: single set/event/takeoffsLayout/pagesLayout {0}/{1}/{2}/{3} ms, bulk set/event/takeoffsLayout/pagesLayout {4}/{5}/{6}/{7} ms" -f $tree.TakeoffsSingleSelectionSetMs, $tree.TakeoffsSingleSelectionEventMs, $tree.TakeoffsSingleSelectionTakeoffsLayoutMs, $tree.TakeoffsSingleSelectionPagesLayoutMs, $tree.TakeoffsBulkSelectionSetMs, $tree.TakeoffsBulkSelectionEventMs, $tree.TakeoffsBulkSelectionTakeoffsLayoutMs, $tree.TakeoffsBulkSelectionPagesLayoutMs)
     }
 }
 

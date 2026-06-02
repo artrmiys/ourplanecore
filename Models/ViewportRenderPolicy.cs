@@ -29,6 +29,7 @@ public static class ViewportRenderPolicy
     public const int DetailRenderCoalesceDelayMs = 850;
     public const int DetailRenderMaxPaintTiles = 2;
     public const int PageSwitchDetailRenderDelayMs = 320;
+    public const int PageSwitchSharpUpgradeDelayMs = 180;
     public const int NearbyPagePreviewPrefetchRadius = 3;
     public const int NearbyPageCleanRenderPrefetchRadius = 1;
     public const float InstantPagePreviewRenderScale = 0.35f;

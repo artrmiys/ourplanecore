@@ -45,6 +45,7 @@ public sealed partial class PdfViewport
     {
         _pageBitmap?.Dispose();
         _pageBitmap = render.Bitmap;
+        MarkPageBitmapIdentity(_pdfPath, _pdfIndex, _pageFolder);
         _pdfW = render.WidthPt;
         _pdfH = render.HeightPt;
         _bitmapScale = render.BitmapScale;
@@ -59,6 +60,7 @@ public sealed partial class PdfViewport
     {
         _pageBitmap?.Dispose();
         _pageBitmap = render.Bitmap;
+        MarkPageBitmapIdentity(_pdfPath, _pdfIndex, _pageFolder);
         _pdfW = render.WidthPt;
         _pdfH = render.HeightPt;
         _bitmapScale = render.BitmapScale;
@@ -147,6 +149,7 @@ public sealed partial class PdfViewport
     {
         _pageBitmap?.Dispose();
         _pageBitmap = bitmap;
+        MarkPageBitmapIdentity(_pdfPath, _pdfIndex, _pageFolder);
         _pdfW = widthPt;
         _pdfH = heightPt;
         _bitmapScale = bitmapScale;
@@ -197,6 +200,7 @@ public sealed partial class PdfViewport
 
         _pageBitmap?.Dispose();
         _pageBitmap = bitmap;
+        MarkPageBitmapIdentity(request.PdfPath, request.PdfIndex, request.PageFolder);
         _pdfW = render.WidthPt;
         _pdfH = render.HeightPt;
         _bitmapScale = _pdfW > 0 ? _pageBitmap.Width / _pdfW : request.RenderScale;
@@ -284,6 +288,7 @@ public sealed partial class PdfViewport
 
         _pageBitmap?.Dispose();
         _pageBitmap = cached.Bitmap;
+        MarkPageBitmapIdentity(request.PdfPath, request.PdfIndex, request.PageFolder);
         _pdfW = cached.WidthPt;
         _pdfH = cached.HeightPt;
         _bitmapScale = cached.BitmapScale;
@@ -464,10 +469,26 @@ public sealed partial class PdfViewport
                 request.PdfIndex == _pdfIndex &&
                 string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
             {
-                if (fromCache)
+                if (ShouldSkipLowerQualityDocnetPreview(request))
+                {
+                    if (fromCache)
+                        cached.Bitmap.Dispose();
+                    else if (render != null)
+                        render.Bitmap.Dispose();
+                    AppLog.Info(
+                        $"Viewport skipped lower-quality Docnet preview; page='{request.PageFolder}'; " +
+                        $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; " +
+                        $"currentScale={_bitmapScale:0.###}; targetScale={request.RenderScale:0.###}");
+                }
+                else if (fromCache)
+                {
                     ApplyCachedBitmapRender(cached);
+                }
                 else if (render != null)
+                {
                     ApplyDocnetRenderResult(render);
+                }
+
                 ApplyDocnetRenderContinuation(request);
                 QueueDetailRenderIfNeeded(force: false);
                 RequestRepaint();
@@ -511,13 +532,99 @@ public sealed partial class PdfViewport
                 request.FireLayersAfter,
                 allowImmediateCache: false,
                 allowLiveRender: false,
-                allowMemoryBitmap: false);
+                allowMemoryBitmap: true);
+            QueueSharpLayerRenderAfterPreview(
+                request.PdfPath,
+                request.PdfIndex,
+                request.PageFolder,
+                request.ResetLayerStates,
+                request.StatusAfter,
+                request.FireLayersAfter);
             return;
         }
 
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
             PostStatus(request.StatusAfter);
     }
+
+    private bool ShouldSkipLowerQualityDocnetPreview(DocnetRenderRequest request) =>
+        IsPageBitmapFor(request.PdfPath, request.PdfIndex, request.PageFolder) &&
+        _pageBitmap != null &&
+        _bitmapScale > request.RenderScale * 1.05f;
+
+    private void MarkPageBitmapIdentity(string pdfPath, int pdfIndex, string pageFolder)
+    {
+        _pageBitmapPdfPath = pdfPath;
+        _pageBitmapPdfIndex = pdfIndex;
+        _pageBitmapPageFolder = pageFolder;
+    }
+
+    private void ClearPageBitmapIdentity()
+    {
+        _pageBitmapPdfPath = "";
+        _pageBitmapPdfIndex = -1;
+        _pageBitmapPageFolder = "";
+    }
+
+    private bool IsPageBitmapFor(string pdfPath, int pdfIndex, string pageFolder) =>
+        _pageBitmap != null &&
+        _pageBitmapPdfIndex == pdfIndex &&
+        string.Equals(_pageBitmapPdfPath, pdfPath, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(_pageBitmapPageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
+
+    private void QueueSharpLayerRenderAfterPreview(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        bool resetLayerStates,
+        string? statusAfter,
+        bool fireLayersAfter)
+    {
+        int layerVersion = _layerRenderVersion;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(async () =>
+            {
+                try
+                {
+                    await Task.Delay(ViewportRenderPolicy.PageSwitchSharpUpgradeDelayMs);
+                    if (!IsCurrentPageRenderTarget(pdfPath, pdfIndex, pageFolder, layerVersion))
+                        return;
+
+                    float renderScale = Math.Max(
+                        CurrentBaseRenderScale(),
+                        ViewportRenderPolicy.ResponsiveMinRenderScale);
+                    if (_bitmapScale >= renderScale * 0.95f)
+                    {
+                        QueueDetailRenderIfNeeded(force: false);
+                        return;
+                    }
+
+                    QueueLayerRender(
+                        resetLayerStates,
+                        renderScale,
+                        statusAfter,
+                        fireLayersAfter,
+                        allowImmediateCache: true,
+                        allowLiveRender: true,
+                        allowMemoryBitmap: true);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, "Viewport sharp page upgrade failed.");
+                }
+            }));
+    }
+
+    private bool IsCurrentPageRenderTarget(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        int layerVersion) =>
+        layerVersion == _layerRenderVersion &&
+        string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+        pdfIndex == _pdfIndex &&
+        string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
 
     private void ReportSlowPdfRender(string kind, DocnetRenderRequest request, long elapsedMs, bool fromCache)
     {
@@ -615,6 +722,7 @@ public sealed partial class PdfViewport
 
         _pageBitmap?.Dispose();
         _pageBitmap = bitmap;
+        MarkPageBitmapIdentity(_pdfPath, _pdfIndex, _pageFolder);
         _pdfW = render.WidthPt;
         _pdfH = render.HeightPt;
         _bitmapScale = _pdfW > 0 ? _pageBitmap.Width / _pdfW : RenderDpi / 72f;
@@ -755,6 +863,39 @@ public sealed partial class PdfViewport
 
     private static bool ShouldForceDetailAfterLayerApply(LayerRenderRequest request) =>
         request.HighlightedLayers.Count > 0;
+
+    private bool TryApplyHotLayerBitmapForPageOpen(
+        bool resetLayerStates,
+        float renderScale,
+        string? statusAfter,
+        bool fireLayersAfter,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        if (string.IsNullOrWhiteSpace(_pdfPath))
+            return false;
+
+        LayerRenderRequest request = new(
+            ++_layerRenderVersion,
+            _pdfPath,
+            _pdfIndex,
+            _pageFolder,
+            Math.Clamp(renderScale, 0.20f, 4.0f),
+            resetLayerStates,
+            EffectiveLayerStates(),
+            EffectiveHighlightedLayers(),
+            LayerRenderCachedLayers(),
+            restoreView,
+            fitAfter,
+            statusAfter,
+            fireLayersAfter);
+
+        if (!TryApplyLayerBitmapCache(request, out _))
+            return false;
+
+        _pendingLayerRender = null;
+        return true;
+    }
 
     private bool TryApplyPersistedDefaultCleanRender(
         float renderScale,

@@ -72,6 +72,7 @@ public sealed partial class PdfViewport
         _cachedLayers = cachedLayers;
 
         bool hadVisibleBitmap = _pageBitmap != null;
+        bool hadCurrentPageBitmap = IsPageBitmapFor(pdfPath, pageIndex, pageFolder);
         _showingPreviousPageDuringSwitch = hadVisibleBitmap;
         ClearSheetOverlay();
         _drawPts.Clear();
@@ -110,6 +111,7 @@ public sealed partial class PdfViewport
             fitAfter: !restoreView.HasValue);
 
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
+        bool hotLayerCacheHit = false;
         if (previewCacheHit)
         {
             QueueLayerRender(
@@ -121,23 +123,57 @@ public sealed partial class PdfViewport
                 fitAfter: !restoreView.HasValue,
                 allowImmediateCache: false,
                 allowLiveRender: false,
-                allowMemoryBitmap: false);
-        }
-        else
-        {
-            ClearPreviousPageBitmapDuringSwitch();
-            QueueDocnetRender(
-                ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
-                restoreView,
-                fitAfter: !restoreView.HasValue,
-                queueLayerAfter: true,
+                allowMemoryBitmap: true);
+            QueueSharpLayerRenderAfterPreview(
+                pdfPath,
+                pageIndex,
+                pageFolder,
                 resetLayerStates: true,
                 statusAfter: loadedStatus,
                 fireLayersAfter: true);
         }
+        else
+        {
+            hotLayerCacheHit = TryApplyHotLayerBitmapForPageOpen(
+                resetLayerStates: true,
+                renderScale: CurrentBaseRenderScale(),
+                statusAfter: loadedStatus,
+                fireLayersAfter: true,
+                restoreView: restoreView,
+                fitAfter: !restoreView.HasValue);
+
+            if (hotLayerCacheHit)
+            {
+                _showingPreviousPageDuringSwitch = false;
+                QueueSharpLayerRenderAfterPreview(
+                    pdfPath,
+                    pageIndex,
+                    pageFolder,
+                    resetLayerStates: true,
+                    statusAfter: loadedStatus,
+                    fireLayersAfter: true);
+            }
+            else
+            {
+                if (hadCurrentPageBitmap && _bitmapScale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f)
+                    _showingPreviousPageDuringSwitch = false;
+                else
+                    ClearPreviousPageBitmapDuringSwitch();
+                QueueDocnetRender(
+                    ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+                    restoreView,
+                    fitAfter: !restoreView.HasValue,
+                    queueLayerAfter: true,
+                    resetLayerStates: true,
+                    statusAfter: loadedStatus,
+                    fireLayersAfter: true);
+            }
+        }
 
         PostStatus(previewCacheHit
             ? $"Cached preview: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
+            : hotLayerCacheHit
+            ? $"Cached page: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
             : $"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
         RequestRepaint();
 
@@ -149,6 +185,7 @@ public sealed partial class PdfViewport
     {
         _pageBitmap?.Dispose();
         _pageBitmap = null;
+        ClearPageBitmapIdentity();
         _pdfW = 0;
         _pdfH = 0;
         _bitmapScale = 0;

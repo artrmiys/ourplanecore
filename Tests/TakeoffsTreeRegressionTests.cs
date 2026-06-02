@@ -1076,18 +1076,33 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("fireLayersAfter: true", StringComparison.Ordinal),
             "cache-miss Docnet preview should still queue the normal layer render continuation");
         AssertTrue(
+            pageApi.Contains("TryApplyHotLayerBitmapForPageOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("Cached page:", StringComparison.Ordinal) &&
+            layers.Contains("private bool TryApplyHotLayerBitmapForPageOpen", StringComparison.Ordinal) &&
+            layers.Contains("TryApplyLayerBitmapCache(request, out _)", StringComparison.Ordinal),
+            "page cache misses should use an already-hot sharp layer bitmap before falling back to low-scale Docnet preview");
+        AssertTrue(
+            pageApi.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
+            layers.Contains("PageSwitchSharpUpgradeDelayMs", StringComparison.Ordinal) &&
+            layers.Contains("IsCurrentPageRenderTarget", StringComparison.Ordinal) &&
+            layers.Contains("allowLiveRender: true", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipLowerQualityDocnetPreview", StringComparison.Ordinal) &&
+            layers.Contains("IsPageBitmapFor(request.PdfPath, request.PdfIndex, request.PageFolder)", StringComparison.Ordinal) &&
+            layers.Contains("Viewport skipped lower-quality Docnet preview", StringComparison.Ordinal),
+            "page preview paths should schedule a delayed sharp live render and prevent stale low-scale previews from replacing sharp current sheets");
+        AssertTrue(
             pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
             pageApi.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
-            pageApi.Contains("allowMemoryBitmap: false", StringComparison.Ordinal) &&
+            pageApi.Contains("allowMemoryBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("bool allowImmediateCache = true", StringComparison.Ordinal) &&
             layers.Contains("bool allowLiveRender = true", StringComparison.Ordinal) &&
             layers.Contains("bool allowMemoryBitmap = true", StringComparison.Ordinal) &&
             layers.Contains("allowMemoryBitmap && TryApplyLayerBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
-            layers.Contains("allowMemoryBitmap: false", StringComparison.Ordinal) &&
+            layers.Contains("allowMemoryBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("allowImmediateCache && TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal) &&
             layers.Contains("CompleteCacheOnlyLayerRender(request)", StringComparison.Ordinal),
-            "page open should not synchronously decode, copy, or live-render a second clean layer bitmap after applying the instant preview");
+            "page open should not synchronously decode persisted renders or live-render a second clean layer bitmap after applying the instant preview, but should use an already-hot sharp bitmap");
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
@@ -1256,6 +1271,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             pageApi.Contains("QueueLayerRender(", StringComparison.Ordinal) &&
             pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
             pageApi.Contains("BeginPageSwitchDetailRenderHold()", StringComparison.Ordinal) &&
             detail.Contains("ShouldHoldDetailRender(force)", StringComparison.Ordinal) &&
             detail.Contains("QueueDetailRenderAfterHold()", StringComparison.Ordinal) &&
@@ -1264,7 +1280,8 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal) &&
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchDetailRenderDelayMs = 320", StringComparison.Ordinal),
+            policy.Contains("PageSwitchDetailRenderDelayMs = 320", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeDelayMs = 180", StringComparison.Ordinal),
             "cached preview page opens should schedule capped base work immediately and hold clipped high-detail briefly until the page switch settles");
         AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
@@ -1399,8 +1416,13 @@ internal static class TakeoffsTreeRegressionTests
             treeOps.Contains("MoveTakeoffsDownAndRestore", StringComparison.Ordinal) &&
             treeOps.Contains("SelectPagesBulkForSmoke", StringComparison.Ordinal) &&
             treeOps.Contains("SelectTakeoffsBulkForSmoke", StringComparison.Ordinal) &&
+            treeOps.Contains("PagesSingleSelectionSetMs", StringComparison.Ordinal) &&
+            treeOps.Contains("TakeoffsSingleSelectionEventMs", StringComparison.Ordinal) &&
+            treeOps.Contains("TakeoffsBulkSelectionPagesLayoutMs", StringComparison.Ordinal) &&
             treeOps.Contains("OrdersEqual(before, OrderedChildSnapshot(parent))", StringComparison.Ordinal) &&
-            script.Contains("[switch]$IncludeTreeOps", StringComparison.Ordinal),
+            script.Contains("[switch]$IncludeTreeOps", StringComparison.Ordinal) &&
+            script.Contains("OURPLANECORE_SETTINGS_PATH", StringComparison.Ordinal) &&
+            script.Contains("tree ops takeoffs detail", StringComparison.Ordinal),
             "viewport stress smoke should optionally exercise reversible single/bulk selection and move operations in Pages and Takeoffs trees");
         AssertTrue(
             source.Contains("ViewportPerformanceRecorder.BeginRun", StringComparison.Ordinal) &&

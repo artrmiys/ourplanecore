@@ -39,6 +39,7 @@ public sealed partial class PdfViewport
         ResetPdfSnapCache();
         _pageBitmap?.Dispose();
         _pageBitmap = null;
+        ClearPageBitmapIdentity();
         ClearSheetOverlay();
         _pdfW = _pdfH = 0;
         _drawPts.Clear();
