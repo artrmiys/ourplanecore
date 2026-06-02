@@ -33,6 +33,10 @@ public sealed partial class PdfViewport
         bool drawGeometry = ViewportRenderPolicy.ShouldDrawMeasurementGeometry(
             activeMeasurements.Count,
             _renderNavigationFastFrame);
+        bool simplifyAreaPaint = ViewportRenderPolicy.ShouldUseSimplifiedAreaPaint(
+            _zoom,
+            activeMeasurements.Count,
+            _renderNavigationFastFrame);
 
         IReadOnlyList<Measurement> renderCandidates = LayerOrderedMeasurements(
             VisibleMeasurementCandidates(visiblePdf));
@@ -47,7 +51,7 @@ public sealed partial class PdfViewport
 
             visibleMeasurements ??= new List<Measurement>(Math.Min(renderCandidates.Count, 256));
             visibleMeasurements.Add(m);
-            DrawMeasurement(canvas, m, selected, drawLabels: false, drawDetails: drawDetails);
+            DrawMeasurement(canvas, m, selected, drawLabels: false, drawDetails: drawDetails, simplifyAreaPaint: simplifyAreaPaint && !selected);
             if (!_renderNavigationFastFrame && selected && !ReferenceEquals(m, _selectedMeasurement))
                 DrawSelectionBounds(canvas, m);
             if (!_renderNavigationFastFrame && ShouldDrawMeasurementHandles(m))
@@ -59,7 +63,13 @@ public sealed partial class PdfViewport
             : Array.Empty<Measurement>();
     }
 
-    private void DrawMeasurement(SKCanvas canvas, Measurement m, bool selected, bool drawLabels, bool drawDetails = true)
+    private void DrawMeasurement(
+        SKCanvas canvas,
+        Measurement m,
+        bool selected,
+        bool drawLabels,
+        bool drawDetails = true,
+        bool simplifyAreaPaint = false)
     {
         SKColor color = GetCachedColor(m.Color, SKColors.Red);
         float strokeScale = MeasurementStrokeScaleFactor();
@@ -67,13 +77,13 @@ public sealed partial class PdfViewport
         {
             Color       = color,
             StrokeWidth = ScreenToPdfDistance((selected ? 3f : 2f) * strokeScale),
-            IsAntialias = true,
+            IsAntialias = !simplifyAreaPaint,
             Style       = SKPaintStyle.Stroke,
         };
         using var fill = new SKPaint
         {
             Color       = color.WithAlpha(180),
-            IsAntialias = true,
+            IsAntialias = !simplifyAreaPaint,
             Style       = SKPaintStyle.Fill,
         };
 
@@ -106,17 +116,19 @@ public sealed partial class PdfViewport
             case "area" when pts.Count >= 3:
                 using (var poly = BuildAreaPath(m))
                 {
-                using (var fillTrans = fill.Clone())
-                {
-                    fillTrans.Color = fillTrans.Color.WithAlpha(AreaFillAlpha());
-                    canvas.DrawPath(poly, fillTrans);
-                }
-                using (var areaStroke = stroke.Clone())
-                {
-                    areaStroke.StrokeWidth =
-                        ScreenToPdfDistance((selected ? 3f : 2f) * strokeScale * AreaEdgeScaleFactor());
-                    canvas.DrawPath(poly, areaStroke);
-                }
+                    if (!simplifyAreaPaint)
+                    {
+                        using var fillTrans = fill.Clone();
+                        fillTrans.Color = fillTrans.Color.WithAlpha(AreaFillAlpha());
+                        canvas.DrawPath(poly, fillTrans);
+                    }
+
+                    using (var areaStroke = stroke.Clone())
+                    {
+                        areaStroke.StrokeWidth =
+                            ScreenToPdfDistance((selected ? 3f : 2f) * strokeScale * AreaEdgeScaleFactor());
+                        canvas.DrawPath(poly, areaStroke);
+                    }
                 }
                 if (drawDetails)
                     DrawJoistLayout(canvas, m, color, drawLabels);

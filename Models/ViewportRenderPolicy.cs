@@ -40,6 +40,17 @@ public static class ViewportRenderPolicy
     public static float CurrentResponsiveMaxRenderScale => CurrentQuality.ResponsiveMaxScale;
     public static float CurrentDetailRenderPaddingScreenPx => CurrentQuality.DetailPaddingScreenPx;
 
+    public static float DetailRenderPaddingScreenPxForZoom(float zoom)
+    {
+        float configured = CurrentQuality.DetailPaddingScreenPx;
+        if (zoom < 2.0f)
+            return Math.Min(configured, 384f);
+        if (zoom < 4.0f)
+            return Math.Min(configured, 512f);
+
+        return configured;
+    }
+
     public static string NormalizeQualityMode(string? mode)
     {
         string clean = (mode ?? "").Trim();
@@ -184,6 +195,15 @@ public static class ViewportRenderPolicy
         bool fastNavigationFrame)
     {
         return true;
+    }
+
+    public static bool ShouldUseSimplifiedAreaPaint(
+        float zoom,
+        int activePageMeasurementCount,
+        bool fastNavigationFrame)
+    {
+        return activePageMeasurementCount >= DenseMeasurementLabelThreshold &&
+               (fastNavigationFrame || zoom <= FarZoomFastFrameThreshold);
     }
 
     public static float VisibleGeometryPaddingPdf(float zoom) =>

@@ -36,6 +36,8 @@ internal static class TakeoffsTreeRegressionTests
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
         string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
         string prefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetchDeferred(");
+        string nearbyPrefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)");
+        string queuePrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePrefetchAt(");
 
         AssertFalse(
             loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
@@ -78,6 +80,11 @@ internal static class TakeoffsTreeRegressionTests
             prefetchMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
             prefetchMethod.Contains("QueueNearbyPagePreviewPrefetch(viewportPage)", StringComparison.Ordinal),
             "nearby preview prefetch should be queued after page-open critical work and guarded against stale pages");
+        AssertTrue(
+            queuePrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("activeIndex - 2", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("activeIndex + 3", StringComparison.Ordinal),
+            "nearby page prefetch should warm normal clean renders around the active sheet, not only tiny previews");
     }
 
     public static void ProgrammaticPageSelectionOpensViewportDirectly()
@@ -1138,6 +1145,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("SelectDetailRenderScale", StringComparison.Ordinal) &&
             policy.Contains("ShouldUseZoomRefreshRender", StringComparison.Ordinal) &&
             policy.Contains("ShouldSkipFullRefreshDuringDetail", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPaddingScreenPxForZoom", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
@@ -1148,8 +1156,9 @@ internal static class TakeoffsTreeRegressionTests
             "interactive page opens should show the cheap preview first, then queue a capped base refresh and clipped detail instead of leaving the sheet blurry");
         AssertTrue(
             rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
+            rendering.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&
             rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
-            "paint should use sharper upscale sampling and overlay the high-DPI detail tile");
+            "paint should use sharper upscale sampling and skip the heavy base bitmap when a high-DPI detail tile covers the view");
         AssertFalse(
             rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal),
             "main PDF bitmap paint must not switch to low-quality sampling while panning at high zoom");
@@ -1189,6 +1198,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
             detail.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
+            detail.Contains("ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
             "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, and decode them off the UI path");
         AssertTrue(
@@ -1210,8 +1220,13 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("TryGetBest", StringComparison.Ordinal) &&
             renderCache.Contains("LayerRenderBitmapCacheSignature", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveLayerBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
+            renderCache.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
+            renderCache.Contains("CleanRenderPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("24_000_000_000L", StringComparison.Ordinal),
-            "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including best-scale fallback and completed stale high-zoom renders");
+            "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including best-scale fallback, clean prefetch, and completed stale high-zoom renders");
+        AssertTrue(
+            service.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal),
+            "background clean render prefetch should use dedicated helper processes instead of blocking the interactive worker");
         AssertTrue(
             service.Contains("public RectDto? Clip { get; set; }", StringComparison.Ordinal) &&
             service.Contains("Clip = hasClip ? RectDto.FromSKRect", StringComparison.Ordinal) &&

@@ -13,8 +13,8 @@ using SkiaSharp;
 
 namespace OurPlaneCore;
 
-public static partial class PdfLayerRenderService
-{
+    public static partial class PdfLayerRenderService
+    {
     internal static bool TryRender(
         string pdfPath,
         int pageIndex,
@@ -124,6 +124,112 @@ public static partial class PdfLayerRenderService
         catch (Exception ex)
         {
             AppLog.Warn(ex, $"TryRender failed for {pdfPath} page {pageIndex}");
+            error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch { }
+        }
+    }
+
+    public static Task<(bool Ok, PdfLayerRenderResult Result, string Error)> TryRenderDedicatedProcessAsync(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        Task.Run(() =>
+        {
+            bool ok = TryRenderDedicatedProcess(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                layerStates,
+                highlightedLayers,
+                cachedLayers,
+                out PdfLayerRenderResult result,
+                out string error);
+            return (ok, result, error);
+        });
+
+    private static bool TryRenderDedicatedProcess(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        out PdfLayerRenderResult result,
+        out string error)
+    {
+        result = new PdfLayerRenderResult();
+        error = "";
+        string cacheKey = BuildRenderCacheKey(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers);
+        if (TryGetCachedRender(cacheKey, out result))
+            return true;
+
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
+        string inputPath = Path.Combine(tempDir, "input.json");
+        string outputPath = Path.Combine(tempDir, "output.json");
+        string imagePath = Path.Combine(tempDir, "page.png");
+
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var request = new RenderRequest
+            {
+                Pdf = pdfPath,
+                Page = pageIndex,
+                Scale = renderScale,
+                Image = imagePath,
+                InlineImage = true,
+                InlineImageMaxPixels = InlineRenderImageMaxPixels,
+                Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
+                Highlight = highlightedLayers.ToList(),
+                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+            };
+
+            if (!TryRunFileCommand("render", request, inputPath, outputPath, out RenderResponse? response, out error))
+                return false;
+            if (response == null || !response.Ok)
+            {
+                error = response?.Error ?? "PyMuPDF did not return a render response.";
+                return false;
+            }
+            if (!TryReadRenderImageBytes(response, out byte[] imageBytes, out error))
+                return false;
+
+            result = new PdfLayerRenderResult
+            {
+                ImageBytes = imageBytes,
+                WidthPt = response.WidthPt,
+                HeightPt = response.HeightPt,
+                Layers = response.Layers
+                    .Select(l => new PdfLayer(l.Xref, l.Name, l.On, highlightedLayers.Contains(l.Xref)))
+                    .ToList(),
+                LayersCaptured = true,
+            };
+            AddCachedRender(cacheKey, result);
+            if (PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+                PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"TryRenderDedicatedProcess failed for {pdfPath} page {pageIndex}");
             error = ex.Message;
             return false;
         }

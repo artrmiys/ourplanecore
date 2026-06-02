@@ -3621,6 +3621,13 @@ static void ViewportMeasurementLodLimitsDenseDetails()
             activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementDetailThreshold + 1,
             fastNavigationFrame: false),
         "dense pages should skip expensive measurement detail layer");
+
+    AssertTrue(
+        ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(1.8f) <= 384f,
+        "moderate zoom detail renders should keep clips small enough for responsive panning");
+    AssertTrue(
+        ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(2.5f) <= 512f,
+        "work zoom detail renders should avoid rendering a huge offscreen margin");
 }
 
 static void ViewportLodHidesExpensiveLayersDuringFastFrames()
@@ -3642,6 +3649,13 @@ static void ViewportLodHidesExpensiveLayersDuringFastFrames()
             activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementGeometryThreshold + 1,
             fastNavigationFrame: true),
         "takeoff geometry should stay visible while high-resolution PDF detail catches up");
+
+    AssertTrue(
+        ViewportRenderPolicy.ShouldUseSimplifiedAreaPaint(
+            zoom: 0.5f,
+            activePageMeasurementCount: ViewportRenderPolicy.DenseMeasurementLabelThreshold,
+            fastNavigationFrame: false),
+        "far zoom dense sheets should skip expensive area fills while keeping outlines visible");
 }
 
 static void ViewportMeasurementSpatialIndexFiltersByBounds()

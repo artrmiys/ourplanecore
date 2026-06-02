@@ -102,7 +102,8 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        SKRect clip = ClampPdfRectToPage(GetVisiblePdfRect(ViewportRenderPolicy.CurrentDetailRenderPaddingScreenPx));
+        SKRect clip = ClampPdfRectToPage(GetVisiblePdfRect(
+            ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)));
         if (clip.Width <= 0 || clip.Height <= 0)
             return false;
 
@@ -148,6 +149,27 @@ public sealed partial class PdfViewport
 
             tile.LastUsed = ++_detailTileClock;
             return true;
+        }
+
+        return false;
+    }
+
+    private bool DetailRenderCoversVisibleViewForPaint()
+    {
+        if (_detailTiles.Count == 0 || _zoom <= 0)
+            return false;
+
+        SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
+        string pageKey = DetailPageKey(_pdfPath, _pdfIndex, _pageFolder);
+        float minimumPaintScale = Math.Max(_bitmapScale, _zoom * 0.90f);
+        foreach (DetailRenderTile tile in _detailTiles)
+        {
+            if (!string.Equals(tile.PageKey, pageKey, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (tile.BitmapScale < minimumPaintScale)
+                continue;
+            if (RectContains(tile.PdfRect, visible, tolerancePt: 0.5f))
+                return true;
         }
 
         return false;

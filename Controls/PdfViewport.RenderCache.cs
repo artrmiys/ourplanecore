@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using SkiaSharp;
 
@@ -14,6 +15,11 @@ public sealed partial class PdfViewport
     private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 320, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
+    private static readonly object CleanRenderPrefetchGate = new();
+    private static readonly HashSet<string> CleanRenderPrefetchInFlight = [];
+    private static readonly SemaphoreSlim CleanRenderPrefetchSemaphore = new(
+        Math.Clamp(Environment.ProcessorCount / 3, 1, 4),
+        Math.Clamp(Environment.ProcessorCount / 3, 1, 4));
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
         ResolveViewportRamBudget(1_500_000_000L, 4_000_000_000L, 0.06);
@@ -483,6 +489,52 @@ public sealed partial class PdfViewport
         _ = PrefetchPagePreviewAsync(pdfPath, pageIndex, renderScale, cacheKey);
     }
 
+    public static void PrefetchCleanLayerRender(
+        string pdfPath,
+        int pageIndex,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        float renderScale = ViewportRenderPolicy.ResponsiveMinRenderScale)
+    {
+        if (string.IsNullOrWhiteSpace(pdfPath) || pageIndex < 0)
+            return;
+
+        renderScale = Math.Clamp(renderScale, ViewportRenderPolicy.ResponsiveMinRenderScale, 2.25f);
+        string cacheKey;
+        string signature;
+        try
+        {
+            cacheKey = LayerRenderBitmapCacheKey(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                EmptyLayerStates,
+                EmptyHighlightedLayers,
+                cachedLayers);
+            signature = LayerRenderBitmapCacheSignature(
+                pdfPath,
+                pageIndex,
+                EmptyLayerStates,
+                EmptyHighlightedLayers,
+                cachedLayers);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport clean render prefetch skipped for {pdfPath} page {pageIndex + 1}");
+            return;
+        }
+
+        if (LayerBitmapCache.Contains(cacheKey))
+            return;
+
+        lock (CleanRenderPrefetchGate)
+        {
+            if (!CleanRenderPrefetchInFlight.Add(cacheKey))
+                return;
+        }
+
+        _ = PrefetchCleanLayerRenderAsync(pdfPath, pageIndex, renderScale, cachedLayers, cacheKey, signature);
+    }
+
     private static async Task PrefetchPagePreviewAsync(
         string pdfPath,
         int pageIndex,
@@ -510,4 +562,82 @@ public sealed partial class PdfViewport
                 DocnetPreviewPrefetchInFlight.Remove(cacheKey);
         }
     }
+
+    private static async Task PrefetchCleanLayerRenderAsync(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        string cacheKey,
+        string signature)
+    {
+        SKBitmap? decodedBitmap = null;
+        try
+        {
+            await Task.Delay(350);
+            await CleanRenderPrefetchSemaphore.WaitAsync();
+            try
+            {
+                if (LayerBitmapCache.Contains(cacheKey))
+                    return;
+
+                PdfLayerRenderResult render;
+                if (!PdfPreviewRenderCache.TryReadCleanRender(pdfPath, pageIndex, renderScale, out render))
+                {
+                    var rendered = await PdfLayerRenderService.TryRenderDedicatedProcessAsync(
+                        pdfPath,
+                        pageIndex,
+                        renderScale,
+                        EmptyLayerStates,
+                        EmptyHighlightedLayers,
+                        cachedLayers);
+                    if (!rendered.Ok)
+                    {
+                        if (!string.IsNullOrWhiteSpace(rendered.Error))
+                            AppLog.Warn($"Viewport clean render prefetch unavailable: {rendered.Error}");
+                        return;
+                    }
+
+                    render = rendered.Result;
+                }
+
+                decodedBitmap = await Task.Run(() => SKBitmap.Decode(render.ImageBytes));
+                if (decodedBitmap == null || render.WidthPt <= 0 || render.HeightPt <= 0)
+                    return;
+
+                float bitmapScale = decodedBitmap.Width / render.WidthPt;
+                LayerBitmapCache.Put(
+                    cacheKey,
+                    signature,
+                    render.WidthPt,
+                    render.HeightPt,
+                    bitmapScale,
+                    decodedBitmap,
+                    render.Layers);
+                AppLog.Info(
+                    $"Viewport clean render prefetched; pdf='{Path.GetFileName(pdfPath)}'; " +
+                    $"pdfPage={pageIndex + 1}; scale={renderScale:0.###}; bitmapScale={bitmapScale:0.###}");
+            }
+            finally
+            {
+                CleanRenderPrefetchSemaphore.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport clean render prefetch failed for {Path.GetFileName(pdfPath)} page {pageIndex + 1}");
+        }
+        finally
+        {
+            decodedBitmap?.Dispose();
+            lock (CleanRenderPrefetchGate)
+                CleanRenderPrefetchInFlight.Remove(cacheKey);
+        }
+    }
+
+    private static readonly IReadOnlyDictionary<int, bool> EmptyLayerStates =
+        new Dictionary<int, bool>();
+
+    private static readonly IReadOnlyCollection<int> EmptyHighlightedLayers =
+        Array.Empty<int>();
 }

@@ -83,8 +83,10 @@ public sealed partial class PdfViewport
                         (srcTop / _bitmapScale - _panY) * _zoom,
                         (srcRight / _bitmapScale - _panX) * _zoom,
                         (srcBottom / _bitmapScale - _panY) * _zoom);
+                    bool detailCoversVisiblePage = DetailRenderCoversVisibleViewForPaint();
                     DrawPagePaperUnderlay(canvas, dst);
-                    canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
+                    if (!detailCoversVisiblePage)
+                        canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
                     DrawDetailRenderTile(canvas);
                     DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);

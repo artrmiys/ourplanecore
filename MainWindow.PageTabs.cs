@@ -561,9 +561,11 @@ public partial class MainWindow
         if (activeIndex < 0)
             return;
 
-        QueuePreviewPrefetchAt(pages, activeIndex + 1);
-        QueuePreviewPrefetchAt(pages, activeIndex - 1);
-        QueuePreviewPrefetchAt(pages, activeIndex + 2);
+        QueuePrefetchAt(pages, activeIndex + 1);
+        QueuePrefetchAt(pages, activeIndex - 1);
+        QueuePrefetchAt(pages, activeIndex + 2);
+        QueuePrefetchAt(pages, activeIndex - 2);
+        QueuePrefetchAt(pages, activeIndex + 3);
     }
 
     private IReadOnlyList<PageInfo> CachedPagesForPreviewPrefetch()
@@ -588,13 +590,17 @@ public partial class MainWindow
         return _pagePreviewPrefetchPages;
     }
 
-    private static void QueuePreviewPrefetchAt(IReadOnlyList<PageInfo> pages, int index)
+    private static void QueuePrefetchAt(IReadOnlyList<PageInfo> pages, int index)
     {
         if (index < 0 || index >= pages.Count)
             return;
 
         PageInfo page = pages[index];
         PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage);
+        PdfViewport.PrefetchCleanLayerRender(
+            page.PdfPath,
+            page.PdfPage,
+            page.PdfLayersCached ? page.PdfLayers : null);
     }
 
     private void ClosePageTab(PageTabState tab)
