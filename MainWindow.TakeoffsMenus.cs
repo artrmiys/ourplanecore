@@ -126,6 +126,10 @@ public partial class MainWindow
             nestedTakeoffCount > 1 ? $"Bulk Item Properties ({nestedTakeoffCount})..." : "Bulk Item Properties...",
             nestedTakeoffCount > 0,
             () => EditSelectedTakeoffProperties(tvi)));
+        menu.Items.Add(MakeMenuItem(
+            nestedTakeoffCount > 1 ? $"Random Colors for Items ({nestedTakeoffCount})" : "Random Colors for Items",
+            nestedTakeoffCount > 0,
+            () => RandomizeTakeoffItemColors(tvi)));
         menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
         menu.Items.Add(BuildTakeoff3DMenu(tvi));
 

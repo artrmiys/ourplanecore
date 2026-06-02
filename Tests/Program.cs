@@ -89,6 +89,7 @@ var tests = new List<(string Name, Action Run)>
     ("bookmarks dock panel and shortcut are wired", TakeoffsTreeRegressionTests.BookmarksDockPanelAndShortcutAreWired),
     ("takeoff template presets and collapsed depth are wired", TakeoffsTreeRegressionTests.TakeoffTemplatePresetsAndCollapsedDepthAreWired),
     ("takeoff tree search bulk visibility and markup selection are wired", TakeoffsTreeRegressionTests.TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired),
+    ("takeoff folder random colors are wired", TakeoffsTreeRegressionTests.TakeoffFolderRandomColorsAreWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
     ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),

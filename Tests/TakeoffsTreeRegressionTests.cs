@@ -698,6 +698,23 @@ internal static class TakeoffsTreeRegressionTests
             "viewport markups must support multi-select delete and snapshot-based ruler hiding");
     }
 
+    public static void TakeoffFolderRandomColorsAreWired()
+    {
+        string menus = ReadRepoFile("MainWindow.TakeoffsMenus.cs");
+        string colors = ReadRepoFile("MainWindow.TakeoffsRandomColors.cs");
+
+        AssertTrue(
+            menus.Contains("Random Colors for Items", StringComparison.Ordinal) &&
+            menus.Contains("RandomizeTakeoffItemColors(tvi)", StringComparison.Ordinal),
+            "takeoff folder context menu must expose random colors for nested takeoff items");
+        AssertTrue(
+            colors.Contains("DistinctColorableTakeoffItems(TakeoffItemsForSelection(anchor))", StringComparison.Ordinal) &&
+            colors.Contains("measurement.Color = color", StringComparison.Ordinal) &&
+            colors.Contains("OurPlaneCoreJobStore.SaveTakeoffItem(item)", StringComparison.Ordinal) &&
+            colors.Contains("_viewport.RefreshMeasurementDisplay()", StringComparison.Ordinal),
+            "random takeoff colors must update item color, measurement colors, persisted sidecars, and viewport paint");
+    }
+
     public static void PageTakeoffLayersAndAltVertexModeAreWired()
     {
         string pageLegend = ReadPageTakeoffLegendSources();
