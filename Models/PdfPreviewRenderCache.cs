@@ -17,6 +17,16 @@ public static class PdfPreviewRenderCache
     private const float MaxPersistedRenderScale = 2.25f;
     private const long MaxPersistedRenderPixels = 30_000_000;
     private const long MaxPersistedRenderImageBytes = 96_000_000;
+    private const int MaxMemoryEntries = 96;
+    private const long MaxMemoryBytes = 512_000_000;
+    private const long MaxMemoryEntryBytes = 96_000_000;
+    private static readonly object MemoryCacheLock = new();
+    private static readonly Dictionary<string, MemoryCacheEntry> MemoryCache = [];
+    private static long MemoryCacheBytes;
+    private static long MemoryCacheClock;
+    private static readonly object PruneLock = new();
+    private static DateTime LastPruneUtc = DateTime.MinValue;
+    private static readonly TimeSpan MinPruneInterval = TimeSpan.FromSeconds(20);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -42,6 +52,8 @@ public static class PdfPreviewRenderCache
             return false;
         if (!TryBuildCachePaths(pdfPath, pageIndex, renderScale, out CachePaths paths, out PreviewCacheIdentity identity))
             return false;
+        if (TryReadMemoryCleanRender(identity.Key, out result))
+            return true;
 
         try
         {
@@ -74,7 +86,10 @@ public static class PdfPreviewRenderCache
                     .ToList(),
                 LayersCaptured = metadata.LayersCaptured,
             };
-            return result.WidthPt > 0 && result.HeightPt > 0;
+            bool valid = result.WidthPt > 0 && result.HeightPt > 0;
+            if (valid)
+                AddMemoryCleanRender(identity.Key, result);
+            return valid;
         }
         catch (Exception ex)
         {
@@ -136,7 +151,8 @@ public static class PdfPreviewRenderCache
             File.WriteAllText(tempMetadata, JsonSerializer.Serialize(metadata, JsonOptions));
             File.Move(tempImage, paths.ImagePath, overwrite: true);
             File.Move(tempMetadata, paths.MetadataPath, overwrite: true);
-            PruneBestEffort();
+            AddMemoryCleanRender(identity.Key, result);
+            PruneBestEffortThrottled();
         }
         catch (Exception ex)
         {
@@ -250,6 +266,84 @@ public static class PdfPreviewRenderCache
         catch { }
     }
 
+    private static bool TryReadMemoryCleanRender(string key, out PdfLayerRenderResult result)
+    {
+        lock (MemoryCacheLock)
+        {
+            if (MemoryCache.TryGetValue(key, out MemoryCacheEntry? entry))
+            {
+                entry.LastUsed = ++MemoryCacheClock;
+                result = entry.Result;
+                return true;
+            }
+        }
+
+        result = new PdfLayerRenderResult();
+        return false;
+    }
+
+    private static void AddMemoryCleanRender(string key, PdfLayerRenderResult result)
+    {
+        long bytes = result.ImageBytes.LongLength;
+        if (bytes <= 0 || bytes > MaxMemoryEntryBytes || result.WidthPt <= 0 || result.HeightPt <= 0)
+            return;
+
+        lock (MemoryCacheLock)
+        {
+            if (MemoryCache.TryGetValue(key, out MemoryCacheEntry? existing))
+            {
+                MemoryCacheBytes -= existing.Bytes;
+                existing.Result = result;
+                existing.Bytes = bytes;
+                existing.LastUsed = ++MemoryCacheClock;
+                MemoryCacheBytes += bytes;
+                TrimMemoryCache();
+                return;
+            }
+
+            MemoryCache[key] = new MemoryCacheEntry(result, bytes, ++MemoryCacheClock);
+            MemoryCacheBytes += bytes;
+            TrimMemoryCache();
+        }
+    }
+
+    private static void TrimMemoryCache()
+    {
+        while (MemoryCache.Count > MaxMemoryEntries || MemoryCacheBytes > MaxMemoryBytes)
+        {
+            string oldestKey = "";
+            long oldest = long.MaxValue;
+            foreach (var pair in MemoryCache)
+            {
+                if (pair.Value.LastUsed >= oldest)
+                    continue;
+
+                oldest = pair.Value.LastUsed;
+                oldestKey = pair.Key;
+            }
+
+            if (string.IsNullOrWhiteSpace(oldestKey))
+                return;
+
+            MemoryCacheBytes -= MemoryCache[oldestKey].Bytes;
+            MemoryCache.Remove(oldestKey);
+        }
+    }
+
+    private static void PruneBestEffortThrottled()
+    {
+        lock (PruneLock)
+        {
+            DateTime now = DateTime.UtcNow;
+            if (now - LastPruneUtc < MinPruneInterval)
+                return;
+
+            LastPruneUtc = now;
+        }
+
+        PruneBestEffort();
+    }
+
     private static void PruneBestEffort()
     {
         try
@@ -339,5 +433,19 @@ public static class PdfPreviewRenderCache
             Math.Abs(RenderScale - identity.RenderScale) < 0.001 &&
             WidthPt > 0 &&
             HeightPt > 0;
+    }
+
+    private sealed class MemoryCacheEntry
+    {
+        public MemoryCacheEntry(PdfLayerRenderResult result, long bytes, long lastUsed)
+        {
+            Result = result;
+            Bytes = bytes;
+            LastUsed = lastUsed;
+        }
+
+        public PdfLayerRenderResult Result { get; set; }
+        public long Bytes { get; set; }
+        public long LastUsed { get; set; }
     }
 }

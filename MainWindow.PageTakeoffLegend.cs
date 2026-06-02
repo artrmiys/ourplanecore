@@ -17,6 +17,9 @@ public partial class MainWindow
 
     private void RebuildPageTakeoffNodes(TreeViewItem pageItem, PageInfo page)
     {
+        foreach (TreeViewItem child in pageItem.Items.OfType<TreeViewItem>())
+            UnregisterPageTreeItemSubtree(child);
+
         pageItem.Items.Clear();
         IReadOnlyList<TakeoffItem> orderedTakeoffs = OrderedTakeoffsForPage(page);
         var addedTakeoffs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -34,11 +37,16 @@ public partial class MainWindow
             };
             AttachLazyPageTakeoffContextMenu(child, node);
             pageItem.Items.Add(child);
+            RegisterPageTreeItemSubtree(child);
             legendIndex++;
         }
 
         if (!string.IsNullOrWhiteSpace(page.OverlayPageFolder))
-            pageItem.Items.Add(CreatePageOverlayTreeItem(page));
+        {
+            TreeViewItem overlayItem = CreatePageOverlayTreeItem(page);
+            pageItem.Items.Add(overlayItem);
+            RegisterPageTreeItemSubtree(overlayItem);
+        }
     }
 
     private TreeViewItem CreatePageOverlayTreeItem(PageInfo page)

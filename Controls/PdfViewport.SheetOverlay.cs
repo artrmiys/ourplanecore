@@ -187,7 +187,7 @@ public sealed partial class PdfViewport
             (displayPoint.Y - _sheetOverlayOffsetYPt) / scale);
     }
 
-    private void DrawSheetOverlay(SKCanvas canvas)
+    private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)
     {
         if (_sheetOverlayBitmap == null || _pdfW <= 0 || _pdfH <= 0)
             return;
@@ -206,7 +206,30 @@ public sealed partial class PdfViewport
             _sheetOverlayOffsetYPt,
             _sheetOverlayOffsetXPt + width * _sheetOverlayScale,
             _sheetOverlayOffsetYPt + height * _sheetOverlayScale);
-        canvas.DrawBitmap(_sheetOverlayBitmap, dest, paint);
+        if (!RectsIntersect(dest, visiblePdf))
+            return;
+
+        SKRect drawDest = IntersectRects(dest, visiblePdf);
+        if (drawDest.Width <= 0 || drawDest.Height <= 0 || dest.Width <= 0 || dest.Height <= 0)
+            return;
+
+        var src = new SKRect(
+            (drawDest.Left - dest.Left) / dest.Width * _sheetOverlayBitmap.Width,
+            (drawDest.Top - dest.Top) / dest.Height * _sheetOverlayBitmap.Height,
+            (drawDest.Right - dest.Left) / dest.Width * _sheetOverlayBitmap.Width,
+            (drawDest.Bottom - dest.Top) / dest.Height * _sheetOverlayBitmap.Height);
+        canvas.DrawBitmap(_sheetOverlayBitmap, src, drawDest, paint);
+    }
+
+    private static SKRect IntersectRects(SKRect a, SKRect b)
+    {
+        float left = Math.Max(a.Left, b.Left);
+        float top = Math.Max(a.Top, b.Top);
+        float right = Math.Min(a.Right, b.Right);
+        float bottom = Math.Min(a.Bottom, b.Bottom);
+        return right > left && bottom > top
+            ? new SKRect(left, top, right, bottom)
+            : SKRect.Empty;
     }
 
     private void DrawSheetOverlayEditGuides(SKCanvas canvas)

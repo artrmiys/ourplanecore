@@ -49,19 +49,16 @@ namespace OurPlaneCore;
         result = new PdfLayerRenderResult();
         error = "";
         bool hasClip = IsUsableClip(clipRect);
-        string cacheKey = "";
-        if (!hasClip)
-        {
-            cacheKey = BuildRenderCacheKey(
-                pdfPath,
-                pageIndex,
-                renderScale,
-                layerStates,
-                highlightedLayers,
-                cachedLayers);
-            if (TryGetCachedRender(cacheKey, out result))
-                return true;
-        }
+        string cacheKey = BuildRenderCacheKey(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers,
+            hasClip ? clipRect : null);
+        if (TryGetCachedRender(cacheKey, out result))
+            return true;
 
         string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
@@ -113,10 +110,7 @@ namespace OurPlaneCore;
                     .ToList(),
                 LayersCaptured = true,
             };
-            if (!hasClip)
-            {
-                AddCachedRender(cacheKey, result);
-            }
+            AddCachedRender(cacheKey, result);
             if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
                 PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
             return true;
@@ -175,19 +169,16 @@ namespace OurPlaneCore;
         result = new PdfLayerRenderResult();
         error = "";
         bool hasClip = IsUsableClip(clipRect);
-        string cacheKey = "";
-        if (!hasClip)
-        {
-            cacheKey = BuildRenderCacheKey(
-                pdfPath,
-                pageIndex,
-                renderScale,
-                layerStates,
-                highlightedLayers,
-                cachedLayers);
-            if (TryGetCachedRender(cacheKey, out result))
-                return true;
-        }
+        string cacheKey = BuildRenderCacheKey(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers,
+            hasClip ? clipRect : null);
+        if (TryGetCachedRender(cacheKey, out result))
+            return true;
 
         string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
@@ -211,7 +202,8 @@ namespace OurPlaneCore;
                 Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
-            if (!TryRunFileCommand("render", request, inputPath, outputPath, out RenderResponse? response, out error))
+            if (!TryInvokePrefetchWorker("render", request, out RenderResponse? response, out error) &&
+                !TryRunFileCommand("render", request, inputPath, outputPath, out response, out error))
                 return false;
             if (response == null || !response.Ok)
             {
@@ -232,8 +224,7 @@ namespace OurPlaneCore;
                     .ToList(),
                 LayersCaptured = true,
             };
-            if (!hasClip)
-                AddCachedRender(cacheKey, result);
+            AddCachedRender(cacheKey, result);
             if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
                 PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
             return true;
@@ -304,12 +295,19 @@ namespace OurPlaneCore;
             if (RenderCache.ContainsKey(key))
                 return;
 
+            long bytes = result.ImageBytes.LongLength;
+            if (bytes <= 0 || bytes > MaxRenderCacheEntryBytes)
+                return;
+
             RenderCache[key] = result;
             RenderCacheOrder.Enqueue(key);
-            while (RenderCache.Count > MaxRenderCacheEntries && RenderCacheOrder.Count > 0)
+            RenderCacheBytes += bytes;
+            while ((RenderCache.Count > MaxRenderCacheEntries || RenderCacheBytes > MaxRenderCacheBytes) &&
+                   RenderCacheOrder.Count > 0)
             {
                 string oldKey = RenderCacheOrder.Dequeue();
-                RenderCache.Remove(oldKey);
+                if (RenderCache.Remove(oldKey, out PdfLayerRenderResult? removed))
+                    RenderCacheBytes -= removed.ImageBytes.LongLength;
             }
         }
     }
@@ -320,7 +318,8 @@ namespace OurPlaneCore;
         double renderScale,
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
-        IReadOnlyList<PdfLayerInfo>? cachedLayers)
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect = null)
     {
         var info = new FileInfo(pdfPath);
         var sb = new StringBuilder();
@@ -343,6 +342,16 @@ namespace OurPlaneCore;
         {
             foreach (var layer in cachedLayers.OrderBy(l => l.Number))
                 sb.Append(layer.Number).Append('=').Append(layer.IsOn ? '1' : '0').Append(':').Append(layer.Name).Append(';');
+        }
+
+        if (IsUsableClip(clipRect))
+        {
+            SKRect clip = clipRect!.Value;
+            sb.Append("|clip:")
+              .Append(Math.Round(clip.Left, 1)).Append(',')
+              .Append(Math.Round(clip.Top, 1)).Append(',')
+              .Append(Math.Round(clip.Right, 1)).Append(',')
+              .Append(Math.Round(clip.Bottom, 1));
         }
 
         return sb.ToString();

@@ -154,21 +154,7 @@ public partial class MainWindow
     }
 
     private TreeViewItem? FindPageTakeoffTreeItem(string pageFolder, string takeoffFolder)
-    {
-        foreach (TreeViewItem item in EnumeratePageTreeItems())
-        {
-            if (item.Tag is not PageTakeoffNode node)
-                continue;
-
-            if (IsSamePageFolder(node.Page.FolderPath, pageFolder) &&
-                string.Equals(node.Takeoff.FolderPath, takeoffFolder, StringComparison.OrdinalIgnoreCase))
-            {
-                return item;
-            }
-        }
-
-        return null;
-    }
+        => FindPageTakeoffTreeItemIndexed(pageFolder, takeoffFolder);
 
     private static TreeViewItem? FindPageTakeoffTreeItem(TreeViewItem pageItem, string takeoffFolder)
     {

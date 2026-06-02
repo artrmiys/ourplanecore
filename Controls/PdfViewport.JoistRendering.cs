@@ -18,12 +18,17 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private readonly Dictionary<Measurement, JoistLayoutResult> _paintJoistLayoutCache = [];
+
+    private void ClearPaintJoistLayoutCache() =>
+        _paintJoistLayoutCache.Clear();
+
     private void DrawJoistLayout(SKCanvas canvas, Measurement m, SKColor color, bool drawLabels)
     {
         if (!m.JoistEnabled)
             return;
 
-        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(m, ScaleMetersPerPt);
+        JoistLayoutResult layout = PaintJoistLayout(m);
         if (!layout.HasScale || layout.Count == 0)
             return;
 
@@ -41,15 +46,23 @@ public sealed partial class PdfViewport
         }
 
         if (drawLabels)
-            DrawJoistLayoutLabels(canvas, m);
+            DrawJoistLayoutLabels(canvas, m, layout, GetVisiblePdfRect());
     }
 
-    private void DrawJoistLayoutLabels(SKCanvas canvas, Measurement measurement)
+    private void DrawJoistLayoutLabels(SKCanvas canvas, Measurement measurement, SKRect visiblePdf)
+    {
+        DrawJoistLayoutLabels(canvas, measurement, PaintJoistLayout(measurement), visiblePdf);
+    }
+
+    private void DrawJoistLayoutLabels(
+        SKCanvas canvas,
+        Measurement measurement,
+        JoistLayoutResult layout,
+        SKRect visiblePdf)
     {
         if (!ShouldDrawJoistSegmentLabels(measurement))
             return;
 
-        JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, ScaleMetersPerPt);
         if (!layout.HasScale || layout.Count == 0 || layout.Count > 180)
             return;
 
@@ -59,6 +72,9 @@ public sealed partial class PdfViewport
             SKPoint mid = new(
                 (segment.Start.X + segment.End.X) / 2f,
                 (segment.Start.Y + segment.End.Y) / 2f);
+            if (!RectContains(visiblePdf, mid))
+                continue;
+
             DrawScreenTextBox(
                 canvas,
                 mid,
@@ -70,6 +86,19 @@ public sealed partial class PdfViewport
                 2f,
                 centered: true);
         }
+    }
+
+    private JoistLayoutResult PaintJoistLayout(Measurement measurement)
+    {
+        if (_paintJoistLayoutCache.TryGetValue(measurement, out JoistLayoutResult? layout) &&
+            layout != null)
+        {
+            return layout;
+        }
+
+        layout = JoistTakeoffCalculator.Calculate(measurement, ScaleMetersPerPt);
+        _paintJoistLayoutCache[measurement] = layout;
+        return layout;
     }
 
     private bool ShouldDrawJoistSegmentLabels(Measurement measurement) =>

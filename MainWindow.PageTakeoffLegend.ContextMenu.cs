@@ -200,12 +200,15 @@ public partial class MainWindow
         if (keySet.Count == 0)
             return [];
 
-        return EnumeratePageTreeItems()
+        if (FindPageTreeItemByFolder(anchor.Page.FolderPath) is not { } pageItem)
+            return [];
+
+        return pageItem.Items
+            .OfType<TreeViewItem>()
             .Select(item => item.Tag as PageTakeoffNode)
             .Where(node => node != null &&
                            !string.IsNullOrWhiteSpace(node.Page.FolderPath) &&
                            !string.IsNullOrWhiteSpace(node.Takeoff.FolderPath) &&
-                           IsSamePageFolder(node.Page.FolderPath, anchor.Page.FolderPath) &&
                            keySet.Contains(PageTakeoffSelectionKey(node)))
             .Select(node => node!)
             .ToList();

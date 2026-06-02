@@ -50,6 +50,7 @@ public sealed partial class PdfViewport
         _renderNavigationFastFrame = IsFastNavigationFrame(activeMeasurements.Count);
         try
         {
+            ClearPaintJoistLayoutCache();
             SKRect visiblePdf = GetVisiblePdfRect();
 
             // ── PDF page bitmap ───────────────────────────────────────────────────
@@ -111,7 +112,7 @@ public sealed partial class PdfViewport
                 canvas.Concat(ref measMtx);
                 sectionStart = frameWatch.ElapsedMilliseconds;
                 if (ViewportRenderPolicy.ShouldDrawSheetOverlay(_renderNavigationFastFrame, IsSheetOverlayPointEditing))
-                    DrawSheetOverlay(canvas);
+                    DrawSheetOverlay(canvas, visiblePdf);
                 DrawSheetOverlayEditGuides(canvas);
                 DrawCursorGuide(canvas, visiblePdf);
                 DrawTransformOverlay(canvas);
@@ -145,6 +146,7 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            ClearPaintJoistLayoutCache();
             frameWatch.Stop();
             ReportSlowViewportFrame(
                 frameWatch.ElapsedMilliseconds,

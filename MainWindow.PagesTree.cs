@@ -28,6 +28,7 @@ public partial class MainWindow
     private void ReloadPagesTree(string? selectPath = null, bool selectSilently = false)
     {
         InvalidatePagePreviewPrefetchCache();
+        ResetPageTreeItemIndex();
         PagesTree.Items.Clear();
         _pageTakeoffMultiSelection.Clear();
         _pageTakeoffRangeAnchorKey = null;
@@ -48,6 +49,7 @@ public partial class MainWindow
             // (its only other effects) already run below.
             FillPagesTree(PagesTree.Items, _currentJob.PagesRoot);
         }
+        RebuildPageTreeItemIndex();
         ClearDirtyPageTakeoffIndicators();
         RestoreExpandedTreeState(PagesTree, _expandedPageTreePaths, GetPagesNodePath);
 
@@ -244,39 +246,31 @@ public partial class MainWindow
 
     private void RefreshPageTakeoffIndicatorsForFolders(IEnumerable<string> pageFolders)
     {
-        var folderKeys = pageFolders
+        var folders = pageFolders
             .Where(folder => !string.IsNullOrWhiteSpace(folder))
-            .Select(NormalizePathForCompare)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .GroupBy(NormalizePathForCompare, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
             .ToList();
-        if (folderKeys.Count == 0)
+        if (folders.Count == 0)
             return;
 
-        var remaining = folderKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var refreshed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using (UsePageMeasurementLookup())
         {
-            foreach (TreeViewItem item in EnumeratePageTreeItems().ToList())
+            foreach (string folder in folders)
             {
-                if (item.Tag is not PageInfo page)
-                    continue;
-
-                string pageKey = NormalizePathForCompare(page.FolderPath);
-                if (!remaining.Remove(pageKey))
-                    continue;
+                if (FindPageTreeItemByFolder(folder) is not { Tag: PageInfo page } item)
+                {
+                    RefreshPagesTakeoffIndicators();
+                    return;
+                }
 
                 bool wasExpanded = item.IsExpanded;
                 item.Header = BuildPageHeader(page);
                 RebuildPageTakeoffNodes(item, page);
                 item.IsExpanded = wasExpanded;
-                refreshed.Add(pageKey);
+                refreshed.Add(NormalizePathForCompare(page.FolderPath));
             }
-        }
-
-        if (remaining.Count > 0)
-        {
-            RefreshPagesTakeoffIndicators();
-            return;
         }
 
         RefreshPageTreeRowsByFolderKeys(refreshed);
@@ -355,48 +349,17 @@ public partial class MainWindow
     {
         WithTreeExpansionTrackingSuppressed(() =>
         {
-            foreach (TreeViewItem item in PagesTree.Items)
-            {
-                if (SelectNodeByFolder(item, folderPath))
-                    return;
-            }
+            if (FindPageTreeItemByFolder(folderPath) is not { } item)
+                return;
+
+            ExpandTreeItemAndAncestors(item);
+            item.IsSelected = true;
+            item.BringIntoView();
         });
     }
 
     private TreeViewItem? FindPageTreeItemByFolder(string folderPath)
-    {
-        foreach (TreeViewItem item in EnumeratePageTreeItems())
-        {
-            string? itemPath = GetPagesNodePath(item);
-            if (itemPath != null && IsSamePageFolder(itemPath, folderPath))
-                return item;
-        }
-
-        return null;
-    }
-
-    private static bool SelectNodeByFolder(TreeViewItem item, string folderPath)
-    {
-        string? itemPath = GetPagesNodePath(item);
-        if (itemPath != null &&
-            IsSamePageFolder(itemPath, folderPath))
-        {
-            item.IsSelected = true;
-            item.BringIntoView();
-            return true;
-        }
-
-        foreach (TreeViewItem child in item.Items)
-        {
-            if (SelectNodeByFolder(child, folderPath))
-            {
-                item.IsExpanded = true;
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => FindPageTreeItemByFolderIndexed(folderPath);
 
     private void SelectPageByFolder(string folderPath)
     {

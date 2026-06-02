@@ -204,9 +204,16 @@ public partial class MainWindow
 
         TreeViewItem? preferredLinked = null;
         TreeViewItem? firstLinked = null;
-        foreach (TreeViewItem pageItem in EnumeratePageTreeItems())
+        var candidatePageFolders = items
+            .SelectMany(item => item.Measurements.Select(measurement => measurement.PageFolder))
+            .Where(pageFolder => !string.IsNullOrWhiteSpace(pageFolder))
+            .GroupBy(NormalizePathForCompare, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        foreach (string pageFolder in candidatePageFolders)
         {
-            if (pageItem.Tag is not PageInfo page)
+            if (FindPageTreeItemByFolder(pageFolder) is not { Tag: PageInfo page } pageItem)
                 continue;
 
             var matchedTakeoffs = items
@@ -245,6 +252,7 @@ public partial class MainWindow
         try
         {
             ExpandTreeItemAndAncestorsWithoutTracking(preferredLinked);
+            preferredLinked.IsSelected = true;
             BringPageTreeItemIntoCenteredView(preferredLinked);
         }
         finally

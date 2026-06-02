@@ -195,16 +195,18 @@ public sealed partial class PdfViewport
             return;
         }
 
-        bool drawAllLabels = ViewportRenderPolicy.ShouldDrawMeasurementLabels(
-            _zoom,
-            activeMeasurements.Count,
-            _renderNavigationFastFrame);
+        bool drawAllLabels =
+            !_renderNavigationFastFrame &&
+            ViewportRenderPolicy.ShouldDrawMeasurementLabels(
+                _zoom,
+                activeMeasurements.Count,
+                _renderNavigationFastFrame);
         IReadOnlyList<Measurement> labelMeasurements =
             visibleMeasurements ?? VisibleMeasurements(visiblePdf);
         foreach (var measurement in labelMeasurements)
         {
             if (drawAllLabels || ShouldDrawDenseMeasurementLabel(measurement))
-                DrawMeasurementTopLabels(canvas, measurement);
+                DrawMeasurementTopLabels(canvas, measurement, visiblePdf);
         }
     }
 
@@ -254,24 +256,48 @@ public sealed partial class PdfViewport
         return merged ?? candidates;
     }
 
-    private void DrawMeasurementTopLabels(SKCanvas canvas, Measurement measurement)
+    private void DrawMeasurementTopLabels(SKCanvas canvas, Measurement measurement, SKRect visiblePdf)
     {
         bool isJoistArea = measurement.MType == "area" && measurement.JoistEnabled;
+        JoistLayoutResult? joistLayout = null;
         if (isJoistArea)
-            DrawJoistLayoutLabels(canvas, measurement);
+        {
+            joistLayout = PaintJoistLayout(measurement);
+            DrawJoistLayoutLabels(canvas, measurement, joistLayout, visiblePdf);
+        }
 
         var points = measurement.Points;
         switch (measurement.MType)
         {
             case "point" when points.Count > 0 && ShouldDrawMeasurementLabel("point"):
             case "line" when points.Count >= 2 && ShouldDrawMeasurementLabel("line"):
-                DrawLabel(canvas, points[^1], measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
+                if (RectContains(visiblePdf, points[^1]))
+                    DrawLabel(canvas, points[^1], MeasurementLabelText(measurement, null), measurement.Color);
                 break;
             case "area" when points.Count >= 3:
                 if (isJoistArea ? ShouldDrawJoistSummaryLabel() : ShouldDrawMeasurementLabel("area"))
-                    DrawLabel(canvas, Centroid(points), measurement.Label(ScaleMetersPerPt, UnitMode), measurement.Color);
+                {
+                    SKPoint center = Centroid(points);
+                    if (RectContains(visiblePdf, center))
+                        DrawLabel(canvas, center, MeasurementLabelText(measurement, joistLayout), measurement.Color);
+                }
                 break;
         }
+    }
+
+    private string MeasurementLabelText(Measurement measurement, JoistLayoutResult? joistLayout)
+    {
+        if (measurement.MType != "area" || !measurement.JoistEnabled)
+            return measurement.Label(ScaleMetersPerPt, UnitMode);
+
+        if (!measurement.JoistDirectionLocked)
+            return "joists: set direction";
+
+        return JoistTakeoffCalculator.FormatMeasurementLabel(
+            joistLayout ?? PaintJoistLayout(measurement),
+            UnitMode,
+            measurement.JoistType,
+            measurement.JoistDetailedLabels);
     }
 
     private static SKPath BuildAreaPath(Measurement measurement)

@@ -561,11 +561,17 @@ public partial class MainWindow
         if (activeIndex < 0)
             return;
 
-        QueuePrefetchAt(pages, activeIndex + 1);
-        QueuePrefetchAt(pages, activeIndex - 1);
-        QueuePrefetchAt(pages, activeIndex + 2);
-        QueuePrefetchAt(pages, activeIndex - 2);
-        QueuePrefetchAt(pages, activeIndex + 3);
+        for (int offset = 1; offset <= ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius; offset++)
+        {
+            QueuePreviewPrefetchAt(pages, activeIndex + offset);
+            QueuePreviewPrefetchAt(pages, activeIndex - offset);
+
+            if (offset <= ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius)
+            {
+                QueueCleanRenderPrefetchAt(pages, activeIndex + offset);
+                QueueCleanRenderPrefetchAt(pages, activeIndex - offset);
+            }
+        }
     }
 
     private IReadOnlyList<PageInfo> CachedPagesForPreviewPrefetch()
@@ -590,13 +596,21 @@ public partial class MainWindow
         return _pagePreviewPrefetchPages;
     }
 
-    private static void QueuePrefetchAt(IReadOnlyList<PageInfo> pages, int index)
+    private static void QueuePreviewPrefetchAt(IReadOnlyList<PageInfo> pages, int index)
     {
         if (index < 0 || index >= pages.Count)
             return;
 
         PageInfo page = pages[index];
         PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage);
+    }
+
+    private static void QueueCleanRenderPrefetchAt(IReadOnlyList<PageInfo> pages, int index)
+    {
+        if (index < 0 || index >= pages.Count)
+            return;
+
+        PageInfo page = pages[index];
         PdfViewport.PrefetchCleanLayerRender(
             page.PdfPath,
             page.PdfPage,

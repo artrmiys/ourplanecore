@@ -37,7 +37,8 @@ internal static class TakeoffsTreeRegressionTests
         string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
         string prefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetchDeferred(");
         string nearbyPrefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)");
-        string queuePrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePrefetchAt(");
+        string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
+        string queueCleanRenderPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueCleanRenderPrefetchAt(");
 
         AssertFalse(
             loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
@@ -81,10 +82,14 @@ internal static class TakeoffsTreeRegressionTests
             prefetchMethod.Contains("QueueNearbyPagePreviewPrefetch(viewportPage)", StringComparison.Ordinal),
             "nearby preview prefetch should be queued after page-open critical work and guarded against stale pages");
         AssertTrue(
-            queuePrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
-            nearbyPrefetchMethod.Contains("activeIndex - 2", StringComparison.Ordinal) &&
-            nearbyPrefetchMethod.Contains("activeIndex + 3", StringComparison.Ordinal),
-            "nearby page prefetch should warm normal clean renders around the active sheet, not only tiny previews");
+            nearbyPrefetchMethod.Contains("CachedPagesForPreviewPrefetch()", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex + offset)", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
+            queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
+            "nearby page prefetch should warm cheap previews around the active sheet and clean renders only for the closest neighbors");
     }
 
     public static void ProgrammaticPageSelectionOpensViewportDirectly()
@@ -1117,7 +1122,8 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("InlineImage = true", StringComparison.Ordinal) &&
             service.Contains("InlineRenderImageMaxPixels", StringComparison.Ordinal) &&
             service.Contains("InlineRenderImageMaxPixels = 24_000_000", StringComparison.Ordinal) &&
-            service.Contains("MaxRenderCacheEntries = 24", StringComparison.Ordinal) &&
+            service.Contains("MaxRenderCacheEntries = 96", StringComparison.Ordinal) &&
+            service.Contains("MaxRenderCacheBytes = 768_000_000", StringComparison.Ordinal) &&
             service.Contains("ImageBase64", StringComparison.Ordinal) &&
             service.Contains("Convert.FromBase64String(response.ImageBase64)", StringComparison.Ordinal),
             "C# layer rendering should request RAM-sized bounded inline PNG data and decode image_base64 responses");
@@ -1213,8 +1219,12 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             pageApi.Contains("QueueLayerRender(", StringComparison.Ordinal) &&
             pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
-            pageApi.Contains("QueueDetailRenderIfNeeded(force: true)", StringComparison.Ordinal),
-            "cached preview page opens should schedule clipped high-detail immediately instead of waiting for the full-sheet high render");
+            pageApi.Contains("BeginPageSwitchDetailRenderHold()", StringComparison.Ordinal) &&
+            detail.Contains("ShouldHoldDetailRender(force)", StringComparison.Ordinal) &&
+            detail.Contains("QueueDetailRenderAfterHold()", StringComparison.Ordinal) &&
+            detail.Contains("QueueDetailRenderIfNeeded(force: true)", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchDetailRenderDelayMs = 320", StringComparison.Ordinal),
+            "cached preview page opens should schedule capped base work immediately and hold clipped high-detail briefly until the page switch settles");
         AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
             viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),
@@ -1302,7 +1312,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void SheetOverlayRenderingUsesSharperSampling()
     {
         string source = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
-        string method = SliceMethod(source, "private void DrawSheetOverlay(SKCanvas canvas)");
+        string method = SliceMethod(source, "private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)");
 
         AssertTrue(
             method.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&

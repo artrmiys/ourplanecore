@@ -102,7 +102,7 @@ public sealed partial class PdfViewport
         SKBitmap? decodedBitmap = null;
         try
         {
-            await Task.Delay(125);
+            await Task.Delay(ViewportRenderPolicy.DetailRenderPrefetchDelayMs);
             await DetailTilePrefetchSemaphore.WaitAsync();
             try
             {

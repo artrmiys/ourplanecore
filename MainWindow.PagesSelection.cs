@@ -21,7 +21,10 @@ public partial class MainWindow
     }
 
     private static string PageTakeoffSelectionKey(PageTakeoffNode node) =>
-        $"{NormalizeSelectionPath(node.Page.FolderPath)}|{NormalizeSelectionPath(node.Takeoff.FolderPath)}";
+        PageTakeoffSelectionKey(node.Page.FolderPath, node.Takeoff.FolderPath);
+
+    private static string PageTakeoffSelectionKey(string? pageFolder, string? takeoffFolder) =>
+        $"{NormalizeSelectionPath(pageFolder)}|{NormalizeSelectionPath(takeoffFolder)}";
 
     private static string NormalizeSelectionPath(string? path) =>
         string.IsNullOrWhiteSpace(path)
@@ -155,15 +158,12 @@ public partial class MainWindow
             return;
 
         PageTreeVisualBrushes brushes = CreatePageTreeVisualBrushes();
-        foreach (TreeViewItem item in EnumeratePageTreeItems())
-        {
-            string? itemPath = GetPagesNodePath(item);
-            if (!string.IsNullOrWhiteSpace(itemPath) &&
-                folderKeys.Contains(NormalizePathForCompare(itemPath)))
-            {
-                ApplyPageTreeItemVisualRecursive(item, brushes);
-            }
-        }
+        foreach (TreeViewItem item in folderKeys
+                     .Select(FindPageTreeItemByFolderKeyIndexed)
+                     .Where(item => item != null)
+                     .Distinct()
+                     .Cast<TreeViewItem>())
+            ApplyPageTreeItemVisualRecursive(item, brushes);
     }
 
     private static HashSet<string> PageTreePathKeysFromPageTakeoffSelection(IEnumerable<string> selectionKeys)

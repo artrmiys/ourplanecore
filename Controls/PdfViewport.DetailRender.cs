@@ -22,6 +22,8 @@ public sealed partial class PdfViewport
     private bool _detailRenderInProgress;
     private int _detailRenderVersion;
     private int _detailTileGeneration;
+    private DateTime _detailRenderHoldUntilUtc = DateTime.MinValue;
+    private bool _detailRenderHoldResumeQueued;
     private readonly object _detailPrefetchGate = new();
     private readonly HashSet<string> _detailPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxDetailRenderTileEntries = 64;
@@ -59,6 +61,12 @@ public sealed partial class PdfViewport
         ClearDetailRenderBitmap();
     }
 
+    private void BeginPageSwitchDetailRenderHold()
+    {
+        _detailRenderHoldUntilUtc = DateTime.UtcNow.AddMilliseconds(
+            ViewportRenderPolicy.PageSwitchDetailRenderDelayMs);
+    }
+
     private void ClearDetailRenderBitmap()
     {
         _detailTileGeneration++;
@@ -77,6 +85,12 @@ public sealed partial class PdfViewport
 
     private void QueueDetailRenderIfNeeded(bool force)
     {
+        if (ShouldHoldDetailRender(force))
+        {
+            QueueDetailRenderAfterHold();
+            return;
+        }
+
         if (!TryBuildDetailRenderRequest(force, out DetailRenderRequest? request))
             return;
         if (request == null)
@@ -96,6 +110,37 @@ public sealed partial class PdfViewport
 
         _pendingDetailRender = request with { Version = ++_detailRenderVersion };
         _ = StartNextDetailRenderAsync();
+    }
+
+    private bool ShouldHoldDetailRender(bool force) =>
+        force &&
+        DateTime.UtcNow < _detailRenderHoldUntilUtc;
+
+    private void QueueDetailRenderAfterHold()
+    {
+        if (_detailRenderHoldResumeQueued)
+            return;
+
+        _detailRenderHoldResumeQueued = true;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(async () =>
+            {
+                try
+                {
+                    TimeSpan delay = _detailRenderHoldUntilUtc - DateTime.UtcNow;
+                    if (delay > TimeSpan.Zero)
+                        await Task.Delay(delay);
+
+                    _detailRenderHoldResumeQueued = false;
+                    QueueDetailRenderIfNeeded(force: true);
+                }
+                catch (Exception ex)
+                {
+                    _detailRenderHoldResumeQueued = false;
+                    AppLog.Warn(ex, "Viewport delayed detail render failed.");
+                }
+            }));
     }
 
     private bool TryBuildDetailRenderRequest(bool force, out DetailRenderRequest? request)

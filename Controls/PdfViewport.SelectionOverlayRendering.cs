@@ -18,6 +18,24 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private const int TextBoxLayoutCacheLimit = 512;
+    private readonly Dictionary<TextBoxLayoutCacheKey, TextBoxLayout> _textBoxLayoutCache = [];
+
+    private readonly record struct TextBoxLayoutCacheKey(
+        string Text,
+        float FontSize,
+        float Pad,
+        float LabelScale,
+        float LabelDivisor);
+
+    private readonly record struct TextBoxLayout(
+        string[] Lines,
+        float Width,
+        float LineHeight,
+        float TextHeight,
+        float PdfPad,
+        float TextSize);
+
     private void DrawSelectionBounds(SKCanvas canvas, Measurement m)
     {
         if (m.Points.Count == 0) return;
@@ -120,11 +138,7 @@ public sealed partial class PdfViewport
         if (lines.Count == 0)
             return;
 
-        string[] cleanLines = lines
-            .Where(line => !string.IsNullOrWhiteSpace(line))
-            .Select(line => line.Trim())
-            .ToArray();
-        if (cleanLines.Length == 0)
+        if (!IsScreenTextAnchorNearViewport(pdfPos))
             return;
 
         float safeZoom = Math.Max(_zoom, 0.001f);
@@ -134,31 +148,31 @@ public sealed partial class PdfViewport
         float labelDivisor = ScaleMeasurementLabelsWithPage
             ? Math.Max(CurrentFitZoom(), 0.001f)
             : safeZoom;
+        TextBoxLayout layout = ResolveTextBoxLayout(lines, fontSize, pad, labelScale, labelDivisor, textColor);
+        if (layout.Lines.Length == 0)
+            return;
+
         using var textPaint = new SKPaint
         {
             Color       = textColor,
-            TextSize    = fontSize * labelScale / labelDivisor,
+            TextSize    = layout.TextSize,
             IsAntialias = true,
             Typeface    = LabelTypeface,
         };
 
-        float width = 0;
-        foreach (string line in cleanLines)
-            width = Math.Max(width, textPaint.MeasureText(line));
-        float lineHeight = textPaint.TextSize * 1.22f;
-        float textHeight = lineHeight * cleanLines.Length;
-        float pdfPad = pad * labelScale / labelDivisor;
         SKRect bg = centered
             ? new SKRect(
-                pdfPos.X - width / 2f - pdfPad,
-                pdfPos.Y - textHeight / 2f - pdfPad,
-                pdfPos.X + width / 2f + pdfPad,
-                pdfPos.Y + textHeight / 2f + pdfPad)
+                pdfPos.X - layout.Width / 2f - layout.PdfPad,
+                pdfPos.Y - layout.TextHeight / 2f - layout.PdfPad,
+                pdfPos.X + layout.Width / 2f + layout.PdfPad,
+                pdfPos.Y + layout.TextHeight / 2f + layout.PdfPad)
             : new SKRect(
-                pdfPos.X + pdfPad,
-                pdfPos.Y - textHeight - pdfPad,
-                pdfPos.X + width + pdfPad * 3,
-                pdfPos.Y + pdfPad);
+                pdfPos.X + layout.PdfPad,
+                pdfPos.Y - layout.TextHeight - layout.PdfPad,
+                pdfPos.X + layout.Width + layout.PdfPad * 3,
+                pdfPos.Y + layout.PdfPad);
+        if (!IsPdfRectNearViewport(bg))
+            return;
 
         using var bgPaint = new SKPaint
         {
@@ -175,13 +189,92 @@ public sealed partial class PdfViewport
         canvas.DrawRoundRect(bg, radius, radius, bgPaint);
         if (borderColor.Alpha > 0)
             canvas.DrawRoundRect(bg, radius, radius, borderPaint);
-        float baseline = bg.Top + pdfPad - textPaint.FontMetrics.Ascent;
-        foreach (string line in cleanLines)
+        float baseline = bg.Top + layout.PdfPad - textPaint.FontMetrics.Ascent;
+        foreach (string line in layout.Lines)
         {
-            float textX = centered ? bg.Left + pdfPad : pdfPos.X + pdfPad * 1.5f;
+            float textX = centered ? bg.Left + layout.PdfPad : pdfPos.X + layout.PdfPad * 1.5f;
             canvas.DrawText(line, textX, baseline, textPaint);
-            baseline += lineHeight;
+            baseline += layout.LineHeight;
         }
+    }
+
+    private TextBoxLayout ResolveTextBoxLayout(
+        IReadOnlyList<string> lines,
+        float fontSize,
+        float pad,
+        float labelScale,
+        float labelDivisor,
+        SKColor textColor)
+    {
+        string text = NormalizeTextBoxLines(lines);
+        if (text.Length == 0)
+            return new TextBoxLayout([], 0, 0, 0, 0, 0);
+
+        var key = new TextBoxLayoutCacheKey(
+            text,
+            MathF.Round(fontSize, 3),
+            MathF.Round(pad, 3),
+            MathF.Round(labelScale, 3),
+            MathF.Round(labelDivisor, 3));
+        if (_textBoxLayoutCache.TryGetValue(key, out TextBoxLayout cached))
+            return cached;
+
+        string[] cleanLines = text.Split('\n');
+        float textSize = fontSize * labelScale / labelDivisor;
+        using var textPaint = new SKPaint
+        {
+            Color = textColor,
+            TextSize = textSize,
+            IsAntialias = true,
+            Typeface = LabelTypeface,
+        };
+
+        float width = 0;
+        foreach (string line in cleanLines)
+            width = Math.Max(width, textPaint.MeasureText(line));
+        float lineHeight = textSize * 1.22f;
+        float pdfPad = pad * labelScale / labelDivisor;
+        var layout = new TextBoxLayout(
+            cleanLines,
+            width,
+            lineHeight,
+            lineHeight * cleanLines.Length,
+            pdfPad,
+            textSize);
+
+        if (_textBoxLayoutCache.Count >= TextBoxLayoutCacheLimit)
+            _textBoxLayoutCache.Clear();
+        _textBoxLayoutCache[key] = layout;
+        return layout;
+    }
+
+    private static string NormalizeTextBoxLines(IReadOnlyList<string> lines)
+    {
+        return string.Join(
+            '\n',
+            lines
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .Select(line => line.Trim()));
+    }
+
+    private bool IsScreenTextAnchorNearViewport(SKPoint pdfPos)
+    {
+        float sx = (pdfPos.X - _panX) * _zoom;
+        float sy = (pdfPos.Y - _panY) * _zoom;
+        const float margin = 360f;
+        return sx >= -margin &&
+               sy >= -margin &&
+               sx <= ViewportCanvasWidth + margin &&
+               sy <= ViewportCanvasHeight + margin;
+    }
+
+    private bool IsPdfRectNearViewport(SKRect rect)
+    {
+        SKRect visible = GetVisiblePdfRect(360f);
+        return rect.Left <= visible.Right &&
+               rect.Right >= visible.Left &&
+               rect.Top <= visible.Bottom &&
+               rect.Bottom >= visible.Top;
     }
 
     private static string ColorHex(SKColor color) =>

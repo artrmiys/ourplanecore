@@ -15,6 +15,13 @@ namespace OurPlaneCore;
 
 public static partial class PdfLayerRenderService
 {
+    private enum WorkerRole
+    {
+        Primary,
+        Detail,
+        Prefetch,
+    }
+
     internal static bool TryInvokeHelper<TRequest, TResponse>(
         string action,
         TRequest request,
@@ -57,7 +64,7 @@ public static partial class PdfLayerRenderService
         out TResponse? response,
         out string error)
     {
-        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, useDetailWorker: false).GetAwaiter().GetResult();
+        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Primary).GetAwaiter().GetResult();
         response = result.Response;
         error = result.Error;
         return result.Ok;
@@ -69,7 +76,19 @@ public static partial class PdfLayerRenderService
         out TResponse? response,
         out string error)
     {
-        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, useDetailWorker: true).GetAwaiter().GetResult();
+        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Detail).GetAwaiter().GetResult();
+        response = result.Response;
+        error = result.Error;
+        return result.Ok;
+    }
+
+    private static bool TryInvokePrefetchWorker<TRequest, TResponse>(
+        string action,
+        TRequest request,
+        out TResponse? response,
+        out string error)
+    {
+        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Prefetch).GetAwaiter().GetResult();
         response = result.Response;
         error = result.Error;
         return result.Ok;
@@ -78,14 +97,14 @@ public static partial class PdfLayerRenderService
     private static async Task<(bool Ok, TResponse? Response, string Error)> TryInvokeWorkerAsync<TRequest, TResponse>(
         string action,
         TRequest request,
-        bool useDetailWorker)
+        WorkerRole role)
     {
-        SemaphoreSlim semaphore = useDetailWorker ? DetailWorkerSemaphore : WorkerSemaphore;
+        SemaphoreSlim semaphore = WorkerSemaphoreFor(role);
         await semaphore.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            if (!EnsureWorker(useDetailWorker, out string error))
+            if (!EnsureWorker(role, out string error))
                 return (false, default, error);
 
             string id = Guid.NewGuid().ToString("N");
@@ -96,8 +115,8 @@ public static partial class PdfLayerRenderService
                 Request = request,
             };
 
-            StreamWriter input = useDetailWorker ? DetailWorkerInput! : WorkerInput!;
-            StreamReader output = useDetailWorker ? DetailWorkerOutput! : WorkerOutput!;
+            StreamWriter input = WorkerInputFor(role)!;
+            StreamReader output = WorkerOutputFor(role)!;
 
             await input
                 .WriteLineAsync(JsonSerializer.Serialize(envelope, WorkerJsonOptions))
@@ -109,14 +128,14 @@ public static partial class PdfLayerRenderService
 
             if (string.IsNullOrWhiteSpace(line))
             {
-                ResetWorker(useDetailWorker);
+                ResetWorker(role);
                 return (false, default, "PyMuPDF worker stopped unexpectedly.");
             }
 
             var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, WorkerJsonOptions);
             if (workerResponse == null || workerResponse.Id != id)
             {
-                ResetWorker(useDetailWorker);
+                ResetWorker(role);
                 return (false, default, "PyMuPDF worker returned an invalid response.");
             }
 
@@ -124,14 +143,14 @@ public static partial class PdfLayerRenderService
         }
         catch (OperationCanceledException ex)
         {
-            ResetWorker(useDetailWorker);
+            ResetWorker(role);
             string error = $"PyMuPDF worker {action} timed out.";
             AppLog.Warn(ex, error);
             return (false, default, error);
         }
         catch (Exception ex)
         {
-            ResetWorker(useDetailWorker);
+            ResetWorker(role);
             AppLog.Warn(ex, $"PyMuPDF worker {action} failed");
             return (false, default, ex.Message);
         }
@@ -141,16 +160,16 @@ public static partial class PdfLayerRenderService
         }
     }
 
-    private static bool EnsureWorker(bool useDetailWorker, out string error)
+    private static bool EnsureWorker(WorkerRole role, out string error)
     {
         error = "";
-        Process? workerProcess = useDetailWorker ? DetailWorkerProcess : WorkerProcess;
-        StreamWriter? workerInput = useDetailWorker ? DetailWorkerInput : WorkerInput;
-        StreamReader? workerOutput = useDetailWorker ? DetailWorkerOutput : WorkerOutput;
+        Process? workerProcess = WorkerProcessFor(role);
+        StreamWriter? workerInput = WorkerInputFor(role);
+        StreamReader? workerOutput = WorkerOutputFor(role);
         if (workerProcess is { HasExited: false } && workerInput != null && workerOutput != null)
             return true;
 
-        ResetWorker(useDetailWorker);
+        ResetWorker(role);
 
         string helperPath = ResolveHelperPath();
         if (helperPath.Length == 0)
@@ -187,30 +206,19 @@ public static partial class PdfLayerRenderService
         started.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
-                AppLog.Warn(useDetailWorker ? $"[pyhelper-detail] {e.Data}" : $"[pyhelper] {e.Data}");
+                AppLog.Warn($"[{WorkerLogPrefix(role)}] {e.Data}");
         };
         started.BeginErrorReadLine();
-        if (useDetailWorker)
-        {
-            DetailWorkerProcess = started;
-            DetailWorkerInput = started.StandardInput;
-            DetailWorkerOutput = started.StandardOutput;
-        }
-        else
-        {
-            WorkerProcess = started;
-            WorkerInput = started.StandardInput;
-            WorkerOutput = started.StandardOutput;
-        }
+        SetWorker(role, started, started.StandardInput, started.StandardOutput);
 
         return true;
     }
 
-    private static void ResetWorker(bool useDetailWorker = false)
+    private static void ResetWorker(WorkerRole role = WorkerRole.Primary)
     {
-        Process? process = useDetailWorker ? DetailWorkerProcess : WorkerProcess;
-        StreamWriter? input = useDetailWorker ? DetailWorkerInput : WorkerInput;
-        StreamReader? output = useDetailWorker ? DetailWorkerOutput : WorkerOutput;
+        Process? process = WorkerProcessFor(role);
+        StreamWriter? input = WorkerInputFor(role);
+        StreamReader? output = WorkerOutputFor(role);
 
         try { input?.Dispose(); } catch { }
         try { output?.Dispose(); } catch { }
@@ -222,18 +230,7 @@ public static partial class PdfLayerRenderService
         catch { }
         try { process?.Dispose(); } catch { }
 
-        if (useDetailWorker)
-        {
-            DetailWorkerInput = null;
-            DetailWorkerOutput = null;
-            DetailWorkerProcess = null;
-        }
-        else
-        {
-            WorkerInput = null;
-            WorkerOutput = null;
-            WorkerProcess = null;
-        }
+        SetWorker(role, null, null, null);
     }
 
     public static void StopWorker()
@@ -251,11 +248,78 @@ public static partial class PdfLayerRenderService
         DetailWorkerSemaphore.Wait();
         try
         {
-            ResetWorker(useDetailWorker: true);
+            ResetWorker(WorkerRole.Detail);
         }
         finally
         {
             DetailWorkerSemaphore.Release();
+        }
+
+        PrefetchWorkerSemaphore.Wait();
+        try
+        {
+            ResetWorker(WorkerRole.Prefetch);
+        }
+        finally
+        {
+            PrefetchWorkerSemaphore.Release();
+        }
+    }
+
+    private static SemaphoreSlim WorkerSemaphoreFor(WorkerRole role) => role switch
+    {
+        WorkerRole.Detail => DetailWorkerSemaphore,
+        WorkerRole.Prefetch => PrefetchWorkerSemaphore,
+        _ => WorkerSemaphore,
+    };
+
+    private static Process? WorkerProcessFor(WorkerRole role) => role switch
+    {
+        WorkerRole.Detail => DetailWorkerProcess,
+        WorkerRole.Prefetch => PrefetchWorkerProcess,
+        _ => WorkerProcess,
+    };
+
+    private static StreamWriter? WorkerInputFor(WorkerRole role) => role switch
+    {
+        WorkerRole.Detail => DetailWorkerInput,
+        WorkerRole.Prefetch => PrefetchWorkerInput,
+        _ => WorkerInput,
+    };
+
+    private static StreamReader? WorkerOutputFor(WorkerRole role) => role switch
+    {
+        WorkerRole.Detail => DetailWorkerOutput,
+        WorkerRole.Prefetch => PrefetchWorkerOutput,
+        _ => WorkerOutput,
+    };
+
+    private static string WorkerLogPrefix(WorkerRole role) => role switch
+    {
+        WorkerRole.Detail => "pyhelper-detail",
+        WorkerRole.Prefetch => "pyhelper-prefetch",
+        _ => "pyhelper",
+    };
+
+    private static void SetWorker(WorkerRole role, Process? process, StreamWriter? input, StreamReader? output)
+    {
+        switch (role)
+        {
+            case WorkerRole.Detail:
+                DetailWorkerProcess = process;
+                DetailWorkerInput = input;
+                DetailWorkerOutput = output;
+                break;
+            case WorkerRole.Prefetch:
+                PrefetchWorkerProcess = process;
+                PrefetchWorkerInput = input;
+                PrefetchWorkerOutput = output;
+                break;
+            default:
+                WorkerProcess = process;
+                WorkerInput = input;
+                WorkerOutput = output;
+                break;
         }
     }
 

@@ -55,6 +55,9 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfLayerInfo>? cachedLayers = null,
         ViewState? restoreView = null)
     {
+        CancelTransientNavigationRenderWork();
+        BeginPageSwitchDetailRenderHold();
+
         _pdfPath    = pdfPath;
         _pdfIndex   = pageIndex;
         _pageFolder = pageFolder;
@@ -109,7 +112,6 @@ public sealed partial class PdfViewport
                 restoreView: restoreView,
                 fitAfter: !restoreView.HasValue,
                 allowImmediateCache: false);
-            QueueDetailRenderIfNeeded(force: true);
         }
         else if (!TryApplyPersistedDefaultCleanRender(
             ViewportRenderPolicy.ResponsiveMinRenderScale,
@@ -146,6 +148,15 @@ public sealed partial class PdfViewport
         _pdfH = 0;
         _bitmapScale = 0;
         _renderedScale = 0;
+    }
+
+    private void CancelTransientNavigationRenderWork()
+    {
+        _zoomRerenderTimer.Stop();
+        _navigationIdleTimer.Stop();
+        _zoomRerenderForce = false;
+        _isFastNavigating = false;
+        _renderNavigationFastFrame = false;
     }
 
 }

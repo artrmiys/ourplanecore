@@ -23,11 +23,20 @@ public static partial class PdfLayerRenderService
     private static Process? DetailWorkerProcess;
     private static StreamWriter? DetailWorkerInput;
     private static StreamReader? DetailWorkerOutput;
+    private static readonly SemaphoreSlim PrefetchWorkerSemaphore = new(1, 1);
+    private static Process? PrefetchWorkerProcess;
+    private static StreamWriter? PrefetchWorkerInput;
+    private static StreamReader? PrefetchWorkerOutput;
     private static readonly object RenderCacheLock = new();
     private static readonly Dictionary<string, PdfLayerRenderResult> RenderCache = [];
     private static readonly Queue<string> RenderCacheOrder = [];
-    private const int MaxRenderCacheEntries = 24;
+    private static long RenderCacheBytes;
+    private const int MaxRenderCacheEntries = 96;
+    private const long MaxRenderCacheBytes = 768_000_000;
+    private const long MaxRenderCacheEntryBytes = 96_000_000;
     private const int InlineRenderImageMaxPixels = 24_000_000;
+    private static readonly object InFlightRenderLock = new();
+    private static readonly Dictionary<string, Task<(bool Ok, PdfLayerRenderResult Result, string Error)>> InFlightRenderTasks = [];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -47,21 +56,51 @@ public static partial class PdfLayerRenderService
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
-        SKRect? clipRect = null) =>
-        Task.Run(() =>
+        SKRect? clipRect = null)
+    {
+        string requestKey = BuildRenderCacheKey(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers,
+            clipRect);
+        if (TryGetCachedRender(requestKey, out PdfLayerRenderResult cached))
+            return Task.FromResult((true, cached, ""));
+
+        lock (InFlightRenderLock)
         {
-            bool ok = TryRender(
-                pdfPath,
-                pageIndex,
-                renderScale,
-                layerStates,
-                highlightedLayers,
-                cachedLayers,
-                clipRect,
-                out PdfLayerRenderResult result,
-                out string error);
-            return (ok, result, error);
-        });
+            if (InFlightRenderTasks.TryGetValue(requestKey, out var inFlight))
+                return inFlight;
+
+            var task = Task.Run(() =>
+            {
+                bool ok = TryRender(
+                    pdfPath,
+                    pageIndex,
+                    renderScale,
+                    layerStates,
+                    highlightedLayers,
+                    cachedLayers,
+                    clipRect,
+                    out PdfLayerRenderResult result,
+                    out string error);
+                return (ok, result, error);
+            });
+            InFlightRenderTasks[requestKey] = task;
+            _ = task.ContinueWith(
+                _ =>
+                {
+                    lock (InFlightRenderLock)
+                        InFlightRenderTasks.Remove(requestKey);
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return task;
+        }
+    }
 
     public static Task<(bool Ok, IReadOnlyList<PdfLayerInfo> Layers, string Error)> TryReadVisibleLayersAsync(
         string pdfPath,
