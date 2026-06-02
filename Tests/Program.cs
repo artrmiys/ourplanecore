@@ -3296,6 +3296,20 @@ static void PdfPreviewRenderCacheRoundTrips()
         AssertTrue(cached.LayersCaptured, "cached clean render should preserve layer discovery state");
         AssertEqual("1", cached.Layers.Count.ToString(), "cached clean render layers");
 
+        PdfPreviewRenderCache.TryWriteCleanPreview(
+            pdf,
+            0,
+            ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+            render);
+        AssertTrue(
+            PdfPreviewRenderCache.TryReadCleanPreview(
+                pdf,
+                0,
+                ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+                out PdfLayerRenderResult fastCached),
+            "written fast preview cache should hit");
+        AssertClose(612, fastCached.WidthPt, "cached fast preview width");
+
         PdfPreviewRenderCache.TryWriteCleanRender(pdf, 0, 1.0f, render);
         AssertTrue(
             PdfPreviewRenderCache.TryReadCleanRender(pdf, 0, 1.0f, out PdfLayerRenderResult fullCached),
@@ -3442,7 +3456,7 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(1.0f),
             "deep zoom should rely on clipped detail once a normal base bitmap exists");
         AssertClose(
-            2.0,
+            1.5,
             ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
             "interactive detail render should cap below the viewport zoom to avoid long clip renders");
         AssertTrue(
@@ -3499,6 +3513,10 @@ static void ViewportHighZoomRespectsFastNavigationToggle()
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
         "enabled fast navigation should use fast frames at high zoom");
+    AssertTrue(
+        ViewportConstants.NavigationIdleMs >= 400 &&
+        ViewportConstants.NavigationIdleMs > ViewportConstants.ZoomRerenderDelayMs,
+        "high-zoom pan bursts should not be treated as idle before the zoom rerender timer settles");
 
     AssertFalse(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(

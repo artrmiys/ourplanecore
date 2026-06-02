@@ -233,7 +233,7 @@ public static class PdfPreviewRenderCache
     private static bool IsPersistedRenderScale(double renderScale)
     {
         float scale = NormalizeScale(renderScale);
-        return scale >= ViewportRenderPolicy.InstantPagePreviewRenderScale - 0.001f &&
+        return scale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale - 0.001f &&
                scale <= MaxPersistedRenderScale + 0.001f;
     }
 

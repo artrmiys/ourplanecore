@@ -12,6 +12,7 @@ namespace OurPlaneCore.Controls;
 public sealed partial class PdfViewport
 {
     private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 48, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
+    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 160, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
     private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 320, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
@@ -23,6 +24,9 @@ public sealed partial class PdfViewport
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
         ResolveViewportRamBudget(1_500_000_000L, 4_000_000_000L, 0.06);
+
+    private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
+        ResolveViewportRamBudget(1_500_000_000L, 5_000_000_000L, 0.08);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
         ResolveViewportRamBudget(12_000_000_000L, 24_000_000_000L, 0.38);
@@ -97,16 +101,21 @@ public sealed partial class PdfViewport
 
         public void Put(string key, DocnetRenderResult render)
         {
-            SKBitmap copy = render.Bitmap.Copy();
+            Put(key, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
+        }
+
+        public void Put(string key, float widthPt, float heightPt, float bitmapScale, SKBitmap bitmap)
+        {
+            SKBitmap copy = bitmap.Copy();
             lock (_gate)
             {
                 if (_entries.TryGetValue(key, out CacheEntry? existing))
                 {
                     _totalBytes -= existing.EstimatedBytes;
                     existing.Bitmap.Dispose();
-                    existing.WidthPt = render.WidthPt;
-                    existing.HeightPt = render.HeightPt;
-                    existing.BitmapScale = render.BitmapScale;
+                    existing.WidthPt = widthPt;
+                    existing.HeightPt = heightPt;
+                    existing.BitmapScale = bitmapScale;
                     existing.Bitmap = copy;
                     existing.EstimatedBytes = EstimateBitmapBytes(copy);
                     existing.LastUsed = ++_clock;
@@ -116,9 +125,9 @@ public sealed partial class PdfViewport
                 }
 
                 var entry = new CacheEntry(
-                    render.WidthPt,
-                    render.HeightPt,
-                    render.BitmapScale,
+                    widthPt,
+                    heightPt,
+                    bitmapScale,
                     copy,
                     ++_clock);
                 _entries[key] = entry;

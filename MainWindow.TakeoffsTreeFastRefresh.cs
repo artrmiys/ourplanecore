@@ -17,9 +17,6 @@ public partial class MainWindow
         bool refreshSheetLegend = false,
         bool refreshPageIndicators = false)
     {
-        if (!FastTakeoffsTreeRefreshEnabled)
-            return false;
-
         if (_currentJob == null || string.IsNullOrWhiteSpace(parentFolder))
             return false;
 

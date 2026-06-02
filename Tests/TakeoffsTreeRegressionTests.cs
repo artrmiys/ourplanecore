@@ -346,9 +346,17 @@ internal static class TakeoffsTreeRegressionTests
     public static void FastRefreshDisabledForDataSafety()
     {
         string source = ReadRepoFile("MainWindow.TakeoffsTreeFastRefresh.cs");
+        string orderMethod = SliceMethod(source, "private bool TryRefreshTakeoffTreeParentOrderFast(");
+        string structureMethod = SliceMethod(source, "private bool TryApplyTakeoffStructureMoveFast(");
         AssertTrue(
             source.Contains("private static readonly bool FastTakeoffsTreeRefreshEnabled = false;", StringComparison.Ordinal),
-            "fast takeoffs tree refresh must stay disabled until the data-loss regression is covered by UI tests");
+            "broad takeoffs tree structure refresh must stay disabled by default");
+        AssertFalse(
+            orderMethod.Contains("FastTakeoffsTreeRefreshEnabled", StringComparison.Ordinal),
+            "same-parent takeoff reorder should use the targeted existing-item refresh instead of reloading the whole tree");
+        AssertTrue(
+            structureMethod.Contains("if (!FastTakeoffsTreeRefreshEnabled)", StringComparison.Ordinal),
+            "cross-parent structure moves must remain gated separately from same-parent reorder refresh");
     }
 
     public static void TakeoffSelectionUsesTargetedUiRefresh()
@@ -411,7 +419,7 @@ internal static class TakeoffsTreeRegressionTests
             "copy fast path should add only the new copied UI subtrees and model items");
         AssertFalse(
             copyMethod.Contains("FastTakeoffsTreeRefreshEnabled", StringComparison.Ordinal),
-            "copy fast path must not re-enable the broader move/reorder fast refresh that is disabled for data safety");
+            "copy fast path must stay independent from the broader cross-parent move refresh gate");
 
         string deferredSource = ReadRepoFile("MainWindow.PagesTreeDeferredRefresh.cs");
         AssertTrue(
@@ -1025,9 +1033,14 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             layers.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
             layers.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) &&
+            layers.Contains("TryApplyPersistedPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("PersistedPreviewBitmapCache.TryGet", StringComparison.Ordinal) &&
+            layers.Contains("PersistedPreviewBitmapCache.Put", StringComparison.Ordinal) &&
+            layers.Contains("preview-memory", StringComparison.Ordinal) &&
             layers.Contains("ApplyInitialPreviewView", StringComparison.Ordinal) &&
             layers.Contains("Viewport PyMuPDF preview cache hit", StringComparison.Ordinal),
-            "viewport should read and apply cached clean PyMuPDF previews without using Docnet");
+            "viewport should read and apply cached clean PyMuPDF previews without using Docnet and keep decoded previews hot in RAM");
         AssertTrue(
             service.Contains("PdfPreviewRenderCache.IsCleanRenderRequest", StringComparison.Ordinal) &&
             service.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal),
@@ -1035,8 +1048,9 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             cache.Contains("CacheRootEnvironmentVariable", StringComparison.Ordinal) &&
             cache.Contains("LastWriteTimeUtc.Ticks", StringComparison.Ordinal) &&
+            cache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale - 0.001f", StringComparison.Ordinal) &&
             cache.Contains("File.Move(tempImage, paths.ImagePath, overwrite: true)", StringComparison.Ordinal),
-            "preview cache should be keyed by source identity and written atomically through temp files");
+            "preview cache should be keyed by source identity, support fast page-switch previews, and write atomically through temp files");
     }
 
     public static void PdfPageOpenUsesDocnetPreviewOnCacheMiss()
@@ -1048,16 +1062,14 @@ internal static class TakeoffsTreeRegressionTests
 
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
         int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
-        int fullCacheFallback = pageApi.IndexOf("TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal);
         int docnetFallback = pageApi.IndexOf("QueueDocnetRender(", StringComparison.Ordinal);
         int status = pageApi.IndexOf("PostStatus(previewCacheHit", StringComparison.Ordinal);
         AssertTrue(
             cacheApply >= 0 &&
             cacheBranch > cacheApply &&
-            fullCacheFallback > cacheBranch &&
-            docnetFallback > fullCacheFallback &&
+            docnetFallback > cacheBranch &&
             status > docnetFallback,
-            "page open should try persisted clean render cache before queueing a fast Docnet preview fallback");
+            "page open should avoid full-clean synchronous decode and queue a fast Docnet preview fallback after a preview cache miss");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: true", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: true", StringComparison.Ordinal) &&
@@ -1066,11 +1078,16 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
             pageApi.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
+            pageApi.Contains("allowMemoryBitmap: false", StringComparison.Ordinal) &&
             layers.Contains("bool allowImmediateCache = true", StringComparison.Ordinal) &&
             layers.Contains("bool allowLiveRender = true", StringComparison.Ordinal) &&
+            layers.Contains("bool allowMemoryBitmap = true", StringComparison.Ordinal) &&
+            layers.Contains("allowMemoryBitmap && TryApplyLayerBitmapCache", StringComparison.Ordinal) &&
+            layers.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
+            layers.Contains("allowMemoryBitmap: false", StringComparison.Ordinal) &&
             layers.Contains("allowImmediateCache && TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal) &&
             layers.Contains("CompleteCacheOnlyLayerRender(request)", StringComparison.Ordinal),
-            "page open should not synchronously decode or live-render a second clean layer bitmap after applying the instant preview");
+            "page open should not synchronously decode, copy, or live-render a second clean layer bitmap after applying the instant preview");
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
@@ -1079,11 +1096,14 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             layers.Contains("private bool TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal) &&
             layers.Contains("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
-            "page open should be able to synchronously apply a persisted clean full render before falling back to Docnet");
+            "explicit layer refresh paths should still be able to apply a persisted clean full render before falling back to PyMuPDF");
         AssertTrue(
             renderCache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
-            renderCache.Contains("Task.Delay(75)", StringComparison.Ordinal),
-            "nearby sheet prefetch should warm the same lightweight preview cache used by page switching");
+            renderCache.Contains("Task.Delay(75)", StringComparison.Ordinal) &&
+            layers.Contains("TryWriteDocnetPreviewCache", StringComparison.Ordinal) &&
+            layers.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal) &&
+            layers.Contains("SKEncodedImageFormat.Png", StringComparison.Ordinal),
+            "nearby sheet prefetch and cold Docnet preview renders should warm the same lightweight persisted preview cache used by page switching");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()
@@ -1290,7 +1310,10 @@ internal static class TakeoffsTreeRegressionTests
             "layer render bitmap decode should be done before UI-thread bitmap application and support the raw detail payload");
         AssertTrue(
             layers.Contains("TryApplyLayerBitmapCache(request, out bool exactLayerCacheHit)", StringComparison.Ordinal) &&
+            layers.Contains("allowMemoryBitmap && TryApplyLayerBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("ShouldPreserveDetailDuringLayerRender(request)", StringComparison.Ordinal) &&
+            layers.Contains("ShouldForceDetailAfterLayerApply", StringComparison.Ordinal) &&
+            layers.Contains("request.HighlightedLayers.Count > 0", StringComparison.Ordinal) &&
             layers.Contains("CacheLayerBitmapRender(completion.Request)", StringComparison.Ordinal) &&
             layers.Contains("CacheLayerBitmapRender(completion.Request, completion.Result, decodedBitmap)", StringComparison.Ordinal) &&
             layers.Contains("PdfLayerRenderResult render,", StringComparison.Ordinal) &&
@@ -1353,6 +1376,8 @@ internal static class TakeoffsTreeRegressionTests
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
     {
         string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");
+        string treeOps = ReadRepoFile("MainWindow.ViewportTreeOpsSmoke.cs");
+        string script = ReadRepoFile(Path.Combine("Tools", "ui_viewport_page_stress_smoke.ps1"));
         string recorder = ReadRepoFile(Path.Combine("Models", "ViewportPerformanceRecorder.cs"));
         string detail = ReadRepoFile(Path.Combine("Controls", "PdfViewport.DetailRender.cs"));
         string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
@@ -1362,8 +1387,21 @@ internal static class TakeoffsTreeRegressionTests
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS", StringComparison.Ordinal) &&
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT", StringComparison.Ordinal) &&
             source.Contains("ReadEnvironmentFloat", StringComparison.Ordinal) &&
-            source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal),
-            "viewport stress smoke must support hidden sampled page opens plus absolute zoom and pan checks for 350% regressions");
+            source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal) &&
+            source.Contains("ZoomExerciseMs", StringComparison.Ordinal) &&
+            source.Contains("PostZoomRenderReadyMs", StringComparison.Ordinal) &&
+            source.Contains("VisualProbeMs", StringComparison.Ordinal),
+            "viewport stress smoke must support hidden sampled page opens plus absolute zoom, pan, and phase timing checks for 350% regressions");
+        AssertTrue(
+            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS", StringComparison.Ordinal) &&
+            source.Contains("RunViewportTreeOpsSmoke(report)", StringComparison.Ordinal) &&
+            treeOps.Contains("MovePagesDownAndRestore", StringComparison.Ordinal) &&
+            treeOps.Contains("MoveTakeoffsDownAndRestore", StringComparison.Ordinal) &&
+            treeOps.Contains("SelectPagesBulkForSmoke", StringComparison.Ordinal) &&
+            treeOps.Contains("SelectTakeoffsBulkForSmoke", StringComparison.Ordinal) &&
+            treeOps.Contains("OrdersEqual(before, OrderedChildSnapshot(parent))", StringComparison.Ordinal) &&
+            script.Contains("[switch]$IncludeTreeOps", StringComparison.Ordinal),
+            "viewport stress smoke should optionally exercise reversible single/bulk selection and move operations in Pages and Takeoffs trees");
         AssertTrue(
             source.Contains("ViewportPerformanceRecorder.BeginRun", StringComparison.Ordinal) &&
             source.Contains("ViewportPerformanceRecorder.EndRun", StringComparison.Ordinal) &&

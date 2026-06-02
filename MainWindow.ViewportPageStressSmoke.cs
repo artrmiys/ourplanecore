@@ -23,6 +23,7 @@ public partial class MainWindow
     private const string ViewportPageStressSmokeTabCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT";
     private const string ViewportPageStressSmokeTargetZoomEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM";
     private const string ViewportPageStressSmokePanStepsEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS";
+    private const string ViewportPageStressTreeOpsEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS";
 
     private async Task TryRunViewportPageStressSmokeAsync()
     {
@@ -109,6 +110,9 @@ public partial class MainWindow
             if (!result.Passed)
                 report.Failures.Add($"{result.Stage} failed for {result.PageName}: {result.Error}");
         }
+
+        if (IsTruthyEnvironment(ViewportPageStressTreeOpsEnv))
+            RunViewportTreeOpsSmoke(report);
     }
 
     private async Task<PageSmokeResult> OpenAndProbePageAsync(PageInfo page, int timeoutMs, string stage)
@@ -120,9 +124,18 @@ public partial class MainWindow
             OpenPageInActiveTab(page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            Stopwatch phaseWatch = Stopwatch.StartNew();
             await ExerciseViewportZoomAsync();
+            phaseWatch.Stop();
+            result.ZoomExerciseMs = phaseWatch.ElapsedMilliseconds;
+            phaseWatch.Restart();
             await WaitForViewportPageRenderAsync(page, timeoutMs);
+            phaseWatch.Stop();
+            result.PostZoomRenderReadyMs = phaseWatch.ElapsedMilliseconds;
+            phaseWatch.Restart();
             result.VisualProbe = ProbeViewportSurfaceOpacity();
+            phaseWatch.Stop();
+            result.VisualProbeMs = phaseWatch.ElapsedMilliseconds;
             result.Passed = result.VisualProbe.Passed;
             result.Error = result.VisualProbe.Error;
         }
@@ -149,8 +162,14 @@ public partial class MainWindow
             OpenPageInNewTab(page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            Stopwatch phaseWatch = Stopwatch.StartNew();
             await ExerciseViewportZoomAsync();
+            phaseWatch.Stop();
+            result.ZoomExerciseMs = phaseWatch.ElapsedMilliseconds;
+            phaseWatch.Restart();
             result.VisualProbe = ProbeViewportSurfaceOpacity();
+            phaseWatch.Stop();
+            result.VisualProbeMs = phaseWatch.ElapsedMilliseconds;
             result.Passed = result.VisualProbe.Passed;
             result.Error = result.VisualProbe.Error;
         }
@@ -177,7 +196,10 @@ public partial class MainWindow
             ActivatePageTab(tab, page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            Stopwatch phaseWatch = Stopwatch.StartNew();
             result.VisualProbe = ProbeViewportSurfaceOpacity();
+            phaseWatch.Stop();
+            result.VisualProbeMs = phaseWatch.ElapsedMilliseconds;
             result.Passed = result.VisualProbe.Passed;
             result.Error = result.VisualProbe.Error;
         }
@@ -370,6 +392,7 @@ public partial class MainWindow
         public List<PageSmokeResult> ReturnResults { get; } = [];
         public List<PageSmokeResult> TabResults { get; } = [];
         public List<PageSmokeResult> TabReturnResults { get; } = [];
+        public ViewportTreeOpsSmokeResult? TreeOps { get; set; }
         public List<string> Failures { get; } = [];
         public ViewportPerformanceRun? Performance { get; set; }
     }
@@ -380,6 +403,9 @@ public partial class MainWindow
         public string PageName { get; set; } = "";
         public string PageFolder { get; set; } = "";
         public long RenderReadyMs { get; set; }
+        public long ZoomExerciseMs { get; set; }
+        public long PostZoomRenderReadyMs { get; set; }
+        public long VisualProbeMs { get; set; }
         public long ElapsedMs { get; set; }
         public bool Passed { get; set; }
         public string Error { get; set; } = "";

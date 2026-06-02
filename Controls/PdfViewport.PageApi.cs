@@ -120,14 +120,10 @@ public sealed partial class PdfViewport
                 restoreView: restoreView,
                 fitAfter: !restoreView.HasValue,
                 allowImmediateCache: false,
-                allowLiveRender: false);
+                allowLiveRender: false,
+                allowMemoryBitmap: false);
         }
-        else if (!TryApplyPersistedDefaultCleanRender(
-            ViewportRenderPolicy.ResponsiveMinRenderScale,
-            restoreView,
-            fitAfter: !restoreView.HasValue,
-            loadedStatus,
-            fireLayersAfter: true))
+        else
         {
             ClearPreviousPageBitmapDuringSwitch();
             QueueDocnetRender(

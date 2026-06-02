@@ -63,8 +63,10 @@ public sealed partial class PdfViewport
             {
                 using var bitmapPaint = new SKPaint
                 {
-                    IsAntialias = true,
-                    FilterQuality = _zoom > _bitmapScale * 1.05f
+                    IsAntialias = !_renderNavigationFastFrame,
+                    FilterQuality = _renderNavigationFastFrame
+                        ? SKFilterQuality.Medium
+                        : _zoom > _bitmapScale * 1.05f
                         ? SKFilterQuality.High
                         : SKFilterQuality.Medium,
                 };

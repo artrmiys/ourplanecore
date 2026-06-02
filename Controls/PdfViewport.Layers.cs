@@ -76,6 +76,41 @@ public sealed partial class PdfViewport
         ViewState? restoreView,
         bool fitAfter)
     {
+        if (TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, renderScale, restoreView, fitAfter))
+            return true;
+
+        float fastScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
+        return Math.Abs(renderScale - fastScale) > 0.001f &&
+               TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter);
+    }
+
+    private bool TryApplyPersistedPreviewRenderScale(
+        string pdfPath,
+        int pdfIndex,
+        float renderScale,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        string cacheKey = DocnetRenderCacheKey(pdfPath, pdfIndex, renderScale);
+        if (PersistedPreviewBitmapCache.TryGet(cacheKey, out CachedBitmapRender cachedPreview))
+        {
+            ApplyPreviewBitmapRender(cachedPreview.Bitmap, cachedPreview.WidthPt, cachedPreview.HeightPt, cachedPreview.BitmapScale, restoreView, fitAfter);
+            AppLog.Info(
+                $"Viewport PyMuPDF preview memory cache hit; page='{_pageFolder}'; " +
+                $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
+            ReportViewportRenderProfile(
+                "preview-memory",
+                _pageFolder,
+                pdfPath,
+                pdfIndex,
+                renderScale,
+                elapsedMs: 0,
+                fromCache: true,
+                clipRect: null);
+            RequestRepaint();
+            return true;
+        }
+
         if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pdfIndex, renderScale, out PdfLayerRenderResult render))
             return false;
 
@@ -83,16 +118,9 @@ public sealed partial class PdfViewport
         if (bitmap == null)
             return false;
 
-        _pageBitmap?.Dispose();
-        _pageBitmap = bitmap;
-        _pdfW = render.WidthPt;
-        _pdfH = render.HeightPt;
-        _bitmapScale = _pdfW > 0 ? _pageBitmap.Width / _pdfW : renderScale;
-        _renderedScale = _bitmapScale;
-        _usingLayerRenderer = true;
-        _showingPreviousPageDuringSwitch = false;
-        ClearDetailRenderBitmap();
-        ApplyInitialPreviewView(restoreView, fitAfter);
+        float bitmapScale = render.WidthPt > 0 ? bitmap.Width / render.WidthPt : renderScale;
+        ApplyPreviewBitmapRender(bitmap, render.WidthPt, render.HeightPt, bitmapScale, restoreView, fitAfter);
+        PersistedPreviewBitmapCache.Put(cacheKey, render.WidthPt, render.HeightPt, bitmapScale, bitmap);
         AppLog.Info(
             $"Viewport PyMuPDF preview cache hit; page='{_pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
@@ -107,6 +135,26 @@ public sealed partial class PdfViewport
             clipRect: null);
         RequestRepaint();
         return true;
+    }
+
+    private void ApplyPreviewBitmapRender(
+        SKBitmap bitmap,
+        float widthPt,
+        float heightPt,
+        float bitmapScale,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        _pageBitmap?.Dispose();
+        _pageBitmap = bitmap;
+        _pdfW = widthPt;
+        _pdfH = heightPt;
+        _bitmapScale = bitmapScale;
+        _renderedScale = bitmapScale;
+        _usingLayerRenderer = true;
+        _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
+        ApplyInitialPreviewView(restoreView, fitAfter);
     }
 
     private bool TryApplyPersistedCleanLayerRender(LayerRenderRequest request)
@@ -179,7 +227,7 @@ public sealed partial class PdfViewport
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
         ApplyLayerRenderContinuation(request);
-        QueueDetailRenderIfNeeded(force: true);
+        QueueDetailRenderIfNeeded(force: ShouldForceDetailAfterLayerApply(request));
         if (request.FireLayersAfter)
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
@@ -265,7 +313,7 @@ public sealed partial class PdfViewport
         if (_pdfSnapEnabled && request.ResetLayerStates)
             QueuePdfSnapPointLoad(force: true);
         ApplyLayerRenderContinuation(request);
-        QueueDetailRenderIfNeeded(force: request.ResetLayerStates || request.HighlightedLayers.Count > 0);
+        QueueDetailRenderIfNeeded(force: ShouldForceDetailAfterLayerApply(request));
         if (request.FireLayersAfter)
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
@@ -331,7 +379,7 @@ public sealed partial class PdfViewport
         if (_pdfSnapEnabled && request.ResetLayerStates)
             QueuePdfSnapPointLoad(force: true);
         ApplyLayerRenderContinuation(request);
-        QueueDetailRenderIfNeeded(force: request.ResetLayerStates || request.HighlightedLayers.Count > 0);
+        QueueDetailRenderIfNeeded(force: ShouldForceDetailAfterLayerApply(request));
         if (request.FireLayersAfter)
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
@@ -406,6 +454,7 @@ public sealed partial class PdfViewport
                 render = await Task.Run(() =>
                     RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
                 DocnetRenderCache.Put(cacheKey, render);
+                TryWriteDocnetPreviewCache(request, render);
             }
             renderWatch.Stop();
             ReportSlowPdfRender("docnet", request, renderWatch.ElapsedMilliseconds, fromCache);
@@ -420,7 +469,7 @@ public sealed partial class PdfViewport
                 else if (render != null)
                     ApplyDocnetRenderResult(render);
                 ApplyDocnetRenderContinuation(request);
-                QueueDetailRenderIfNeeded(force: true);
+                QueueDetailRenderIfNeeded(force: false);
                 RequestRepaint();
             }
             else if (render != null)
@@ -460,7 +509,9 @@ public sealed partial class PdfViewport
                 CurrentRenderScale(),
                 request.StatusAfter,
                 request.FireLayersAfter,
-                allowImmediateCache: false);
+                allowImmediateCache: false,
+                allowLiveRender: false,
+                allowMemoryBitmap: false);
             return;
         }
 
@@ -511,6 +562,43 @@ public sealed partial class PdfViewport
         }
 
         return ApplyLayerRenderResult(render, resetLayerStates);
+    }
+
+    private static void TryWriteDocnetPreviewCache(DocnetRenderRequest request, DocnetRenderResult render)
+    {
+        if (Math.Abs(request.RenderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) > 0.001f ||
+            render.WidthPt <= 0 ||
+            render.HeightPt <= 0 ||
+            render.Bitmap.Width <= 0 ||
+            render.Bitmap.Height <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using SKImage image = SKImage.FromBitmap(render.Bitmap);
+            using SKData? data = image.Encode(SKEncodedImageFormat.Png, 85);
+            if (data == null || data.Size <= 0)
+                return;
+
+            PdfPreviewRenderCache.TryWriteCleanPreview(
+                request.PdfPath,
+                request.PdfIndex,
+                request.RenderScale,
+                new PdfLayerRenderResult
+                {
+                    ImageBytes = data.ToArray(),
+                    WidthPt = render.WidthPt,
+                    HeightPt = render.HeightPt,
+                    Layers = [],
+                    LayersCaptured = false,
+                });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport fast Docnet preview cache write failed for {Path.GetFileName(request.PdfPath)} page {request.PdfIndex + 1}");
+        }
     }
 
     private bool ApplyLayerRenderResult(
@@ -566,7 +654,8 @@ public sealed partial class PdfViewport
         ViewState? restoreView = null,
         bool fitAfter = false,
         bool allowImmediateCache = true,
-        bool allowLiveRender = true)
+        bool allowLiveRender = true,
+        bool allowMemoryBitmap = true)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath))
             return;
@@ -591,7 +680,7 @@ public sealed partial class PdfViewport
         if (!preserveDetailDuringZoomRefresh)
             ClearDetailRender();
 
-        if (TryApplyLayerBitmapCache(request, out bool exactLayerCacheHit))
+        if (allowMemoryBitmap && TryApplyLayerBitmapCache(request, out bool exactLayerCacheHit))
         {
             if (exactLayerCacheHit)
             {
@@ -640,7 +729,7 @@ public sealed partial class PdfViewport
                 new PdfLayer(layer.Number, layer.Name, layer.IsOn)));
         }
 
-        QueueDetailRenderIfNeeded(force: request.ResetLayerStates || request.HighlightedLayers.Count > 0);
+        QueueDetailRenderIfNeeded(force: ShouldForceDetailAfterLayerApply(request));
         if (request.FireLayersAfter)
             FireLayersChanged();
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
@@ -663,6 +752,9 @@ public sealed partial class PdfViewport
         !request.FitAfter &&
         string.IsNullOrWhiteSpace(request.StatusAfter) &&
         !request.FireLayersAfter;
+
+    private static bool ShouldForceDetailAfterLayerApply(LayerRenderRequest request) =>
+        request.HighlightedLayers.Count > 0;
 
     private bool TryApplyPersistedDefaultCleanRender(
         float renderScale,
@@ -698,9 +790,18 @@ public sealed partial class PdfViewport
         float renderScale,
         string? statusAfter,
         bool fireLayersAfter,
-        bool allowImmediateCache = true)
+        bool allowImmediateCache = true,
+        bool allowLiveRender = true,
+        bool allowMemoryBitmap = true)
     {
-        QueueLayerRender(resetLayerStates, renderScale, statusAfter, fireLayersAfter, allowImmediateCache: allowImmediateCache);
+        QueueLayerRender(
+            resetLayerStates,
+            renderScale,
+            statusAfter,
+            fireLayersAfter,
+            allowImmediateCache: allowImmediateCache,
+            allowLiveRender: allowLiveRender,
+            allowMemoryBitmap: allowMemoryBitmap);
     }
 
     public void DiscoverPdfLayersOnDemand()
@@ -864,7 +965,7 @@ public sealed partial class PdfViewport
                         decodedBitmap = null;
                         CacheLayerBitmapRender(completion.Request);
                         ApplyLayerRenderContinuation(completion.Request);
-                        QueueDetailRenderIfNeeded(force: true);
+                        QueueDetailRenderIfNeeded(force: ShouldForceDetailAfterLayerApply(completion.Request));
                         if (completion.Request.FireLayersAfter)
                             FireLayersChanged();
                         if (!string.IsNullOrWhiteSpace(completion.Request.StatusAfter))
