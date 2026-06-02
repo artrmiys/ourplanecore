@@ -693,6 +693,7 @@ public partial class MainWindow
                     AllowDrop = true,
                 };
                 item.PreviewMouseLeftButtonDown += PageTab_PreviewMouseLeftButtonDown;
+                item.PreviewMouseLeftButtonUp += PageTab_PreviewMouseLeftButtonUp;
                 item.PreviewMouseMove += PageTab_PreviewMouseMove;
                 item.DragOver += PageTab_DragOver;
                 item.Drop += PageTab_Drop;
@@ -724,12 +725,32 @@ public partial class MainWindow
 
         _pendingPageTabDrag = sender is TabItem { Tag: PageTabState tab } ? tab : null;
         _pendingPageTabDragStart = e.GetPosition(PageTabs);
+        e.Handled = _pendingPageTabDrag != null;
+    }
+
+    private void PageTab_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TabItem { Tag: PageTabState tab } ||
+            !ReferenceEquals(_pendingPageTabDrag, tab))
+        {
+            return;
+        }
+
+        _pendingPageTabDrag = null;
+        ActivatePageTab(tab);
+        e.Handled = true;
     }
 
     private void PageTab_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (_pendingPageTabDrag == null || e.LeftButton != MouseButtonState.Pressed)
+        if (_pendingPageTabDrag == null)
             return;
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _pendingPageTabDrag = null;
+            return;
+        }
 
         Point position = e.GetPosition(PageTabs);
         if (Math.Abs(position.X - _pendingPageTabDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&

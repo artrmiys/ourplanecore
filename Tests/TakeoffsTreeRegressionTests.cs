@@ -110,10 +110,17 @@ internal static class TakeoffsTreeRegressionTests
             "page tabs control and central viewport space should accept drops for detach");
         AssertTrue(
             pageTabs.Contains("item.PreviewMouseLeftButtonDown += PageTab_PreviewMouseLeftButtonDown", StringComparison.Ordinal) &&
+            pageTabs.Contains("item.PreviewMouseLeftButtonUp += PageTab_PreviewMouseLeftButtonUp", StringComparison.Ordinal) &&
             pageTabs.Contains("item.PreviewMouseMove += PageTab_PreviewMouseMove", StringComparison.Ordinal) &&
             pageTabs.Contains("item.Drop += PageTab_Drop", StringComparison.Ordinal) &&
             pageTabs.Contains("DragDrop.DoDragDrop(PageTabs, dragged, DragDropEffects.Move)", StringComparison.Ordinal),
             "page tabs should start a tab drag from the tab item body");
+        string tabMouseDown = SliceMethod(pageTabs, "private void PageTab_PreviewMouseLeftButtonDown");
+        string tabMouseUp = SliceMethod(pageTabs, "private void PageTab_PreviewMouseLeftButtonUp");
+        AssertTrue(
+            tabMouseDown.Contains("e.Handled = _pendingPageTabDrag != null", StringComparison.Ordinal) &&
+            tabMouseUp.Contains("ActivatePageTab(tab)", StringComparison.Ordinal),
+            "page tabs should activate on click release, not mouse down, so starting a drag does not switch pages");
         AssertTrue(
             pageTabs.Contains("MovePageTab(dragged, target", StringComparison.Ordinal) &&
             pageTabs.Contains("_pageTabs.RemoveAt(oldIndex)", StringComparison.Ordinal) &&
@@ -154,10 +161,16 @@ internal static class TakeoffsTreeRegressionTests
         string resources = ReadRepoFile("Resources/AppControlResources.xaml");
         string clickMethod = SliceMethod(pagesTree, "private void PagesTree_PreviewMouseLeftButtonDown");
         string openMethod = SliceMethod(pagesTree, "private void SelectPageTreeItemAndOpenIfPage");
+        string syncMethod = SliceMethod(pagesTree, "private void SyncPageTreeNodeForViewportOpen");
 
         AssertTrue(
             clickMethod.Contains("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
             "page-tree mouse clicks should not rely only on WPF SelectedItemChanged to open the viewport");
+        AssertTrue(
+            clickMethod.Contains("FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) != null", StringComparison.Ordinal) &&
+            clickMethod.IndexOf("FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) != null", StringComparison.Ordinal) <
+            clickMethod.IndexOf("SelectPageTreeItemAndOpenIfPage(item)", StringComparison.Ordinal),
+            "page-tree expander clicks should bypass row selection/open logic so folders collapse on the first click");
         AssertTrue(
             openMethod.Contains("item.Tag is not PageInfo page", StringComparison.Ordinal) &&
             openMethod.Contains("SelectPagesTreeItemSilently(item)", StringComparison.Ordinal) &&
@@ -205,6 +218,10 @@ internal static class TakeoffsTreeRegressionTests
             pagesTree.Contains("private bool HasActivePagesMultiSelection() => _pagesMultiSelection.Count > 1;", StringComparison.Ordinal) &&
             pagesTree.Contains("private void SyncPageTreeNodeForViewportOpen", StringComparison.Ordinal),
             "deferred viewport-to-tree sync should have a guard that preserves active page multi-selection");
+        AssertTrue(
+            syncMethod.Contains("PagesTree.SelectedItem is TreeViewItem { Tag: PageInfo selectedPage }", StringComparison.Ordinal) &&
+            syncMethod.Contains("IsSamePageFolder(selectedPage.FolderPath, pageFolder)", StringComparison.Ordinal),
+            "deferred viewport-to-tree sync should not re-expand a user-collapsed folder when the current page is already selected");
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
         string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
         AssertTrue(

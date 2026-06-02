@@ -497,6 +497,13 @@ public partial class MainWindow
             return;
         }
 
+        if (PagesTree.SelectedItem is TreeViewItem { Tag: PageInfo selectedPage } &&
+            IsSamePageFolder(selectedPage.FolderPath, pageFolder))
+        {
+            ApplyPagesMultiSelectionVisuals();
+            return;
+        }
+
         SelectPageTreeNodeSilently(pageFolder);
     }
 
@@ -510,6 +517,8 @@ public partial class MainWindow
 
         _pagesDragItem = item;
         _pagesDragArmed = CanArmPagesTreeDrag(item, e.OriginalSource as DependencyObject);
+        if (FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) != null)
+            return;
 
         if (item.Tag is PageTakeoffNode pageTakeoff)
         {
