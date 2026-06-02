@@ -40,6 +40,14 @@ public sealed partial class PdfViewport
 
     public void RestoreViewState(ViewState state)
     {
+        bool hasVisiblePage = _pageBitmap != null && !_showingPreviousPageDuringSwitch;
+        bool changedView =
+            Math.Abs(state.Zoom - _zoom) > 0.001f ||
+            Math.Abs(state.PanX - _panX) * Math.Max(_zoom, 0.001f) > 2f ||
+            Math.Abs(state.PanY - _panY) * Math.Max(_zoom, 0.001f) > 2f;
+        if (hasVisiblePage && changedView)
+            BeginFastNavigation();
+
         _zoom = Math.Clamp(state.Zoom, ZoomMin, ZoomMax);
         _panX = state.PanX;
         _panY = state.PanY;
@@ -111,7 +119,8 @@ public sealed partial class PdfViewport
                 fireLayersAfter: true,
                 restoreView: restoreView,
                 fitAfter: !restoreView.HasValue,
-                allowImmediateCache: false);
+                allowImmediateCache: false,
+                allowLiveRender: false);
         }
         else if (!TryApplyPersistedDefaultCleanRender(
             ViewportRenderPolicy.ResponsiveMinRenderScale,

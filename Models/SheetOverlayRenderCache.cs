@@ -13,6 +13,7 @@ namespace OurPlaneCore;
 public static class SheetOverlayRenderCache
 {
     public const string CacheRootEnvironmentVariable = "OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT";
+    private const string TintStyleVersion = "bright-v2";
 
     private const int MaxEntries = 256;
     private const long MaxBytes = 800_000_000;
@@ -291,6 +292,8 @@ public static class SheetOverlayRenderCache
                 OverlayPageIndex.ToString(CultureInfo.InvariantCulture),
                 "|",
                 RenderScale.ToString("0.###", CultureInfo.InvariantCulture),
+                "|",
+                TintStyleVersion,
                 "|",
                 Color,
                 "|",

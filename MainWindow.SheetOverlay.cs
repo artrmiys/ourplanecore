@@ -15,7 +15,10 @@ namespace OurPlaneCore;
 public partial class MainWindow
 {
     private const string DefaultSheetOverlayColor = "#E53935";
-    private const double DefaultSheetOverlayOpacity = 0.55;
+    private const double DefaultSheetOverlayOpacity = 0.82;
+    private const double MinimumBrightSheetOverlayOpacity = 0.82;
+    private const double SheetOverlayAlphaBoost = 1.85;
+    private const string SheetOverlayTintStyleVersion = "bright-v2";
     private readonly SheetOverlayBitmapCache _sheetOverlayBitmapCache = new(maxEntries: 8);
     private int _sheetOverlayLoadVersion;
 
@@ -594,8 +597,9 @@ public partial class MainWindow
             info.Exists ? info.Length.ToString(CultureInfo.InvariantCulture) : "0",
             overlayPage.PdfPage.ToString(CultureInfo.InvariantCulture),
             Math.Round(renderScale, 3).ToString(CultureInfo.InvariantCulture),
+            SheetOverlayTintStyleVersion,
             page.OverlayColor,
-            page.OverlayOpacity.ToString("0.###", CultureInfo.InvariantCulture),
+            EffectiveSheetOverlayOpacity(page.OverlayOpacity).ToString("0.###", CultureInfo.InvariantCulture),
             string.Join(';', overlayPage.PdfLayers
                 .OrderBy(layer => layer.Number)
                 .Select(layer => $"{layer.Number}:{layer.IsOn}:{layer.Name}")));
@@ -722,8 +726,8 @@ public partial class MainWindow
 
     private static SKBitmap BuildTintedSheetOverlayBitmap(SKBitmap source, string colorHex, double opacity)
     {
-        SKColor color = ParseOverlayColor(colorHex);
-        double alphaScale = Math.Clamp(opacity, 0.05, 1.0);
+        SKColor color = BuildBrightSheetOverlayColor(ParseOverlayColor(colorHex));
+        double alphaScale = EffectiveSheetOverlayOpacity(opacity);
         var tinted = new SKBitmap(new SKImageInfo(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
         tinted.Erase(SKColors.Transparent);
 
@@ -735,9 +739,9 @@ public partial class MainWindow
                 int whiteDistance = Math.Max(
                     Math.Max(255 - pixel.Red, 255 - pixel.Green),
                     255 - pixel.Blue);
-                int alpha = (int)Math.Round(whiteDistance * alphaScale * (pixel.Alpha / 255.0) * 1.15);
-                alpha = Math.Clamp(alpha, 0, 235);
-                if (alpha < 8)
+                int alpha = (int)Math.Round(whiteDistance * alphaScale * (pixel.Alpha / 255.0) * SheetOverlayAlphaBoost);
+                alpha = Math.Clamp(alpha, 0, 255);
+                if (alpha < 3)
                     continue;
 
                 tinted.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, (byte)alpha));
@@ -757,7 +761,28 @@ public partial class MainWindow
         double opacity = _currentPage?.OverlayOpacity ?? DefaultSheetOverlayOpacity;
         return double.IsNaN(opacity) || double.IsInfinity(opacity) || opacity <= 0
             ? DefaultSheetOverlayOpacity
-            : Math.Clamp(opacity, 0.05, 1.0);
+            : EffectiveSheetOverlayOpacity(opacity);
+    }
+
+    private static double EffectiveSheetOverlayOpacity(double opacity) =>
+        Math.Clamp(
+            double.IsNaN(opacity) || double.IsInfinity(opacity) || opacity <= 0
+                ? DefaultSheetOverlayOpacity
+                : Math.Max(opacity, MinimumBrightSheetOverlayOpacity),
+            0.05,
+            1.0);
+
+    private static SKColor BuildBrightSheetOverlayColor(SKColor color)
+    {
+        static byte Boost(byte value)
+        {
+            if (value < 8)
+                return 0;
+
+            return (byte)Math.Clamp((int)Math.Round(value * 1.28 + 34), 0, 255);
+        }
+
+        return new SKColor(Boost(color.Red), Boost(color.Green), Boost(color.Blue));
     }
 
     private static SKColor ParseOverlayColor(string colorHex)

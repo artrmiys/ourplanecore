@@ -16,11 +16,21 @@ namespace OurPlaneCore;
 public sealed class PdfLayerRenderResult
 {
     public byte[] ImageBytes { get; init; } = [];
+    public byte[] RawImageBytes { get; init; } = [];
+    public int RawImageWidth { get; init; }
+    public int RawImageHeight { get; init; }
+    public int RawImageChannels { get; init; }
     public float WidthPt { get; init; }
     public float HeightPt { get; init; }
     public SKRect? ClipRect { get; init; }
     public IReadOnlyList<PdfLayer> Layers { get; init; } = [];
     public bool LayersCaptured { get; init; }
+
+    public bool HasRawImage =>
+        RawImageBytes.Length > 0 &&
+        RawImageWidth > 0 &&
+        RawImageHeight > 0 &&
+        RawImageChannels is 3 or 4;
 }
 
 public sealed class PdfLayerTraceResult

@@ -26,6 +26,7 @@ public static class ViewportRenderPolicy
     public const int DetailRenderPrefetchConcurrency = 1;
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
+    public const int DetailRenderCoalesceDelayMs = 850;
     public const int DetailRenderMaxPaintTiles = 2;
     public const int PageSwitchDetailRenderDelayMs = 320;
     public const int NearbyPagePreviewPrefetchRadius = 3;
@@ -33,7 +34,7 @@ public static class ViewportRenderPolicy
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;
-    public const float SheetOverlayViewportRenderScale = 1.0f;
+    public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;
     public const float MeasurementLabelMinZoom = 0.95f;
     public const int DenseMeasurementLabelThreshold = 250;
@@ -54,11 +55,11 @@ public static class ViewportRenderPolicy
     {
         float configured = CurrentQuality.DetailPaddingScreenPx;
         if (zoom < 2.0f)
-            return Math.Min(configured, 384f);
+            return Math.Min(configured, 192f);
         if (zoom < 4.0f)
-            return Math.Min(configured, 512f);
+            return Math.Min(configured, 256f);
 
-        return configured;
+        return Math.Min(configured, 512f);
     }
 
     public static string NormalizeQualityMode(string? mode)
@@ -78,9 +79,9 @@ public static class ViewportRenderPolicy
 
     private static RenderQuality CurrentQuality => _qualityMode switch
     {
-        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f),
-        MaxQualityMode => new RenderQuality(4.0f, 320_000_000f, DetailRenderMaxScale, 320_000_000f, 1024f),
-        _ => new RenderQuality(3.0f, 192_000_000f, 12.0f, 192_000_000f, 768f),
+        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f, 1.75f),
+        MaxQualityMode => new RenderQuality(4.0f, 320_000_000f, DetailRenderMaxScale, 320_000_000f, 1024f, 2.25f),
+        _ => new RenderQuality(3.0f, 192_000_000f, 12.0f, 192_000_000f, 768f, 2.0f),
     };
 
     public static bool ShouldUseFastNavigationFrame(
@@ -142,6 +143,10 @@ public static class ViewportRenderPolicy
     public static bool ShouldSkipFullRefreshDuringDetail(float bitmapScale) =>
         bitmapScale >= ResponsiveMinRenderScale * 0.95f;
 
+    public static bool ShouldPreferDetailRenderOverFullRefresh(float zoom, float bitmapScale) =>
+        ShouldUseDetailRender(zoom, bitmapScale) &&
+        bitmapScale < ResponsiveMinRenderScale * 0.95f;
+
     public static float SelectDetailRenderScale(
         float zoom,
         float clipWidthPt,
@@ -151,7 +156,10 @@ public static class ViewportRenderPolicy
         if (!ShouldUseDetailRender(zoom, bitmapScale) || clipWidthPt <= 0 || clipHeightPt <= 0)
             return 0;
 
-        float target = Math.Clamp(zoom, bitmapScale * DetailRenderMinScaleGain, CurrentQuality.DetailMaxScale);
+        float target = Math.Clamp(
+            zoom,
+            bitmapScale * DetailRenderMinScaleGain,
+            Math.Min(CurrentQuality.DetailMaxScale, CurrentQuality.DetailInteractiveMaxScale));
         float clipPoints = clipWidthPt * clipHeightPt;
         if (clipPoints > 0)
         {
@@ -229,5 +237,6 @@ public static class ViewportRenderPolicy
         float ResponsiveMaxPixels,
         float DetailMaxScale,
         float DetailMaxPixels,
-        float DetailPaddingScreenPx);
+        float DetailPaddingScreenPx,
+        float DetailInteractiveMaxScale);
 }

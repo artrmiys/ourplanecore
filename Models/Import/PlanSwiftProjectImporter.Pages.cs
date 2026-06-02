@@ -22,18 +22,21 @@ public static partial class PlanSwiftProjectImporter
         ref int importedPages)
     {
         HashSet<string> takeoffPageGuids = BuildTakeoffPageGuidSet(manifest);
-        IReadOnlyList<PlanSwiftPageRecord> pagesWithTakeoffs = manifest.Pages
-            .Where(page => PageHasTakeoffGeometry(page, takeoffPageGuids))
-            .ToList();
-        int skippedPages = manifest.Pages.Count - pagesWithTakeoffs.Count;
-        if (skippedPages > 0)
+        IReadOnlyList<PlanSwiftPageRecord> pagesToImport = options.ImportAllSheetsAndTakeoffFolders
+            ? manifest.Pages
+            : manifest.Pages
+                .Where(page => PageHasTakeoffGeometry(page, takeoffPageGuids))
+                .ToList();
+
+        int skippedPages = manifest.Pages.Count - pagesToImport.Count;
+        if (!options.ImportAllSheetsAndTakeoffFolders && skippedPages > 0)
         {
             messages.Add(
                 $"Skipped {skippedPages.ToString(CultureInfo.InvariantCulture)} PlanSwift page(s) " +
                 "with no measured takeoff geometry.");
         }
 
-        IEnumerable<PlanSwiftPageRecord> pages = Limit(pagesWithTakeoffs, options.MaxPages);
+        IEnumerable<PlanSwiftPageRecord> pages = Limit(pagesToImport, options.MaxPages);
         foreach (PlanSwiftPageRecord page in pages)
         {
             string parent = EnsureRelativeFolder(pagesRoot, page.ParentRelativeFolder);

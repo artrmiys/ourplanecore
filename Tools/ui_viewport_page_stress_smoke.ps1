@@ -6,6 +6,10 @@ param(
     [int]$PageTimeoutMs = 8000,
     [int]$ReturnCount = 6,
     [int]$TabCount = 5,
+    [int]$OpenCount = 0,
+    [double]$TargetZoom = 0,
+    [int]$PanSteps = 4,
+    [string]$ReportPath = "",
     [switch]$KeepAppOpen
 )
 
@@ -114,18 +118,30 @@ function Summarize-Results {
     foreach ($item in $slowest) {
         Write-Host ("  slow: {0} {1} ready {2} ms total {3} ms" -f $item.Stage, $item.PageName, $item.RenderReadyMs, $item.ElapsedMs)
     }
+    if ($null -ne $Report.Performance) {
+        $summary = $Report.Performance.Summary
+        Write-Host ("  render profiles: {0}" -f $summary.RenderProfileCount)
+        Write-Host ("  cache hit rate: {0:P1}" -f [double]$summary.CacheHitRate)
+        Write-Host ("  max render: {0} ms" -f $summary.MaxRenderMs)
+        Write-Host ("  slow frames: {0}" -f $summary.SlowFrameCount)
+        Write-Host ("  working set: {0} MB" -f $summary.WorkingSetMb)
+    }
 }
 
 $resolvedJob = (Resolve-Path -LiteralPath $JobPath).Path
 $jobState = $null
 $settingsState = $null
 $proc = $null
-$reportPath = Join-Path $env:TEMP ("opc_viewport_page_stress_report_" + [guid]::NewGuid().ToString("N") + ".json")
+$reportPathWasProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
+$reportPath = if ($reportPathWasProvided) { $ReportPath } else { Join-Path $env:TEMP ("opc_viewport_page_stress_report_" + [guid]::NewGuid().ToString("N") + ".json") }
 $oldSmoke = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE
 $oldReport = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_REPORT
 $oldTimeout = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS
 $oldReturn = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT
 $oldTabs = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT
+$oldOpen = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT
+$oldZoom = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM
+$oldPan = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS
 $stdoutPath = Join-Path $env:TEMP ("opc_viewport_page_stress_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
 $stderrPath = Join-Path $env:TEMP ("opc_viewport_page_stress_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
 
@@ -148,13 +164,22 @@ try {
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = [string]$PageTimeoutMs
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT = [string]$ReturnCount
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT = [string]$TabCount
+    if ($OpenCount -gt 0) {
+        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT = [string]$OpenCount
+    }
+    if ($TargetZoom -gt 0) {
+        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM = [string]$TargetZoom
+    }
+    if ($PanSteps -ge 0) {
+        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = [string]$PanSteps
+    }
 
     $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
     if (Test-Path -LiteralPath $appDll) {
-        $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     } else {
         $projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
-        $proc = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--no-restore", "--project", $projectPath) -WorkingDirectory $ProjectRoot -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $proc = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--no-restore", "--project", $projectPath) -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     }
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -195,6 +220,9 @@ try {
     }
 
     Write-Host "PASS viewport page stress smoke: opened $($report.PageCount) pages, returned to samples, opened new tabs, and all viewport opacity probes passed." -ForegroundColor Green
+    if ($reportPathWasProvided) {
+        Write-Host "Report saved: $reportPath" -ForegroundColor Cyan
+    }
 }
 finally {
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE = $oldSmoke
@@ -202,11 +230,14 @@ finally {
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = $oldTimeout
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT = $oldReturn
     $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT = $oldTabs
+    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT = $oldOpen
+    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM = $oldZoom
+    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = $oldPan
     Restore-SmokeSettings $settingsState
     if ($jobState -ne $null -and -not $KeepAppOpen) {
         Remove-Item -LiteralPath $jobState.Root -Recurse -Force -ErrorAction SilentlyContinue
     }
-    if (Test-Path -LiteralPath $reportPath) {
+    if (-not $reportPathWasProvided -and (Test-Path -LiteralPath $reportPath)) {
         Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path -LiteralPath $stdoutPath) {

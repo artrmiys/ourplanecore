@@ -178,6 +178,23 @@ public sealed partial class PdfViewport
         if (elapsedMs < ViewportRenderPolicy.SlowFrameLogMs)
             return;
 
+        ViewportPerformanceRecorder.RecordSlowFrame(
+            _pageFolder,
+            _zoom,
+            _renderNavigationFastFrame,
+            activeMeasurementCount,
+            visibleMeasurementCount,
+            _renderedScale,
+            _sheetOverlayBitmap != null,
+            elapsedMs,
+            pageBitmapMs,
+            overlayMs,
+            measurementMs,
+            markupMs,
+            inProgressMs,
+            labelMs,
+            screenOverlayMs);
+
         DateTime now = DateTime.UtcNow;
         if ((now - _lastSlowFrameLogAt).TotalSeconds < 2)
             return;

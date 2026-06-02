@@ -18,6 +18,7 @@ public partial class MainWindow
     private const string ViewportPageStressSmokeEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE";
     private const string ViewportPageStressSmokeReportEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_REPORT";
     private const string ViewportPageStressSmokeTimeoutEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS";
+    private const string ViewportPageStressSmokeOpenCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT";
     private const string ViewportPageStressSmokeReturnCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT";
     private const string ViewportPageStressSmokeTabCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT";
     private const string ViewportPageStressSmokeTargetZoomEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM";
@@ -47,6 +48,8 @@ public partial class MainWindow
         }
         finally
         {
+            if (ViewportPerformanceRecorder.IsActive)
+                report.Performance = ViewportPerformanceRecorder.EndRun();
             report.FinishedUtc = DateTime.UtcNow;
             WriteViewportPageStressSmokeReport(report);
             Application.Current.Shutdown(exitCode);
@@ -58,16 +61,20 @@ public partial class MainWindow
         if (_currentJob == null)
             throw new InvalidOperationException("No current job was opened before viewport page stress smoke.");
 
+        ViewportPerformanceRecorder.BeginRun(_currentJob.RootPath, "viewport-page-stress-smoke");
         int timeoutMs = ReadEnvironmentInt(ViewportPageStressSmokeTimeoutEnv, 8000, 1000, 60000);
         int returnCount = ReadEnvironmentInt(ViewportPageStressSmokeReturnCountEnv, 6, 1, 50);
         int tabCount = ReadEnvironmentInt(ViewportPageStressSmokeTabCountEnv, 5, 1, 20);
         List<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         if (pages.Count == 0)
             throw new InvalidOperationException("No pages were found for viewport page stress smoke.");
+        int openCount = ReadEnvironmentInt(ViewportPageStressSmokeOpenCountEnv, pages.Count, 1, pages.Count);
+        IReadOnlyList<PageInfo> openPages = SelectSmokeSamplePages(pages, openCount);
 
         report.JobPath = _currentJob.RootPath;
         report.PageCount = pages.Count;
-        foreach (PageInfo page in pages)
+        report.OpenSampleCount = openPages.Count;
+        foreach (PageInfo page in openPages)
         {
             PageSmokeResult result = await OpenAndProbePageAsync(page, timeoutMs, "open");
             report.OpenResults.Add(result);
@@ -329,6 +336,8 @@ public partial class MainWindow
     {
         string path = Environment.GetEnvironmentVariable(ViewportPageStressSmokeReportEnv) ?? "";
         if (string.IsNullOrWhiteSpace(path))
+            path = DefaultViewportPageStressSmokeReportPath(report);
+        if (string.IsNullOrWhiteSpace(path))
             return;
 
         string? directory = Path.GetDirectoryName(path);
@@ -337,6 +346,16 @@ public partial class MainWindow
 
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(path, JsonSerializer.Serialize(report, options));
+        AppLog.Info($"Viewport page stress smoke report written: {path}");
+    }
+
+    private static string DefaultViewportPageStressSmokeReportPath(ViewportPageStressSmokeReport report)
+    {
+        if (string.IsNullOrWhiteSpace(report.JobPath))
+            return "";
+
+        string stamp = report.StartedUtc.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+        return Path.Combine(report.JobPath, "AI_Context", "perf_runs", $"viewport_page_stress_{stamp}.json");
     }
 
     private sealed class ViewportPageStressSmokeReport
@@ -344,6 +363,7 @@ public partial class MainWindow
         public bool Passed { get; set; }
         public string JobPath { get; set; } = "";
         public int PageCount { get; set; }
+        public int OpenSampleCount { get; set; }
         public DateTime StartedUtc { get; set; }
         public DateTime FinishedUtc { get; set; }
         public List<PageSmokeResult> OpenResults { get; } = [];
@@ -351,6 +371,7 @@ public partial class MainWindow
         public List<PageSmokeResult> TabResults { get; } = [];
         public List<PageSmokeResult> TabReturnResults { get; } = [];
         public List<string> Failures { get; } = [];
+        public ViewportPerformanceRun? Performance { get; set; }
     }
 
     private sealed class PageSmokeResult

@@ -850,12 +850,17 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             overlay.Contains("SheetOverlayRenderCache.TryRead", StringComparison.Ordinal) &&
             overlay.Contains("Sheet overlay cache hit", StringComparison.Ordinal) &&
-            overlay.Contains("SheetOverlayRenderCache.TryWrite", StringComparison.Ordinal),
-            "sheet overlay rendering must read persisted cache before rendering and write it after tinting");
+            overlay.Contains("SheetOverlayRenderCache.TryWrite", StringComparison.Ordinal) &&
+            overlay.Contains("MinimumBrightSheetOverlayOpacity = 0.82", StringComparison.Ordinal) &&
+            overlay.Contains("SheetOverlayAlphaBoost = 1.85", StringComparison.Ordinal) &&
+            overlay.Contains("SheetOverlayTintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
+            overlay.Contains("BuildBrightSheetOverlayColor", StringComparison.Ordinal),
+            "sheet overlay rendering must read persisted cache before rendering, write after tinting, and keep overlays bright");
         AssertTrue(
             cache.Contains("OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT", StringComparison.Ordinal) &&
             cache.Contains("render-cache", StringComparison.Ordinal) &&
             cache.Contains("sheet-overlay", StringComparison.Ordinal) &&
+            cache.Contains("TintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
             cache.Contains("LayerStateKey", StringComparison.Ordinal),
             "sheet overlay cache must be portable and keyed by source PDF identity, render state, tint, opacity, and layers");
     }
@@ -1060,9 +1065,12 @@ internal static class TakeoffsTreeRegressionTests
             "cache-miss Docnet preview should still queue the normal layer render continuation");
         AssertTrue(
             pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
+            pageApi.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
             layers.Contains("bool allowImmediateCache = true", StringComparison.Ordinal) &&
-            layers.Contains("allowImmediateCache && TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
-            "page open should not synchronously decode a second clean render cache hit after applying the instant preview");
+            layers.Contains("bool allowLiveRender = true", StringComparison.Ordinal) &&
+            layers.Contains("allowImmediateCache && TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal) &&
+            layers.Contains("CompleteCacheOnlyLayerRender(request)", StringComparison.Ordinal),
+            "page open should not synchronously decode or live-render a second clean layer bitmap after applying the instant preview");
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
@@ -1125,8 +1133,11 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("MaxRenderCacheEntries = 96", StringComparison.Ordinal) &&
             service.Contains("MaxRenderCacheBytes = 768_000_000", StringComparison.Ordinal) &&
             service.Contains("ImageBase64", StringComparison.Ordinal) &&
+            service.Contains("InlineRawImage = hasClip", StringComparison.Ordinal) &&
+            service.Contains("InlineRawRenderImageMaxPixels = 4_000_000", StringComparison.Ordinal) &&
+            service.Contains("ImageRawBase64", StringComparison.Ordinal) &&
             service.Contains("Convert.FromBase64String(response.ImageBase64)", StringComparison.Ordinal),
-            "C# layer rendering should request RAM-sized bounded inline PNG data and decode image_base64 responses");
+            "C# layer rendering should request bounded raw detail images plus RAM-sized bounded inline PNG fallback data");
         AssertTrue(
             service.Contains("File.ReadAllBytes(response.Image)", StringComparison.Ordinal) &&
             service.Contains("PyMuPDF did not produce a rendered image.", StringComparison.Ordinal),
@@ -1138,10 +1149,11 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             helper.Contains("import base64", StringComparison.Ordinal) &&
             helper.Contains("def _render_image_payload", StringComparison.Ordinal) &&
+            helper.Contains("\"image_raw_base64\"", StringComparison.Ordinal) &&
             helper.Contains("base.tobytes(\"png\")", StringComparison.Ordinal) &&
             helper.Contains("\"image_base64\"", StringComparison.Ordinal) &&
             helper.Contains("base.save(image_path)", StringComparison.Ordinal),
-            "Python helper should return inline PNG data for bounded renders and fall back to the existing PNG file path");
+            "Python helper should return raw detail image data, inline PNG data for bounded renders, and fall back to the existing PNG file path");
     }
 
     public static void PdfSheetMetadataHandlesRotatedBottomTitleBlock()
@@ -1190,15 +1202,19 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderPrefetchEnabled = true", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchMinZoom = 4.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderCoalesceDelayMs = 850", StringComparison.Ordinal) &&
+            policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPaintTiles = 2", StringComparison.Ordinal) &&
             policy.Contains("ShouldUseDetailRenderPrefetch", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
             pageApi.Contains("renderScale: CurrentBaseRenderScale()", StringComparison.Ordinal) &&
+            pageApi.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
+            pageApi.Contains("BeginFastNavigation();", StringComparison.Ordinal) &&
             layers.Contains("QueueInitialLayerDiscoveryOrRender", StringComparison.Ordinal) &&
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
-            "interactive page opens should show the cheap preview first, then queue a capped base refresh and clipped detail instead of leaving the sheet blurry");
+            "interactive page opens should show the cheap preview first, then use cached base work plus clipped detail instead of launching an immediate full-sheet render");
         AssertTrue(
             rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
             rendering.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&
@@ -1212,6 +1228,7 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("bool needsDetailRender", StringComparison.Ordinal) &&
             transform.Contains("_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
+            transform.Contains("ViewportRenderPolicy.ShouldPreferDetailRenderOverFullRefresh(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
@@ -1222,7 +1239,11 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("BeginPageSwitchDetailRenderHold()", StringComparison.Ordinal) &&
             detail.Contains("ShouldHoldDetailRender(force)", StringComparison.Ordinal) &&
             detail.Contains("QueueDetailRenderAfterHold()", StringComparison.Ordinal) &&
-            detail.Contains("QueueDetailRenderIfNeeded(force: true)", StringComparison.Ordinal) &&
+            detail.Contains("QueueDetailRenderStart(force)", StringComparison.Ordinal) &&
+            detail.Contains("ViewportRenderPolicy.DetailRenderCoalesceDelayMs", StringComparison.Ordinal) &&
+            detail.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal) &&
+            detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
+            detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 320", StringComparison.Ordinal),
             "cached preview page opens should schedule capped base work immediately and hold clipped high-detail briefly until the page switch settles");
         AssertTrue(
@@ -1245,7 +1266,8 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
-            detail.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
+            detail.Contains("DecodePdfLayerRenderBitmap(renderResult.Result)", StringComparison.Ordinal) &&
+            detail.Contains("Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length)", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)", StringComparison.Ordinal) &&
             detail.Contains("QueueAdjacentDetailRenderPrefetch", StringComparison.Ordinal) &&
@@ -1263,9 +1285,9 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
             "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, and decode them off the UI path");
         AssertTrue(
-            layers.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
+            layers.Contains("DecodePdfLayerRenderBitmap(renderResult.Result)", StringComparison.Ordinal) &&
             layers.Contains("ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap)", StringComparison.Ordinal),
-            "full layer render PNG decode should be done before UI-thread bitmap application");
+            "layer render bitmap decode should be done before UI-thread bitmap application and support the raw detail payload");
         AssertTrue(
             layers.Contains("TryApplyLayerBitmapCache(request, out bool exactLayerCacheHit)", StringComparison.Ordinal) &&
             layers.Contains("ShouldPreserveDetailDuringLayerRender(request)", StringComparison.Ordinal) &&
@@ -1313,14 +1335,16 @@ internal static class TakeoffsTreeRegressionTests
     {
         string source = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
         string method = SliceMethod(source, "private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)");
+        string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
         AssertTrue(
             method.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
-            method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal),
-            "sheet overlay underlay should use medium/high sampling instead of low-quality blur");
+            policy.Contains("SheetOverlayViewportRenderScale = 2.0f", StringComparison.Ordinal),
+            "sheet overlay underlay should use high sampling and a sharper 2x viewport source render instead of looking blurry");
         AssertFalse(
-            method.Contains("SKFilterQuality.Low", StringComparison.Ordinal),
-            "sheet overlay underlay should not switch to low-quality sampling during navigation");
+            method.Contains("SKFilterQuality.Low", StringComparison.Ordinal) ||
+            method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal),
+            "sheet overlay underlay should not switch to lower-quality sampling during navigation");
         AssertTrue(
             method.Contains("IsAntialias = false", StringComparison.Ordinal),
             "bitmap sheet overlays should avoid antialias softening");
@@ -1329,13 +1353,33 @@ internal static class TakeoffsTreeRegressionTests
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
     {
         string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");
+        string recorder = ReadRepoFile(Path.Combine("Models", "ViewportPerformanceRecorder.cs"));
+        string detail = ReadRepoFile(Path.Combine("Controls", "PdfViewport.DetailRender.cs"));
+        string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
 
         AssertTrue(
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM", StringComparison.Ordinal) &&
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS", StringComparison.Ordinal) &&
+            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT", StringComparison.Ordinal) &&
             source.Contains("ReadEnvironmentFloat", StringComparison.Ordinal) &&
             source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal),
-            "viewport stress smoke must support hidden absolute zoom and pan checks for 350% regressions");
+            "viewport stress smoke must support hidden sampled page opens plus absolute zoom and pan checks for 350% regressions");
+        AssertTrue(
+            source.Contains("ViewportPerformanceRecorder.BeginRun", StringComparison.Ordinal) &&
+            source.Contains("ViewportPerformanceRecorder.EndRun", StringComparison.Ordinal) &&
+            source.Contains("AI_Context", StringComparison.Ordinal) &&
+            source.Contains("perf_runs", StringComparison.Ordinal),
+            "viewport stress smoke must write a default perf report under the job AI_Context");
+        AssertTrue(
+            recorder.Contains("RecordRenderProfile", StringComparison.Ordinal) &&
+            recorder.Contains("RecordSlowFrame", StringComparison.Ordinal) &&
+            recorder.Contains("CacheHitRate", StringComparison.Ordinal) &&
+            recorder.Contains("MaxPageBitmapPaintMs", StringComparison.Ordinal),
+            "viewport perf recorder must capture render/cache and slow paint metrics");
+        AssertTrue(
+            detail.Contains("ViewportPerformanceRecorder.RecordRenderProfile", StringComparison.Ordinal) &&
+            rendering.Contains("ViewportPerformanceRecorder.RecordSlowFrame", StringComparison.Ordinal),
+            "viewport render and paint paths must feed the perf recorder");
     }
 
     public static void PagesTreeSelectedSheetScaleMenuIsWired()

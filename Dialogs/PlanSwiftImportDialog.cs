@@ -14,6 +14,7 @@ public sealed class PlanSwiftImportDialog : Window
     private readonly TextBox _destinationBox;
     private readonly TextBox _jobNameBox;
     private readonly CheckBox _convertImagesBox;
+    private readonly CheckBox _importAllBox;
     private readonly TextBlock _summaryText;
     private readonly TextBlock _statusText;
     private readonly Button _scanButton;
@@ -110,6 +111,15 @@ public sealed class PlanSwiftImportDialog : Window
             Margin = new Thickness(0, 10, 0, 0),
         };
         form.Children.Add(_convertImagesBox);
+
+        _importAllBox = new CheckBox
+        {
+            Content = "Import all PlanSwift sheets and takeoff folders",
+            IsChecked = false,
+            Margin = new Thickness(0, 6, 0, 0),
+            ToolTip = "When off, import keeps the current behavior and skips sheets with no measured takeoff geometry.",
+        };
+        form.Children.Add(_importAllBox);
 
         _statusText = new TextBlock
         {
@@ -266,6 +276,7 @@ public sealed class PlanSwiftImportDialog : Window
                 SourceJobPath = manifest.SourceJobPath,
                 DestinationJobPath = destinationJob,
                 ConvertPageImages = _convertImagesBox.IsChecked == true,
+                ImportAllSheetsAndTakeoffFolders = _importAllBox.IsChecked == true,
                 ImportRootFolderName = PlanSwiftImportOptions.DefaultCurrentJobImportFolderName,
             };
             DialogResult = true;
@@ -285,6 +296,7 @@ public sealed class PlanSwiftImportDialog : Window
             DestinationParentPath = destination,
             DestinationJobName = _jobNameBox.Text.Trim(),
             ConvertPageImages = _convertImagesBox.IsChecked == true,
+            ImportAllSheetsAndTakeoffFolders = _importAllBox.IsChecked == true,
         };
         DialogResult = true;
     }

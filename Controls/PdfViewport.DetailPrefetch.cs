@@ -131,7 +131,7 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                decodedBitmap = await Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes));
+                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(renderResult.Result));
                 if (decodedBitmap == null || !IsCurrentDetailPrefetchRequest(request))
                     return;
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using SkiaSharp;
 
@@ -20,6 +21,7 @@ public sealed partial class PdfViewport
     private DetailRenderRequest? _pendingDetailRender;
     private DetailRenderRequest? _activeDetailRender;
     private bool _detailRenderInProgress;
+    private bool _detailRenderStartQueued;
     private int _detailRenderVersion;
     private int _detailTileGeneration;
     private DateTime _detailRenderHoldUntilUtc = DateTime.MinValue;
@@ -91,6 +93,9 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (!force && _isFastNavigating)
+            return;
+
         if (!TryBuildDetailRenderRequest(force, out DetailRenderRequest? request))
             return;
         if (request == null)
@@ -109,7 +114,40 @@ public sealed partial class PdfViewport
             return;
 
         _pendingDetailRender = request with { Version = ++_detailRenderVersion };
-        _ = StartNextDetailRenderAsync();
+        QueueDetailRenderStart(force);
+    }
+
+    private void QueueDetailRenderStart(bool immediate)
+    {
+        if (immediate)
+        {
+            _detailRenderStartQueued = false;
+            _ = StartNextDetailRenderAsync();
+            return;
+        }
+
+        if (_detailRenderStartQueued)
+            return;
+
+        _detailRenderStartQueued = true;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(async () =>
+            {
+                try
+                {
+                    await Task.Delay(ViewportRenderPolicy.DetailRenderCoalesceDelayMs);
+                }
+                catch
+                {
+                    // Best-effort coalescing; no cancellation token is used here.
+                }
+                finally
+                {
+                    _detailRenderStartQueued = false;
+                    _ = StartNextDetailRenderAsync();
+                }
+            }));
     }
 
     private bool ShouldHoldDetailRender(bool force) =>
@@ -133,7 +171,7 @@ public sealed partial class PdfViewport
                         await Task.Delay(delay);
 
                     _detailRenderHoldResumeQueued = false;
-                    QueueDetailRenderIfNeeded(force: true);
+                    QueueDetailRenderIfNeeded(force: false);
                 }
                 catch (Exception ex)
                 {
@@ -258,6 +296,9 @@ public sealed partial class PdfViewport
 
         DetailRenderRequest request = _pendingDetailRender;
         _pendingDetailRender = null;
+        if (!IsCurrentDetailRequest(request))
+            return;
+
         _activeDetailRender = request;
         _detailRenderInProgress = true;
         try
@@ -287,7 +328,7 @@ public sealed partial class PdfViewport
 
             SKBitmap? decodedBitmap = null;
             if (renderResult.Ok)
-                decodedBitmap = await Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes));
+                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(renderResult.Result));
 
             if (renderResult.Ok)
                 ApplyDetailRenderResult(request, renderResult.Result, decodedBitmap);
@@ -440,6 +481,36 @@ public sealed partial class PdfViewport
     private static long EstimateBitmapBytes(SKBitmap bitmap) =>
         (long)Math.Max(0, bitmap.Width) * Math.Max(0, bitmap.Height) * 4;
 
+    private static SKBitmap? DecodePdfLayerRenderBitmap(PdfLayerRenderResult render)
+    {
+        if (!render.HasRawImage)
+            return SKBitmap.Decode(render.ImageBytes);
+
+        int width = render.RawImageWidth;
+        int height = render.RawImageHeight;
+        int channels = render.RawImageChannels;
+        byte[] source = render.RawImageBytes;
+        long pixelCount = (long)width * height;
+        if (pixelCount <= 0 ||
+            pixelCount > int.MaxValue / 4 ||
+            source.LongLength != pixelCount * channels)
+            return null;
+
+        var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        byte[] bgra = new byte[(int)(pixelCount * 4)];
+        int dst = 0;
+        for (int src = 0; src < source.Length; src += channels)
+        {
+            bgra[dst++] = source[src + 2];
+            bgra[dst++] = source[src + 1];
+            bgra[dst++] = source[src];
+            bgra[dst++] = channels == 4 ? source[src + 3] : (byte)255;
+        }
+
+        Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length);
+        return bitmap;
+    }
+
     private void ReportViewportRenderProfile(
         string kind,
         string pageFolder,
@@ -458,6 +529,18 @@ public sealed partial class PdfViewport
             $"zoom={_zoom:0.###}; bitmapScale={_bitmapScale:0.###}; renderedScale={_renderedScale:0.###}; " +
             $"targetScale={renderScale:0.###};{clip} page='{pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}");
+        ViewportPerformanceRecorder.RecordRenderProfile(
+            kind,
+            pageFolder,
+            Path.GetFileName(pdfPath),
+            pdfIndex + 1,
+            _zoom,
+            _bitmapScale,
+            _renderedScale,
+            renderScale,
+            elapsedMs,
+            fromCache,
+            clipRect);
     }
 
     private bool IsCurrentDetailRequest(DetailRenderRequest request) =>
@@ -465,13 +548,35 @@ public sealed partial class PdfViewport
         request.TileGeneration == _detailTileGeneration &&
         string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
         request.PdfIndex == _pdfIndex &&
-        string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
+        string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase) &&
+        CurrentViewStillMatchesDetailRequest(request);
 
     private bool IsCurrentDetailPrefetchRequest(DetailRenderRequest request) =>
         request.TileGeneration == _detailTileGeneration &&
         string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
         request.PdfIndex == _pdfIndex &&
-        string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
+        string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase) &&
+        ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale);
+
+    private bool CurrentViewStillMatchesDetailRequest(DetailRenderRequest request)
+    {
+        if (!ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale))
+            return false;
+
+        SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
+        if (visible.Width <= 0 || visible.Height <= 0)
+            return false;
+
+        float currentTargetScale = ViewportRenderPolicy.SelectDetailRenderScale(
+            _zoom,
+            visible.Width,
+            visible.Height,
+            _bitmapScale);
+        if (currentTargetScale <= 0 || request.RenderScale < currentTargetScale * 0.85f)
+            return false;
+
+        return RectContains(request.ClipRect, visible, tolerancePt: 0.5f);
+    }
 
     private static bool IsSameDetailRequest(DetailRenderRequest? existing, DetailRenderRequest next) =>
         existing != null &&

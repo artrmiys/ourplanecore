@@ -35,6 +35,7 @@ public static partial class PdfLayerRenderService
     private const long MaxRenderCacheBytes = 768_000_000;
     private const long MaxRenderCacheEntryBytes = 96_000_000;
     private const int InlineRenderImageMaxPixels = 24_000_000;
+    private const int InlineRawRenderImageMaxPixels = 4_000_000;
     private static readonly object InFlightRenderLock = new();
     private static readonly Dictionary<string, Task<(bool Ok, PdfLayerRenderResult Result, string Error)>> InFlightRenderTasks = [];
 

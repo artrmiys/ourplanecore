@@ -196,7 +196,7 @@ public sealed partial class PdfViewport
         {
             // Sheet overlays are alignment references; keep linework crisp.
             IsAntialias = false,
-            FilterQuality = _renderNavigationFastFrame ? SKFilterQuality.Medium : SKFilterQuality.High,
+            FilterQuality = SKFilterQuality.High,
         };
 
         float width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;

@@ -18,6 +18,7 @@ public sealed class PlanSwiftImportOptions
     public string DestinationJobPath { get; init; } = "";
     public string ImportRootFolderName { get; init; } = DefaultCurrentJobImportFolderName;
     public bool ConvertPageImages { get; init; } = true;
+    public bool ImportAllSheetsAndTakeoffFolders { get; init; }
     public int MaxPages { get; init; }
     public int MaxTakeoffItems { get; init; }
     public int MaxMeasurements { get; init; }

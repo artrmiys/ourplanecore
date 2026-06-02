@@ -111,6 +111,37 @@ internal static class PlanSwiftImportTests
         });
     }
 
+    public static void ImportAllOptionKeepsPlanSwiftPagesWithoutTakeoffs()
+    {
+        WithTempParent(parent =>
+        {
+            string sourceJob = Path.Combine(parent, "PlanSwift Job");
+            string destinationParent = Path.Combine(parent, "imported");
+            CreateSyntheticPlanSwiftJob(sourceJob);
+            AddUnusedPlanSwiftPage(sourceJob);
+            AddEmptyTakeoffFolder(sourceJob);
+
+            PlanSwiftImportResult result = PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
+            {
+                SourceJobPath = sourceJob,
+                DestinationParentPath = destinationParent,
+                ConvertPageImages = false,
+                ImportAllSheetsAndTakeoffFolders = true,
+            });
+
+            AssertEqual("2", result.PagesImported.ToString(), "all PlanSwift pages should import");
+            AssertFalse(
+                result.Messages.Any(message => message.Contains("with no measured takeoff geometry", StringComparison.OrdinalIgnoreCase)),
+                "all PlanSwift pages mode should not report unused pages as skipped");
+
+            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            IReadOnlyList<PageInfo> pages = CollectPages(job.PagesRoot);
+            AssertTrue(pages.Any(page => page.Name == "A100"), "measured page should be imported");
+            AssertTrue(pages.Any(page => page.Name == "A101"), "unused page should be imported");
+            AssertTrue(Directory.Exists(Path.Combine(job.TakeoffsRoot, "Empty Folder")), "empty PlanSwift takeoff folder should be imported");
+        });
+    }
+
 
     public static void ImportPreservesPlanSwiftHolesBoxAndContainers()
     {
@@ -413,6 +444,13 @@ internal static class PlanSwiftImportTests
         Directory.CreateDirectory(pageFolder);
         WritePageData(pageFolder, "A101", UnusedPageGuid, UnusedImageGuid);
         WriteSyntheticImage(Path.Combine(pageFolder, $"{{{UnusedImageGuid}}}.png"));
+    }
+
+    private static void AddEmptyTakeoffFolder(string root)
+    {
+        string folder = Path.Combine(root, "Takeoff", "Empty Folder");
+        Directory.CreateDirectory(folder);
+        WriteFolderData(folder, "Empty Folder");
     }
 
     private static void AddNestedItemContainer(string root)

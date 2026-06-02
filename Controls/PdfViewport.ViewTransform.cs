@@ -121,9 +121,17 @@ public sealed partial class PdfViewport
 
         if (_usingLayerRenderer)
         {
-            QueueLayerRender(resetLayerStates: false, renderScale: desired);
+            bool cacheOnlyBaseRefresh = ViewportRenderPolicy.ShouldPreferDetailRenderOverFullRefresh(_zoom, _bitmapScale);
+            QueueLayerRender(
+                resetLayerStates: false,
+                renderScale: desired,
+                allowImmediateCache: !cacheOnlyBaseRefresh,
+                allowLiveRender: !cacheOnlyBaseRefresh);
             return;
         }
+
+        if (ViewportRenderPolicy.ShouldPreferDetailRenderOverFullRefresh(_zoom, _bitmapScale))
+            return;
 
         try
         {

@@ -219,6 +219,7 @@ var tests = new List<(string Name, Action Run)>
     ("planswift import creates job pages and measurements", PlanSwiftImportTests.ImportCreatesJobPagesAndMeasurements),
     ("planswift import normalizes oversized raster pages", PlanSwiftImportTests.ImportNormalizesOversizedRasterPageWithoutChangingMeasurements),
     ("planswift import skips pages without takeoffs", PlanSwiftImportTests.ImportSkipsPlanSwiftPagesWithoutTakeoffs),
+    ("planswift import all option keeps pages without takeoffs", PlanSwiftImportTests.ImportAllOptionKeepsPlanSwiftPagesWithoutTakeoffs),
     ("planswift import preserves holes box and containers", PlanSwiftImportTests.ImportPreservesPlanSwiftHolesBoxAndContainers),
     ("planswift import preserves segments and source metadata", PlanSwiftImportTests.ImportPreservesSegmentsAndSourceMetadata),
     ("planswift import joist segments use linked area section directions", PlanSwiftImportTests.ImportJoistSegmentsUseLinkedAreaSectionDirections),
@@ -3441,9 +3442,9 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(1.0f),
             "deep zoom should rely on clipped detail once a normal base bitmap exists");
         AssertClose(
-            4.0,
+            2.0,
             ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
-            "deep zoom detail render should match the viewport zoom when inside the clip pixel budget");
+            "interactive detail render should cap below the viewport zoom to avoid long clip renders");
         AssertTrue(
             ViewportRenderPolicy.SelectDetailRenderScale(16.0f, 3200f, 2200f, 1.0f) < 6.0f,
             "very large visible clips should be capped by the detail render pixel budget");

@@ -76,6 +76,8 @@ namespace OurPlaneCore;
                 Image = imagePath,
                 InlineImage = true,
                 InlineImageMaxPixels = InlineRenderImageMaxPixels,
+                InlineRawImage = hasClip,
+                InlineRawImageMaxPixels = InlineRawRenderImageMaxPixels,
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
                 VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
@@ -96,12 +98,23 @@ namespace OurPlaneCore;
                 return false;
             }
 
-            if (!TryReadRenderImageBytes(response, out byte[] imageBytes, out error))
+            if (!TryReadRenderImagePayload(
+                    response,
+                    out byte[] imageBytes,
+                    out byte[] rawImageBytes,
+                    out int rawImageWidth,
+                    out int rawImageHeight,
+                    out int rawImageChannels,
+                    out error))
                 return false;
 
             result = new PdfLayerRenderResult
             {
                 ImageBytes = imageBytes,
+                RawImageBytes = rawImageBytes,
+                RawImageWidth = rawImageWidth,
+                RawImageHeight = rawImageHeight,
+                RawImageChannels = rawImageChannels,
                 WidthPt = response.WidthPt,
                 HeightPt = response.HeightPt,
                 ClipRect = response.Clip?.ToSKRect() ?? (hasClip ? clipRect!.Value : null),
@@ -196,6 +209,8 @@ namespace OurPlaneCore;
                 Image = imagePath,
                 InlineImage = true,
                 InlineImageMaxPixels = InlineRenderImageMaxPixels,
+                InlineRawImage = hasClip,
+                InlineRawImageMaxPixels = InlineRawRenderImageMaxPixels,
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
                 VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
@@ -210,12 +225,23 @@ namespace OurPlaneCore;
                 error = response?.Error ?? "PyMuPDF did not return a render response.";
                 return false;
             }
-            if (!TryReadRenderImageBytes(response, out byte[] imageBytes, out error))
+            if (!TryReadRenderImagePayload(
+                    response,
+                    out byte[] imageBytes,
+                    out byte[] rawImageBytes,
+                    out int rawImageWidth,
+                    out int rawImageHeight,
+                    out int rawImageChannels,
+                    out error))
                 return false;
 
             result = new PdfLayerRenderResult
             {
                 ImageBytes = imageBytes,
+                RawImageBytes = rawImageBytes,
+                RawImageWidth = rawImageWidth,
+                RawImageHeight = rawImageHeight,
+                RawImageChannels = rawImageChannels,
                 WidthPt = response.WidthPt,
                 HeightPt = response.HeightPt,
                 ClipRect = response.Clip?.ToSKRect() ?? (hasClip ? clipRect!.Value : null),
@@ -246,10 +272,49 @@ namespace OurPlaneCore;
         }
     }
 
-    private static bool TryReadRenderImageBytes(RenderResponse response, out byte[] imageBytes, out string error)
+    private static bool TryReadRenderImagePayload(
+        RenderResponse response,
+        out byte[] imageBytes,
+        out byte[] rawImageBytes,
+        out int rawImageWidth,
+        out int rawImageHeight,
+        out int rawImageChannels,
+        out string error)
     {
         imageBytes = [];
+        rawImageBytes = [];
+        rawImageWidth = 0;
+        rawImageHeight = 0;
+        rawImageChannels = 0;
         error = "";
+
+        if (!string.IsNullOrWhiteSpace(response.ImageRawBase64))
+        {
+            try
+            {
+                rawImageBytes = Convert.FromBase64String(response.ImageRawBase64);
+                rawImageWidth = response.ImageRawWidth;
+                rawImageHeight = response.ImageRawHeight;
+                rawImageChannels = response.ImageRawChannels;
+                long expected = (long)rawImageWidth * rawImageHeight * rawImageChannels;
+                if (rawImageWidth > 0 &&
+                    rawImageHeight > 0 &&
+                    rawImageChannels is 3 or 4 &&
+                    rawImageBytes.LongLength == expected)
+                {
+                    return true;
+                }
+
+                error = "PyMuPDF returned invalid raw render image dimensions.";
+                return false;
+            }
+            catch (FormatException ex)
+            {
+                AppLog.Warn(ex, "PyMuPDF returned invalid inline raw render image data");
+                error = "PyMuPDF returned invalid inline raw render image data.";
+                return false;
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(response.ImageBase64))
         {
@@ -295,7 +360,7 @@ namespace OurPlaneCore;
             if (RenderCache.ContainsKey(key))
                 return;
 
-            long bytes = result.ImageBytes.LongLength;
+            long bytes = result.ImageBytes.LongLength + result.RawImageBytes.LongLength;
             if (bytes <= 0 || bytes > MaxRenderCacheEntryBytes)
                 return;
 
@@ -307,7 +372,7 @@ namespace OurPlaneCore;
             {
                 string oldKey = RenderCacheOrder.Dequeue();
                 if (RenderCache.Remove(oldKey, out PdfLayerRenderResult? removed))
-                    RenderCacheBytes -= removed.ImageBytes.LongLength;
+                    RenderCacheBytes -= removed.ImageBytes.LongLength + removed.RawImageBytes.LongLength;
             }
         }
     }
