@@ -193,6 +193,7 @@ public partial class MainWindow
         bool wasCut = mode == TakeoffsClipboardMode.Cut;
         try
         {
+            string? previousActivePath = _activeItem?.FolderPath;
             var flushWatch = Stopwatch.StartNew();
             FlushTakeoffAutosaves();
             flushWatch.Stop();
@@ -238,9 +239,7 @@ public partial class MainWindow
             {
                 if (!TryApplyTakeoffStructureMoveFast(rebasedLegendPaths, targetFolder, changed))
                 {
-                    LoadTakeoffsForJob();
-                    SetTakeoffMultiSelection(changed);
-                    SelectFirstTakeoffPath(changed);
+                    ReloadTakeoffsForMoveSelection(changed, previousActivePath);
                 }
             }
             else

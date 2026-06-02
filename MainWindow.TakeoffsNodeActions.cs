@@ -307,15 +307,14 @@ public partial class MainWindow
 
         try
         {
+            string? previousActivePath = _activeItem?.FolderPath;
             if (!OurPlaneCoreJobStore.MoveSiblings(paths, offset))
                 return;
 
             string parentFolder = Path.GetDirectoryName(paths[0]) ?? "";
             if (!TryRefreshTakeoffTreeParentOrderFast(parentFolder, paths))
             {
-                LoadTakeoffsForJob();
-                SetTakeoffMultiSelection(paths);
-                SelectFirstTakeoffPath(paths);
+                ReloadTakeoffsForMoveSelection(paths, previousActivePath);
             }
 
             TxtStatus.Text = paths.Count == 1

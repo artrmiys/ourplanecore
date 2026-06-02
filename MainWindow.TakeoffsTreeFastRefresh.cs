@@ -304,6 +304,16 @@ public partial class MainWindow
         UpdateActiveTakeoffTargetBar();
     }
 
+    private void ReloadTakeoffsForMoveSelection(
+        IReadOnlyList<string> selectedPaths,
+        string? previousActivePath)
+    {
+        LoadTakeoffsForJob();
+        SetTakeoffMultiSelection(selectedPaths);
+        TreeViewItem? selected = SelectFirstTakeoffPathForMoveFast(selectedPaths);
+        RefreshFastMoveActiveState(selected, previousActivePath);
+    }
+
     private void RefreshFastMoveActiveState(TreeViewItem? selected, string? previousActivePath)
     {
         if (selected?.Tag is TakeoffItem item)

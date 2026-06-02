@@ -258,6 +258,7 @@ public partial class MainWindow
         string root = _currentJob.TakeoffsRoot;
         try
         {
+            string? previousActivePath = _activeItem?.FolderPath;
             FlushTakeoffAutosaves();
             var changed = new List<string>();
             var entriesToMove = new List<TakeoffsClipboardEntry>();
@@ -293,16 +294,12 @@ public partial class MainWindow
             {
                 if (!TryApplyTakeoffStructureMoveFast(rebasedLegendPaths, root, changed))
                 {
-                    LoadTakeoffsForJob();
-                    SetTakeoffMultiSelection(changed);
-                    SelectFirstTakeoffPath(changed);
+                    ReloadTakeoffsForMoveSelection(changed, previousActivePath);
                 }
             }
             else if (!TryRefreshTakeoffTreeParentOrderFast(root, changed))
             {
-                LoadTakeoffsForJob();
-                SetTakeoffMultiSelection(changed);
-                SelectFirstTakeoffPath(changed);
+                ReloadTakeoffsForMoveSelection(changed, previousActivePath);
             }
 
             TxtStatus.Text = reordered || entriesToMove.Count > 0
@@ -516,6 +513,7 @@ public partial class MainWindow
 
         try
         {
+            string? previousActivePath = _activeItem?.FolderPath;
             FlushTakeoffAutosaves();
             string targetParent = Path.GetDirectoryName(targetPath) ?? "";
             if (string.IsNullOrWhiteSpace(targetParent))
@@ -567,9 +565,7 @@ public partial class MainWindow
                 : TryRefreshTakeoffTreeParentOrderFast(targetParent, changed);
             if (!fastRefreshed)
             {
-                LoadTakeoffsForJob();
-                SetTakeoffMultiSelection(changed);
-                SelectFirstTakeoffPath(changed);
+                ReloadTakeoffsForMoveSelection(changed, previousActivePath);
             }
 
             TxtStatus.Text = changed.Count == 1

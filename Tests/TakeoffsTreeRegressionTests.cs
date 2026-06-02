@@ -397,8 +397,12 @@ internal static class TakeoffsTreeRegressionTests
     public static void FastRefreshDisabledForDataSafety()
     {
         string source = ReadRepoFile("MainWindow.TakeoffsTreeFastRefresh.cs");
+        string dragSource = ReadRepoFile("MainWindow.TakeoffsDragDrop.cs");
+        string clipboardSource = ReadRepoFile("MainWindow.TakeoffsClipboard.cs");
+        string actionsSource = ReadRepoFile("MainWindow.TakeoffsNodeActions.cs");
         string orderMethod = SliceMethod(source, "private bool TryRefreshTakeoffTreeParentOrderFast(");
         string structureMethod = SliceMethod(source, "private bool TryApplyTakeoffStructureMoveFast(");
+        string fallbackMethod = SliceMethod(source, "private void ReloadTakeoffsForMoveSelection(");
         AssertTrue(
             source.Contains("private static readonly bool FastTakeoffsTreeRefreshEnabled = false;", StringComparison.Ordinal),
             "broad takeoffs tree structure refresh must stay disabled by default");
@@ -408,6 +412,15 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             structureMethod.Contains("if (!FastTakeoffsTreeRefreshEnabled)", StringComparison.Ordinal),
             "cross-parent structure moves must remain gated separately from same-parent reorder refresh");
+        AssertTrue(
+            fallbackMethod.Contains("SelectFirstTakeoffPathForMoveFast(selectedPaths)", StringComparison.Ordinal) &&
+            fallbackMethod.Contains("RefreshFastMoveActiveState(selected, previousActivePath)", StringComparison.Ordinal),
+            "move fallback reloads should restore the moved takeoff selection silently without running page-opening selection handlers");
+        AssertTrue(
+            dragSource.Contains("ReloadTakeoffsForMoveSelection(changed, previousActivePath)", StringComparison.Ordinal) &&
+            clipboardSource.Contains("ReloadTakeoffsForMoveSelection(changed, previousActivePath)", StringComparison.Ordinal) &&
+            actionsSource.Contains("ReloadTakeoffsForMoveSelection(paths, previousActivePath)", StringComparison.Ordinal),
+            "takeoff drag/drop, cut/paste, and move up/down fallbacks should not use raw SelectFirstTakeoffPath after reload");
     }
 
     public static void TakeoffSelectionUsesTargetedUiRefresh()
@@ -1507,6 +1520,7 @@ internal static class TakeoffsTreeRegressionTests
             treeOps.Contains("MoveTakeoffsDownAndRestore", StringComparison.Ordinal) &&
             treeOps.Contains("MoveTakeoffSectionAndRestoreWithPageJump", StringComparison.Ordinal) &&
             treeOps.Contains("AssertCurrentPageIsMeasurementPage", StringComparison.Ordinal) &&
+            treeOps.Contains("AssertCurrentPageUnchangedForTakeoffMove", StringComparison.Ordinal) &&
             treeOps.Contains("SelectPagesBulkForSmoke", StringComparison.Ordinal) &&
             treeOps.Contains("SelectTakeoffsBulkForSmoke", StringComparison.Ordinal) &&
             treeOps.Contains("PagesSingleSelectionSetMs", StringComparison.Ordinal) &&

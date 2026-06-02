@@ -222,6 +222,8 @@ public partial class MainWindow
     {
         IReadOnlyList<string> before = OrderedChildSnapshot(parent);
         _ = SelectTakeoffsBulkForSmoke(paths);
+        string pageBefore = _currentPage?.FolderPath
+            ?? throw new InvalidOperationException("Takeoffs move smoke needs an active viewport page.");
         if (FindTakeoffTreeItemByFolder(paths[0]) is not { } anchor)
             throw new InvalidOperationException($"Takeoffs move anchor was not found for '{paths[0]}'.");
 
@@ -230,6 +232,7 @@ public partial class MainWindow
         TakeoffsTree.UpdateLayout();
         PagesTree.UpdateLayout();
         move.Stop();
+        AssertCurrentPageUnchangedForTakeoffMove(pageBefore, "moving takeoff node(s) down");
         if (OrdersEqual(before, OrderedChildSnapshot(parent)))
             throw new InvalidOperationException("Takeoffs move smoke did not change sibling order.");
 
@@ -240,6 +243,7 @@ public partial class MainWindow
         TakeoffsTree.UpdateLayout();
         PagesTree.UpdateLayout();
         restore.Stop();
+        AssertCurrentPageUnchangedForTakeoffMove(pageBefore, "restoring takeoff node order");
         if (!OrdersEqual(before, OrderedChildSnapshot(parent)))
             throw new InvalidOperationException("Takeoffs move smoke did not restore original sibling order.");
 
@@ -334,6 +338,12 @@ public partial class MainWindow
 
         if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, measurement.PageFolder))
             throw new InvalidOperationException($"Takeoffs section drop smoke did not jump to the measurement page while {action}.");
+    }
+
+    private void AssertCurrentPageUnchangedForTakeoffMove(string pageBefore, string action)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, pageBefore))
+            throw new InvalidOperationException($"Takeoffs move smoke changed the viewport page while {action}.");
     }
 
     private static MovableSiblingSet? FindMovableSiblingSet(
