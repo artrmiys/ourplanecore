@@ -392,6 +392,8 @@ internal static class TakeoffsTreeRegressionTests
     {
         string treeSource = ReadRepoFile("MainWindow.TakeoffsTree.cs");
         string selectionMethod = SliceMethod(treeSource, "private void TakeoffsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)");
+        string scheduleMethod = SliceMethod(treeSource, "private void ScheduleTakeoffSelectionSync(Action action)");
+        string scheduledRunMethod = SliceMethod(treeSource, "private void RunScheduledTakeoffSelectionSync(int version, Action action)");
 
         AssertFalse(
             selectionMethod.Contains("RefreshPagesTakeoffIndicators();", StringComparison.Ordinal),
@@ -409,6 +411,12 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             selectionMethod.Contains("RefreshActiveTakeoffVisualsForPaths(", StringComparison.Ordinal),
             "plain takeoff selection should repaint only the previous and current active rows");
+        AssertTrue(
+            scheduleMethod.Contains("RunScheduledTakeoffSelectionSync(version, action)", StringComparison.Ordinal) &&
+            scheduledRunMethod.Contains("_takeoffsDragStart != null && Mouse.LeftButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
+            scheduledRunMethod.Contains("System.Windows.Threading.DispatcherTimer", StringComparison.Ordinal) &&
+            scheduledRunMethod.Contains("ResetTakeoffsDragState();", StringComparison.Ordinal),
+            "takeoff selection sync should wait out mouse-held drag arming instead of opening a page during drag/drop");
 
         string pagesSource = ReadRepoFile("MainWindow.PagesTree.cs");
         AssertTrue(
@@ -486,6 +494,11 @@ internal static class TakeoffsTreeRegressionTests
             mouseMove.Contains("e.LeftButton != MouseButtonState.Pressed", StringComparison.Ordinal) &&
             mouseMove.Contains("ResetTakeoffsDragState();", StringComparison.Ordinal),
             "takeoffs drag state must reset when the mouse is released before a drag starts");
+        AssertTrue(
+            mouseMove.Contains("CancelPendingTakeoffSelectionSync();", StringComparison.Ordinal) &&
+            mouseMove.Contains("DoTakeoffsDragDrop(sectionPayload", StringComparison.Ordinal) &&
+            mouseMove.Contains("DoTakeoffsDragDrop(payload", StringComparison.Ordinal),
+            "takeoffs drag start must cancel pending click selection sync before drag/drop can navigate");
         AssertTrue(
             source.Contains("private void DoTakeoffsDragDrop(object payload, DragDropEffects effects)", StringComparison.Ordinal) &&
             source.Contains("finally", StringComparison.Ordinal) &&
@@ -1407,16 +1420,20 @@ internal static class TakeoffsTreeRegressionTests
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
         AssertTrue(
-            method.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
+            method.Contains("SKFilterQuality.None", StringComparison.Ordinal) &&
             policy.Contains("SheetOverlayViewportRenderScale = 2.0f", StringComparison.Ordinal),
-            "sheet overlay underlay should use high sampling and a sharper 2x viewport source render instead of looking blurry");
+            "sheet overlay underlay should use a sharper 2x viewport source render and no smoothing filter so it stays crisp without slow high-quality bitmap resampling");
         AssertFalse(
             method.Contains("SKFilterQuality.Low", StringComparison.Ordinal) ||
-            method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal),
-            "sheet overlay underlay should not switch to lower-quality sampling during navigation");
+            method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) ||
+            method.Contains("SKFilterQuality.High", StringComparison.Ordinal),
+            "sheet overlay underlay should not switch to smoothing filters that blur linework or stall page navigation");
         AssertTrue(
             method.Contains("IsAntialias = false", StringComparison.Ordinal),
             "bitmap sheet overlays should avoid antialias softening");
+        AssertTrue(
+            source.Contains("public bool HasSheetOverlay => _sheetOverlayBitmap != null", StringComparison.Ordinal),
+            "viewport smoke tests need to wait until async sheet overlays are actually applied before exercising pan and zoom");
     }
 
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
@@ -1435,9 +1452,12 @@ internal static class TakeoffsTreeRegressionTests
             source.Contains("ReadEnvironmentFloat", StringComparison.Ordinal) &&
             source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal) &&
             source.Contains("ZoomExerciseMs", StringComparison.Ordinal) &&
+            source.Contains("WaitForViewportSheetOverlayAsync", StringComparison.Ordinal) &&
+            source.Contains("OverlayReadyMs", StringComparison.Ordinal) &&
             source.Contains("PostZoomRenderReadyMs", StringComparison.Ordinal) &&
-            source.Contains("VisualProbeMs", StringComparison.Ordinal),
-            "viewport stress smoke must support hidden sampled page opens plus absolute zoom, pan, and phase timing checks for 350% regressions");
+            source.Contains("VisualProbeMs", StringComparison.Ordinal) &&
+            script.Contains("overlay checks", StringComparison.Ordinal),
+            "viewport stress smoke must support hidden sampled page opens plus absolute zoom, pan, sheet overlay waits, and phase timing checks for 350% regressions");
         AssertTrue(
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS", StringComparison.Ordinal) &&
             source.Contains("RunViewportTreeOpsSmoke(report)", StringComparison.Ordinal) &&

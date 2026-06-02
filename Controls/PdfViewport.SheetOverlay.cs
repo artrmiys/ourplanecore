@@ -27,6 +27,8 @@ public sealed partial class PdfViewport
     private SKPoint _sheetOverlayEditAnchorTarget;
     private SKPoint _sheetOverlayEditScaleLocal;
 
+    public bool HasSheetOverlay => _sheetOverlayBitmap != null;
+
     public void SetSheetOverlay(
         SKBitmap bitmap,
         float widthPt,
@@ -196,7 +198,7 @@ public sealed partial class PdfViewport
         {
             // Sheet overlays are alignment references; keep linework crisp.
             IsAntialias = false,
-            FilterQuality = SKFilterQuality.High,
+            FilterQuality = SKFilterQuality.None,
         };
 
         float width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;

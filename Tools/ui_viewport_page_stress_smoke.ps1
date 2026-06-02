@@ -119,8 +119,10 @@ function Summarize-Results {
     Write-Host "  tab return checks: $(@($Report.TabReturnResults).Count)"
     Write-Host "  max render ready: $maxReady ms"
     Write-Host "  max step: $max ms"
+    $overlayCount = @($all | Where-Object { $_.HasOverlayConfigured }).Count
+    Write-Host "  overlay checks: $overlayCount"
     foreach ($item in $slowest) {
-        Write-Host ("  slow: {0} {1} ready {2} ms zoom {3} ms post {4} ms probe {5} ms total {6} ms" -f $item.Stage, $item.PageName, $item.RenderReadyMs, $item.ZoomExerciseMs, $item.PostZoomRenderReadyMs, $item.VisualProbeMs, $item.ElapsedMs)
+        Write-Host ("  slow: {0} {1} ready {2} ms overlay {3} ms zoom {4} ms post {5} ms probe {6} ms total {7} ms" -f $item.Stage, $item.PageName, $item.RenderReadyMs, $item.OverlayReadyMs, $item.ZoomExerciseMs, $item.PostZoomRenderReadyMs, $item.VisualProbeMs, $item.ElapsedMs)
     }
     if ($null -ne $Report.Performance) {
         $summary = $Report.Performance.Summary

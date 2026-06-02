@@ -12,6 +12,8 @@ public partial class MainWindow
 {
     // ── Takeoffs tree ─────────────────────────────────────────────────────────
 
+    private const int TakeoffSelectionSyncDragDeferMs = 80;
+
     private void TakeoffsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (_syncingTakeoffTreeSelection)
@@ -130,13 +132,33 @@ public partial class MainWindow
             version = _takeoffSelectionSyncVersion;
         }
 
-        Dispatcher.InvokeAsync(() =>
-        {
-            if (version != _takeoffSelectionSyncVersion)
-                return;
+        Dispatcher.InvokeAsync(() => RunScheduledTakeoffSelectionSync(version, action));
+    }
 
-            action();
-        });
+    private void RunScheduledTakeoffSelectionSync(int version, Action action)
+    {
+        if (version != _takeoffSelectionSyncVersion)
+            return;
+
+        if (_takeoffsDragStart != null && Mouse.LeftButton == MouseButtonState.Pressed)
+        {
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(TakeoffSelectionSyncDragDeferMs),
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                RunScheduledTakeoffSelectionSync(version, action);
+            };
+            timer.Start();
+            return;
+        }
+
+        if (_takeoffsDragStart != null)
+            ResetTakeoffsDragState();
+
+        action();
     }
 
     // ── Takeoff item context menu ─────────────────────────────────────────────

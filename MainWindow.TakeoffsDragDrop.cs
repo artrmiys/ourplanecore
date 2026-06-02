@@ -54,6 +54,7 @@ public partial class MainWindow
                 return;
             }
 
+            CancelPendingTakeoffSelectionSync();
             var sectionPayload = new TakeoffSectionDrag(nodes);
             DoTakeoffsDragDrop(sectionPayload, DragDropEffects.Move | DragDropEffects.Copy);
             return;
@@ -66,6 +67,7 @@ public partial class MainWindow
             return;
         }
 
+        CancelPendingTakeoffSelectionSync();
         var payload = new TakeoffsClipboard(entries, TakeoffsClipboardMode.Cut);
         DoTakeoffsDragDrop(payload, DragDropEffects.Move | DragDropEffects.Copy);
     }

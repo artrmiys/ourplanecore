@@ -124,6 +124,7 @@ public partial class MainWindow
             OpenPageInActiveTab(page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
             await ExerciseViewportZoomAsync();
             phaseWatch.Stop();
@@ -162,6 +163,7 @@ public partial class MainWindow
             OpenPageInNewTab(page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
             await ExerciseViewportZoomAsync();
             phaseWatch.Stop();
@@ -196,6 +198,7 @@ public partial class MainWindow
             ActivatePageTab(tab, page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
             result.VisualProbe = ProbeViewportSurfaceOpacity();
             phaseWatch.Stop();
@@ -229,6 +232,27 @@ public partial class MainWindow
         }
 
         throw new TimeoutException($"Viewport did not render '{page.Name}' within {timeoutMs} ms.");
+    }
+
+    private async Task WaitForViewportSheetOverlayAsync(PageInfo page, int timeoutMs, PageSmokeResult result)
+    {
+        result.HasOverlayConfigured = !string.IsNullOrWhiteSpace(page.OverlayPageFolder) && page.OverlayVisible;
+        if (!result.HasOverlayConfigured)
+            return;
+
+        Stopwatch watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < timeoutMs)
+        {
+            if (_viewport.HasSheetOverlay)
+            {
+                result.OverlayReadyMs = watch.ElapsedMilliseconds;
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException($"Viewport did not apply sheet overlay for '{page.Name}' within {timeoutMs} ms.");
     }
 
     private async Task ExerciseViewportZoomAsync()
@@ -403,6 +427,8 @@ public partial class MainWindow
         public string PageName { get; set; } = "";
         public string PageFolder { get; set; } = "";
         public long RenderReadyMs { get; set; }
+        public bool HasOverlayConfigured { get; set; }
+        public long OverlayReadyMs { get; set; }
         public long ZoomExerciseMs { get; set; }
         public long PostZoomRenderReadyMs { get; set; }
         public long VisualProbeMs { get; set; }
