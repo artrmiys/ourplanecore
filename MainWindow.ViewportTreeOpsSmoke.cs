@@ -62,6 +62,7 @@ public partial class MainWindow
         ApplyTakeoffSelectionTiming(report, SelectTakeoffsBulkForSmoke(bulk.Paths), single: false);
         (report.TakeoffsSingleMoveDownMs, report.TakeoffsSingleMoveRestoreMs) = MoveTakeoffsDownAndRestore(single.Parent, single.Paths);
         (report.TakeoffsBulkMoveDownMs, report.TakeoffsBulkMoveRestoreMs) = MoveTakeoffsDownAndRestore(bulk.Parent, bulk.Paths);
+        (report.TakeoffsSingleDragMoveDownMs, report.TakeoffsSingleDragMoveRestoreMs) = DragTakeoffPositionDownAndRestore(single.Parent, single.Paths[0]);
         report.TakeoffsSectionDropPageJumpMs = MoveTakeoffSectionAndRestoreWithPageJump();
         report.TakeoffsPassed = true;
     }
@@ -246,6 +247,51 @@ public partial class MainWindow
         AssertCurrentPageUnchangedForTakeoffMove(pageBefore, "restoring takeoff node order");
         if (!OrdersEqual(before, OrderedChildSnapshot(parent)))
             throw new InvalidOperationException("Takeoffs move smoke did not restore original sibling order.");
+
+        return (move.ElapsedMilliseconds, restore.ElapsedMilliseconds);
+    }
+
+    private (long MoveDownMs, long RestoreMs) DragTakeoffPositionDownAndRestore(string parent, string path)
+    {
+        IReadOnlyList<string> before = OrderedChildSnapshot(parent);
+        int index = before.ToList().FindIndex(candidate => string.Equals(NormalizePath(candidate), NormalizePath(path), StringComparison.OrdinalIgnoreCase));
+        if (index < 0 || index + 1 >= before.Count)
+            throw new InvalidOperationException("Takeoffs drag/drop smoke needs a takeoff node with a following sibling.");
+
+        string nextPath = before[index + 1];
+        string pageBefore = _currentPage?.FolderPath
+            ?? throw new InvalidOperationException("Takeoffs drag/drop smoke needs an active viewport page.");
+        var payload = new TakeoffsClipboard([new TakeoffsClipboardEntry(path, OurPlaneCoreJobStore.IsTakeoffItemFolder(path))], TakeoffsClipboardMode.Cut);
+
+        if (FindTakeoffTreeItemByFolder(nextPath) is not { } target)
+            throw new InvalidOperationException($"Takeoffs drag/drop target was not found for '{nextPath}'.");
+
+        var move = Stopwatch.StartNew();
+        DropTakeoffPosition(payload, target, after: true);
+        TakeoffsTree.UpdateLayout();
+        PagesTree.UpdateLayout();
+        move.Stop();
+        AssertCurrentPageUnchangedForTakeoffMove(pageBefore, "drag/dropping takeoff node after its next sibling");
+        if (OrdersEqual(before, OrderedChildSnapshot(parent)))
+            throw new InvalidOperationException("Takeoffs drag/drop smoke did not change sibling order.");
+
+        if (FindTakeoffTreeItemByFolder(path) is null ||
+            FindTakeoffTreeItemByFolder(nextPath) is not { } restoreTarget)
+        {
+            throw new InvalidOperationException("Takeoffs drag/drop restore nodes were not found.");
+        }
+
+        var restore = Stopwatch.StartNew();
+        DropTakeoffPosition(
+            new TakeoffsClipboard([new TakeoffsClipboardEntry(path, OurPlaneCoreJobStore.IsTakeoffItemFolder(path))], TakeoffsClipboardMode.Cut),
+            restoreTarget,
+            after: false);
+        TakeoffsTree.UpdateLayout();
+        PagesTree.UpdateLayout();
+        restore.Stop();
+        AssertCurrentPageUnchangedForTakeoffMove(pageBefore, "restoring takeoff node after drag/drop");
+        if (!OrdersEqual(before, OrderedChildSnapshot(parent)))
+            throw new InvalidOperationException("Takeoffs drag/drop smoke did not restore original sibling order.");
 
         return (move.ElapsedMilliseconds, restore.ElapsedMilliseconds);
     }
@@ -484,6 +530,8 @@ public partial class MainWindow
         public long TakeoffsSingleMoveRestoreMs { get; set; }
         public long TakeoffsBulkMoveDownMs { get; set; }
         public long TakeoffsBulkMoveRestoreMs { get; set; }
+        public long TakeoffsSingleDragMoveDownMs { get; set; }
+        public long TakeoffsSingleDragMoveRestoreMs { get; set; }
         public long TakeoffsSectionDropPageJumpMs { get; set; }
         public List<string> Failures { get; } = [];
     }

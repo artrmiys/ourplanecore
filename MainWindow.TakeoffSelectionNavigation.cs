@@ -252,7 +252,6 @@ public partial class MainWindow
         try
         {
             ExpandTreeItemAndAncestorsWithoutTracking(preferredLinked);
-            preferredLinked.IsSelected = true;
             BringPageTreeItemIntoCenteredView(preferredLinked);
         }
         finally

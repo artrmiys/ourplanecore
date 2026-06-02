@@ -426,7 +426,9 @@ internal static class TakeoffsTreeRegressionTests
     public static void TakeoffSelectionUsesTargetedUiRefresh()
     {
         string treeSource = ReadRepoFile("MainWindow.TakeoffsTree.cs");
+        string navigationSource = ReadRepoFile("MainWindow.TakeoffSelectionNavigation.cs");
         string selectionMethod = SliceMethod(treeSource, "private void TakeoffsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)");
+        string revealMethod = SliceMethod(navigationSource, "private void RevealPagesForTakeoffItems(");
         string scheduleMethod = SliceMethod(treeSource, "private void ScheduleTakeoffSelectionSync(Action action)");
         string scheduledRunMethod = SliceMethod(treeSource, "private void RunScheduledTakeoffSelectionSync(int version, Action action)");
 
@@ -446,6 +448,10 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             selectionMethod.Contains("RefreshActiveTakeoffVisualsForPaths(", StringComparison.Ordinal),
             "plain takeoff selection should repaint only the previous and current active rows");
+        AssertTrue(
+            revealMethod.Contains("BringPageTreeItemIntoCenteredView(preferredLinked)", StringComparison.Ordinal) &&
+            !revealMethod.Contains("preferredLinked.IsSelected = true", StringComparison.Ordinal),
+            "Takeoffs-tree reveal should scroll/highlight linked Pages rows without selecting PageTakeoffNode and opening its sheet");
         AssertTrue(
             scheduleMethod.Contains("RunScheduledTakeoffSelectionSync(version, action)", StringComparison.Ordinal) &&
             scheduledRunMethod.Contains("_takeoffsDragStart != null && Mouse.LeftButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
@@ -1518,6 +1524,7 @@ internal static class TakeoffsTreeRegressionTests
             source.Contains("RunViewportTreeOpsSmoke(report)", StringComparison.Ordinal) &&
             treeOps.Contains("MovePagesDownAndRestore", StringComparison.Ordinal) &&
             treeOps.Contains("MoveTakeoffsDownAndRestore", StringComparison.Ordinal) &&
+            treeOps.Contains("DragTakeoffPositionDownAndRestore", StringComparison.Ordinal) &&
             treeOps.Contains("MoveTakeoffSectionAndRestoreWithPageJump", StringComparison.Ordinal) &&
             treeOps.Contains("AssertCurrentPageIsMeasurementPage", StringComparison.Ordinal) &&
             treeOps.Contains("AssertCurrentPageUnchangedForTakeoffMove", StringComparison.Ordinal) &&
@@ -1525,11 +1532,13 @@ internal static class TakeoffsTreeRegressionTests
             treeOps.Contains("SelectTakeoffsBulkForSmoke", StringComparison.Ordinal) &&
             treeOps.Contains("PagesSingleSelectionSetMs", StringComparison.Ordinal) &&
             treeOps.Contains("TakeoffsSingleSelectionEventMs", StringComparison.Ordinal) &&
+            treeOps.Contains("TakeoffsSingleDragMoveDownMs", StringComparison.Ordinal) &&
             treeOps.Contains("TakeoffsSectionDropPageJumpMs", StringComparison.Ordinal) &&
             treeOps.Contains("TakeoffsBulkSelectionPagesLayoutMs", StringComparison.Ordinal) &&
             treeOps.Contains("OrdersEqual(before, OrderedChildSnapshot(parent))", StringComparison.Ordinal) &&
             script.Contains("[switch]$IncludeTreeOps", StringComparison.Ordinal) &&
             script.Contains("OURPLANECORE_SETTINGS_PATH", StringComparison.Ordinal) &&
+            script.Contains("tree ops takeoff drag/drop", StringComparison.Ordinal) &&
             script.Contains("jumped to measurement page", StringComparison.Ordinal) &&
             script.Contains("tree ops takeoffs detail", StringComparison.Ordinal),
             "viewport stress smoke should optionally exercise reversible single/bulk selection and move operations in Pages and Takeoffs trees, including section/count row drops that jump to the measurement page");
