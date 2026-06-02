@@ -75,6 +75,11 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
+        int deferredOverlay = deferredMethod.IndexOf("LoadSheetOverlay(_currentPage ?? viewportPage)", StringComparison.Ordinal);
+        int deferredPrefetch = deferredMethod.IndexOf("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal);
+        AssertTrue(
+            deferredOverlay >= 0 && deferredPrefetch > deferredOverlay,
+            "cold sheet overlay render should be queued before nearby page prefetch so the current page gets its overlay first");
 
         AssertTrue(
             prefetchMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
@@ -906,6 +911,12 @@ internal static class TakeoffsTreeRegressionTests
             overlay.Contains("SheetOverlayTintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
             overlay.Contains("BuildBrightSheetOverlayColor", StringComparison.Ordinal),
             "sheet overlay rendering must read persisted cache before rendering, write after tinting, and keep overlays bright");
+        AssertTrue(
+            overlay.Contains("SKColor[] sourcePixels = source.Pixels", StringComparison.Ordinal) &&
+            overlay.Contains("tinted.Pixels = tintedPixels", StringComparison.Ordinal) &&
+            !overlay.Contains("source.GetPixel(x, y)", StringComparison.Ordinal) &&
+            !overlay.Contains("tinted.SetPixel(x, y", StringComparison.Ordinal),
+            "sheet overlay tinting should use a single pixel-array pass instead of per-pixel bitmap calls");
         AssertTrue(
             cache.Contains("OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT", StringComparison.Ordinal) &&
             cache.Contains("render-cache", StringComparison.Ordinal) &&

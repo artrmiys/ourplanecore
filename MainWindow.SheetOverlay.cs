@@ -729,25 +729,22 @@ public partial class MainWindow
         SKColor color = BuildBrightSheetOverlayColor(ParseOverlayColor(colorHex));
         double alphaScale = EffectiveSheetOverlayOpacity(opacity);
         var tinted = new SKBitmap(new SKImageInfo(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
-        tinted.Erase(SKColors.Transparent);
+        SKColor[] sourcePixels = source.Pixels;
+        SKColor[] tintedPixels = new SKColor[sourcePixels.Length];
 
-        for (int y = 0; y < source.Height; y++)
+        for (int i = 0; i < sourcePixels.Length; i++)
         {
-            for (int x = 0; x < source.Width; x++)
-            {
-                SKColor pixel = source.GetPixel(x, y);
-                int whiteDistance = Math.Max(
-                    Math.Max(255 - pixel.Red, 255 - pixel.Green),
-                    255 - pixel.Blue);
-                int alpha = (int)Math.Round(whiteDistance * alphaScale * (pixel.Alpha / 255.0) * SheetOverlayAlphaBoost);
-                alpha = Math.Clamp(alpha, 0, 255);
-                if (alpha < 3)
-                    continue;
-
-                tinted.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, (byte)alpha));
-            }
+            SKColor pixel = sourcePixels[i];
+            int whiteDistance = Math.Max(
+                Math.Max(255 - pixel.Red, 255 - pixel.Green),
+                255 - pixel.Blue);
+            int alpha = (int)Math.Round(whiteDistance * alphaScale * (pixel.Alpha / 255.0) * SheetOverlayAlphaBoost);
+            alpha = Math.Clamp(alpha, 0, 255);
+            if (alpha >= 3)
+                tintedPixels[i] = new SKColor(color.Red, color.Green, color.Blue, (byte)alpha);
         }
 
+        tinted.Pixels = tintedPixels;
         return tinted;
     }
 

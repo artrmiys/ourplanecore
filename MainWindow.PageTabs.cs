@@ -391,12 +391,13 @@ public partial class MainWindow
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
-            trace?.Mark("prefetch-queued");
+            LoadSheetOverlay(_currentPage ?? viewportPage);
+            trace?.Mark("overlay-queued");
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            LoadSheetOverlay(_currentPage ?? viewportPage);
+            QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
+            trace?.Mark("prefetch-queued");
             _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
             ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();
