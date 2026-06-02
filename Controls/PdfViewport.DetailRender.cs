@@ -296,37 +296,59 @@ public sealed partial class PdfViewport
     private void DrawDetailRenderTile(SKCanvas canvas)
     {
         if (_detailTiles.Count == 0)
-        {
             return;
-        }
 
         SKRect visible = ClampPdfRectToPage(GetVisiblePdfRect());
         string pageKey = DetailPageKey(_pdfPath, _pdfIndex, _pageFolder);
-        foreach (DetailRenderTile tile in _detailTiles.ToList())
-        {
-            if (!string.Equals(tile.PageKey, pageKey, StringComparison.OrdinalIgnoreCase) ||
-                tile.BitmapScale <= 0 ||
-                tile.PdfRect.Width <= 0 ||
-                tile.PdfRect.Height <= 0 ||
-                !Intersects(tile.PdfRect, visible))
-            {
-                continue;
-            }
+        var eligibleTiles = _detailTiles
+            .Where(tile =>
+                string.Equals(tile.PageKey, pageKey, StringComparison.OrdinalIgnoreCase) &&
+                tile.BitmapScale > 0 &&
+                tile.PdfRect.Width > 0 &&
+                tile.PdfRect.Height > 0 &&
+                Intersects(tile.PdfRect, visible))
+            .ToList();
+        if (eligibleTiles.Count == 0)
+            return;
 
-            tile.LastUsed = ++_detailTileClock;
-            using var paint = new SKPaint
-            {
-                IsAntialias = false,
-                FilterQuality = _zoom > tile.BitmapScale * 1.05f ? SKFilterQuality.High : SKFilterQuality.Medium,
-            };
-            var src = new SKRect(0, 0, tile.Bitmap.Width, tile.Bitmap.Height);
-            var dst = new SKRect(
-                (tile.PdfRect.Left - _panX) * _zoom,
-                (tile.PdfRect.Top - _panY) * _zoom,
-                (tile.PdfRect.Right - _panX) * _zoom,
-                (tile.PdfRect.Bottom - _panY) * _zoom);
-            canvas.DrawBitmap(tile.Bitmap, src, dst, paint);
+        float minimumPaintScale = Math.Max(_bitmapScale, _zoom * 0.90f);
+        DetailRenderTile? coveringTile = eligibleTiles
+            .Where(tile => tile.BitmapScale >= minimumPaintScale &&
+                           RectContains(tile.PdfRect, visible, tolerancePt: 0.5f))
+            .OrderByDescending(tile => tile.BitmapScale)
+            .ThenByDescending(tile => tile.LastUsed)
+            .FirstOrDefault();
+        if (coveringTile != null)
+        {
+            DrawDetailRenderTileBitmap(canvas, coveringTile);
+            return;
         }
+
+        foreach (DetailRenderTile tile in eligibleTiles
+                     .OrderByDescending(tile => IntersectionArea(tile.PdfRect, visible))
+                     .ThenByDescending(tile => tile.BitmapScale)
+                     .ThenByDescending(tile => tile.LastUsed)
+                     .Take(ViewportRenderPolicy.DetailRenderMaxPaintTiles))
+        {
+            DrawDetailRenderTileBitmap(canvas, tile);
+        }
+    }
+
+    private void DrawDetailRenderTileBitmap(SKCanvas canvas, DetailRenderTile tile)
+    {
+        tile.LastUsed = ++_detailTileClock;
+        using var paint = new SKPaint
+        {
+            IsAntialias = false,
+            FilterQuality = _zoom > tile.BitmapScale * 1.05f ? SKFilterQuality.High : SKFilterQuality.Medium,
+        };
+        var src = new SKRect(0, 0, tile.Bitmap.Width, tile.Bitmap.Height);
+        var dst = new SKRect(
+            (tile.PdfRect.Left - _panX) * _zoom,
+            (tile.PdfRect.Top - _panY) * _zoom,
+            (tile.PdfRect.Right - _panX) * _zoom,
+            (tile.PdfRect.Bottom - _panY) * _zoom);
+        canvas.DrawBitmap(tile.Bitmap, src, dst, paint);
     }
 
     private void AddDetailRenderTile(SKBitmap bitmap, SKRect clip, float bitmapScale, string pageKey)
@@ -443,6 +465,13 @@ public sealed partial class PdfViewport
         a.Right > b.Left &&
         a.Top < b.Bottom &&
         a.Bottom > b.Top;
+
+    private static float IntersectionArea(SKRect a, SKRect b)
+    {
+        float width = Math.Max(0, Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left));
+        float height = Math.Max(0, Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top));
+        return width * height;
+    }
 
     private static string DetailPageKey(string pdfPath, int pdfIndex, string pageFolder) =>
         string.Join('|', pdfPath.ToLowerInvariant(), pdfIndex, pageFolder.ToLowerInvariant());

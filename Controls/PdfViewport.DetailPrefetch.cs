@@ -13,7 +13,7 @@ public sealed partial class PdfViewport
 {
     private void QueueAdjacentDetailRenderPrefetchFromTile(DetailRenderTile tile, float targetScale)
     {
-        if (!ViewportRenderPolicy.DetailRenderPrefetchEnabled ||
+        if (!ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating) ||
             string.IsNullOrWhiteSpace(_pdfPath) ||
             _pdfIndex < 0 ||
             tile.PdfRect.Width <= 0 ||
@@ -38,7 +38,7 @@ public sealed partial class PdfViewport
 
     private void QueueAdjacentDetailRenderPrefetch(DetailRenderRequest source, SKRect sourceClip)
     {
-        if (!ViewportRenderPolicy.DetailRenderPrefetchEnabled ||
+        if (!ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating) ||
             !IsCurrentDetailRequest(source) ||
             source.RenderScale <= 0 ||
             sourceClip.Width <= 0 ||
@@ -107,6 +107,7 @@ public sealed partial class PdfViewport
             try
             {
                 if (!IsCurrentDetailPrefetchRequest(request) ||
+                    !ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating) ||
                     DetailRenderTileCoversRect(request.ClipRect, request.RenderScale))
                 {
                     return;

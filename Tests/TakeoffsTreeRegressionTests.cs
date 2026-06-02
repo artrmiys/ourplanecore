@@ -1166,7 +1166,10 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderPaddingScreenPxForZoom", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchEnabled = true", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderPrefetchConcurrency = 2", StringComparison.Ordinal),
+            policy.Contains("DetailRenderPrefetchMinZoom = 4.0f", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMaxPaintTiles = 2", StringComparison.Ordinal) &&
+            policy.Contains("ShouldUseDetailRenderPrefetch", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
@@ -1222,11 +1225,15 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("QueueAdjacentDetailRenderPrefetch", StringComparison.Ordinal) &&
             detail.Contains("DetailTilePrefetchSemaphore", StringComparison.Ordinal) &&
             detailPrefetch.Contains("QueueAdjacentDetailRenderPrefetchFromTile", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating)", StringComparison.Ordinal) &&
             detailPrefetch.Contains("PrefetchDetailRenderTileAsync", StringComparison.Ordinal) &&
             detailPrefetch.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             detailPrefetch.Contains("IsCurrentDetailPrefetchRequest", StringComparison.Ordinal) &&
             detailPrefetch.Contains("DetailRenderTileCoversRect", StringComparison.Ordinal) &&
             detailPrefetch.Contains("detail-prefetch", StringComparison.Ordinal) &&
+            detail.Contains("DrawDetailRenderTileBitmap", StringComparison.Ordinal) &&
+            detail.Contains("IntersectionArea", StringComparison.Ordinal) &&
+            detail.Contains("ViewportRenderPolicy.DetailRenderMaxPaintTiles", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
             "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, and decode them off the UI path");
         AssertTrue(

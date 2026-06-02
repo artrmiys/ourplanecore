@@ -21,9 +21,11 @@ public static class ViewportRenderPolicy
     public const float DetailRenderMaxPixels = 96_000_000f;
     public const float DetailRenderPaddingScreenPx = 1024f;
     public const bool DetailRenderPrefetchEnabled = true;
-    public const int DetailRenderPrefetchTileCount = 4;
-    public const int DetailRenderPrefetchConcurrency = 2;
+    public const float DetailRenderPrefetchMinZoom = 4.0f;
+    public const int DetailRenderPrefetchTileCount = 2;
+    public const int DetailRenderPrefetchConcurrency = 1;
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
+    public const int DetailRenderMaxPaintTiles = 2;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;
@@ -155,6 +157,11 @@ public static class ViewportRenderPolicy
 
         return target >= bitmapScale * DetailRenderMinScaleGain ? Math.Max(target, bitmapScale) : 0;
     }
+
+    public static bool ShouldUseDetailRenderPrefetch(float zoom, bool isFastNavigating) =>
+        DetailRenderPrefetchEnabled &&
+        !isFastNavigating &&
+        zoom >= DetailRenderPrefetchMinZoom;
 
     private static float PixelBudgetMaxRenderScale(float pageWidthPt, float pageHeightPt)
     {
