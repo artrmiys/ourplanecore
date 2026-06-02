@@ -20,6 +20,10 @@ public static class ViewportRenderPolicy
     public const float DetailRenderMaxScale = 16.0f;
     public const float DetailRenderMaxPixels = 96_000_000f;
     public const float DetailRenderPaddingScreenPx = 1024f;
+    public const bool DetailRenderPrefetchEnabled = true;
+    public const int DetailRenderPrefetchTileCount = 4;
+    public const int DetailRenderPrefetchConcurrency = 2;
+    public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;

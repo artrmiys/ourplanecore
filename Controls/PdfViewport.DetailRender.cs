@@ -21,12 +21,18 @@ public sealed partial class PdfViewport
     private DetailRenderRequest? _activeDetailRender;
     private bool _detailRenderInProgress;
     private int _detailRenderVersion;
+    private int _detailTileGeneration;
+    private readonly object _detailPrefetchGate = new();
+    private readonly HashSet<string> _detailPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
     private const int MaxDetailRenderTileEntries = 64;
     private static readonly long MaxDetailRenderTileBytes =
         ResolveViewportRamBudget(2_400_000_000L, 4_800_000_000L, 0.07);
+    private static readonly SemaphoreSlim DetailTilePrefetchSemaphore =
+        new(ViewportRenderPolicy.DetailRenderPrefetchConcurrency, ViewportRenderPolicy.DetailRenderPrefetchConcurrency);
 
     private sealed record DetailRenderRequest(
         int Version,
+        int TileGeneration,
         string PdfPath,
         int PdfIndex,
         string PageFolder,
@@ -55,6 +61,10 @@ public sealed partial class PdfViewport
 
     private void ClearDetailRenderBitmap()
     {
+        _detailTileGeneration++;
+        lock (_detailPrefetchGate)
+            _detailPrefetchInFlight.Clear();
+
         foreach (DetailRenderTile tile in _detailTiles)
             tile.Bitmap.Dispose();
         _detailTiles.Clear();
@@ -121,6 +131,7 @@ public sealed partial class PdfViewport
         int version = _detailRenderVersion + 1;
         request = new DetailRenderRequest(
             version,
+            _detailTileGeneration,
             _pdfPath,
             _pdfIndex,
             _pageFolder,
@@ -148,6 +159,7 @@ public sealed partial class PdfViewport
                 continue;
 
             tile.LastUsed = ++_detailTileClock;
+            QueueAdjacentDetailRenderPrefetchFromTile(tile, targetScale);
             return true;
         }
 
@@ -277,6 +289,7 @@ public sealed partial class PdfViewport
         _detailBitmapScale = clip.Width > 0 ? bitmap.Width / clip.Width : request.RenderScale;
         _detailPageKey = DetailPageKey(request.PdfPath, request.PdfIndex, request.PageFolder);
         AddDetailRenderTile(bitmap, clip, _detailBitmapScale, _detailPageKey);
+        QueueAdjacentDetailRenderPrefetch(request, clip);
         RequestRepaint();
     }
 
@@ -382,6 +395,13 @@ public sealed partial class PdfViewport
 
     private bool IsCurrentDetailRequest(DetailRenderRequest request) =>
         request.Version == _detailRenderVersion &&
+        request.TileGeneration == _detailTileGeneration &&
+        string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+        request.PdfIndex == _pdfIndex &&
+        string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsCurrentDetailPrefetchRequest(DetailRenderRequest request) =>
+        request.TileGeneration == _detailTileGeneration &&
         string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
         request.PdfIndex == _pdfIndex &&
         string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);

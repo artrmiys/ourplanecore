@@ -1143,6 +1143,7 @@ internal static class TakeoffsTreeRegressionTests
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
+        string detailPrefetch = ReadRepoFile("Controls/PdfViewport.DetailPrefetch.cs");
         string transform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
         string viewport = ReadRepoFile("Controls/PdfViewport.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
@@ -1163,7 +1164,9 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("ShouldUseZoomRefreshRender", StringComparison.Ordinal) &&
             policy.Contains("ShouldSkipFullRefreshDuringDetail", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPaddingScreenPxForZoom", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal),
+            policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchEnabled = true", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchConcurrency = 2", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
@@ -1216,8 +1219,16 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)", StringComparison.Ordinal) &&
+            detail.Contains("QueueAdjacentDetailRenderPrefetch", StringComparison.Ordinal) &&
+            detail.Contains("DetailTilePrefetchSemaphore", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("QueueAdjacentDetailRenderPrefetchFromTile", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("PrefetchDetailRenderTileAsync", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("IsCurrentDetailPrefetchRequest", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("DetailRenderTileCoversRect", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("detail-prefetch", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
-            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, and decode them off the UI path");
+            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, and decode them off the UI path");
         AssertTrue(
             layers.Contains("Task.Run(() => SKBitmap.Decode(renderResult.Result.ImageBytes))", StringComparison.Ordinal) &&
             layers.Contains("ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap)", StringComparison.Ordinal),
@@ -1250,6 +1261,9 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("response.Clip?.ToSKRect()", StringComparison.Ordinal) &&
             service.Contains("bool invoked = hasClip", StringComparison.Ordinal) &&
             service.Contains("TryInvokeDetailWorker(\"render\", request", StringComparison.Ordinal) &&
+            service.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
+            service.Contains("clipRect = null", StringComparison.Ordinal) &&
+            service.Contains("Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null", StringComparison.Ordinal) &&
             service.Contains("DetailWorkerSemaphore", StringComparison.Ordinal) &&
             service.Contains("WorkerJsonOptions", StringComparison.Ordinal) &&
             service.Contains("JsonSerializer.Serialize(envelope, WorkerJsonOptions)", StringComparison.Ordinal) &&

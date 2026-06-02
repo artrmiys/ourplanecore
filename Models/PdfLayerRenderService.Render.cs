@@ -144,7 +144,8 @@ namespace OurPlaneCore;
         double renderScale,
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
-        IReadOnlyList<PdfLayerInfo>? cachedLayers) =>
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect = null) =>
         Task.Run(() =>
         {
             bool ok = TryRenderDedicatedProcess(
@@ -154,6 +155,7 @@ namespace OurPlaneCore;
                 layerStates,
                 highlightedLayers,
                 cachedLayers,
+                clipRect,
                 out PdfLayerRenderResult result,
                 out string error);
             return (ok, result, error);
@@ -166,20 +168,26 @@ namespace OurPlaneCore;
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect,
         out PdfLayerRenderResult result,
         out string error)
     {
         result = new PdfLayerRenderResult();
         error = "";
-        string cacheKey = BuildRenderCacheKey(
-            pdfPath,
-            pageIndex,
-            renderScale,
-            layerStates,
-            highlightedLayers,
-            cachedLayers);
-        if (TryGetCachedRender(cacheKey, out result))
-            return true;
+        bool hasClip = IsUsableClip(clipRect);
+        string cacheKey = "";
+        if (!hasClip)
+        {
+            cacheKey = BuildRenderCacheKey(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                layerStates,
+                highlightedLayers,
+                cachedLayers);
+            if (TryGetCachedRender(cacheKey, out result))
+                return true;
+        }
 
         string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
@@ -200,6 +208,7 @@ namespace OurPlaneCore;
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
                 VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+                Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
             if (!TryRunFileCommand("render", request, inputPath, outputPath, out RenderResponse? response, out error))
@@ -217,13 +226,15 @@ namespace OurPlaneCore;
                 ImageBytes = imageBytes,
                 WidthPt = response.WidthPt,
                 HeightPt = response.HeightPt,
+                ClipRect = response.Clip?.ToSKRect() ?? (hasClip ? clipRect!.Value : null),
                 Layers = response.Layers
                     .Select(l => new PdfLayer(l.Xref, l.Name, l.On, highlightedLayers.Contains(l.Xref)))
                     .ToList(),
                 LayersCaptured = true,
             };
-            AddCachedRender(cacheKey, result);
-            if (PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+            if (!hasClip)
+                AddCachedRender(cacheKey, result);
+            if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
                 PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
             return true;
         }
