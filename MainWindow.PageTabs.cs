@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using OurPlaneCore.Controls;
 
@@ -16,6 +17,8 @@ public partial class MainWindow
     private string _pagePreviewPrefetchJobRoot = "";
     private IReadOnlyList<PageInfo> _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     private int _pageOpenDeferredVersion;
+    private PageTabState? _pendingPageTabDrag;
+    private Point _pendingPageTabDragStart;
 
     private void InvalidatePagePreviewPrefetchCache()
     {
@@ -686,7 +689,12 @@ public partial class MainWindow
                     Tag = tab,
                     ToolTip = tab.PageFolder,
                     ContextMenu = BuildPageTabContextMenu(tab),
+                    AllowDrop = true,
                 };
+                item.PreviewMouseLeftButtonDown += PageTab_PreviewMouseLeftButtonDown;
+                item.PreviewMouseMove += PageTab_PreviewMouseMove;
+                item.DragOver += PageTab_DragOver;
+                item.Drop += PageTab_Drop;
                 item.SetResourceReference(Control.ForegroundProperty, "ControlForegroundBrush");
                 item.SetResourceReference(Control.BackgroundProperty, "ControlBackgroundBrush");
                 item.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
@@ -702,6 +710,141 @@ public partial class MainWindow
         {
             _updatingPageTabs = false;
         }
+    }
+
+    private void PageTab_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject source &&
+            FindVisualAncestor<Button>(source) != null)
+        {
+            _pendingPageTabDrag = null;
+            return;
+        }
+
+        _pendingPageTabDrag = sender is TabItem { Tag: PageTabState tab } ? tab : null;
+        _pendingPageTabDragStart = e.GetPosition(PageTabs);
+    }
+
+    private void PageTab_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_pendingPageTabDrag == null || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        Point position = e.GetPosition(PageTabs);
+        if (Math.Abs(position.X - _pendingPageTabDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(position.Y - _pendingPageTabDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        PageTabState dragged = _pendingPageTabDrag;
+        _pendingPageTabDrag = null;
+        DragDrop.DoDragDrop(PageTabs, dragged, DragDropEffects.Move);
+    }
+
+    private void PageTab_DragOver(object sender, DragEventArgs e) =>
+        UpdatePageTabDragEffects(e);
+
+    private void PageTabs_DragOver(object sender, DragEventArgs e) =>
+        UpdatePageTabDragEffects(e);
+
+    private void UpdatePageTabDragEffects(DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(typeof(PageTabState))
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void PageTab_Drop(object sender, DragEventArgs e)
+    {
+        if (!TryGetDraggedPageTab(e, out PageTabState? dragged) || dragged == null)
+            return;
+
+        if (sender is not TabItem { Tag: PageTabState targetTab } targetItem)
+        {
+            PageTabs_Drop(sender, e);
+            return;
+        }
+
+        MovePageTab(dragged, targetTab, e.GetPosition(targetItem).X > targetItem.ActualWidth / 2);
+        e.Handled = true;
+    }
+
+    private void PageTabs_Drop(object sender, DragEventArgs e)
+    {
+        if (!TryGetDraggedPageTab(e, out PageTabState? dragged) || dragged == null)
+            return;
+
+        if (e.OriginalSource is DependencyObject source &&
+            FindVisualAncestor<TabItem>(source) != null)
+        {
+            return;
+        }
+
+        DetachPageTabFromDrag(dragged);
+        e.Handled = true;
+    }
+
+    private static bool TryGetDraggedPageTab(DragEventArgs e, out PageTabState? tab)
+    {
+        tab = e.Data.GetData(typeof(PageTabState)) as PageTabState;
+        if (tab == null)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return false;
+        }
+
+        e.Effects = DragDropEffects.Move;
+        return true;
+    }
+
+    private void MovePageTab(PageTabState dragged, PageTabState target, bool insertAfter)
+    {
+        int oldIndex = _pageTabs.IndexOf(dragged);
+        int targetIndex = _pageTabs.IndexOf(target);
+        if (oldIndex < 0 || targetIndex < 0 || ReferenceEquals(dragged, target))
+            return;
+
+        SaveActivePageTabViewState();
+        _pageTabs.RemoveAt(oldIndex);
+        if (oldIndex < targetIndex)
+            targetIndex--;
+
+        int insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+        insertIndex = Math.Clamp(insertIndex, 0, _pageTabs.Count);
+        _pageTabs.Insert(insertIndex, dragged);
+        RefreshPageTabs(_activePageTab);
+        TxtStatus.Text = $"Moved sheet tab: {dragged.PageName}.";
+    }
+
+    private void DetachPageTabFromDrag(PageTabState tab)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Page tabs: open a job before detaching sheets.";
+            return;
+        }
+
+        SaveActivePageTabViewState();
+        OpenPageTabsInDetachedWindows([tab], tileOnSecondMonitor: false);
+        ClosePageTab(tab);
+    }
+
+    private static T? FindVisualAncestor<T>(DependencyObject source)
+        where T : DependencyObject
+    {
+        DependencyObject? current = source;
+        while (current != null)
+        {
+            if (current is T match)
+                return match;
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private StackPanel BuildPageTabHeader(PageTabState tab)

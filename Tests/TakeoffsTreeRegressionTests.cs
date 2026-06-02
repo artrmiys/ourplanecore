@@ -92,6 +92,35 @@ internal static class TakeoffsTreeRegressionTests
             "nearby page prefetch should warm cheap previews around the active sheet and clean renders only for the closest neighbors");
     }
 
+    public static void PageTabsSupportDragReorderAndDetach()
+    {
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string xaml = ReadRepoFile("MainWindow.xaml");
+
+        AssertTrue(
+            xaml.Contains("DragOver=\"PageTabs_DragOver\"", StringComparison.Ordinal) &&
+            xaml.Contains("Drop=\"PageTabs_Drop\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"ViewportHost\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"ViewportSurfaceHost\"", StringComparison.Ordinal),
+            "page tabs control and central viewport space should accept drops for detach");
+        AssertTrue(
+            pageTabs.Contains("item.PreviewMouseLeftButtonDown += PageTab_PreviewMouseLeftButtonDown", StringComparison.Ordinal) &&
+            pageTabs.Contains("item.PreviewMouseMove += PageTab_PreviewMouseMove", StringComparison.Ordinal) &&
+            pageTabs.Contains("item.Drop += PageTab_Drop", StringComparison.Ordinal) &&
+            pageTabs.Contains("DragDrop.DoDragDrop(PageTabs, dragged, DragDropEffects.Move)", StringComparison.Ordinal),
+            "page tabs should start a tab drag from the tab item body");
+        AssertTrue(
+            pageTabs.Contains("MovePageTab(dragged, target", StringComparison.Ordinal) &&
+            pageTabs.Contains("_pageTabs.RemoveAt(oldIndex)", StringComparison.Ordinal) &&
+            pageTabs.Contains("_pageTabs.Insert(insertIndex, dragged)", StringComparison.Ordinal),
+            "dropping a page tab on another tab should reorder the existing tab list");
+        AssertTrue(
+            pageTabs.Contains("DetachPageTabFromDrag", StringComparison.Ordinal) &&
+            pageTabs.Contains("OpenPageTabsInDetachedWindows([tab], tileOnSecondMonitor: false)", StringComparison.Ordinal) &&
+            pageTabs.Contains("ClosePageTab(tab)", StringComparison.Ordinal),
+            "dropping a page tab on empty tab strip space should detach it and remove the tab");
+    }
+
     public static void ProgrammaticPageSelectionOpensViewportDirectly()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");

@@ -1000,7 +1000,11 @@
                               Background="{DynamicResource SplitterBrush}" ResizeBehavior="PreviousAndNext"/>
 
                 <!-- Centre: page tabs + PDF viewport -->
-                <Grid x:Name="ViewportHost" Grid.Column="2" Background="{DynamicResource SurfaceBackgroundBrush}">
+                <Grid x:Name="ViewportHost" Grid.Column="2"
+                      Background="{DynamicResource SurfaceBackgroundBrush}"
+                      AllowDrop="True"
+                      DragOver="PageTabs_DragOver"
+                      Drop="PageTabs_Drop">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -1010,12 +1014,18 @@
                                 Visibility="Collapsed"
                                 MinHeight="28"
                                 SelectionChanged="PageTabs_SelectionChanged"
+                                AllowDrop="True"
+                                DragOver="PageTabs_DragOver"
+                                Drop="PageTabs_Drop"
                                 Background="{DynamicResource PanelBackgroundBrush}"
                                 Foreground="{DynamicResource ControlForegroundBrush}"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"/>
                     <Grid x:Name="ViewportSurfaceHost"
                           Grid.Row="1"
                           Background="#FFFFFF"
+                          AllowDrop="True"
+                          DragOver="PageTabs_DragOver"
+                          Drop="PageTabs_Drop"
                           ClipToBounds="True"/>
 
                     <!-- Empty-state Start card: shown when no job is open -->
