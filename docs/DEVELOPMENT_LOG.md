@@ -31,7 +31,7 @@
   `c3abc9a Split large UI and context surfaces` and
   `9b71181 Split import render and learning stores`.
 - Detailed handoff:
-  `docs/REFACTOR_UX_HANDOFF_2026_05_31.md`.
+  `docs/70-architecture-refactor/REFACTOR_UX_HANDOFF_2026_05_31.md`.
 
 ## 2026-05-30 Blank Job / Blank Sheet
 
@@ -64,7 +64,7 @@
   the latest `Application startup.`.
 - Code commit: `5a2eb9e Add blank job and sheet`.
 - Detailed handoff:
-  `docs/BLANK_JOB_BLANK_SHEET_HANDOFF_2026_05_30.md`.
+  `docs/20-import-pages-metadata/BLANK_JOB_BLANK_SHEET_HANDOFF_2026_05_30.md`.
 
 ## 2026-05-30 Detail Reference Sorting
 
@@ -112,7 +112,7 @@
   `checkpoint/before-full-render-cache-20260528-184340`.
 - Code commit: `7b03854 Cache clean PDF rerenders`.
 - Detailed handoff:
-  `docs/PDF_FULL_RENDER_CACHE_HANDOFF_2026_05_28.md`.
+  `docs/10-performance-render/PDF_FULL_RENDER_CACHE_HANDOFF_2026_05_28.md`.
 
 ## 2026-05-28 Underlayment / Sheet Overlay Clarity
 
@@ -134,7 +134,7 @@
   after the latest `Application startup.`.
 - Code commit: `efb0bd1 Sharpen sheet overlay rendering`.
 - Detailed handoff:
-  `docs/UNDERLAYMENT_CLARITY_HANDOFF_2026_05_28.md`.
+  `docs/10-performance-render/UNDERLAYMENT_CLARITY_HANDOFF_2026_05_28.md`.
 
 ## 2026-05-28 PDF Render Performance Status
 
@@ -151,7 +151,7 @@
   `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
   (`0 warnings / 0 errors`).
 - Detailed status:
-  `docs/PDF_RENDER_PERF_STATUS_2026_05_28.md`.
+  `docs/10-performance-render/PDF_RENDER_PERF_STATUS_2026_05_28.md`.
 
 ## 2026-05-28 PDF Inline Render Round Trip
 
@@ -179,7 +179,7 @@
   `checkpoint/before-inline-png-render-20260528-175239`.
 - Code commit: `a6d55e0 Inline bounded PDF render images`.
 - Detailed handoff:
-  `docs/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`.
+  `docs/10-performance-render/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`.
 
 ## 2026-05-28 Page Open UI Performance
 
@@ -205,7 +205,7 @@
   `Application startup.`.
 - Code commit: `e0b9539 Defer page open UI refresh work`.
 - Detailed handoff:
-  `docs/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`.
+  `docs/10-performance-render/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`.
 
 ## 2026-05-28 PDF Preview Cache
 
@@ -231,7 +231,7 @@
   `Application startup.`.
 - Code commit: `a6e00a4 Add persisted PDF preview cache`.
 - Detailed handoff:
-  `docs/PDF_PREVIEW_CACHE_HANDOFF_2026_05_28.md`.
+  `docs/10-performance-render/PDF_PREVIEW_CACHE_HANDOFF_2026_05_28.md`.
 
 ## 2026-05-28 Bookmarks Dock Return
 
@@ -258,7 +258,7 @@
 - Commits: `3f15285 Fix bookmarks dock return`,
   `922c474 Move bookmarks dock toggle into tab`.
 - Detailed handoff:
-  `docs/BOOKMARKS_DOCK_HANDOFF_2026_05_28.md`.
+  `docs/30-takeoffs-measurements/BOOKMARKS_DOCK_HANDOFF_2026_05_28.md`.
 
 ## 2026-05-27 Open Jobs, PDF Import, Render, and Sheet Naming
 
@@ -289,7 +289,7 @@
   `8d60fc2 Fix PDF render and sheet naming`,
   `da31009 Use clean PDF preview on page open`.
 - Detailed handoff:
-  `docs/OPEN_JOBS_PDF_IMPORT_RENDER_HANDOFF_2026_05_27.md`.
+  `docs/20-import-pages-metadata/OPEN_JOBS_PDF_IMPORT_RENDER_HANDOFF_2026_05_27.md`.
 
 ## 2026-05-24 Beam, Openings, and Current-Job PlanSwift Import
 
@@ -310,7 +310,7 @@
 - Added regression coverage for Beam rounding/name selection, Openings
   one-decimal size-only names, and current-job PlanSwift bucket placement.
 - Detailed handoff:
-  `docs/TAKEOFF_TOOLS_AND_PLANSWIFT_IMPORT_HANDOFF_2026_05_24.md`.
+  `docs/30-takeoffs-measurements/TAKEOFF_TOOLS_AND_PLANSWIFT_IMPORT_HANDOFF_2026_05_24.md`.
 - Commits:
   `ff3e5c1 Add Beam count workflow`,
   `a9fe52e Add Openings count workflow`,
@@ -510,7 +510,7 @@
   `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`, with working
   directory `C:\Users\User\Desktop\updates\OurPlaneCore`.
 - Detailed handoff:
-  `docs/RULER_AND_COUNT_DISPLAY_HANDOFF_2026_05_14.md`.
+  `docs/30-takeoffs-measurements/RULER_AND_COUNT_DISPLAY_HANDOFF_2026_05_14.md`.
 - Verification and package refresh passed:
   `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`190/190`), then
   the update-package workflow with `dotnet build .\ourplanecore.sln`
@@ -527,7 +527,7 @@
 - Added stale row detection/reload in `MainWindow.TakeoffsSelectionHelpers.cs` and wired it into Takeoffs mouse-down and drag-start paths.
 - Hardened Takeoffs drag cleanup so aborted drags reset state and clear drop cues.
 - Added regression checks for stale-row reload and drag-state reset behavior.
-- Detailed handoff: `docs/TAKEOFF_TREE_STALE_RF_UI_FIX_2026_05_13.md`.
+- Detailed handoff: `docs/30-takeoffs-measurements/TAKEOFF_TREE_STALE_RF_UI_FIX_2026_05_13.md`.
 - Verification passed: isolated build/test (`185/185`), then normal Debug build/test (`185/185`) after closing the running app.
 
 ## 2026-05-13 New Job Flow and Crop Note Output Fix
@@ -549,7 +549,7 @@
 - Added `OpenAiResponseParser` plus regression coverage for normal
   `output_text` extraction and `max_output_tokens` incomplete responses.
 - Detailed handoff:
-  `docs/JOB_CREATION_AND_CROP_NOTE_HANDOFF_2026_05_13.md`.
+  `docs/20-import-pages-metadata/JOB_CREATION_AND_CROP_NOTE_HANDOFF_2026_05_13.md`.
 - Verification:
   - `dotnet build .\ourplanecore.sln` passed with 0 warnings and 0 errors;
   - `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` passed
@@ -1174,7 +1174,7 @@
     sets, marker export, and 3D draft handoff;
   - `3D`: draft build, 3D from takeoffs, detached viewport, JSON, roof/opening
     review, and accept.
-- Added `docs/WORKSPACE_TAB_COMMAND_MAP.md` as the durable command ownership
+- Added `docs/60-ux-ui/WORKSPACE_TAB_COMMAND_MAP.md` as the durable command ownership
   map for the new workspace tabs.
 
 ## 2026-05-04 Full UX Shell Cleanup Block
@@ -1201,7 +1201,7 @@
 
 ## 2026-05-04 UX / Design Research Audit
 
-- Added `docs/UX_DESIGN_RESEARCH_AUDIT_2026_05_04.md` as the current
+- Added `docs/60-ux-ui/UX_DESIGN_RESEARCH_AUDIT_2026_05_04.md` as the current
   design-risk review after the compact top command bar, Display tab reorg, and
   toolbar duplicate cleanup.
 - Findings are prioritized as P0/P1/P2 and focus on what is uncomfortable or
@@ -1469,7 +1469,7 @@
     prompts before build and is saved in app settings.
 - Created a pre-change Git savepoint before UX/new-window roadmap edits:
   `2a07c79 Add selection clipboard and UX roadmap`.
-- Reviewed `docs/UX_AND_NEW_WINDOWS_IMPLEMENTATION_PROMPT.md` against
+- Reviewed `docs/60-ux-ui/UX_AND_NEW_WINDOWS_IMPLEMENTATION_PROMPT.md` against
   PlanSwift and WPF sources, then added a research review section that:
   - marks stale/overlapping tasks such as Count rename and Record rewrite;
   - recommends splitting JobPicker into recent-jobs first and thumbnails second;
@@ -2025,12 +2025,12 @@ ba8bf22 Sync canvas and estimate section selection
   tighten right-side Takeoffs editing, item properties, section management,
   and drawing/editing affordances before changing the Estimating tab further.
 - Continue the AI marker training workflow from
-  `docs/AI_MARKER_TRAINING_IDEAS.md`: first-slice `Find Similar From Marker`,
+  `docs/50-3d-roof-ai/AI_MARKER_TRAINING_IDEAS.md`: first-slice `Find Similar From Marker`,
   auto-created candidate crop bookmarks, and failed-bookmark retry controls are
   in place; next add cross-sheet batch search and a dedicated bulk marker
   review panel.
 - Add the lightweight 3D massing viewer idea from
-  `docs/AI_3D_MASSING_VIEWER_IDEAS.md`: use exterior corner markers, wall
+  `docs/50-3d-roof-ai/AI_3D_MASSING_VIEWER_IDEAS.md`: use exterior corner markers, wall
   height samples, and roof notes to build a simple separate-tab 3D draft for
   visual review, not BIM-grade modeling. The data service and placeholder
   `3D Massing` tab are in place, including source-marker jump/JSON/crop
@@ -2243,7 +2243,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   - main-window Estimate/Takeoffs selection sync is skipped while the left mouse
     button is down so right-side UI cannot re-enter viewport focus during drag.
 - Added the detailed future-handoff file:
-  `docs/MEASUREMENT_PAGE_LINK_AND_EDITING_POSTMORTEM.md`.
+  `docs/30-takeoffs-measurements/MEASUREMENT_PAGE_LINK_AND_EDITING_POSTMORTEM.md`.
 - Regression rule for future agents: if measurements exist in the right tree but
   not on the canvas, inspect `measurements.json` `page_folder` before debugging
   drawing transforms or `Data.xml`.
@@ -2257,7 +2257,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   caveat that its source URLs were not web-verified because WebSearch/WebFetch
   were blocked in that agent sandbox.
 - Recorded the new architecture queue in
-  `docs/UX_AND_NEW_WINDOWS_IMPLEMENTATION_PROMPT.md` and
+  `docs/60-ux-ui/UX_AND_NEW_WINDOWS_IMPLEMENTATION_PROMPT.md` and
   `docs/OURPLANECORE_TASK_ROADMAP.md`: shrink/split future
   `MainWindow.xaml.cs` work, AvalonDock as a later spike, Command Palette,
   screen-pixel Snap v2 glyphs, crash-recovery snapshots, HelixToolkit for the
@@ -2521,7 +2521,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 
 - Archived the old 3D/Massing implementation before turning it off. Readable
   `.cs.txt` copies are in `docs/archive/3d_massing_legacy_2026_05_08/`, and
-  the behavior map is in `docs/ARCHIVED_3D_MASSING_LOGIC_2026_05_08.md`.
+  the behavior map is in `docs/90-archive-prompts/ARCHIVED_3D_MASSING_LOGIC_2026_05_08.md`.
 - Removed the visible legacy 3D entry points from AI Manager, AI Inbox,
   command palette, the right-side workspace tabs, and the shared `6 3D`
   workspace tab.
@@ -2729,7 +2729,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   preview counts, let the user pick destination/name, run the importer with
   status, open the new job automatically, and surface the import report.
 - Handoff details and exact resume commands are in
-  `docs/PLANSWIFT_PROJECT_IMPORT_PLAN.md`.
+  `docs/40-planswift-product/PLANSWIFT_PROJECT_IMPORT_PLAN.md`.
 - Verification:
   `dotnet build .\ourplanecore.sln`
   passed with 0 warnings and 0 errors.
@@ -2740,7 +2740,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 ## 2026-05-09 Current 3D Status and Joist Area Rotation
 
 - Wrote the current clean 3D roof state into
-  `docs/THREE_D_ROOF_SYSTEM_MAP.md`: walls, sqft slabs, RF/roof footprints,
+  `docs/50-3d-roof-ai/THREE_D_ROOF_SYSTEM_MAP.md`: walls, sqft slabs, RF/roof footprints,
   manual roof guides, `Build Roof`, `Auto Roof`, visible roof issues, saved
   `3D_Context/walls_model.json`, and the current limit that roof output is a
   reviewable candidate rather than a trusted final solver.
@@ -2770,7 +2770,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   `dotnet build .\ourplanecore.sln` passed clean and
   `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` passed `145/145`.
 - Resume details, exact files, next optimization targets, and approval-noise
-  note are in `docs/TAKEOFF_TREE_PERFORMANCE_HANDOFF_2026_05_10.md`.
+  note are in `docs/30-takeoffs-measurements/TAKEOFF_TREE_PERFORMANCE_HANDOFF_2026_05_10.md`.
 
 ## 2026-05-10 Sheet Notes and Viewport Smoke Handoff
 
@@ -2797,7 +2797,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 - Shortcut `C:\Users\User\Desktop\OurPlaneCore.lnk` was updated to the fresh
   Debug exe.
 - Scope, touched files, suspected lag cause, and verification details are in
-  `docs/SHEET_NOTES_AND_VIEWPORT_SMOKE_HANDOFF_2026_05_10.md`.
+  `docs/20-import-pages-metadata/SHEET_NOTES_AND_VIEWPORT_SMOKE_HANDOFF_2026_05_10.md`.
 
 ## 2026-05-10 Takeoffs Tree Post-Drop Optimization
 
@@ -2979,7 +2979,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 - Added `Tests/PdfSheetMetadataCropServiceTests.cs` and registered template
   persistence/usability coverage.
 - Detailed handoff:
-  `docs/AI_FILL_CROP_HINTS_AND_NOTES_HANDOFF_2026_05_12.md`.
+  `docs/50-3d-roof-ai/AI_FILL_CROP_HINTS_AND_NOTES_HANDOFF_2026_05_12.md`.
 - Verification passed:
   `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`
   and `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`178/178`).
@@ -3007,7 +3007,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 ## 2026-05-12 Auto Trace Areas and Walls Spec
 
 - Wrote the full planning spec for a reviewable area/wall/opening trace system:
-  `docs/AUTO_TRACE_AREAS_AND_WALLS_SPEC_2026_05_12.md`.
+  `docs/30-takeoffs-measurements/AUTO_TRACE_AREAS_AND_WALLS_SPEC_2026_05_12.md`.
 - Scope covers manual trace assist, seeded vector area trace, seeded wall-run
   trace, plan wall area from length x height, facade/elevation area trace,
   opening detection, and cross-sheet batch trace.
@@ -3041,7 +3041,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   `PageAnnotationsFollowMovedPageFolder`.
 - Updated the local user-facing package and Desktop shortcut after verification.
 - Detailed handoff:
-  `docs/PAGE_FOLDER_SORT_AND_NOTES_HANDOFF_2026_05_13.md`.
+  `docs/20-import-pages-metadata/PAGE_FOLDER_SORT_AND_NOTES_HANDOFF_2026_05_13.md`.
 - Verification passed:
   `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
   `dotnet .\Tests\cache\verify_build\OurPlaneCore.Tests.dll` (`183/183`),
@@ -3073,7 +3073,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   `Models/PageImageOperationService.cs` by reducing render scale to `1.5f` and
   setting PDF encoding quality to `72`.
 - Detailed handoff:
-  `docs/PERFORMANCE_RENDER_AND_LAYERS_HANDOFF_2026_05_16.md`.
+  `docs/10-performance-render/PERFORMANCE_RENDER_AND_LAYERS_HANDOFF_2026_05_16.md`.
 - Verification passed:
   `dotnet build .\ourplanecore.sln /p:OutDir=.\cache\verify_build\ /p:UseAppHost=false`,
   `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj /p:OutDir=.\cache\test_run\ /p:UseAppHost=false`,
@@ -3087,7 +3087,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
 ## 2026-05-21 3D Roof Render and Desktop Package Pass
 
 - Documented the current 3D roof render state in
-  `docs/3D_ROOF_RENDER_HANDOFF_2026_05_21.md`.
+  `docs/50-3d-roof-ai/3D_ROOF_RENDER_HANDOFF_2026_05_21.md`.
 - Current roof render behavior removes visible internal planar lines by avoiding
   reverse duplicate coplanar roof triangles and drawing extra roof edge bars
   only on outer boundary edges.
@@ -3131,7 +3131,7 @@ Integrated the three parallel Codex agent slices into the shared worktree:
   scanned. Remaining blanks are mostly scanned/no-text or weak-title-block PDFs
   that need OCR/image fallback rather than looser regex.
 - Detailed handoff:
-  `docs/PDF_IMPORT_SHEET_METADATA_HANDOFF_2026_05_22.md`.
+  `docs/20-import-pages-metadata/PDF_IMPORT_SHEET_METADATA_HANDOFF_2026_05_22.md`.
 - Verification passed:
   `python -m py_compile .\Tools\pdf_layers_helper.py`,
   `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj` (`222/222`),

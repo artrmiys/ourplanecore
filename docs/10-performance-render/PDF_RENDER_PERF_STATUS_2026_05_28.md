@@ -1,4 +1,4 @@
-# PDF Render Performance Status - 2026-05-28
+﻿# PDF Render Performance Status - 2026-05-28
 
 ## Current Status
 
@@ -201,7 +201,7 @@ Reason:
 
 ## Related Handoffs
 
-- `docs/PDF_PREVIEW_CACHE_HANDOFF_2026_05_28.md`
-- `docs/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`
-- `docs/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`
+- `docs/10-performance-render/PDF_PREVIEW_CACHE_HANDOFF_2026_05_28.md`
+- `docs/10-performance-render/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`
+- `docs/10-performance-render/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`
 

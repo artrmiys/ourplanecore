@@ -1,4 +1,4 @@
-# PDF Preview Cache Handoff - 2026-05-28
+﻿# PDF Preview Cache Handoff - 2026-05-28
 
 ## Current Status
 
@@ -112,12 +112,12 @@ Still not changed in this slice:
 - global `WorkerSemaphore = new(1, 1)` for PyMuPDF worker traffic;
 - temp PNG round-trip between Python and C# was partially reduced later on
   2026-05-28 for bounded renders; see
-  `docs/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`;
+  `docs/10-performance-render/PDF_INLINE_RENDER_HANDOFF_2026_05_28.md`;
 - `fitz.Document` recreation when hidden layers are applied;
 - `Bitmap.Copy()` on Docnet in-memory cache hits;
 - synchronous page-open work in `LoadPageIntoViewport` was partially reduced
   later on 2026-05-28; see
-  `docs/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`;
+  `docs/10-performance-render/PAGE_OPEN_UI_PERF_HANDOFF_2026_05_28.md`;
 - first-job full `source.json` tree scan for nearby preview prefetch still
   exists, but the later page-open UI slice moved it behind the first viewport
   load at background dispatcher priority.

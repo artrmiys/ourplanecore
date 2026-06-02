@@ -1,4 +1,4 @@
-# OurPlaneCore Speed Acceleration Analysis - 2026-06-02
+﻿# OurPlaneCore Speed Acceleration Analysis - 2026-06-02
 
 Полный разбор текущей производительности OurPlaneCore после коммита
 `a77aaed Speed up viewport rendering` и план доведения программы до состояния
@@ -8,9 +8,9 @@
 
 Этот документ продолжает и уточняет:
 
-- `docs/SHEET_RENDER_STRATEGY_2026_06_01.md`
-- `docs/PDF_RENDER_PERF_STATUS_2026_05_28.md`
-- `docs/CODEBASE_HEALTH_AUDIT_2026_06_01.md`
+- `docs/10-performance-render/SHEET_RENDER_STRATEGY_2026_06_01.md`
+- `docs/10-performance-render/PDF_RENDER_PERF_STATUS_2026_05_28.md`
+- `docs/70-architecture-refactor/CODEBASE_HEALTH_AUDIT_2026_06_01.md`
 
 ## 0. Короткий вывод
 
