@@ -157,10 +157,12 @@ public static class ViewportRenderPolicy
         if (!ShouldUseDetailRender(zoom, bitmapScale) || clipWidthPt <= 0 || clipHeightPt <= 0)
             return 0;
 
-        float target = Math.Clamp(
-            zoom,
-            bitmapScale * DetailRenderMinScaleGain,
-            Math.Min(CurrentQuality.DetailMaxScale, CurrentQuality.DetailInteractiveMaxScale));
+        float minScale = bitmapScale * DetailRenderMinScaleGain;
+        float maxScale = Math.Min(CurrentQuality.DetailMaxScale, CurrentQuality.DetailInteractiveMaxScale);
+        if (minScale > maxScale)
+            return 0;
+
+        float target = Math.Clamp(zoom, minScale, maxScale);
         float clipPoints = clipWidthPt * clipHeightPt;
         if (clipPoints > 0)
         {
@@ -168,7 +170,7 @@ public static class ViewportRenderPolicy
             target = Math.Min(target, budgetScale);
         }
 
-        return target >= bitmapScale * DetailRenderMinScaleGain ? Math.Max(target, bitmapScale) : 0;
+        return target >= minScale ? Math.Max(target, bitmapScale) : 0;
     }
 
     public static bool ShouldUseDetailRenderPrefetch(float zoom, bool isFastNavigating) =>

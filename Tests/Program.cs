@@ -3463,6 +3463,12 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertTrue(
             ViewportRenderPolicy.SelectDetailRenderScale(16.0f, 3200f, 2200f, 1.0f) < 6.0f,
             "very large visible clips should be capped by the detail render pixel budget");
+
+        ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.MaxQualityMode);
+        AssertClose(
+            0.0,
+            ViewportRenderPolicy.SelectDetailRenderScale(2.0f, 100f, 100f, 1.5f),
+            "detail render should skip when the required gain exceeds the interactive render cap");
     }
     finally
     {
