@@ -511,6 +511,8 @@ internal static class TakeoffsTreeRegressionTests
     {
         string source = ReadRepoFile("MainWindow.TakeoffsDragDrop.cs");
         string mouseMove = SliceMethod(source, "private void TakeoffsTree_MouseMove(object sender, MouseEventArgs e)");
+        string dropSections = SliceMethod(source, "private void DropTakeoffSections(");
+        string droppedSectionsSelection = SliceMethod(source, "private void SelectDroppedTakeoffSectionsOnCurrentPage(");
 
         AssertTrue(
             mouseMove.Contains("e.LeftButton != MouseButtonState.Pressed", StringComparison.Ordinal) &&
@@ -521,6 +523,12 @@ internal static class TakeoffsTreeRegressionTests
             mouseMove.Contains("DoTakeoffsDragDrop(sectionPayload", StringComparison.Ordinal) &&
             mouseMove.Contains("DoTakeoffsDragDrop(payload", StringComparison.Ordinal),
             "takeoffs drag start must cancel pending click selection sync before drag/drop can navigate");
+        AssertTrue(
+            dropSections.Contains("SelectDroppedTakeoffSectionsOnCurrentPage(resultingNodes)", StringComparison.Ordinal) &&
+            !dropSections.Contains("SelectTakeoffSectionMeasurementsOnCanvas(resultingNodes)", StringComparison.Ordinal) &&
+            droppedSectionsSelection.Contains("IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath)", StringComparison.Ordinal) &&
+            !droppedSectionsSelection.Contains("SelectPageByFolder", StringComparison.Ordinal),
+            "section/count row drag/drop should keep the current viewport page instead of navigating to the moved measurement page");
         AssertTrue(
             source.Contains("private void DoTakeoffsDragDrop(object payload, DragDropEffects effects)", StringComparison.Ordinal) &&
             source.Contains("finally", StringComparison.Ordinal) &&
@@ -1491,16 +1499,20 @@ internal static class TakeoffsTreeRegressionTests
             source.Contains("RunViewportTreeOpsSmoke(report)", StringComparison.Ordinal) &&
             treeOps.Contains("MovePagesDownAndRestore", StringComparison.Ordinal) &&
             treeOps.Contains("MoveTakeoffsDownAndRestore", StringComparison.Ordinal) &&
+            treeOps.Contains("MoveTakeoffSectionAndRestoreWithoutPageChange", StringComparison.Ordinal) &&
+            treeOps.Contains("AssertCurrentPageUnchanged", StringComparison.Ordinal) &&
             treeOps.Contains("SelectPagesBulkForSmoke", StringComparison.Ordinal) &&
             treeOps.Contains("SelectTakeoffsBulkForSmoke", StringComparison.Ordinal) &&
             treeOps.Contains("PagesSingleSelectionSetMs", StringComparison.Ordinal) &&
             treeOps.Contains("TakeoffsSingleSelectionEventMs", StringComparison.Ordinal) &&
+            treeOps.Contains("TakeoffsSectionDropKeepsPageMs", StringComparison.Ordinal) &&
             treeOps.Contains("TakeoffsBulkSelectionPagesLayoutMs", StringComparison.Ordinal) &&
             treeOps.Contains("OrdersEqual(before, OrderedChildSnapshot(parent))", StringComparison.Ordinal) &&
             script.Contains("[switch]$IncludeTreeOps", StringComparison.Ordinal) &&
             script.Contains("OURPLANECORE_SETTINGS_PATH", StringComparison.Ordinal) &&
+            script.Contains("tree ops takeoff sections", StringComparison.Ordinal) &&
             script.Contains("tree ops takeoffs detail", StringComparison.Ordinal),
-            "viewport stress smoke should optionally exercise reversible single/bulk selection and move operations in Pages and Takeoffs trees");
+            "viewport stress smoke should optionally exercise reversible single/bulk selection and move operations in Pages and Takeoffs trees, including section/count row drops that must not switch pages");
         AssertTrue(
             source.Contains("ViewportPerformanceRecorder.BeginRun", StringComparison.Ordinal) &&
             source.Contains("ViewportPerformanceRecorder.EndRun", StringComparison.Ordinal) &&

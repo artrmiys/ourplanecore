@@ -720,7 +720,7 @@ public partial class MainWindow
         _viewport.LoadMeasurements(_takeoffItems.SelectMany(item => item.Measurements));
         CancelPendingTakeoffSelectionSync();
         SelectTakeoffSectionNodesSilently(resultingNodes);
-        SelectTakeoffSectionMeasurementsOnCanvas(resultingNodes);
+        SelectDroppedTakeoffSectionsOnCurrentPage(resultingNodes);
         RefreshPagesTakeoffIndicators();
         RefreshSheetLegend();
         RefreshEstimateTable();
@@ -728,6 +728,30 @@ public partial class MainWindow
         TxtStatus.Text = copy
             ? $"Copied {resultingNodes.Count} section/count row(s) to {target.Name}."
             : $"Moved {resultingNodes.Count} section/count row(s) to {target.Name}.";
+    }
+
+    private void SelectDroppedTakeoffSectionsOnCurrentPage(IReadOnlyList<TakeoffMeasurementNode> nodes)
+    {
+        if (_currentPage == null)
+            return;
+
+        var measurements = nodes
+            .Select(node => node.Measurement)
+            .Where(measurement => IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
+            .Distinct()
+            .ToList();
+        if (measurements.Count == 0)
+            return;
+
+        _syncingViewportSelectionFromTakeoffItem = true;
+        try
+        {
+            _viewport.SelectMeasurements(measurements);
+        }
+        finally
+        {
+            _syncingViewportSelectionFromTakeoffItem = false;
+        }
     }
 
     private static Measurement CloneMeasurementForTakeoff(Measurement source, TakeoffItem target, string targetType) =>

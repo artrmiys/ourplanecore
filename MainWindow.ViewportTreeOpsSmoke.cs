@@ -62,6 +62,7 @@ public partial class MainWindow
         ApplyTakeoffSelectionTiming(report, SelectTakeoffsBulkForSmoke(bulk.Paths), single: false);
         (report.TakeoffsSingleMoveDownMs, report.TakeoffsSingleMoveRestoreMs) = MoveTakeoffsDownAndRestore(single.Parent, single.Paths);
         (report.TakeoffsBulkMoveDownMs, report.TakeoffsBulkMoveRestoreMs) = MoveTakeoffsDownAndRestore(bulk.Parent, bulk.Paths);
+        report.TakeoffsSectionDropKeepsPageMs = MoveTakeoffSectionAndRestoreWithoutPageChange();
         report.TakeoffsPassed = true;
     }
 
@@ -245,6 +246,94 @@ public partial class MainWindow
         return (move.ElapsedMilliseconds, restore.ElapsedMilliseconds);
     }
 
+    private long MoveTakeoffSectionAndRestoreWithoutPageChange()
+    {
+        var candidate = FindTakeoffSectionDropSmokeCandidate()
+            ?? throw new InvalidOperationException("Takeoffs section drop smoke needs two measured takeoffs with the same type.");
+        (TakeoffItem source, TakeoffItem target, Measurement measurement) = candidate;
+
+        OpenDifferentPageForSectionDropSmoke(measurement.PageFolder);
+        string pageBefore = _currentPage?.FolderPath
+            ?? throw new InvalidOperationException("Takeoffs section drop smoke could not open a baseline page.");
+
+        var stopwatch = Stopwatch.StartNew();
+        MoveSectionForSmoke(source, target, measurement);
+        AssertCurrentPageUnchanged(pageBefore, "moving section/count row into target");
+        if (!target.Measurements.Contains(measurement) || source.Measurements.Contains(measurement))
+            throw new InvalidOperationException("Takeoffs section drop smoke did not move the measurement into the target item.");
+
+        MoveSectionForSmoke(target, source, measurement);
+        AssertCurrentPageUnchanged(pageBefore, "restoring section/count row to source");
+        if (!source.Measurements.Contains(measurement) || target.Measurements.Contains(measurement))
+            throw new InvalidOperationException("Takeoffs section drop smoke did not restore the measurement to the source item.");
+
+        stopwatch.Stop();
+        return stopwatch.ElapsedMilliseconds;
+    }
+
+    private (TakeoffItem Source, TakeoffItem Target, Measurement Measurement)? FindTakeoffSectionDropSmokeCandidate()
+    {
+        var measured = _takeoffItems
+            .Where(item => item.Measurements.Count > 0)
+            .Select(item => new
+            {
+                Item = item,
+                Type = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+            })
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Type))
+            .ToList();
+
+        foreach (var source in measured)
+        {
+            Measurement? measurement = source.Item.Measurements.FirstOrDefault(measurement =>
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == source.Type &&
+                !string.IsNullOrWhiteSpace(measurement.PageFolder));
+            if (measurement == null)
+                continue;
+
+            TakeoffItem? target = measured
+                .Where(entry => !ReferenceEquals(entry.Item, source.Item) && entry.Type == source.Type)
+                .Select(entry => entry.Item)
+                .FirstOrDefault();
+            if (target != null)
+                return (source.Item, target, measurement);
+        }
+
+        return null;
+    }
+
+    private void OpenDifferentPageForSectionDropSmoke(string measurementPageFolder)
+    {
+        if (_currentJob == null)
+            throw new InvalidOperationException("No current job is open.");
+
+        PageInfo? page = CollectPagesUnder(_currentJob.PagesRoot)
+            .FirstOrDefault(candidate => !IsSamePageFolder(candidate.FolderPath, measurementPageFolder));
+        if (page == null)
+            throw new InvalidOperationException("Takeoffs section drop smoke needs at least two pages.");
+
+        OpenPageInActiveTab(page);
+    }
+
+    private void MoveSectionForSmoke(TakeoffItem source, TakeoffItem target, Measurement measurement)
+    {
+        if (FindTakeoffTreeItem(target) is not { } targetItem)
+            throw new InvalidOperationException($"Takeoffs section drop smoke target was not found: {target.Name}.");
+
+        DropTakeoffSections(
+            new TakeoffSectionDrag([new TakeoffMeasurementNode(source, measurement)]),
+            targetItem,
+            copy: false);
+        TakeoffsTree.UpdateLayout();
+        PagesTree.UpdateLayout();
+    }
+
+    private void AssertCurrentPageUnchanged(string pageBefore, string action)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, pageBefore))
+            throw new InvalidOperationException($"Takeoffs section drop smoke changed the viewport page while {action}.");
+    }
+
     private static MovableSiblingSet? FindMovableSiblingSet(
         string root,
         Func<string, bool> include,
@@ -383,6 +472,7 @@ public partial class MainWindow
         public long TakeoffsSingleMoveRestoreMs { get; set; }
         public long TakeoffsBulkMoveDownMs { get; set; }
         public long TakeoffsBulkMoveRestoreMs { get; set; }
+        public long TakeoffsSectionDropKeepsPageMs { get; set; }
         public List<string> Failures { get; } = [];
     }
 }
