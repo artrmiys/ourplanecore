@@ -1,5 +1,35 @@
 ﻿# Development Log
 
+## 2026-06-02 Takeoff Tree Page Navigation / v2 Release
+
+- Stabilized takeoff-tree page navigation:
+  - section/count row selection and moves now jump to the row's real
+    `Measurement.PageFolder`;
+  - whole takeoff moves/reorders keep the current viewport page stable;
+  - Takeoffs-tree reveal no longer selects linked `PageTakeoffNode` rows in the
+    Pages tree, preventing takeoff drag from opening sheets such as `a502`.
+- Added heavy smoke coverage for the real `DropTakeoffPosition(...)` drag/drop
+  reorder path and kept the section/count row page-jump smoke separate.
+- Related commits:
+  `d1e55e8 Fix takeoff section page jumps`,
+  `6c3b249 Keep page stable when moving takeoffs`,
+  `3746b67 Stop takeoff drag from opening linked pages`.
+- Verification passed:
+  `dotnet build .\ourplanecore.sln` (`0 warnings / 0 errors`),
+  `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj --no-build`
+  (`272/272`), and the viewport/tree-ops stress smoke on the Croton Point job.
+- Published v2 to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore-v2.exe`, kept the
+  old `ourplanecore.exe` fallback, kept `ourplanecore-v2.exe.bak`, and pointed
+  `C:\Users\User\Desktop\OurPlaneCore.lnk` to v2.
+- Publish/target SHA256:
+  `195C35F7C83271B203F237E78F4698D1F00A557144AED18DC5975F3F28239182`.
+- Packaged v2 startup log check passed with `0` errors after the latest
+  `Application startup.` and showed `Loaded takeoffs tree` plus `Viewport`
+  render activity.
+- Detailed handoff:
+  `docs/30-takeoffs-measurements/TAKEOFF_TREE_PAGE_JUMP_AND_V2_RELEASE_2026_06_02.md`.
+
 ## 2026-05-31 Refactor / UX Stabilization Handoff
 
 - Fixed the visible command-tab clipping issue from the prior UX pass by
