@@ -404,7 +404,8 @@ def _prominent_sheet_label_from_title_block(
 
         in_top_right_title = x0 >= max_x * 0.86 and y0 <= max_y * 0.18
         in_bottom_right_title = x0 >= max_x * 0.86 and y0 >= max_y * 0.70 and size >= 30
-        if not in_top_right_title and not in_bottom_right_title:
+        in_bottom_large_title = y0 >= max_y * 0.82 and size >= max(48.0, max_y * 0.015)
+        if not in_top_right_title and not in_bottom_right_title and not in_bottom_large_title:
             continue
 
         score = min(size, 90.0) * 3.0
@@ -412,11 +413,17 @@ def _prominent_sheet_label_from_title_block(
             score += 520.0
         if in_bottom_right_title:
             score += 360.0
+        if in_bottom_large_title:
+            score += 520.0
+            if x0 <= max_x * 0.20:
+                score += 220.0
+            if "." in label:
+                score += 80.0
         if x0 >= max_x * 0.94:
             score += 160.0
         if size >= 40:
             score += 120.0
-        if y0 >= max_y * 0.90:
+        if y0 >= max_y * 0.90 and not in_bottom_large_title:
             score -= 140.0
 
         scored.append((score, label, word))
@@ -428,6 +435,51 @@ def _prominent_sheet_label_from_title_block(
     if score < 450.0:
         return None, None
     return label, word
+
+
+def _extract_rotated_bottom_title(words: list, sheet_label_word: object, max_x: float, max_y: float) -> str:
+    label_x0, label_y0, label_x1, _ = _word_box(sheet_label_word)
+    if label_y0 < max_y * 0.82 or _word_size(sheet_label_word) < max(48.0, max_y * 0.015):
+        return ""
+
+    bottom_top = max(max_y * 0.90, label_y0 - 80.0)
+    title_labels = [
+        w for w in words
+        if bottom_top <= float(w[1]) <= max_y
+        and label_x1 + 25.0 <= float(w[0]) <= max_x * 0.45
+        and str(w[4]).strip().lower().rstrip(":") == "title"
+    ]
+    if not title_labels:
+        return ""
+
+    title_label = min(title_labels, key=lambda w: abs(float(w[0]) - label_x1))
+    title_x0, _, _, _ = _word_box(title_label)
+    content_x0 = max(label_x1 + 55.0, title_x0 - 135.0)
+    content_x1 = max(content_x0, title_x0 - 3.0)
+    skip = {
+        "sheet", "drawing", "number", "no", "date", "phase", "project", "#",
+        "drawn", "checked", "by", "scale", "revisions", "seal", "title",
+        "address",
+    }
+    title_words = []
+    for word in words:
+        token = str(word[4]).strip()
+        clean = token.lower().rstrip(":")
+        if clean in skip:
+            continue
+        if re.fullmatch(r"\d+(?:[./-]\d+)*", token):
+            continue
+        if re.search(r"(?:\"|'|=)", token):
+            continue
+        wx0, wy0, _, _ = _word_box(word)
+        if content_x0 <= wx0 <= content_x1 and bottom_top <= wy0 <= max_y and _word_size(word) >= 16:
+            title_words.append(word)
+
+    if not title_words:
+        return ""
+
+    ordered = sorted(title_words, key=lambda w: float(w[1]))
+    return _clean_sheet_title(" ".join(str(w[4]) for w in ordered))
 
 
 def _same_row(left: object, right: object, tolerance: float = 12.0) -> bool:
@@ -490,6 +542,10 @@ def _extract_title_near_sheet_label(words: list, sheet_label_word: object | None
         return ""
 
     x0, y0, x1, y1 = _word_box(sheet_label_word)
+    rotated_bottom_title = _extract_rotated_bottom_title(words, sheet_label_word, max_x, max_y)
+    if rotated_bottom_title:
+        return rotated_bottom_title
+
     if x0 < max_x * 0.86 or y0 > max_y * 0.22:
         return ""
 
@@ -2269,10 +2325,6 @@ def sheetmeta_data(req: dict) -> dict:
         selected_scale = _infer_scale_from_title(suffix_text, suffix)
         if selected_scale:
             warnings.append("scale inferred from sheet title")
-
-    if not sheet_label:
-        skip_scale = True
-        selected_scale = None
 
     ratio = _scale_ratio(selected_scale)
     selected_scale_m_per_pt = _PT_M * ratio if ratio else 0.0

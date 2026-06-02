@@ -255,6 +255,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
+    ("pdf sheet metadata handles rotated bottom title block", TakeoffsTreeRegressionTests.PdfSheetMetadataHandlesRotatedBottomTitleBlock),
     ("pdf detail clip render is wired", TakeoffsTreeRegressionTests.PdfDetailClipRenderIsWired),
     ("sheet overlay rendering uses sharper sampling", TakeoffsTreeRegressionTests.SheetOverlayRenderingUsesSharperSampling),
     ("sheet overlay persisted cache is wired", TakeoffsTreeRegressionTests.SheetOverlayPersistedCacheIsWired),

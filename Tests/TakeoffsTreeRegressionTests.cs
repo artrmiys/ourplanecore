@@ -1138,6 +1138,22 @@ internal static class TakeoffsTreeRegressionTests
             "Python helper should return inline PNG data for bounded renders and fall back to the existing PNG file path");
     }
 
+    public static void PdfSheetMetadataHandlesRotatedBottomTitleBlock()
+    {
+        string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
+
+        AssertTrue(
+            helper.Contains("in_bottom_large_title", StringComparison.Ordinal) &&
+            helper.Contains("def _extract_rotated_bottom_title", StringComparison.Ordinal) &&
+            helper.Contains("str(w[4]).strip().lower().rstrip(\":\") == \"title\"", StringComparison.Ordinal) &&
+            helper.Contains("return _clean_sheet_title(\" \".join(str(w[4]) for w in ordered))", StringComparison.Ordinal),
+            "sheet metadata helper should detect large rotated sheet labels and titles in bottom title blocks");
+        AssertFalse(
+            helper.Contains("if not sheet_label:\r\n        skip_scale = True", StringComparison.Ordinal) ||
+            helper.Contains("if not sheet_label:\n        skip_scale = True", StringComparison.Ordinal),
+            "missing sheet label must not force Auto Scale off when a usable PDF scale was detected");
+    }
+
     public static void PdfDetailClipRenderIsWired()
     {
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
