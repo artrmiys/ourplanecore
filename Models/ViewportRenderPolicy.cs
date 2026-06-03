@@ -40,7 +40,7 @@ public static class ViewportRenderPolicy
     public const int JobOpenPreviewWarmupCount = 96;
     public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
-    public const float FastPageSwitchPreviewRenderScale = 0.15f;
+    public const float FastPageSwitchPreviewRenderScale = 0.35f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;

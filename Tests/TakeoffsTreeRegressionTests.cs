@@ -1217,6 +1217,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
             pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
             pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
             pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
@@ -1233,6 +1234,9 @@ internal static class TakeoffsTreeRegressionTests
             "normal page opens should not prefer full layer bitmaps over lightweight previews when PDF layers are lazy");
         AssertTrue(
             layers.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
+            layers.Contains("QueueSharpBaseRenderAfterPreview(", StringComparison.Ordinal) &&
+            layers.Contains("IsCurrentPageDocnetRenderTarget", StringComparison.Ordinal) &&
+            layers.Contains("QueueDocnetRender(renderScale)", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeDelayMs", StringComparison.Ordinal) &&
             layers.Contains("ShouldDelaySharpLayerUpgrade(deferralCount)", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeIdleMs", StringComparison.Ordinal) &&
@@ -1263,8 +1267,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
-            policy.Contains("FastPageSwitchPreviewRenderScale = 0.15f", StringComparison.Ordinal),
-            "cache-miss page switches should not keep showing the old sheet while the lightweight preview renders");
+            policy.Contains("FastPageSwitchPreviewRenderScale = 0.35f", StringComparison.Ordinal),
+            "cache-miss page switches should use a non-muddy lightweight preview instead of the old very low-resolution 0.15x image");
         AssertTrue(
             layers.Contains("private bool TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal) &&
             layers.Contains("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
@@ -1418,7 +1422,9 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
             pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("BeginPageSwitchDetailRenderHold();", StringComparison.Ordinal) &&
+            layers.Contains("QueueSharpBaseRenderAfterPreview(") &&
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
             "interactive page opens should show a cheap preview first, keep PDF layers lazy, then use clipped detail instead of launching an immediate full-sheet layer render");
         AssertTrue(

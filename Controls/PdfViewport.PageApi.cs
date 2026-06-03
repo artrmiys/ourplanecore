@@ -118,6 +118,7 @@ public sealed partial class PdfViewport
         if (previewCacheHit)
         {
             PostStatus(loadedStatus);
+            QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder);
         }
         else
         {

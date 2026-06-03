@@ -634,6 +634,9 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (IsFastPreviewRenderScale(request.RenderScale))
+            QueueSharpBaseRenderAfterPreview(request.PdfPath, request.PdfIndex, request.PageFolder);
+
         if (!string.IsNullOrWhiteSpace(request.StatusAfter))
             PostStatus(request.StatusAfter);
     }
@@ -779,6 +782,63 @@ public sealed partial class PdfViewport
             }));
     }
 
+    private void QueueSharpBaseRenderAfterPreview(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        int deferralCount = 0)
+    {
+        int docnetVersion = _docnetRenderVersion;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(async () =>
+            {
+                try
+                {
+                    await Task.Delay(ViewportRenderPolicy.PageSwitchSharpUpgradeDelayMs);
+                    if (!IsCurrentPageDocnetRenderTarget(pdfPath, pdfIndex, pageFolder, docnetVersion) ||
+                        _pdfLayersLoadedForPage)
+                    {
+                        return;
+                    }
+
+                    if (ShouldDelaySharpLayerUpgrade(deferralCount))
+                    {
+                        QueueSharpBaseRenderAfterPreview(
+                            pdfPath,
+                            pdfIndex,
+                            pageFolder,
+                            deferralCount + 1);
+                        return;
+                    }
+
+                    if (ShouldUseDetailRenderForSharpUpgrade())
+                    {
+                        QueueDetailRenderIfNeeded(force: false);
+                        return;
+                    }
+
+                    if (ShouldSkipSharpLayerUpgradeForLowZoom())
+                        return;
+
+                    float renderScale = Math.Max(
+                        CurrentBaseRenderScale(),
+                        ViewportRenderPolicy.ResponsiveMinRenderScale);
+                    if (_bitmapScale >= renderScale * 0.95f)
+                    {
+                        QueueDetailRenderIfNeeded(force: false);
+                        return;
+                    }
+
+                    QueueDocnetRender(renderScale);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, "Viewport sharp base page upgrade failed.");
+                }
+            }));
+    }
+
     private bool ShouldDelaySharpLayerUpgrade(int deferralCount)
     {
         if (deferralCount >= ViewportRenderPolicy.PageSwitchSharpUpgradeMaxDeferrals)
@@ -803,6 +863,16 @@ public sealed partial class PdfViewport
         string pageFolder,
         int layerVersion) =>
         layerVersion == _layerRenderVersion &&
+        string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+        pdfIndex == _pdfIndex &&
+        string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsCurrentPageDocnetRenderTarget(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        int docnetVersion) =>
+        docnetVersion == _docnetRenderVersion &&
         string.Equals(pdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
         pdfIndex == _pdfIndex &&
         string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
