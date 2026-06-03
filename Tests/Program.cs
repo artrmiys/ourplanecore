@@ -107,6 +107,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),
     ("raster snap strict black lines only is wired", TakeoffsTreeRegressionTests.RasterSnapStrictBlackLinesOnlyIsWired),
     ("raster sheet render skips delayed pdf zoom refresh", TakeoffsTreeRegressionTests.RasterSheetRenderSkipsDelayedPdfZoomRefresh),
+    ("pdf raster edge snap preview is wired", TakeoffsTreeRegressionTests.PdfRasterEdgeSnapPreviewIsWired),
     ("pages tree selected sheet scale menu is wired", TakeoffsTreeRegressionTests.PagesTreeSelectedSheetScaleMenuIsWired),
     ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
@@ -298,6 +299,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf snap index finds nearest point", PdfSnapIndexFindsNearestPoint),
     ("pdf snap index prefers corner ties", PdfSnapIndexPrefersCornerTies),
     ("pdf snap index snaps to line", PdfSnapIndexSnapsToLine),
+    ("pdf snap index finds nearest segment", PdfSnapIndexFindsNearestSegment),
 };
 
 int passed = 0;
@@ -4319,6 +4321,27 @@ static void PdfSnapIndexSnapsToLine()
         "nearby PDF segment should be found");
     AssertEqual("64,10", $"{snap.Point.X:0},{snap.Point.Y:0}", "nearest point on line");
     AssertEqual("pdf-line", snap.Kind, "line snap kind");
+}
+
+static void PdfSnapIndexFindsNearestSegment()
+{
+    var index = new PdfSnapPointIndex(
+        [],
+        [
+            new PdfGeometrySnapSegment(new SKPoint(10, 10), new SKPoint(110, 10), "pdf-line"),
+            new PdfGeometrySnapSegment(new SKPoint(10, 50), new SKPoint(110, 50), "pdf-line"),
+        ]);
+
+    AssertTrue(
+        index.TryFindSegment(new SKPoint(64, 14), tolerancePt: 8, out PdfGeometrySnapSegment segment, out float distance),
+        "nearby PDF segment should be available for edge snap preview");
+    AssertEqual("10,10", $"{segment.Start.X:0},{segment.Start.Y:0}", "nearest segment start");
+    AssertEqual("110,10", $"{segment.End.X:0},{segment.End.Y:0}", "nearest segment end");
+    AssertTrue(Math.Abs(distance - 4) < 0.001f, "nearest segment distance should be returned");
+
+    AssertFalse(
+        index.TryFindSegment(new SKPoint(64, 34), tolerancePt: 8, out _, out _),
+        "distant PDF segment should not be available for edge snap preview");
 }
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>

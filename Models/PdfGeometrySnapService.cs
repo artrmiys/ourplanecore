@@ -40,6 +40,7 @@ public sealed class PdfSnapPointIndex
     }
 
     public int Count => _pointCount + _segments.Count;
+    public IReadOnlyList<PdfGeometrySnapSegment> Segments => _segments;
 
     public bool TryFind(SKPoint rawPdf, float tolerancePt, out PdfGeometrySnapPoint snap)
     {
@@ -97,6 +98,55 @@ public sealed class PdfSnapPointIndex
         }
 
         snap = bestSnap;
+        return found;
+    }
+
+    public bool TryFindSegment(
+        SKPoint rawPdf,
+        float tolerancePt,
+        out PdfGeometrySnapSegment segment,
+        out float distancePt)
+    {
+        segment = default!;
+        distancePt = 0;
+        if (tolerancePt <= 0 || _segments.Count == 0)
+            return false;
+
+        int minX = GridCoordinate(rawPdf.X - tolerancePt);
+        int maxX = GridCoordinate(rawPdf.X + tolerancePt);
+        int minY = GridCoordinate(rawPdf.Y - tolerancePt);
+        int maxY = GridCoordinate(rawPdf.Y + tolerancePt);
+        float bestDistance = tolerancePt * tolerancePt;
+        bool found = false;
+        HashSet<int>? seenSegments = null;
+
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                if (!_segmentCells.TryGetValue((x, y), out var segmentBucket))
+                    continue;
+
+                seenSegments ??= [];
+                foreach (int segmentIndex in segmentBucket)
+                {
+                    if (!seenSegments.Add(segmentIndex))
+                        continue;
+
+                    PdfGeometrySnapSegment candidate = _segments[segmentIndex];
+                    SKPoint closest = ClosestPointOnSegment(rawPdf, candidate.Start, candidate.End);
+                    float distance = DistanceSquared(rawPdf, closest);
+                    if (distance >= bestDistance)
+                        continue;
+
+                    bestDistance = distance;
+                    segment = candidate;
+                    found = true;
+                }
+            }
+        }
+
+        distancePt = found ? MathF.Sqrt(bestDistance) : 0;
         return found;
     }
 

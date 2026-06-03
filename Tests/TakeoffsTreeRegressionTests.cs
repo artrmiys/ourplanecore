@@ -1210,6 +1210,33 @@ internal static class TakeoffsTreeRegressionTests
             "raster sheet mode should use stable bitmap sampling instead of switching quality during navigation");
     }
 
+    public static void PdfRasterEdgeSnapPreviewIsWired()
+    {
+        string edgeSnap = ReadRepoFile("Controls/PdfViewport.EdgeSnap.cs");
+        string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+        string snapService = ReadRepoFile("Models/PdfGeometrySnapService.cs");
+
+        AssertTrue(
+            snapService.Contains("public IReadOnlyList<PdfGeometrySnapSegment> Segments => _segments;", StringComparison.Ordinal) &&
+            snapService.Contains("public bool TryFindSegment(", StringComparison.Ordinal),
+            "PDF snap index must expose strict line segments for edge preview without re-reading the PDF");
+        AssertTrue(
+            edgeSnap.Contains("TryFindPdfEdgeSnapCandidate", StringComparison.Ordinal) &&
+            edgeSnap.Contains("_pdfSnapIndex.TryFindSegment", StringComparison.Ordinal) &&
+            edgeSnap.Contains("_pdfSnapIndex.Segments", StringComparison.Ordinal) &&
+            edgeSnap.Contains("BuildPdfSnapContour", StringComparison.Ordinal),
+            "Edge Snap should use loaded PDF/raster snap segments as a second preview source");
+        AssertTrue(
+            edgeSnap.Contains("TryFindUniqueConnectedPdfSnapSegment", StringComparison.Ordinal) &&
+            edgeSnap.Contains("if (matches > 1)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("PdfSnapEndpointTolerancePt", StringComparison.Ordinal),
+            "PDF/raster contour preview should stop at ambiguous branches and only connect close endpoints");
+        AssertTrue(
+            edgeSnap.Contains("label = \"pdf \" + label", StringComparison.Ordinal) &&
+            pdfSnap.Contains("PDF Snap ready from raster index", StringComparison.Ordinal),
+            "PDF/raster edge preview should be visible to the user and prefer the persisted strict raster index");
+    }
+
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");

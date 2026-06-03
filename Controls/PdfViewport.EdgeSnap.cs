@@ -16,6 +16,8 @@ public sealed partial class PdfViewport
     private const int EdgeSnapModeAdjacentEdges = 2;
     private const int EdgeSnapModeContour = 3;
     private const int EdgeSnapModeCount = 4;
+    private const float PdfSnapEndpointTolerancePt = 0.75f;
+    private const int PdfSnapMaxChainSegments = 256;
 
     private bool UpdateEdgeSnapPreview(SKPoint rawPdf, bool resetModeForNewCandidate = true)
     {
@@ -31,10 +33,7 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (_edgeSnapCandidate == null ||
-            !ReferenceEquals(_edgeSnapCandidate.Measurement, candidate.Measurement) ||
-            _edgeSnapCandidate.SegmentIndex != candidate.SegmentIndex ||
-            _edgeSnapCandidate.Closed != candidate.Closed)
+        if (!IsSameEdgeSnapCandidate(_edgeSnapCandidate, candidate))
         {
             if (resetModeForNewCandidate)
                 _edgeSnapCycleMode = EdgeSnapModeVertices;
@@ -164,6 +163,13 @@ public sealed partial class PdfViewport
             found = true;
         }
 
+        if (TryFindPdfEdgeSnapCandidate(rawPdf, best, out EdgeSnapCandidate? pdfCandidate) &&
+            pdfCandidate != null)
+        {
+            candidate = pdfCandidate;
+            found = true;
+        }
+
         return found;
     }
 
@@ -211,6 +217,7 @@ public sealed partial class PdfViewport
                 continue;
 
             candidate = new EdgeSnapCandidate(
+                "takeoff",
                 measurement,
                 contour.ToList(),
                 closed,
@@ -237,7 +244,154 @@ public sealed partial class PdfViewport
             EdgeSnapModeContour => candidate.Closed ? "contour" : "polyline",
             _ => "edge",
         };
+        if (candidate.SourceKind == "pdf")
+            label = "pdf " + label;
         return new EdgeSnapPreview(points, mode, candidate.Closed, label);
+    }
+
+    private bool TryFindPdfEdgeSnapCandidate(SKPoint rawPdf, float tolerance, out EdgeSnapCandidate? candidate)
+    {
+        candidate = null;
+        if (!PdfSnapEnabled)
+            return false;
+
+        if (!IsPdfSnapCacheCurrent())
+        {
+            QueuePdfSnapPointLoad(force: false);
+            return false;
+        }
+
+        if (!_pdfSnapIndex.TryFindSegment(rawPdf, tolerance, out PdfGeometrySnapSegment segment, out float distance))
+            return false;
+
+        candidate = BuildPdfEdgeSnapCandidate(segment, distance);
+        return candidate != null;
+    }
+
+    private EdgeSnapCandidate? BuildPdfEdgeSnapCandidate(PdfGeometrySnapSegment selectedSegment, float distance)
+    {
+        IReadOnlyList<PdfGeometrySnapSegment> segments = _pdfSnapIndex.Segments;
+        int selectedIndex = FindPdfSnapSegmentIndex(segments, selectedSegment);
+        if (selectedIndex < 0)
+        {
+            return new EdgeSnapCandidate(
+                "pdf",
+                null,
+                [ClonePoint(selectedSegment.Start), ClonePoint(selectedSegment.End)],
+                false,
+                0,
+                distance);
+        }
+
+        List<SKPoint> contour = BuildPdfSnapContour(segments, selectedIndex, out bool closed, out int segmentIndex);
+        if (contour.Count < 2)
+            return null;
+
+        return new EdgeSnapCandidate(
+            "pdf",
+            null,
+            contour,
+            closed,
+            segmentIndex,
+            distance);
+    }
+
+    private static int FindPdfSnapSegmentIndex(
+        IReadOnlyList<PdfGeometrySnapSegment> segments,
+        PdfGeometrySnapSegment selected)
+    {
+        for (int i = 0; i < segments.Count; i++)
+        {
+            PdfGeometrySnapSegment segment = segments[i];
+            if (SamePointPair(segment.Start, segment.End, selected.Start, selected.End))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static List<SKPoint> BuildPdfSnapContour(
+        IReadOnlyList<PdfGeometrySnapSegment> segments,
+        int selectedIndex,
+        out bool closed,
+        out int selectedSegmentIndex)
+    {
+        closed = false;
+        selectedSegmentIndex = 0;
+        if (selectedIndex < 0 || selectedIndex >= segments.Count)
+            return [];
+
+        PdfGeometrySnapSegment selected = segments[selectedIndex];
+        var points = new List<SKPoint>
+        {
+            ClonePoint(selected.Start),
+            ClonePoint(selected.End),
+        };
+        var used = new HashSet<int> { selectedIndex };
+
+        while (!closed &&
+               used.Count < PdfSnapMaxChainSegments &&
+               TryFindUniqueConnectedPdfSnapSegment(segments, used, points[0], out int nextIndex, out SKPoint otherPoint))
+        {
+            used.Add(nextIndex);
+            if (points.Count >= 3 && PdfSnapSameEndpoint(otherPoint, points[^1]))
+            {
+                closed = true;
+                break;
+            }
+
+            points.Insert(0, ClonePoint(otherPoint));
+            selectedSegmentIndex++;
+        }
+
+        while (!closed &&
+               used.Count < PdfSnapMaxChainSegments &&
+               TryFindUniqueConnectedPdfSnapSegment(segments, used, points[^1], out int nextIndex, out SKPoint otherPoint))
+        {
+            used.Add(nextIndex);
+            if (points.Count >= 3 && PdfSnapSameEndpoint(otherPoint, points[0]))
+            {
+                closed = true;
+                break;
+            }
+
+            points.Add(ClonePoint(otherPoint));
+        }
+
+        selectedSegmentIndex = Math.Clamp(selectedSegmentIndex, 0, Math.Max(0, points.Count - 2));
+        return points;
+    }
+
+    private static bool TryFindUniqueConnectedPdfSnapSegment(
+        IReadOnlyList<PdfGeometrySnapSegment> segments,
+        HashSet<int> used,
+        SKPoint endpoint,
+        out int segmentIndex,
+        out SKPoint otherPoint)
+    {
+        segmentIndex = -1;
+        otherPoint = default;
+        int matches = 0;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (used.Contains(i))
+                continue;
+
+            PdfGeometrySnapSegment segment = segments[i];
+            bool startMatches = PdfSnapSameEndpoint(segment.Start, endpoint);
+            bool endMatches = PdfSnapSameEndpoint(segment.End, endpoint);
+            if (!startMatches && !endMatches)
+                continue;
+
+            matches++;
+            if (matches > 1)
+                return false;
+
+            segmentIndex = i;
+            otherPoint = startMatches ? segment.End : segment.Start;
+        }
+
+        return matches == 1;
     }
 
     private static List<SKPoint> BuildSingleEdgeSnapPoints(EdgeSnapCandidate candidate)
@@ -347,6 +501,47 @@ public sealed partial class PdfViewport
         _ => "vertices",
     };
 
+    private static bool IsSameEdgeSnapCandidate(EdgeSnapCandidate? current, EdgeSnapCandidate next)
+    {
+        if (current == null ||
+            !string.Equals(current.SourceKind, next.SourceKind, StringComparison.Ordinal) ||
+            !string.Equals(current.Measurement?.Id ?? "", next.Measurement?.Id ?? "", StringComparison.Ordinal) ||
+            current.SegmentIndex != next.SegmentIndex ||
+            current.Closed != next.Closed)
+        {
+            return false;
+        }
+
+        if (!TryGetEdgeSnapSegment(current, out SKPoint currentStart, out SKPoint currentEnd) ||
+            !TryGetEdgeSnapSegment(next, out SKPoint nextStart, out SKPoint nextEnd))
+        {
+            return false;
+        }
+
+        return SamePointPair(currentStart, currentEnd, nextStart, nextEnd);
+    }
+
+    private static bool TryGetEdgeSnapSegment(EdgeSnapCandidate candidate, out SKPoint start, out SKPoint end)
+    {
+        start = default;
+        end = default;
+        if (candidate.Contour.Count < 2)
+            return false;
+
+        int i = Math.Clamp(candidate.SegmentIndex, 0, Math.Max(0, candidate.Contour.Count - 1));
+        int next = i + 1;
+        if (next >= candidate.Contour.Count)
+        {
+            if (!candidate.Closed)
+                return false;
+            next = 0;
+        }
+
+        start = candidate.Contour[i];
+        end = candidate.Contour[next];
+        return true;
+    }
+
     private static bool SamePointPair(SKPoint a, SKPoint b, SKPoint start, SKPoint end) =>
         EdgeSamePoint(a, start) && EdgeSamePoint(b, end) ||
         EdgeSamePoint(a, end) && EdgeSamePoint(b, start);
@@ -354,8 +549,12 @@ public sealed partial class PdfViewport
     private static bool EdgeSamePoint(SKPoint left, SKPoint right) =>
         DistanceSquared(left, right) <= ViewportConstants.GeometryEpsilon;
 
+    private static bool PdfSnapSameEndpoint(SKPoint left, SKPoint right) =>
+        DistanceSquared(left, right) <= PdfSnapEndpointTolerancePt * PdfSnapEndpointTolerancePt;
+
     private sealed record EdgeSnapCandidate(
-        Measurement Measurement,
+        string SourceKind,
+        Measurement? Measurement,
         IReadOnlyList<SKPoint> Contour,
         bool Closed,
         int SegmentIndex,
