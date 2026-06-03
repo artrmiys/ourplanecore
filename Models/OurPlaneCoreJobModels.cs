@@ -47,6 +47,7 @@ public sealed class PageInfo
     public double OverlayOffsetXPt { get; init; }
     public double OverlayOffsetYPt { get; init; }
     public double OverlayScale { get; init; } = 1.0;
+    public RasterSheetSource? RasterSheet { get; init; }
 }
 
 public sealed class SourceInfo
@@ -95,6 +96,74 @@ public sealed class SourceInfo
 
     [JsonPropertyName("overlay_scale")]
     public double OverlayScale { get; set; } = 1.0;
+
+    [JsonPropertyName("raster_sheet")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RasterSheetSource? RasterSheet { get; set; }
+}
+
+public sealed class RasterSheetSource
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonPropertyName("image")]
+    public string Image { get; set; } = "";
+
+    [JsonPropertyName("format")]
+    public string Format { get; set; } = "png";
+
+    [JsonPropertyName("render_scale")]
+    public double RenderScale { get; set; }
+
+    [JsonPropertyName("width_pt")]
+    public double WidthPt { get; set; }
+
+    [JsonPropertyName("height_pt")]
+    public double HeightPt { get; set; }
+
+    [JsonPropertyName("pdf_last_write_utc_ticks")]
+    public long PdfLastWriteUtcTicks { get; set; }
+
+    [JsonPropertyName("pdf_length")]
+    public long PdfLength { get; set; }
+
+    [JsonPropertyName("generated_at_utc")]
+    public string GeneratedAtUtc { get; set; } = "";
+
+    [JsonPropertyName("snap_index")]
+    public string SnapIndex { get; set; } = "";
+
+    [JsonPropertyName("snap_black_only")]
+    public bool SnapBlackOnly { get; set; } = true;
+
+    [JsonPropertyName("snap_point_count")]
+    public int SnapPointCount { get; set; }
+
+    [JsonPropertyName("snap_segment_count")]
+    public int SnapSegmentCount { get; set; }
+
+    [JsonPropertyName("snap_generated_at_utc")]
+    public string SnapGeneratedAtUtc { get; set; } = "";
+
+    public RasterSheetSource Clone() =>
+        new()
+        {
+            Enabled = Enabled,
+            Image = Image,
+            Format = Format,
+            RenderScale = RenderScale,
+            WidthPt = WidthPt,
+            HeightPt = HeightPt,
+            PdfLastWriteUtcTicks = PdfLastWriteUtcTicks,
+            PdfLength = PdfLength,
+            GeneratedAtUtc = GeneratedAtUtc,
+            SnapIndex = SnapIndex,
+            SnapBlackOnly = SnapBlackOnly,
+            SnapPointCount = SnapPointCount,
+            SnapSegmentCount = SnapSegmentCount,
+            SnapGeneratedAtUtc = SnapGeneratedAtUtc,
+        };
 }
 
 public sealed class PdfLayerInfo

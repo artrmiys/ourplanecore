@@ -1552,6 +1552,10 @@
                         <Button Content="Import PDF(s)" Click="BtnImport_Click" ToolTip="Add one or many PDF files to the current job"/>
                         <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" ToolTip="Import PDF measurement annotations into takeoff items"/>
                         <Button Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
+                        <TextBlock Text="Raster" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build fast raster working sheets and strict black-line snap indexes for selected sheets, or all sheets if none are selected"/>
+                        <Button Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets"/>
+                        <Button Content="Raster Off" Click="BtnSheetManagerRasterOff_Click" Margin="0,0,12,4" ToolTip="Return selected sheets to live PDF rendering without deleting the raster cache"/>
                         <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>
                         <Button Content="Analyze" Click="BtnSheetManagerAnalyze_Click" ToolTip="Read PDF text/layers and preview sheet metadata"/>
@@ -1597,6 +1601,7 @@
                             <DataGridTextColumn Header="Title" Binding="{Binding SheetTitle}" Width="240" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="100" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Confidence" Binding="{Binding Confidence}" Width="110" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Raster" Binding="{Binding RasterStatus}" Width="110" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Why" Binding="{Binding Reason}" Width="320" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Warnings" Binding="{Binding Warnings}" Width="280" IsReadOnly="True"/>
                         </DataGrid.Columns>

@@ -363,6 +363,7 @@ public partial class MainWindow
                     : metadata.SkipScale ? "skip" : "",
                 Source = metadata.Source,
                 Confidence = learning.Confidence,
+                RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page),
                 Reason = PdfMetadataDecisionReason(metadata, learning, canRename, canScale, nameConflict, learnedConflict),
                 Warnings = string.Join("; ", warnings),
                 ApplyRename = defaultRename && canRename && !learnedConflict,

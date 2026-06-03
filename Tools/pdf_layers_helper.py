@@ -1523,6 +1523,24 @@ def _is_snap_layer_visible(layer_name: str, visible_layers: dict[str, bool] | No
     return visible_layers.get(clean, True)
 
 
+def _is_dark_pdf_color(value) -> bool:
+    if value is None:
+        return False
+    try:
+        components = [float(v) for v in value]
+    except Exception:
+        return False
+    if not components:
+        return False
+    # PyMuPDF returns normalized RGB/gray values. Treat very dark gray/black
+    # linework as the takeoff snap substrate and skip colored markup noise.
+    return max(components) <= 0.24
+
+
+def _is_snap_drawing_dark(drawing: dict) -> bool:
+    return _is_dark_pdf_color(drawing.get("color"))
+
+
 def _add_snap_point(
     points: dict[tuple[float, float], dict],
     point: tuple[float, float] | None,
@@ -1612,6 +1630,7 @@ def _add_snap_points_from_item(
     layer_name: str,
     max_points: int,
     max_segments: int,
+    strict_lines: bool = False,
 ) -> None:
     if not item:
         return
@@ -1625,6 +1644,8 @@ def _add_snap_points_from_item(
         _add_snap_segment(segments, start, end, layer_name, max_segments)
     elif command == "re" and len(item) >= 2:
         _add_snap_rect_geometry(points, segments, _rect_xyxy(item[1]), layer_name, max_points, max_segments)
+    elif strict_lines:
+        return
     elif command == "qu" and len(item) >= 2:
         try:
             quad_points = [_point_xy(point) for point in item[1]]
@@ -1654,6 +1675,8 @@ def pdf_snap_data(req: dict) -> dict:
     page_index = int(req.get("page", 0))
     max_points = max(100, min(int(req.get("max_points", 30000)), 100000))
     max_segments = max(100, min(int(req.get("max_segments", 50000)), 150000))
+    black_only = bool(req.get("black_only", False))
+    strict_lines = black_only
     visible_layers = _visible_layer_map(_cached_layers(req.get("visible_layers")))
 
     doc = fitz.open(pdf_path)
@@ -1673,14 +1696,16 @@ def pdf_snap_data(req: dict) -> dict:
             layer_name = str(drawing.get("layer") or "").strip()
             if not _is_snap_layer_visible(layer_name, visible_layers):
                 continue
+            if black_only and not _is_snap_drawing_dark(drawing):
+                continue
 
             before_count = len(points) + len(segments)
             for item in drawing.get("items") or []:
-                _add_snap_points_from_item(points, segments, item, layer_name, max_points, max_segments)
+                _add_snap_points_from_item(points, segments, item, layer_name, max_points, max_segments, strict_lines)
                 if len(points) >= max_points and len(segments) >= max_segments:
                     break
 
-            if len(points) + len(segments) == before_count:
+            if not strict_lines and len(points) + len(segments) == before_count:
                 _add_snap_rect_geometry(
                     points,
                     segments,

@@ -343,7 +343,8 @@ public partial class MainWindow
             viewportPage.PdfPage,
             viewportPage.FolderPath,
             viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
-            restoreView);
+            restoreView,
+            viewportPage.RasterSheet);
         trace?.Mark("decode");
         ApplyViewportPageTakeoffVisibility(viewportPage);
         _settings.LastPageFolder = viewportPage.FolderPath;

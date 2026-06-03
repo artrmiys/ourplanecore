@@ -35,6 +35,7 @@ public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
     }
     public string Source { get; init; } = "";
     public string Confidence { get; init; } = "";
+    public string RasterStatus { get; init; } = "";
     public string Reason { get; init; } = "";
     public string Warnings { get; init; } = "";
     public bool ApplyRename

@@ -23,6 +23,7 @@ public sealed partial class PdfViewport
         _pdfIndex = 0;
         _pageFolder = "";
         _cachedLayers = null;
+        _rasterSheetSource = null;
         _zoomRerenderTimer.Stop();
         _navigationIdleTimer.Stop();
         _zoomRerenderForce = false;

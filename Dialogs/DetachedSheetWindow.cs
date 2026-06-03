@@ -79,7 +79,8 @@ public sealed class DetachedSheetWindow : Window
             page.PdfPath,
             page.PdfPage,
             page.FolderPath,
-            page.PdfLayersCached ? page.PdfLayers : null);
+            page.PdfLayersCached ? page.PdfLayers : null,
+            rasterSheet: page.RasterSheet);
         _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath));
         _viewport.SetSheetLegend(settings.ShowSheetLegend
             ? SheetLegendBuilder.Build(job, page, takeoffItems, unitMode)

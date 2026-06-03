@@ -102,7 +102,11 @@ public partial class MainWindow
         if (confirmPageNames && !ConfirmPdfImportPageNames(plans, skipped))
             return;
 
-        await ImportPdfPlansAsync(plans, skipped, sender);
+        bool? buildRasterCache = ConfirmPdfImportRasterOption(plans.Sum(plan => plan.PageCount));
+        if (!buildRasterCache.HasValue)
+            return;
+
+        await ImportPdfPlansAsync(plans, skipped, sender, buildRasterCache.Value);
     }
 
     private string? NewPdfImportInitialFolder()
@@ -187,12 +191,15 @@ public partial class MainWindow
     private async Task ImportPdfPlansAsync(
         IReadOnlyList<PdfImportPlan> plans,
         IReadOnlyList<string> skipped,
-        object sender)
+        object sender,
+        bool buildRasterCache)
     {
         string destFolder = GetSelectedImportFolder();
         Button? importButton = sender as Button;
         int totalPages = plans.Sum(plan => plan.PageCount);
         var createdPages = new List<PageInfo>();
+        int rasterOk = 0;
+        int rasterFailed = 0;
 
         try
         {
@@ -225,6 +232,22 @@ public partial class MainWindow
                         destFolder,
                         pdfLayerCache);
                     createdPages.AddRange(created);
+                    if (buildRasterCache)
+                    {
+                        for (int pageIndex = 0; pageIndex < created.Count; pageIndex++)
+                        {
+                            PageInfo page = created[pageIndex];
+                            ((IProgress<string>)progress).Report($"building raster {pageIndex + 1}/{created.Count}...");
+                            RasterSheetBuildResult raster = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+                            if (raster.Ok)
+                                rasterOk++;
+                            else
+                            {
+                                rasterFailed++;
+                                AppLog.Warn($"Raster cache build failed during import for '{page.Name}': {raster.Error}");
+                            }
+                        }
+                    }
                     BusyOverlayText.Text = $"Imported {pdfName} ({created.Count} page(s)).";
                 }
 
@@ -238,7 +261,9 @@ public partial class MainWindow
             string skippedText = skipped.Count > 0 ? $" Skipped {skipped.Count} unreadable PDF(s)." : "";
             TxtStatus.Text =
                 $"Imported {createdPages.Count} page(s) from {plans.Count} PDF file(s). " +
-                $"PDF layers load on demand from the PDF Layers tab.{skippedText}";
+                $"PDF layers load on demand from the PDF Layers tab." +
+                (buildRasterCache ? $" Raster built: {rasterOk}, failed: {rasterFailed}." : "") +
+                skippedText;
 
             if (createdPages.Count > 0)
                 await TryApplySheetMetadataAfterPdfImportAsync(createdPages);
@@ -281,6 +306,64 @@ public partial class MainWindow
         return Enumerable.Range(1, pageCount)
             .Select(i => $"{prefix} - Page {i}")
             .ToList();
+    }
+
+    private bool? ConfirmPdfImportRasterOption(int totalPages)
+    {
+        var win = new Window
+        {
+            Title = "Import PDF Options",
+            Width = 440,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Owner = this,
+        };
+
+        var panel = new StackPanel { Margin = new Thickness(12) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Import {totalPages} PDF page(s).",
+            Margin = new Thickness(0, 0, 0, 8),
+        });
+        var rasterCheck = new CheckBox
+        {
+            Content = "Build raster working sheets (v5) and strict black-line snap index",
+            IsChecked = _settings.BuildRasterCacheOnPdfImport,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        panel.Children.Add(rasterCheck);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Original PDFs stay as the source for export, metadata, layers, and rebuild.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.78,
+            Margin = new Thickness(22, 0, 0, 8),
+        });
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        var ok = new Button { Content = "Import", Width = 82, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
+        var cancel = new Button { Content = "Cancel", Width = 76, IsCancel = true };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        panel.Children.Add(buttons);
+        win.Content = panel;
+
+        bool? result = null;
+        ok.Click += (_, _) =>
+        {
+            result = rasterCheck.IsChecked == true;
+            _settings.BuildRasterCacheOnPdfImport = result.Value;
+            SaveAppSettings();
+            win.DialogResult = true;
+        };
+
+        return win.ShowDialog() == true ? result : null;
     }
 
     private static Dictionary<int, IReadOnlyList<PdfLayerInfo>> BuildPdfLayerCache(

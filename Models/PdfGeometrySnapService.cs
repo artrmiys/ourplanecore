@@ -184,10 +184,11 @@ public static class PdfGeometrySnapService
     public static Task<(bool Ok, PdfGeometrySnapResult Result, string Error)> TryReadSnapPointsAsync(
         string pdfPath,
         int pageIndex,
-        IReadOnlyList<PdfLayerInfo>? visibleLayers) =>
+        IReadOnlyList<PdfLayerInfo>? visibleLayers,
+        bool blackOnly = false) =>
         Task.Run(() =>
         {
-            bool ok = TryReadSnapPoints(pdfPath, pageIndex, visibleLayers, out PdfGeometrySnapResult result, out string error);
+            bool ok = TryReadSnapPoints(pdfPath, pageIndex, visibleLayers, blackOnly, out PdfGeometrySnapResult result, out string error);
             return (ok, result, error);
         });
 
@@ -195,6 +196,7 @@ public static class PdfGeometrySnapService
         string pdfPath,
         int pageIndex,
         IReadOnlyList<PdfLayerInfo>? visibleLayers,
+        bool blackOnly,
         out PdfGeometrySnapResult result,
         out string error)
     {
@@ -208,6 +210,7 @@ public static class PdfGeometrySnapService
                 Pdf = pdfPath,
                 Page = pageIndex,
                 MaxPoints = 30000,
+                BlackOnly = blackOnly,
                 VisibleLayers = visibleLayers?.Select(PdfSnapLayerDto.FromInfo).ToList(),
             };
 
@@ -260,6 +263,7 @@ public static class PdfGeometrySnapService
         public string Pdf { get; set; } = "";
         public int Page { get; set; }
         public int MaxPoints { get; set; } = 30000;
+        public bool BlackOnly { get; set; }
         public List<PdfSnapLayerDto>? VisibleLayers { get; set; }
     }
 

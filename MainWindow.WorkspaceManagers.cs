@@ -239,6 +239,7 @@ public partial class MainWindow
                 CurrentPageName = page.Name,
                 ProposedPageName = page.Name,
                 ProposedScale = SheetManagerScaleText(page.ScaleMetersPerPt),
+                RasterStatus = RasterSheetCacheService.DisplayStatus(page),
                 Reason = "No saved PDF metadata. Click Analyze / Auto Name / Auto Scale.",
                 Confidence = page.ScaleMetersPerPt > 0 ? "scale-set" : "",
             });
@@ -296,6 +297,7 @@ public partial class MainWindow
             {
                 PageFolder = result.Page.FolderPath,
                 CurrentPageName = result.Page.Name,
+                RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page),
                 Reason = result.Error,
                 Warnings = result.Error,
             }));
@@ -424,6 +426,139 @@ public partial class MainWindow
     {
         if (SheetManagerGrid.SelectedItem is PdfMetadataPreviewRow row)
             OpenSourcePdfMetadata(row.PageFolder);
+    }
+
+    private async void BtnSheetManagerBuildRaster_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => BuildSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster()),
+            "Build Raster failed.",
+            "Sheet Manager Raster");
+    }
+
+    private async void BtnSheetManagerRasterOn_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: true),
+            "Raster On failed.",
+            "Sheet Manager Raster");
+    }
+
+    private async void BtnSheetManagerRasterOff_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsyncUiHandler(
+            () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: false),
+            "Raster Off failed.",
+            "Sheet Manager Raster");
+    }
+
+    private IReadOnlyList<PageInfo> SelectedSheetManagerPagesForRaster()
+    {
+        IReadOnlyList<PageInfo> selected = SelectedSheetManagerPages();
+        if (selected.Count > 0)
+            return selected;
+
+        return _currentJob == null
+            ? []
+            : CollectPagesUnder(_currentJob.PagesRoot).ToList();
+    }
+
+    private async Task BuildSheetManagerRasterCacheAsync(IReadOnlyList<PageInfo> pages)
+    {
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "Sheet Manager Raster: no sheets selected.";
+            return;
+        }
+
+        int ok = 0;
+        int failed = 0;
+        using (ShowBusyOverlay($"Building raster cache for {pages.Count} sheet(s)..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            for (int i = 0; i < pages.Count; i++)
+            {
+                PageInfo page = pages[i];
+                BusyOverlayText.Text = $"Raster {i + 1}/{pages.Count}: {page.Name}";
+                RasterSheetBuildResult result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+                if (result.Ok)
+                    ok++;
+                else
+                {
+                    failed++;
+                    AppLog.Warn($"Raster cache build failed for '{page.Name}': {result.Error}");
+                }
+            }
+        }
+
+        InvalidatePagePreviewPrefetchCache();
+        RefreshSheetManager();
+        ReloadCurrentPageIfRasterChanged(pages);
+        TxtStatus.Text = $"Sheet Manager Raster: built {ok}, failed {failed}.";
+    }
+
+    private async Task SetSheetManagerRasterEnabledAsync(IReadOnlyList<PageInfo> pages, bool enabled)
+    {
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "Sheet Manager Raster: no sheets selected.";
+            return;
+        }
+
+        int changed = 0;
+        int built = 0;
+        int failed = 0;
+        using (ShowBusyOverlay($"{(enabled ? "Enabling" : "Disabling")} raster for {pages.Count} sheet(s)..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            for (int i = 0; i < pages.Count; i++)
+            {
+                PageInfo page = pages[i];
+                BusyOverlayText.Text = $"{(enabled ? "Raster On" : "Raster Off")} {i + 1}/{pages.Count}: {page.Name}";
+                if (enabled && (page.RasterSheet == null || string.IsNullOrWhiteSpace(page.RasterSheet.Image)))
+                {
+                    RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+                    if (build.Ok)
+                    {
+                        built++;
+                        changed++;
+                    }
+                    else
+                    {
+                        failed++;
+                        AppLog.Warn($"Raster cache build failed for '{page.Name}': {build.Error}");
+                    }
+                    continue;
+                }
+
+                if (RasterSheetCacheService.TrySetEnabled(page, enabled, out string error))
+                    changed++;
+                else
+                {
+                    failed++;
+                    AppLog.Warn($"Raster cache toggle failed for '{page.Name}': {error}");
+                }
+            }
+        }
+
+        InvalidatePagePreviewPrefetchCache();
+        RefreshSheetManager();
+        ReloadCurrentPageIfRasterChanged(pages);
+        TxtStatus.Text = enabled
+            ? $"Sheet Manager Raster On: changed {changed}, built {built}, failed {failed}."
+            : $"Sheet Manager Raster Off: changed {changed}, failed {failed}.";
+    }
+
+    private void ReloadCurrentPageIfRasterChanged(IReadOnlyList<PageInfo> changedPages)
+    {
+        if (_currentPage == null ||
+            !changedPages.Any(page => IsSamePageFolder(page.FolderPath, _currentPage.FolderPath)) ||
+            OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is not { } refreshedPage)
+        {
+            return;
+        }
+
+        LoadPageIntoViewport(refreshedPage, _viewport.CaptureViewState());
     }
 
     private static string SheetManagerScaleText(double scaleMetersPerPt)

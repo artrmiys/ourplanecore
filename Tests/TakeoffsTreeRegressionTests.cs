@@ -1150,6 +1150,36 @@ internal static class TakeoffsTreeRegressionTests
             "overlay PDF Snap loads should skip duplicate in-flight cache keys");
     }
 
+    public static void RasterSnapStrictBlackLinesOnlyIsWired()
+    {
+        string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
+        string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
+        string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+
+        AssertTrue(
+            helper.Contains("black_only = bool(req.get(\"black_only\", False))", StringComparison.Ordinal) &&
+            helper.Contains("strict_lines = black_only", StringComparison.Ordinal) &&
+            helper.Contains("if black_only and not _is_snap_drawing_dark(drawing):", StringComparison.Ordinal) &&
+            helper.Contains("return _is_dark_pdf_color(drawing.get(\"color\"))", StringComparison.Ordinal),
+            "raster snap helper should filter to strict dark/black PDF stroke geometry");
+        AssertTrue(
+            helper.Contains("elif strict_lines:\r\n        return", StringComparison.Ordinal) ||
+            helper.Contains("elif strict_lines:\n        return", StringComparison.Ordinal),
+            "strict raster snap should ignore curves/quads instead of making approximate points");
+        AssertTrue(
+            helper.Contains("if not strict_lines and len(points) + len(segments) == before_count:", StringComparison.Ordinal),
+            "strict raster snap must not synthesize geometry from drawing bounds");
+        AssertFalse(
+            raster.Contains("blackOnly: false", StringComparison.Ordinal),
+            "raster snap cache must not fall back to all PDF vectors when no black linework is found");
+        AssertTrue(
+            raster.Contains("SnapIndexName = \"snap.json\"", StringComparison.Ordinal) &&
+            raster.Contains("blackOnly: true", StringComparison.Ordinal) &&
+            pdfSnap.Contains("RasterSheetCacheService.TryReadSnapIndex", StringComparison.Ordinal) &&
+            pdfSnap.Contains("PDF Snap ready from raster index", StringComparison.Ordinal),
+            "viewport should prefer the persisted strict raster snap index before live PDF snap extraction");
+    }
+
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");

@@ -76,6 +76,7 @@ public sealed partial class PdfViewport : SKElement
 
     private string  _pdfPath  = "";
     private int     _pdfIndex = 0;
+    private RasterSheetSource? _rasterSheetSource;
 
     private SKBitmap? _pageBitmap;
     private string _pageBitmapPdfPath = "";

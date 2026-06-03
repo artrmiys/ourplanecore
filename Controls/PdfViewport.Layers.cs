@@ -71,6 +71,58 @@ public sealed partial class PdfViewport
         ClearDetailRenderBitmap();
     }
 
+    private bool TryApplyRasterSheetRender(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        if (!RasterSheetCacheService.TryReadReady(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                out RasterSheetBitmapResult raster,
+                out string reason))
+        {
+            if (rasterSheet?.Enabled == true)
+            {
+                AppLog.Info(
+                    $"Viewport raster sheet skipped; reason='{reason}'; page='{pageFolder}'; " +
+                    $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}");
+            }
+            return false;
+        }
+
+        _pageBitmap?.Dispose();
+        _pageBitmap = raster.Bitmap;
+        MarkPageBitmapIdentity(pdfPath, pdfIndex, pageFolder);
+        _pdfW = raster.WidthPt;
+        _pdfH = raster.HeightPt;
+        _bitmapScale = raster.BitmapScale;
+        _layers = [];
+        _usingLayerRenderer = false;
+        _renderedScale = raster.BitmapScale;
+        _showingPreviousPageDuringSwitch = false;
+        ClearDetailRenderBitmap();
+        ApplyInitialPreviewView(restoreView, fitAfter);
+        AppLog.Info(
+            $"Viewport raster sheet cache hit; page='{pageFolder}'; " +
+            $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={raster.BitmapScale:0.###}; " +
+            $"image='{raster.ImagePath}'");
+        ReportViewportRenderProfile(
+            "raster-sheet",
+            pageFolder,
+            pdfPath,
+            pdfIndex,
+            raster.BitmapScale,
+            elapsedMs: 0,
+            fromCache: true,
+            clipRect: null);
+        return true;
+    }
+
     private bool TryApplyPersistedPreviewRender(
         string pdfPath,
         int pdfIndex,

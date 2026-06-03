@@ -176,6 +176,7 @@ internal static class PageStore
             OverlayOffsetXPt = NormalizeOverlayOffset(src.OverlayOffsetXPt),
             OverlayOffsetYPt = NormalizeOverlayOffset(src.OverlayOffsetYPt),
             OverlayScale = NormalizeOverlayScale(src.OverlayScale),
+            RasterSheet = NormalizeRasterSheet(src.RasterSheet),
         };
     }
 
@@ -201,7 +202,8 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            src.RasterSheet);
     }
 
     public static void SavePageLegendTakeoffOrder(
@@ -232,7 +234,8 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            src.RasterSheet);
     }
 
     public static void SavePageHiddenTakeoffs(string pageFolder, IReadOnlyList<string> hiddenTakeoffs)
@@ -257,7 +260,8 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            hiddenTakeoffs);
+            hiddenTakeoffs,
+            src.RasterSheet);
     }
 
     public static void ReplacePagePdf(string pageFolder, string pdfAbsPath, int pageIndex = 0)
@@ -281,7 +285,8 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            rasterSheet: null);
     }
 
     public static void SavePageOverlay(
@@ -310,7 +315,8 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            src.RasterSheet);
     }
 
     public static void SavePageOverlayVisibility(string pageFolder, bool isVisible)
@@ -335,7 +341,8 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            src.RasterSheet);
     }
 
     public static void ClearPageOverlay(string pageFolder) =>
@@ -367,7 +374,8 @@ internal static class PageStore
             NormalizeOverlayOffset(overlayOffsetXPt),
             NormalizeOverlayOffset(overlayOffsetYPt),
             NormalizeOverlayScale(overlayScale),
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            src.RasterSheet);
     }
 
     public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers)
@@ -392,7 +400,34 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
-            src.HiddenTakeoffs);
+            src.HiddenTakeoffs,
+            src.RasterSheet);
+    }
+
+    public static void SavePageRasterSheet(string pageFolder, RasterSheetSource? rasterSheet)
+    {
+        SourceInfo? src = ReadSource(pageFolder);
+        if (src == null) return;
+
+        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        WriteSource(
+            pageFolder,
+            pdfAbs,
+            src.Page,
+            src.ScaleMetersPerPt,
+            src.PdfLayers,
+            src.PdfLayersCached,
+            src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
+            src.OverlayPageFolder,
+            src.OverlayVisible,
+            src.OverlayColor,
+            src.OverlayOpacity,
+            src.OverlayOffsetXPt,
+            src.OverlayOffsetYPt,
+            src.OverlayScale,
+            src.HiddenTakeoffs,
+            rasterSheet);
     }
 
     public static string PageLayersJsonPath(string pageFolder) =>
@@ -480,7 +515,8 @@ internal static class PageStore
                     overlayOffsetXPt: snap.OverlayOffsetXPt,
                     overlayOffsetYPt: snap.OverlayOffsetYPt,
                     overlayScale: snap.OverlayScale,
-                    hiddenTakeoffs: snap.HiddenTakeoffs);
+                    hiddenTakeoffs: snap.HiddenTakeoffs,
+                    rasterSheet: snap.RasterSheet);
         }
     }
 
@@ -510,7 +546,8 @@ internal static class PageStore
                 src.OverlayOffsetXPt,
                 src.OverlayOffsetYPt,
                 src.OverlayScale,
-                NormalizeStringList(src.HiddenTakeoffs)));
+                NormalizeStringList(src.HiddenTakeoffs),
+                NormalizeRasterSheet(src.RasterSheet)));
         }
 
         return snapshots;
@@ -532,7 +569,8 @@ internal static class PageStore
         double overlayOffsetXPt = 0,
         double overlayOffsetYPt = 0,
         double overlayScale = 1.0,
-        IReadOnlyList<string>? hiddenTakeoffs = null)
+        IReadOnlyList<string>? hiddenTakeoffs = null,
+        RasterSheetSource? rasterSheet = null)
     {
         var src = new SourceInfo
         {
@@ -554,6 +592,7 @@ internal static class PageStore
             OverlayOffsetXPt = NormalizeOverlayOffset(overlayOffsetXPt),
             OverlayOffsetYPt = NormalizeOverlayOffset(overlayOffsetYPt),
             OverlayScale = NormalizeOverlayScale(overlayScale),
+            RasterSheet = NormalizeRasterSheet(rasterSheet),
         };
         try
         {
@@ -666,6 +705,33 @@ internal static class PageStore
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
 
+    private static RasterSheetSource? NormalizeRasterSheet(RasterSheetSource? rasterSheet)
+    {
+        if (rasterSheet == null)
+            return null;
+
+        RasterSheetSource copy = rasterSheet.Clone();
+        copy.Image = (copy.Image ?? "").Trim();
+        copy.Format = string.IsNullOrWhiteSpace(copy.Format) ? "png" : copy.Format.Trim().ToLowerInvariant();
+        copy.RenderScale = double.IsNaN(copy.RenderScale) || double.IsInfinity(copy.RenderScale)
+            ? 0
+            : Math.Clamp(copy.RenderScale, 0, 8);
+        copy.WidthPt = double.IsNaN(copy.WidthPt) || double.IsInfinity(copy.WidthPt)
+            ? 0
+            : Math.Max(0, copy.WidthPt);
+        copy.HeightPt = double.IsNaN(copy.HeightPt) || double.IsInfinity(copy.HeightPt)
+            ? 0
+            : Math.Max(0, copy.HeightPt);
+        copy.PdfLastWriteUtcTicks = Math.Max(0, copy.PdfLastWriteUtcTicks);
+        copy.PdfLength = Math.Max(0, copy.PdfLength);
+        copy.GeneratedAtUtc = (copy.GeneratedAtUtc ?? "").Trim();
+        copy.SnapIndex = (copy.SnapIndex ?? "").Trim();
+        copy.SnapPointCount = Math.Max(0, copy.SnapPointCount);
+        copy.SnapSegmentCount = Math.Max(0, copy.SnapSegmentCount);
+        copy.SnapGeneratedAtUtc = (copy.SnapGeneratedAtUtc ?? "").Trim();
+        return copy;
+    }
+
     private static string NormalizeLegendTakeoffOrderMode(string? mode) =>
         string.Equals(mode?.Trim(), "manual", StringComparison.OrdinalIgnoreCase)
             ? "manual"
@@ -686,4 +752,5 @@ internal sealed record PageSourceSnapshot(
     double OverlayOffsetXPt,
     double OverlayOffsetYPt,
     double OverlayScale,
-    IReadOnlyList<string> HiddenTakeoffs);
+    IReadOnlyList<string> HiddenTakeoffs,
+    RasterSheetSource? RasterSheet);

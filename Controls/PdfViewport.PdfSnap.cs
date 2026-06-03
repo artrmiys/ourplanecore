@@ -98,7 +98,13 @@ public sealed partial class PdfViewport
             return;
 
         IReadOnlyList<PdfLayerInfo>? layers = CurrentPdfSnapVisibleLayers();
-        string cacheKey = PdfSnapCacheKey(_pdfPath, _pdfIndex, _pageFolder, PdfSnapLayerStateKey(layers));
+        RasterSheetSource? rasterSheet = _rasterSheetSource?.Clone();
+        string cacheKey = PdfSnapCacheKey(
+            _pdfPath,
+            _pdfIndex,
+            _pageFolder,
+            PdfSnapLayerStateKey(layers),
+            PdfSnapRasterStateKey(rasterSheet));
         if (!force && string.Equals(_pdfSnapCacheKey, cacheKey, StringComparison.Ordinal))
             return;
 
@@ -114,7 +120,7 @@ public sealed partial class PdfViewport
         _pdfSnapLoadInProgress = true;
         _pdfSnapInProgressCacheKey = cacheKey;
         int version = ++_pdfSnapLoadVersion;
-        _ = LoadPdfSnapPointsAsync(version, _pdfPath, _pdfIndex, _pageFolder, layers, cacheKey);
+        _ = LoadPdfSnapPointsAsync(version, _pdfPath, _pdfIndex, _pageFolder, layers, rasterSheet, cacheKey);
     }
 
     private async Task LoadPdfSnapPointsAsync(
@@ -123,10 +129,28 @@ public sealed partial class PdfViewport
         int pdfIndex,
         string pageFolder,
         IReadOnlyList<PdfLayerInfo>? layers,
+        RasterSheetSource? rasterSheet,
         string cacheKey)
     {
         try
         {
+            if (RasterSheetCacheService.TryReadSnapIndex(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    out PdfGeometrySnapResult snapIndex,
+                    out _))
+            {
+                if (!IsCurrentPdfSnapRequest(version, pdfPath, pdfIndex, pageFolder))
+                    return;
+
+                _pdfSnapIndex = new PdfSnapPointIndex(snapIndex.Points, snapIndex.Segments);
+                _pdfSnapCacheKey = cacheKey;
+                if (_pdfSnapEnabled)
+                    PostStatus($"PDF Snap ready from raster index: {_pdfSnapIndex.Count} strict black line points/segments.");
+                return;
+            }
+
             var result = await PdfGeometrySnapService.TryReadSnapPointsAsync(pdfPath, pdfIndex, layers);
             if (!IsCurrentPdfSnapRequest(version, pdfPath, pdfIndex, pageFolder))
                 return;
@@ -283,13 +307,29 @@ public sealed partial class PdfViewport
             .ToList();
     }
 
-    private static string PdfSnapCacheKey(string pdfPath, int pdfIndex, string pageFolder, string layerStateKey) =>
-        $"{pdfPath}|{pdfIndex}|{pageFolder}|{layerStateKey}";
+    private static string PdfSnapCacheKey(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        string layerStateKey,
+        string rasterStateKey = "") =>
+        $"{pdfPath}|{pdfIndex}|{pageFolder}|{layerStateKey}|{rasterStateKey}";
 
     private static string PdfSnapLayerStateKey(IReadOnlyList<PdfLayerInfo>? layers) =>
         layers == null || layers.Count == 0
             ? "no-layers"
             : string.Join("|", layers.Select(layer => $"{layer.Number}:{layer.IsOn}"));
+
+    private static string PdfSnapRasterStateKey(RasterSheetSource? rasterSheet) =>
+        rasterSheet == null || string.IsNullOrWhiteSpace(rasterSheet.SnapIndex)
+            ? "live-pdf"
+            : string.Join(
+                ":",
+                "raster",
+                rasterSheet.SnapIndex,
+                rasterSheet.SnapGeneratedAtUtc,
+                rasterSheet.SnapPointCount,
+                rasterSheet.SnapSegmentCount);
 
     private bool TryFindPdfSnapPoint(SKPoint rawPdf, float tolerancePt, out SKPoint snapped, out string snapKind)
     {
@@ -335,7 +375,12 @@ public sealed partial class PdfViewport
             return false;
 
         IReadOnlyList<PdfLayerInfo>? layers = CurrentPdfSnapVisibleLayers();
-        string cacheKey = PdfSnapCacheKey(_pdfPath, _pdfIndex, _pageFolder, PdfSnapLayerStateKey(layers));
+        string cacheKey = PdfSnapCacheKey(
+            _pdfPath,
+            _pdfIndex,
+            _pageFolder,
+            PdfSnapLayerStateKey(layers),
+            PdfSnapRasterStateKey(_rasterSheetSource));
         return string.Equals(_pdfSnapCacheKey, cacheKey, StringComparison.Ordinal);
     }
 

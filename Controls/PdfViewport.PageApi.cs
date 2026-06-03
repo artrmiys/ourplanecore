@@ -63,7 +63,8 @@ public sealed partial class PdfViewport
         int pageIndex = 0,
         string pageFolder = "",
         IReadOnlyList<PdfLayerInfo>? cachedLayers = null,
-        ViewState? restoreView = null)
+        ViewState? restoreView = null,
+        RasterSheetSource? rasterSheet = null)
     {
         CancelTransientNavigationRenderWork();
         BeginPageSwitchDetailRenderHold();
@@ -72,6 +73,7 @@ public sealed partial class PdfViewport
         _pdfIndex   = pageIndex;
         _pageFolder = pageFolder;
         _cachedLayers = cachedLayers;
+        _rasterSheetSource = rasterSheet?.Clone();
 
         bool hadVisibleBitmap = _pageBitmap != null;
         bool hadCurrentPageBitmap = IsPageBitmapFor(pdfPath, pageIndex, pageFolder);
@@ -106,6 +108,20 @@ public sealed partial class PdfViewport
         QueuePdfSnapPointLoad(force: true);
         FireLayersChanged();
 
+        string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
+        if (TryApplyRasterSheetRender(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                rasterSheet,
+                restoreView,
+                fitAfter: !restoreView.HasValue))
+        {
+            PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+            RequestRepaint();
+            return;
+        }
+
         float previewScale = ViewportRenderPolicy.InstantPagePreviewRenderScale;
         bool previewCacheHit = TryApplyPersistedPreviewRender(
             pdfPath,
@@ -114,7 +130,6 @@ public sealed partial class PdfViewport
             restoreView,
             fitAfter: !restoreView.HasValue);
 
-        string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         if (previewCacheHit)
         {
             PostStatus(loadedStatus);

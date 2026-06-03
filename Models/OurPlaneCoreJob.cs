@@ -234,6 +234,9 @@ public static class OurPlaneCoreJobStore
     public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers) =>
         PageStore.SavePageLayerCache(pageFolder, pdfLayers);
 
+    public static void SavePageRasterSheet(string pageFolder, RasterSheetSource? rasterSheet) =>
+        PageStore.SavePageRasterSheet(pageFolder, rasterSheet);
+
     public static string PageLayersJsonPath(string pageFolder) =>
         PageStore.PageLayersJsonPath(pageFolder);
 
