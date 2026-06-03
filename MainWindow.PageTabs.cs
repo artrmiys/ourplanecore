@@ -15,6 +15,7 @@ public partial class MainWindow
 {
     private const int MaxBatchSheetOpenCount = 64;
     private string _pagePreviewPrefetchJobRoot = "";
+    private string _pagePreviewWarmupJobRoot = "";
     private IReadOnlyList<PageInfo> _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     private int _pageOpenDeferredVersion;
     private PageTabState? _pendingPageTabDrag;
@@ -23,6 +24,7 @@ public partial class MainWindow
     private void InvalidatePagePreviewPrefetchCache()
     {
         _pagePreviewPrefetchJobRoot = "";
+        _pagePreviewWarmupJobRoot = "";
         _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     }
 
@@ -343,19 +345,19 @@ public partial class MainWindow
             viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
             restoreView);
         trace?.Mark("decode");
-        TryApplyCachedSheetOverlay(viewportPage);
         ApplyViewportPageTakeoffVisibility(viewportPage);
         _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
-        QueueDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace);
+        QueueDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView);
     }
 
     private void QueueDeferredPageOpenWork(
         int deferredVersion,
         PageInfo viewportPage,
         IReadOnlyList<TakeoffItem> scaledItems,
-        PageOpenTrace? trace)
+        PageOpenTrace? trace,
+        PdfViewport.ViewState? restoreView)
     {
         try
         {
@@ -364,7 +366,7 @@ public partial class MainWindow
                 {
                     try
                     {
-                        RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace);
+                        RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView);
                     }
                     catch (Exception ex)
                     {
@@ -384,20 +386,22 @@ public partial class MainWindow
         int deferredVersion,
         PageInfo viewportPage,
         IReadOnlyList<TakeoffItem> scaledItems,
-        PageOpenTrace? trace)
+        PageOpenTrace? trace,
+        PdfViewport.ViewState? restoreView)
     {
         try
         {
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            LoadSheetOverlay(_currentPage ?? viewportPage);
+            LoadSheetOverlay(_currentPage ?? viewportPage, restoreView);
             trace?.Mark("overlay-queued");
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
             QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
             trace?.Mark("prefetch-queued");
+            QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
             _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
             ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();
@@ -443,6 +447,38 @@ public partial class MainWindow
                 catch (Exception ex)
                 {
                     AppLog.Warn(ex, $"Nearby page preview prefetch failed for {viewportPage.Name}");
+                }
+            }),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void QueueJobPagePreviewWarmupDeferred(int deferredVersion, PageInfo viewportPage)
+    {
+        if (_currentJob == null)
+            return;
+
+        string jobRoot = _currentJob.RootPath;
+        if (string.Equals(_pagePreviewWarmupJobRoot, jobRoot, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _pagePreviewWarmupJobRoot = jobRoot;
+        Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                try
+                {
+                    if (_currentJob == null ||
+                        !string.Equals(_currentJob.RootPath, jobRoot, StringComparison.OrdinalIgnoreCase) ||
+                        !IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                    {
+                        return;
+                    }
+
+                    QueueJobPagePreviewWarmup(viewportPage);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, $"Job page preview warmup failed for {viewportPage.Name}");
                 }
             }),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
@@ -575,6 +611,65 @@ public partial class MainWindow
                 QueueCleanRenderPrefetchAt(pages, activeIndex + offset);
                 QueueCleanRenderPrefetchAt(pages, activeIndex - offset);
             }
+        }
+    }
+
+    private void QueueJobPagePreviewWarmup(PageInfo activePage)
+    {
+        IReadOnlyList<PageInfo> pages = CachedPagesForPreviewPrefetch();
+        if (pages.Count == 0)
+            return;
+
+        int activeIndex = -1;
+        for (int i = 0; i < pages.Count; i++)
+        {
+            if (string.Equals(pages[i].FolderPath, activePage.FolderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                activeIndex = i;
+                break;
+            }
+        }
+
+        foreach (int index in BuildPreviewWarmupOrder(pages.Count, activeIndex)
+                     .Take(ViewportRenderPolicy.JobOpenPreviewWarmupCount))
+        {
+            QueuePreviewPrefetchAt(pages, index);
+        }
+    }
+
+    private static IEnumerable<int> BuildPreviewWarmupOrder(int count, int activeIndex)
+    {
+        if (count <= 0)
+            yield break;
+
+        bool[] emitted = new bool[count];
+        if (activeIndex >= 0 && activeIndex < count)
+        {
+            emitted[activeIndex] = true;
+            yield return activeIndex;
+
+            for (int offset = 1; offset < count; offset++)
+            {
+                int next = activeIndex + offset;
+                if (next < count)
+                {
+                    emitted[next] = true;
+                    yield return next;
+                }
+
+                int previous = activeIndex - offset;
+                if (previous >= 0)
+                {
+                    emitted[previous] = true;
+                    yield return previous;
+                }
+            }
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            if (!emitted[i])
+                yield return i;
         }
     }
 

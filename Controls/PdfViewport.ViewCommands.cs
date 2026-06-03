@@ -109,6 +109,7 @@ public sealed partial class PdfViewport
         _zoom = Math.Min(ViewportCanvasWidth / _pdfW, ViewportCanvasHeight / _pdfH) * 0.95f;
         _panX = _panY = 0;
         ScheduleRerenderForZoom(force: true);
+        MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
     }
 

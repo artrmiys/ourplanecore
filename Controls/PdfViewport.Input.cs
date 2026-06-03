@@ -482,8 +482,18 @@ public sealed partial class PdfViewport
             PostPointerStatus(pointerPdf);
 
         UpdateCursor(pointerPdf);
-        RequestRepaint();
+        RequestPointerMoveRepaint();
         e.Handled = true;
+    }
+
+    private void RequestPointerMoveRepaint()
+    {
+        DateTime now = DateTime.UtcNow;
+        if ((now - _lastPointerRepaintAt).TotalMilliseconds < ViewportRenderPolicy.PointerMoveRepaintMinIntervalMs)
+            return;
+
+        _lastPointerRepaintAt = now;
+        RequestRepaint();
     }
 
     protected override void OnMouseLeave(MouseEventArgs e)

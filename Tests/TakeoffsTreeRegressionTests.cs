@@ -36,9 +36,12 @@ internal static class TakeoffsTreeRegressionTests
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
         string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
         string prefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetchDeferred(");
+        string warmupMethod = SliceMethod(pageTabs, "private void QueueJobPagePreviewWarmupDeferred(");
+        string warmupRunMethod = SliceMethod(pageTabs, "private void QueueJobPagePreviewWarmup(PageInfo activePage)");
         string nearbyPrefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)");
         string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
         string queueCleanRenderPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueCleanRenderPrefetchAt(");
+        string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
         AssertFalse(
             loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
@@ -57,9 +60,9 @@ internal static class TakeoffsTreeRegressionTests
             loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
             loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "page open should not run overlays, annotations, takeoff tree refresh, or settings save in the immediate path");
-        AssertTrue(
-            loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage)", StringComparison.Ordinal),
-            "page open should restore cached sheet overlays immediately without starting a heavy overlay render");
+        AssertFalse(
+            loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage, restoreView)", StringComparison.Ordinal),
+            "page open should not synchronously decode cached sheet overlays before the first viewport frame");
 
         AssertTrue(
             queueMethod.Contains("Dispatcher.BeginInvoke", StringComparison.Ordinal) &&
@@ -70,12 +73,13 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("LoadSheetOverlay(_currentPage ?? viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("LoadSheetOverlay(_currentPage ?? viewportPage, restoreView)", StringComparison.Ordinal) &&
             deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
-        int deferredOverlay = deferredMethod.IndexOf("LoadSheetOverlay(_currentPage ?? viewportPage)", StringComparison.Ordinal);
+        int deferredOverlay = deferredMethod.IndexOf("LoadSheetOverlay(_currentPage ?? viewportPage, restoreView)", StringComparison.Ordinal);
         int deferredPrefetch = deferredMethod.IndexOf("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal);
         AssertTrue(
             deferredOverlay >= 0 && deferredPrefetch > deferredOverlay,
@@ -86,6 +90,14 @@ internal static class TakeoffsTreeRegressionTests
             prefetchMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
             prefetchMethod.Contains("QueueNearbyPagePreviewPrefetch(viewportPage)", StringComparison.Ordinal),
             "nearby preview prefetch should be queued after page-open critical work and guarded against stale pages");
+        AssertTrue(
+            warmupMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
+            warmupMethod.Contains("_pagePreviewWarmupJobRoot", StringComparison.Ordinal) &&
+            warmupMethod.Contains("QueueJobPagePreviewWarmup(viewportPage)", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("ViewportRenderPolicy.JobOpenPreviewWarmupCount", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupCount = 96", StringComparison.Ordinal),
+            "job-open preview warmup should run once per job at idle priority and use a bounded active-page-first order");
         AssertTrue(
             nearbyPrefetchMethod.Contains("CachedPagesForPreviewPrefetch()", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
@@ -856,11 +868,14 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             areaCut.Contains("CutLinePiecesByPolygon", StringComparison.Ordinal) &&
+            areaCut.Contains("TryBuildAreaCutGeometry", StringComparison.Ordinal) &&
+            areaCut.Contains("MeasurementAreaBooleanService.TrySubtract", StringComparison.Ordinal) &&
+            areaCut.Contains("ClipPolygonToConvexClip", StringComparison.Ordinal) &&
             areaCut.Contains("CloneLineMeasurement", StringComparison.Ordinal) &&
             areaCut.Contains("PushMixedMeasurementUndo", StringComparison.Ordinal) &&
             areaCut.Contains("NotifyMeasurementsRemoved(removedLines)", StringComparison.Ordinal) &&
             areaCut.Contains("NotifyMeasurementsAdded(addedLines)", StringComparison.Ordinal),
-            "Cut tool must apply the same box/polygon gesture to Area holes and Line eraser pieces");
+            "Cut tool must apply the same box/polygon gesture to Area bites/holes and Line eraser pieces");
 
         string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
         string pdfExporter = ReadRepoFile("Models/PdfExporter.cs");
@@ -1129,10 +1144,20 @@ internal static class TakeoffsTreeRegressionTests
         string cache = ReadRepoFile("Models/PdfPreviewRenderCache.cs");
 
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
-        int queueRender = pageApi.IndexOf("QueueLayerRender(", StringComparison.Ordinal);
+        int queueRender = pageApi.IndexOf("QueueDocnetRender(", StringComparison.Ordinal);
         AssertTrue(
             cacheApply >= 0 && queueRender > cacheApply,
-            "persisted clean preview cache should be applied before queueing the PyMuPDF refresh render");
+            "persisted clean preview cache should be applied before queueing the fast fallback preview render");
+        AssertFalse(
+            pageApi.Contains("QueueLayerRender(", StringComparison.Ordinal),
+            "normal page open must not queue PDF layer render work before the user explicitly loads layers");
+        int previewMethod = layers.IndexOf("private void ApplyPreviewBitmapRender", StringComparison.Ordinal);
+        int previewMarksNonLayer = previewMethod >= 0
+            ? layers.IndexOf("_usingLayerRenderer = false;", previewMethod, StringComparison.Ordinal)
+            : -1;
+        AssertTrue(
+            previewMethod >= 0 && previewMarksNonLayer > previewMethod,
+            "cached PyMuPDF previews should stay outside layer-render mode so zoom refreshes do not schedule layer-cache-only work");
         AssertTrue(
             layers.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
             layers.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) &&
@@ -1162,6 +1187,7 @@ internal static class TakeoffsTreeRegressionTests
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
+        string mainLayers = ReadRepoFile("MainWindow.PdfLayers.cs");
 
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
         int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
@@ -1174,38 +1200,52 @@ internal static class TakeoffsTreeRegressionTests
             status > docnetFallback,
             "page open should avoid full-clean synchronous decode and queue a fast Docnet preview fallback after a preview cache miss");
         AssertTrue(
-            pageApi.Contains("queueLayerAfter: true", StringComparison.Ordinal) &&
-            pageApi.Contains("resetLayerStates: true", StringComparison.Ordinal) &&
-            pageApi.Contains("fireLayersAfter: true", StringComparison.Ordinal),
-            "cache-miss Docnet preview should still queue the normal layer render continuation");
+            pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
+            pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
+            pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
+            pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
+            mainLayers.Contains("PDF layers not loaded. Click Load to scan this sheet.", StringComparison.Ordinal),
+            "normal page opens should keep PDF layers lazy and clear the layer panel without starting layer discovery/render work");
         AssertTrue(
-            pageApi.Contains("TryApplyHotLayerBitmapForPageOpen", StringComparison.Ordinal) &&
-            pageApi.Contains("Cached page:", StringComparison.Ordinal) &&
-            layers.Contains("private bool TryApplyHotLayerBitmapForPageOpen", StringComparison.Ordinal) &&
-            layers.Contains("TryApplyLayerBitmapCache(request, out _)", StringComparison.Ordinal),
-            "page cache misses should use an already-hot sharp layer bitmap before falling back to low-scale Docnet preview");
+            layers.Contains("if (_cachedLayers != null)", StringComparison.Ordinal) &&
+            layers.Contains("PDF Layers: loading cached page layers...", StringComparison.Ordinal) &&
+            layers.Contains("CompleteLayerlessRender(\"PDF Layers loaded.\", fireLayersAfter: true)", StringComparison.Ordinal),
+            "manual PDF Layers Load should use cached manifests first and avoid rendering when a PDF has no layers");
+        AssertFalse(
+            pageApi.Contains("TryApplyHotLayerBitmapForPageOpen", StringComparison.Ordinal) ||
+            pageApi.Contains("Cached page:", StringComparison.Ordinal),
+            "normal page opens should not prefer full layer bitmaps over lightweight previews when PDF layers are lazy");
         AssertTrue(
-            pageApi.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
+            layers.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeDelayMs", StringComparison.Ordinal) &&
+            layers.Contains("ShouldDelaySharpLayerUpgrade(deferralCount)", StringComparison.Ordinal) &&
+            layers.Contains("PageSwitchSharpUpgradeIdleMs", StringComparison.Ordinal) &&
+            layers.Contains("ShouldUseDetailRenderForSharpUpgrade()", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipSharpLayerUpgradeForLowZoom()", StringComparison.Ordinal) &&
+            layers.Contains("PageSwitchSharpUpgradeMinZoom", StringComparison.Ordinal) &&
             layers.Contains("IsCurrentPageRenderTarget", StringComparison.Ordinal) &&
             layers.Contains("allowLiveRender: true", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipLowerQualityDocnetPreview", StringComparison.Ordinal) &&
             layers.Contains("IsPageBitmapFor(request.PdfPath, request.PdfIndex, request.PageFolder)", StringComparison.Ordinal) &&
             layers.Contains("Viewport skipped lower-quality Docnet preview", StringComparison.Ordinal),
-            "page preview paths should schedule a delayed sharp live render and prevent stale low-scale previews from replacing sharp current sheets");
+            "explicit layer continuation paths should keep delayed sharp live render safeguards for stale low-scale previews");
         AssertTrue(
-            pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
-            pageApi.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
-            pageApi.Contains("allowMemoryBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("bool allowImmediateCache = true", StringComparison.Ordinal) &&
             layers.Contains("bool allowLiveRender = true", StringComparison.Ordinal) &&
             layers.Contains("bool allowMemoryBitmap = true", StringComparison.Ordinal) &&
             layers.Contains("allowMemoryBitmap && TryApplyLayerBitmapCache", StringComparison.Ordinal) &&
+            layers.Contains("ShouldUseCacheOnlyForAutomaticLayerRender(request)", StringComparison.Ordinal) &&
+            layers.Contains("IsAutomaticViewportLayerRender(request)", StringComparison.Ordinal) &&
+            layers.Contains("request.StatusAfter.StartsWith(\"Loaded:\", StringComparison.Ordinal)", StringComparison.Ordinal) &&
+            layers.Contains("if (!automaticViewportRender || forceDetail)", StringComparison.Ordinal) &&
+            layers.Contains("if (!automaticViewportRender || request.RestoreView.HasValue || request.FitAfter || forceDetail)", StringComparison.Ordinal) &&
             layers.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
             layers.Contains("allowMemoryBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("allowImmediateCache && TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal) &&
             layers.Contains("CompleteCacheOnlyLayerRender(request)", StringComparison.Ordinal),
-            "page open should not synchronously decode persisted renders or live-render a second clean layer bitmap after applying the instant preview, but should use an already-hot sharp bitmap");
+            "automatic viewport layer refresh should be able to collapse to cache-only while explicit layer paths keep the full render fallback");
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
@@ -1218,10 +1258,21 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             renderCache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             renderCache.Contains("Task.Delay(75)", StringComparison.Ordinal) &&
+            renderCache.Contains("PreviewPrefetchSemaphore", StringComparison.Ordinal) &&
+            renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
+            renderCache.Contains("DecodePdfLayerRenderBitmap(preview)", StringComparison.Ordinal) &&
             layers.Contains("TryWriteDocnetPreviewCache", StringComparison.Ordinal) &&
             layers.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal) &&
             layers.Contains("SKEncodedImageFormat.Png", StringComparison.Ordinal),
             "nearby sheet prefetch and cold Docnet preview renders should warm the same lightweight persisted preview cache used by page switching");
+        AssertTrue(
+            layers.Contains("TryRenderFastPreviewWithPyMuPdfAsync", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("PdfLayerRenderService.TryRenderIsolatedProcessAsync", StringComparison.Ordinal) &&
+            layers.Contains("StartFastPreviewRenderAsync", StringComparison.Ordinal) &&
+            layers.Contains("preview-pymupdf", StringComparison.Ordinal) &&
+            layers.Contains("RenderPageBitmapWithDocnet", StringComparison.Ordinal),
+            "cold page-switch previews should prefer the faster PyMuPDF preview worker and retain Docnet as a fallback");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()
@@ -1327,8 +1378,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             policy.Contains("DetailRenderEnabled = true", StringComparison.Ordinal) &&
             policy.Contains("CurrentResponsiveMaxRenderScale", StringComparison.Ordinal) &&
-            policy.Contains("new RenderQuality(3.0f, 192_000_000f", StringComparison.Ordinal) &&
-            policy.Contains("new RenderQuality(4.0f, 320_000_000f", StringComparison.Ordinal) &&
+            policy.Contains("new RenderQuality(3.0f, 160_000_000f", StringComparison.Ordinal) &&
+            policy.Contains("new RenderQuality(4.0f, 240_000_000f", StringComparison.Ordinal) &&
             policy.Contains("ZoomRefreshMinZoom = 0.30f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMinZoom = 1.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxScale = 16.0f", StringComparison.Ordinal) &&
@@ -1337,30 +1388,33 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("ShouldSkipFullRefreshDuringDetail", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPaddingScreenPxForZoom", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderPrefetchEnabled = true", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderPrefetchMinZoom = 4.0f", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchEnabled = false", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchMinZoom = 6.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderCoalesceDelayMs = 850", StringComparison.Ordinal) &&
             policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPaintTiles = 2", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderStableTileScreenPx", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderStableTileMaxExpansionFactor", StringComparison.Ordinal) &&
             policy.Contains("ShouldUseDetailRenderPrefetch", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
-            pageApi.Contains("renderScale: CurrentBaseRenderScale()", StringComparison.Ordinal) &&
-            pageApi.Contains("allowLiveRender: false", StringComparison.Ordinal) &&
-            pageApi.Contains("BeginFastNavigation();", StringComparison.Ordinal) &&
-            layers.Contains("QueueInitialLayerDiscoveryOrRender", StringComparison.Ordinal) &&
+            pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
+            pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("BeginPageSwitchDetailRenderHold();", StringComparison.Ordinal) &&
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
-            "interactive page opens should show the cheap preview first, then use cached base work plus clipped detail instead of launching an immediate full-sheet render");
+            "interactive page opens should show a cheap preview first, keep PDF layers lazy, then use clipped detail instead of launching an immediate full-sheet layer render");
         AssertTrue(
-            rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal) &&
+            rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
             rendering.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&
             rendering.Contains("DrawDetailRenderTile(canvas)", StringComparison.Ordinal),
-            "paint should use sharper upscale sampling and skip the heavy base bitmap when a high-DPI detail tile covers the view");
+            "paint should use cheap bitmap sampling during responsive navigation and skip the heavy base bitmap when a high-DPI detail tile covers the view");
         AssertFalse(
-            rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal),
-            "main PDF bitmap paint must not switch to low-quality sampling while panning at high zoom");
+            rendering.Contains("SKFilterQuality.High", StringComparison.Ordinal),
+            "main PDF bitmap paint must not use high-quality sampling on the interactive path");
         AssertTrue(
             transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("bool needsDetailRender", StringComparison.Ordinal) &&
@@ -1372,9 +1426,10 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
         AssertTrue(
-            pageApi.Contains("QueueLayerRender(", StringComparison.Ordinal) &&
-            pageApi.Contains("allowImmediateCache: false", StringComparison.Ordinal) &&
-            pageApi.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
+            pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
+            !pageApi.Contains("QueueLayerRender(", StringComparison.Ordinal) &&
+            layers.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
             pageApi.Contains("BeginPageSwitchDetailRenderHold()", StringComparison.Ordinal) &&
             detail.Contains("ShouldHoldDetailRender(force)", StringComparison.Ordinal) &&
             detail.Contains("QueueDetailRenderAfterHold()", StringComparison.Ordinal) &&
@@ -1384,8 +1439,11 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 320", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchSharpUpgradeDelayMs = 180", StringComparison.Ordinal),
-            "cached preview page opens should schedule capped base work immediately and hold clipped high-detail briefly until the page switch settles");
+            policy.Contains("PageSwitchSharpUpgradeDelayMs = 900", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeIdleMs = 700", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeMinZoom = 0.45f", StringComparison.Ordinal),
+            "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards");
         AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
             viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),
@@ -1401,8 +1459,8 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("IsSameDetailRequest(_activeDetailRender, request)", StringComparison.Ordinal) &&
             detail.Contains("_detailRenderVersion + 1", StringComparison.Ordinal) &&
             detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&
-            detail.Contains("MaxDetailRenderTileEntries = 64", StringComparison.Ordinal) &&
-            detail.Contains("ResolveViewportRamBudget(2_400_000_000L, 4_800_000_000L, 0.07)", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileEntries = 16", StringComparison.Ordinal) &&
+            detail.Contains("ResolveViewportRamBudget(160_000_000L, 512_000_000L, 0.025)", StringComparison.Ordinal) &&
             detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
@@ -1410,6 +1468,8 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length)", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)", StringComparison.Ordinal) &&
+            detail.Contains("BuildStableDetailRenderClip", StringComparison.Ordinal) &&
+            detail.Contains("stableScale >= targetScale * 0.92f", StringComparison.Ordinal) &&
             detail.Contains("QueueAdjacentDetailRenderPrefetch", StringComparison.Ordinal) &&
             detail.Contains("DetailTilePrefetchSemaphore", StringComparison.Ordinal) &&
             detailPrefetch.Contains("QueueAdjacentDetailRenderPrefetchFromTile", StringComparison.Ordinal) &&
@@ -1448,8 +1508,8 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("ResolveLayerBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
             renderCache.Contains("CleanRenderPrefetchSemaphore", StringComparison.Ordinal) &&
-            renderCache.Contains("24_000_000_000L", StringComparison.Ordinal),
-            "decoded full-sheet PyMuPDF bitmaps should be reused from a large RAM cache before rerendering, including best-scale fallback, clean prefetch, and completed stale high-zoom renders");
+            renderCache.Contains("1_200_000_000L", StringComparison.Ordinal),
+            "decoded full-sheet PyMuPDF bitmaps should be reused from a bounded RAM cache before rerendering, including best-scale fallback, clean prefetch, and completed stale high-zoom renders");
         AssertTrue(
             service.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal),
             "background clean render prefetch should use dedicated helper processes instead of blocking the interactive worker");
@@ -1479,11 +1539,15 @@ internal static class TakeoffsTreeRegressionTests
         string source = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
         string method = SliceMethod(source, "private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
+        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string shell = ReadRepoFile("MainWindow.xaml.cs");
 
         AssertTrue(
             method.Contains("SKFilterQuality.None", StringComparison.Ordinal) &&
-            policy.Contains("SheetOverlayViewportRenderScale = 2.0f", StringComparison.Ordinal),
-            "sheet overlay underlay should use a sharper 2x viewport source render and no smoothing filter so it stays crisp without slow high-quality bitmap resampling");
+            policy.Contains("SheetOverlayViewportRenderScale = 2.0f", StringComparison.Ordinal) &&
+            policy.Contains("SelectSheetOverlayRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("SheetOverlayMaxRenderPixels", StringComparison.Ordinal),
+            "sheet overlay underlay should start at a sharp 2x source render, scale up for zoom, and keep bitmap size bounded without smoothing blur");
         AssertFalse(
             method.Contains("SKFilterQuality.Low", StringComparison.Ordinal) ||
             method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) ||
@@ -1495,6 +1559,18 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             source.Contains("public bool HasSheetOverlay => _sheetOverlayBitmap != null", StringComparison.Ordinal),
             "viewport smoke tests need to wait until async sheet overlays are actually applied before exercising pan and zoom");
+        AssertTrue(
+            source.Contains("SheetOverlayRenderScaleRefreshRequested", StringComparison.Ordinal) &&
+            source.Contains("MaybeRequestSheetOverlayRenderScaleRefresh", StringComparison.Ordinal) &&
+            source.Contains("_sheetOverlayBitmapScale", StringComparison.Ordinal),
+            "sheet overlay should request a sharper cached/rendered bitmap when zoom outruns the current overlay source bitmap");
+        AssertTrue(
+            main.Contains("SelectSheetOverlayViewportRenderScale", StringComparison.Ordinal) &&
+            main.Contains("ReadSheetOverlaySourceSize", StringComparison.Ordinal) &&
+            main.Contains("requestedRenderScale", StringComparison.Ordinal) &&
+            main.Contains("bitmapScale: renderScale", StringComparison.Ordinal) &&
+            shell.Contains("SheetOverlayRenderScaleRefreshRequested += OnSheetOverlayRenderScaleRefreshRequested", StringComparison.Ordinal),
+            "main window sheet overlay loading should use zoom-aware render scale selection and wire viewport refresh requests");
     }
 
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
@@ -1514,6 +1590,7 @@ internal static class TakeoffsTreeRegressionTests
             source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal) &&
             source.Contains("ZoomExerciseMs", StringComparison.Ordinal) &&
             source.Contains("WaitForViewportSheetOverlayAsync", StringComparison.Ordinal) &&
+            source.Contains("Directory.Exists(page.OverlayPageFolder)", StringComparison.Ordinal) &&
             source.Contains("OverlayReadyMs", StringComparison.Ordinal) &&
             source.Contains("PostZoomRenderReadyMs", StringComparison.Ordinal) &&
             source.Contains("VisualProbeMs", StringComparison.Ordinal) &&

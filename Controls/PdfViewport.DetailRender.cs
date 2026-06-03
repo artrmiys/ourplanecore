@@ -28,9 +28,9 @@ public sealed partial class PdfViewport
     private bool _detailRenderHoldResumeQueued;
     private readonly object _detailPrefetchGate = new();
     private readonly HashSet<string> _detailPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
-    private const int MaxDetailRenderTileEntries = 64;
+    private const int MaxDetailRenderTileEntries = 16;
     private static readonly long MaxDetailRenderTileBytes =
-        ResolveViewportRamBudget(2_400_000_000L, 4_800_000_000L, 0.07);
+        ResolveViewportRamBudget(160_000_000L, 512_000_000L, 0.025);
     private static readonly SemaphoreSlim DetailTilePrefetchSemaphore =
         new(ViewportRenderPolicy.DetailRenderPrefetchConcurrency, ViewportRenderPolicy.DetailRenderPrefetchConcurrency);
 
@@ -195,18 +195,32 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        SKRect clip = ClampPdfRectToPage(GetVisiblePdfRect(
+        SKRect desiredClip = ClampPdfRectToPage(GetVisiblePdfRect(
             ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)));
-        if (clip.Width <= 0 || clip.Height <= 0)
+        if (desiredClip.Width <= 0 || desiredClip.Height <= 0)
             return false;
 
         float targetScale = ViewportRenderPolicy.SelectDetailRenderScale(
             _zoom,
-            clip.Width,
-            clip.Height,
+            desiredClip.Width,
+            desiredClip.Height,
             _bitmapScale);
         if (targetScale <= 0)
             return false;
+
+        SKRect clip = BuildStableDetailRenderClip(desiredClip, targetScale);
+        if (!RectNearlyEquals(clip, desiredClip, tolerancePt: 0.5f))
+        {
+            float stableScale = ViewportRenderPolicy.SelectDetailRenderScale(
+                _zoom,
+                clip.Width,
+                clip.Height,
+                _bitmapScale);
+            if (stableScale >= targetScale * 0.92f)
+                targetScale = stableScale;
+            else
+                clip = desiredClip;
+        }
 
         if (!force && DetailRenderCoversCurrentView(targetScale))
             return false;
@@ -224,6 +238,44 @@ public sealed partial class PdfViewport
             EffectiveHighlightedLayers(),
             LayerRenderCachedLayers());
         return true;
+    }
+
+    private SKRect BuildStableDetailRenderClip(SKRect desiredClip, float renderScale)
+    {
+        if (renderScale <= 0 ||
+            desiredClip.Width <= 0 ||
+            desiredClip.Height <= 0 ||
+            _pdfW <= 0 ||
+            _pdfH <= 0)
+        {
+            return desiredClip;
+        }
+
+        float tilePdf = ViewportRenderPolicy.DetailRenderStableTileScreenPx / renderScale;
+        if (tilePdf <= 0)
+            return desiredClip;
+
+        SKRect stable = ClampPdfRectToPage(new SKRect(
+            MathF.Floor(desiredClip.Left / tilePdf) * tilePdf,
+            MathF.Floor(desiredClip.Top / tilePdf) * tilePdf,
+            MathF.Ceiling(desiredClip.Right / tilePdf) * tilePdf,
+            MathF.Ceiling(desiredClip.Bottom / tilePdf) * tilePdf));
+        if (stable.Width <= 0 || stable.Height <= 0)
+            return desiredClip;
+
+        float desiredArea = desiredClip.Width * desiredClip.Height;
+        float stableArea = stable.Width * stable.Height;
+        if (desiredArea <= 0 ||
+            stableArea > desiredArea * ViewportRenderPolicy.DetailRenderStableTileMaxExpansionFactor)
+        {
+            return desiredClip;
+        }
+
+        float stablePixels = stableArea * renderScale * renderScale;
+        if (stablePixels > ViewportRenderPolicy.DetailRenderMaxPixels)
+            return desiredClip;
+
+        return stable;
     }
 
     private bool DetailRenderCoversCurrentView(float targetScale)
@@ -426,7 +478,9 @@ public sealed partial class PdfViewport
         using var paint = new SKPaint
         {
             IsAntialias = false,
-            FilterQuality = _zoom > tile.BitmapScale * 1.05f ? SKFilterQuality.High : SKFilterQuality.Medium,
+            FilterQuality = _renderNavigationFastFrame || _zoom > tile.BitmapScale * 1.05f
+                ? SKFilterQuality.Low
+                : SKFilterQuality.Medium,
         };
         var src = new SKRect(0, 0, tile.Bitmap.Width, tile.Bitmap.Height);
         var dst = new SKRect(

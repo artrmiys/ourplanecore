@@ -20,23 +20,31 @@ public static class ViewportRenderPolicy
     public const float DetailRenderMaxScale = 16.0f;
     public const float DetailRenderMaxPixels = 96_000_000f;
     public const float DetailRenderPaddingScreenPx = 1024f;
-    public const bool DetailRenderPrefetchEnabled = true;
-    public const float DetailRenderPrefetchMinZoom = 4.0f;
+    public const bool DetailRenderPrefetchEnabled = false;
+    public const float DetailRenderPrefetchMinZoom = 6.0f;
     public const int DetailRenderPrefetchTileCount = 1;
     public const int DetailRenderPrefetchConcurrency = 1;
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
     public const int DetailRenderCoalesceDelayMs = 850;
     public const int DetailRenderMaxPaintTiles = 2;
+    public const float DetailRenderStableTileScreenPx = 1536f;
+    public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
     public const int PageSwitchDetailRenderDelayMs = 320;
-    public const int PageSwitchSharpUpgradeDelayMs = 180;
-    public const int NearbyPagePreviewPrefetchRadius = 3;
-    public const int NearbyPageCleanRenderPrefetchRadius = 1;
+    public const int PageSwitchSharpUpgradeDelayMs = 900;
+    public const int PageSwitchSharpUpgradeIdleMs = 700;
+    public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
+    public const float PageSwitchSharpUpgradeMinZoom = 0.45f;
+    public const int NearbyPagePreviewPrefetchRadius = 1;
+    public const int NearbyPageCleanRenderPrefetchRadius = 0;
+    public const int JobOpenPreviewWarmupCount = 96;
+    public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.15f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;
+    public const float SheetOverlayMaxRenderPixels = 48_000_000f;
     public const float MeasurementLabelMinZoom = 0.95f;
     public const int DenseMeasurementLabelThreshold = 250;
     public const int DenseMeasurementDetailThreshold = 400;
@@ -47,6 +55,7 @@ public static class ViewportRenderPolicy
     public const int SlowSnapLogMs = 18;
     public const float VisibleGeometryPaddingScreenPx = 96f;
     private static string _qualityMode = HighQualityMode;
+    private static readonly float[] SheetOverlayRenderScaleSteps = [2.0f, 2.25f, 3.0f, 4.0f];
 
     public static string QualityMode => _qualityMode;
     public static float CurrentResponsiveMaxRenderScale => CurrentQuality.ResponsiveMaxScale;
@@ -81,8 +90,8 @@ public static class ViewportRenderPolicy
     private static RenderQuality CurrentQuality => _qualityMode switch
     {
         BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f, 1.35f),
-        MaxQualityMode => new RenderQuality(4.0f, 320_000_000f, DetailRenderMaxScale, 320_000_000f, 1024f, 1.75f),
-        _ => new RenderQuality(3.0f, 192_000_000f, 12.0f, 192_000_000f, 768f, 1.5f),
+        MaxQualityMode => new RenderQuality(4.0f, 240_000_000f, DetailRenderMaxScale, 160_000_000f, 768f, 1.5f),
+        _ => new RenderQuality(3.0f, 160_000_000f, 12.0f, 120_000_000f, 640f, 1.4f),
     };
 
     public static bool ShouldUseFastNavigationFrame(
@@ -92,12 +101,7 @@ public static class ViewportRenderPolicy
         int activePageMeasurementCount,
         bool hasBlockingInteraction)
     {
-        return simplifyNavigationRendering &&
-               isFastNavigating &&
-               !hasBlockingInteraction &&
-               (zoom <= FarZoomFastFrameThreshold ||
-                zoom >= HighZoomFastFrameThreshold ||
-                activePageMeasurementCount >= DenseNavigationFastFrameThreshold);
+        return isFastNavigating && !hasBlockingInteraction;
     }
 
     public static float SelectRenderScale(
@@ -114,6 +118,30 @@ public static class ViewportRenderPolicy
         float minScale = Math.Min(ResponsiveMinRenderScale, maxScale);
         float desired = Math.Clamp(zoom, minScale, maxScale);
         foreach (float step in renderScaleSteps)
+        {
+            if (desired <= step)
+                return Math.Min(step, maxScale);
+        }
+
+        return maxScale;
+    }
+
+    public static float SelectSheetOverlayRenderScale(
+        float zoom,
+        float pageWidthPt = 0,
+        float pageHeightPt = 0)
+    {
+        float maxScale = Math.Min(CurrentQuality.ResponsiveMaxScale, PixelBudgetMaxRenderScale(pageWidthPt, pageHeightPt));
+        maxScale = Math.Min(maxScale, SheetOverlayPixelBudgetMaxRenderScale(pageWidthPt, pageHeightPt));
+        if (maxScale <= 0)
+            return SheetOverlayViewportRenderScale;
+
+        float minScale = Math.Min(SheetOverlayViewportRenderScale, maxScale);
+        float desired = Math.Clamp(
+            Math.Max(zoom <= 0 ? SheetOverlayViewportRenderScale : zoom, SheetOverlayViewportRenderScale),
+            minScale,
+            maxScale);
+        foreach (float step in SheetOverlayRenderScaleSteps)
         {
             if (desired <= step)
                 return Math.Min(step, maxScale);
@@ -175,6 +203,7 @@ public static class ViewportRenderPolicy
 
     public static bool ShouldUseDetailRenderPrefetch(float zoom, bool isFastNavigating) =>
         DetailRenderPrefetchEnabled &&
+        string.Equals(QualityMode, MaxQualityMode, StringComparison.Ordinal) &&
         !isFastNavigating &&
         zoom >= DetailRenderPrefetchMinZoom;
 
@@ -188,6 +217,19 @@ public static class ViewportRenderPolicy
             return CurrentQuality.ResponsiveMaxScale;
 
         float budgetScale = MathF.Sqrt(CurrentQuality.ResponsiveMaxPixels / pagePoints);
+        return Math.Clamp(budgetScale, ResponsiveMinRenderScale, CurrentQuality.ResponsiveMaxScale);
+    }
+
+    private static float SheetOverlayPixelBudgetMaxRenderScale(float pageWidthPt, float pageHeightPt)
+    {
+        if (pageWidthPt <= 0 || pageHeightPt <= 0)
+            return CurrentQuality.ResponsiveMaxScale;
+
+        float pagePoints = pageWidthPt * pageHeightPt;
+        if (pagePoints <= 0)
+            return CurrentQuality.ResponsiveMaxScale;
+
+        float budgetScale = MathF.Sqrt(SheetOverlayMaxRenderPixels / pagePoints);
         return Math.Clamp(budgetScale, ResponsiveMinRenderScale, CurrentQuality.ResponsiveMaxScale);
     }
 
@@ -213,7 +255,7 @@ public static class ViewportRenderPolicy
         bool fastNavigationFrame,
         bool isOverlayEditing)
     {
-        return true;
+        return !fastNavigationFrame || isOverlayEditing;
     }
 
     public static bool ShouldDrawMeasurementGeometry(

@@ -30,6 +30,7 @@ public sealed partial class PdfViewport
         _panX  = pdfX - screenX / _zoom;
         _panY  = pdfY - screenY / _zoom;
         ScheduleRerenderForZoom(force: false);
+        MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
         PostStatus($"Zoom: {_zoom * 100:F0}%");
     }
@@ -37,6 +38,7 @@ public sealed partial class PdfViewport
     private void BeginFastNavigation()
     {
         _isFastNavigating = true;
+        _lastFastNavigationAt = DateTime.UtcNow;
         _navigationIdleTimer.Stop();
         _navigationIdleTimer.Start();
     }
@@ -48,13 +50,15 @@ public sealed partial class PdfViewport
 
         _navigationIdleTimer.Stop();
         _isFastNavigating = false;
+        MaybeRequestSheetOverlayRenderScaleRefresh();
         QueueDetailRenderIfNeeded(force: false);
         RequestRepaint();
     }
 
     private bool IsFastNavigationFrame(int activeMeasurementCount)
     {
-        bool hasBlockingInteraction =
+        bool hasInteractiveMotion =
+            _isFastNavigating ||
             _draggingMeasurement ||
             _draggingVertex ||
             _draggingAnnotation ||
@@ -62,13 +66,17 @@ public sealed partial class PdfViewport
             _draggingTransformScale ||
             _draggingTransformRotate ||
             _boxSelecting ||
+            _aiCropNoteDragging ||
+            IsSheetOverlayPointEditing;
+
+        bool hasBlockingInteraction =
             _drawPts.Count > 0 ||
             _scalePts.Count > 0 ||
             _joistDirectionMeasurement != null;
 
         return ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             SimplifyNavigationRendering,
-            _isFastNavigating,
+            hasInteractiveMotion,
             _zoom,
             activeMeasurementCount,
             hasBlockingInteraction);

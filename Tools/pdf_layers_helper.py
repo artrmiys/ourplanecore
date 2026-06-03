@@ -40,8 +40,12 @@ AI_ALLOWED_SCALES = [
     '1" = 50\'0"',
     '1" = 100\'0"',
 ]
-AI_SCALE_SUFFIXES = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw", "shw"}
-AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t"}
+AI_SCALE_SUFFIXES = {
+    "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th",
+    "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw", "shw",
+    "fr n", "df", "wt pl", "fl pl", "u sc", "elev sec", "str sec", "d sec",
+}
+AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t", "w d sc", "f d", "wd d", "jamb d"}
 SHEET_PREFIXES = {"a", "ar", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l", "id", "fp", "fa", "fs"}
 SHEET_LABEL_RE = re.compile(
     r"\b([A-Z]{1,3}-?\d{1,4}(?:\.(?:R\d+[A-Z]?|[0-9]?U\d+[A-Z]?|\d+[A-Z]{0,2}))?[A-Z]{0,2})\b",
@@ -333,6 +337,102 @@ def _clean_sheet_title(title: str | None) -> str:
     source = re.sub(r"\b(?:scale|revisions?|project|date|drawn|checked)\b:?.*", "", source, flags=re.IGNORECASE)
     source = re.sub(r"\s+", " ", source).strip(" -:|")
     return source
+
+
+def _title_rule_text(value: str | None) -> str:
+    source = (value or "").lower()
+    source = source.replace("&", " and ")
+    source = re.sub(r"[/_+-]+", " ", source)
+    source = re.sub(r"\s+", " ", source)
+    return source.strip()
+
+
+def _is_title_block_noise_line(line: str, sheet_label: str | None) -> bool:
+    clean = re.sub(r"\s+", " ", (line or "").strip())
+    if not clean:
+        return True
+    lower = clean.lower().strip(" :")
+    if sheet_label and _sheet_display_key(clean) == _sheet_display_key(sheet_label):
+        return True
+    if lower in {
+        "true", "north", "plan", "project", "location", "key plan", "sheet",
+        "sheet no", "sheet no.", "revisions", "owner project no", "(owner) project no",
+        "no", "date", "description", "scale", "drawn", "checked", "civil",
+        "structural", "landscape", "general contractor", "electrical",
+        "communications", "mechanical", "architectural", "set",
+    }:
+        return True
+    if re.fullmatch(r"\d+(?:[./-]\d+)*", lower):
+        return True
+    if re.fullmatch(r"[a-z]{1,3}\d{1,4}(?:\.\d+)?[a-z]?", lower):
+        return True
+    if re.search(r"(?:telephone|facsimile|zastudios\.com|project\s+no|hec\s+project\s+no)", lower):
+        return True
+    if re.search(r"(?:sturgeon|sturgen)\s+bay|milwaukee|multi\s+family|housing|construction\s+documents|bid\s+set", lower):
+        return True
+    if re.search(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\bmay\s+\d{1,2},\s+\d{4}\b", lower):
+        return True
+    if "=" in clean:
+        return True
+    if re.fullmatch(r"\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?\s*\"?", clean):
+        return True
+    if lower in {"as indicated", "nts", "not to scale"}:
+        return True
+    return False
+
+
+def _extract_title_from_sheet_no_lines(text: str, sheet_label: str | None) -> str:
+    lines = [re.sub(r"\s+", " ", line).strip() for line in (text or "").splitlines()]
+    lines = [line for line in lines if line]
+    if not lines or not sheet_label:
+        return ""
+
+    sheet_no_index = next(
+        (index for index, line in enumerate(lines) if re.match(r"^sheet\s+no\.?:?$", line, flags=re.IGNORECASE)),
+        -1,
+    )
+    if sheet_no_index < 0:
+        return ""
+
+    label_key = _sheet_display_key(sheet_label)
+    label_index = next(
+        (
+            index
+            for index in range(sheet_no_index + 1, len(lines))
+            if _sheet_display_key(lines[index]) == label_key
+        ),
+        -1,
+    )
+    if label_index < 0:
+        return ""
+
+    description_index = next(
+        (
+            index
+            for index in range(sheet_no_index + 1, label_index)
+            if lines[index].strip().lower().rstrip(":") == "description"
+        ),
+        -1,
+    )
+    if description_index < 0 or description_index >= label_index:
+        return ""
+
+    title_lines: list[str] = []
+    for line in lines[description_index + 1:label_index]:
+        if _is_title_block_noise_line(line, sheet_label):
+            continue
+        title_line = re.sub(
+            r"^\s*\d+(?:\s+\d+/\d+|-\d+/\d+|/\d+)?\s*\"?\s+",
+            "",
+            line,
+        ).strip()
+        if title_line:
+            title_lines.append(title_line)
+
+    title = _clean_sheet_title(" ".join(title_lines))
+    if len(title) >= 3:
+        return title
+    return ""
 
 
 def _filename_title(pdf_path: str, sheet_label: str | None) -> str:
@@ -714,8 +814,11 @@ def _detect_suffix(
     has_schedule: bool,
     sheet_label: str | None = None,
     has_shear: bool = False,
+    body_text: str | None = None,
 ) -> tuple[str | None, bool]:
-    title = (sheet_title or "").lower()
+    title = _title_rule_text(sheet_title)
+    body = _title_rule_text(body_text)
+    combined = f"{title} {body}".strip()
     label = (sheet_label or "").strip().lower().replace("-", "")
     is_arch = label.startswith("a")
     is_struct = label.startswith("s")
@@ -732,12 +835,51 @@ def _detect_suffix(
         8: "8th",
     }
 
+    if is_struct and ("general notes" in title or re.search(r"\bnotes?\b", title)):
+        return "n", True
+    if "life safety" in title or "fire rating" in title or "fire rated" in title or "fire resistance" in title:
+        return "fr n", False
+    if "draft stopping" in title and "ul" not in title:
+        return "df", False
+    if "ul" in title and ("draft stopping" in title or "assembl" in title):
+        return "wt", True
+    if "door schedule" in title and ("window type" in title or "door type" in title):
+        return "w d sc", True
+    if "room finish" in title and "schedule" in title:
+        return "sc", True
+    if "accessible unit type" in title or ("unit type" in title and "plan" not in title):
+        return "u sc", False
+    if "overall floor plan" in title:
+        return "fl pl", False
+    if "wall type" in title and "plan" in title:
+        return "wt pl", False
+    if "interior elevation" in title:
+        return "f", False
+    if "elevator" in title and "section" in title:
+        return "elev sec", False
+    if "stair" in title and "section" in title:
+        return "str sec", False
+    if "wall section" in title:
+        return "d sec", False
+    if is_arch and sheet_num == 700 and "miscellaneous detail" in title:
+        return "jamb d", True
+    if is_struct and (has_details or _has_detail_word(title)):
+        if sheet_num == 500:
+            return "f d", True
+        if sheet_num in {510, 511, 512} or any(token in combined for token in (
+            "wood", "framing", "joist", "stud wall", "beam", "header", "sheathing",
+            "holdown", "hold down", "microlam", "lvl", "truss",
+        )):
+            return "wd d", True
+        if any(token in combined for token in ("foundation", "footing", "slab on grade", "engineered fill")):
+            return "f d", True
+        return "d", True
+    if is_struct and (has_shear or _has_shear_word(combined)) and (
+        has_schedule or "schedule" in title or sheet_num == 902
+    ):
+        return "shw", True
     if has_shear or _has_shear_word(title):
         return "shw", bool(has_details or has_schedule)
-    if is_struct and (has_details or _has_detail_word(title)):
-        return "d", True
-    if has_schedule or "schedule" in title or "schedules" in title:
-        return "sc", True
     if (
         "general notes" in title
         or re.search(r"\bnotes?\b", title)
@@ -753,6 +895,8 @@ def _detect_suffix(
         or "special inspections" in title
     ):
         return "n", True
+    if has_schedule or "schedule" in title or "schedules" in title:
+        return "sc", True
     if "wall type" in title or "wall types" in title or "partition type" in title or "partition types" in title:
         return "wt", True
     if (
@@ -2305,6 +2449,7 @@ def sheetmeta_data(req: dict) -> dict:
     sheet_display_key = _sheet_display_key(sheet_label)
     filename_title = _filename_title(pdf_path, sheet_label or filename_label) if doc.page_count <= 1 or filename_label else ""
     sheet_title = (
+        _extract_title_from_sheet_no_lines(text, sheet_label) or
         _extract_title_near_sheet_label(words, prominent_label_word, max_x, max_y) or
         _extract_title_from_title_block(words, sheet_label, max_x, max_y)
         or _extract_pdf_title(words, text, sheet_label, bottom_y0, max_x, max_y)
@@ -2334,7 +2479,7 @@ def sheetmeta_data(req: dict) -> dict:
         and bool(re.search(r"\bbracing\b", suffix_text, flags=re.IGNORECASE))
     )
     has_shear = has_title_shear or has_bracing_shear
-    suffix, skip_scale = _detect_suffix(suffix_text, has_details, has_schedule, sheet_label, has_shear=has_shear)
+    suffix, skip_scale = _detect_suffix(suffix_text, has_details, has_schedule, sheet_label, has_shear=has_shear, body_text=text)
 
     selected_scale = title_scale
     if title_scale_raw == "NTS":

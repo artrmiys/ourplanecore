@@ -323,6 +323,7 @@ public partial class MainWindow : Window
         _viewport.BeamMeasurementCompleted += OnBeamMeasurementCompleted;
         _viewport.OpeningMeasurementCompleted += OnOpeningMeasurementCompleted;
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChanged;
+        _viewport.SheetOverlayRenderScaleRefreshRequested += OnSheetOverlayRenderScaleRefreshRequested;
         ViewportSurfaceHost.Children.Add(_viewport);
 
         _toolBtns = new Dictionary<string, RadioButton>

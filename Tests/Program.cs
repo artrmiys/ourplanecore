@@ -16,6 +16,8 @@ var tests = new List<(string Name, Action Run)>
     ("measurement line uses own scale first", MeasurementLineUsesOwnScaleFirst),
     ("measurement area uses fallback scale", MeasurementAreaUsesFallbackScale),
     ("measurement area subtracts holes", MeasurementAreaSubtractsHoles),
+    ("area cut inside keeps hole behavior", AreaCutInsideKeepsHoleBehavior),
+    ("area cut box clips at area edge", AreaCutBoxClipsAtAreaEdge),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
@@ -26,6 +28,12 @@ var tests = new List<(string Name, Action Run)>
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
+    ("measurement merge moves segment into target takeoff", MeasurementMergeMovesSegmentIntoTargetTakeoff),
+    ("measurement merge rejects mixed target type", MeasurementMergeRejectsMixedTargetType),
+    ("measurement merge coalesces touching line sections", MeasurementMergeCoalescesTouchingLineSections),
+    ("measurement merge keeps separated line sections", MeasurementMergeKeepsSeparatedLineSections),
+    ("measurement merge splices overlapping area sections", MeasurementMergeSplicesOverlappingAreaSections),
+    ("measurement merge keeps separated area sections", MeasurementMergeKeepsSeparatedAreaSections),
     ("beam length rounds up below and above eight feet", BeamLengthRoundsUpBelowAndAboveEightFeet),
     ("beam default name keeps size suffix outside selection", BeamDefaultNameKeepsSizeSuffixOutsideSelection),
     ("opening size formats one decimal", OpeningSizeFormatsOneDecimal),
@@ -185,6 +193,7 @@ var tests = new List<(string Name, Action Run)>
     ("count display symbol persists on takeoff and measurements", StorageTests.CountDisplaySymbolPersistsOnTakeoffAndMeasurements),
     ("takeoff corrupt measurements json is quarantined", StorageTests.TakeoffCorruptMeasurementsJsonIsQuarantined),
     ("pdf metadata page name and scale gate", PdfMetadataPageNameAndScaleGate),
+    ("pdf metadata hides duplicate marker from visible names", PdfMetadataHidesDuplicateMarkerFromVisibleNames),
     ("pdf metadata leaves unknown page names blank", PdfMetadataLeavesUnknownPageNamesBlank),
     ("pdf metadata preserves dotted sheet labels", PdfMetadataPreservesDottedSheetLabels),
     ("pdf scale parser handles architectural scale", PdfScaleParserHandlesArchitecturalScale),
@@ -236,6 +245,7 @@ var tests = new List<(string Name, Action Run)>
     ("job recovery normalizes snapshot reasons", JobRecoveryNormalizesSnapshotReasons),
     ("job recovery filters metadata files", JobRecoveryFiltersMetadataFiles),
     ("job recovery lock writes reads and clears", JobRecoveryLockWritesReadsAndClears),
+    ("job recovery treats live foreign lock as active", JobRecoveryTreatsLiveForeignLockAsActive),
     ("job recovery snapshot copies metadata only", JobRecoverySnapshotCopiesMetadataOnly),
     ("job recovery snapshot pruning keeps newest", JobRecoverySnapshotPruningKeepsNewest),
     ("app settings job roots dedupe", AppSettingsJobRootsDedupe),
@@ -269,9 +279,9 @@ var tests = new List<(string Name, Action Run)>
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
     ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
     ("viewport background tints comfort colors", ViewportBackgroundTintsComfortColors),
-    ("viewport high zoom respects fast navigation toggle", ViewportHighZoomRespectsFastNavigationToggle),
-    ("viewport far zoom respects fast navigation toggle", ViewportFarZoomRespectsFastNavigationToggle),
-    ("viewport dense page respects fast navigation toggle", ViewportDensePageRespectsFastNavigationToggle),
+    ("viewport high zoom uses responsive navigation frame", ViewportHighZoomUsesResponsiveNavigationFrame),
+    ("viewport far zoom uses responsive navigation frame", ViewportFarZoomUsesResponsiveNavigationFrame),
+    ("viewport dense page uses responsive navigation frame", ViewportDensePageUsesResponsiveNavigationFrame),
     ("viewport editing blocks fast navigation frame", ViewportEditingBlocksFastNavigationFrame),
     ("viewport rendering preserves dpi matrix", TakeoffsTreeRegressionTests.ViewportRenderingPreservesDpiMatrix),
     ("viewport visible geometry padding is screen relative", ViewportVisibleGeometryPaddingIsScreenRelative),
@@ -405,6 +415,87 @@ static void MeasurementAreaSubtractsHoles()
 
     AssertClose(88.0, measurement.AreaValue(1), "area should subtract the 3x4 hole");
 }
+
+static void AreaCutInsideKeepsHoleBehavior()
+{
+    var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
+    List<SKPoint> cut =
+    [
+        new SKPoint(2, 2),
+        new SKPoint(5, 2),
+        new SKPoint(5, 6),
+        new SKPoint(2, 6),
+    ];
+
+    AreaBooleanGeometry geometry = BuildAreaCutGeometryForTest(measurement, cut);
+    AssertEqual("4", geometry.Points.Count.ToString(), "inside cut should keep the original four-point outer area");
+    AssertEqual("1", geometry.Holes.Count.ToString(), "inside cut should be stored as one hole");
+    AssertClose(0, geometry.Points[0].X, "inside cut keeps outer start x");
+
+    measurement.Points = geometry.Points;
+    measurement.Holes = geometry.Holes;
+    AssertClose(88.0, measurement.AreaValue(1), "inside area cut should subtract the hole exactly");
+}
+
+static void AreaCutBoxClipsAtAreaEdge()
+{
+    var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
+    measurement.JoistEnabled = true;
+    measurement.JoistDirectionLocked = true;
+    measurement.JoistSpacingInches = 24;
+    measurement.JoistDirectionDegrees = 0;
+    List<SKPoint> cut =
+    [
+        new SKPoint(8, 2),
+        new SKPoint(12, 2),
+        new SKPoint(12, 5),
+        new SKPoint(8, 5),
+    ];
+
+    AreaBooleanGeometry geometry = BuildAreaCutGeometryForTest(measurement, cut);
+    AssertEqual("0", geometry.Holes.Count.ToString(), "edge cut should bite the outer contour instead of adding an inner hole");
+    AssertTrue(geometry.Points.Count > 4, "edge cut should add vertices to the outer contour");
+    AssertTrue(geometry.Points.All(point => point.X <= 10.001f), "edge cut contour must not extend outside the area edge");
+
+    measurement.Points = geometry.Points;
+    measurement.Holes = geometry.Holes;
+    AssertClose(94.0, measurement.AreaValue(1), "area cut at edge should subtract only the overlap");
+
+    JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(measurement, 1);
+    AssertClose(94.0, layout.AreaMetersSquared, "joist area should subtract the same clipped edge cut");
+}
+
+static AreaBooleanGeometry BuildAreaCutGeometryForTest(Measurement measurement, IReadOnlyList<SKPoint> cut)
+{
+    MethodInfo method = typeof(PdfViewport).GetMethod(
+        "TryBuildAreaCutGeometry",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("Area cut geometry helper was not found.");
+
+    object?[] args = [measurement, cut, null, ""];
+    bool ok = (bool)(method.Invoke(null, args) ?? false);
+    if (!ok)
+        throw new InvalidOperationException(args[3]?.ToString() ?? "Area cut edge clip failed.");
+
+    return (AreaBooleanGeometry)(args[2]
+        ?? throw new InvalidOperationException("Area cut helper returned no geometry."));
+}
+
+static Measurement SimpleAreaMeasurement(float left, float top, float right, float bottom, string takeoffFolder = "") =>
+    new()
+    {
+        MType = "area",
+        PageFolder = @"C:\job\Pages\A101",
+        TakeoffFolder = takeoffFolder,
+        ScaleMetersPerPt = 1,
+        Points =
+        [
+            new SKPoint(left, top),
+            new SKPoint(right, top),
+            new SKPoint(right, bottom),
+            new SKPoint(left, bottom),
+        ],
+    };
 
 static void PdfExportAreaPathCutsHoles()
 {
@@ -807,6 +898,255 @@ static void TakeoffItemNormalizesCountTotals()
     });
 
     AssertEqual("2 ea", item.TotalLabel(0), "count total label");
+}
+
+static void MeasurementMergeMovesSegmentIntoTargetTakeoff()
+{
+    var source = new TakeoffItem
+    {
+        Name = "Source Area",
+        FolderPath = @"C:\job\Takeoffs\Source",
+        MeasurementType = "area",
+        Color = "#111111",
+        IsJoistTakeoff = true,
+        JoistSpacingInches = 24,
+        JoistDirectionDegrees = 90,
+    };
+    var target = new TakeoffItem
+    {
+        Name = "Target Area",
+        FolderPath = @"C:\job\Takeoffs\Target",
+        MeasurementType = "area",
+        Color = "#22AAFF",
+    };
+    var measurement = new Measurement
+    {
+        MType = "area",
+        Color = source.Color,
+        PageFolder = @"C:\job\Pages\A101",
+        TakeoffFolder = source.FolderPath,
+        ScaleMetersPerPt = 0.25,
+        Points =
+        [
+            new SKPoint(0, 0),
+            new SKPoint(10, 0),
+            new SKPoint(10, 10),
+            new SKPoint(0, 10),
+        ],
+        Holes =
+        [
+            [
+                new SKPoint(2, 2),
+                new SKPoint(4, 2),
+                new SKPoint(4, 4),
+                new SKPoint(2, 4),
+            ],
+        ],
+    };
+    source.Measurements.Add(measurement);
+
+    MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
+        [source, target],
+        [measurement],
+        target);
+
+    AssertEqual("0", source.Measurements.Count.ToString(), "source should lose moved measurement");
+    AssertEqual("1", target.Measurements.Count.ToString(), "target should receive moved measurement");
+    AssertTrue(ReferenceEquals(measurement, target.Measurements[0]), "move should preserve the measurement object");
+    AssertEqual(target.FolderPath, measurement.TakeoffFolder, "moved measurement folder");
+    AssertEqual(target.Color, measurement.Color, "moved measurement color");
+    AssertEqual(@"C:\job\Pages\A101", measurement.PageFolder, "moved measurement page");
+    AssertClose(0.25, measurement.ScaleMetersPerPt, "moved measurement scale");
+    AssertEqual("1", measurement.Holes.Count.ToString(), "moved measurement holes");
+    AssertEqual("2", result.ChangedItems.Count.ToString(), "changed item count");
+    AssertEqual("1", result.PageFolders.Count.ToString(), "changed page count");
+}
+
+static void MeasurementMergeRejectsMixedTargetType()
+{
+    var source = new TakeoffItem
+    {
+        Name = "Source Line",
+        FolderPath = @"C:\job\Takeoffs\Source",
+        MeasurementType = "line",
+    };
+    var target = new TakeoffItem
+    {
+        Name = "Target Area",
+        FolderPath = @"C:\job\Takeoffs\Target",
+        MeasurementType = "area",
+    };
+    var measurement = new Measurement
+    {
+        MType = "line",
+        TakeoffFolder = source.FolderPath,
+        Points = [new SKPoint(0, 0), new SKPoint(1, 1)],
+    };
+    source.Measurements.Add(measurement);
+
+    bool rejected = false;
+    try
+    {
+        MeasurementMergeSplitService.MoveMeasurementsToTakeoff([source, target], [measurement], target);
+    }
+    catch (InvalidOperationException)
+    {
+        rejected = true;
+    }
+
+    AssertTrue(rejected, "line segment should not merge into area target");
+}
+
+static void MeasurementMergeCoalescesTouchingLineSections()
+{
+    var source = new TakeoffItem
+    {
+        Name = "Source Line",
+        FolderPath = @"C:\job\Takeoffs\Source",
+        MeasurementType = "line",
+        Color = "#111111",
+    };
+    var target = new TakeoffItem
+    {
+        Name = "Target Line",
+        FolderPath = @"C:\job\Takeoffs\Target",
+        MeasurementType = "line",
+        Color = "#22AAFF",
+    };
+    var existing = MergeSplitLine("existing", target.FolderPath, 0, 0, 10, 0);
+    var moved = MergeSplitLine("moved", source.FolderPath, 10, 0, 20, 0);
+    target.Measurements.Add(existing);
+    source.Measurements.Add(moved);
+
+    MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
+        [source, target],
+        [moved],
+        target);
+
+    AssertEqual("0", source.Measurements.Count.ToString(), "source line should move out");
+    AssertEqual("1", target.Measurements.Count.ToString(), "touching lines should coalesce into one section");
+    AssertTrue(ReferenceEquals(existing, target.Measurements[0]), "existing target line should survive coalesce");
+    AssertEqual("2", existing.Points.Count.ToString(), "coalesced line should have two endpoints");
+    AssertClose(0, existing.Points[0].X, "coalesced start x");
+    AssertClose(20, existing.Points[1].X, "coalesced end x");
+    AssertEqual("1", result.SelectedMeasurements.Count.ToString(), "selection should point at survivor");
+    AssertTrue(ReferenceEquals(existing, result.SelectedMeasurements[0]), "selection should use surviving line");
+    AssertEqual("1", result.CoalescedLineCount.ToString(), "coalesced line count");
+}
+
+static void MeasurementMergeKeepsSeparatedLineSections()
+{
+    var source = new TakeoffItem
+    {
+        Name = "Source Line",
+        FolderPath = @"C:\job\Takeoffs\Source",
+        MeasurementType = "line",
+        Color = "#111111",
+    };
+    var target = new TakeoffItem
+    {
+        Name = "Target Line",
+        FolderPath = @"C:\job\Takeoffs\Target",
+        MeasurementType = "line",
+        Color = "#22AAFF",
+    };
+    var existing = MergeSplitLine("existing", target.FolderPath, 0, 0, 10, 0);
+    var moved = MergeSplitLine("moved", source.FolderPath, 15, 0, 25, 0);
+    target.Measurements.Add(existing);
+    source.Measurements.Add(moved);
+
+    MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
+        [source, target],
+        [moved],
+        target);
+
+    AssertEqual("0", source.Measurements.Count.ToString(), "source line should move out");
+    AssertEqual("2", target.Measurements.Count.ToString(), "separated lines should remain separate sections");
+    AssertTrue(target.Measurements.Contains(moved), "moved line should remain in target");
+    AssertEqual("1", result.SelectedMeasurements.Count.ToString(), "selection should keep moved line");
+    AssertTrue(ReferenceEquals(moved, result.SelectedMeasurements[0]), "selection should use moved line");
+    AssertEqual("0", result.CoalescedLineCount.ToString(), "no coalesce count");
+}
+
+static Measurement MergeSplitLine(string id, string takeoffFolder, float x1, float y1, float x2, float y2) =>
+    new()
+    {
+        Id = id,
+        MType = "line",
+        PageFolder = @"C:\job\Pages\A101",
+        TakeoffFolder = takeoffFolder,
+        ScaleMetersPerPt = 0.25,
+        Points = [new SKPoint(x1, y1), new SKPoint(x2, y2)],
+    };
+
+static void MeasurementMergeSplicesOverlappingAreaSections()
+{
+    var source = new TakeoffItem
+    {
+        Name = "Source Area",
+        FolderPath = @"C:\job\Takeoffs\Source",
+        MeasurementType = "area",
+        Color = "#111111",
+    };
+    var target = new TakeoffItem
+    {
+        Name = "Target Area",
+        FolderPath = @"C:\job\Takeoffs\Target",
+        MeasurementType = "area",
+        Color = "#22AAFF",
+    };
+    var existing = SimpleAreaMeasurement(0, 0, 10, 10, target.FolderPath);
+    var moved = SimpleAreaMeasurement(5, 0, 15, 10, source.FolderPath);
+    target.Measurements.Add(existing);
+    source.Measurements.Add(moved);
+
+    MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
+        [source, target],
+        [moved],
+        target);
+
+    AssertEqual("0", source.Measurements.Count.ToString(), "source area should move out");
+    AssertEqual("1", target.Measurements.Count.ToString(), "overlapping areas should splice into one section");
+    AssertTrue(ReferenceEquals(existing, target.Measurements[0]), "existing target area should survive splice");
+    AssertClose(150.0, existing.AreaValue(1), "spliced area should be seamless union area");
+    AssertEqual("0", existing.Holes.Count.ToString(), "simple overlapping area splice should have no holes");
+    AssertEqual("1", result.SelectedMeasurements.Count.ToString(), "selection should point at area survivor");
+    AssertTrue(ReferenceEquals(existing, result.SelectedMeasurements[0]), "selection should use surviving area");
+    AssertEqual("1", result.CoalescedAreaCount.ToString(), "coalesced area count");
+}
+
+static void MeasurementMergeKeepsSeparatedAreaSections()
+{
+    var source = new TakeoffItem
+    {
+        Name = "Source Area",
+        FolderPath = @"C:\job\Takeoffs\Source",
+        MeasurementType = "area",
+        Color = "#111111",
+    };
+    var target = new TakeoffItem
+    {
+        Name = "Target Area",
+        FolderPath = @"C:\job\Takeoffs\Target",
+        MeasurementType = "area",
+        Color = "#22AAFF",
+    };
+    var existing = SimpleAreaMeasurement(0, 0, 10, 10, target.FolderPath);
+    var moved = SimpleAreaMeasurement(15, 0, 25, 10, source.FolderPath);
+    target.Measurements.Add(existing);
+    source.Measurements.Add(moved);
+
+    MeasurementMoveResult result = MeasurementMergeSplitService.MoveMeasurementsToTakeoff(
+        [source, target],
+        [moved],
+        target);
+
+    AssertEqual("0", source.Measurements.Count.ToString(), "source area should move out");
+    AssertEqual("2", target.Measurements.Count.ToString(), "separated areas should remain separate sections");
+    AssertTrue(target.Measurements.Contains(moved), "moved area should remain in target");
+    AssertEqual("1", result.SelectedMeasurements.Count.ToString(), "selection should keep moved area");
+    AssertTrue(ReferenceEquals(moved, result.SelectedMeasurements[0]), "selection should use moved area");
+    AssertEqual("0", result.CoalescedAreaCount.ToString(), "no area splice count");
 }
 
 static void BeamLengthRoundsUpBelowAndAboveEightFeet()
@@ -2238,6 +2578,20 @@ static void PdfMetadataPageNameAndScaleGate()
     AssertFalse(metadata.CanApplyScale(), "skip scale blocks scale apply");
 }
 
+static void PdfMetadataHidesDuplicateMarkerFromVisibleNames()
+{
+    var metadata = new PdfSheetMetadata
+    {
+        SheetKey = "s200",
+        Suffix = "f",
+        RenameCandidate = "s200 f (2)",
+    };
+
+    AssertEqual("s200 f", metadata.ProposedPageName(), "duplicate marker should not be visible in proposed name");
+    AssertEqual("s200 f", PdfSheetMetadataService.VisibleSheetDisplayName("s200 f (2)"), "visible sheet name strips duplicate marker");
+    AssertEqual("dem (2) 2x4", PdfSheetMetadataService.VisibleSheetDisplayName("dem (2) 2x4"), "embedded takeoff-style marker is preserved");
+}
+
 static void PdfMetadataLeavesUnknownPageNamesBlank()
 {
     var metadata = new PdfSheetMetadata();
@@ -2914,6 +3268,43 @@ static void JobRecoveryLockWritesReadsAndClears()
     });
 }
 
+static void JobRecoveryTreatsLiveForeignLockAsActive()
+{
+    using System.Diagnostics.Process process = StartShortLivedSleepProcess();
+    try
+    {
+        var info = new JobRecoveryLockInfo { ProcessId = process.Id };
+        AssertFalse(JobRecoveryService.IsCurrentProcessLock(info), "foreign lock should not be current");
+        AssertFalse(JobRecoveryService.IsStaleLock(info), "running foreign lock should not be stale");
+        AssertTrue(JobRecoveryService.IsStaleLock(new JobRecoveryLockInfo { ProcessId = -1 }), "invalid lock should be stale");
+    }
+    finally
+    {
+        if (!process.HasExited)
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(2000);
+        }
+    }
+}
+
+static System.Diagnostics.Process StartShortLivedSleepProcess()
+{
+    var startInfo = new System.Diagnostics.ProcessStartInfo
+    {
+        FileName = "powershell.exe",
+        Arguments = "-NoProfile -Command \"Start-Sleep -Seconds 30\"",
+        CreateNoWindow = true,
+        UseShellExecute = false,
+    };
+    System.Diagnostics.Process process = System.Diagnostics.Process.Start(startInfo)
+        ?? throw new InvalidOperationException("Failed to start sleep process for job recovery test.");
+    Thread.Sleep(200);
+    if (process.HasExited)
+        throw new InvalidOperationException("Sleep process exited before job recovery test could inspect it.");
+    return process;
+}
+
 static void JobRecoverySnapshotCopiesMetadataOnly()
 {
     WithTempJob("Recovery Snapshot", job =>
@@ -3424,6 +3815,8 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertClose(1.0, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom uses the responsive clarity floor");
         AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
         AssertClose(3.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high quality mode uses a RAM-backed 3x responsive render cap");
+        AssertClose(2.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(0.4f), "sheet overlay keeps a 2x minimum source render");
+        AssertClose(3.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(2.6f), "sheet overlay upgrades to the high quality 3x source render at work zoom");
         AssertClose(
             3.0,
             ViewportRenderPolicy.SelectRenderScale(8.0f, steps, pageWidthPt: 2592f, pageHeightPt: 3456f),
@@ -3432,9 +3825,14 @@ static void ViewportRenderScaleChoosesNextQualityStep()
 
         ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.BalancedQualityMode);
         AssertClose(2.25, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "balanced mode keeps the old responsive render cap");
+        AssertClose(2.25, ViewportRenderPolicy.SelectSheetOverlayRenderScale(4.0f), "balanced mode caps sheet overlay refreshes below high quality");
 
         ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.MaxQualityMode);
         AssertClose(4.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "max mode uses the 4x RAM render cap");
+        AssertClose(4.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(3.5f, 612f, 792f), "max mode lets small sheet overlays reach 4x");
+        AssertTrue(
+            ViewportRenderPolicy.SelectSheetOverlayRenderScale(4.0f, 2592f, 1728f) < 3.5f,
+            "large sheet overlays should be capped by the overlay pixel budget instead of rendering an oversized bitmap");
 
         ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.HighQualityMode);
         AssertClose(
@@ -3457,7 +3855,7 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(1.0f),
             "deep zoom should rely on clipped detail once a normal base bitmap exists");
         AssertClose(
-            1.5,
+            1.4,
             ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
             "interactive detail render should cap below the viewport zoom to avoid long clip renders");
         AssertTrue(
@@ -3501,16 +3899,16 @@ static void ViewportBackgroundTintsComfortColors()
         "black paper uses dark tint alpha");
 }
 
-static void ViewportHighZoomRespectsFastNavigationToggle()
+static void ViewportHighZoomUsesResponsiveNavigationFrame()
 {
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold,
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
-        "disabled fast navigation should keep full high-zoom frames");
+        "high-zoom navigation should stay responsive even when optional visual simplification is off");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
@@ -3525,26 +3923,26 @@ static void ViewportHighZoomRespectsFastNavigationToggle()
         ViewportConstants.NavigationIdleMs > ViewportConstants.ZoomRerenderDelayMs,
         "high-zoom pan bursts should not be treated as idle before the zoom rerender timer settles");
 
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: true,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.HighZoomFastFrameThreshold - 0.1f,
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
-        "lower zoom should stay full frame when no fast-frame trigger is active");
+        "ordinary pan should also stay responsive instead of waiting for a full-quality frame");
 }
 
-static void ViewportFarZoomRespectsFastNavigationToggle()
+static void ViewportFarZoomUsesResponsiveNavigationFrame()
 {
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: ViewportRenderPolicy.FarZoomFastFrameThreshold,
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
-        "disabled fast navigation should keep full far-zoom frames");
+        "far-zoom navigation should stay responsive even when optional visual simplification is off");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
@@ -3556,16 +3954,16 @@ static void ViewportFarZoomRespectsFastNavigationToggle()
         "enabled fast navigation should use fast frames at far zoom");
 }
 
-static void ViewportDensePageRespectsFastNavigationToggle()
+static void ViewportDensePageUsesResponsiveNavigationFrame()
 {
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
             simplifyNavigationRendering: false,
             isFastNavigating: true,
             zoom: 1.0f,
             activePageMeasurementCount: ViewportRenderPolicy.DenseNavigationFastFrameThreshold,
             hasBlockingInteraction: false),
-        "disabled fast navigation should keep full dense-page frames");
+        "dense-page navigation should stay responsive even when optional visual simplification is off");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
@@ -3660,11 +4058,11 @@ static void ViewportMeasurementLodLimitsDenseDetails()
 
 static void ViewportLodHidesExpensiveLayersDuringFastFrames()
 {
-    AssertTrue(
+    AssertFalse(
         ViewportRenderPolicy.ShouldDrawSheetOverlay(
             fastNavigationFrame: true,
             isOverlayEditing: false),
-        "fast navigation should keep sheet overlays visible over detail renders");
+        "fast navigation should hide sheet overlays until idle unless the overlay is being edited");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldDrawSheetOverlay(

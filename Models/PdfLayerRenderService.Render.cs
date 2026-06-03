@@ -163,6 +163,31 @@ namespace OurPlaneCore;
                 highlightedLayers,
                 cachedLayers,
                 clipRect,
+                usePrefetchWorker: true,
+                out PdfLayerRenderResult result,
+                out string error);
+            return (ok, result, error);
+        });
+
+    public static Task<(bool Ok, PdfLayerRenderResult Result, string Error)> TryRenderIsolatedProcessAsync(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect = null) =>
+        Task.Run(() =>
+        {
+            bool ok = TryRenderDedicatedProcess(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                layerStates,
+                highlightedLayers,
+                cachedLayers,
+                clipRect,
+                usePrefetchWorker: false,
                 out PdfLayerRenderResult result,
                 out string error);
             return (ok, result, error);
@@ -176,6 +201,7 @@ namespace OurPlaneCore;
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
         SKRect? clipRect,
+        bool usePrefetchWorker,
         out PdfLayerRenderResult result,
         out string error)
     {
@@ -217,8 +243,12 @@ namespace OurPlaneCore;
                 Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
-            if (!TryInvokePrefetchWorker("render", request, out RenderResponse? response, out error) &&
-                !TryRunFileCommand("render", request, inputPath, outputPath, out response, out error))
+            RenderResponse? response;
+            bool invoked = usePrefetchWorker
+                ? TryInvokePrefetchWorker("render", request, out response, out error) ||
+                  TryRunFileCommand("render", request, inputPath, outputPath, out response, out error)
+                : TryRunFileCommand("render", request, inputPath, outputPath, out response, out error);
+            if (!invoked)
                 return false;
             if (response == null || !response.Ok)
             {

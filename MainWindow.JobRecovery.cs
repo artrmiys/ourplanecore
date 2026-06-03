@@ -17,7 +17,7 @@ public partial class MainWindow
             SaveCurrentPageScale();
             SaveCurrentPageAnnotations();
             SaveJobRecoverySnapshot("before_switch");
-            JobRecoveryService.ClearLock(_currentJob);
+            ClearJobRecoveryLock();
         }
         catch (Exception ex)
         {
@@ -32,19 +32,28 @@ public partial class MainWindow
 
         try
         {
-            if (JobRecoveryService.TryReadLock(_currentJob, out JobRecoveryLockInfo info) &&
-                JobRecoveryService.IsStaleLock(info))
+            bool shouldWriteLock = true;
+            if (JobRecoveryService.TryReadLock(_currentJob, out JobRecoveryLockInfo info))
             {
-                var result = MessageBox.Show(
-                    "This job has a recovery marker from a previous session. Create a metadata snapshot before continuing?",
-                    "Job Recovery",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                if (result == MessageBoxResult.Yes)
-                    SaveJobRecoverySnapshot("recovery_marker");
+                if (JobRecoveryService.IsStaleLock(info))
+                {
+                    var result = MessageBox.Show(
+                        "This job has a recovery marker from a previous session. Create a metadata snapshot before continuing?",
+                        "Job Recovery",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+                    if (result == MessageBoxResult.Yes)
+                        SaveJobRecoverySnapshot("recovery_marker");
+                }
+                else if (!JobRecoveryService.IsCurrentProcessLock(info))
+                {
+                    shouldWriteLock = false;
+                    TxtStatus.Text = $"Job is already open in process {info.ProcessId}; recovery marker preserved.";
+                }
             }
 
-            JobRecoveryService.WriteLock(_currentJob);
+            if (shouldWriteLock)
+                JobRecoveryService.WriteLock(_currentJob);
         }
         catch (Exception ex)
         {
@@ -68,7 +77,7 @@ public partial class MainWindow
 
         try
         {
-            JobRecoveryService.ClearLock(_currentJob);
+            JobRecoveryService.TryClearLockForCurrentProcess(_currentJob);
         }
         catch (IOException)
         {

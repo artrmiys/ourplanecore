@@ -105,15 +105,16 @@ public sealed class PdfSheetMetadata
     public string ProposedPageName()
     {
         if (!string.IsNullOrWhiteSpace(RenameCandidate))
-            return RenameCandidate.Trim().ToLowerInvariant();
+            return PdfSheetMetadataService.VisibleSheetDisplayName(RenameCandidate).ToLowerInvariant();
 
         string key = EffectiveSheetKey.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(key))
             return "";
         string suffix = Suffix.Trim().ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(Suffix)
+        string proposed = string.IsNullOrWhiteSpace(Suffix)
             ? key
             : $"{key} {suffix}";
+        return PdfSheetMetadataService.VisibleSheetDisplayName(proposed);
     }
 
     public bool CanApplyScale() =>
@@ -123,6 +124,12 @@ public sealed class PdfSheetMetadata
 public static class PdfSheetMetadataService
 {
     private const double PdfPointMeters = ViewportConstants.PdfPointMeters;
+
+    public static string VisibleSheetDisplayName(string value)
+    {
+        string clean = Regex.Replace((value ?? "").Trim(), @"\s+", " ");
+        return Regex.Replace(clean, @"\s+\(\d+\)\s*$", "", RegexOptions.CultureInvariant).Trim();
+    }
 
     public static string FormatImperialScale(double scaleMetersPerPt)
     {
@@ -462,6 +469,7 @@ public static class PdfSheetMetadataService
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "1st", "2nd", "3rd", "4th", "5th", "rf", "f", "b", "sec", "el", "u", "v", "wt", "ft", "sv", "sw", "shw",
+            "fr n", "df", "wt pl", "fl pl", "u sc", "elev sec", "str sec", "d sec",
         }.Contains(suffix);
 
     public static SmartSheetLearningRecord BuildLearningRecord(
@@ -641,7 +649,7 @@ public static class PdfSheetMetadataService
 
     private static string NormalizeProposedPageName(string value)
     {
-        string compact = Regex.Replace((value ?? "").Trim(), @"\s+", " ");
+        string compact = VisibleSheetDisplayName(value);
         return string.IsNullOrWhiteSpace(compact)
             ? ""
             : compact.ToLowerInvariant();

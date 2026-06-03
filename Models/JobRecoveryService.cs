@@ -122,8 +122,23 @@ public static class JobRecoveryService
         }
     }
 
+    public static bool IsCurrentProcessLock(JobRecoveryLockInfo info) =>
+        info.ProcessId == Environment.ProcessId;
+
     public static bool IsStaleLock(JobRecoveryLockInfo info) =>
-        info.ProcessId <= 0 || info.ProcessId != Environment.ProcessId || !IsProcessRunning(info.ProcessId);
+        info.ProcessId <= 0 || !IsProcessRunning(info.ProcessId);
+
+    public static bool TryClearLockForCurrentProcess(OurPlaneCoreJob job)
+    {
+        if (!TryReadLock(job, out JobRecoveryLockInfo info))
+            return false;
+
+        if (!IsCurrentProcessLock(info))
+            return false;
+
+        ClearLock(job);
+        return true;
+    }
 
     public static void ClearLock(OurPlaneCoreJob job)
     {

@@ -315,16 +315,25 @@ public partial class MainWindow
         TxtStatus.Text = status;
     }
 
-    private void LoadSheetOverlay(PageInfo page)
+    private void LoadSheetOverlay(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView = null,
+        float? requestedRenderScale = null,
+        bool keepExistingUntilReady = false)
     {
         int version = ++_sheetOverlayLoadVersion;
-        _viewport.ClearSheetOverlay();
+        if (!keepExistingUntilReady)
+            _viewport.ClearSheetOverlay();
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
+        {
+            _viewport.ClearSheetOverlay();
             return;
+        }
 
+        float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView, requestedRenderScale);
         if (!TryBuildSheetOverlayBitmap(
                 page,
-                ViewportRenderPolicy.SheetOverlayViewportRenderScale,
+                renderScale,
                 allowRender: false,
                 out SKBitmap? bitmap,
                 out float widthPt,
@@ -333,21 +342,22 @@ public partial class MainWindow
                 out string error) ||
             bitmap == null)
         {
-            _ = LoadSheetOverlayAsync(page, version);
+            _ = LoadSheetOverlayAsync(page, version, renderScale);
             return;
         }
 
-        ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName);
+        ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName, renderScale);
     }
 
-    private void TryApplyCachedSheetOverlay(PageInfo page)
+    private void TryApplyCachedSheetOverlay(PageInfo page, PdfViewport.ViewState? restoreView = null)
     {
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
             return;
 
+        float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView);
         if (!TryBuildSheetOverlayBitmap(
                 page,
-                ViewportRenderPolicy.SheetOverlayViewportRenderScale,
+                renderScale,
                 allowRender: false,
                 out SKBitmap? bitmap,
                 out float widthPt,
@@ -359,16 +369,16 @@ public partial class MainWindow
             return;
         }
 
-        ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName);
+        ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName, renderScale);
     }
 
-    private async Task LoadSheetOverlayAsync(PageInfo page, int version)
+    private async Task LoadSheetOverlayAsync(PageInfo page, int version, float renderScale)
     {
         SheetOverlayBuildResult result = await Task.Run(() =>
         {
             bool ok = TryBuildSheetOverlayBitmap(
                 page,
-                ViewportRenderPolicy.SheetOverlayViewportRenderScale,
+                renderScale,
                 allowRender: true,
                 out SKBitmap? bitmap,
                 out float widthPt,
@@ -398,7 +408,8 @@ public partial class MainWindow
             result.Bitmap,
             result.WidthPt,
             result.HeightPt,
-            result.OverlayName);
+            result.OverlayName,
+            renderScale);
     }
 
     private void ApplySheetOverlayBitmapToViewport(
@@ -406,7 +417,8 @@ public partial class MainWindow
         SKBitmap bitmap,
         float widthPt,
         float heightPt,
-        string overlayName)
+        string overlayName,
+        float renderScale)
     {
         PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
         _viewport.SetSheetOverlay(
@@ -419,13 +431,59 @@ public partial class MainWindow
             (float)page.OverlayScale,
             overlayPage?.PdfPath ?? "",
             overlayPage?.PdfPage ?? 0,
-            OverlaySnapLayers(overlayPage));
+            OverlaySnapLayers(overlayPage),
+            bitmapScale: renderScale);
     }
 
     private static IReadOnlyList<PdfLayerInfo>? OverlaySnapLayers(PageInfo? overlayPage) =>
         overlayPage is { PdfLayersCached: true, PdfLayers.Count: > 0 }
             ? overlayPage.PdfLayers
             : null;
+
+    private void OnSheetOverlayRenderScaleRefreshRequested(float requestedRenderScale)
+    {
+        if (_currentPage == null ||
+            string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder) ||
+            !_currentPage.OverlayVisible)
+        {
+            return;
+        }
+
+        LoadSheetOverlay(_currentPage, requestedRenderScale: requestedRenderScale, keepExistingUntilReady: true);
+    }
+
+    private float SelectSheetOverlayViewportRenderScale(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView = null,
+        float? requestedRenderScale = null)
+    {
+        float zoom = requestedRenderScale is > 0
+            ? requestedRenderScale.Value
+            : restoreView?.Zoom ?? CurrentViewportZoomForSheetOverlay(page);
+        (float widthPt, float heightPt) = ReadSheetOverlaySourceSize(page);
+        return ViewportRenderPolicy.SelectSheetOverlayRenderScale(zoom, widthPt, heightPt);
+    }
+
+    private float CurrentViewportZoomForSheetOverlay(PageInfo page)
+    {
+        PdfViewport.ViewState view = _viewport.CaptureViewState();
+        if (_viewport.IsPageRenderReady(page.FolderPath))
+            return view.Zoom;
+
+        return Math.Max(1.0f, view.Zoom);
+    }
+
+    private static (float WidthPt, float HeightPt) ReadSheetOverlaySourceSize(PageInfo page)
+    {
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+            return (0, 0);
+
+        PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.OverlayPageFolder);
+        if (metadata is not { WidthPt: > 0, HeightPt: > 0 })
+            return (0, 0);
+
+        return ((float)metadata.WidthPt, (float)metadata.HeightPt);
+    }
 
     private (bool Ok, string Error) DrawPdfExportSheetOverlay(
         SKCanvas canvas,

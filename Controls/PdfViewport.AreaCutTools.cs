@@ -66,7 +66,7 @@ public sealed partial class PdfViewport
 
         List<Measurement> areaTargets = useSelection
             ? selectedTargets.Where(measurement => measurement.MType == "area").ToList()
-            : ResolveAreaCutTargets(Centroid(cutShape.ToList()));
+            : ResolveAreaCutTargets(cutShape);
         List<Measurement> lineTargets = useSelection
             ? selectedTargets.Where(measurement => measurement.MType == "line").ToList()
             : ActivePageMeasurements()
@@ -79,7 +79,7 @@ public sealed partial class PdfViewport
         string firstAreaError = "";
         foreach (Measurement area in areaTargets)
         {
-            if (!CanApplyAreaCut(area, cutShape, out string error))
+            if (!TryBuildAreaCutGeometry(area, cutShape, out AreaBooleanGeometry geometry, out string error))
             {
                 firstAreaError = string.IsNullOrWhiteSpace(firstAreaError) ? error : firstAreaError;
                 continue;
@@ -87,7 +87,7 @@ public sealed partial class PdfViewport
 
             beforeAreaPoints[area] = area.Points.ToList();
             beforeAreaHoles[area] = CloneHoles(area.Holes);
-            area.Holes.Add(cutShape.Select(point => new SKPoint(point.X, point.Y)).ToList());
+            ApplyAreaGeometry(area, geometry);
             changedAreas.Add(area);
         }
 
@@ -161,7 +161,7 @@ public sealed partial class PdfViewport
         PostRecordPrompt();
     }
 
-    private List<Measurement> ResolveAreaCutTargets(SKPoint point)
+    private List<Measurement> ResolveAreaCutTargets(IReadOnlyList<SKPoint> cutShape)
     {
         if (_areaCutMeasurement != null &&
             _measurementSet.Contains(_areaCutMeasurement) &&
@@ -170,9 +170,27 @@ public sealed partial class PdfViewport
             return [_areaCutMeasurement];
         }
 
+        SKPoint point = Centroid(cutShape.ToList());
         return TryResolveAreaCutTarget(point, out Measurement target, out _)
             ? [target]
-            : [];
+            : ResolveAreaCutTargetsByIntersection(cutShape);
+    }
+
+    private List<Measurement> ResolveAreaCutTargetsByIntersection(IReadOnlyList<SKPoint> cutShape)
+    {
+        SKRect bounds = PointsBounds(cutShape);
+        IReadOnlyList<Measurement> candidates = ActivePageMeasurementsNear(bounds);
+        for (int i = candidates.Count - 1; i >= 0; i--)
+        {
+            Measurement candidate = candidates[i];
+            if (candidate.MType == "area" &&
+                TryBuildAreaCutGeometry(candidate, cutShape, out _, out _))
+            {
+                return [candidate];
+            }
+        }
+
+        return [];
     }
 
     private bool TryResolveAreaCutTarget(SKPoint point, out Measurement target, out string status)
@@ -204,8 +222,13 @@ public sealed partial class PdfViewport
         return false;
     }
 
-    private static bool CanApplyAreaCut(Measurement target, IReadOnlyList<SKPoint> hole, out string error)
+    private static bool TryBuildAreaCutGeometry(
+        Measurement target,
+        IReadOnlyList<SKPoint> cutShape,
+        out AreaBooleanGeometry geometry,
+        out string error)
     {
+        geometry = new AreaBooleanGeometry([], []);
         error = "";
         if (target.MType != "area" || target.Points.Count < 3)
         {
@@ -213,38 +236,196 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (hole.Count < 3)
+        if (cutShape.Count < 3)
         {
             error = "Cut: draw a larger shape.";
             return false;
         }
 
-        foreach (SKPoint point in hole)
+        if (CanUseExactAreaCutHole(target, cutShape))
         {
-            if (!PointInMeasurementFill(target, point))
-            {
-                error = "Cut: area cut must stay inside the Area and outside existing holes.";
-                return false;
-            }
+            List<List<SKPoint>> holes = CloneHoles(target.Holes);
+            holes.Add(CleanPolygon(cutShape));
+            geometry = new AreaBooleanGeometry(target.Points.Select(ClonePoint).ToList(), holes);
+            return true;
         }
 
-        if (PolygonEdgesIntersect(hole, target.Points))
+        if (!IsConvexPolygon(cutShape))
         {
-            error = "Cut: area cut cannot cross the Area edge.";
+            error = "Cut: edge cuts need a box or convex cut shape.";
             return false;
         }
 
-        foreach (var existingHole in target.Holes)
+        List<SKPoint> clippedHole = ClipPolygonToConvexClip(target.Points, cutShape);
+        if (clippedHole.Count < 3 || PolygonArea(clippedHole) <= ViewportConstants.GeometryEpsilon)
         {
-            if (existingHole.Count >= 3 && PolygonEdgesIntersect(hole, existingHole))
-            {
-                error = "Cut: area cut cannot overlap an existing hole.";
-                return false;
-            }
+            error = "Cut: no selected Area or Line was touched.";
+            return false;
         }
 
-        return true;
+        if (AreaCutOverlapsExistingHole(target, clippedHole))
+        {
+            error = "Cut: area cut cannot overlap an existing hole.";
+            return false;
+        }
+
+        if (!MeasurementAreaBooleanService.TrySubtract(target, cutShape, out geometry, out error))
+            return false;
+
+        return geometry.Points.Count >= 3;
     }
+
+    private static void ApplyAreaGeometry(Measurement area, AreaBooleanGeometry geometry)
+    {
+        area.Points.Clear();
+        area.Points.AddRange(geometry.Points.Select(ClonePoint));
+        area.Holes.Clear();
+        area.Holes.AddRange(geometry.Holes.Select(hole => hole.Select(ClonePoint).ToList()));
+    }
+
+    private static bool CanUseExactAreaCutHole(Measurement target, IReadOnlyList<SKPoint> cutShape)
+    {
+        if (cutShape.Any(point => !PointInMeasurementFill(target, point)))
+            return false;
+
+        if (PolygonEdgesIntersect(cutShape, target.Points))
+            return false;
+
+        return !AreaCutOverlapsExistingHole(target, cutShape);
+    }
+
+    private static bool AreaCutOverlapsExistingHole(Measurement target, IReadOnlyList<SKPoint> cutShape)
+    {
+        foreach (var existingHole in target.Holes)
+        {
+            if (existingHole.Count < 3)
+                continue;
+
+            if (PolygonEdgesIntersect(cutShape, existingHole))
+                return true;
+
+            SKPoint cutProbe = Centroid(cutShape.ToList());
+            if (PointInPolygon(cutProbe, existingHole))
+                return true;
+
+            SKPoint holeProbe = Centroid(existingHole);
+            if (PointInPolygon(holeProbe, cutShape))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsConvexPolygon(IReadOnlyList<SKPoint> polygon)
+    {
+        List<SKPoint> clean = CleanPolygon(polygon);
+        if (clean.Count < 3)
+            return false;
+
+        float sign = 0;
+        for (int i = 0; i < clean.Count; i++)
+        {
+            SKPoint a = clean[i];
+            SKPoint b = clean[(i + 1) % clean.Count];
+            SKPoint c = clean[(i + 2) % clean.Count];
+            float cross = Cross(a, b, c);
+            if (Math.Abs(cross) <= ViewportConstants.GeometryEpsilon)
+                continue;
+
+            float currentSign = MathF.Sign(cross);
+            if (sign == 0)
+                sign = currentSign;
+            else if (MathF.Sign(sign) != currentSign)
+                return false;
+        }
+
+        return sign != 0;
+    }
+
+    private static List<SKPoint> ClipPolygonToConvexClip(
+        IReadOnlyList<SKPoint> subject,
+        IReadOnlyList<SKPoint> clip)
+    {
+        List<SKPoint> output = CleanPolygon(subject);
+        List<SKPoint> clipPoints = CleanPolygon(clip);
+        if (output.Count < 3 || clipPoints.Count < 3)
+            return [];
+
+        float clipArea = SignedPolygonArea(clipPoints);
+        for (int i = 0; i < clipPoints.Count; i++)
+        {
+            SKPoint edgeStart = clipPoints[i];
+            SKPoint edgeEnd = clipPoints[(i + 1) % clipPoints.Count];
+            List<SKPoint> input = output;
+            output = [];
+            if (input.Count == 0)
+                break;
+
+            SKPoint previous = input[^1];
+            bool previousInside = IsInsideClipEdge(previous, edgeStart, edgeEnd, clipArea);
+            foreach (SKPoint current in input)
+            {
+                bool currentInside = IsInsideClipEdge(current, edgeStart, edgeEnd, clipArea);
+                if (currentInside)
+                {
+                    if (!previousInside)
+                        AddDistinctPoint(output, IntersectLines(previous, current, edgeStart, edgeEnd));
+                    AddDistinctPoint(output, current);
+                }
+                else if (previousInside)
+                {
+                    AddDistinctPoint(output, IntersectLines(previous, current, edgeStart, edgeEnd));
+                }
+
+                previous = current;
+                previousInside = currentInside;
+            }
+
+            output = CleanPolygon(output);
+        }
+
+        return CleanPolygon(output);
+    }
+
+    private static bool IsInsideClipEdge(SKPoint point, SKPoint edgeStart, SKPoint edgeEnd, float clipArea)
+    {
+        float cross = Cross(edgeStart, edgeEnd, point);
+        return clipArea >= 0
+            ? cross >= -ViewportConstants.GeometryEpsilon
+            : cross <= ViewportConstants.GeometryEpsilon;
+    }
+
+    private static SKPoint IntersectLines(SKPoint start, SKPoint end, SKPoint edgeStart, SKPoint edgeEnd)
+    {
+        float rx = end.X - start.X;
+        float ry = end.Y - start.Y;
+        float sx = edgeEnd.X - edgeStart.X;
+        float sy = edgeEnd.Y - edgeStart.Y;
+        float denom = rx * sy - ry * sx;
+        if (Math.Abs(denom) <= ViewportConstants.GeometryEpsilon)
+            return end;
+
+        float qpx = edgeStart.X - start.X;
+        float qpy = edgeStart.Y - start.Y;
+        float t = (qpx * sy - qpy * sx) / denom;
+        return new SKPoint(start.X + t * rx, start.Y + t * ry);
+    }
+
+    private static float SignedPolygonArea(IReadOnlyList<SKPoint> polygon)
+    {
+        float area = 0;
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            SKPoint a = polygon[i];
+            SKPoint b = polygon[(i + 1) % polygon.Count];
+            area += a.X * b.Y - b.X * a.Y;
+        }
+
+        return area / 2f;
+    }
+
+    private static double PolygonArea(IReadOnlyList<SKPoint> polygon) =>
+        Math.Abs(SignedPolygonArea(polygon));
 
     private static List<SKPoint> BoxMeasurementPoints(SKPoint first, SKPoint second, bool closeForLine)
     {
@@ -417,6 +598,41 @@ public sealed partial class PdfViewport
         var clean = new List<SKPoint>();
         foreach (SKPoint point in points)
             AddDistinctPoint(clean, point);
+        return clean;
+    }
+
+    private static List<SKPoint> CleanPolygon(IReadOnlyList<SKPoint> points)
+    {
+        var clean = new List<SKPoint>();
+        foreach (SKPoint point in points)
+            AddDistinctPoint(clean, point);
+
+        if (clean.Count > 1 && SamePoint(clean[0], clean[^1]))
+            clean.RemoveAt(clean.Count - 1);
+
+        if (clean.Count < 3)
+            return clean;
+
+        bool removed;
+        do
+        {
+            removed = false;
+            for (int i = 0; i < clean.Count && clean.Count >= 3; i++)
+            {
+                SKPoint previous = clean[(i - 1 + clean.Count) % clean.Count];
+                SKPoint current = clean[i];
+                SKPoint next = clean[(i + 1) % clean.Count];
+                if (Math.Abs(Cross(previous, current, next)) <= ViewportConstants.GeometryEpsilon &&
+                    DistanceToSegment(current, previous, next) <= ViewportConstants.GeometryEpsilon)
+                {
+                    clean.RemoveAt(i);
+                    removed = true;
+                    break;
+                }
+            }
+        }
+        while (removed);
+
         return clean;
     }
 

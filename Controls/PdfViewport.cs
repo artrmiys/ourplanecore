@@ -292,6 +292,7 @@ public sealed partial class PdfViewport : SKElement
     private readonly HashSet<int> _highlightedLayers = [];
     private List<PdfLayer> _layers = [];
     private IReadOnlyList<PdfLayerInfo>? _cachedLayers;
+    private bool _pdfLayersLoadedForPage;
     private bool _usingLayerRenderer;
     private bool _pdfLayerTraceEnabled;
     private PdfLayerTraceMode _pdfLayerTraceMode = PdfLayerTraceMode.Full;
@@ -316,7 +317,9 @@ public sealed partial class PdfViewport : SKElement
     private bool _isFastNavigating;
     private bool _renderNavigationFastFrame;
     private bool _showingPreviousPageDuringSwitch;
+    private DateTime _lastFastNavigationAt = DateTime.MinValue;
     private DateTime _lastPointerStatusAt = DateTime.MinValue;
+    private DateTime _lastPointerRepaintAt = DateTime.MinValue;
     private DateTime _lastSlowFrameLogAt = DateTime.MinValue;
     private DateTime _lastSlowRenderLogAt = DateTime.MinValue;
     private DateTime _lastSlowSnapLogAt = DateTime.MinValue;
@@ -355,6 +358,7 @@ public sealed partial class PdfViewport : SKElement
         int PdfIndex,
         string PageFolder,
         float RenderScale,
+        IReadOnlyList<PdfLayerInfo>? CachedLayers,
         ViewState? RestoreView,
         bool FitAfter,
         bool QueueLayerAfter,
@@ -399,6 +403,7 @@ public sealed partial class PdfViewport : SKElement
     public event Action<BeamMeasurementRequest>?          BeamMeasurementCompleted;
     public event Action<OpeningMeasurementRequest>?       OpeningMeasurementCompleted;
     public event Action<SheetOverlayTransformChange>?     SheetOverlayTransformChanged;
+    public event Action<float>?                           SheetOverlayRenderScaleRefreshRequested;
 
     // в”Ђв”Ђ Constants в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     private const float ZoomMin    = 0.05f;

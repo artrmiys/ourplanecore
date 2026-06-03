@@ -11,11 +11,12 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 48, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
-    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 160, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
-    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 320, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 16, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
+    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 96, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
+    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 32, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
+    private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
     private static readonly object CleanRenderPrefetchGate = new();
     private static readonly HashSet<string> CleanRenderPrefetchInFlight = [];
     private static readonly SemaphoreSlim CleanRenderPrefetchSemaphore = new(
@@ -23,13 +24,13 @@ public sealed partial class PdfViewport
         Math.Clamp(Environment.ProcessorCount / 3, 1, 4));
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
-        ResolveViewportRamBudget(1_500_000_000L, 4_000_000_000L, 0.06);
+        ResolveViewportRamBudget(192_000_000L, 768_000_000L, 0.025);
 
     private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(1_500_000_000L, 5_000_000_000L, 0.08);
+        ResolveViewportRamBudget(128_000_000L, 384_000_000L, 0.015);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(12_000_000_000L, 24_000_000_000L, 0.38);
+        ResolveViewportRamBudget(384_000_000L, 1_200_000_000L, 0.05);
 
     private static long ResolveViewportRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
     {
@@ -551,14 +552,54 @@ public sealed partial class PdfViewport
         string cacheKey)
     {
         DocnetRenderResult? render = null;
+        SKBitmap? decodedBitmap = null;
         try
         {
             await Task.Delay(75);
-            if (DocnetRenderCache.Contains(cacheKey))
-                return;
+            await PreviewPrefetchSemaphore.WaitAsync();
+            try
+            {
+                if (DocnetRenderCache.Contains(cacheKey))
+                    return;
 
-            render = await Task.Run(() => RenderPageBitmapWithDocnet(pdfPath, pageIndex, renderScale));
-            DocnetRenderCache.Put(cacheKey, render);
+                if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pageIndex, renderScale, out PdfLayerRenderResult preview))
+                {
+                    var rendered = await PdfLayerRenderService.TryRenderDedicatedProcessAsync(
+                        pdfPath,
+                        pageIndex,
+                        renderScale,
+                        EmptyLayerStates,
+                        EmptyHighlightedLayers,
+                        cachedLayers: null);
+                    if (rendered.Ok)
+                    {
+                        preview = rendered.Result;
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(rendered.Error))
+                            AppLog.Warn($"Viewport PyMuPDF preview prefetch unavailable: {rendered.Error}");
+                    }
+                }
+
+                if (preview.ImageBytes.Length > 0 && preview.WidthPt > 0 && preview.HeightPt > 0)
+                {
+                    decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(preview));
+                    if (decodedBitmap != null)
+                    {
+                        float bitmapScale = decodedBitmap.Width / preview.WidthPt;
+                        DocnetRenderCache.Put(cacheKey, preview.WidthPt, preview.HeightPt, bitmapScale, decodedBitmap);
+                        return;
+                    }
+                }
+
+                render = await Task.Run(() => RenderPageBitmapWithDocnet(pdfPath, pageIndex, renderScale));
+                DocnetRenderCache.Put(cacheKey, render);
+            }
+            finally
+            {
+                PreviewPrefetchSemaphore.Release();
+            }
         }
         catch (Exception ex)
         {
@@ -566,6 +607,7 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            decodedBitmap?.Dispose();
             render?.Bitmap.Dispose();
             lock (DocnetPreviewPrefetchGate)
                 DocnetPreviewPrefetchInFlight.Remove(cacheKey);

@@ -127,7 +127,7 @@ public partial class MainWindow
         };
         panel.Children.Add(new TextBlock
         {
-            Text = $"  {page.Name}",
+            Text = $"  {PdfSheetMetadataService.VisibleSheetDisplayName(page.Name)}",
             VerticalAlignment = VerticalAlignment.Center,
         });
 

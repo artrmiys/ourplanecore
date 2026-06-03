@@ -101,6 +101,8 @@ public partial class MainWindow
 
         Add("edit.copyMeasurements", "Copy Selected Measurements", "Edit", "Ctrl+C", "Copy the selected measurements.", selectedMeasurementCount > 0, "Select one or more measurements first.");
         Add("edit.pasteMeasurements", "Paste Measurements", "Edit", "Ctrl+V", "Paste copied measurements to the active page.", _measurementClipboard != null && hasPage, "Copy measurements and select a page first.");
+        Add("edit.mergeMeasurements", "Merge Selected Measurements", "Edit", "Ctrl+M", "Move selected measurement segments into another takeoff.", selectedMeasurementCount > 0, "Select one or more measurements first.");
+        Add("edit.splitMeasurements", "Split Selected Measurements", "Edit", "Ctrl+Shift+M", "Move selected measurement segments into a new takeoff.", selectedMeasurementCount > 0, "Select one or more measurements first.");
 
         Add("pages.sortArchStruct", "Sort Pages A/S", "Pages", "", "Move A sheets to Arch, S sheets to Struct, and trailing '-' sheets to others.", hasJob, "Open or create a job first.");
         Add("pages.blankSheet", "Blank Sheet", "Pages", "", "Create an empty sheet in the current job.", hasJob, "Open or create a job first.");
@@ -209,6 +211,8 @@ public partial class MainWindow
 
             case "edit.copyMeasurements": CopyMeasurementsToClipboard(_viewport.GetSelectedMeasurements()); break;
             case "edit.pasteMeasurements": PasteMeasurementsFromClipboard(); break;
+            case "edit.mergeMeasurements": MergeSelectedMeasurementsToPromptedTakeoff(); break;
+            case "edit.splitMeasurements": SplitSelectedMeasurementsToNewTakeoff(); break;
 
             case "pages.sortArchStruct": BtnSortPagesArchStruct_Click(this, new RoutedEventArgs()); break;
             case "pages.blankSheet": BtnNewBlankPage_Click(this, new RoutedEventArgs()); break;

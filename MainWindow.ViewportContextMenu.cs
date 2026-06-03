@@ -30,6 +30,21 @@ public partial class MainWindow
             clipboardCount > 0 ? $"Paste {clipboardCount} Measurement(s) to This Sheet" : "Paste Measurements to This Sheet",
             _currentPage != null && clipboardCount > 0,
             () => PasteMeasurementsFromClipboard(new SKPoint(request.PdfX, request.PdfY))));
+
+        IReadOnlyList<Measurement> selection = selected.Count > 0
+            ? selected
+            : clickedMeasurement == null
+                ? Array.Empty<Measurement>()
+                : [clickedMeasurement];
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem(
+            selection.Count > 1 ? $"Merge {selection.Count} Segment(s)..." : "Merge Segment...",
+            selection.Count > 0,
+            () => MergeSelectedMeasurementsToPromptedTakeoff(selection)));
+        menu.Items.Add(MakeMenuItem(
+            selection.Count > 1 ? $"Split {selection.Count} Segment(s)..." : "Split Segment...",
+            selection.Count > 0,
+            () => SplitSelectedMeasurementsToNewTakeoff(selection)));
     }
 
     private void AddPdfAiMenuItems(ItemsControl menu, ViewportContextRequest request)

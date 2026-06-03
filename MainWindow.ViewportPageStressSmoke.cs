@@ -236,7 +236,10 @@ public partial class MainWindow
 
     private async Task WaitForViewportSheetOverlayAsync(PageInfo page, int timeoutMs, PageSmokeResult result)
     {
-        result.HasOverlayConfigured = !string.IsNullOrWhiteSpace(page.OverlayPageFolder) && page.OverlayVisible;
+        result.HasOverlayConfigured =
+            !string.IsNullOrWhiteSpace(page.OverlayPageFolder) &&
+            page.OverlayVisible &&
+            Directory.Exists(page.OverlayPageFolder);
         if (!result.HasOverlayConfigured)
             return;
 

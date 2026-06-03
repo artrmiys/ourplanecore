@@ -21,6 +21,8 @@ public sealed partial class PdfViewport
     private float _sheetOverlayOffsetXPt;
     private float _sheetOverlayOffsetYPt;
     private float _sheetOverlayScale = 1f;
+    private float _sheetOverlayBitmapScale;
+    private float _lastSheetOverlayRefreshRequestScale;
     private string _sheetOverlayName = "";
     private SheetOverlayPointEditStep _sheetOverlayPointEditStep;
     private SKPoint _sheetOverlayEditAnchorLocal;
@@ -39,7 +41,8 @@ public sealed partial class PdfViewport
         float overlayScale = 1,
         string overlayPdfPath = "",
         int overlayPageIndex = 0,
-        IReadOnlyList<PdfLayerInfo>? overlayLayers = null)
+        IReadOnlyList<PdfLayerInfo>? overlayLayers = null,
+        float bitmapScale = 0)
     {
         ClearSheetOverlay();
         _sheetOverlayBitmap = bitmap;
@@ -48,10 +51,13 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetXPt = offsetXPt;
         _sheetOverlayOffsetYPt = offsetYPt;
         _sheetOverlayScale = NormalizeSheetOverlayScale(overlayScale);
+        _sheetOverlayBitmapScale = bitmapScale > 0 ? bitmapScale : InferSheetOverlayBitmapScale(bitmap, widthPt);
+        _lastSheetOverlayRefreshRequestScale = _sheetOverlayBitmapScale;
         _sheetOverlayName = overlayName ?? "";
         if (!string.IsNullOrWhiteSpace(overlayPdfPath))
             SetOverlayPdfSnapSource(overlayPdfPath, overlayPageIndex, _sheetOverlayName, overlayLayers);
         CancelSheetOverlayPointEdit(silent: true);
+        MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
     }
 
@@ -64,6 +70,8 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetXPt = 0;
         _sheetOverlayOffsetYPt = 0;
         _sheetOverlayScale = 1;
+        _sheetOverlayBitmapScale = 0;
+        _lastSheetOverlayRefreshRequestScale = 0;
         _sheetOverlayName = "";
         ClearOverlayPdfSnapSource();
         CancelSheetOverlayPointEdit(silent: true);
@@ -284,4 +292,31 @@ public sealed partial class PdfViewport
         float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0
             ? 1f
             : Math.Clamp(scale, 0.05f, 20f);
+
+    private void MaybeRequestSheetOverlayRenderScaleRefresh()
+    {
+        if (_sheetOverlayBitmap == null || _sheetOverlayBitmapScale <= 0 || _zoom <= 0 || _isFastNavigating)
+            return;
+
+        float desired = ViewportRenderPolicy.SelectSheetOverlayRenderScale(
+            _zoom,
+            _sheetOverlayWidthPt,
+            _sheetOverlayHeightPt);
+        if (desired <= _sheetOverlayBitmapScale * 1.18f ||
+            desired <= _lastSheetOverlayRefreshRequestScale * 1.01f)
+        {
+            return;
+        }
+
+        _lastSheetOverlayRefreshRequestScale = desired;
+        SheetOverlayRenderScaleRefreshRequested?.Invoke(desired);
+    }
+
+    private static float InferSheetOverlayBitmapScale(SKBitmap bitmap, float widthPt)
+    {
+        if (bitmap.Width <= 0 || widthPt <= 0)
+            return 0;
+
+        return bitmap.Width / widthPt;
+    }
 }

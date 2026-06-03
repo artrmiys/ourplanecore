@@ -591,6 +591,20 @@
             <RadioButton x:Name="BtnAreaCut" Content="Cut" Click="BtnTool_Click" Tag="areacut"
                          GroupName="DrawingTool" ToolTip="Cut Area holes or erase Line pieces (X, F9 toggles box)"
                          Style="{StaticResource ToolRadio}"/>
+            <Button x:Name="BtnMergeSelectedMeasurements"
+                    Content="Merge"
+                    Click="BtnMergeSelectedMeasurements_Click"
+                    ToolTip="Merge selected measurement segments into another takeoff (Ctrl+M)"
+                    Style="{StaticResource ToolBtn}"
+                    MinWidth="58"
+                    Padding="6,2"/>
+            <Button x:Name="BtnSplitSelectedMeasurements"
+                    Content="Split"
+                    Click="BtnSplitSelectedMeasurements_Click"
+                    ToolTip="Split selected measurement segments to a new takeoff (Ctrl+Shift+M)"
+                    Style="{StaticResource ToolBtn}"
+                    MinWidth="52"
+                    Padding="6,2"/>
             <Border Style="{StaticResource ToolDiv}"/>
             <ToggleButton x:Name="BtnSnap" Content="Snap"
                           ToolTip="Snap to existing takeoff points (F3)"
@@ -1161,6 +1175,8 @@
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+Z"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Undo"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+C"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Copy"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+V"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Paste"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+M"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Merge segments"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+Shift+M"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Split segments"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F2"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Rename in tree"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Del"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Delete selected"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Ctrl+Shift+P"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Command palette"/></DockPanel>

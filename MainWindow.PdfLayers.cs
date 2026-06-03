@@ -30,7 +30,9 @@ public partial class MainWindow
         {
             LayersPanel.Children.Add(new TextBlock
             {
-                Text       = "  No PDF layers detected.",
+                Text       = _viewport.ArePdfLayersLoaded
+                    ? "  No PDF layers detected."
+                    : "  PDF layers not loaded. Click Load to scan this sheet.",
                 Foreground = Brushes.Gray,
                 FontSize   = 10,
                 Margin     = new Thickness(0, 2, 0, 2),

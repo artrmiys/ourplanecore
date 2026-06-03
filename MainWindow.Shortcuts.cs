@@ -118,6 +118,9 @@ public partial class MainWindow
                 case Key.O:
                     BtnOpen_Click(this, new RoutedEventArgs());
                     return true;
+                case Key.M:
+                    MergeSelectedMeasurementsToPromptedTakeoff();
+                    return true;
                 case Key.S:
                     BtnSave_Click(this, new RoutedEventArgs());
                     return true;
@@ -130,6 +133,9 @@ public partial class MainWindow
             {
                 case Key.O:
                     ShowRecentJobPicker();
+                    return true;
+                case Key.M:
+                    SplitSelectedMeasurementsToNewTakeoff();
                     return true;
                 case Key.P:
                     ShowCommandPalette();

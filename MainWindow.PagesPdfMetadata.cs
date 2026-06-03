@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -330,16 +329,17 @@ public partial class MainWindow
         {
             PdfMetadataPageResult result = entry.Result;
             PdfSheetMetadata metadata = entry.Metadata;
-            string proposedName = entry.ProposedName;
+            string proposedName = PdfSheetMetadataService.VisibleSheetDisplayName(entry.ProposedName);
             bool duplicateName = duplicateNames.Contains(NormalizePathForCompare(proposedName));
             if (duplicateName)
             {
-                proposedName = SourceQualifiedDuplicatePageName(proposedName, result.Page);
-                if (!string.Equals(proposedName, entry.ProposedName, StringComparison.OrdinalIgnoreCase))
-                    metadata.Warnings.Add("duplicate sheet number disambiguated by source PDF");
+                metadata.Warnings.Add("duplicate sheet number; hidden folder/source identity will disambiguate");
             }
             bool canRename = !string.IsNullOrWhiteSpace(proposedName) &&
-                             !string.Equals(proposedName, result.Page.Name, StringComparison.OrdinalIgnoreCase);
+                             !string.Equals(
+                                 proposedName,
+                                 PdfSheetMetadataService.VisibleSheetDisplayName(result.Page.Name),
+                                 StringComparison.OrdinalIgnoreCase);
             bool nameConflict = HasPageNameConflict(result.Page.FolderPath, proposedName);
             bool canScale = metadata.CanApplyScale();
             SmartSheetLearningSignal learning = SmartLearningStore.BuildSheetMetadataSignal(metadata);
@@ -353,7 +353,7 @@ public partial class MainWindow
             yield return new PdfMetadataPreviewRow
             {
                 PageFolder = result.Page.FolderPath,
-                CurrentPageName = result.Page.Name,
+                CurrentPageName = PdfSheetMetadataService.VisibleSheetDisplayName(result.Page.Name),
                 SheetLabel = metadata.SheetLabel,
                 SheetTitle = metadata.SheetTitle,
                 ProposedPageName = proposedName,
@@ -369,31 +369,6 @@ public partial class MainWindow
                 ApplyScale = defaultScale && canScale && !learnedConflict,
             };
         }
-    }
-
-    private static string SourceQualifiedDuplicatePageName(string proposedName, PageInfo page)
-    {
-        string source = CleanDuplicateSourceName(Path.GetFileNameWithoutExtension(page.PdfPath));
-        if (string.IsNullOrWhiteSpace(source) ||
-            proposedName.Contains(source, StringComparison.OrdinalIgnoreCase))
-        {
-            return proposedName;
-        }
-
-        string combined = $"{proposedName} - {source}";
-        return combined.Length <= 110
-            ? combined
-            : combined[..110].Trim().TrimEnd('-').Trim();
-    }
-
-    private static string CleanDuplicateSourceName(string sourceName)
-    {
-        string clean = (sourceName ?? "").Replace('_', ' ');
-        clean = Regex.Replace(clean, @"\s*\(\d+\)\s*$", "");
-        clean = Regex.Replace(clean, @"\b\d{1,2}[-.]\d{1,2}[-.]\d{2,4}\b", "");
-        clean = Regex.Replace(clean, @"\s*-\s*", " - ");
-        clean = Regex.Replace(clean, @"\s+", " ").Trim(' ', '-');
-        return clean.Trim();
     }
 
     private static string PdfMetadataDecisionReason(

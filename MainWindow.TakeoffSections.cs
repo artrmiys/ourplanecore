@@ -71,6 +71,14 @@ public partial class MainWindow
             selectedCount > 1 ? $"Select {selectedCount} on Canvas" : "Select on Canvas",
             true,
             () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true), anchor)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Merge {selectedCount} Segments..." : "Merge Segment...",
+            true,
+            () => MergeSelectedMeasurementsToPromptedTakeoff(sectionAnchor: anchor)));
+        menu.Items.Add(MakeMenuItem(
+            selectedCount > 1 ? $"Split {selectedCount} Segments..." : "Split Segment...",
+            true,
+            () => SplitSelectedMeasurementsToNewTakeoff(sectionAnchor: anchor)));
         bool isAreaSection =
             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
