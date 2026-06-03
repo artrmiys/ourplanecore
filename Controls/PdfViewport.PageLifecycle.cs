@@ -24,6 +24,7 @@ public sealed partial class PdfViewport
         _pageFolder = "";
         _cachedLayers = null;
         _rasterSheetSource = null;
+        _usingRasterSheetRender = false;
         _zoomRerenderTimer.Stop();
         _navigationIdleTimer.Stop();
         _zoomRerenderForce = false;

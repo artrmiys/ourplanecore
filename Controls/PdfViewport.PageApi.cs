@@ -74,6 +74,7 @@ public sealed partial class PdfViewport
         _pageFolder = pageFolder;
         _cachedLayers = cachedLayers;
         _rasterSheetSource = rasterSheet?.Clone();
+        _usingRasterSheetRender = false;
 
         bool hadVisibleBitmap = _pageBitmap != null;
         bool hadCurrentPageBitmap = IsPageBitmapFor(pdfPath, pageIndex, pageFolder);
@@ -162,6 +163,7 @@ public sealed partial class PdfViewport
     {
         _pageBitmap?.Dispose();
         _pageBitmap = null;
+        _usingRasterSheetRender = false;
         ClearPageBitmapIdentity();
         _pdfW = 0;
         _pdfH = 0;

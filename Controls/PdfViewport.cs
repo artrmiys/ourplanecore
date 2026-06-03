@@ -295,6 +295,7 @@ public sealed partial class PdfViewport : SKElement
     private IReadOnlyList<PdfLayerInfo>? _cachedLayers;
     private bool _pdfLayersLoadedForPage;
     private bool _usingLayerRenderer;
+    private bool _usingRasterSheetRender;
     private bool _pdfLayerTraceEnabled;
     private PdfLayerTraceMode _pdfLayerTraceMode = PdfLayerTraceMode.Full;
     private int? _activePdfLayerTraceLayer;
@@ -482,6 +483,7 @@ public sealed partial class PdfViewport : SKElement
         _docnetRenderVersion++;
         ClearDetailRender();
         _showingPreviousPageDuringSwitch = false;
+        _usingRasterSheetRender = false;
         _pageBitmap?.Dispose();
         _pageBitmap = null;
         ClearSheetOverlay();

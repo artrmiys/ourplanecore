@@ -106,6 +106,7 @@ var tests = new List<(string Name, Action Run)>
     ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),
     ("raster snap strict black lines only is wired", TakeoffsTreeRegressionTests.RasterSnapStrictBlackLinesOnlyIsWired),
+    ("raster sheet render skips delayed pdf zoom refresh", TakeoffsTreeRegressionTests.RasterSheetRenderSkipsDelayedPdfZoomRefresh),
     ("pages tree selected sheet scale menu is wired", TakeoffsTreeRegressionTests.PagesTreeSelectedSheetScaleMenuIsWired),
     ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),

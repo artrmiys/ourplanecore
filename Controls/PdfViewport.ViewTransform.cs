@@ -106,6 +106,9 @@ public sealed partial class PdfViewport
         if (_showingPreviousPageDuringSwitch && !_usingLayerRenderer)
             return;
 
+        if (_usingRasterSheetRender)
+            return;
+
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
             return;
 
@@ -157,6 +160,9 @@ public sealed partial class PdfViewport
             return;
 
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
+            return;
+
+        if (_usingRasterSheetRender)
             return;
 
         if (!force && _renderedScale > 0)

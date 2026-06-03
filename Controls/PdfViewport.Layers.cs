@@ -51,6 +51,7 @@ public sealed partial class PdfViewport
         _bitmapScale = render.BitmapScale;
         _layers = [];
         _usingLayerRenderer = false;
+        _usingRasterSheetRender = false;
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
@@ -66,6 +67,7 @@ public sealed partial class PdfViewport
         _bitmapScale = render.BitmapScale;
         _layers = [];
         _usingLayerRenderer = false;
+        _usingRasterSheetRender = false;
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
@@ -103,6 +105,7 @@ public sealed partial class PdfViewport
         _bitmapScale = raster.BitmapScale;
         _layers = [];
         _usingLayerRenderer = false;
+        _usingRasterSheetRender = true;
         _renderedScale = raster.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
@@ -207,6 +210,7 @@ public sealed partial class PdfViewport
         _bitmapScale = bitmapScale;
         _renderedScale = bitmapScale;
         _usingLayerRenderer = false;
+        _usingRasterSheetRender = false;
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
@@ -280,6 +284,7 @@ public sealed partial class PdfViewport
         if (_pdfSnapEnabled && request.ResetLayerStates)
             QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
+        _usingRasterSheetRender = false;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
@@ -348,6 +353,7 @@ public sealed partial class PdfViewport
         _bitmapScale = cached.BitmapScale;
         _renderedScale = cached.BitmapScale;
         _usingLayerRenderer = true;
+        _usingRasterSheetRender = false;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
@@ -416,6 +422,7 @@ public sealed partial class PdfViewport
         _pdfH = heightPt;
         _renderedScale = Math.Max(_renderedScale, request.RenderScale);
         _usingLayerRenderer = true;
+        _usingRasterSheetRender = false;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;
@@ -1049,6 +1056,7 @@ public sealed partial class PdfViewport
         if (_pdfSnapEnabled && resetLayerStates)
             QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
+        _usingRasterSheetRender = false;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
         _showingPreviousPageDuringSwitch = false;

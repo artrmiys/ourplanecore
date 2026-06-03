@@ -1180,6 +1180,36 @@ internal static class TakeoffsTreeRegressionTests
             "viewport should prefer the persisted strict raster snap index before live PDF snap extraction");
     }
 
+    public static void RasterSheetRenderSkipsDelayedPdfZoomRefresh()
+    {
+        string viewport = ReadRepoFile("Controls/PdfViewport.cs");
+        string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
+        string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string viewTransform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
+        string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
+        string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+
+        AssertTrue(
+            viewport.Contains("private bool _usingRasterSheetRender;", StringComparison.Ordinal) &&
+            pageApi.Contains("_usingRasterSheetRender = false;", StringComparison.Ordinal) &&
+            layers.Contains("_usingRasterSheetRender = true;", StringComparison.Ordinal),
+            "viewport must track when the visible page bitmap is the raster working sheet");
+        AssertTrue(
+            viewTransform.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) ||
+            viewTransform.Contains("if (_usingRasterSheetRender)\n            return;", StringComparison.Ordinal),
+            "raster sheet mode must not schedule full PDF zoom refreshes");
+        AssertTrue(
+            detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force)", StringComparison.Ordinal) &&
+            (detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) ||
+             detailRender.Contains("if (_usingRasterSheetRender)\n            return;", StringComparison.Ordinal)) &&
+            detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
+            "raster sheet mode must block delayed clipped PDF detail renders");
+        AssertTrue(
+            rendering.Contains("FilterQuality = _usingRasterSheetRender", StringComparison.Ordinal) &&
+            rendering.Contains("? SKFilterQuality.None", StringComparison.Ordinal),
+            "raster sheet mode should use stable bitmap sampling instead of switching quality during navigation");
+    }
+
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
