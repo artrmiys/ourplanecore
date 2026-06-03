@@ -28,6 +28,9 @@ internal static class RasterSheetCacheTests
                 ?? throw new InvalidOperationException("Raster page source was not readable after build.");
             AssertTrue(refreshed.RasterSheet != null, "source.json should persist raster sheet metadata");
             AssertTrue(refreshed.RasterSheet!.Enabled, "raster sheet should be enabled after build");
+            AssertTrue(
+                string.Equals(refreshed.RasterSheet.RenderProfile, RasterSheetCacheService.ReadableLineBoostProfile, StringComparison.Ordinal),
+                "working raster should be generated with the readable black-line boost profile");
             AssertTrue(refreshed.RasterSheet.SnapBlackOnly, "raster snap manifest should stay strict black-line only");
             AssertTrue(refreshed.RasterSheet.SnapIndex.EndsWith("snap.json", StringComparison.OrdinalIgnoreCase), "snap manifest path should be saved");
 
@@ -36,8 +39,8 @@ internal static class RasterSheetCacheTests
             AssertTrue(File.Exists(imagePath), "working raster image should be written beside the page");
             AssertTrue(File.Exists(snapPath), "strict snap manifest should be written beside the page");
             AssertTrue(
-                RasterSheetCacheService.DisplayStatus(refreshed).StartsWith("Raster", StringComparison.Ordinal),
-                "Sheet Manager raster status should report raster readiness");
+                RasterSheetCacheService.DisplayStatus(refreshed).Contains("+boost", StringComparison.Ordinal),
+                "Sheet Manager raster status should report the readable raster profile");
 
             AssertTrue(
                 RasterSheetCacheService.TryReadReady(

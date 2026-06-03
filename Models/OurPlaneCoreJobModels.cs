@@ -113,6 +113,9 @@ public sealed class RasterSheetSource
     [JsonPropertyName("format")]
     public string Format { get; set; } = "png";
 
+    [JsonPropertyName("render_profile")]
+    public string RenderProfile { get; set; } = "";
+
     [JsonPropertyName("render_scale")]
     public double RenderScale { get; set; }
 
@@ -152,6 +155,7 @@ public sealed class RasterSheetSource
             Enabled = Enabled,
             Image = Image,
             Format = Format,
+            RenderProfile = RenderProfile,
             RenderScale = RenderScale,
             WidthPt = WidthPt,
             HeightPt = HeightPt,
