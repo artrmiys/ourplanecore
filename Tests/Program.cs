@@ -300,6 +300,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf snap index prefers corner ties", PdfSnapIndexPrefersCornerTies),
     ("pdf snap index snaps to line", PdfSnapIndexSnapsToLine),
     ("pdf snap index finds nearest segment", PdfSnapIndexFindsNearestSegment),
+    ("pdf raster edge snap bridges small endpoint gaps", PdfRasterEdgeSnapBridgesSmallEndpointGaps),
 };
 
 int passed = 0;
@@ -4343,6 +4344,37 @@ static void PdfSnapIndexFindsNearestSegment()
         index.TryFindSegment(new SKPoint(64, 34), tolerancePt: 8, out _, out _),
         "distant PDF segment should not be available for edge snap preview");
 }
+
+static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
+{
+    MethodInfo method = typeof(PdfViewport).GetMethod(
+        "BuildPdfSnapContour",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfViewport.BuildPdfSnapContour");
+
+    var bridgeSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(10, 0), "pdf-line"),
+        new(new SKPoint(16, 0), new SKPoint(30, 0), "pdf-line"),
+        new(new SKPoint(36, 0), new SKPoint(50, 0), "pdf-line"),
+    };
+    object?[] bridgeArgs = [bridgeSegments, 0, 7f, false, 0];
+    var bridgePoints = (List<SKPoint>)method.Invoke(null, bridgeArgs)!;
+    AssertEqual("0,0|10,0|16,0|30,0|36,0|50,0", FormatPoints(bridgePoints), "small endpoint gaps should bridge along an unambiguous chain");
+
+    var branchSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(10, 0), "pdf-line"),
+        new(new SKPoint(15, 0), new SKPoint(30, 0), "pdf-line"),
+        new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line"),
+    };
+    object?[] branchArgs = [branchSegments, 0, 7f, false, 0];
+    var branchPoints = (List<SKPoint>)method.Invoke(null, branchArgs)!;
+    AssertEqual("0,0|10,0", FormatPoints(branchPoints), "ambiguous endpoint branches should not be guessed");
+}
+
+static string FormatPoints(IReadOnlyList<SKPoint> points) =>
+    string.Join("|", points.Select(point => $"{point.X:0},{point.Y:0}"));
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>
     ids.Select(id => new Measurement { Id = id }).ToList();

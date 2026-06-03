@@ -17,6 +17,9 @@ public sealed partial class PdfViewport
     private const int EdgeSnapModeContour = 3;
     private const int EdgeSnapModeCount = 4;
     private const float PdfSnapEndpointTolerancePt = 0.75f;
+    private const float PdfSnapBridgeToleranceScreenPx = 18f;
+    private const float PdfSnapBridgeToleranceMinPt = 1.0f;
+    private const float PdfSnapBridgeToleranceMaxPt = 18.0f;
     private const int PdfSnapMaxChainSegments = 256;
 
     private bool UpdateEdgeSnapPreview(SKPoint rawPdf, bool resetModeForNewCandidate = true)
@@ -283,7 +286,12 @@ public sealed partial class PdfViewport
                 distance);
         }
 
-        List<SKPoint> contour = BuildPdfSnapContour(segments, selectedIndex, out bool closed, out int segmentIndex);
+        List<SKPoint> contour = BuildPdfSnapContour(
+            segments,
+            selectedIndex,
+            PdfSnapBridgeTolerancePt(),
+            out bool closed,
+            out int segmentIndex);
         if (contour.Count < 2)
             return null;
 
@@ -310,9 +318,16 @@ public sealed partial class PdfViewport
         return -1;
     }
 
+    private float PdfSnapBridgeTolerancePt() =>
+        Math.Clamp(
+            ScreenToPdfDistance(PdfSnapBridgeToleranceScreenPx),
+            PdfSnapBridgeToleranceMinPt,
+            PdfSnapBridgeToleranceMaxPt);
+
     private static List<SKPoint> BuildPdfSnapContour(
         IReadOnlyList<PdfGeometrySnapSegment> segments,
         int selectedIndex,
+        float bridgeTolerancePt,
         out bool closed,
         out int selectedSegmentIndex)
     {
@@ -331,30 +346,53 @@ public sealed partial class PdfViewport
 
         while (!closed &&
                used.Count < PdfSnapMaxChainSegments &&
-               TryFindUniqueConnectedPdfSnapSegment(segments, used, points[0], out int nextIndex, out SKPoint otherPoint))
+               TryFindUniqueConnectedPdfSnapSegment(
+                   segments,
+                   used,
+                   points[0],
+                   bridgeTolerancePt,
+                   out int nextIndex,
+                   out SKPoint matchedPoint,
+                   out SKPoint otherPoint))
         {
             used.Add(nextIndex);
-            if (points.Count >= 3 && PdfSnapSameEndpoint(otherPoint, points[^1]))
+            if (points.Count >= 3 && PdfSnapSameEndpoint(otherPoint, points[^1], bridgeTolerancePt))
             {
                 closed = true;
                 break;
             }
 
+            if (!PdfSnapSameEndpoint(matchedPoint, points[0], PdfSnapEndpointTolerancePt))
+            {
+                points.Insert(0, ClonePoint(matchedPoint));
+                selectedSegmentIndex++;
+            }
             points.Insert(0, ClonePoint(otherPoint));
             selectedSegmentIndex++;
         }
 
         while (!closed &&
                used.Count < PdfSnapMaxChainSegments &&
-               TryFindUniqueConnectedPdfSnapSegment(segments, used, points[^1], out int nextIndex, out SKPoint otherPoint))
+               TryFindUniqueConnectedPdfSnapSegment(
+                   segments,
+                   used,
+                   points[^1],
+                   bridgeTolerancePt,
+                   out int nextIndex,
+                   out SKPoint matchedPoint,
+                   out SKPoint otherPoint))
         {
             used.Add(nextIndex);
-            if (points.Count >= 3 && PdfSnapSameEndpoint(otherPoint, points[0]))
+            if (points.Count >= 3 && PdfSnapSameEndpoint(otherPoint, points[0], bridgeTolerancePt))
             {
+                if (!PdfSnapSameEndpoint(matchedPoint, points[^1], PdfSnapEndpointTolerancePt))
+                    points.Add(ClonePoint(matchedPoint));
                 closed = true;
                 break;
             }
 
+            if (!PdfSnapSameEndpoint(matchedPoint, points[^1], PdfSnapEndpointTolerancePt))
+                points.Add(ClonePoint(matchedPoint));
             points.Add(ClonePoint(otherPoint));
         }
 
@@ -366,20 +404,25 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfGeometrySnapSegment> segments,
         HashSet<int> used,
         SKPoint endpoint,
+        float bridgeTolerancePt,
         out int segmentIndex,
+        out SKPoint matchedPoint,
         out SKPoint otherPoint)
     {
         segmentIndex = -1;
+        matchedPoint = default;
         otherPoint = default;
         int matches = 0;
+        float toleranceSq = Math.Max(PdfSnapEndpointTolerancePt, bridgeTolerancePt);
+        toleranceSq *= toleranceSq;
         for (int i = 0; i < segments.Count; i++)
         {
             if (used.Contains(i))
                 continue;
 
             PdfGeometrySnapSegment segment = segments[i];
-            bool startMatches = PdfSnapSameEndpoint(segment.Start, endpoint);
-            bool endMatches = PdfSnapSameEndpoint(segment.End, endpoint);
+            bool startMatches = PdfSnapSameEndpointSquared(segment.Start, endpoint, toleranceSq);
+            bool endMatches = PdfSnapSameEndpointSquared(segment.End, endpoint, toleranceSq);
             if (!startMatches && !endMatches)
                 continue;
 
@@ -388,6 +431,7 @@ public sealed partial class PdfViewport
                 return false;
 
             segmentIndex = i;
+            matchedPoint = startMatches ? segment.Start : segment.End;
             otherPoint = startMatches ? segment.End : segment.Start;
         }
 
@@ -549,8 +593,11 @@ public sealed partial class PdfViewport
     private static bool EdgeSamePoint(SKPoint left, SKPoint right) =>
         DistanceSquared(left, right) <= ViewportConstants.GeometryEpsilon;
 
-    private static bool PdfSnapSameEndpoint(SKPoint left, SKPoint right) =>
-        DistanceSquared(left, right) <= PdfSnapEndpointTolerancePt * PdfSnapEndpointTolerancePt;
+    private static bool PdfSnapSameEndpoint(SKPoint left, SKPoint right, float tolerancePt) =>
+        DistanceSquared(left, right) <= tolerancePt * tolerancePt;
+
+    private static bool PdfSnapSameEndpointSquared(SKPoint left, SKPoint right, double toleranceSq) =>
+        DistanceSquared(left, right) <= toleranceSq;
 
     private sealed record EdgeSnapCandidate(
         string SourceKind,

@@ -1232,6 +1232,12 @@ internal static class TakeoffsTreeRegressionTests
             edgeSnap.Contains("PdfSnapEndpointTolerancePt", StringComparison.Ordinal),
             "PDF/raster contour preview should stop at ambiguous branches and only connect close endpoints");
         AssertTrue(
+            edgeSnap.Contains("PdfSnapBridgeToleranceScreenPx", StringComparison.Ordinal) &&
+            edgeSnap.Contains("ScreenToPdfDistance(PdfSnapBridgeToleranceScreenPx)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("PdfSnapBridgeToleranceMaxPt", StringComparison.Ordinal) &&
+            edgeSnap.Contains("matchedPoint", StringComparison.Ordinal),
+            "PDF/raster edge preview should bridge small screen-pixel gaps while preserving the next real segment endpoint");
+        AssertTrue(
             edgeSnap.Contains("label = \"pdf \" + label", StringComparison.Ordinal) &&
             pdfSnap.Contains("PDF Snap ready from raster index", StringComparison.Ordinal),
             "PDF/raster edge preview should be visible to the user and prefer the persisted strict raster index");
