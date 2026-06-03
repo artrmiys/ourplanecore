@@ -3,7 +3,7 @@ namespace OurPlaneCore;
 public static class JoistTakeoffDefaults
 {
     public const string LengthRounding = JoistTakeoffCalculator.RoundingNearestFoot;
-    public const bool ShowLabels = true;
+    public const bool ShowLabels = false;
     public const bool DetailedAreaLabel = false;
     public const bool DirectionFollowsAreaRotation = true;
     public const bool AddEndJoist = true;

@@ -18,6 +18,7 @@ var tests = new List<(string Name, Action Run)>
     ("measurement area subtracts holes", MeasurementAreaSubtractsHoles),
     ("area cut inside keeps hole behavior", AreaCutInsideKeepsHoleBehavior),
     ("area cut box clips at area edge", AreaCutBoxClipsAtAreaEdge),
+    ("area cut through area splits into segments", AreaCutThroughAreaSplitsIntoSegments),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
@@ -465,6 +466,29 @@ static void AreaCutBoxClipsAtAreaEdge()
     AssertClose(94.0, layout.AreaMetersSquared, "joist area should subtract the same clipped edge cut");
 }
 
+static void AreaCutThroughAreaSplitsIntoSegments()
+{
+    var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
+    List<SKPoint> cut =
+    [
+        new SKPoint(4, -1),
+        new SKPoint(6, -1),
+        new SKPoint(6, 11),
+        new SKPoint(4, 11),
+    ];
+
+    bool ok = MeasurementAreaBooleanService.TrySubtractAll(
+        measurement,
+        cut,
+        out List<AreaBooleanGeometry> geometries,
+        out string error);
+
+    AssertTrue(ok, error);
+    AssertEqual("2", geometries.Count.ToString(), "through cut should split the area into two stored area geometries");
+    AssertClose(80.0, geometries.Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))), "split segments should preserve the remaining area");
+    AssertTrue(geometries.All(geometry => geometry.Holes.Count == 0), "simple through cut should not create holes");
+}
+
 static AreaBooleanGeometry BuildAreaCutGeometryForTest(Measurement measurement, IReadOnlyList<SKPoint> cut)
 {
     MethodInfo method = typeof(PdfViewport).GetMethod(
@@ -479,6 +503,19 @@ static AreaBooleanGeometry BuildAreaCutGeometryForTest(Measurement measurement, 
 
     return (AreaBooleanGeometry)(args[2]
         ?? throw new InvalidOperationException("Area cut helper returned no geometry."));
+}
+
+static double SignedAreaForTest(IReadOnlyList<SKPoint> polygon)
+{
+    double area = 0;
+    for (int i = 0; i < polygon.Count; i++)
+    {
+        SKPoint a = polygon[i];
+        SKPoint b = polygon[(i + 1) % polygon.Count];
+        area += a.X * b.Y - b.X * a.Y;
+    }
+
+    return area / 2.0;
 }
 
 static Measurement SimpleAreaMeasurement(float left, float top, float right, float bottom, string takeoffFolder = "") =>
@@ -3020,7 +3057,7 @@ static void JoistAreaDefaultsUseCompactLabelsAndFootRounding()
 
     AssertTrue(item.IsJoistTakeoff, "joist default enables item");
     AssertEqual(JoistTakeoffCalculator.RoundingNearestFoot, item.JoistLengthRounding, "joist default rounding");
-    AssertTrue(item.JoistShowLabels, "joist default labels");
+    AssertFalse(item.JoistShowLabels, "joist default hides per-segment labels");
     AssertFalse(item.JoistDetailedLabels, "joist default area label");
     AssertTrue(item.JoistDirectionFollowsAreaRotation, "joist default rotate direction");
     AssertTrue(item.JoistAddEndJoist, "joist default end joist");
@@ -3046,8 +3083,8 @@ static void LegacyJoistItemWithoutLabelFlagShowsLabels()
         TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("legacy joist item not loaded");
 
-        AssertTrue(loaded.JoistShowLabels, "legacy joist item labels");
-        AssertTrue(loaded.Measurements[0].JoistShowLabels, "legacy joist measurement labels");
+        AssertFalse(loaded.JoistShowLabels, "legacy joist item labels default hidden");
+        AssertFalse(loaded.Measurements[0].JoistShowLabels, "legacy joist measurement labels default hidden");
     });
 }
 
@@ -3072,8 +3109,8 @@ static void LegacyJoistItemOldFalseLabelFlagMigratesToLabels()
         TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("legacy joist item not loaded");
 
-        AssertTrue(loaded.JoistShowLabels, "legacy false joist item labels migrate on");
-        AssertTrue(loaded.Measurements[0].JoistShowLabels, "legacy false joist measurement labels migrate on");
+        AssertFalse(loaded.JoistShowLabels, "legacy false joist item labels stay hidden by default");
+        AssertFalse(loaded.Measurements[0].JoistShowLabels, "legacy false joist measurement labels stay hidden by default");
     });
 }
 
@@ -3099,8 +3136,8 @@ static void LegacyJoistItemOldExplicitFalseLabelFlagMigratesToLabels()
         TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("legacy explicit joist item not loaded");
 
-        AssertTrue(loaded.JoistShowLabels, "legacy explicit false joist item labels migrate on");
-        AssertTrue(loaded.Measurements[0].JoistShowLabels, "legacy explicit false joist measurement labels migrate on");
+        AssertFalse(loaded.JoistShowLabels, "legacy explicit false joist item labels stay hidden");
+        AssertFalse(loaded.Measurements[0].JoistShowLabels, "legacy explicit false joist measurement labels stay hidden");
         AssertFalse(loaded.JoistShowLabelsUserSet, "legacy explicit marker should not become a user label choice");
     });
 }

@@ -41,6 +41,34 @@ public static class MeasurementAreaBooleanService
         return TryReadSingleMeasurementGeometry(resultPath, out geometry, out error, "Cut");
     }
 
+    public static bool TrySubtractAll(
+        Measurement area,
+        IReadOnlyList<SKPoint> cutter,
+        out List<AreaBooleanGeometry> geometries,
+        out string error)
+    {
+        geometries = [];
+        error = "";
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area" ||
+            area.Points.Count < 3 ||
+            cutter.Count < 3)
+        {
+            error = "Cut: select an Area and draw a larger cut shape.";
+            return false;
+        }
+
+        using SKPath areaPath = BuildMeasurementPath(area);
+        using SKPath cutterPath = BuildPolygonPath(cutter);
+        using var resultPath = new SKPath { FillType = SKPathFillType.EvenOdd };
+        if (!areaPath.Op(cutterPath, SKPathOp.Difference, resultPath))
+        {
+            error = "Cut: area boolean failed.";
+            return false;
+        }
+
+        return TryReadMeasurementGeometries(resultPath, out geometries, out error, "Cut");
+    }
+
     public static bool TryUnion(
         Measurement first,
         Measurement second,
@@ -84,6 +112,28 @@ public static class MeasurementAreaBooleanService
         geometry = new AreaBooleanGeometry([], []);
         error = "";
 
+        if (!TryReadMeasurementGeometries(path, out List<AreaBooleanGeometry> geometries, out error, operation))
+            return false;
+
+        if (geometries.Count != 1)
+        {
+            error = $"{operation}: result has multiple separate area islands.";
+            return false;
+        }
+
+        geometry = geometries[0];
+        return geometry.Points.Count >= 3;
+    }
+
+    private static bool TryReadMeasurementGeometries(
+        SKPath path,
+        out List<AreaBooleanGeometry> geometries,
+        out string error,
+        string operation)
+    {
+        geometries = [];
+        error = "";
+
         List<List<SKPoint>> contours = ReadPathContours(path)
             .Select(CleanPolygon)
             .Where(contour => contour.Count >= 3 && Math.Abs(SignedArea(contour)) > AreaEpsilon)
@@ -102,29 +152,40 @@ public static class MeasurementAreaBooleanService
             .Where(info => info.Depth % 2 == 0)
             .OrderByDescending(info => info.Area)
             .ToList();
-        if (outers.Count != 1)
+        if (outers.Count == 0)
         {
-            error = $"{operation}: result has multiple separate area islands.";
+            error = $"{operation}: result area is empty.";
             return false;
         }
 
-        ContourInfo outer = outers[0];
-        List<ContourInfo> holeInfos = infos
-            .Where(info => info.Depth == outer.Depth + 1 && PointInside(info.Points, outer.Points))
-            .OrderByDescending(info => info.Area)
-            .ToList();
+        var supportedIndexes = new HashSet<int>(outers.Select(info => info.Index));
+        var output = new List<AreaBooleanGeometry>();
+        foreach (ContourInfo outer in outers)
+        {
+            List<ContourInfo> holeInfos = infos
+                .Where(info => info.Depth == outer.Depth + 1 && PointInside(info.Points, outer.Points))
+                .OrderByDescending(info => info.Area)
+                .ToList();
 
-        var supportedIndexes = new HashSet<int>(holeInfos.Select(info => info.Index)) { outer.Index };
+            foreach (ContourInfo hole in holeInfos)
+                supportedIndexes.Add(hole.Index);
+
+            output.Add(new AreaBooleanGeometry(
+                Orient(outer.Points, clockwise: false),
+                holeInfos.Select(info => Orient(info.Points, clockwise: true)).ToList()));
+        }
+
         if (infos.Any(info => !supportedIndexes.Contains(info.Index)))
         {
             error = $"{operation}: result has nested holes that cannot be stored safely.";
             return false;
         }
 
-        geometry = new AreaBooleanGeometry(
-            Orient(outer.Points, clockwise: false),
-            holeInfos.Select(info => Orient(info.Points, clockwise: true)).ToList());
-        return geometry.Points.Count >= 3;
+        geometries = output
+            .Where(item => item.Points.Count >= 3)
+            .OrderByDescending(item => Math.Abs(SignedArea(item.Points)))
+            .ToList();
+        return geometries.Count > 0;
     }
 
     private static SKPath BuildMeasurementPath(Measurement measurement)

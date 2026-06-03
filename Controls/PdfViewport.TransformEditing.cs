@@ -183,18 +183,17 @@ public sealed partial class PdfViewport
         if (!_draggingTransformScale && !_draggingTransformRotate)
             return;
 
-        if (_draggingTransformScale && IsEdgeHandle(_transformHandle))
+        if (_draggingTransformScale && ShouldScaleFromTopLeftAnchor(_transformHandle))
+        {
+            UpdateTopLeftAnchoredScaleDrag(pdf);
+        }
+        else if (_draggingTransformScale && IsEdgeHandle(_transformHandle))
         {
             UpdateEdgeResizeDrag(pdf);
         }
         else if (_draggingTransformScale)
         {
-            float distance = Distance(pdf, _transformCenter);
-            float factor = Math.Clamp(distance / Math.Max(_transformStartDistance, ViewportConstants.ZeroLengthEpsilon), 0.05f, 20f);
-            ApplyTransformFromOriginal(point => new SKPoint(
-                _transformCenter.X + (point.X - _transformCenter.X) * factor,
-                _transformCenter.Y + (point.Y - _transformCenter.Y) * factor));
-            PostStatus($"Scaling selection: {factor:0.##}x.");
+            UpdateCenteredScaleDrag(pdf);
         }
         else
         {
@@ -279,6 +278,60 @@ public sealed partial class PdfViewport
         PostStatus(proportional
             ? $"Resizing selection (proportional): {factor:0.##}x."
             : $"Resizing selection: {factor:0.##}x along {(horizontal ? "width" : "height")}.");
+    }
+
+    private void UpdateCenteredScaleDrag(SKPoint pdf)
+    {
+        float distance = Distance(pdf, _transformCenter);
+        float factor = Math.Clamp(distance / Math.Max(_transformStartDistance, ViewportConstants.ZeroLengthEpsilon), 0.05f, 20f);
+        ApplyTransformFromOriginal(point => new SKPoint(
+            _transformCenter.X + (point.X - _transformCenter.X) * factor,
+            _transformCenter.Y + (point.Y - _transformCenter.Y) * factor));
+        PostStatus($"Scaling selection: {factor:0.##}x.");
+    }
+
+    private void UpdateTopLeftAnchoredScaleDrag(SKPoint pdf)
+    {
+        SKRect b = _transformStartBounds;
+        SKPoint anchor = new(b.Left, b.Top);
+        float eps = Math.Max(ViewportConstants.ZeroLengthEpsilon, 0.0001f);
+        float fx = 1f;
+        float fy = 1f;
+
+        switch (_transformHandle)
+        {
+            case TransformHandleKind.ScaleRight:
+                fx = ScaleFactor(pdf.X, anchor.X, _transformStartPdf.X, eps);
+                if (IsOrthoActive())
+                    fy = fx;
+                break;
+            case TransformHandleKind.ScaleBottom:
+                fy = ScaleFactor(pdf.Y, anchor.Y, _transformStartPdf.Y, eps);
+                if (IsOrthoActive())
+                    fx = fy;
+                break;
+            case TransformHandleKind.ScaleTopRight:
+            case TransformHandleKind.ScaleBottomRight:
+                float startDistance = Math.Max(eps, Distance(_transformStartPdf, anchor));
+                float distance = Math.Max(eps, Distance(pdf, anchor));
+                fx = fy = Math.Clamp(distance / startDistance, 0.05f, 20f);
+                break;
+        }
+
+        ApplyTransformFromOriginal(point => new SKPoint(
+            anchor.X + (point.X - anchor.X) * fx,
+            anchor.Y + (point.Y - anchor.Y) * fy));
+        PostStatus(Math.Abs(fx - fy) <= 0.001f
+            ? $"Scaling selection from top-left: {fx:0.##}x."
+            : $"Resizing selection from top-left: width {fx:0.##}x, height {fy:0.##}x.");
+    }
+
+    private static float ScaleFactor(float current, float anchor, float start, float eps)
+    {
+        float original = start - anchor;
+        return Math.Abs(original) < eps
+            ? 1f
+            : Math.Clamp((current - anchor) / original, 0.05f, 20f);
     }
 
     private void FinishTransformDrag()
@@ -584,6 +637,12 @@ public sealed partial class PdfViewport
         kind is TransformHandleKind.ScaleLeft
              or TransformHandleKind.ScaleRight
              or TransformHandleKind.ScaleTop
+             or TransformHandleKind.ScaleBottom;
+
+    private static bool ShouldScaleFromTopLeftAnchor(TransformHandleKind kind) =>
+        kind is TransformHandleKind.ScaleTopRight
+             or TransformHandleKind.ScaleBottomRight
+             or TransformHandleKind.ScaleRight
              or TransformHandleKind.ScaleBottom;
 
     private static bool IsTransformRotationSnapActive() =>

@@ -76,19 +76,35 @@ public sealed partial class PdfViewport
         var beforeAreaPoints = new Dictionary<Measurement, List<SKPoint>>();
         var beforeAreaHoles = new Dictionary<Measurement, List<List<SKPoint>>>();
         var changedAreas = new List<Measurement>();
+        var removedAreaIndexes = new Dictionary<Measurement, int>();
+        var removedAreas = new List<Measurement>();
+        var addedAreas = new List<Measurement>();
         string firstAreaError = "";
         foreach (Measurement area in areaTargets)
         {
-            if (!TryBuildAreaCutGeometry(area, cutShape, out AreaBooleanGeometry geometry, out string error))
+            if (!TryBuildAreaCutGeometries(area, cutShape, out List<AreaBooleanGeometry> geometries, out string error))
             {
                 firstAreaError = string.IsNullOrWhiteSpace(firstAreaError) ? error : firstAreaError;
                 continue;
             }
 
-            beforeAreaPoints[area] = area.Points.ToList();
-            beforeAreaHoles[area] = CloneHoles(area.Holes);
-            ApplyAreaGeometry(area, geometry);
-            changedAreas.Add(area);
+            if (geometries.Count == 1)
+            {
+                beforeAreaPoints[area] = area.Points.ToList();
+                beforeAreaHoles[area] = CloneHoles(area.Holes);
+                ApplyAreaGeometry(area, geometries[0]);
+                changedAreas.Add(area);
+                continue;
+            }
+
+            int index = _measurements.IndexOf(area);
+            if (index < 0)
+                continue;
+
+            removedAreaIndexes[area] = index;
+            removedAreas.Add(area);
+            foreach (AreaBooleanGeometry geometry in geometries)
+                addedAreas.Add(CloneAreaMeasurement(area, geometry));
         }
 
         var removedLineIndexes = new Dictionary<Measurement, int>();
@@ -110,7 +126,7 @@ public sealed partial class PdfViewport
                 addedLines.Add(CloneLineMeasurement(line, piece));
         }
 
-        if (changedAreas.Count == 0 && removedLines.Count == 0)
+        if (changedAreas.Count == 0 && removedAreas.Count == 0 && removedLines.Count == 0)
         {
             _drawPts.Clear();
             _rubberEnd = null;
@@ -122,12 +138,27 @@ public sealed partial class PdfViewport
             return;
         }
 
+        foreach (Measurement removed in removedAreas)
+        {
+            _measurements.Remove(removed);
+            _measurementSet.Remove(removed);
+            RemoveMeasurementFromPageIndex(removed);
+            ForgetMeasurementState(removed);
+        }
+
         foreach (Measurement removed in removedLines)
         {
             _measurements.Remove(removed);
             _measurementSet.Remove(removed);
             RemoveMeasurementFromPageIndex(removed);
             ForgetMeasurementState(removed);
+        }
+
+        foreach (Measurement added in addedAreas)
+        {
+            _measurements.Add(added);
+            _measurementSet.Add(added);
+            IndexMeasurementByPage(added);
         }
 
         foreach (Measurement added in addedLines)
@@ -137,27 +168,33 @@ public sealed partial class PdfViewport
             IndexMeasurementByPage(added);
         }
 
+        var removedMeasurementIndexes = new Dictionary<Measurement, int>(removedAreaIndexes);
+        foreach (var pair in removedLineIndexes)
+            removedMeasurementIndexes[pair.Key] = pair.Value;
+        var addedMeasurements = addedAreas.Concat(addedLines).ToList();
         PushMixedMeasurementUndo(
             beforeAreaPoints,
             beforeAreaHoles,
-            removedLineIndexes,
-            addedLines,
+            removedMeasurementIndexes,
+            addedMeasurements,
             "cut measurements",
             "cut");
 
         _drawPts.Clear();
         _rubberEnd = null;
         _areaCutMeasurement = null;
-        if (addedLines.Count > 0)
+        if (addedMeasurements.Count > 0)
+            SetSelectedMeasurements(addedMeasurements, addedMeasurements.LastOrDefault(), -1);
+        else if (addedLines.Count > 0)
             SetSelectedMeasurements(addedLines, addedLines.LastOrDefault(), -1);
         else
             SetSelectedMeasurements(changedAreas, changedAreas.LastOrDefault(), -1);
 
         NotifyMeasurementsChanged(changedAreas);
-        NotifyMeasurementsRemoved(removedLines);
-        NotifyMeasurementsAdded(addedLines);
+        NotifyMeasurementsRemoved(removedAreas.Concat(removedLines).ToList());
+        NotifyMeasurementsAdded(addedMeasurements);
         RequestRepaint();
-        PostStatus(FormatCutStatus(shapeName, changedAreas.Count, removedLines.Count, addedLines.Count));
+        PostStatus(FormatCutStatus(shapeName, changedAreas.Count, removedAreas.Count, addedAreas.Count, removedLines.Count, addedLines.Count));
         PostRecordPrompt();
     }
 
@@ -273,6 +310,53 @@ public sealed partial class PdfViewport
             return false;
 
         return geometry.Points.Count >= 3;
+    }
+
+    private static bool TryBuildAreaCutGeometries(
+        Measurement target,
+        IReadOnlyList<SKPoint> cutShape,
+        out List<AreaBooleanGeometry> geometries,
+        out string error)
+    {
+        geometries = [];
+        error = "";
+        if (TryBuildAreaCutGeometry(target, cutShape, out AreaBooleanGeometry single, out string singleError))
+        {
+            geometries = [single];
+            return true;
+        }
+
+        if (!IsConvexPolygon(cutShape))
+        {
+            error = string.IsNullOrWhiteSpace(singleError)
+                ? "Cut: edge cuts need a box or convex cut shape."
+                : singleError;
+            return false;
+        }
+
+        List<SKPoint> clippedCut = ClipPolygonToConvexClip(target.Points, cutShape);
+        if (clippedCut.Count < 3 || PolygonArea(clippedCut) <= ViewportConstants.GeometryEpsilon)
+        {
+            error = "Cut: no selected Area or Line was touched.";
+            return false;
+        }
+
+        if (AreaCutOverlapsExistingHole(target, clippedCut))
+        {
+            error = "Cut: area cut cannot overlap an existing hole.";
+            return false;
+        }
+
+        if (!MeasurementAreaBooleanService.TrySubtractAll(target, cutShape, out geometries, out error))
+            return false;
+
+        if (geometries.Count < 2)
+        {
+            error = string.IsNullOrWhiteSpace(singleError) ? error : singleError;
+            return false;
+        }
+
+        return true;
     }
 
     private static void ApplyAreaGeometry(Measurement area, AreaBooleanGeometry geometry)
@@ -675,11 +759,45 @@ public sealed partial class PdfViewport
             ScaleMetersPerPt = source.ScaleMetersPerPt,
         };
 
-    private static string FormatCutStatus(string shapeName, int areaCount, int removedLineCount, int addedLineCount)
+    private static Measurement CloneAreaMeasurement(Measurement source, AreaBooleanGeometry geometry) =>
+        new()
+        {
+            Name = source.Name,
+            Notes = source.Notes,
+            MType = "area",
+            Points = geometry.Points.Select(ClonePoint).ToList(),
+            Holes = geometry.Holes.Select(hole => hole.Select(ClonePoint).ToList()).ToList(),
+            Color = source.Color,
+            CountSymbol = source.CountSymbol,
+            PageFolder = source.PageFolder,
+            TakeoffFolder = source.TakeoffFolder,
+            ScaleMetersPerPt = source.ScaleMetersPerPt,
+            JoistEnabled = source.JoistEnabled,
+            JoistType = source.JoistType,
+            JoistSpacingInches = source.JoistSpacingInches,
+            JoistDirectionDegrees = source.JoistDirectionDegrees,
+            JoistDirectionLocked = source.JoistDirectionLocked,
+            JoistDirectionFollowsAreaRotation = source.JoistDirectionFollowsAreaRotation,
+            JoistAddEndJoist = source.JoistAddEndJoist,
+            JoistPitch = source.JoistPitch,
+            JoistLengthRounding = source.JoistLengthRounding,
+            JoistShowLabels = source.JoistShowLabels,
+            JoistDetailedLabels = source.JoistDetailedLabels,
+        };
+
+    private static string FormatCutStatus(
+        string shapeName,
+        int areaCount,
+        int splitAreaCount,
+        int addedAreaCount,
+        int removedLineCount,
+        int addedLineCount)
     {
         var parts = new List<string>();
         if (areaCount > 0)
             parts.Add($"{areaCount} area hole(s)");
+        if (splitAreaCount > 0)
+            parts.Add($"{splitAreaCount} area(s) split into {addedAreaCount} segment(s)");
         if (removedLineCount > 0)
             parts.Add($"{removedLineCount} line(s) into {addedLineCount} piece(s)");
 

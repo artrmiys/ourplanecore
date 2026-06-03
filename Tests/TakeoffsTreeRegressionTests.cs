@@ -853,6 +853,7 @@ internal static class TakeoffsTreeRegressionTests
         string boxSelection = ReadRepoFile("Controls/PdfViewport.BoxSelection.cs");
         string hitTesting = ReadRepoFile("Controls/PdfViewport.HitTesting.cs");
         string areaCut = ReadRepoFile("Controls/PdfViewport.AreaCutTools.cs");
+        string transform = ReadRepoFile("Controls/PdfViewport.TransformEditing.cs");
         AssertTrue(
             viewportInput.Contains("BeginVertexBoxSelection(pdf)", StringComparison.Ordinal) &&
             selectionEditing.Contains("TryHitSelectedMeasurementSelectedVertex(pdf", StringComparison.Ordinal) &&
@@ -869,13 +870,26 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             areaCut.Contains("CutLinePiecesByPolygon", StringComparison.Ordinal) &&
             areaCut.Contains("TryBuildAreaCutGeometry", StringComparison.Ordinal) &&
+            areaCut.Contains("TryBuildAreaCutGeometries", StringComparison.Ordinal) &&
             areaCut.Contains("MeasurementAreaBooleanService.TrySubtract", StringComparison.Ordinal) &&
+            areaCut.Contains("MeasurementAreaBooleanService.TrySubtractAll", StringComparison.Ordinal) &&
             areaCut.Contains("ClipPolygonToConvexClip", StringComparison.Ordinal) &&
             areaCut.Contains("CloneLineMeasurement", StringComparison.Ordinal) &&
+            areaCut.Contains("CloneAreaMeasurement", StringComparison.Ordinal) &&
             areaCut.Contains("PushMixedMeasurementUndo", StringComparison.Ordinal) &&
-            areaCut.Contains("NotifyMeasurementsRemoved(removedLines)", StringComparison.Ordinal) &&
-            areaCut.Contains("NotifyMeasurementsAdded(addedLines)", StringComparison.Ordinal),
-            "Cut tool must apply the same box/polygon gesture to Area bites/holes and Line eraser pieces");
+            areaCut.Contains("NotifyMeasurementsRemoved(removedAreas.Concat(removedLines).ToList())", StringComparison.Ordinal) &&
+            areaCut.Contains("NotifyMeasurementsAdded(addedMeasurements)", StringComparison.Ordinal),
+            "Cut tool must apply the same box/polygon gesture to Area bites/holes, through-area splits, and Line eraser pieces");
+
+        AssertTrue(
+            transform.Contains("ShouldScaleFromTopLeftAnchor", StringComparison.Ordinal) &&
+            transform.Contains("UpdateTopLeftAnchoredScaleDrag", StringComparison.Ordinal) &&
+            transform.Contains("new(b.Left, b.Top)", StringComparison.Ordinal) &&
+            transform.Contains("TransformHandleKind.ScaleRight", StringComparison.Ordinal) &&
+            transform.Contains("TransformHandleKind.ScaleBottom", StringComparison.Ordinal) &&
+            transform.Contains("TransformHandleKind.ScaleBottomRight", StringComparison.Ordinal) &&
+            transform.Contains("UpdateCenteredScaleDrag", StringComparison.Ordinal),
+            "orange transform handles should keep top-left anchored for right/bottom scale paths while preserving legacy centered/left behavior");
 
         string rendering = ReadRepoFile("Controls/PdfViewport.MeasurementRendering.cs");
         string pdfExporter = ReadRepoFile("Models/PdfExporter.cs");
