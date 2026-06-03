@@ -36,6 +36,7 @@ public sealed class AppSettings
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
     public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
+    public double ViewportRulerStrokeWidth { get; set; } = 1.0;
     public double ViewportPointSizeScale { get; set; } = 2.0;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
@@ -349,6 +350,11 @@ public static class AppSettingsStore
             fallback: 3.0,
             min: 0.25,
             max: 4.0);
+        settings.ViewportRulerStrokeWidth = NormalizeScale(
+            settings.ViewportRulerStrokeWidth,
+            fallback: 1.0,
+            min: 0.5,
+            max: 6.0);
         settings.ViewportPointSizeScale = NormalizeScale(
             settings.ViewportPointSizeScale,
             fallback: 2.0,

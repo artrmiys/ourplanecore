@@ -131,6 +131,7 @@ public sealed partial class PdfViewport : SKElement
     public  string   ActiveColor      { get; set; } = "#FF4444";
     public  string   ActiveAnnotationColor { get; set; } = "#FF4444";
     public  double   ActiveAnnotationStrokeWidth { get; set; } = 5.0;
+    public  double   RulerStrokeWidth { get; set; } = 1.0;
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  string   ActiveCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;
@@ -275,6 +276,7 @@ public sealed partial class PdfViewport : SKElement
     private List<SKPoint> _dragMeasurementOriginalPoints = [];
     private List<List<SKPoint>> _dragMeasurementOriginalHoles = [];
     private List<SKPoint> _dragAnnotationOriginalPoints = [];
+    private readonly Dictionary<PageAnnotation, List<SKPoint>> _dragAnnotationSelectionOriginalPoints = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _dragSelectionOriginalPoints = [];
     private readonly Dictionary<Measurement, List<List<SKPoint>>> _dragSelectionOriginalHoles = [];
     private readonly Dictionary<Measurement, List<SKPoint>> _transformMeasurementOriginalPoints = [];
@@ -293,6 +295,7 @@ public sealed partial class PdfViewport : SKElement
     private readonly HashSet<int> _highlightedLayers = [];
     private List<PdfLayer> _layers = [];
     private IReadOnlyList<PdfLayerInfo>? _cachedLayers;
+    private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = [];
     private bool _pdfLayersLoadedForPage;
     private bool _usingLayerRenderer;
     private bool _usingRasterSheetRender;
@@ -493,6 +496,8 @@ public sealed partial class PdfViewport : SKElement
         _dragMeasurementVertexOriginalPoints.Clear();
         _dragSelectionOriginalPoints.Clear();
         _dragSelectionOriginalHoles.Clear();
+        _dragAnnotationSelectionOriginalPoints.Clear();
+        ClearRasterSheetVisualSegments();
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();

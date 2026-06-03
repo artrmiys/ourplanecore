@@ -121,7 +121,7 @@ public sealed partial class PdfViewport
             Kind = "dimension",
             Points = new List<SKPoint> { start, end },
             Color = "#1565C0",
-            StrokeWidth = ActiveAnnotationStrokeWidth,
+            StrokeWidth = RulerStrokeWidthPx(),
             PageFolder = _pageFolder,
             ScaleMetersPerPt = ScaleMetersPerPt,
         };

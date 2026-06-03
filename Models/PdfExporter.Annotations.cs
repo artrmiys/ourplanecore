@@ -30,7 +30,7 @@ public static partial class PdfExporter
                 IsAntialias = true,
                 Color = color,
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = ExportAnnotationStrokeWidth(annotation),
+                StrokeWidth = ExportAnnotationStrokeWidth(annotation, kind, options),
                 StrokeCap = SKStrokeCap.Round,
                 StrokeJoin = SKStrokeJoin.Round,
             };
@@ -100,8 +100,14 @@ public static partial class PdfExporter
         }
     }
 
-    private static float ExportAnnotationStrokeWidth(PageAnnotation annotation)
+    private static float ExportAnnotationStrokeWidth(
+        PageAnnotation annotation,
+        string kind,
+        PdfExportOptions options)
     {
+        if (string.Equals(kind, "dimension", StringComparison.OrdinalIgnoreCase))
+            return (float)Math.Clamp(options.RulerStrokeWidth, 0.5, 6.0);
+
         double value = annotation.StrokeWidth is >= 0.75 and <= 12.0
             ? annotation.StrokeWidth
             : 5.0;

@@ -63,6 +63,7 @@ public sealed class DetachedSheetWindow : Window
         _viewport.ShowCountLabels = settings.ShowCountLabels;
         _viewport.MeasurementLabelScale = ClampScale(settings.MeasurementLabelScale);
         _viewport.MeasurementStrokeScale = ClampScale(settings.ViewportMeasurementStrokeScale);
+        _viewport.RulerStrokeWidth = Math.Clamp(settings.ViewportRulerStrokeWidth, 0.5, 6.0);
         _viewport.PointSizeScale = ClampScale(settings.ViewportPointSizeScale);
         _viewport.SheetLegendAnchor = settings.SheetLegendAnchor;
         _viewport.SheetLegendScale = ClampScale(settings.SheetLegendScale);

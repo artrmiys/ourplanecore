@@ -795,7 +795,12 @@ internal static class TakeoffsTreeRegressionTests
         string takeoffsClipboard = ReadRepoFile("MainWindow.TakeoffsClipboard.cs");
         string pageLegend = ReadPageTakeoffLegendSources();
         string viewportSelectionState = ReadRepoFile("Controls/PdfViewport.SelectionState.cs");
+        string viewportSelectionEditing = ReadRepoFile("Controls/PdfViewport.SelectionEditing.cs");
+        string viewportInput = ReadRepoFile("Controls/PdfViewport.Input.cs");
+        string viewportAnnotationRendering = ReadRepoFile("Controls/PdfViewport.AnnotationRendering.cs");
         string viewportMeasurementApi = ReadRepoFile("Controls/PdfViewport.MeasurementApi.cs");
+        string displaySizing = ReadRepoFile("MainWindow.DisplaySettings.MeasurementSizing.cs");
+        string settings = ReadRepoFile("Models/AppSettingsStore.cs");
 
         AssertTrue(
             xaml.Contains("PagesTreeSearchBox", StringComparison.Ordinal) &&
@@ -818,6 +823,18 @@ internal static class TakeoffsTreeRegressionTests
             viewportMeasurementApi.Contains("HideVisibleRulerAnnotationsOnActivePage", StringComparison.Ordinal) &&
             viewportMeasurementApi.Contains("ShowAllRulerAnnotationsOnActivePage", StringComparison.Ordinal),
             "viewport markups must support multi-select delete and snapshot-based ruler hiding");
+        AssertTrue(
+            xaml.Contains("SldRulerThickness", StringComparison.Ordinal) &&
+            xaml.Contains("TxtRulerStrokeWidth", StringComparison.Ordinal) &&
+            displaySizing.Contains("NormalizeRulerStrokeWidth", StringComparison.Ordinal) &&
+            settings.Contains("ViewportRulerStrokeWidth", StringComparison.Ordinal) &&
+            viewportAnnotationRendering.Contains("RulerStrokeWidthPx()", StringComparison.Ordinal),
+            "ruler thickness must be a separate persisted Viewport control with a 1px default");
+        AssertTrue(
+            viewportSelectionEditing.Contains("_dragAnnotationSelectionOriginalPoints", StringComparison.Ordinal) &&
+            viewportSelectionEditing.Contains("Moving {selected.Count} selected markups.", StringComparison.Ordinal) &&
+            viewportInput.Contains("foreach (var (annotation, originalPoints) in _dragAnnotationSelectionOriginalPoints)", StringComparison.Ordinal),
+            "selected ruler/markup annotations must drag as a group instead of collapsing to the primary annotation");
     }
 
     public static void TakeoffFolderRandomColorsAreWired()
@@ -1185,6 +1202,7 @@ internal static class TakeoffsTreeRegressionTests
         string viewport = ReadRepoFile("Controls/PdfViewport.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
         string viewTransform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
@@ -1208,6 +1226,14 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("FilterQuality = _usingRasterSheetRender", StringComparison.Ordinal) &&
             rendering.Contains("? SKFilterQuality.None", StringComparison.Ordinal),
             "raster sheet mode should use stable bitmap sampling instead of switching quality during navigation");
+        AssertTrue(
+            viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
+            pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
+            pdfSnap.Contains("RasterSheetCacheService.TryReadSnapIndex", StringComparison.Ordinal) &&
+            layers.Contains("LoadRasterSheetVisualSegments(pageFolder, pdfPath, rasterSheet)", StringComparison.Ordinal) &&
+            rendering.Contains("DrawRasterSheetLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
+            rendering.Contains("_zoom > 0.55f", StringComparison.Ordinal),
+            "raster sheet low zoom should overlay strict snap segments so thin source lines remain readable below 50% zoom");
     }
 
     public static void PdfRasterEdgeSnapPreviewIsWired()

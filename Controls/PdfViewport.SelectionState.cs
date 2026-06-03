@@ -195,6 +195,7 @@ public sealed partial class PdfViewport
         _dragSelectionOriginalPoints.Clear();
         _dragSelectionOriginalHoles.Clear();
         _dragAnnotationOriginalPoints.Clear();
+        _dragAnnotationSelectionOriginalPoints.Clear();
         _transformMeasurementOriginalPoints.Clear();
         _transformMeasurementOriginalHoles.Clear();
         _transformMeasurementOriginalJoistDirections.Clear();

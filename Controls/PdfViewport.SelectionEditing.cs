@@ -249,10 +249,24 @@ public sealed partial class PdfViewport
         _draggingAnnotation = true;
         _dragAnnotationChanged = false;
         _dragScreenStart = screen;
-        _dragAnnotationOriginalPoints = annotation.Points.ToList();
         CaptureMouse();
-        SelectAnnotation(annotation, -1);
-        PostStatus($"Moving {ToolTitle(annotation.Kind)} markup. Drag body to move; blue handles reshape; orange handle rotates/scales.");
+        if (_selectedAnnotations.Contains(annotation))
+            SetSelectedAnnotations(GetSelectedAnnotations(), annotation, -1);
+        else
+            SelectAnnotation(annotation, -1);
+
+        _dragAnnotationOriginalPoints = annotation.Points.ToList();
+        _dragAnnotationSelectionOriginalPoints.Clear();
+        var selected = GetSelectedAnnotations();
+        if (selected.Count > 1 && selected.Contains(annotation))
+        {
+            foreach (PageAnnotation selectedAnnotation in selected)
+                _dragAnnotationSelectionOriginalPoints[selectedAnnotation] = selectedAnnotation.Points.ToList();
+        }
+
+        PostStatus(selected.Count > 1
+            ? $"Moving {selected.Count} selected markups."
+            : $"Moving {ToolTitle(annotation.Kind)} markup. Drag body to move; blue handles reshape; orange handle rotates/scales.");
     }
 
     private void FinishAnnotationDrag()
@@ -260,15 +274,29 @@ public sealed partial class PdfViewport
         if (!_draggingAnnotationVertex && !_draggingAnnotation)
             return;
 
-        PageAnnotation? changed = _dragAnnotationChanged ? _selectedAnnotation : null;
+        bool wasChanged = _dragAnnotationChanged;
+        PageAnnotation? changed = wasChanged ? _selectedAnnotation : null;
         List<SKPoint> beforePoints = _dragAnnotationOriginalPoints.ToList();
+        Dictionary<PageAnnotation, List<SKPoint>> beforeSelection = _dragAnnotationSelectionOriginalPoints
+            .ToDictionary(pair => pair.Key, pair => pair.Value.ToList());
         _draggingAnnotationVertex = false;
         _draggingAnnotation = false;
         _dragAnnotationChanged = false;
         _dragAnnotationOriginalPoints.Clear();
+        _dragAnnotationSelectionOriginalPoints.Clear();
         if (IsMouseCaptured)
             ReleaseMouseCapture();
-        if (changed != null)
+        if (wasChanged && beforeSelection.Count > 0)
+        {
+            PushGeometryUndoSnapshotFromOriginals(
+                new Dictionary<Measurement, List<SKPoint>>(),
+                beforeSelection,
+                "move selected markups",
+                "annotation-drag");
+            foreach (PageAnnotation annotation in beforeSelection.Keys)
+                PageAnnotationChanged?.Invoke(annotation);
+        }
+        else if (changed != null)
         {
             PushAnnotationUndoSnapshot(changed, beforePoints, "move markup", "annotation-drag");
             PageAnnotationChanged?.Invoke(changed);

@@ -594,6 +594,7 @@ static void OutputSettingsDefaultExportAppearance()
     AssertFalse(settings.ShowAreaLabels, "area labels should default to the current display profile");
     AssertClose(0.9619565217391305, settings.MeasurementLabelScale, "viewport labels should default to the current size");
     AssertClose(3.0, settings.ViewportMeasurementStrokeScale, "viewport stroke should default to the current size");
+    AssertClose(1.0, settings.ViewportRulerStrokeWidth, "viewport ruler should default to a 1px screen line");
     AssertClose(2.0, settings.ViewportPointSizeScale, "viewport point size should default to the current size");
     AssertClose(0.25, settings.ViewportAreaEdgeScale, "viewport area edge should default to the current size");
     AssertClose(0.2826086956521738, settings.ViewportAreaFillOpacity, "viewport area fill should default to the current opacity");

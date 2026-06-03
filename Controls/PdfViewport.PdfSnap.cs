@@ -60,6 +60,26 @@ public sealed partial class PdfViewport
         _pdfSnapLoadVersion++;
     }
 
+    private void ClearRasterSheetVisualSegments()
+    {
+        _rasterSheetVisualSegments = [];
+    }
+
+    private void LoadRasterSheetVisualSegments(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet)
+    {
+        _rasterSheetVisualSegments = RasterSheetCacheService.TryReadSnapIndex(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                out PdfGeometrySnapResult snapIndex,
+                out _)
+            ? snapIndex.Segments
+            : [];
+    }
+
     private void SetOverlayPdfSnapSource(
         string pdfPath,
         int pageIndex,

@@ -379,14 +379,30 @@ public sealed partial class PdfViewport
             _selectedAnnotation != null)
         {
             SKPoint delta = ScreenDragDeltaToPdf(pos);
-            for (int i = 0; i < _selectedAnnotation.Points.Count && i < _dragAnnotationOriginalPoints.Count; i++)
+            if (_dragAnnotationSelectionOriginalPoints.Count > 0)
             {
-                SKPoint original = _dragAnnotationOriginalPoints[i];
-                _selectedAnnotation.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                foreach (var (annotation, originalPoints) in _dragAnnotationSelectionOriginalPoints)
+                {
+                    for (int i = 0; i < annotation.Points.Count && i < originalPoints.Count; i++)
+                    {
+                        SKPoint original = originalPoints[i];
+                        annotation.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _selectedAnnotation.Points.Count && i < _dragAnnotationOriginalPoints.Count; i++)
+                {
+                    SKPoint original = _dragAnnotationOriginalPoints[i];
+                    _selectedAnnotation.Points[i] = new SKPoint(original.X + delta.X, original.Y + delta.Y);
+                }
             }
 
             _dragAnnotationChanged = true;
-            PostDragStatus("Dragging markup", delta);
+            PostDragStatus(
+                _dragAnnotationSelectionOriginalPoints.Count > 0 ? "Dragging markups" : "Dragging markup",
+                delta);
             RequestRepaint();
             e.Handled = true;
             return;

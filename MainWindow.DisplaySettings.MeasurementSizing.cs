@@ -102,6 +102,42 @@ public partial class MainWindow
     private void BtnMeasurementPointApply_Click(object sender, RoutedEventArgs e) =>
         ApplyMeasurementPointScaleFromText();
 
+    private void TxtRulerStrokeWidth_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyRulerStrokeWidthFromText();
+        e.Handled = true;
+    }
+
+    private void TxtRulerStrokeWidth_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyRulerStrokeWidthFromText();
+
+    private void ApplyRulerStrokeWidthFromText()
+    {
+        string raw = TxtRulerStrokeWidth.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double width) ||
+            width < 0.5 ||
+            width > 6.0)
+        {
+            TxtRulerStrokeWidth.Text = _settings.ViewportRulerStrokeWidth.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtStatus.Text = "Ruler thickness must be 0.5 - 6 px.";
+            return;
+        }
+
+        SetRulerStrokeWidth(width);
+    }
+
+    private void SetRulerStrokeWidth(double width)
+    {
+        _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(width);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"Ruler thickness: {_settings.ViewportRulerStrokeWidth:0.##}px.";
+    }
+
     private void TxtMeasurementPointScale_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key is not (Key.Enter or Key.Return))
@@ -230,6 +266,19 @@ public partial class MainWindow
         _viewport.InvalidateVisual();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Viewport point size: {_settings.ViewportPointSizeScale:0.##}x.";
+    }
+
+    private void SldRulerThickness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized || _isApplyingSettings)
+            return;
+
+        _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(e.NewValue);
+        _viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
+        TxtRulerStrokeWidth.Text = _settings.ViewportRulerStrokeWidth.ToString("0.##", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Ruler thickness: {_settings.ViewportRulerStrokeWidth:0.##}px.";
     }
 
     private void SldAreaEdge_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -372,6 +421,14 @@ public partial class MainWindow
             return 1.0;
 
         return Math.Clamp(scale, 0.25, 4.00);
+    }
+
+    private static double NormalizeRulerStrokeWidth(double width)
+    {
+        if (double.IsNaN(width) || double.IsInfinity(width) || width <= 0)
+            return 1.0;
+
+        return Math.Clamp(width, 0.5, 6.0);
     }
 
     private static double NormalizePointScale(double scale)

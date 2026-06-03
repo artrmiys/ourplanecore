@@ -118,6 +118,9 @@ public sealed partial class PdfViewport
 
     private float AnnotationStrokeWidth(PageAnnotation annotation, bool selected)
     {
+        if (IsRulerAnnotation(annotation))
+            return ScreenToPdfDistance(RulerStrokeWidthPx());
+
         double value = annotation.StrokeWidth is >= 0.75 and <= 12.0
             ? annotation.StrokeWidth
             : 5.0;
@@ -125,6 +128,9 @@ public sealed partial class PdfViewport
             value += 0.9;
         return ScreenToPdfDistance((float)Math.Clamp(value, 0.75, 12.9));
     }
+
+    private float RulerStrokeWidthPx() =>
+        (float)Math.Clamp(RulerStrokeWidth, 0.5, 6.0);
 
     private void DrawAreaAnnotation(SKCanvas canvas, PageAnnotation annotation, SKColor color, SKPaint stroke)
     {

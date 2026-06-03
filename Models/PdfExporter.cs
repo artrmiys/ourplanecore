@@ -27,7 +27,8 @@ public sealed record PdfExportOptions(
     double MeasurementLabelScale,
     bool ShowJoistLabels = true,
     double AreaEdgeScale = 1.0,
-    double AreaFillOpacity = 0.15);
+    double AreaFillOpacity = 0.15,
+    double RulerStrokeWidth = 1.0);
 
 public sealed record PdfExportPageInput(
     PageInfo Page,

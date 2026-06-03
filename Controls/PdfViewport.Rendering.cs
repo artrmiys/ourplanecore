@@ -95,6 +95,7 @@ public sealed partial class PdfViewport
                     DrawDetailRenderTile(canvas);
                     DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);
+                    DrawRasterSheetLowZoomLineOverlay(canvas, visiblePdf);
                 }
             }
             pageBitmapMs += frameWatch.ElapsedMilliseconds - sectionStart;
@@ -292,6 +293,45 @@ public sealed partial class PdfViewport
             IsAntialias = false,
         };
         canvas.DrawRect(new SKRect(0, 0, width, height), paint);
+    }
+
+    private void DrawRasterSheetLowZoomLineOverlay(SKCanvas canvas, SKRect visiblePdf)
+    {
+        if (!_usingRasterSheetRender ||
+            _rasterSheetVisualSegments.Count == 0 ||
+            _zoom <= 0 ||
+            _zoom > 0.55f)
+        {
+            return;
+        }
+
+        SKRect searchRect = visiblePdf;
+        searchRect.Inflate(ScreenToPdfDistance(8f), ScreenToPdfDistance(8f));
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black.WithAlpha(145),
+            StrokeWidth = 1.0f,
+            IsAntialias = false,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Square,
+        };
+
+        foreach (PdfGeometrySnapSegment segment in _rasterSheetVisualSegments)
+        {
+            if (!RectsIntersect(SegmentBounds(segment), searchRect))
+                continue;
+
+            canvas.DrawLine(PdfToScreen(segment.Start), PdfToScreen(segment.End), stroke);
+        }
+    }
+
+    private static SKRect SegmentBounds(PdfGeometrySnapSegment segment)
+    {
+        float left = Math.Min(segment.Start.X, segment.End.X);
+        float top = Math.Min(segment.Start.Y, segment.End.Y);
+        float right = Math.Max(segment.Start.X, segment.End.X);
+        float bottom = Math.Max(segment.Start.Y, segment.End.Y);
+        return new SKRect(left, top, right, bottom);
     }
 
 }
