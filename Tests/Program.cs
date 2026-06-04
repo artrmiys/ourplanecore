@@ -4349,6 +4349,10 @@ static void PdfSnapIndexFindsNearestSegment()
     AssertEqual("10,10", $"{segment.Start.X:0},{segment.Start.Y:0}", "nearest segment start");
     AssertEqual("110,10", $"{segment.End.X:0},{segment.End.Y:0}", "nearest segment end");
     AssertTrue(Math.Abs(distance - 4) < 0.001f, "nearest segment distance should be returned");
+    var hits = index.FindSegments(new SKPoint(64, 14), tolerancePt: 8);
+    AssertEqual("1", hits.Count.ToString(), "nearby PDF segment hits should be enumerable for contour ranking");
+    AssertEqual("0", hits[0].Index.ToString(), "nearby PDF segment hit should preserve source segment index");
+    AssertTrue(Math.Abs(hits[0].DistancePt - 4) < 0.001f, "nearby PDF segment hit should preserve distance");
 
     AssertFalse(
         index.TryFindSegment(new SKPoint(64, 34), tolerancePt: 8, out _, out _),
@@ -4425,6 +4429,21 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
     AssertTrue(boundaryArgs[4] is true, "Area PDF boundary pass should close a likely exterior contour across bridge-sized door/window gaps");
     double boundaryArea = Math.Abs(SignedAreaForTest(boundaryPoints));
     AssertTrue(boundaryArea > 3000, $"closed PDF boundary contour should preserve the probable exterior footprint area, got {boundaryArea:0.0}: {FormatPoints(boundaryPoints)}");
+
+    var shortJogSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(120, 0), "pdf-line"),
+        new(new SKPoint(120, 0), new SKPoint(120, 24), "pdf-line"),
+        new(new SKPoint(120, 24), new SKPoint(220, 24), "pdf-line"),
+        new(new SKPoint(220, 24), new SKPoint(220, 100), "pdf-line"),
+        new(new SKPoint(220, 100), new SKPoint(0, 100), "pdf-line"),
+        new(new SKPoint(0, 100), new SKPoint(0, 0), "pdf-line"),
+    };
+    object?[] shortJogArgs = [shortJogSegments, 1, 80f, true, false, 0];
+    var shortJogPoints = (List<SKPoint>)method.Invoke(null, shortJogArgs)!;
+    AssertTrue(shortJogArgs[4] is true, "large bridge tolerance must not collapse selected 24pt exterior jog segments");
+    double shortJogArea = Math.Abs(SignedAreaForTest(shortJogPoints));
+    AssertTrue(shortJogArea > 18000, $"short exterior jog contour should stay closed and full size, got {shortJogArea:0.0}: {FormatPoints(shortJogPoints)}");
 }
 
 static string FormatPoints(IReadOnlyList<SKPoint> points) =>

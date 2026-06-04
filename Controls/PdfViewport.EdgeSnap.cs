@@ -283,17 +283,30 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (!_pdfSnapIndex.TryFindSegment(rawPdf, tolerance, out PdfGeometrySnapSegment segment, out float distance))
+        IReadOnlyList<PdfGeometrySnapSegmentHit> hits = _pdfSnapIndex.FindSegments(rawPdf, tolerance);
+        if (hits.Count == 0)
             return false;
 
-        candidate = BuildPdfEdgeSnapCandidate(segment, distance);
-        return candidate != null;
+        bool preferClosedBoundary = _tool == ViewerTool.Area || _edgeSnapCycleMode == EdgeSnapModeContour;
+        float bridgeTolerancePt = PdfSnapBridgeTolerancePt();
+        foreach (PdfGeometrySnapSegmentHit hit in RankPdfEdgeSnapSegmentHits(hits, preferClosedBoundary, bridgeTolerancePt).Take(12))
+        {
+            candidate = BuildPdfEdgeSnapCandidate(hit.Segment, hit.DistancePt, hit.Index, preferClosedBoundary, bridgeTolerancePt);
+            if (candidate != null)
+                return true;
+        }
+
+        return false;
     }
 
-    private EdgeSnapCandidate? BuildPdfEdgeSnapCandidate(PdfGeometrySnapSegment selectedSegment, float distance)
+    private EdgeSnapCandidate? BuildPdfEdgeSnapCandidate(
+        PdfGeometrySnapSegment selectedSegment,
+        float distance,
+        int selectedIndex,
+        bool preferClosedBoundary,
+        float bridgeTolerancePt)
     {
         IReadOnlyList<PdfGeometrySnapSegment> segments = _pdfSnapIndex.Segments;
-        int selectedIndex = FindPdfSnapSegmentIndex(segments, selectedSegment);
         if (selectedIndex < 0)
         {
             return new EdgeSnapCandidate(
@@ -308,8 +321,8 @@ public sealed partial class PdfViewport
         List<SKPoint> contour = BuildPdfSnapContour(
             segments,
             selectedIndex,
-            PdfSnapBridgeTolerancePt(),
-            _tool == ViewerTool.Area,
+            bridgeTolerancePt,
+            preferClosedBoundary,
             out bool closed,
             out int segmentIndex);
         if (contour.Count < 2)
@@ -322,6 +335,32 @@ public sealed partial class PdfViewport
             closed,
             segmentIndex,
             distance);
+    }
+
+    private static IEnumerable<PdfGeometrySnapSegmentHit> RankPdfEdgeSnapSegmentHits(
+        IReadOnlyList<PdfGeometrySnapSegmentHit> hits,
+        bool preferClosedBoundary,
+        float bridgeTolerancePt)
+    {
+        if (!preferClosedBoundary)
+            return hits.OrderBy(hit => hit.DistancePt);
+
+        float usefulLength = Math.Clamp(bridgeTolerancePt * 0.22f, 10f, 36f);
+        return hits.OrderBy(hit => PdfEdgeSnapSegmentHitScore(hit, usefulLength));
+    }
+
+    private static float PdfEdgeSnapSegmentHitScore(PdfGeometrySnapSegmentHit hit, float usefulLength)
+    {
+        float shortPenalty = hit.LengthPt >= usefulLength ? 0 : (usefulLength - hit.LengthPt) * 2.5f;
+        float axisPenalty = PdfEdgeSnapSegmentIsAxisAligned(hit.Segment) ? 0 : usefulLength;
+        return hit.DistancePt + shortPenalty + axisPenalty;
+    }
+
+    private static bool PdfEdgeSnapSegmentIsAxisAligned(PdfGeometrySnapSegment segment)
+    {
+        float dx = Math.Abs(segment.End.X - segment.Start.X);
+        float dy = Math.Abs(segment.End.Y - segment.Start.Y);
+        return dx <= 2f || dy <= 2f;
     }
 
     private static int FindPdfSnapSegmentIndex(

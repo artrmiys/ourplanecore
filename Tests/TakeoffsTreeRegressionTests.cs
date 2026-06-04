@@ -1263,16 +1263,20 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             snapService.Contains("public IReadOnlyList<PdfGeometrySnapSegment> Segments => _segments;", StringComparison.Ordinal) &&
-            snapService.Contains("public bool TryFindSegment(", StringComparison.Ordinal),
-            "PDF snap index must expose strict line segments for edge preview without re-reading the PDF");
+            snapService.Contains("public bool TryFindSegment(", StringComparison.Ordinal) &&
+            snapService.Contains("PdfGeometrySnapSegmentHit", StringComparison.Ordinal) &&
+            snapService.Contains("public IReadOnlyList<PdfGeometrySnapSegmentHit> FindSegments(", StringComparison.Ordinal),
+            "PDF snap index must expose strict line segments and nearby segment hits for edge preview without re-reading the PDF");
         AssertTrue(
             edgeSnap.Contains("TryFindPdfEdgeSnapCandidate", StringComparison.Ordinal) &&
-            edgeSnap.Contains("_pdfSnapIndex.TryFindSegment", StringComparison.Ordinal) &&
+            edgeSnap.Contains("_pdfSnapIndex.FindSegments(rawPdf, tolerance)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("RankPdfEdgeSnapSegmentHits", StringComparison.Ordinal) &&
+            edgeSnap.Contains("preferClosedBoundary", StringComparison.Ordinal) &&
             edgeSnap.Contains("_pdfSnapIndex.Segments", StringComparison.Ordinal) &&
             edgeSnap.Contains("if (!found &&", StringComparison.Ordinal) &&
             edgeSnap.Contains("BuildPdfSnapContour", StringComparison.Ordinal) &&
             edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal),
-            "Edge Snap should use loaded PDF/raster snap segments as a second preview source without overriding ordinary takeoff edge snap");
+            "Edge Snap should use ranked loaded PDF/raster snap segments as a second preview source without overriding ordinary takeoff edge snap");
         AssertTrue(
             edgeSnap.Contains("TryFindUniqueConnectedPdfSnapSegment", StringComparison.Ordinal) &&
             edgeSnap.Contains("if (matches > 1 &&", StringComparison.Ordinal) &&
@@ -1304,9 +1308,11 @@ internal static class TakeoffsTreeRegressionTests
             contour.Contains("TryBuildPdfSnapBoundaryContour", StringComparison.Ordinal) &&
             contour.Contains("TryBuildPdfSnapRasterBoundaryContour", StringComparison.Ordinal) &&
             contour.Contains("TryChooseLargestPdfSnapBoundaryContour", StringComparison.Ordinal) &&
+            contour.Contains("bridgeTolerancePt * 0.025f", StringComparison.Ordinal) &&
+            contour.Contains("2.25f", StringComparison.Ordinal) &&
             contour.Contains("PdfSnapDirectionalBridgeFactor", StringComparison.Ordinal) &&
             contour.Contains("ProjectPdfSnapBoundaryPoints", StringComparison.Ordinal),
-            "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass and prefer the largest reliable contour before falling back to the line chain");
+            "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass while preserving short exterior jog edges");
     }
 
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()

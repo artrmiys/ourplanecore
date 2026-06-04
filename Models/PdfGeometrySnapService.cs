@@ -9,6 +9,7 @@ namespace OurPlaneCore;
 
 public sealed record PdfGeometrySnapPoint(SKPoint Point, string Kind, string LayerName = "");
 public sealed record PdfGeometrySnapSegment(SKPoint Start, SKPoint End, string Kind, string LayerName = "", float StrokeWidth = 0f);
+public readonly record struct PdfGeometrySnapSegmentHit(PdfGeometrySnapSegment Segment, int Index, float DistancePt, float LengthPt);
 
 public sealed class PdfGeometrySnapResult
 {
@@ -149,6 +150,51 @@ public sealed class PdfSnapPointIndex
 
         distancePt = found ? MathF.Sqrt(bestDistance) : 0;
         return found;
+    }
+
+    public IReadOnlyList<PdfGeometrySnapSegmentHit> FindSegments(SKPoint rawPdf, float tolerancePt)
+    {
+        if (tolerancePt <= 0 || _segments.Count == 0)
+            return [];
+
+        int minX = GridCoordinate(rawPdf.X - tolerancePt);
+        int maxX = GridCoordinate(rawPdf.X + tolerancePt);
+        int minY = GridCoordinate(rawPdf.Y - tolerancePt);
+        int maxY = GridCoordinate(rawPdf.Y + tolerancePt);
+        float toleranceSq = tolerancePt * tolerancePt;
+        var hits = new List<PdfGeometrySnapSegmentHit>();
+        HashSet<int>? seenSegments = null;
+
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                if (!_segmentCells.TryGetValue((x, y), out var segmentBucket))
+                    continue;
+
+                seenSegments ??= [];
+                foreach (int segmentIndex in segmentBucket)
+                {
+                    if (!seenSegments.Add(segmentIndex))
+                        continue;
+
+                    PdfGeometrySnapSegment segment = _segments[segmentIndex];
+                    SKPoint closest = ClosestPointOnSegment(rawPdf, segment.Start, segment.End);
+                    float distanceSq = DistanceSquared(rawPdf, closest);
+                    if (distanceSq > toleranceSq)
+                        continue;
+
+                    float length = MeasurementGeometry.Distance(segment.Start, segment.End);
+                    hits.Add(new PdfGeometrySnapSegmentHit(
+                        segment,
+                        segmentIndex,
+                        MathF.Sqrt(distanceSq),
+                        length));
+                }
+            }
+        }
+
+        return hits;
     }
 
     private void AddPoint(PdfGeometrySnapPoint point)

@@ -59,7 +59,7 @@ public sealed partial class PdfViewport
             return false;
 
         selected = segments[selectedIndex];
-        float nodeTolerance = Math.Clamp(Math.Max(PdfSnapEndpointTolerancePt, bridgeTolerancePt), 1f, 32f);
+        float nodeTolerance = Math.Clamp(Math.Max(PdfSnapEndpointTolerancePt, bridgeTolerancePt * 0.025f), 1f, 2.25f);
         var nodes = new List<SKPoint>();
         var adjacency = new List<List<int>>();
         var nodeGrid = new Dictionary<(int X, int Y), List<int>>();
