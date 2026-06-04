@@ -108,6 +108,13 @@ public sealed partial class PdfViewport
 
         if (_usingRasterSheetRender)
         {
+            if (_usingRasterSheetOverviewRender &&
+                ShouldUseRasterSheetForCurrentZoom() &&
+                TryApplyReadyRasterSheetForCurrentZoom())
+            {
+                return;
+            }
+
             if (TrySwitchRasterSheetToFastPreviewForLowZoom())
                 return;
 

@@ -28,6 +28,7 @@ public static class RasterSheetCacheService
     public const float DefaultRenderScale = 200f / 72f;
     public const string CacheFolderName = "raster";
     public const string WorkingImageName = "working.png";
+    public const string OverviewImageName = "overview.png";
     public const string SnapIndexName = "snap.json";
     public const string ReadableRasterProfile = "readable-raster-v2";
     public const string SourceImageRasterProfile = "source-image-v1";
@@ -130,14 +131,27 @@ public static class RasterSheetCacheService
             data.SaveTo(output);
         File.Move(tempPath, imagePath, overwrite: true);
 
+        bool hasOverview = TryWriteSourceImageOverview(
+            decoded,
+            rasterDir,
+            page.FolderPath,
+            widthPt,
+            out string overviewImage,
+            out double overviewRenderScale,
+            out string overviewError);
+        if (!hasOverview && !string.IsNullOrWhiteSpace(overviewError))
+            AppLog.Warn($"Source image overview cache unavailable for '{page.Name}': {overviewError}");
+
         var pdfInfo = new FileInfo(page.PdfPath);
         var source = new RasterSheetSource
         {
             Enabled = true,
             Image = Path.GetRelativePath(page.FolderPath, imagePath),
+            OverviewImage = overviewImage,
             Format = "png",
             RenderProfile = SourceImageRasterProfile,
             RenderScale = widthPt > 0 ? decoded.Width / widthPt : 0,
+            OverviewRenderScale = overviewRenderScale,
             WidthPt = widthPt,
             HeightPt = heightPt,
             PdfLastWriteUtcTicks = pdfInfo.LastWriteTimeUtc.Ticks,
@@ -245,12 +259,20 @@ public static class RasterSheetCacheService
         if (!IsSourceImageRaster(source) || source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
             return false;
 
+        if (HasSourceImageOverview(source))
+            return true;
+
         double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
         return estimatedPixels > 0 &&
                !double.IsInfinity(estimatedPixels) &&
                !double.IsNaN(estimatedPixels) &&
                estimatedPixels <= SourceImageFastOpenMaxPixels;
     }
+
+    public static bool HasSourceImageOverview(RasterSheetSource? source) =>
+        IsSourceImageRaster(source) &&
+        !string.IsNullOrWhiteSpace(source!.OverviewImage) &&
+        source.OverviewRenderScale > 0;
 
     public static bool TryReadSnapIndex(
         string pageFolder,
@@ -390,6 +412,52 @@ public static class RasterSheetCacheService
         return true;
     }
 
+    public static bool TryReadOverviewReady(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? source,
+        out RasterSheetBitmapResult result,
+        out string reason)
+    {
+        result = new RasterSheetBitmapResult(new SKBitmap(), 0, 0, 0, "");
+        reason = "";
+        if (!HasSourceImageOverview(source))
+        {
+            reason = "overview image is missing";
+            return false;
+        }
+        if (source!.WidthPt <= 0 || source.HeightPt <= 0)
+        {
+            reason = "page size is invalid";
+            return false;
+        }
+        if (IsStale(pdfPath, source))
+        {
+            reason = "source PDF changed";
+            return false;
+        }
+
+        string imagePath = ResolvePagePath(pageFolder, source.OverviewImage);
+        if (!File.Exists(imagePath))
+        {
+            reason = "overview image file is missing";
+            return false;
+        }
+
+        SKBitmap? bitmap = SKBitmap.Decode(imagePath);
+        if (bitmap == null)
+        {
+            reason = "overview image file could not be decoded";
+            return false;
+        }
+
+        float widthPt = (float)source.WidthPt;
+        float heightPt = (float)source.HeightPt;
+        float bitmapScale = widthPt > 0 ? bitmap.Width / widthPt : (float)source.OverviewRenderScale;
+        result = new RasterSheetBitmapResult(bitmap, widthPt, heightPt, bitmapScale, imagePath);
+        return true;
+    }
+
     private static bool IsStale(string pdfPath, RasterSheetSource source)
     {
         if (string.IsNullOrWhiteSpace(pdfPath) || !File.Exists(pdfPath))
@@ -408,6 +476,72 @@ public static class RasterSheetCacheService
     {
         string image = source.Image.Trim();
         return ResolvePagePath(pageFolder, image);
+    }
+
+    private static bool TryWriteSourceImageOverview(
+        SKBitmap source,
+        string rasterDir,
+        string pageFolder,
+        double widthPt,
+        out string overviewImage,
+        out double overviewRenderScale,
+        out string error)
+    {
+        overviewImage = "";
+        overviewRenderScale = 0;
+        error = "";
+
+        long sourcePixels = (long)Math.Max(0, source.Width) * Math.Max(0, source.Height);
+        if (sourcePixels <= 0 || sourcePixels <= SourceImageFastOpenMaxPixels)
+            return false;
+
+        double resizeRatio = Math.Sqrt(SourceImageFastOpenMaxPixels / (double)sourcePixels);
+        int targetWidth = Math.Max(1, (int)Math.Floor(source.Width * resizeRatio));
+        int targetHeight = Math.Max(1, (int)Math.Floor(source.Height * resizeRatio));
+        while ((long)targetWidth * targetHeight > SourceImageFastOpenMaxPixels)
+        {
+            if (targetWidth >= targetHeight && targetWidth > 1)
+                targetWidth--;
+            else if (targetHeight > 1)
+                targetHeight--;
+            else
+                break;
+        }
+
+        try
+        {
+            using SKBitmap? overview = source.Resize(
+                new SKImageInfo(targetWidth, targetHeight, SKColorType.Bgra8888, SKAlphaType.Premul),
+                SKFilterQuality.High);
+            if (overview == null)
+            {
+                error = "source image resize failed";
+                return false;
+            }
+
+            using SKImage image = SKImage.FromBitmap(overview);
+            using SKData? data = image.Encode(SKEncodedImageFormat.Png, 100);
+            if (data == null || data.Size == 0)
+            {
+                error = "overview image could not be encoded as PNG";
+                return false;
+            }
+
+            string imagePath = Path.Combine(rasterDir, OverviewImageName);
+            string tempPath = imagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            using (FileStream output = File.Create(tempPath))
+                data.SaveTo(output);
+            File.Move(tempPath, imagePath, overwrite: true);
+
+            overviewImage = Path.GetRelativePath(pageFolder, imagePath);
+            overviewRenderScale = widthPt > 0 ? overview.Width / widthPt : 0;
+            return overviewRenderScale > 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     private static void TryWriteSnapIndex(

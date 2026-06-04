@@ -75,6 +75,7 @@ public sealed partial class PdfViewport
         _cachedLayers = cachedLayers;
         _rasterSheetSource = rasterSheet?.Clone();
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
 
         bool hadVisibleBitmap = _pageBitmap != null;
@@ -121,6 +122,7 @@ public sealed partial class PdfViewport
                 rasterSheet,
                 restoreView,
                 fitAfter: !restoreView.HasValue,
+                preferOverview: ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue),
                 out rasterSkipReason))
         {
             PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
@@ -185,6 +187,7 @@ public sealed partial class PdfViewport
         _pageBitmap?.Dispose();
         _pageBitmap = null;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         ClearPageBitmapIdentity();
         _pdfW = 0;

@@ -137,6 +137,20 @@ public sealed partial class PdfViewport
         return !fitAfter && ShouldUseRasterSheetForCurrentZoom();
     }
 
+    private static bool ShouldUseRasterSheetOverviewForPageOpen(
+        RasterSheetSource? rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        if (!RasterSheetCacheService.HasSourceImageOverview(rasterSheet))
+            return false;
+
+        if (restoreView.HasValue)
+            return restoreView.Value.Zoom < ViewportRenderPolicy.RasterSheetDisplayMinZoom;
+
+        return fitAfter;
+    }
+
     private bool ShouldUseRasterSheetForCurrentZoom() =>
         _zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom;
 
@@ -178,13 +192,32 @@ public sealed partial class PdfViewport
     private bool TrySwitchRasterSheetToFastPreviewForLowZoom()
     {
         if (!_usingRasterSheetRender ||
-            ShouldKeepRasterSheetAtLowZoom() ||
             _zoom >= ViewportRenderPolicy.RasterSheetDisplayExitZoom)
         {
             return false;
         }
 
         ViewState currentView = CaptureViewState();
+        if (!_usingRasterSheetOverviewRender &&
+            RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource) &&
+            TryApplyRasterSheetRender(
+                _pdfPath,
+                _pdfIndex,
+                _pageFolder,
+                _rasterSheetSource,
+                currentView,
+                fitAfter: false,
+                preferOverview: true,
+                out _))
+        {
+            PostStatus($"Raster overview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
+            RequestRepaint();
+            return true;
+        }
+
+        if (ShouldKeepRasterSheetAtLowZoom())
+            return false;
+
         if (TryApplyPersistedPreviewRender(
                 _pdfPath,
                 _pdfIndex,
@@ -212,5 +245,6 @@ public sealed partial class PdfViewport
         $"{Path.GetFullPath(pdfPath)}|{pageIndex}|{Path.GetFullPath(pageFolder)}";
 
     private bool ShouldKeepRasterSheetAtLowZoom() =>
-        RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource);
+        RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) &&
+        (!RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource) || _usingRasterSheetOverviewRender);
 }

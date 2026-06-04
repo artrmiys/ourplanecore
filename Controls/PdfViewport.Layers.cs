@@ -52,6 +52,7 @@ public sealed partial class PdfViewport
         _layers = [];
         _usingLayerRenderer = false;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
@@ -69,6 +70,7 @@ public sealed partial class PdfViewport
         _layers = [];
         _usingLayerRenderer = false;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _renderedScale = render.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
@@ -82,9 +84,41 @@ public sealed partial class PdfViewport
         RasterSheetSource? rasterSheet,
         ViewState? restoreView,
         bool fitAfter,
+        bool preferOverview,
         out string skipReason)
     {
         skipReason = "";
+        bool usingOverview = false;
+        if (preferOverview)
+        {
+            if (RasterSheetCacheService.TryReadOverviewReady(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    out RasterSheetBitmapResult overview,
+                    out string overviewReason))
+            {
+                return ApplyRasterSheetBitmapRender(
+                    pdfPath,
+                    pdfIndex,
+                    pageFolder,
+                    rasterSheet,
+                    overview,
+                    restoreView,
+                    fitAfter,
+                    usingOverview: true);
+            }
+
+            skipReason = overviewReason;
+            if (rasterSheet?.Enabled == true)
+            {
+                AppLog.Info(
+                    $"Viewport raster sheet overview skipped; reason='{overviewReason}'; page='{pageFolder}'; " +
+                    $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}");
+            }
+            return false;
+        }
+
         if (!RasterSheetCacheService.TryReadReady(
                 pageFolder,
                 pdfPath,
@@ -102,6 +136,45 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        return ApplyRasterSheetBitmapRender(
+            pdfPath,
+            pdfIndex,
+            pageFolder,
+            rasterSheet,
+            raster,
+            restoreView,
+            fitAfter,
+            usingOverview);
+    }
+
+    private bool TryApplyRasterSheetRender(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter,
+        out string skipReason) =>
+        TryApplyRasterSheetRender(
+            pdfPath,
+            pdfIndex,
+            pageFolder,
+            rasterSheet,
+            restoreView,
+            fitAfter,
+            preferOverview: false,
+            out skipReason);
+
+    private bool ApplyRasterSheetBitmapRender(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet,
+        RasterSheetBitmapResult raster,
+        ViewState? restoreView,
+        bool fitAfter,
+        bool usingOverview)
+    {
         _pageBitmap?.Dispose();
         _pageBitmap = raster.Bitmap;
         MarkPageBitmapIdentity(pdfPath, pdfIndex, pageFolder);
@@ -111,17 +184,18 @@ public sealed partial class PdfViewport
         _layers = [];
         _usingLayerRenderer = false;
         _usingRasterSheetRender = true;
+        _usingRasterSheetOverviewRender = usingOverview;
         LoadRasterSheetVisualSegments(pageFolder, pdfPath, rasterSheet);
         _renderedScale = raster.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
         AppLog.Info(
-            $"Viewport raster sheet cache hit; page='{pageFolder}'; " +
+            $"Viewport raster sheet {(usingOverview ? "overview " : "")}cache hit; page='{pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={raster.BitmapScale:0.###}; " +
             $"image='{raster.ImagePath}'");
         ReportViewportRenderProfile(
-            "raster-sheet",
+            usingOverview ? "raster-sheet-overview" : "raster-sheet",
             pageFolder,
             pdfPath,
             pdfIndex,
@@ -217,6 +291,7 @@ public sealed partial class PdfViewport
         _renderedScale = bitmapScale;
         _usingLayerRenderer = false;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
@@ -292,6 +367,7 @@ public sealed partial class PdfViewport
             QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
@@ -362,6 +438,7 @@ public sealed partial class PdfViewport
         _renderedScale = cached.BitmapScale;
         _usingLayerRenderer = true;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
@@ -432,6 +509,7 @@ public sealed partial class PdfViewport
         _renderedScale = Math.Max(_renderedScale, request.RenderScale);
         _usingLayerRenderer = true;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
@@ -1067,6 +1145,7 @@ public sealed partial class PdfViewport
             QueuePdfSnapPointLoad(force: true);
         _usingLayerRenderer = true;
         _usingRasterSheetRender = false;
+        _usingRasterSheetOverviewRender = false;
         ClearRasterSheetVisualSegments();
         _pendingDocnetRender = null;
         _docnetRenderVersion++;

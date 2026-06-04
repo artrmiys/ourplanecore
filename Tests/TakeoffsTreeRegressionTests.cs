@@ -1272,11 +1272,18 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("ShouldUseSourceImageRasterForFastOpen", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldUseRasterSheetOverviewForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("HasSourceImageOverview(_rasterSheetSource)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("preferOverview: true", StringComparison.Ordinal) &&
+            viewTransform.Contains("_usingRasterSheetOverviewRender", StringComparison.Ordinal) &&
+            layers.Contains("raster-sheet-overview", StringComparison.Ordinal) &&
+            raster.Contains("OverviewImageName = \"overview.png\"", StringComparison.Ordinal) &&
+            raster.Contains("TryReadOverviewReady", StringComparison.Ordinal) &&
             rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
             rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
-            "image-backed PlanSwift PNG/TIF raster sheets should open directly at overview only inside a safe pixel budget and get sharper still-frame sampling");
+            "image-backed PlanSwift PNG/TIF raster sheets should open through safe overview rasters, switch to full source pixels on zoom, and get sharper still-frame sampling");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&

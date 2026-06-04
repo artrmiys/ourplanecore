@@ -60,7 +60,7 @@ internal static class PlanSwiftImportTests
             string destinationParent = Path.Combine(parent, "imported");
             CreateSyntheticPlanSwiftJob(sourceJob);
             string imagePath = Path.Combine(sourceJob, "Pages", "Sheets", "A100", $"{{{ImageGuid}}}.png");
-            WriteSyntheticImage(imagePath, width: 3600, height: 2400, dpiX: 72, dpiY: 72);
+            WriteSyntheticImage(imagePath, width: 5400, height: 3600, dpiX: 72, dpiY: 72);
 
             PlanSwiftImportResult result = PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
             {
@@ -77,11 +77,11 @@ internal static class PlanSwiftImportTests
             (int pdfWidth, int pdfHeight) = ReadPdfPageSize(page.PdfPath);
             AssertClose(2592, pdfWidth, "normalized PDF width should be 36 in");
             AssertClose(1728, pdfHeight, "normalized PDF height should be 24 in");
-            AssertPlanSwiftImageRasterCache(page, expectedWidthPt: 2592, expectedHeightPt: 1728, minBitmapScale: 1.30);
+            AssertPlanSwiftImageRasterCache(page, expectedWidthPt: 2592, expectedHeightPt: 1728, minBitmapScale: 2.0, expectOverview: true);
 
             Measurement measurement = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single().Measurements.Single();
-            AssertClose(7.2, measurement.Points[1].X, "measurement x coordinate should be transformed to PDF points");
-            AssertClose(0.042333333333333334, measurement.ScaleMetersPerPt, "measurement scale should compensate for coordinate transform");
+            AssertClose(4.8, measurement.Points[1].X, "measurement x coordinate should be transformed to PDF points");
+            AssertClose(0.0635, measurement.ScaleMetersPerPt, "measurement scale should compensate for coordinate transform");
             AssertClose(0.3048, measurement.Value(0), "transformed one foot line should keep original measured value");
             AssertPlanSwiftImagePdfUsesHighQualitySampling();
         });
@@ -863,7 +863,8 @@ internal static class PlanSwiftImportTests
         PageInfo page,
         double expectedWidthPt,
         double expectedHeightPt,
-        double minBitmapScale)
+        double minBitmapScale,
+        bool expectOverview = false)
     {
         AssertTrue(page.RasterSheet != null, "PlanSwift image import should persist a raster sheet cache");
         RasterSheetSource raster = page.RasterSheet!;
@@ -874,6 +875,22 @@ internal static class PlanSwiftImportTests
         AssertTrue(
             raster.Image.EndsWith(Path.Combine(RasterSheetCacheService.CacheFolderName, RasterSheetCacheService.WorkingImageName), StringComparison.OrdinalIgnoreCase),
             "PlanSwift image raster cache should live beside the page");
+        if (expectOverview)
+        {
+            AssertTrue(
+                raster.OverviewImage.EndsWith(Path.Combine(RasterSheetCacheService.CacheFolderName, RasterSheetCacheService.OverviewImageName), StringComparison.OrdinalIgnoreCase),
+                "large PlanSwift image raster cache should persist a bounded overview image beside the full working raster");
+            AssertTrue(
+                raster.OverviewRenderScale > 0 && raster.OverviewRenderScale < raster.RenderScale,
+                "large PlanSwift image overview should be lower resolution than the full working raster");
+            AssertTrue(
+                RasterSheetCacheService.HasSourceImageOverview(raster),
+                "large PlanSwift image raster should advertise an overview cache for fast page open");
+        }
+        else
+        {
+            AssertTrue(string.IsNullOrWhiteSpace(raster.OverviewImage), "small PlanSwift image raster should not write a duplicate overview image");
+        }
         AssertClose(expectedWidthPt, raster.WidthPt, "PlanSwift image raster cache width", tolerance: 0.05);
         AssertClose(expectedHeightPt, raster.HeightPt, "PlanSwift image raster cache height", tolerance: 0.05);
         AssertTrue(raster.RenderScale >= minBitmapScale, "PlanSwift image raster cache should keep source pixels for readable zoom");
@@ -902,6 +919,32 @@ internal static class PlanSwiftImportTests
         finally
         {
             bitmap.Bitmap.Dispose();
+        }
+
+        if (expectOverview)
+        {
+            AssertTrue(
+                RasterSheetCacheService.TryReadOverviewReady(
+                    page.FolderPath,
+                    page.PdfPath,
+                    raster,
+                    out RasterSheetBitmapResult overview,
+                    out string overviewReason),
+                overviewReason);
+            try
+            {
+                long overviewPixels = (long)overview.Bitmap.Width * overview.Bitmap.Height;
+                AssertTrue(
+                    overviewPixels <= RasterSheetCacheService.SourceImageFastOpenMaxPixels,
+                    "large PlanSwift image overview should stay inside the fast-open pixel budget");
+                AssertTrue(
+                    overview.BitmapScale > 0 && overview.BitmapScale < raster.RenderScale,
+                    "overview raster should be lighter than the full source image raster");
+            }
+            finally
+            {
+                overview.Bitmap.Dispose();
+            }
         }
     }
 

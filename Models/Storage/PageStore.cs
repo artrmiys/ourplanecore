@@ -712,11 +712,15 @@ internal static class PageStore
 
         RasterSheetSource copy = rasterSheet.Clone();
         copy.Image = (copy.Image ?? "").Trim();
+        copy.OverviewImage = (copy.OverviewImage ?? "").Trim();
         copy.Format = string.IsNullOrWhiteSpace(copy.Format) ? "png" : copy.Format.Trim().ToLowerInvariant();
         copy.RenderProfile = (copy.RenderProfile ?? "").Trim().ToLowerInvariant();
         copy.RenderScale = double.IsNaN(copy.RenderScale) || double.IsInfinity(copy.RenderScale)
             ? 0
             : Math.Clamp(copy.RenderScale, 0, 8);
+        copy.OverviewRenderScale = double.IsNaN(copy.OverviewRenderScale) || double.IsInfinity(copy.OverviewRenderScale)
+            ? 0
+            : Math.Clamp(copy.OverviewRenderScale, 0, 8);
         copy.WidthPt = double.IsNaN(copy.WidthPt) || double.IsInfinity(copy.WidthPt)
             ? 0
             : Math.Max(0, copy.WidthPt);

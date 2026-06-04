@@ -110,6 +110,9 @@ public sealed class RasterSheetSource
     [JsonPropertyName("image")]
     public string Image { get; set; } = "";
 
+    [JsonPropertyName("overview_image")]
+    public string OverviewImage { get; set; } = "";
+
     [JsonPropertyName("format")]
     public string Format { get; set; } = "png";
 
@@ -118,6 +121,9 @@ public sealed class RasterSheetSource
 
     [JsonPropertyName("render_scale")]
     public double RenderScale { get; set; }
+
+    [JsonPropertyName("overview_render_scale")]
+    public double OverviewRenderScale { get; set; }
 
     [JsonPropertyName("width_pt")]
     public double WidthPt { get; set; }
@@ -154,9 +160,11 @@ public sealed class RasterSheetSource
         {
             Enabled = Enabled,
             Image = Image,
+            OverviewImage = OverviewImage,
             Format = Format,
             RenderProfile = RenderProfile,
             RenderScale = RenderScale,
+            OverviewRenderScale = OverviewRenderScale,
             WidthPt = WidthPt,
             HeightPt = HeightPt,
             PdfLastWriteUtcTicks = PdfLastWriteUtcTicks,
