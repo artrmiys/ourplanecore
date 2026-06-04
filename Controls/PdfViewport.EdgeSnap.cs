@@ -60,19 +60,7 @@ public sealed partial class PdfViewport
 
     private bool TryCycleEdgeSnapPreview()
     {
-        if (!_lastPointerPdf.HasValue)
-            return false;
-
-        if (CanPrepareEdgeSnapPreviewForTab() && (!SnapEnabled || !PdfSnapEnabled))
-        {
-            SnapEnabled = true;
-            PdfSnapEnabled = true;
-            QueuePdfSnapPointLoad(force: false);
-            PostStatus("PDF Snap loading for edge contour. Press Tab again when ready.");
-            return true;
-        }
-
-        if (!CanUseEdgeSnapPreview())
+        if (!_lastPointerPdf.HasValue || !CanUseEdgeSnapPreview())
             return false;
 
         _edgeSnapCycleMode = NextEdgeSnapCycleMode();
@@ -196,7 +184,8 @@ public sealed partial class PdfViewport
             found = true;
         }
 
-        if (TryFindPdfEdgeSnapCandidate(rawPdf, best, out EdgeSnapCandidate? pdfCandidate) &&
+        if (!found &&
+            TryFindPdfEdgeSnapCandidate(rawPdf, best, out EdgeSnapCandidate? pdfCandidate) &&
             pdfCandidate != null)
         {
             candidate = pdfCandidate;

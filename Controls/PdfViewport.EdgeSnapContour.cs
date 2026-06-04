@@ -382,14 +382,12 @@ public sealed partial class PdfViewport
         contour = [];
         selectedSegmentIndex = 0;
         SKRect bounds = PdfSnapBoundaryBounds(component);
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-            return false;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return false;
 
         float inflate = Math.Max(bridgeTolerancePt * 2f, 12f);
         bounds.Inflate(inflate, inflate);
         float cell = PdfSnapBoundaryCellSize(bounds, bridgeTolerancePt, out int width, out int height);
-        if (width < 4 || height < 4)
-            return false;
+        if (width < 4 || height < 4) return false;
 
         bool[] blocked = new bool[width * height];
         int radiusCells = Math.Clamp(
@@ -400,18 +398,24 @@ public sealed partial class PdfViewport
 
         bool[] outside = FloodPdfSnapBoundaryOutside(width, height, blocked);
         List<PdfSnapBoundaryGridEdge> edges = BuildPdfSnapBoundaryGridEdges(width, height, outside);
-        if (edges.Count == 0)
-            return false;
+        if (edges.Count == 0) return false;
 
         List<SKPoint> loop = TraceBestPdfSnapBoundaryGridLoop(edges, bounds, cell);
-        if (loop.Count < 3)
-            return false;
+        if (loop.Count < 3) return false;
 
-        contour = CleanPdfSnapBoundaryContour(
+        float cleanTolerance = Math.Clamp(bridgeTolerancePt * 0.24f, 1.5f, 14f);
+        List<SKPoint> rawContour = CleanPdfSnapBoundaryContour(loop, cleanTolerance);
+        List<SKPoint> projectedContour = CleanPdfSnapBoundaryContour(
             ProjectPdfSnapBoundaryPoints(loop, component, bridgeTolerancePt, cell),
-            Math.Clamp(bridgeTolerancePt * 0.24f, 1.5f, 14f));
-        if (!PdfSnapBoundaryContourLooksUsable(contour, component))
+            cleanTolerance);
+
+        if (!TryChooseLargestPdfSnapBoundaryContour(
+                [projectedContour, rawContour],
+                component,
+                out contour))
+        {
             return false;
+        }
 
         selectedSegmentIndex = FindNearestPdfSnapContourSegmentIndex(contour, selected);
         return true;
@@ -666,7 +670,7 @@ public sealed partial class PdfViewport
 
         List<SKPoint> hull = PdfSnapBoundaryConvexHull(points);
         contour = CleanPdfSnapBoundaryContour(hull, Math.Clamp(bridgeTolerancePt * 0.35f, 2f, 20f));
-        if (!PdfSnapBoundaryContourLooksUsable(contour, component))
+        if (!PdfSnapBoundaryContourLooksUsable(contour, component, out _))
             return false;
 
         selectedSegmentIndex = FindNearestPdfSnapContourSegmentIndex(contour, selected);
@@ -854,17 +858,41 @@ public sealed partial class PdfViewport
         SimplifyPdfSnapBoundaryRdp(points, bestIndex, end, tolerance, keep);
     }
 
+    private static bool TryChooseLargestPdfSnapBoundaryContour(
+        IEnumerable<IReadOnlyList<SKPoint>> candidates,
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> component,
+        out List<SKPoint> selected)
+    {
+        selected = [];
+        double bestArea = 0;
+        foreach (IReadOnlyList<SKPoint> candidate in candidates)
+        {
+            if (!PdfSnapBoundaryContourLooksUsable(candidate, component, out double area) ||
+                area <= bestArea)
+            {
+                continue;
+            }
+
+            bestArea = area;
+            selected = candidate.Select(ClonePoint).ToList();
+        }
+
+        return selected.Count >= 3;
+    }
+
     private static bool PdfSnapBoundaryContourLooksUsable(
         IReadOnlyList<SKPoint> contour,
-        IReadOnlyList<PdfSnapBoundaryTraceSegment> component)
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> component,
+        out double area)
     {
+        area = 0;
         if (contour.Count < 3)
             return false;
         if (HasDuplicatePdfSnapBoundaryPoints(contour, 1.0f))
             return false;
 
         SKRect bounds = PdfSnapBoundaryBounds(component);
-        double area = Math.Abs(PdfSnapBoundarySignedArea(contour));
+        area = Math.Abs(PdfSnapBoundarySignedArea(contour));
         double minArea = Math.Max(1_000.0, bounds.Width * bounds.Height * 0.015);
         return area >= minArea;
     }
@@ -941,8 +969,7 @@ public sealed partial class PdfViewport
         return new SKPoint(start.X + (vx * t), start.Y + (vy * t));
     }
 
-    private static int PdfSnapBoundaryGridCoordinate(float value, float cellSize) =>
-        (int)MathF.Floor(value / Math.Max(0.001f, cellSize));
+    private static int PdfSnapBoundaryGridCoordinate(float value, float cellSize) => (int)MathF.Floor(value / Math.Max(0.001f, cellSize));
 
     private static double PdfSnapBoundarySignedArea(IReadOnlyList<SKPoint> points)
     {
@@ -960,33 +987,12 @@ public sealed partial class PdfViewport
         return area / 2.0;
     }
 
-    private static float PdfSnapBoundaryCross(SKPoint a, SKPoint b, SKPoint c) =>
-        ((b.X - a.X) * (c.Y - a.Y)) - ((b.Y - a.Y) * (c.X - a.X));
+    private static float PdfSnapBoundaryCross(SKPoint a, SKPoint b, SKPoint c) => ((b.X - a.X) * (c.Y - a.Y)) - ((b.Y - a.Y) * (c.X - a.X));
 
-    private static float PdfSnapBoundaryDot(SKPoint previous, SKPoint current, SKPoint after)
-    {
-        float ax = current.X - previous.X;
-        float ay = current.Y - previous.Y;
-        float bx = after.X - current.X;
-        float by = after.Y - current.Y;
-        return (ax * bx) + (ay * by);
-    }
+    private static float PdfSnapBoundaryDot(SKPoint previous, SKPoint current, SKPoint after) =>
+        ((current.X - previous.X) * (after.X - current.X)) + ((current.Y - previous.Y) * (after.Y - current.Y));
 
-    private readonly record struct PdfSnapBoundaryGraphEdge(
-        int A,
-        int B,
-        int SegmentIndex,
-        bool Bridge);
-
-    private readonly record struct PdfSnapBoundaryTraceSegment(
-        SKPoint Start,
-        SKPoint End,
-        int SegmentIndex,
-        bool Bridge);
-
-    private readonly record struct PdfSnapBoundaryGridEdge(
-        int X0,
-        int Y0,
-        int X1,
-        int Y1);
+    private readonly record struct PdfSnapBoundaryGraphEdge(int A, int B, int SegmentIndex, bool Bridge);
+    private readonly record struct PdfSnapBoundaryTraceSegment(SKPoint Start, SKPoint End, int SegmentIndex, bool Bridge);
+    private readonly record struct PdfSnapBoundaryGridEdge(int X0, int Y0, int X1, int Y1);
 }

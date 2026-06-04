@@ -1269,9 +1269,10 @@ internal static class TakeoffsTreeRegressionTests
             edgeSnap.Contains("TryFindPdfEdgeSnapCandidate", StringComparison.Ordinal) &&
             edgeSnap.Contains("_pdfSnapIndex.TryFindSegment", StringComparison.Ordinal) &&
             edgeSnap.Contains("_pdfSnapIndex.Segments", StringComparison.Ordinal) &&
+            edgeSnap.Contains("if (!found &&", StringComparison.Ordinal) &&
             edgeSnap.Contains("BuildPdfSnapContour", StringComparison.Ordinal) &&
             edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal),
-            "Edge Snap should use loaded PDF/raster snap segments as a second preview source");
+            "Edge Snap should use loaded PDF/raster snap segments as a second preview source without overriding ordinary takeoff edge snap");
         AssertTrue(
             edgeSnap.Contains("TryFindUniqueConnectedPdfSnapSegment", StringComparison.Ordinal) &&
             edgeSnap.Contains("if (matches > 1 &&", StringComparison.Ordinal) &&
@@ -1294,18 +1295,18 @@ internal static class TakeoffsTreeRegressionTests
             edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal) &&
             edgeSnap.Contains("return EdgeSnapModeContour;", StringComparison.Ordinal),
             "Area should jump straight to closed PDF/raster contour mode so thick exterior line loops can become Area takeoffs");
-        AssertTrue(
-            edgeSnap.Contains("CanPrepareEdgeSnapPreviewForTab", StringComparison.Ordinal) &&
-            edgeSnap.Contains("SnapEnabled = true;", StringComparison.Ordinal) &&
-            edgeSnap.Contains("PdfSnapEnabled = true;", StringComparison.Ordinal) &&
+        AssertFalse(
+            edgeSnap.Contains("SnapEnabled = true;", StringComparison.Ordinal) ||
+            edgeSnap.Contains("PdfSnapEnabled = true;", StringComparison.Ordinal) ||
             edgeSnap.Contains("PDF Snap loading for edge contour", StringComparison.Ordinal),
-            "Tab in Line/Area should arm Snap and PDF Snap when the user starts from both toggles off");
+            "Tab in Line/Area must not auto-enable Snap or PDF Snap because ordinary area/line edge snap is a separate workflow");
         AssertTrue(
             contour.Contains("TryBuildPdfSnapBoundaryContour", StringComparison.Ordinal) &&
             contour.Contains("TryBuildPdfSnapRasterBoundaryContour", StringComparison.Ordinal) &&
+            contour.Contains("TryChooseLargestPdfSnapBoundaryContour", StringComparison.Ordinal) &&
             contour.Contains("PdfSnapDirectionalBridgeFactor", StringComparison.Ordinal) &&
             contour.Contains("ProjectPdfSnapBoundaryPoints", StringComparison.Ordinal),
-            "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass before falling back to the line chain");
+            "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass and prefer the largest reliable contour before falling back to the line chain");
     }
 
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()
