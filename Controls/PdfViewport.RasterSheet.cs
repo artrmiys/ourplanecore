@@ -183,8 +183,13 @@ public sealed partial class PdfViewport
 
     private bool ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet, ViewState? restoreView, bool fitAfter)
     {
-        if (RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet))
+        if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
+        {
+            if (IsLowZoomRasterSheetPageOpen(restoreView, fitAfter))
+                return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+
             return true;
+        }
 
         if (restoreView.HasValue)
             return restoreView.Value.Zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom;
@@ -200,6 +205,11 @@ public sealed partial class PdfViewport
         if (!RasterSheetCacheService.HasSourceImageOverview(rasterSheet))
             return false;
 
+        return IsLowZoomRasterSheetPageOpen(restoreView, fitAfter);
+    }
+
+    private static bool IsLowZoomRasterSheetPageOpen(ViewState? restoreView, bool fitAfter)
+    {
         if (restoreView.HasValue)
             return restoreView.Value.Zoom < ViewportRenderPolicy.RasterSheetDisplayMinZoom;
 

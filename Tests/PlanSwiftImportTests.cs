@@ -936,8 +936,8 @@ internal static class PlanSwiftImportTests
             {
                 long overviewPixels = (long)overview.Bitmap.Width * overview.Bitmap.Height;
                 AssertTrue(
-                    overviewPixels <= RasterSheetCacheService.SourceImageFastOpenMaxPixels,
-                    "large PlanSwift image overview should stay inside the fast-open pixel budget");
+                    overviewPixels <= RasterSheetCacheService.SourceImageOverviewMaxPixels,
+                    "large PlanSwift image overview should stay inside the browsing overview pixel budget");
                 AssertTrue(
                     overview.BitmapScale > 0 && overview.BitmapScale < raster.RenderScale,
                     "overview raster should be lighter than the full source image raster");
@@ -997,8 +997,8 @@ internal static class PlanSwiftImportTests
         {
             long overviewPixels = (long)overview.Bitmap.Width * overview.Bitmap.Height;
             AssertTrue(
-                overviewPixels <= RasterSheetCacheService.SourceImageFastOpenMaxPixels,
-                "upgraded existing source-image overview should stay inside the fast-open pixel budget");
+                overviewPixels <= RasterSheetCacheService.SourceImageOverviewMaxPixels,
+                "upgraded existing source-image overview should stay inside the browsing overview pixel budget");
         }
         finally
         {

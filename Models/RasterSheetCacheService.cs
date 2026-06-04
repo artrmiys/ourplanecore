@@ -33,6 +33,7 @@ public static class RasterSheetCacheService
     public const string ReadableRasterProfile = "readable-raster-v2";
     public const string SourceImageRasterProfile = "source-image-v1";
     public const string ReadableLineBoostProfile = "lineboost-v1";
+    public const long SourceImageOverviewMaxPixels = 4_000_000;
     public const long SourceImageFastOpenMaxPixels = 18_000_000;
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
@@ -180,10 +181,7 @@ public static class RasterSheetCacheService
         if (IsStale(page.PdfPath, source))
             return Failed("Source PDF changed.");
 
-        double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
-        if (estimatedPixels <= SourceImageFastOpenMaxPixels ||
-            double.IsInfinity(estimatedPixels) ||
-            double.IsNaN(estimatedPixels))
+        if (!NeedsSourceImageOverview(source))
         {
             return Failed("Source image overview is not needed.");
         }
@@ -315,11 +313,17 @@ public static class RasterSheetCacheService
         if (HasSourceImageOverview(source))
             return true;
 
-        double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
-        return estimatedPixels > 0 &&
-               !double.IsInfinity(estimatedPixels) &&
-               !double.IsNaN(estimatedPixels) &&
-               estimatedPixels <= SourceImageFastOpenMaxPixels;
+        return !NeedsSourceImageOverview(source);
+    }
+
+    public static bool NeedsSourceImageOverview(RasterSheetSource? source)
+    {
+        if (!IsSourceImageRaster(source) || source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
+            return false;
+
+        double estimatedPixels = EstimateSourceImagePixels(source);
+        return IsValidPixelEstimate(estimatedPixels) &&
+               estimatedPixels > SourceImageOverviewMaxPixels;
     }
 
     public static bool HasSourceImageOverview(RasterSheetSource? source) =>
@@ -345,10 +349,7 @@ public static class RasterSheetCacheService
         if (!File.Exists(imagePath))
             return false;
 
-        double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
-        if (estimatedPixels <= SourceImageFastOpenMaxPixels ||
-            double.IsInfinity(estimatedPixels) ||
-            double.IsNaN(estimatedPixels))
+        if (!NeedsSourceImageOverview(source))
         {
             return false;
         }
@@ -587,13 +588,13 @@ public static class RasterSheetCacheService
         error = "";
 
         long sourcePixels = (long)Math.Max(0, source.Width) * Math.Max(0, source.Height);
-        if (sourcePixels <= 0 || sourcePixels <= SourceImageFastOpenMaxPixels)
+        if (sourcePixels <= 0 || sourcePixels <= SourceImageOverviewMaxPixels)
             return false;
 
-        double resizeRatio = Math.Sqrt(SourceImageFastOpenMaxPixels / (double)sourcePixels);
+        double resizeRatio = Math.Sqrt(SourceImageOverviewMaxPixels / (double)sourcePixels);
         int targetWidth = Math.Max(1, (int)Math.Floor(source.Width * resizeRatio));
         int targetHeight = Math.Max(1, (int)Math.Floor(source.Height * resizeRatio));
-        while ((long)targetWidth * targetHeight > SourceImageFastOpenMaxPixels)
+        while ((long)targetWidth * targetHeight > SourceImageOverviewMaxPixels)
         {
             if (targetWidth >= targetHeight && targetWidth > 1)
                 targetWidth--;
@@ -638,6 +639,14 @@ public static class RasterSheetCacheService
             return false;
         }
     }
+
+    private static double EstimateSourceImagePixels(RasterSheetSource source) =>
+        source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
+
+    private static bool IsValidPixelEstimate(double estimatedPixels) =>
+        estimatedPixels > 0 &&
+        !double.IsInfinity(estimatedPixels) &&
+        !double.IsNaN(estimatedPixels);
 
     private static void TryWriteSnapIndex(
         PageInfo page,

@@ -126,6 +126,13 @@ public sealed partial class PdfViewport
                 out rasterSkipReason))
         {
             PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+            QueueRasterSheetSelfHealIfNeeded(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                cachedLayers,
+                rasterSheet,
+                rasterSkipReason);
             RequestRepaint();
             return;
         }

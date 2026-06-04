@@ -1268,11 +1268,15 @@ internal static class TakeoffsTreeRegressionTests
             "high-DPI raster sheets should be a deep-zoom LOD, not the default bitmap for overview page browsing");
         AssertTrue(
             raster.Contains("SourceImageRasterProfile = \"source-image-v1\"", StringComparison.Ordinal) &&
+            raster.Contains("SourceImageOverviewMaxPixels", StringComparison.Ordinal) &&
             raster.Contains("SourceImageFastOpenMaxPixels", StringComparison.Ordinal) &&
             raster.Contains("ShouldUseSourceImageRasterForFastOpen", StringComparison.Ordinal) &&
+            raster.Contains("NeedsSourceImageOverview", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetOverviewForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("IsLowZoomRasterSheetPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("HasSourceImageOverview(_rasterSheetSource)", StringComparison.Ordinal) &&
