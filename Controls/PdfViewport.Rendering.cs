@@ -310,7 +310,10 @@ public sealed partial class PdfViewport
     private void DrawLowZoomLineOverlay(SKCanvas canvas, SKRect visiblePdf)
     {
         IReadOnlyList<PdfGeometrySnapSegment> segments = LowZoomVisualSegments();
-        if (segments.Count == 0 || _zoom <= 0 || _zoom > 0.55f)
+        if (_renderNavigationFastFrame ||
+            segments.Count == 0 ||
+            _zoom <= 0 ||
+            _zoom > 0.55f)
         {
             return;
         }

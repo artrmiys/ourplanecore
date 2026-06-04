@@ -1295,10 +1295,11 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("LoadRasterSheetVisualSegments(pageFolder, pdfPath, rasterSheet)", StringComparison.Ordinal) &&
             rendering.Contains("DrawLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
             rendering.Contains("LowZoomVisualSegments()", StringComparison.Ordinal) &&
+            rendering.Contains("_renderNavigationFastFrame", StringComparison.Ordinal) &&
             rendering.Contains("_pdfSnapEnabled && IsPdfSnapCacheCurrent()", StringComparison.Ordinal) &&
             rendering.Contains("_pdfSnapIndex.Segments", StringComparison.Ordinal) &&
             rendering.Contains("_zoom > 0.55f", StringComparison.Ordinal),
-            "low zoom should overlay already-loaded raster or PDF snap segments so thin source lines remain readable below 50% zoom without starting PDF extraction from paint");
+            "low zoom should overlay already-loaded raster or PDF snap segments on idle frames so thin source lines remain readable below 50% zoom without slowing navigation or starting PDF extraction from paint");
         AssertTrue(
             pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldSelfHealRasterSheet", StringComparison.Ordinal) &&
