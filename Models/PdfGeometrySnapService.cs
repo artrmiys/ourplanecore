@@ -7,7 +7,7 @@ using SkiaSharp;
 namespace OurPlaneCore;
 
 public sealed record PdfGeometrySnapPoint(SKPoint Point, string Kind, string LayerName = "");
-public sealed record PdfGeometrySnapSegment(SKPoint Start, SKPoint End, string Kind, string LayerName = "");
+public sealed record PdfGeometrySnapSegment(SKPoint Start, SKPoint End, string Kind, string LayerName = "", float StrokeWidth = 0f);
 
 public sealed class PdfGeometrySnapResult
 {
@@ -292,7 +292,8 @@ public static class PdfGeometrySnapService
                         new SKPoint(segment.X0, segment.Y0),
                         new SKPoint(segment.X1, segment.Y1),
                         string.IsNullOrWhiteSpace(segment.Kind) ? "pdf-line" : segment.Kind,
-                        segment.LayerName ?? ""))
+                        segment.LayerName ?? "",
+                        Math.Max(0f, segment.StrokeWidth)))
                     .ToList(),
             };
             return true;
@@ -341,6 +342,7 @@ public static class PdfGeometrySnapService
         public float Y1 { get; set; }
         public string Kind { get; set; } = "";
         public string LayerName { get; set; } = "";
+        public float StrokeWidth { get; set; }
     }
 
     private sealed class PdfSnapLayerDto

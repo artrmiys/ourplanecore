@@ -193,7 +193,8 @@ public static class RasterSheetCacheService
                         new SKPoint(segment.X0, segment.Y0),
                         new SKPoint(segment.X1, segment.Y1),
                         string.IsNullOrWhiteSpace(segment.Kind) ? "pdf-line" : segment.Kind,
-                        segment.LayerName ?? ""))
+                        segment.LayerName ?? "",
+                        Math.Max(0f, segment.StrokeWidth)))
                     .ToList(),
             };
             return true;
@@ -412,6 +413,7 @@ public static class RasterSheetCacheService
                     Y1 = segment.End.Y,
                     Kind = segment.Kind,
                     LayerName = segment.LayerName,
+                    StrokeWidth = segment.StrokeWidth,
                 })
                 .ToList(),
         };
@@ -464,5 +466,6 @@ public static class RasterSheetCacheService
         public float Y1 { get; set; }
         public string Kind { get; set; } = "";
         public string LayerName { get; set; } = "";
+        public float StrokeWidth { get; set; }
     }
 }

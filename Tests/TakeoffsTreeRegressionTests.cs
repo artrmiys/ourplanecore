@@ -1178,13 +1178,16 @@ internal static class TakeoffsTreeRegressionTests
         string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
         string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
         string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+        string snapService = ReadRepoFile("Models/PdfGeometrySnapService.cs");
 
         AssertTrue(
             helper.Contains("black_only = bool(req.get(\"black_only\", False))", StringComparison.Ordinal) &&
             helper.Contains("strict_lines = black_only", StringComparison.Ordinal) &&
+            helper.Contains("_snap_drawing_stroke_width", StringComparison.Ordinal) &&
+            helper.Contains("\"stroke_width\"", StringComparison.Ordinal) &&
             helper.Contains("if black_only and not _is_snap_drawing_dark(drawing):", StringComparison.Ordinal) &&
             helper.Contains("return _is_dark_pdf_color(drawing.get(\"color\"))", StringComparison.Ordinal),
-            "raster snap helper should filter to strict dark/black PDF stroke geometry");
+            "raster snap helper should filter to strict dark/black PDF stroke geometry and keep stroke width");
         AssertTrue(
             helper.Contains("elif strict_lines:\r\n        return", StringComparison.Ordinal) ||
             helper.Contains("elif strict_lines:\n        return", StringComparison.Ordinal),
@@ -1197,6 +1200,8 @@ internal static class TakeoffsTreeRegressionTests
             "raster snap cache must not fall back to all PDF vectors when no black linework is found");
         AssertTrue(
             raster.Contains("SnapIndexName = \"snap.json\"", StringComparison.Ordinal) &&
+            raster.Contains("StrokeWidth", StringComparison.Ordinal) &&
+            snapService.Contains("StrokeWidth", StringComparison.Ordinal) &&
             raster.Contains("blackOnly: true", StringComparison.Ordinal) &&
             pdfSnap.Contains("RasterSheetCacheService.TryReadSnapIndex", StringComparison.Ordinal) &&
             pdfSnap.Contains("PDF Snap ready from raster index", StringComparison.Ordinal),
@@ -1260,9 +1265,11 @@ internal static class TakeoffsTreeRegressionTests
             "Edge Snap should use loaded PDF/raster snap segments as a second preview source");
         AssertTrue(
             edgeSnap.Contains("TryFindUniqueConnectedPdfSnapSegment", StringComparison.Ordinal) &&
-            edgeSnap.Contains("if (matches > 1)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("if (matches > 1 &&", StringComparison.Ordinal) &&
+            edgeSnap.Contains("PdfSnapDirectionalBridgeFactor", StringComparison.Ordinal) &&
+            edgeSnap.Contains("PdfSnapStrokeWidthPenalty", StringComparison.Ordinal) &&
             edgeSnap.Contains("PdfSnapEndpointTolerancePt", StringComparison.Ordinal),
-            "PDF/raster contour preview should stop at ambiguous branches and only connect close endpoints");
+            "PDF/raster contour preview should continue directional gaps, prefer matching thick strokes, and stop at equally ambiguous branches");
         AssertTrue(
             edgeSnap.Contains("PdfSnapBridgeToleranceScreenPx", StringComparison.Ordinal) &&
             edgeSnap.Contains("ScreenToPdfDistance((float)PdfSnapBridgeToleranceScreenPx)", StringComparison.Ordinal) &&
@@ -1273,6 +1280,11 @@ internal static class TakeoffsTreeRegressionTests
             edgeSnap.Contains("label = \"pdf \" + label", StringComparison.Ordinal) &&
             pdfSnap.Contains("PDF Snap ready from raster index", StringComparison.Ordinal),
             "PDF/raster edge preview should be visible to the user and prefer the persisted strict raster index");
+        AssertTrue(
+            edgeSnap.Contains("private int NextEdgeSnapCycleMode()", StringComparison.Ordinal) &&
+            edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal) &&
+            edgeSnap.Contains("return EdgeSnapModeContour;", StringComparison.Ordinal),
+            "Area should jump straight to closed PDF/raster contour mode so thick exterior line loops can become Area takeoffs");
     }
 
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()

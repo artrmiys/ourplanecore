@@ -4372,15 +4372,45 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
     var bridgePoints = (List<SKPoint>)method.Invoke(null, bridgeArgs)!;
     AssertEqual("0,0|10,0|16,0|30,0|36,0|50,0", FormatPoints(bridgePoints), "small endpoint gaps should bridge along an unambiguous chain");
 
-    var branchSegments = new List<PdfGeometrySnapSegment>
+    var directionalGapSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(20, 0), "pdf-line"),
+        new(new SKPoint(70, 3), new SKPoint(100, 3), "pdf-line"),
+        new(new SKPoint(108, 3), new SKPoint(130, 3), "pdf-line"),
+    };
+    object?[] directionalGapArgs = [directionalGapSegments, 0, 20f, false, 0];
+    var directionalGapPoints = (List<SKPoint>)method.Invoke(null, directionalGapArgs)!;
+    AssertEqual("0,0|20,0|70,3|100,3|108,3|130,3", FormatPoints(directionalGapPoints), "shifted collinear gaps should continue through window-like breaks");
+
+    var closestBranchSegments = new List<PdfGeometrySnapSegment>
     {
         new(new SKPoint(0, 0), new SKPoint(10, 0), "pdf-line"),
         new(new SKPoint(15, 0), new SKPoint(30, 0), "pdf-line"),
         new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line"),
     };
-    object?[] branchArgs = [branchSegments, 0, 7f, false, 0];
-    var branchPoints = (List<SKPoint>)method.Invoke(null, branchArgs)!;
-    AssertEqual("0,0|10,0", FormatPoints(branchPoints), "ambiguous endpoint branches should not be guessed");
+    object?[] closestBranchArgs = [closestBranchSegments, 0, 7f, false, 0];
+    var closestBranchPoints = (List<SKPoint>)method.Invoke(null, closestBranchArgs)!;
+    AssertEqual("0,0|10,0|15,0|30,0", FormatPoints(closestBranchPoints), "near branches should prefer the best same-axis continuation");
+
+    var thickBranchSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(10, 0), "pdf-line", "", 6f),
+        new(new SKPoint(15, 0), new SKPoint(30, 0), "pdf-line", "", 0.5f),
+        new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line", "", 6f),
+    };
+    object?[] thickBranchArgs = [thickBranchSegments, 0, 7f, false, 0];
+    var thickBranchPoints = (List<SKPoint>)method.Invoke(null, thickBranchArgs)!;
+    AssertEqual("0,0|10,0|15,2|30,2", FormatPoints(thickBranchPoints), "thick exterior linework should stay on the matching stroke width");
+
+    var ambiguousBranchSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(10, 0), "pdf-line"),
+        new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line"),
+        new(new SKPoint(15, -2), new SKPoint(30, -2), "pdf-line"),
+    };
+    object?[] ambiguousBranchArgs = [ambiguousBranchSegments, 0, 7f, false, 0];
+    var ambiguousBranchPoints = (List<SKPoint>)method.Invoke(null, ambiguousBranchArgs)!;
+    AssertEqual("0,0|10,0", FormatPoints(ambiguousBranchPoints), "equally likely branches should not be guessed");
 }
 
 static string FormatPoints(IReadOnlyList<SKPoint> points) =>

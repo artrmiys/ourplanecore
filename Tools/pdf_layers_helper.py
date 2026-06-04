@@ -1541,6 +1541,13 @@ def _is_snap_drawing_dark(drawing: dict) -> bool:
     return _is_dark_pdf_color(drawing.get("color"))
 
 
+def _snap_drawing_stroke_width(drawing: dict) -> float:
+    try:
+        return max(0.0, float(drawing.get("width") or 0.0))
+    except Exception:
+        return 0.0
+
+
 def _add_snap_point(
     points: dict[tuple[float, float], dict],
     point: tuple[float, float] | None,
@@ -1573,6 +1580,7 @@ def _add_snap_segment(
     end: tuple[float, float] | None,
     layer_name: str,
     max_segments: int,
+    stroke_width: float = 0.0,
 ) -> None:
     if start is None or end is None or len(segments) >= max_segments:
         return
@@ -1593,6 +1601,7 @@ def _add_snap_segment(
         "y1": end[1],
         "kind": "pdf-line",
         "layer_name": layer_name,
+        "stroke_width": max(0.0, float(stroke_width or 0.0)),
     }
 
 
@@ -1615,12 +1624,13 @@ def _add_snap_rect_geometry(
     layer_name: str,
     max_points: int,
     max_segments: int,
+    stroke_width: float = 0.0,
 ) -> None:
     if rect is None:
         return
     _add_snap_rect_points(points, rect, layer_name, max_points)
     for start, end in _rect_segments(rect):
-        _add_snap_segment(segments, start, end, layer_name, max_segments)
+        _add_snap_segment(segments, start, end, layer_name, max_segments, stroke_width)
 
 
 def _add_snap_points_from_item(
@@ -1631,6 +1641,7 @@ def _add_snap_points_from_item(
     max_points: int,
     max_segments: int,
     strict_lines: bool = False,
+    stroke_width: float = 0.0,
 ) -> None:
     if not item:
         return
@@ -1641,9 +1652,9 @@ def _add_snap_points_from_item(
         end = _point_xy(item[2])
         _add_snap_point(points, start, "pdf-point", layer_name, max_points)
         _add_snap_point(points, end, "pdf-point", layer_name, max_points)
-        _add_snap_segment(segments, start, end, layer_name, max_segments)
+        _add_snap_segment(segments, start, end, layer_name, max_segments, stroke_width)
     elif command == "re" and len(item) >= 2:
-        _add_snap_rect_geometry(points, segments, _rect_xyxy(item[1]), layer_name, max_points, max_segments)
+        _add_snap_rect_geometry(points, segments, _rect_xyxy(item[1]), layer_name, max_points, max_segments, stroke_width)
     elif strict_lines:
         return
     elif command == "qu" and len(item) >= 2:
@@ -1661,13 +1672,13 @@ def _add_snap_points_from_item(
                 (quad_points[2], quad_points[3]),
                 (quad_points[3], quad_points[0]),
             ]:
-                _add_snap_segment(segments, start, end, layer_name, max_segments)
+                _add_snap_segment(segments, start, end, layer_name, max_segments, stroke_width)
     elif command == "c" and len(item) >= 3:
         start = _point_xy(item[1])
         end = _point_xy(item[-1])
         _add_snap_point(points, start, "pdf-point", layer_name, max_points)
         _add_snap_point(points, end, "pdf-point", layer_name, max_points)
-        _add_snap_segment(segments, start, end, layer_name, max_segments)
+        _add_snap_segment(segments, start, end, layer_name, max_segments, stroke_width)
 
 
 def pdf_snap_data(req: dict) -> dict:
@@ -1700,8 +1711,9 @@ def pdf_snap_data(req: dict) -> dict:
                 continue
 
             before_count = len(points) + len(segments)
+            stroke_width = _snap_drawing_stroke_width(drawing)
             for item in drawing.get("items") or []:
-                _add_snap_points_from_item(points, segments, item, layer_name, max_points, max_segments, strict_lines)
+                _add_snap_points_from_item(points, segments, item, layer_name, max_points, max_segments, strict_lines, stroke_width)
                 if len(points) >= max_points and len(segments) >= max_segments:
                     break
 
@@ -1713,6 +1725,7 @@ def pdf_snap_data(req: dict) -> dict:
                     layer_name,
                     max_points,
                     max_segments,
+                    stroke_width,
                 )
 
             if len(points) >= max_points and len(segments) >= max_segments:

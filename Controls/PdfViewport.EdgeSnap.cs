@@ -19,6 +19,9 @@ public sealed partial class PdfViewport
     private const float PdfSnapEndpointTolerancePt = 0.75f;
     private const float PdfSnapBridgeToleranceMinPt = 1.0f;
     private const float PdfSnapBridgeToleranceMaxPt = 240.0f;
+    private const float PdfSnapDirectionalBridgeFactor = 3.0f;
+    private const float PdfSnapDirectionalMinAlignment = 0.94f;
+    private const float PdfSnapDirectionalLateralFactor = 0.35f;
     private const int PdfSnapMaxChainSegments = 256;
 
     private bool UpdateEdgeSnapPreview(SKPoint rawPdf, bool resetModeForNewCandidate = true)
@@ -60,11 +63,24 @@ public sealed partial class PdfViewport
         if (!_lastPointerPdf.HasValue || !CanUseEdgeSnapPreview())
             return false;
 
-        _edgeSnapCycleMode = (_edgeSnapCycleMode + 1) % EdgeSnapModeCount;
+        _edgeSnapCycleMode = NextEdgeSnapCycleMode();
         bool found = UpdateEdgeSnapPreview(_lastPointerPdf.Value, resetModeForNewCandidate: false);
         if (found)
             PostStatus($"Edge Snap: {EdgeSnapModeTitle(_edgeSnapCycleMode)}. Tab cycles vertices / edge / edges / contour.");
         return found;
+    }
+
+    private int NextEdgeSnapCycleMode()
+    {
+        if (_edgeSnapCycleMode == EdgeSnapModeVertices &&
+            _tool == ViewerTool.Area &&
+            _edgeSnapCandidate is { SourceKind: "pdf", Closed: true } &&
+            _edgeSnapCandidate.Contour.Count >= 3)
+        {
+            return EdgeSnapModeContour;
+        }
+
+        return (_edgeSnapCycleMode + 1) % EdgeSnapModeCount;
     }
 
     private bool TryCommitEdgeSnapPreview(SKPoint rawPdf)
@@ -342,6 +358,7 @@ public sealed partial class PdfViewport
             ClonePoint(selected.End),
         };
         var used = new HashSet<int> { selectedIndex };
+        float targetStrokeWidth = Math.Max(0f, selected.StrokeWidth);
 
         while (!closed &&
                used.Count < PdfSnapMaxChainSegments &&
@@ -349,7 +366,9 @@ public sealed partial class PdfViewport
                    segments,
                    used,
                    points[0],
+                   points[1],
                    bridgeTolerancePt,
+                   targetStrokeWidth,
                    out int nextIndex,
                    out SKPoint matchedPoint,
                    out SKPoint otherPoint))
@@ -376,7 +395,9 @@ public sealed partial class PdfViewport
                    segments,
                    used,
                    points[^1],
+                   points[^2],
                    bridgeTolerancePt,
+                   targetStrokeWidth,
                    out int nextIndex,
                    out SKPoint matchedPoint,
                    out SKPoint otherPoint))
@@ -403,7 +424,9 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfGeometrySnapSegment> segments,
         HashSet<int> used,
         SKPoint endpoint,
+        SKPoint previousPoint,
         float bridgeTolerancePt,
+        float targetStrokeWidth,
         out int segmentIndex,
         out SKPoint matchedPoint,
         out SKPoint otherPoint)
@@ -411,30 +434,152 @@ public sealed partial class PdfViewport
         segmentIndex = -1;
         matchedPoint = default;
         otherPoint = default;
-        int matches = 0;
-        float toleranceSq = Math.Max(PdfSnapEndpointTolerancePt, bridgeTolerancePt);
-        toleranceSq *= toleranceSq;
+
+        if (!TryPdfSnapDirection(previousPoint, endpoint, out float dirX, out float dirY))
+            return false;
+
+        float endpointTolerance = Math.Max(PdfSnapEndpointTolerancePt, bridgeTolerancePt);
+        float endpointToleranceSq = endpointTolerance * endpointTolerance;
+        float directionalTolerance = Math.Min(
+            PdfSnapBridgeToleranceMaxPt,
+            Math.Max(endpointTolerance, bridgeTolerancePt * PdfSnapDirectionalBridgeFactor));
+        float lateralTolerance = Math.Max(
+            PdfSnapEndpointTolerancePt * 2f,
+            bridgeTolerancePt * PdfSnapDirectionalLateralFactor);
+        var candidates = new List<PdfSnapConnectedSegmentCandidate>();
+
         for (int i = 0; i < segments.Count; i++)
         {
             if (used.Contains(i))
                 continue;
 
             PdfGeometrySnapSegment segment = segments[i];
-            bool startMatches = PdfSnapSameEndpointSquared(segment.Start, endpoint, toleranceSq);
-            bool endMatches = PdfSnapSameEndpointSquared(segment.End, endpoint, toleranceSq);
-            if (!startMatches && !endMatches)
-                continue;
-
-            matches++;
-            if (matches > 1)
-                return false;
-
-            segmentIndex = i;
-            matchedPoint = startMatches ? segment.Start : segment.End;
-            otherPoint = startMatches ? segment.End : segment.Start;
+            float strokeWidth = Math.Max(0f, segment.StrokeWidth);
+            ConsiderPdfSnapEndpoint(i, segment.Start, segment.End, strokeWidth);
+            ConsiderPdfSnapEndpoint(i, segment.End, segment.Start, strokeWidth);
         }
 
-        return matches == 1;
+        int matches = candidates.Count;
+        if (matches == 0)
+            return false;
+
+        candidates.Sort((left, right) => left.Score.CompareTo(right.Score));
+        if (matches > 1 && PdfSnapCandidatesAreAmbiguous(candidates[0], candidates[1], bridgeTolerancePt))
+            return false;
+
+        PdfSnapConnectedSegmentCandidate best = candidates[0];
+        segmentIndex = best.SegmentIndex;
+        matchedPoint = best.MatchedPoint;
+        otherPoint = best.OtherPoint;
+        return true;
+
+        void ConsiderPdfSnapEndpoint(int index, SKPoint candidateEndpoint, SKPoint candidateOtherPoint, float strokeWidth)
+        {
+            float endpointDistanceSq = DistanceSquared(candidateEndpoint, endpoint);
+            bool endpointMatch = endpointDistanceSq <= endpointToleranceSq;
+            PdfSnapDirectionalOffset(endpoint, candidateEndpoint, dirX, dirY, out float along, out float lateral);
+            float alignment = PdfSnapDirectionAlignment(candidateEndpoint, candidateOtherPoint, dirX, dirY);
+            if (endpointMatch && alignment < -0.25f)
+                return;
+
+            if (!endpointMatch)
+            {
+                if (along <= 0 ||
+                    along > directionalTolerance ||
+                    lateral > lateralTolerance ||
+                    alignment < PdfSnapDirectionalMinAlignment)
+                {
+                    return;
+                }
+            }
+
+            float endpointDistance = MathF.Sqrt(endpointDistanceSq);
+            float directionPenalty = (1f - Math.Max(0f, alignment)) * endpointTolerance * 0.35f;
+            float strokePenalty = PdfSnapStrokeWidthPenalty(strokeWidth, targetStrokeWidth, endpointTolerance);
+            float score = endpointMatch
+                ? endpointDistance + lateral * 3f + directionPenalty
+                : along + lateral * 4f + (1f - alignment) * directionalTolerance * 2f;
+            score += strokePenalty;
+
+            candidates.Add(new PdfSnapConnectedSegmentCandidate(
+                index,
+                candidateEndpoint,
+                candidateOtherPoint,
+                score,
+                lateral,
+                alignment));
+        }
+    }
+
+    private static float PdfSnapStrokeWidthPenalty(float candidateStrokeWidth, float targetStrokeWidth, float endpointTolerance)
+    {
+        if (targetStrokeWidth <= 0.25f)
+            return 0f;
+
+        float deficit = Math.Max(0f, targetStrokeWidth - Math.Max(0f, candidateStrokeWidth));
+        return deficit * Math.Max(2f, endpointTolerance * 0.25f);
+    }
+
+    private static bool PdfSnapCandidatesAreAmbiguous(
+        PdfSnapConnectedSegmentCandidate best,
+        PdfSnapConnectedSegmentCandidate next,
+        float bridgeTolerancePt)
+    {
+        float scoreTie = Math.Max(0.5f, Math.Min(bridgeTolerancePt * 0.08f, 6f));
+        if (Math.Abs(next.Score - best.Score) > scoreTie)
+            return false;
+
+        if (Math.Abs(next.Alignment - best.Alignment) > 0.08f)
+            return false;
+
+        float lateralTie = Math.Max(0.5f, Math.Min(bridgeTolerancePt * 0.05f, 4f));
+        return Math.Abs(next.LateralDistance - best.LateralDistance) <= lateralTie;
+    }
+
+    private static bool TryPdfSnapDirection(
+        SKPoint previousPoint,
+        SKPoint endpoint,
+        out float dirX,
+        out float dirY)
+    {
+        float dx = endpoint.X - previousPoint.X;
+        float dy = endpoint.Y - previousPoint.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= ViewportConstants.GeometryEpsilon)
+        {
+            dirX = 0;
+            dirY = 0;
+            return false;
+        }
+
+        dirX = dx / length;
+        dirY = dy / length;
+        return true;
+    }
+
+    private static void PdfSnapDirectionalOffset(
+        SKPoint origin,
+        SKPoint point,
+        float dirX,
+        float dirY,
+        out float along,
+        out float lateral)
+    {
+        float dx = point.X - origin.X;
+        float dy = point.Y - origin.Y;
+        along = dx * dirX + dy * dirY;
+        lateral = Math.Abs(dx * dirY - dy * dirX);
+    }
+
+    private static float PdfSnapDirectionAlignment(SKPoint start, SKPoint end, float dirX, float dirY)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length <= ViewportConstants.GeometryEpsilon)
+            return 0f;
+
+        return Math.Clamp((dx * dirX + dy * dirY) / length, -1f, 1f);
     }
 
     private static List<SKPoint> BuildSingleEdgeSnapPoints(EdgeSnapCandidate candidate)
@@ -605,6 +750,14 @@ public sealed partial class PdfViewport
         bool Closed,
         int SegmentIndex,
         float Distance);
+
+    private readonly record struct PdfSnapConnectedSegmentCandidate(
+        int SegmentIndex,
+        SKPoint MatchedPoint,
+        SKPoint OtherPoint,
+        float Score,
+        float LateralDistance,
+        float Alignment);
 
     private sealed record EdgeSnapPreview(
         IReadOnlyList<SKPoint> Points,
