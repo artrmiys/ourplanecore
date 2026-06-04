@@ -1250,9 +1250,12 @@ internal static class TakeoffsTreeRegressionTests
             !detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
             "raster sheet mode must allow delayed clipped PDF detail renders");
         AssertTrue(
-            rendering.Contains("FilterQuality = _usingRasterSheetRender", StringComparison.Ordinal) &&
-            rendering.Contains("? SKFilterQuality.Low", StringComparison.Ordinal) &&
-            !rendering.Contains("? SKFilterQuality.None", StringComparison.Ordinal),
+            rendering.Contains("FilterQuality = CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
+            rendering.Contains("private SKFilterQuality CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
+            rendering.Contains("ShouldUseSharperSourceImageRasterSampling()", StringComparison.Ordinal) &&
+            rendering.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) &&
+            rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
+            !rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal),
             "raster sheet mode should use smoothed bitmap sampling instead of nearest-neighbor blocks");
         AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = 2.0f", StringComparison.Ordinal) &&
@@ -1270,8 +1273,10 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal),
-            "image-backed PlanSwift PNG/TIF raster sheets should open directly at overview only inside a safe pixel budget");
+            rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal) &&
+            rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
+            rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
+            "image-backed PlanSwift PNG/TIF raster sheets should open directly at overview only inside a safe pixel budget and get sharper still-frame sampling");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&

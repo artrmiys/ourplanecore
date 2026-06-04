@@ -64,13 +64,7 @@ public sealed partial class PdfViewport
                 using var bitmapPaint = new SKPaint
                 {
                     IsAntialias = false,
-                    FilterQuality = _usingRasterSheetRender
-                        ? SKFilterQuality.Low
-                        : _renderNavigationFastFrame
-                        ? SKFilterQuality.Low
-                        : _zoom > _bitmapScale * 1.05f
-                        ? SKFilterQuality.Low
-                        : SKFilterQuality.Medium,
+                    FilterQuality = CurrentPageBitmapFilterQuality(),
                 };
 
                 float visibleW = ViewportCanvasWidth / Math.Max(_zoom, 0.001f);
@@ -212,6 +206,24 @@ public sealed partial class PdfViewport
             $"timings=page:{pageBitmapMs} overlay:{overlayMs} measurements:{measurementMs} markups:{markupMs} " +
             $"inProgress:{inProgressMs} labels:{labelMs} chrome:{screenOverlayMs}ms");
     }
+
+    private SKFilterQuality CurrentPageBitmapFilterQuality()
+    {
+        if (_usingRasterSheetRender)
+            return ShouldUseSharperSourceImageRasterSampling()
+                ? SKFilterQuality.Medium
+                : SKFilterQuality.Low;
+
+        if (_renderNavigationFastFrame || _zoom > _bitmapScale * 1.05f)
+            return SKFilterQuality.Low;
+
+        return SKFilterQuality.Medium;
+    }
+
+    private bool ShouldUseSharperSourceImageRasterSampling() =>
+        !_renderNavigationFastFrame &&
+        _zoom <= _bitmapScale * 1.05f &&
+        RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource);
 
     private void DrawCursorGuide(SKCanvas canvas, SKRect visiblePdf)
     {
