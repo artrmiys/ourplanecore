@@ -1269,7 +1269,8 @@ internal static class TakeoffsTreeRegressionTests
             "PDF snap index must expose strict line segments and nearby segment hits for edge preview without re-reading the PDF");
         AssertTrue(
             edgeSnap.Contains("TryFindPdfEdgeSnapCandidate", StringComparison.Ordinal) &&
-            edgeSnap.Contains("_pdfSnapIndex.FindSegments(rawPdf, tolerance)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("Math.Max(tolerance, bridgeTolerancePt)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("_pdfSnapIndex.FindSegments(rawPdf, searchTolerance)", StringComparison.Ordinal) &&
             edgeSnap.Contains("RankPdfEdgeSnapSegmentHits", StringComparison.Ordinal) &&
             edgeSnap.Contains("preferClosedBoundary", StringComparison.Ordinal) &&
             edgeSnap.Contains("_pdfSnapIndex.Segments", StringComparison.Ordinal) &&

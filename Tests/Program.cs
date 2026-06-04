@@ -4505,6 +4505,42 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
     var doorOnlyPoints = (List<SKPoint>)coreMethod.Invoke(null, doorOnlyArgs)!;
     AssertEqual("0", doorOnlyPoints.Count.ToString(), "interior door swing symbols should not become area PDF contour fallback polylines");
 
+    var realLikeDoorSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(1509.72f, 721.44f), new SKPoint(1509.72f, 745.44f), "pdf-line"),
+        new(new SKPoint(1510.68f, 721.44f), new SKPoint(1510.68f, 745.44f), "pdf-line"),
+        new(new SKPoint(1506.00f, 721.92f), new SKPoint(1510.68f, 721.44f), "pdf-line"),
+        new(new SKPoint(1501.56f, 723.24f), new SKPoint(1506.00f, 721.92f), "pdf-line"),
+        new(new SKPoint(1497.36f, 725.52f), new SKPoint(1501.56f, 723.24f), "pdf-line"),
+        new(new SKPoint(1493.76f, 728.40f), new SKPoint(1497.36f, 725.52f), "pdf-line"),
+        new(new SKPoint(1490.76f, 732.12f), new SKPoint(1493.76f, 728.40f), "pdf-line"),
+        new(new SKPoint(1488.48f, 736.20f), new SKPoint(1490.76f, 732.12f), "pdf-line"),
+        new(new SKPoint(1487.16f, 740.76f), new SKPoint(1488.48f, 736.20f), "pdf-line"),
+        new(new SKPoint(1486.68f, 745.44f), new SKPoint(1487.16f, 740.76f), "pdf-line"),
+    };
+    object?[] realLikeDoorArgs = [realLikeDoorSegments, 0, 24f, true, everythingMode, false, 0];
+    var realLikeDoorPoints = (List<SKPoint>)coreMethod.Invoke(null, realLikeDoorArgs)!;
+    AssertEqual("0", realLikeDoorPoints.Count.ToString(), "fragmented a203-style interior door swing should be rejected before area contour fallback");
+
+    var exteriorPrioritySegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(160, 0), "pdf-line"),
+        new(new SKPoint(160, 0), new SKPoint(160, 100), "pdf-line"),
+        new(new SKPoint(160, 100), new SKPoint(0, 100), "pdf-line"),
+        new(new SKPoint(0, 100), new SKPoint(0, 0), "pdf-line"),
+        new(new SKPoint(80, 0), new SKPoint(80, 40), "pdf-line"),
+        new(new SKPoint(80, 40), new SKPoint(80, 72), "pdf-line"),
+        new(new SKPoint(80, 40), new SKPoint(92, 44), "pdf-line"),
+        new(new SKPoint(92, 44), new SKPoint(101, 52), "pdf-line"),
+        new(new SKPoint(101, 52), new SKPoint(106, 64), "pdf-line"),
+    };
+    object?[] exteriorPriorityArgs = [exteriorPrioritySegments, 5, 24f, true, everythingMode, false, 0];
+    var exteriorPriorityPoints = (List<SKPoint>)coreMethod.Invoke(null, exteriorPriorityArgs)!;
+    AssertEqual(
+        "0",
+        exteriorPriorityPoints.Count.ToString(),
+        $"door-like selected hits should not return an interior wall capsule before the exterior candidate, got {FormatPoints(exteriorPriorityPoints)}");
+
     var largeBridgeSegments = new List<PdfGeometrySnapSegment>
     {
         new(new SKPoint(0, 0), new SKPoint(120, 0), "pdf-line"),

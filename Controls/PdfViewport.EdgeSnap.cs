@@ -287,14 +287,18 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        IReadOnlyList<PdfGeometrySnapSegmentHit> hits = _pdfSnapIndex.FindSegments(rawPdf, tolerance);
-        if (hits.Count == 0)
-            return false;
-
         bool preferClosedBoundary = _tool == ViewerTool.Area || IsClosedEdgeSnapContourMode(_edgeSnapCycleMode);
         PdfSnapBoundaryMode boundaryMode = BoundaryModeForEdgeSnapMode(_edgeSnapCycleMode);
         float bridgeTolerancePt = PdfSnapBridgeTolerancePt();
-        foreach (PdfGeometrySnapSegmentHit hit in RankPdfEdgeSnapSegmentHits(hits, preferClosedBoundary, bridgeTolerancePt).Take(12))
+        float searchTolerance = preferClosedBoundary
+            ? Math.Max(tolerance, bridgeTolerancePt)
+            : tolerance;
+        IReadOnlyList<PdfGeometrySnapSegmentHit> hits = _pdfSnapIndex.FindSegments(rawPdf, searchTolerance);
+        if (hits.Count == 0)
+            return false;
+
+        int candidateLimit = preferClosedBoundary ? 32 : 12;
+        foreach (PdfGeometrySnapSegmentHit hit in RankPdfEdgeSnapSegmentHits(hits, preferClosedBoundary, bridgeTolerancePt).Take(candidateLimit))
         {
             candidate = BuildPdfEdgeSnapCandidate(hit.Segment, hit.DistancePt, hit.Index, preferClosedBoundary, boundaryMode, bridgeTolerancePt);
             if (candidate != null)
@@ -424,8 +428,7 @@ public sealed partial class PdfViewport
 
         bool selectedLooksLikeDoorSymbol = preferClosedBoundary &&
             PdfSnapGeometrySegmentLooksLikeInteriorDoorCandidate(segments, selectedIndex, bridgeTolerancePt);
-        if (!selectedLooksLikeDoorSymbol &&
-            preferClosedBoundary &&
+        if (preferClosedBoundary &&
             TryBuildPdfSnapBoundaryContour(
                 segments,
                 selectedIndex,
@@ -434,9 +437,13 @@ public sealed partial class PdfViewport
                 out List<SKPoint> boundary,
                 out int boundarySegmentIndex))
         {
-            closed = true;
-            selectedSegmentIndex = boundarySegmentIndex;
-            return boundary;
+            if (!selectedLooksLikeDoorSymbol ||
+                PdfSnapDoorSelectedBoundaryLooksLikeExterior(boundary, segments, selectedIndex, bridgeTolerancePt))
+            {
+                closed = true;
+                selectedSegmentIndex = boundarySegmentIndex;
+                return boundary;
+            }
         }
 
         if (selectedLooksLikeDoorSymbol)
