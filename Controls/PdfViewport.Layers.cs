@@ -81,8 +81,10 @@ public sealed partial class PdfViewport
         string pageFolder,
         RasterSheetSource? rasterSheet,
         ViewState? restoreView,
-        bool fitAfter)
+        bool fitAfter,
+        out string skipReason)
     {
+        skipReason = "";
         if (!RasterSheetCacheService.TryReadReady(
                 pageFolder,
                 pdfPath,
@@ -90,6 +92,7 @@ public sealed partial class PdfViewport
                 out RasterSheetBitmapResult raster,
                 out string reason))
         {
+            skipReason = reason;
             if (rasterSheet?.Enabled == true)
             {
                 AppLog.Info(

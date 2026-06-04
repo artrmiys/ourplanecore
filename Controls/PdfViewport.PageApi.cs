@@ -111,17 +111,30 @@ public sealed partial class PdfViewport
         FireLayersChanged();
 
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
-        if (TryApplyRasterSheetRender(
+        string rasterSkipReason = "";
+        bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(restoreView, fitAfter: !restoreView.HasValue);
+        if (shouldUseRasterSheetForOpen &&
+            TryApplyRasterSheetRender(
                 pdfPath,
                 pageIndex,
                 pageFolder,
                 rasterSheet,
                 restoreView,
-                fitAfter: !restoreView.HasValue))
+                fitAfter: !restoreView.HasValue,
+                out rasterSkipReason))
         {
             PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
             RequestRepaint();
             return;
+        }
+        if (!shouldUseRasterSheetForOpen &&
+            RasterSheetCacheService.ShouldRebuildForReadableDisplay(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                out string deferredRebuildReason))
+        {
+            rasterSkipReason = deferredRebuildReason;
         }
 
         float previewScale = ViewportRenderPolicy.InstantPagePreviewRenderScale;
@@ -157,6 +170,13 @@ public sealed partial class PdfViewport
         PostStatus(previewCacheHit
             ? $"Cached preview: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
             : $"Rendering: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+        QueueRasterSheetSelfHealIfNeeded(
+            pdfPath,
+            pageIndex,
+            pageFolder,
+            cachedLayers,
+            rasterSheet,
+            rasterSkipReason);
         RequestRepaint();
     }
 

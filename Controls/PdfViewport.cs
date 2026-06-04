@@ -311,6 +311,8 @@ public sealed partial class PdfViewport : SKElement
     private List<PdfLayer> _layers = [];
     private IReadOnlyList<PdfLayerInfo>? _cachedLayers;
     private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = [];
+    private readonly object _rasterSheetRebuildGate = new();
+    private readonly HashSet<string> _rasterSheetRebuildsInFlight = new(StringComparer.OrdinalIgnoreCase);
     private bool _pdfLayersLoadedForPage;
     private bool _usingLayerRenderer;
     private bool _usingRasterSheetRender;

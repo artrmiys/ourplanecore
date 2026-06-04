@@ -108,9 +108,15 @@ public sealed partial class PdfViewport
 
         if (_usingRasterSheetRender)
         {
+            if (TrySwitchRasterSheetToFastPreviewForLowZoom())
+                return;
+
             QueueDetailRenderIfNeeded(force);
             return;
         }
+
+        if (TryApplyReadyRasterSheetForCurrentZoom())
+            return;
 
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
             return;
@@ -162,10 +168,26 @@ public sealed partial class PdfViewport
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfW <= 0 || _pdfH <= 0)
             return;
 
+        if (_usingRasterSheetRender)
+        {
+            if (_zoom < ViewportRenderPolicy.RasterSheetDisplayExitZoom)
+            {
+                _zoomRerenderForce = true;
+                _zoomRerenderTimer.Stop();
+                _zoomRerenderTimer.Start();
+                return;
+            }
+
+            _zoomRerenderForce = _zoomRerenderForce || force;
+            _zoomRerenderTimer.Stop();
+            _zoomRerenderTimer.Start();
+            return;
+        }
+
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
             return;
 
-        if (_usingRasterSheetRender)
+        if (ShouldUseRasterSheetForCurrentZoom() && _rasterSheetSource?.Enabled == true)
         {
             _zoomRerenderForce = _zoomRerenderForce || force;
             _zoomRerenderTimer.Stop();

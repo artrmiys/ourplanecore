@@ -1228,16 +1228,20 @@ internal static class TakeoffsTreeRegressionTests
         string viewTransform = ReadRepoFile("Controls/PdfViewport.ViewTransform.cs");
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
+        string rasterSheetViewport = ReadRepoFile("Controls/PdfViewport.RasterSheet.cs");
+        string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
         AssertTrue(
             viewport.Contains("private bool _usingRasterSheetRender;", StringComparison.Ordinal) &&
+            viewport.Contains("_rasterSheetRebuildsInFlight", StringComparison.Ordinal) &&
             pageApi.Contains("_usingRasterSheetRender = false;", StringComparison.Ordinal) &&
             layers.Contains("_usingRasterSheetRender = true;", StringComparison.Ordinal),
             "viewport must track when the visible page bitmap is the raster working sheet");
         AssertTrue(
-            viewTransform.Contains("if (_usingRasterSheetRender)\r\n        {\r\n            QueueDetailRenderIfNeeded(force);\r\n            return;\r\n        }", StringComparison.Ordinal) ||
-            viewTransform.Contains("if (_usingRasterSheetRender)\n        {\n            QueueDetailRenderIfNeeded(force);\n            return;\n        }", StringComparison.Ordinal),
-            "raster sheet mode should skip full PDF zoom refreshes but queue clipped detail renders");
+            viewTransform.Contains("if (_usingRasterSheetRender)", StringComparison.Ordinal) &&
+            viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
+            viewTransform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal),
+            "raster sheet mode should skip full PDF zoom refreshes, exit to preview at low zoom, and queue clipped detail renders");
         AssertTrue(
             detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force)", StringComparison.Ordinal) &&
             !detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) &&
@@ -1247,9 +1251,17 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             rendering.Contains("FilterQuality = _usingRasterSheetRender", StringComparison.Ordinal) &&
             rendering.Contains("? SKFilterQuality.Low", StringComparison.Ordinal) &&
-            rendering.Contains(": SKFilterQuality.Medium", StringComparison.Ordinal) &&
             !rendering.Contains("? SKFilterQuality.None", StringComparison.Ordinal),
             "raster sheet mode should use smoothed bitmap sampling instead of nearest-neighbor blocks");
+        AssertTrue(
+            policy.Contains("RasterSheetDisplayMinZoom = 2.0f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayExitZoom = 1.8f", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&
+            viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
+            viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
+            "high-DPI raster sheets should be a deep-zoom LOD, not the default bitmap for overview page browsing");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
@@ -1258,6 +1270,16 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("DrawRasterSheetLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
             rendering.Contains("_zoom > 0.55f", StringComparison.Ordinal),
             "raster sheet low zoom should overlay strict snap segments so thin source lines remain readable below 50% zoom");
+        AssertTrue(
+            pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldSelfHealRasterSheet", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("legacy lineboost", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("Task.Run(() => RasterSheetCacheService.BuildAndEnable(page))", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("IsCurrentPageRasterTarget", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("CaptureViewState()", StringComparison.Ordinal) &&
+            pageApi.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("_pdfLayersLoadedForPage || _usingLayerRenderer", StringComparison.Ordinal),
+            "legacy or stale raster sheets should rebuild in the background, then apply only to the still-current non-layer page");
     }
 
     public static void PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules()

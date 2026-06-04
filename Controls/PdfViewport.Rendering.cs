@@ -65,7 +65,7 @@ public sealed partial class PdfViewport
                 {
                     IsAntialias = false,
                     FilterQuality = _usingRasterSheetRender
-                        ? (_renderNavigationFastFrame ? SKFilterQuality.Low : SKFilterQuality.Medium)
+                        ? SKFilterQuality.Low
                         : _renderNavigationFastFrame
                         ? SKFilterQuality.Low
                         : _zoom > _bitmapScale * 1.05f

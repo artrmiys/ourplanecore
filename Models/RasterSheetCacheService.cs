@@ -138,6 +138,46 @@ public static class RasterSheetCacheService
         return $"Raster {scale}x{profile}{snap}";
     }
 
+    public static bool ShouldRebuildForReadableDisplay(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? source,
+        out string reason)
+    {
+        reason = "";
+        if (source?.Enabled != true)
+            return false;
+        if (string.IsNullOrWhiteSpace(source.Image))
+        {
+            reason = "image path is empty";
+            return true;
+        }
+        if (source.WidthPt <= 0 || source.HeightPt <= 0)
+        {
+            reason = "page size is invalid";
+            return true;
+        }
+        if (IsStale(pdfPath, source))
+        {
+            reason = "source PDF changed";
+            return true;
+        }
+        if (IsLegacyLineBoost(source))
+        {
+            reason = "legacy lineboost raster cache";
+            return true;
+        }
+
+        string imagePath = ResolveImagePath(pageFolder, source);
+        if (!File.Exists(imagePath))
+        {
+            reason = "image file is missing";
+            return true;
+        }
+
+        return false;
+    }
+
     public static bool TryReadSnapIndex(
         string pageFolder,
         string pdfPath,
