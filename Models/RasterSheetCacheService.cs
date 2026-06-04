@@ -32,6 +32,7 @@ public static class RasterSheetCacheService
     public const string ReadableRasterProfile = "readable-raster-v2";
     public const string SourceImageRasterProfile = "source-image-v1";
     public const string ReadableLineBoostProfile = "lineboost-v1";
+    public const long SourceImageFastOpenMaxPixels = 18_000_000;
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
     {
@@ -233,6 +234,22 @@ public static class RasterSheetCacheService
         }
 
         return false;
+    }
+
+    public static bool IsSourceImageRaster(RasterSheetSource? source) =>
+        source?.Enabled == true &&
+        string.Equals(source.RenderProfile, SourceImageRasterProfile, StringComparison.OrdinalIgnoreCase);
+
+    public static bool ShouldUseSourceImageRasterForFastOpen(RasterSheetSource? source)
+    {
+        if (!IsSourceImageRaster(source) || source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
+            return false;
+
+        double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
+        return estimatedPixels > 0 &&
+               !double.IsInfinity(estimatedPixels) &&
+               !double.IsNaN(estimatedPixels) &&
+               estimatedPixels <= SourceImageFastOpenMaxPixels;
     }
 
     public static bool TryReadSnapIndex(

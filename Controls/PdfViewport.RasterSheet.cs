@@ -126,8 +126,11 @@ public sealed partial class PdfViewport
          reason.Contains("image file", StringComparison.OrdinalIgnoreCase) ||
          reason.Contains("page size is invalid", StringComparison.OrdinalIgnoreCase));
 
-    private bool ShouldUseRasterSheetForPageOpen(ViewState? restoreView, bool fitAfter)
+    private bool ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet, ViewState? restoreView, bool fitAfter)
     {
+        if (RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet))
+            return true;
+
         if (restoreView.HasValue)
             return restoreView.Value.Zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom;
 
@@ -175,6 +178,7 @@ public sealed partial class PdfViewport
     private bool TrySwitchRasterSheetToFastPreviewForLowZoom()
     {
         if (!_usingRasterSheetRender ||
+            ShouldKeepRasterSheetAtLowZoom() ||
             _zoom >= ViewportRenderPolicy.RasterSheetDisplayExitZoom)
         {
             return false;
@@ -206,4 +210,7 @@ public sealed partial class PdfViewport
 
     private static string RasterSheetRebuildKey(string pdfPath, int pageIndex, string pageFolder) =>
         $"{Path.GetFullPath(pdfPath)}|{pageIndex}|{Path.GetFullPath(pageFolder)}";
+
+    private bool ShouldKeepRasterSheetAtLowZoom() =>
+        RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource);
 }

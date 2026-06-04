@@ -1229,6 +1229,7 @@ internal static class TakeoffsTreeRegressionTests
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
         string rasterSheetViewport = ReadRepoFile("Controls/PdfViewport.RasterSheet.cs");
+        string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
         AssertTrue(
@@ -1262,6 +1263,15 @@ internal static class TakeoffsTreeRegressionTests
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
             "high-DPI raster sheets should be a deep-zoom LOD, not the default bitmap for overview page browsing");
+        AssertTrue(
+            raster.Contains("SourceImageRasterProfile = \"source-image-v1\"", StringComparison.Ordinal) &&
+            raster.Contains("SourceImageFastOpenMaxPixels", StringComparison.Ordinal) &&
+            raster.Contains("ShouldUseSourceImageRasterForFastOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen(RasterSheetSource? rasterSheet", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal),
+            "image-backed PlanSwift PNG/TIF raster sheets should open directly at overview only inside a safe pixel budget");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&

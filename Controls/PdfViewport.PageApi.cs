@@ -112,7 +112,7 @@ public sealed partial class PdfViewport
 
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         string rasterSkipReason = "";
-        bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(restoreView, fitAfter: !restoreView.HasValue);
+        bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         if (shouldUseRasterSheetForOpen &&
             TryApplyRasterSheetRender(
                 pdfPath,

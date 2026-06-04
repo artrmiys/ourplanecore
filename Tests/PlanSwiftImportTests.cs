@@ -878,6 +878,9 @@ internal static class PlanSwiftImportTests
         AssertClose(expectedHeightPt, raster.HeightPt, "PlanSwift image raster cache height", tolerance: 0.05);
         AssertTrue(raster.RenderScale >= minBitmapScale, "PlanSwift image raster cache should keep source pixels for readable zoom");
         AssertTrue(string.IsNullOrWhiteSpace(raster.SnapIndex), "PlanSwift image raster cache should not run PDF snap indexing during import");
+        AssertTrue(
+            RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(raster),
+            "PlanSwift image raster cache should be eligible for direct safe overview open");
 
         AssertTrue(
             RasterSheetCacheService.DisplayStatus(page).Contains("+image", StringComparison.Ordinal),
