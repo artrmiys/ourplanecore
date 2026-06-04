@@ -4493,6 +4493,39 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         noisyEverythingBounds.Right < 132,
         $"polyline everything should ignore interior door arcs and narrow paired door lines, got {noisyEverythingBounds}: {FormatPoints(noisyEverythingPoints)}");
 
+    var doorOnlySegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(60, 28), new SKPoint(78, 28), "pdf-line"),
+        new(new SKPoint(60, 31), new SKPoint(78, 31), "pdf-line"),
+        new(new SKPoint(60, 28), new SKPoint(68, 32), "pdf-line"),
+        new(new SKPoint(68, 32), new SKPoint(74, 38), "pdf-line"),
+        new(new SKPoint(74, 38), new SKPoint(78, 46), "pdf-line"),
+    };
+    object?[] doorOnlyArgs = [doorOnlySegments, 0, 24f, true, everythingMode, false, 0];
+    var doorOnlyPoints = (List<SKPoint>)coreMethod.Invoke(null, doorOnlyArgs)!;
+    AssertEqual("0", doorOnlyPoints.Count.ToString(), "interior door swing symbols should not become area PDF contour fallback polylines");
+
+    var largeBridgeSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(120, 0), "pdf-line"),
+        new(new SKPoint(120, 0), new SKPoint(120, 40), "pdf-line"),
+        new(new SKPoint(120, 40), new SKPoint(120, 80), "pdf-line"),
+        new(new SKPoint(120, 80), new SKPoint(0, 80), "pdf-line"),
+        new(new SKPoint(0, 80), new SKPoint(0, 0), "pdf-line"),
+        new(new SKPoint(120, 40), new SKPoint(150, 40), "pdf-line"),
+        new(new SKPoint(300, 40), new SKPoint(340, 40), "pdf-line"),
+        new(new SKPoint(340, 40), new SKPoint(340, 120), "pdf-line"),
+        new(new SKPoint(340, 120), new SKPoint(300, 120), "pdf-line"),
+    };
+    object?[] largeBridgeArgs = [largeBridgeSegments, 0, 80f, true, everythingMode, false, 0];
+    var largeBridgePoints = (List<SKPoint>)coreMethod.Invoke(null, largeBridgeArgs)!;
+    AssertTrue(largeBridgeArgs[5] is true, "large bridge contour should still close the selected local footprint");
+    SKRect largeBridgeBounds = BoundsForTest(largeBridgePoints);
+    AssertTrue(
+        largeBridgeBounds.Right < 220 &&
+        largeBridgeBounds.Bottom < 120,
+        $"large bridge should not glue a distant aligned foreign figure into the selected footprint, got {largeBridgeBounds}: {FormatPoints(largeBridgePoints)}");
+
     static int AddFragmentedHorizontal(List<PdfGeometrySnapSegment> segments, float y, float x0, float x1, int pieces)
     {
         int first = segments.Count;

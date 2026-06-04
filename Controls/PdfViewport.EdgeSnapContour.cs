@@ -27,6 +27,7 @@ public sealed partial class PdfViewport
                 segments,
                 selectedIndex,
                 bridgeTolerancePt,
+                mode,
                 out List<PdfSnapBoundaryTraceSegment> component,
                 out PdfGeometrySnapSegment selected))
         {
@@ -70,6 +71,7 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfGeometrySnapSegment> segments,
         int selectedIndex,
         float bridgeTolerancePt,
+        PdfSnapBoundaryMode mode,
         out List<PdfSnapBoundaryTraceSegment> component,
         out PdfGeometrySnapSegment selected)
     {
@@ -103,7 +105,7 @@ public sealed partial class PdfViewport
         if (selectedGraphEdge < 0)
             return false;
 
-        AddPdfSnapBoundaryBridgeEdges(nodes, adjacency, graphEdges, edgeKeys, bridgeTolerancePt);
+        AddPdfSnapBoundaryBridgeEdges(nodes, adjacency, graphEdges, edgeKeys, bridgeTolerancePt, mode);
 
         var componentEdges = ConnectedPdfSnapBoundaryEdges(selectedGraphEdge, graphEdges, adjacency);
         if (componentEdges.Count < 4 || componentEdges.Count > PdfSnapBoundaryMaxComponentEdges)
@@ -200,12 +202,10 @@ public sealed partial class PdfViewport
         List<List<int>> adjacency,
         List<PdfSnapBoundaryGraphEdge> graphEdges,
         Dictionary<(int A, int B), int> edgeKeys,
-        float bridgeTolerancePt)
+        float bridgeTolerancePt,
+        PdfSnapBoundaryMode mode)
     {
-        float maxBridge = Math.Clamp(
-            bridgeTolerancePt * PdfSnapDirectionalBridgeFactor,
-            PdfSnapBridgeToleranceMinPt,
-            PdfSnapBridgeToleranceMaxPt);
+        float maxBridge = PdfSnapBoundaryGraphBridgeTolerance(bridgeTolerancePt, mode);
         if (maxBridge <= PdfSnapEndpointTolerancePt)
             return;
 
@@ -245,6 +245,8 @@ public sealed partial class PdfViewport
                     graphEdges,
                     grid,
                     maxBridge,
+                    bridgeTolerancePt,
+                    mode,
                     claimed,
                     out int bridgeNode))
             {
@@ -271,17 +273,22 @@ public sealed partial class PdfViewport
         List<PdfSnapBoundaryGraphEdge> graphEdges,
         Dictionary<(int X, int Y), List<int>> grid,
         float maxBridge,
+        float bridgeTolerancePt,
+        PdfSnapBoundaryMode mode,
         HashSet<int> claimed,
         out int bridgeNode)
     {
         bridgeNode = -1;
-        if (!TryPdfSnapBoundaryEndpointDirection(nodeIndex, nodes, adjacency, graphEdges, out float dirX, out float dirY))
+        if (!TryPdfSnapBoundaryEndpointDirection(nodeIndex, nodes, adjacency, graphEdges, out float dirX, out float dirY, out float incidentLength))
             return false;
 
         SKPoint point = nodes[nodeIndex];
         int gx = PdfSnapBoundaryGridCoordinate(point.X, maxBridge);
         int gy = PdfSnapBoundaryGridCoordinate(point.Y, maxBridge);
-        float bestScore = maxBridge;
+        float minAlignment = PdfSnapBoundaryBridgeMinAlignment(mode);
+        float lateralTolerance = PdfSnapBoundaryBridgeLateralTolerance(bridgeTolerancePt, mode);
+        float bestScore = float.PositiveInfinity;
+        float nextScore = float.PositiveInfinity;
         int bestNode = -1;
 
         for (int y = gy - 1; y <= gy + 1; y++)
@@ -297,7 +304,11 @@ public sealed partial class PdfViewport
         }
 
         bridgeNode = bestNode;
-        return bridgeNode >= 0;
+        if (bridgeNode < 0)
+            return false;
+
+        float ambiguity = Math.Clamp(Math.Max(bridgeTolerancePt * 0.10f, maxBridge * 0.04f), 1.5f, 10f);
+        return nextScore - bestScore > ambiguity;
 
         void Consider(int candidate)
         {
@@ -314,23 +325,80 @@ public sealed partial class PdfViewport
             float gapX = dx / distance;
             float gapY = dy / distance;
             float entryAlignment = dirX * gapX + dirY * gapY;
-            if (entryAlignment < 0.78f)
+            if (entryAlignment < minAlignment)
                 return;
 
-            if (!TryPdfSnapBoundaryEndpointDirection(candidate, nodes, adjacency, graphEdges, out float otherDirX, out float otherDirY))
+            float lateral = Math.Abs((dx * dirY) - (dy * dirX));
+            if (lateral > lateralTolerance)
+                return;
+
+            if (!TryPdfSnapBoundaryEndpointDirection(candidate, nodes, adjacency, graphEdges, out float otherDirX, out float otherDirY, out float otherIncidentLength))
                 return;
 
             float exitAlignment = otherDirX * -gapX + otherDirY * -gapY;
-            if (exitAlignment < 0.78f)
+            if (exitAlignment < minAlignment)
                 return;
 
-            float score = distance + (1f - Math.Min(entryAlignment, exitAlignment)) * maxBridge;
-            if (score >= bestScore)
+            if (!PdfSnapBoundaryBridgeHasSegmentSupport(distance, incidentLength, otherIncidentLength, bridgeTolerancePt, mode))
                 return;
 
-            bestScore = score;
-            bestNode = candidate;
+            float alignmentPenalty = (1f - Math.Min(entryAlignment, exitAlignment)) * maxBridge * 2.5f;
+            float score = distance + (lateral * 3f) + alignmentPenalty;
+            if (score < bestScore)
+            {
+                nextScore = bestScore;
+                bestScore = score;
+                bestNode = candidate;
+                return;
+            }
+
+            if (score < nextScore)
+                nextScore = score;
         }
+    }
+
+    private static float PdfSnapBoundaryGraphBridgeTolerance(float bridgeTolerancePt, PdfSnapBoundaryMode mode)
+    {
+        float factor = mode switch
+        {
+            PdfSnapBoundaryMode.Safe => 1.05f,
+            PdfSnapBoundaryMode.All => 1.25f,
+            PdfSnapBoundaryMode.Everything => 1.45f,
+            _ => 1.05f,
+        };
+        float cap = mode switch
+        {
+            PdfSnapBoundaryMode.Safe => 72f,
+            PdfSnapBoundaryMode.All => 96f,
+            PdfSnapBoundaryMode.Everything => 128f,
+            _ => 72f,
+        };
+        return Math.Clamp(bridgeTolerancePt * factor, PdfSnapBridgeToleranceMinPt, Math.Min(cap, PdfSnapBridgeToleranceMaxPt));
+    }
+
+    private static float PdfSnapBoundaryBridgeMinAlignment(PdfSnapBoundaryMode mode) =>
+        mode == PdfSnapBoundaryMode.Everything ? 0.90f : 0.93f;
+
+    private static float PdfSnapBoundaryBridgeLateralTolerance(float bridgeTolerancePt, PdfSnapBoundaryMode mode)
+    {
+        float factor = mode == PdfSnapBoundaryMode.Everything ? 0.24f : 0.18f;
+        float cap = mode == PdfSnapBoundaryMode.Everything ? 18f : 14f;
+        return Math.Clamp(bridgeTolerancePt * factor, 2.5f, cap);
+    }
+
+    private static bool PdfSnapBoundaryBridgeHasSegmentSupport(
+        float distance,
+        float firstIncidentLength,
+        float secondIncidentLength,
+        float bridgeTolerancePt,
+        PdfSnapBoundaryMode mode)
+    {
+        float shortBridge = Math.Max(bridgeTolerancePt * (mode == PdfSnapBoundaryMode.Everything ? 0.95f : 0.80f), 24f);
+        if (distance <= shortBridge)
+            return true;
+
+        float requiredIncident = Math.Clamp(distance * 0.35f, 10f, 48f);
+        return firstIncidentLength >= requiredIncident && secondIncidentLength >= requiredIncident;
     }
 
     private static bool TryPdfSnapBoundaryEndpointDirection(
@@ -339,10 +407,12 @@ public sealed partial class PdfViewport
         List<List<int>> adjacency,
         List<PdfSnapBoundaryGraphEdge> graphEdges,
         out float dirX,
-        out float dirY)
+        out float dirY,
+        out float length)
     {
         dirX = 0;
         dirY = 0;
+        length = 0;
         if (adjacency[nodeIndex].Count != 1)
             return false;
 
@@ -352,7 +422,7 @@ public sealed partial class PdfViewport
         SKPoint other = nodes[otherIndex];
         float dx = point.X - other.X;
         float dy = point.Y - other.Y;
-        float length = MathF.Sqrt(dx * dx + dy * dy);
+        length = MathF.Sqrt(dx * dx + dy * dy);
         if (length <= ViewportConstants.GeometryEpsilon)
             return false;
 

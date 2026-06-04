@@ -97,7 +97,7 @@ public sealed partial class PdfViewport
                     PdfSnapBoundaryModeKeepsSparseAxisSegments(mode) &&
                     PdfSnapWallCoreShouldKeepSparseAxisSegment(segment, expandedCoreBounds, horizontal, minLength, bridgeTolerancePt);
                 if (!keep ||
-                    PdfSnapLooksLikeInteriorDoorSymbol(segment, coreBounds, horizontal, minLength, bridgeTolerancePt))
+                    PdfSnapLooksLikeInteriorDoorSymbol(segment, component, coreBounds, horizontal, minLength, bridgeTolerancePt))
                 {
                     continue;
                 }
@@ -119,7 +119,7 @@ public sealed partial class PdfViewport
                 PdfSnapBoundaryModeKeepsSparseAxisSegments(mode) &&
                 PdfSnapWallCoreShouldKeepSparseAxisSegment(segment, expandedCoreBounds, horizontal, minLength, bridgeTolerancePt);
             if (!keepVertical ||
-                PdfSnapLooksLikeInteriorDoorSymbol(segment, coreBounds, horizontal, minLength, bridgeTolerancePt))
+                PdfSnapLooksLikeInteriorDoorSymbol(segment, component, coreBounds, horizontal, minLength, bridgeTolerancePt))
             {
                 continue;
             }
@@ -237,6 +237,7 @@ public sealed partial class PdfViewport
 
     private static bool PdfSnapLooksLikeInteriorDoorSymbol(
         PdfSnapBoundaryTraceSegment segment,
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> component,
         SKRect coreBounds,
         bool horizontal,
         float minLength,
@@ -251,11 +252,20 @@ public sealed partial class PdfViewport
             Math.Abs(midpoint.X - coreBounds.Right) <= perimeterMargin ||
             Math.Abs(midpoint.Y - coreBounds.Top) <= perimeterMargin ||
             Math.Abs(midpoint.Y - coreBounds.Bottom) <= perimeterMargin;
+
+        float length = MeasurementGeometry.Distance(segment.Start, segment.End);
+        float doorSymbolMax = Math.Clamp(bridgeTolerancePt * (horizontal ? 1.05f : 0.90f), minLength * 2.25f, 96f);
+        if (length > doorSymbolMax)
+            return false;
+
+        bool pairedDoorSwing = PdfSnapBoundaryAxisSegmentHasDoorPair(component, segment, horizontal, bridgeTolerancePt) &&
+            PdfSnapBoundaryAxisSegmentHasDoorArc(component, segment, horizontal, bridgeTolerancePt);
+        if (pairedDoorSwing)
+            return true;
+
         if (nearPerimeter)
             return false;
 
-        float length = MeasurementGeometry.Distance(segment.Start, segment.End);
-        float doorSymbolMax = Math.Clamp(bridgeTolerancePt * (horizontal ? 0.85f : 0.65f), minLength * 2.25f, 72f);
         return length <= doorSymbolMax;
     }
 

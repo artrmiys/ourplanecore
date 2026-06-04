@@ -1314,9 +1314,10 @@ internal static class TakeoffsTreeRegressionTests
             contour.Contains("TryChooseLargestPdfSnapBoundaryContour", StringComparison.Ordinal) &&
             contour.Contains("bridgeTolerancePt * 0.025f", StringComparison.Ordinal) &&
             contour.Contains("2.25f", StringComparison.Ordinal) &&
-            contour.Contains("PdfSnapDirectionalBridgeFactor", StringComparison.Ordinal) &&
+            contour.Contains("PdfSnapBoundaryGraphBridgeTolerance", StringComparison.Ordinal) &&
+            contour.Contains("PdfSnapBoundaryBridgeMinAlignment", StringComparison.Ordinal) &&
             contour.Contains("ProjectPdfSnapBoundaryPoints", StringComparison.Ordinal),
-            "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass while preserving short exterior jog edges");
+            "Area PDF/raster contour mode should include a guarded bridge-tolerance-driven probable closed boundary pass while preserving short exterior jog edges");
         string wallCore = ReadRepoFile("Controls/PdfViewport.EdgeSnapWallCore.cs");
         AssertTrue(
             wallCore.Contains("PdfSnapBoundaryMode.All", StringComparison.Ordinal) &&
@@ -1324,6 +1325,12 @@ internal static class TakeoffsTreeRegressionTests
             wallCore.Contains("PdfSnapLooksLikeInteriorDoorSymbol", StringComparison.Ordinal) &&
             wallCore.Contains("SelectPdfSnapRasterBoundaryComponent", StringComparison.Ordinal),
             "PDF/raster contour all/everything modes should suppress interior door-like arcs and narrow paired door lines before tracing");
+        string door = ReadRepoFile("Controls/PdfViewport.EdgeSnapDoor.cs");
+        AssertTrue(
+            door.Contains("PdfSnapGeometrySegmentLooksLikeInteriorDoorCandidate", StringComparison.Ordinal) &&
+            door.Contains("PdfSnapBoundaryAxisSegmentHasDoorPair", StringComparison.Ordinal) &&
+            door.Contains("PdfSnapDoorArcTouchesAxisSegment", StringComparison.Ordinal),
+            "PDF/raster contour door detection should keep paired interior door swing symbols out of area contour fallback");
     }
 
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()

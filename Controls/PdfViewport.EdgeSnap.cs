@@ -422,7 +422,10 @@ public sealed partial class PdfViewport
         if (selectedIndex < 0 || selectedIndex >= segments.Count)
             return [];
 
-        if (preferClosedBoundary &&
+        bool selectedLooksLikeDoorSymbol = preferClosedBoundary &&
+            PdfSnapGeometrySegmentLooksLikeInteriorDoorCandidate(segments, selectedIndex, bridgeTolerancePt);
+        if (!selectedLooksLikeDoorSymbol &&
+            preferClosedBoundary &&
             TryBuildPdfSnapBoundaryContour(
                 segments,
                 selectedIndex,
@@ -434,6 +437,11 @@ public sealed partial class PdfViewport
             closed = true;
             selectedSegmentIndex = boundarySegmentIndex;
             return boundary;
+        }
+
+        if (selectedLooksLikeDoorSymbol)
+        {
+            return [];
         }
 
         PdfGeometrySnapSegment selected = segments[selectedIndex];
