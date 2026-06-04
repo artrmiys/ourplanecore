@@ -84,6 +84,7 @@ internal static class PlanSwiftImportTests
             AssertClose(0.0635, measurement.ScaleMetersPerPt, "measurement scale should compensate for coordinate transform");
             AssertClose(0.3048, measurement.Value(0), "transformed one foot line should keep original measured value");
             AssertPlanSwiftImagePdfUsesHighQualitySampling();
+            AssertExistingSourceImageRasterOverviewUpgrade(page);
         });
     }
 
@@ -945,6 +946,63 @@ internal static class PlanSwiftImportTests
             {
                 overview.Bitmap.Dispose();
             }
+        }
+        else
+        {
+            AssertFalse(
+                RasterSheetCacheService.ShouldBuildSourceImageOverview(
+                    page.FolderPath,
+                    page.PdfPath,
+                    raster,
+                    out _),
+                "small PlanSwift image raster should not queue a duplicate overview build");
+        }
+    }
+
+    private static void AssertExistingSourceImageRasterOverviewUpgrade(PageInfo page)
+    {
+        RasterSheetSource legacy = page.RasterSheet!.Clone();
+        legacy.OverviewImage = "";
+        legacy.OverviewRenderScale = 0;
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, legacy);
+
+        PageInfo legacyPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            ?? throw new InvalidOperationException("Legacy raster page source was not readable.");
+        AssertTrue(
+            RasterSheetCacheService.ShouldBuildSourceImageOverview(
+                legacyPage.FolderPath,
+                legacyPage.PdfPath,
+                legacyPage.RasterSheet,
+                out string reason),
+            reason);
+
+        RasterSheetBuildResult upgrade = RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(legacyPage);
+        AssertTrue(upgrade.Ok, upgrade.Error);
+
+        PageInfo upgradedPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            ?? throw new InvalidOperationException("Upgraded raster page source was not readable.");
+        RasterSheetSource upgraded = upgradedPage.RasterSheet!;
+        AssertTrue(
+            RasterSheetCacheService.HasSourceImageOverview(upgraded),
+            "existing oversized source-image raster should be upgraded with overview metadata");
+        AssertTrue(
+            RasterSheetCacheService.TryReadOverviewReady(
+                upgradedPage.FolderPath,
+                upgradedPage.PdfPath,
+                upgraded,
+                out RasterSheetBitmapResult overview,
+                out string overviewReason),
+            overviewReason);
+        try
+        {
+            long overviewPixels = (long)overview.Bitmap.Width * overview.Bitmap.Height;
+            AssertTrue(
+                overviewPixels <= RasterSheetCacheService.SourceImageFastOpenMaxPixels,
+                "upgraded existing source-image overview should stay inside the fast-open pixel budget");
+        }
+        finally
+        {
+            overview.Bitmap.Dispose();
         }
     }
 

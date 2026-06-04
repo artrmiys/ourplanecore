@@ -15,14 +15,28 @@ public sealed partial class PdfViewport
         RasterSheetSource? rasterSheet,
         string rasterSkipReason)
     {
-        if (!ShouldSelfHealRasterSheet(rasterSheet, rasterSkipReason) ||
-            string.IsNullOrWhiteSpace(pageFolder) ||
+        bool shouldSelfHeal = ShouldSelfHealRasterSheet(rasterSheet, rasterSkipReason);
+        if (string.IsNullOrWhiteSpace(pageFolder) ||
             string.IsNullOrWhiteSpace(pdfPath) ||
             !Directory.Exists(pageFolder) ||
             !File.Exists(pdfPath))
         {
             return;
         }
+
+        bool shouldBuildOverview = RasterSheetCacheService.ShouldBuildSourceImageOverview(
+            pageFolder,
+            pdfPath,
+            rasterSheet,
+            out string overviewReason);
+        if (!shouldSelfHeal && !shouldBuildOverview)
+            return;
+
+        string effectiveReason = shouldSelfHeal
+            ? rasterSkipReason
+            : overviewReason;
+        if (string.IsNullOrWhiteSpace(effectiveReason))
+            effectiveReason = "raster sheet background refresh";
 
         string rebuildKey = RasterSheetRebuildKey(pdfPath, pageIndex, pageFolder);
         lock (_rasterSheetRebuildGate)
@@ -32,7 +46,7 @@ public sealed partial class PdfViewport
         }
 
         AppLog.Info(
-            $"Viewport raster sheet self-heal queued; reason='{rasterSkipReason}'; " +
+            $"Viewport raster sheet self-heal queued; reason='{effectiveReason}'; " +
             $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}");
         _ = RebuildRasterSheetForCurrentPageAsync(
             rebuildKey,
@@ -40,7 +54,8 @@ public sealed partial class PdfViewport
             pageIndex,
             pageFolder,
             cachedLayers,
-            rasterSkipReason);
+            rasterSheet?.Clone(),
+            effectiveReason);
     }
 
     private async Task RebuildRasterSheetForCurrentPageAsync(
@@ -49,6 +64,7 @@ public sealed partial class PdfViewport
         int pageIndex,
         string pageFolder,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        RasterSheetSource? rasterSheet,
         string rasterSkipReason)
     {
         try
@@ -61,9 +77,20 @@ public sealed partial class PdfViewport
                 PdfPage = pageIndex,
                 PdfLayersCached = cachedLayers != null,
                 PdfLayers = cachedLayers ?? Array.Empty<PdfLayerInfo>(),
+                RasterSheet = rasterSheet?.Clone(),
             };
 
-            RasterSheetBuildResult result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+            bool overviewOnly =
+                RasterSheetCacheService.ShouldBuildSourceImageOverview(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    out _) ||
+                (RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
+                 rasterSkipReason.Contains("overview", StringComparison.OrdinalIgnoreCase));
+            RasterSheetBuildResult result = await Task.Run(() => overviewOnly
+                ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
+                : RasterSheetCacheService.BuildAndEnable(page));
             if (!result.Ok || result.Source == null)
             {
                 AppLog.Warn(
@@ -73,17 +100,45 @@ public sealed partial class PdfViewport
             }
 
             AppLog.Info(
-                $"Viewport raster sheet self-heal built; reason='{rasterSkipReason}'; " +
+                $"Viewport raster sheet self-heal built; mode='{(overviewOnly ? "overview" : "full")}'; reason='{rasterSkipReason}'; " +
                 $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}");
 
             if (!IsCurrentPageRasterTarget(pdfPath, pageIndex, pageFolder))
                 return;
 
             _rasterSheetSource = result.Source.Clone();
-            if (_pdfLayersLoadedForPage || _usingLayerRenderer || !ShouldUseRasterSheetForCurrentZoom())
+            if (_pdfLayersLoadedForPage || _usingLayerRenderer)
                 return;
 
             ViewState currentView = CaptureViewState();
+            if (overviewOnly && !ShouldUseRasterSheetForCurrentZoom())
+            {
+                if (TryApplyRasterSheetRender(
+                        pdfPath,
+                        pageIndex,
+                        pageFolder,
+                        result.Source,
+                        currentView,
+                        fitAfter: false,
+                        preferOverview: true,
+                        out string overviewApplyReason))
+                {
+                    PostStatus($"Raster overview built: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+                    RequestRepaint();
+                }
+                else
+                {
+                    AppLog.Warn(
+                        $"Viewport raster overview self-heal apply skipped; reason='{overviewApplyReason}'; " +
+                        $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}");
+                }
+
+                return;
+            }
+
+            if (!ShouldUseRasterSheetForCurrentZoom())
+                return;
+
             if (TryApplyRasterSheetRender(
                     pdfPath,
                     pageIndex,

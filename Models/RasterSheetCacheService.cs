@@ -167,6 +167,59 @@ public static class RasterSheetCacheService
             new(false, null, "", error);
     }
 
+    public static RasterSheetBuildResult BuildOverviewForExistingSourceImageRaster(PageInfo page)
+    {
+        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
+            return Failed("Page folder is missing.");
+        if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
+            return Failed($"Source PDF is missing: {page.PdfPath}");
+
+        RasterSheetSource? source = page.RasterSheet?.Clone();
+        if (!IsSourceImageRaster(source) || source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
+            return Failed("Source image raster is not eligible for overview.");
+        if (IsStale(page.PdfPath, source))
+            return Failed("Source PDF changed.");
+
+        double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
+        if (estimatedPixels <= SourceImageFastOpenMaxPixels ||
+            double.IsInfinity(estimatedPixels) ||
+            double.IsNaN(estimatedPixels))
+        {
+            return Failed("Source image overview is not needed.");
+        }
+
+        string sourceImagePath = ResolveImagePath(page.FolderPath, source);
+        if (!File.Exists(sourceImagePath))
+            return Failed("Source image raster file is missing.");
+        using SKBitmap? decoded = SKBitmap.Decode(sourceImagePath);
+        if (decoded == null)
+            return Failed("Source image raster could not be decoded.");
+
+        string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        Directory.CreateDirectory(rasterDir);
+        bool hasOverview = TryWriteSourceImageOverview(
+            decoded,
+            rasterDir,
+            page.FolderPath,
+            source.WidthPt,
+            out string overviewImage,
+            out double overviewRenderScale,
+            out string overviewError);
+        if (!hasOverview)
+            return Failed(string.IsNullOrWhiteSpace(overviewError)
+                ? "Source image overview could not be generated."
+                : overviewError);
+
+        source.OverviewImage = overviewImage;
+        source.OverviewRenderScale = overviewRenderScale;
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        string overviewPath = ResolvePagePath(page.FolderPath, overviewImage);
+        return new RasterSheetBuildResult(true, source, overviewPath, "");
+
+        static RasterSheetBuildResult Failed(string error) =>
+            new(false, null, "", error);
+    }
+
     public static bool TrySetEnabled(PageInfo page, bool enabled, out string error)
     {
         error = "";
@@ -273,6 +326,48 @@ public static class RasterSheetCacheService
         IsSourceImageRaster(source) &&
         !string.IsNullOrWhiteSpace(source!.OverviewImage) &&
         source.OverviewRenderScale > 0;
+
+    public static bool ShouldBuildSourceImageOverview(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? source,
+        out string reason)
+    {
+        reason = "";
+        if (!IsSourceImageRaster(source))
+            return false;
+        if (source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
+            return false;
+        if (IsStale(pdfPath, source))
+            return false;
+
+        string imagePath = ResolveImagePath(pageFolder, source);
+        if (!File.Exists(imagePath))
+            return false;
+
+        double estimatedPixels = source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
+        if (estimatedPixels <= SourceImageFastOpenMaxPixels ||
+            double.IsInfinity(estimatedPixels) ||
+            double.IsNaN(estimatedPixels))
+        {
+            return false;
+        }
+
+        if (!HasSourceImageOverview(source))
+        {
+            reason = "source image overview missing";
+            return true;
+        }
+
+        string overviewPath = ResolvePagePath(pageFolder, source.OverviewImage);
+        if (!File.Exists(overviewPath))
+        {
+            reason = "overview image file is missing";
+            return true;
+        }
+
+        return false;
+    }
 
     public static bool TryReadSnapIndex(
         string pageFolder,

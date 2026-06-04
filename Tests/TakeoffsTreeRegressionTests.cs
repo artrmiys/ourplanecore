@@ -1281,9 +1281,13 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("raster-sheet-overview", StringComparison.Ordinal) &&
             raster.Contains("OverviewImageName = \"overview.png\"", StringComparison.Ordinal) &&
             raster.Contains("TryReadOverviewReady", StringComparison.Ordinal) &&
+            raster.Contains("BuildOverviewForExistingSourceImageRaster", StringComparison.Ordinal) &&
+            raster.Contains("ShouldBuildSourceImageOverview", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldBuildSourceImageOverview", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("mode='{(overviewOnly ? \"overview\" : \"full\")}'", StringComparison.Ordinal) &&
             rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
             rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
-            "image-backed PlanSwift PNG/TIF raster sheets should open through safe overview rasters, switch to full source pixels on zoom, and get sharper still-frame sampling");
+            "image-backed PlanSwift PNG/TIF raster sheets should open through safe overview rasters, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
@@ -1296,12 +1300,13 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldSelfHealRasterSheet", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("legacy lineboost", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("Task.Run(() => RasterSheetCacheService.BuildAndEnable(page))", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("BuildOverviewForExistingSourceImageRaster(page)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("BuildAndEnable(page)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("IsCurrentPageRasterTarget", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("CaptureViewState()", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("_pdfLayersLoadedForPage || _usingLayerRenderer", StringComparison.Ordinal),
-            "legacy or stale raster sheets should rebuild in the background, then apply only to the still-current non-layer page");
+            "legacy or stale raster sheets should rebuild in the background, while old oversized image rasters get overview-only rebuilds, then apply only to the still-current non-layer page");
     }
 
     public static void PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules()
