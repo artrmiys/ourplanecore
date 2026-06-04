@@ -81,6 +81,7 @@ internal static class PlanSwiftImportTests
             AssertClose(7.2, measurement.Points[1].X, "measurement x coordinate should be transformed to PDF points");
             AssertClose(0.042333333333333334, measurement.ScaleMetersPerPt, "measurement scale should compensate for coordinate transform");
             AssertClose(0.3048, measurement.Value(0), "transformed one foot line should keep original measured value");
+            AssertPlanSwiftImagePdfUsesHighQualitySampling();
         });
     }
 
@@ -842,6 +843,20 @@ internal static class PlanSwiftImportTests
         return (pageReader.GetPageWidth(), pageReader.GetPageHeight());
     }
 
+    private static void AssertPlanSwiftImagePdfUsesHighQualitySampling()
+    {
+        string repoRoot = FindRepoRoot();
+        string writer = File.ReadAllText(Path.Combine(repoRoot, "Models", "Import", "PlanSwiftPagePdfWriter.cs"));
+
+        AssertTrue(
+            writer.Contains("CreateImagePagePdfPaint", StringComparison.Ordinal) &&
+            writer.Contains("FilterQuality = SKFilterQuality.High", StringComparison.Ordinal) &&
+            writer.Contains("IsAntialias = true", StringComparison.Ordinal) &&
+            writer.Contains("canvas.DrawBitmap(", StringComparison.Ordinal) &&
+            writer.Contains("imagePaint", StringComparison.Ordinal),
+            "PlanSwift PNG/TIF page import should embed image pages with explicit high-quality sampling");
+    }
+
     private static IEnumerable<string> EnumerateSelfAndDescendants(string root)
     {
         yield return root;
@@ -885,6 +900,23 @@ internal static class PlanSwiftImportTests
     {
         if (condition)
             throw new InvalidOperationException(message);
+    }
+
+    private static string FindRepoRoot()
+    {
+        string dir = Directory.GetCurrentDirectory();
+        while (!string.IsNullOrWhiteSpace(dir))
+        {
+            if (File.Exists(Path.Combine(dir, "ourplanecore.csproj")))
+                return dir;
+
+            string? parent = Directory.GetParent(dir)?.FullName;
+            if (string.Equals(parent, dir, StringComparison.OrdinalIgnoreCase))
+                break;
+            dir = parent ?? "";
+        }
+
+        throw new DirectoryNotFoundException("Could not locate ourplanecore repo root.");
     }
 
     private static void AssertEqual(string expected, string actual, string message)

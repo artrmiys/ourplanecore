@@ -21,10 +21,12 @@ internal static class PlanSwiftPagePdfWriter
         using SKDocument document = SKDocument.CreatePdf(stream);
         SKCanvas canvas = document.BeginPage((float)normalization.WidthPt, (float)normalization.HeightPt);
         canvas.Clear(SKColors.White);
+        using SKPaint imagePaint = CreateImagePagePdfPaint();
         canvas.DrawBitmap(
             bitmap,
             new SKRect(0, 0, bitmap.Width, bitmap.Height),
-            new SKRect(0, 0, (float)normalization.WidthPt, (float)normalization.HeightPt));
+            new SKRect(0, 0, (float)normalization.WidthPt, (float)normalization.HeightPt),
+            imagePaint);
         document.EndPage();
         document.Close();
         return normalization;
@@ -93,6 +95,13 @@ internal static class PlanSwiftPagePdfWriter
 
         return PlanSwiftGeometryConverter.NormalizePageImage(bitmap.Width, bitmap.Height, 72, 72);
     }
+
+    private static SKPaint CreateImagePagePdfPaint() =>
+        new()
+        {
+            IsAntialias = true,
+            FilterQuality = SKFilterQuality.High,
+        };
 
     private static bool TryReadImagePageNormalizationWithWpf(
         string imagePath,
