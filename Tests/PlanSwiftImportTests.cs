@@ -37,6 +37,7 @@ internal static class PlanSwiftImportTests
             OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
             PageInfo page = CollectPages(job.PagesRoot).Single();
             AssertTrue(File.Exists(page.PdfPath), "converted page pdf exists");
+            AssertPlanSwiftImageRasterCache(page, expectedWidthPt: 120, expectedHeightPt: 80, minBitmapScale: 0.99);
             AssertClose(0.03048, page.ScaleMetersPerPt, "page scale from PlanSwift ScaleX", tolerance: 0.00001);
 
             TakeoffItem item = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single();
@@ -76,6 +77,7 @@ internal static class PlanSwiftImportTests
             (int pdfWidth, int pdfHeight) = ReadPdfPageSize(page.PdfPath);
             AssertClose(2592, pdfWidth, "normalized PDF width should be 36 in");
             AssertClose(1728, pdfHeight, "normalized PDF height should be 24 in");
+            AssertPlanSwiftImageRasterCache(page, expectedWidthPt: 2592, expectedHeightPt: 1728, minBitmapScale: 1.30);
 
             Measurement measurement = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single().Measurements.Single();
             AssertClose(7.2, measurement.Points[1].X, "measurement x coordinate should be transformed to PDF points");
@@ -855,6 +857,49 @@ internal static class PlanSwiftImportTests
             writer.Contains("canvas.DrawBitmap(", StringComparison.Ordinal) &&
             writer.Contains("imagePaint", StringComparison.Ordinal),
             "PlanSwift PNG/TIF page import should embed image pages with explicit high-quality sampling");
+    }
+
+    private static void AssertPlanSwiftImageRasterCache(
+        PageInfo page,
+        double expectedWidthPt,
+        double expectedHeightPt,
+        double minBitmapScale)
+    {
+        AssertTrue(page.RasterSheet != null, "PlanSwift image import should persist a raster sheet cache");
+        RasterSheetSource raster = page.RasterSheet!;
+        AssertEqual(
+            RasterSheetCacheService.SourceImageRasterProfile,
+            raster.RenderProfile,
+            "PlanSwift image raster cache profile");
+        AssertTrue(
+            raster.Image.EndsWith(Path.Combine(RasterSheetCacheService.CacheFolderName, RasterSheetCacheService.WorkingImageName), StringComparison.OrdinalIgnoreCase),
+            "PlanSwift image raster cache should live beside the page");
+        AssertClose(expectedWidthPt, raster.WidthPt, "PlanSwift image raster cache width", tolerance: 0.05);
+        AssertClose(expectedHeightPt, raster.HeightPt, "PlanSwift image raster cache height", tolerance: 0.05);
+        AssertTrue(raster.RenderScale >= minBitmapScale, "PlanSwift image raster cache should keep source pixels for readable zoom");
+        AssertTrue(string.IsNullOrWhiteSpace(raster.SnapIndex), "PlanSwift image raster cache should not run PDF snap indexing during import");
+
+        AssertTrue(
+            RasterSheetCacheService.DisplayStatus(page).Contains("+image", StringComparison.Ordinal),
+            "PlanSwift image raster cache should be visible as an image-backed raster status");
+        AssertTrue(
+            RasterSheetCacheService.TryReadReady(
+                page.FolderPath,
+                page.PdfPath,
+                raster,
+                out RasterSheetBitmapResult bitmap,
+                out string reason),
+            reason);
+        try
+        {
+            AssertClose(expectedWidthPt, bitmap.WidthPt, "readable image raster width", tolerance: 0.05);
+            AssertClose(expectedHeightPt, bitmap.HeightPt, "readable image raster height", tolerance: 0.05);
+            AssertTrue(bitmap.BitmapScale >= minBitmapScale, "readable image raster should decode at source pixel scale");
+        }
+        finally
+        {
+            bitmap.Bitmap.Dispose();
+        }
     }
 
     private static IEnumerable<string> EnumerateSelfAndDescendants(string root)

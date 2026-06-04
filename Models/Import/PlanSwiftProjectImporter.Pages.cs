@@ -88,6 +88,16 @@ public static partial class PlanSwiftProjectImporter
                 scaleMetersPerPt: scale);
             if (page.OrderIndex > 0)
                 OurPlaneCoreJobStore.SetOrderIndex(imported.FolderPath, page.OrderIndex);
+            if (options.ConvertPageImages && File.Exists(page.ImagePath))
+            {
+                RasterSheetBuildResult raster = RasterSheetCacheService.BuildFromImageAndEnable(
+                    imported,
+                    page.ImagePath,
+                    normalization.WidthPt,
+                    normalization.HeightPt);
+                if (!raster.Ok)
+                    messages.Add($"Page '{page.Name}' image raster cache skipped: {raster.Error}");
+            }
             importedPages++;
 
             if (!string.IsNullOrWhiteSpace(page.Guid))

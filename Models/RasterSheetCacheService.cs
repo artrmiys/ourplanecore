@@ -30,6 +30,7 @@ public static class RasterSheetCacheService
     public const string WorkingImageName = "working.png";
     public const string SnapIndexName = "snap.json";
     public const string ReadableRasterProfile = "readable-raster-v2";
+    public const string SourceImageRasterProfile = "source-image-v1";
     public const string ReadableLineBoostProfile = "lineboost-v1";
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
@@ -97,6 +98,60 @@ public static class RasterSheetCacheService
             new(false, null, "", error);
     }
 
+    public static RasterSheetBuildResult BuildFromImageAndEnable(
+        PageInfo page,
+        string sourceImagePath,
+        double widthPt,
+        double heightPt)
+    {
+        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
+            return Failed("Page folder is missing.");
+        if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
+            return Failed($"Source PDF is missing: {page.PdfPath}");
+        if (string.IsNullOrWhiteSpace(sourceImagePath) || !File.Exists(sourceImagePath))
+            return Failed($"Source image is missing: {sourceImagePath}");
+        if (widthPt <= 0 || heightPt <= 0 || double.IsNaN(widthPt) || double.IsNaN(heightPt))
+            return Failed("Page image size is invalid.");
+
+        using SKBitmap? decoded = PageImageBitmapDecoder.Decode(sourceImagePath);
+        if (decoded == null)
+            return Failed("Source image could not be decoded.");
+        using SKImage image = SKImage.FromBitmap(decoded);
+        using SKData? data = image.Encode(SKEncodedImageFormat.Png, 100);
+        if (data == null || data.Size == 0)
+            return Failed("Source image could not be encoded as PNG.");
+
+        string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        Directory.CreateDirectory(rasterDir);
+        string imagePath = Path.Combine(rasterDir, WorkingImageName);
+        string tempPath = imagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        using (FileStream output = File.Create(tempPath))
+            data.SaveTo(output);
+        File.Move(tempPath, imagePath, overwrite: true);
+
+        var pdfInfo = new FileInfo(page.PdfPath);
+        var source = new RasterSheetSource
+        {
+            Enabled = true,
+            Image = Path.GetRelativePath(page.FolderPath, imagePath),
+            Format = "png",
+            RenderProfile = SourceImageRasterProfile,
+            RenderScale = widthPt > 0 ? decoded.Width / widthPt : 0,
+            WidthPt = widthPt,
+            HeightPt = heightPt,
+            PdfLastWriteUtcTicks = pdfInfo.LastWriteTimeUtc.Ticks,
+            PdfLength = pdfInfo.Length,
+            GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            SnapBlackOnly = true,
+        };
+
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        return new RasterSheetBuildResult(true, source, imagePath, "");
+
+        static RasterSheetBuildResult Failed(string error) =>
+            new(false, null, "", error);
+    }
+
     public static bool TrySetEnabled(PageInfo page, bool enabled, out string error)
     {
         error = "";
@@ -133,6 +188,8 @@ public static class RasterSheetCacheService
             : "?";
         string profile = string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase)
             ? "+readable"
+            : string.Equals(source.RenderProfile, SourceImageRasterProfile, StringComparison.OrdinalIgnoreCase)
+            ? "+image"
             : "";
         string snap = source.SnapPointCount + source.SnapSegmentCount > 0 ? "+snap" : "";
         return $"Raster {scale}x{profile}{snap}";
