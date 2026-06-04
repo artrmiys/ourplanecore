@@ -32,13 +32,29 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        return TryBuildPdfSnapRasterBoundaryContour(
-                   component,
-                   selected,
-                   bridgeTolerancePt,
-                   out contour,
-                   out selectedSegmentIndex) ||
-               TryBuildPdfSnapEnvelopeBoundaryContour(
+        bool hasWallCore = TryCreatePdfSnapWallCoreComponent(
+            component,
+            selected,
+            bridgeTolerancePt,
+            out List<PdfSnapBoundaryTraceSegment> wallCoreComponent);
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> rasterComponent = hasWallCore
+            ? wallCoreComponent
+            : component;
+
+        if (TryBuildPdfSnapRasterBoundaryContour(
+                rasterComponent,
+                selected,
+                bridgeTolerancePt,
+                out contour,
+                out selectedSegmentIndex))
+        {
+            return true;
+        }
+
+        if (hasWallCore)
+            return false;
+
+        return TryBuildPdfSnapEnvelopeBoundaryContour(
                    component,
                    selected,
                    bridgeTolerancePt,
@@ -405,9 +421,18 @@ public sealed partial class PdfViewport
 
         float cleanTolerance = Math.Clamp(bridgeTolerancePt * 0.24f, 1.5f, 14f);
         List<SKPoint> rawContour = CleanPdfSnapBoundaryContour(loop, cleanTolerance);
+        if (!PdfSnapBoundaryLoopStaysNearSelected(rawContour, selected, bridgeTolerancePt, cell))
+            return false;
+
         List<SKPoint> projectedContour = CleanPdfSnapBoundaryContour(
             ProjectPdfSnapBoundaryPoints(loop, component, bridgeTolerancePt, cell),
             cleanTolerance);
+        if (!PdfSnapBoundaryContourHasUsableArea(projectedContour, component, out _))
+        {
+            projectedContour = CleanPdfSnapBoundaryContour(
+                ProjectPdfSnapBoundaryPoints(rawContour, component, bridgeTolerancePt, cell),
+                cleanTolerance);
+        }
 
         if (!TryChooseLargestPdfSnapBoundaryContour(
                 [projectedContour, rawContour],
@@ -670,7 +695,8 @@ public sealed partial class PdfViewport
 
         List<SKPoint> hull = PdfSnapBoundaryConvexHull(points);
         contour = CleanPdfSnapBoundaryContour(hull, Math.Clamp(bridgeTolerancePt * 0.35f, 2f, 20f));
-        if (!PdfSnapBoundaryContourLooksUsable(contour, component, out _))
+        if (!PdfSnapBoundaryLoopStaysNearSelected(contour, selected, bridgeTolerancePt, 0f) ||
+            !PdfSnapBoundaryContourLooksUsable(contour, component, out _))
             return false;
 
         selectedSegmentIndex = FindNearestPdfSnapContourSegmentIndex(contour, selected);
@@ -716,7 +742,7 @@ public sealed partial class PdfViewport
         float bridgeTolerancePt,
         float cell)
     {
-        float search = Math.Max(bridgeTolerancePt * 0.9f, cell * 3f);
+        float search = Math.Max(bridgeTolerancePt * 1.15f, cell * 4f);
         float searchSq = search * search;
         var projected = new List<SKPoint>(points.Count);
 
@@ -748,12 +774,14 @@ public sealed partial class PdfViewport
             return points;
 
         points = RemoveCollinearPdfSnapBoundaryPoints(points, tolerance);
+        points = RemoveDuplicatePdfSnapBoundaryPoints(points, Math.Max(1.0f, tolerance * 0.75f));
         float simplifyTolerance = tolerance;
         while (points.Count > PdfSnapBoundaryMaxContourPoints && simplifyTolerance < 48f)
         {
             simplifyTolerance *= 1.45f;
             points = SimplifyClosedPdfSnapBoundaryRdp(points, simplifyTolerance);
             points = RemoveCollinearPdfSnapBoundaryPoints(points, simplifyTolerance);
+            points = RemoveDuplicatePdfSnapBoundaryPoints(points, Math.Max(1.0f, simplifyTolerance * 0.75f));
         }
 
         return points;
@@ -807,6 +835,24 @@ public sealed partial class PdfViewport
         while (changed && points.Count >= 4);
 
         return points;
+    }
+
+    private static List<SKPoint> RemoveDuplicatePdfSnapBoundaryPoints(IReadOnlyList<SKPoint> source, float tolerance)
+    {
+        if (source.Count < 4)
+            return source.ToList();
+
+        var result = new List<SKPoint>(source.Count);
+        float toleranceSq = tolerance * tolerance;
+        foreach (SKPoint point in source)
+        {
+            if (result.Any(existing => DistanceSquared(existing, point) <= toleranceSq))
+                continue;
+
+            result.Add(point);
+        }
+
+        return result.Count >= 3 ? result : source.ToList();
     }
 
     private static List<SKPoint> SimplifyClosedPdfSnapBoundaryRdp(IReadOnlyList<SKPoint> source, float tolerance)
@@ -864,20 +910,21 @@ public sealed partial class PdfViewport
         out List<SKPoint> selected)
     {
         selected = [];
-        double bestArea = 0;
+        bool projectedCandidate = true;
         foreach (IReadOnlyList<SKPoint> candidate in candidates)
         {
-            if (!PdfSnapBoundaryContourLooksUsable(candidate, component, out double area) ||
-                area <= bestArea)
-            {
+            bool usable = projectedCandidate
+                ? PdfSnapBoundaryContourHasUsableArea(candidate, component, out _)
+                : PdfSnapBoundaryContourLooksUsable(candidate, component, out _);
+            projectedCandidate = false;
+            if (!usable)
                 continue;
-            }
 
-            bestArea = area;
             selected = candidate.Select(ClonePoint).ToList();
+            return true;
         }
 
-        return selected.Count >= 3;
+        return false;
     }
 
     private static bool PdfSnapBoundaryContourLooksUsable(
@@ -889,6 +936,21 @@ public sealed partial class PdfViewport
         if (contour.Count < 3)
             return false;
         if (HasDuplicatePdfSnapBoundaryPoints(contour, 1.0f))
+            return false;
+
+        SKRect bounds = PdfSnapBoundaryBounds(component);
+        area = Math.Abs(PdfSnapBoundarySignedArea(contour));
+        double minArea = Math.Max(1_000.0, bounds.Width * bounds.Height * 0.015);
+        return area >= minArea;
+    }
+
+    private static bool PdfSnapBoundaryContourHasUsableArea(
+        IReadOnlyList<SKPoint> contour,
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> component,
+        out double area)
+    {
+        area = 0;
+        if (contour.Count < 3)
             return false;
 
         SKRect bounds = PdfSnapBoundaryBounds(component);

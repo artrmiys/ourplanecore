@@ -4444,10 +4444,70 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
     AssertTrue(shortJogArgs[4] is true, "large bridge tolerance must not collapse selected 24pt exterior jog segments");
     double shortJogArea = Math.Abs(SignedAreaForTest(shortJogPoints));
     AssertTrue(shortJogArea > 18000, $"short exterior jog contour should stay closed and full size, got {shortJogArea:0.0}: {FormatPoints(shortJogPoints)}");
+
+    var noisyWallCoreSegments = new List<PdfGeometrySnapSegment>();
+    int noisySelectedIndex = AddFragmentedHorizontal(noisyWallCoreSegments, 0, 0, 120, 8);
+    AddFragmentedVertical(noisyWallCoreSegments, 120, 0, 70, 6);
+    AddFragmentedHorizontal(noisyWallCoreSegments, 70, 120, 0, 8);
+    AddFragmentedVertical(noisyWallCoreSegments, 0, 70, 0, 6);
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(-24, -40), new SKPoint(144, -40), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(-24, 110), new SKPoint(144, 110), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(0, -40), new SKPoint(0, 0), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(120, -40), new SKPoint(120, 0), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(0, 70), new SKPoint(0, 110), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(120, 70), new SKPoint(120, 110), "pdf-line"));
+
+    object?[] noisyWallCoreArgs = [noisyWallCoreSegments, noisySelectedIndex, 24f, true, false, 0];
+    var noisyWallCorePoints = (List<SKPoint>)method.Invoke(null, noisyWallCoreArgs)!;
+    AssertTrue(noisyWallCoreArgs[4] is true, "dense exterior wall core should still close when sparse dimension graphics are connected");
+    SKRect noisyWallCoreBounds = BoundsForTest(noisyWallCorePoints);
+    AssertTrue(
+        noisyWallCoreBounds.Top > -12 &&
+        noisyWallCoreBounds.Bottom < 82 &&
+        noisyWallCoreBounds.Left > -12 &&
+        noisyWallCoreBounds.Right < 132,
+        $"sparse dimension graphics should not expand PDF wall contour bounds, got {noisyWallCoreBounds}: {FormatPoints(noisyWallCorePoints)}");
+
+    static int AddFragmentedHorizontal(List<PdfGeometrySnapSegment> segments, float y, float x0, float x1, int pieces)
+    {
+        int first = segments.Count;
+        float step = (x1 - x0) / pieces;
+        for (int i = 0; i < pieces; i++)
+        {
+            float start = x0 + (step * i);
+            float end = x0 + (step * (i + 1));
+            segments.Add(new PdfGeometrySnapSegment(new SKPoint(start, y), new SKPoint(end, y), "pdf-line"));
+        }
+
+        return first;
+    }
+
+    static void AddFragmentedVertical(List<PdfGeometrySnapSegment> segments, float x, float y0, float y1, int pieces)
+    {
+        float step = (y1 - y0) / pieces;
+        for (int i = 0; i < pieces; i++)
+        {
+            float start = y0 + (step * i);
+            float end = y0 + (step * (i + 1));
+            segments.Add(new PdfGeometrySnapSegment(new SKPoint(x, start), new SKPoint(x, end), "pdf-line"));
+        }
+    }
 }
 
 static string FormatPoints(IReadOnlyList<SKPoint> points) =>
     string.Join("|", points.Select(point => $"{point.X:0},{point.Y:0}"));
+
+static SKRect BoundsForTest(IReadOnlyList<SKPoint> points)
+{
+    if (points.Count == 0)
+        return SKRect.Empty;
+
+    float left = points.Min(point => point.X);
+    float top = points.Min(point => point.Y);
+    float right = points.Max(point => point.X);
+    float bottom = points.Max(point => point.Y);
+    return new SKRect(left, top, right, bottom);
+}
 
 static List<Measurement> SectionMeasurements(params string[] ids) =>
     ids.Select(id => new Measurement { Id = id }).ToList();
