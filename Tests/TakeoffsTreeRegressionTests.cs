@@ -1729,8 +1729,8 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("PageSwitchSharpUpgradeDelayMs = 900", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 700", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchSharpUpgradeMinZoom = 0.45f", StringComparison.Ordinal),
-            "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards");
+            policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal),
+            "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards and use the zoom-refresh clarity threshold");
         AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
             viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),

@@ -34,7 +34,7 @@ public static class ViewportRenderPolicy
     public const int PageSwitchSharpUpgradeDelayMs = 900;
     public const int PageSwitchSharpUpgradeIdleMs = 700;
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
-    public const float PageSwitchSharpUpgradeMinZoom = 0.45f;
+    public const float PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
     public const int JobOpenPreviewWarmupCount = 96;
