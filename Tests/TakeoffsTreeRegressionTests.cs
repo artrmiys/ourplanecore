@@ -1297,8 +1297,12 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             edgeSnap.Contains("private int NextEdgeSnapCycleMode()", StringComparison.Ordinal) &&
             edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal) &&
-            edgeSnap.Contains("return EdgeSnapModeContour;", StringComparison.Ordinal),
-            "Area should jump straight to closed PDF/raster contour mode so thick exterior line loops can become Area takeoffs");
+            edgeSnap.Contains("return EdgeSnapModeContour;", StringComparison.Ordinal) &&
+            edgeSnap.Contains("EdgeSnapModePolylineAll", StringComparison.Ordinal) &&
+            edgeSnap.Contains("EdgeSnapModePolylineEverything", StringComparison.Ordinal) &&
+            edgeSnap.Contains("polyline all", StringComparison.Ordinal) &&
+            edgeSnap.Contains("polyline everything", StringComparison.Ordinal),
+            "Area should jump straight to closed PDF/raster contour mode and then allow more aggressive polyline all/everything cycles");
         AssertFalse(
             edgeSnap.Contains("SnapEnabled = true;", StringComparison.Ordinal) ||
             edgeSnap.Contains("PdfSnapEnabled = true;", StringComparison.Ordinal) ||
@@ -1313,6 +1317,13 @@ internal static class TakeoffsTreeRegressionTests
             contour.Contains("PdfSnapDirectionalBridgeFactor", StringComparison.Ordinal) &&
             contour.Contains("ProjectPdfSnapBoundaryPoints", StringComparison.Ordinal),
             "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass while preserving short exterior jog edges");
+        string wallCore = ReadRepoFile("Controls/PdfViewport.EdgeSnapWallCore.cs");
+        AssertTrue(
+            wallCore.Contains("PdfSnapBoundaryMode.All", StringComparison.Ordinal) &&
+            wallCore.Contains("PdfSnapBoundaryMode.Everything", StringComparison.Ordinal) &&
+            wallCore.Contains("PdfSnapLooksLikeInteriorDoorSymbol", StringComparison.Ordinal) &&
+            wallCore.Contains("SelectPdfSnapRasterBoundaryComponent", StringComparison.Ordinal),
+            "PDF/raster contour all/everything modes should suppress interior door-like arcs and narrow paired door lines before tracing");
     }
 
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()

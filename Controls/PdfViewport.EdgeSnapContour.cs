@@ -16,6 +16,7 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfGeometrySnapSegment> segments,
         int selectedIndex,
         float bridgeTolerancePt,
+        PdfSnapBoundaryMode mode,
         out List<SKPoint> contour,
         out int selectedSegmentIndex)
     {
@@ -36,10 +37,13 @@ public sealed partial class PdfViewport
             component,
             selected,
             bridgeTolerancePt,
+            mode,
             out List<PdfSnapBoundaryTraceSegment> wallCoreComponent);
-        IReadOnlyList<PdfSnapBoundaryTraceSegment> rasterComponent = hasWallCore
-            ? wallCoreComponent
-            : component;
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> rasterComponent = SelectPdfSnapRasterBoundaryComponent(
+            component,
+            wallCoreComponent,
+            hasWallCore,
+            mode);
 
         if (TryBuildPdfSnapRasterBoundaryContour(
                 rasterComponent,
@@ -51,7 +55,7 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (hasWallCore)
+        if (hasWallCore || mode != PdfSnapBoundaryMode.Safe)
             return false;
 
         return TryBuildPdfSnapEnvelopeBoundaryContour(

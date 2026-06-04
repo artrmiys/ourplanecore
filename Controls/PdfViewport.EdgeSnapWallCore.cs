@@ -11,6 +11,7 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfSnapBoundaryTraceSegment> component,
         PdfGeometrySnapSegment selected,
         float bridgeTolerancePt,
+        PdfSnapBoundaryMode mode,
         out List<PdfSnapBoundaryTraceSegment> wallCore)
     {
         wallCore = [];
@@ -45,7 +46,9 @@ public sealed partial class PdfViewport
         if (realAxisSegments < 24)
             return false;
 
-        int minBandCount = Math.Clamp((int)MathF.Round(realAxisSegments / 450f), 5, 10);
+        int minBandCount = mode == PdfSnapBoundaryMode.Safe
+            ? Math.Clamp((int)MathF.Round(realAxisSegments / 450f), 5, 10)
+            : Math.Clamp((int)MathF.Round(realAxisSegments / 650f), 3, 8);
         var denseHorizontal = horizontalBands
             .Where(pair => pair.Value.Count >= minBandCount)
             .Select(pair => pair.Value)
@@ -69,6 +72,10 @@ public sealed partial class PdfViewport
         if (!PdfSnapWallCoreContainsSelected(coreBounds, selected, bridgeTolerancePt))
             return false;
 
+        SKRect expandedCoreBounds = coreBounds;
+        expandedCoreBounds.Inflate(
+            Math.Clamp(bridgeTolerancePt * (mode == PdfSnapBoundaryMode.Everything ? 1.1f : 0.65f), 8f, 72f),
+            Math.Clamp(bridgeTolerancePt * (mode == PdfSnapBoundaryMode.Everything ? 1.1f : 0.65f), 8f, 72f));
         var denseHorizontalKeys = horizontalBands
             .Where(pair => pair.Value.Count >= minBandCount)
             .Select(pair => pair.Key)
@@ -86,8 +93,14 @@ public sealed partial class PdfViewport
             int key = PdfSnapWallCoreBandKey(coordinate, bandSize);
             if (horizontal)
             {
-                if (!denseHorizontalKeys.Contains(key))
+                bool keep = denseHorizontalKeys.Contains(key) ||
+                    PdfSnapBoundaryModeKeepsSparseAxisSegments(mode) &&
+                    PdfSnapWallCoreShouldKeepSparseAxisSegment(segment, expandedCoreBounds, horizontal, minLength, bridgeTolerancePt);
+                if (!keep ||
+                    PdfSnapLooksLikeInteriorDoorSymbol(segment, coreBounds, horizontal, minLength, bridgeTolerancePt))
+                {
                     continue;
+                }
 
                 float x0 = Math.Clamp(segment.Start.X, coreLeft, coreRight);
                 float x1 = Math.Clamp(segment.End.X, coreLeft, coreRight);
@@ -102,8 +115,14 @@ public sealed partial class PdfViewport
                 continue;
             }
 
-            if (!denseVerticalKeys.Contains(key))
+            bool keepVertical = denseVerticalKeys.Contains(key) ||
+                PdfSnapBoundaryModeKeepsSparseAxisSegments(mode) &&
+                PdfSnapWallCoreShouldKeepSparseAxisSegment(segment, expandedCoreBounds, horizontal, minLength, bridgeTolerancePt);
+            if (!keepVertical ||
+                PdfSnapLooksLikeInteriorDoorSymbol(segment, coreBounds, horizontal, minLength, bridgeTolerancePt))
+            {
                 continue;
+            }
 
             float y0 = Math.Clamp(segment.Start.Y, coreTop, coreBottom);
             float y1 = Math.Clamp(segment.End.Y, coreTop, coreBottom);
@@ -124,6 +143,26 @@ public sealed partial class PdfViewport
         }
 
         return true;
+    }
+
+    private static IReadOnlyList<PdfSnapBoundaryTraceSegment> SelectPdfSnapRasterBoundaryComponent(
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> component,
+        IReadOnlyList<PdfSnapBoundaryTraceSegment> wallCoreComponent,
+        bool hasWallCore,
+        PdfSnapBoundaryMode mode)
+    {
+        if (hasWallCore)
+            return wallCoreComponent;
+
+        if (mode == PdfSnapBoundaryMode.Safe)
+            return component;
+
+        List<PdfSnapBoundaryTraceSegment> axisOnly = component
+            .Where(segment =>
+                !segment.Bridge &&
+                TryClassifyPdfSnapAxisSegment(segment, 2.5f, 4f, out _, out _, out _, out _))
+            .ToList();
+        return axisOnly.Count >= 8 ? axisOnly : component;
     }
 
     private static bool TryClassifyPdfSnapAxisSegment(
@@ -168,6 +207,56 @@ public sealed partial class PdfViewport
         SKRect inflated = coreBounds;
         inflated.Inflate(tolerance, tolerance);
         return inflated.Contains((selected.Start.X + selected.End.X) * 0.5f, (selected.Start.Y + selected.End.Y) * 0.5f);
+    }
+
+    private static bool PdfSnapWallCoreShouldKeepSparseAxisSegment(
+        PdfSnapBoundaryTraceSegment segment,
+        SKRect expandedCoreBounds,
+        bool horizontal,
+        float minLength,
+        float bridgeTolerancePt)
+    {
+        float length = MeasurementGeometry.Distance(segment.Start, segment.End);
+        if (length < Math.Max(minLength * 1.35f, 6f))
+            return false;
+
+        SKPoint midpoint = new(
+            (segment.Start.X + segment.End.X) * 0.5f,
+            (segment.Start.Y + segment.End.Y) * 0.5f);
+        if (!expandedCoreBounds.Contains(midpoint.X, midpoint.Y))
+            return false;
+
+        float enough = horizontal
+            ? Math.Clamp(bridgeTolerancePt * 0.35f, 10f, 52f)
+            : Math.Clamp(bridgeTolerancePt * 0.22f, 8f, 42f);
+        return length >= enough;
+    }
+
+    private static bool PdfSnapBoundaryModeKeepsSparseAxisSegments(PdfSnapBoundaryMode mode) =>
+        mode is PdfSnapBoundaryMode.All or PdfSnapBoundaryMode.Everything;
+
+    private static bool PdfSnapLooksLikeInteriorDoorSymbol(
+        PdfSnapBoundaryTraceSegment segment,
+        SKRect coreBounds,
+        bool horizontal,
+        float minLength,
+        float bridgeTolerancePt)
+    {
+        SKPoint midpoint = new(
+            (segment.Start.X + segment.End.X) * 0.5f,
+            (segment.Start.Y + segment.End.Y) * 0.5f);
+        float perimeterMargin = Math.Clamp(bridgeTolerancePt * 0.8f, 12f, 52f);
+        bool nearPerimeter =
+            Math.Abs(midpoint.X - coreBounds.Left) <= perimeterMargin ||
+            Math.Abs(midpoint.X - coreBounds.Right) <= perimeterMargin ||
+            Math.Abs(midpoint.Y - coreBounds.Top) <= perimeterMargin ||
+            Math.Abs(midpoint.Y - coreBounds.Bottom) <= perimeterMargin;
+        if (nearPerimeter)
+            return false;
+
+        float length = MeasurementGeometry.Distance(segment.Start, segment.End);
+        float doorSymbolMax = Math.Clamp(bridgeTolerancePt * (horizontal ? 0.85f : 0.65f), minLength * 2.25f, 72f);
+        return length <= doorSymbolMax;
     }
 
     private static bool PdfSnapBoundaryLoopStaysNearSelected(

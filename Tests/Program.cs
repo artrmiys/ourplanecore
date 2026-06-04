@@ -4365,6 +4365,13 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         "BuildPdfSnapContour",
         BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new MissingMethodException("PdfViewport.BuildPdfSnapContour");
+    MethodInfo coreMethod = typeof(PdfViewport).GetMethod(
+        "BuildPdfSnapContourCore",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfViewport.BuildPdfSnapContourCore");
+    Type boundaryModeType = typeof(PdfViewport).GetNestedType("PdfSnapBoundaryMode", BindingFlags.NonPublic)
+        ?? throw new MissingMemberException("PdfViewport.PdfSnapBoundaryMode");
+    object everythingMode = Enum.Parse(boundaryModeType, "Everything");
 
     var bridgeSegments = new List<PdfGeometrySnapSegment>
     {
@@ -4456,6 +4463,13 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
     noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(120, -40), new SKPoint(120, 0), "pdf-line"));
     noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(0, 70), new SKPoint(0, 110), "pdf-line"));
     noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(120, 70), new SKPoint(120, 110), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(60, 0), new SKPoint(60, 28), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(60, 42), new SKPoint(60, 70), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(60, 28), new SKPoint(78, 28), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(60, 31), new SKPoint(78, 31), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(60, 28), new SKPoint(68, 32), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(68, 32), new SKPoint(74, 38), "pdf-line"));
+    noisyWallCoreSegments.Add(new PdfGeometrySnapSegment(new SKPoint(74, 38), new SKPoint(78, 46), "pdf-line"));
 
     object?[] noisyWallCoreArgs = [noisyWallCoreSegments, noisySelectedIndex, 24f, true, false, 0];
     var noisyWallCorePoints = (List<SKPoint>)method.Invoke(null, noisyWallCoreArgs)!;
@@ -4467,6 +4481,17 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         noisyWallCoreBounds.Left > -12 &&
         noisyWallCoreBounds.Right < 132,
         $"sparse dimension graphics should not expand PDF wall contour bounds, got {noisyWallCoreBounds}: {FormatPoints(noisyWallCorePoints)}");
+
+    object?[] noisyEverythingArgs = [noisyWallCoreSegments, noisySelectedIndex, 24f, true, everythingMode, false, 0];
+    var noisyEverythingPoints = (List<SKPoint>)coreMethod.Invoke(null, noisyEverythingArgs)!;
+    AssertTrue(noisyEverythingArgs[5] is true, "polyline everything should still close the likely exterior wall contour");
+    SKRect noisyEverythingBounds = BoundsForTest(noisyEverythingPoints);
+    AssertTrue(
+        noisyEverythingBounds.Top > -12 &&
+        noisyEverythingBounds.Bottom < 82 &&
+        noisyEverythingBounds.Left > -12 &&
+        noisyEverythingBounds.Right < 132,
+        $"polyline everything should ignore interior door arcs and narrow paired door lines, got {noisyEverythingBounds}: {FormatPoints(noisyEverythingPoints)}");
 
     static int AddFragmentedHorizontal(List<PdfGeometrySnapSegment> segments, float y, float x0, float x1, int pieces)
     {

@@ -15,7 +15,9 @@ public sealed partial class PdfViewport
     private const int EdgeSnapModeSingleEdge = 1;
     private const int EdgeSnapModeAdjacentEdges = 2;
     private const int EdgeSnapModeContour = 3;
-    private const int EdgeSnapModeCount = 4;
+    private const int EdgeSnapModePolylineAll = 4;
+    private const int EdgeSnapModePolylineEverything = 5;
+    private const int EdgeSnapModeCount = 6;
     private const float PdfSnapEndpointTolerancePt = 0.75f;
     private const float PdfSnapBridgeToleranceMinPt = 1.0f;
     private const float PdfSnapBridgeToleranceMaxPt = 240.0f;
@@ -66,7 +68,7 @@ public sealed partial class PdfViewport
         _edgeSnapCycleMode = NextEdgeSnapCycleMode();
         bool found = UpdateEdgeSnapPreview(_lastPointerPdf.Value, resetModeForNewCandidate: false);
         if (found)
-            PostStatus($"Edge Snap: {EdgeSnapModeTitle(_edgeSnapCycleMode)}. Tab cycles vertices / edge / edges / contour.");
+            PostStatus($"Edge Snap: {EdgeSnapModeTitle(_edgeSnapCycleMode)}. Tab cycles vertices / edge / edges / contour / polyline all / polyline everything.");
         return found;
     }
 
@@ -95,7 +97,7 @@ public sealed partial class PdfViewport
         List<SKPoint> points = _edgeSnapPreview.Points.Select(ClonePoint).ToList();
         if (_tool == ViewerTool.Line)
         {
-            if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == EdgeSnapModeContour && points.Count >= 3)
+            if (_edgeSnapPreview.ClosedContour && IsClosedEdgeSnapContourMode(_edgeSnapPreview.Mode) && points.Count >= 3)
                 points.Add(points[0]);
             if (points.Count < 2)
                 return false;
@@ -114,7 +116,7 @@ public sealed partial class PdfViewport
 
             bool finalizeClosedContour =
                 _edgeSnapPreview.ClosedContour &&
-                _edgeSnapPreview.Mode == EdgeSnapModeContour &&
+                IsClosedEdgeSnapContourMode(_edgeSnapPreview.Mode) &&
                 points.Count >= 3;
 
             _drawPts.Clear();
@@ -256,7 +258,7 @@ public sealed partial class PdfViewport
         List<SKPoint> points = mode switch
         {
             EdgeSnapModeAdjacentEdges => BuildAdjacentEdgeSnapPoints(candidate),
-            EdgeSnapModeContour => candidate.Contour.Select(ClonePoint).ToList(),
+            EdgeSnapModeContour or EdgeSnapModePolylineAll or EdgeSnapModePolylineEverything => candidate.Contour.Select(ClonePoint).ToList(),
             _ => BuildSingleEdgeSnapPoints(candidate),
         };
 
@@ -264,6 +266,8 @@ public sealed partial class PdfViewport
         {
             EdgeSnapModeAdjacentEdges => "edges",
             EdgeSnapModeContour => candidate.Closed ? "contour" : "polyline",
+            EdgeSnapModePolylineAll => "polyline all",
+            EdgeSnapModePolylineEverything => "polyline everything",
             _ => "edge",
         };
         if (candidate.SourceKind == "pdf")
@@ -287,11 +291,12 @@ public sealed partial class PdfViewport
         if (hits.Count == 0)
             return false;
 
-        bool preferClosedBoundary = _tool == ViewerTool.Area || _edgeSnapCycleMode == EdgeSnapModeContour;
+        bool preferClosedBoundary = _tool == ViewerTool.Area || IsClosedEdgeSnapContourMode(_edgeSnapCycleMode);
+        PdfSnapBoundaryMode boundaryMode = BoundaryModeForEdgeSnapMode(_edgeSnapCycleMode);
         float bridgeTolerancePt = PdfSnapBridgeTolerancePt();
         foreach (PdfGeometrySnapSegmentHit hit in RankPdfEdgeSnapSegmentHits(hits, preferClosedBoundary, bridgeTolerancePt).Take(12))
         {
-            candidate = BuildPdfEdgeSnapCandidate(hit.Segment, hit.DistancePt, hit.Index, preferClosedBoundary, bridgeTolerancePt);
+            candidate = BuildPdfEdgeSnapCandidate(hit.Segment, hit.DistancePt, hit.Index, preferClosedBoundary, boundaryMode, bridgeTolerancePt);
             if (candidate != null)
                 return true;
         }
@@ -304,6 +309,7 @@ public sealed partial class PdfViewport
         float distance,
         int selectedIndex,
         bool preferClosedBoundary,
+        PdfSnapBoundaryMode boundaryMode,
         float bridgeTolerancePt)
     {
         IReadOnlyList<PdfGeometrySnapSegment> segments = _pdfSnapIndex.Segments;
@@ -318,11 +324,12 @@ public sealed partial class PdfViewport
                 distance);
         }
 
-        List<SKPoint> contour = BuildPdfSnapContour(
+        List<SKPoint> contour = BuildPdfSnapContourCore(
             segments,
             selectedIndex,
             bridgeTolerancePt,
             preferClosedBoundary,
+            boundaryMode,
             out bool closed,
             out int segmentIndex);
         if (contour.Count < 2)
@@ -391,6 +398,25 @@ public sealed partial class PdfViewport
         out bool closed,
         out int selectedSegmentIndex)
     {
+        return BuildPdfSnapContourCore(
+            segments,
+            selectedIndex,
+            bridgeTolerancePt,
+            preferClosedBoundary,
+            PdfSnapBoundaryMode.Safe,
+            out closed,
+            out selectedSegmentIndex);
+    }
+
+    private static List<SKPoint> BuildPdfSnapContourCore(
+        IReadOnlyList<PdfGeometrySnapSegment> segments,
+        int selectedIndex,
+        float bridgeTolerancePt,
+        bool preferClosedBoundary,
+        PdfSnapBoundaryMode boundaryMode,
+        out bool closed,
+        out int selectedSegmentIndex)
+    {
         closed = false;
         selectedSegmentIndex = 0;
         if (selectedIndex < 0 || selectedIndex >= segments.Count)
@@ -401,6 +427,7 @@ public sealed partial class PdfViewport
                 segments,
                 selectedIndex,
                 bridgeTolerancePt,
+                boundaryMode,
                 out List<SKPoint> boundary,
                 out int boundarySegmentIndex))
         {
@@ -687,7 +714,7 @@ public sealed partial class PdfViewport
         path.MoveTo(_edgeSnapPreview.Points[0]);
         for (int i = 1; i < _edgeSnapPreview.Points.Count; i++)
             path.LineTo(_edgeSnapPreview.Points[i]);
-        if (_edgeSnapPreview.ClosedContour && _edgeSnapPreview.Mode == EdgeSnapModeContour)
+        if (_edgeSnapPreview.ClosedContour && IsClosedEdgeSnapContourMode(_edgeSnapPreview.Mode))
             path.Close();
 
         using var glow = new SKPaint
@@ -744,7 +771,19 @@ public sealed partial class PdfViewport
         EdgeSnapModeSingleEdge => "edge",
         EdgeSnapModeAdjacentEdges => "edges",
         EdgeSnapModeContour => "contour",
+        EdgeSnapModePolylineAll => "polyline all",
+        EdgeSnapModePolylineEverything => "polyline everything",
         _ => "vertices",
+    };
+
+    private static bool IsClosedEdgeSnapContourMode(int mode) =>
+        mode is EdgeSnapModeContour or EdgeSnapModePolylineAll or EdgeSnapModePolylineEverything;
+
+    private static PdfSnapBoundaryMode BoundaryModeForEdgeSnapMode(int mode) => mode switch
+    {
+        EdgeSnapModePolylineAll => PdfSnapBoundaryMode.All,
+        EdgeSnapModePolylineEverything => PdfSnapBoundaryMode.Everything,
+        _ => PdfSnapBoundaryMode.Safe,
     };
 
     private static bool IsSameEdgeSnapCandidate(EdgeSnapCandidate? current, EdgeSnapCandidate next)
@@ -808,6 +847,13 @@ public sealed partial class PdfViewport
         bool Closed,
         int SegmentIndex,
         float Distance);
+
+    private enum PdfSnapBoundaryMode
+    {
+        Safe,
+        All,
+        Everything,
+    }
 
     private readonly record struct PdfSnapConnectedSegmentCandidate(
         int SegmentIndex,
