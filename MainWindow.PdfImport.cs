@@ -328,7 +328,7 @@ public partial class MainWindow
         });
         var rasterCheck = new CheckBox
         {
-            Content = "Build raster working sheets (v5) and strict black-line snap index",
+            Content = "Build readable raster cache and strict black-line snap index",
             IsChecked = _settings.BuildRasterCacheOnPdfImport,
             Margin = new Thickness(0, 0, 0, 4),
         };

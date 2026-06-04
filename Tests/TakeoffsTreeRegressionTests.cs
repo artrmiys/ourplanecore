@@ -1294,6 +1294,20 @@ internal static class TakeoffsTreeRegressionTests
         AssertFalse(
             helper.Contains("num_match = re.search(r\"(\\d{2,4})\", label)", StringComparison.Ordinal),
             "dotted sheet suffix rules must not read A4.50 as 50 and classify it as a note sheet");
+
+        PdfImportRasterOptionUsesReadableCacheWording();
+    }
+
+    public static void PdfImportRasterOptionUsesReadableCacheWording()
+    {
+        string import = ReadRepoFile("MainWindow.PdfImport.cs");
+
+        AssertTrue(
+            import.Contains("Build readable raster cache and strict black-line snap index", StringComparison.Ordinal),
+            "PDF import raster option should describe the current readable cache and strict snap behavior");
+        AssertFalse(
+            import.Contains("Build raster working sheets (v5)", StringComparison.Ordinal),
+            "PDF import raster option should not expose stale internal version wording");
     }
 
     public static void PdfRasterEdgeSnapPreviewIsWired()
