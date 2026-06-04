@@ -138,6 +138,43 @@ public partial class MainWindow
         TxtStatus.Text = $"Ruler thickness: {_settings.ViewportRulerStrokeWidth:0.##}px.";
     }
 
+    private void TxtPdfSnapBridgeTolerance_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyPdfSnapBridgeToleranceFromText();
+        e.Handled = true;
+    }
+
+    private void TxtPdfSnapBridgeTolerance_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyPdfSnapBridgeToleranceFromText();
+
+    private void ApplyPdfSnapBridgeToleranceFromText()
+    {
+        string raw = TxtPdfSnapBridgeTolerance.Text.Trim().Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double pixels) ||
+            pixels < AppSettingsStore.ViewportPdfSnapBridgeToleranceMinPx ||
+            pixels > AppSettingsStore.ViewportPdfSnapBridgeToleranceMaxPx)
+        {
+            TxtPdfSnapBridgeTolerance.Text = _settings.ViewportPdfSnapBridgeTolerancePx.ToString("0.#", CultureInfo.InvariantCulture);
+            TxtStatus.Text =
+                $"PDF Snap bridge must be {AppSettingsStore.ViewportPdfSnapBridgeToleranceMinPx:0} - {AppSettingsStore.ViewportPdfSnapBridgeToleranceMaxPx:0} px.";
+            return;
+        }
+
+        SetPdfSnapBridgeTolerance(pixels);
+    }
+
+    private void SetPdfSnapBridgeTolerance(double pixels)
+    {
+        _settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerance(pixels);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        _viewport.InvalidateVisual();
+        TxtStatus.Text = $"PDF Snap bridge radius: {_settings.ViewportPdfSnapBridgeTolerancePx:0.#}px.";
+    }
+
     private void TxtMeasurementPointScale_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key is not (Key.Enter or Key.Return))
@@ -279,6 +316,19 @@ public partial class MainWindow
         _viewport.InvalidateVisual();
         _viewportScaleDirty = true;
         TxtStatus.Text = $"Ruler thickness: {_settings.ViewportRulerStrokeWidth:0.##}px.";
+    }
+
+    private void SldPdfSnapBridgeTolerance_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized || _isApplyingSettings)
+            return;
+
+        _settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerance(e.NewValue);
+        _viewport.PdfSnapBridgeToleranceScreenPx = _settings.ViewportPdfSnapBridgeTolerancePx;
+        TxtPdfSnapBridgeTolerance.Text = _settings.ViewportPdfSnapBridgeTolerancePx.ToString("0.#", CultureInfo.InvariantCulture);
+        _viewport.InvalidateVisual();
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"PDF Snap bridge radius: {_settings.ViewportPdfSnapBridgeTolerancePx:0.#}px.";
     }
 
     private void SldAreaEdge_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -430,6 +480,9 @@ public partial class MainWindow
 
         return Math.Clamp(width, 0.5, 6.0);
     }
+
+    private static double NormalizePdfSnapBridgeTolerance(double pixels) =>
+        AppSettingsStore.NormalizePdfSnapBridgeTolerancePx(pixels);
 
     private static double NormalizePointScale(double scale)
     {

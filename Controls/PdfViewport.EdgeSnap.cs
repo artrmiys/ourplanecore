@@ -17,9 +17,8 @@ public sealed partial class PdfViewport
     private const int EdgeSnapModeContour = 3;
     private const int EdgeSnapModeCount = 4;
     private const float PdfSnapEndpointTolerancePt = 0.75f;
-    private const float PdfSnapBridgeToleranceScreenPx = 18f;
     private const float PdfSnapBridgeToleranceMinPt = 1.0f;
-    private const float PdfSnapBridgeToleranceMaxPt = 18.0f;
+    private const float PdfSnapBridgeToleranceMaxPt = 240.0f;
     private const int PdfSnapMaxChainSegments = 256;
 
     private bool UpdateEdgeSnapPreview(SKPoint rawPdf, bool resetModeForNewCandidate = true)
@@ -320,7 +319,7 @@ public sealed partial class PdfViewport
 
     private float PdfSnapBridgeTolerancePt() =>
         Math.Clamp(
-            ScreenToPdfDistance(PdfSnapBridgeToleranceScreenPx),
+            ScreenToPdfDistance((float)PdfSnapBridgeToleranceScreenPx),
             PdfSnapBridgeToleranceMinPt,
             PdfSnapBridgeToleranceMaxPt);
 

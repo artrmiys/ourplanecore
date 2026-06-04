@@ -37,6 +37,7 @@ public sealed class AppSettings
     public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
     public double ViewportRulerStrokeWidth { get; set; } = 1.0;
+    public double ViewportPdfSnapBridgeTolerancePx { get; set; } = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
     public double ViewportPointSizeScale { get; set; } = 2.0;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
@@ -90,6 +91,9 @@ public static class AppSettingsStore
 {
     public const string SettingsPathEnvironmentVariable = "OURPLANECORE_SETTINGS_PATH";
     public const double PdfExportScaleMax = 10.0;
+    public const double ViewportPdfSnapBridgeToleranceDefaultPx = 36.0;
+    public const double ViewportPdfSnapBridgeToleranceMinPx = 4.0;
+    public const double ViewportPdfSnapBridgeToleranceMaxPx = 96.0;
 
     public static readonly string[] SuggestedOpenAiModels =
     [
@@ -355,6 +359,8 @@ public static class AppSettingsStore
             fallback: 1.0,
             min: 0.5,
             max: 6.0);
+        settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerancePx(
+            settings.ViewportPdfSnapBridgeTolerancePx);
         settings.ViewportPointSizeScale = NormalizeScale(
             settings.ViewportPointSizeScale,
             fallback: 2.0,
@@ -469,6 +475,17 @@ public static class AppSettingsStore
             return fallback;
 
         return Math.Clamp(value, min, max);
+    }
+
+    public static double NormalizePdfSnapBridgeTolerancePx(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+            return ViewportPdfSnapBridgeToleranceDefaultPx;
+
+        return Math.Clamp(
+            value,
+            ViewportPdfSnapBridgeToleranceMinPx,
+            ViewportPdfSnapBridgeToleranceMaxPx);
     }
 
     public static OpenAiKeyStatus GetOpenAiKeyStatus()

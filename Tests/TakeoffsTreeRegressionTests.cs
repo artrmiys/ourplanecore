@@ -831,6 +831,12 @@ internal static class TakeoffsTreeRegressionTests
             viewportAnnotationRendering.Contains("RulerStrokeWidthPx()", StringComparison.Ordinal),
             "ruler thickness must be a separate persisted Viewport control with a 1px default");
         AssertTrue(
+            xaml.Contains("SldPdfSnapBridgeTolerance", StringComparison.Ordinal) &&
+            xaml.Contains("TxtPdfSnapBridgeTolerance", StringComparison.Ordinal) &&
+            displaySizing.Contains("NormalizePdfSnapBridgeTolerance", StringComparison.Ordinal) &&
+            settings.Contains("ViewportPdfSnapBridgeTolerancePx", StringComparison.Ordinal),
+            "PDF Snap bridge radius must be a separate persisted Viewport control");
+        AssertTrue(
             viewportSelectionEditing.Contains("_dragAnnotationSelectionOriginalPoints", StringComparison.Ordinal) &&
             viewportSelectionEditing.Contains("Moving {selected.Count} selected markups.", StringComparison.Ordinal) &&
             viewportInput.Contains("foreach (var (annotation, originalPoints) in _dragAnnotationSelectionOriginalPoints)", StringComparison.Ordinal),
@@ -1259,7 +1265,7 @@ internal static class TakeoffsTreeRegressionTests
             "PDF/raster contour preview should stop at ambiguous branches and only connect close endpoints");
         AssertTrue(
             edgeSnap.Contains("PdfSnapBridgeToleranceScreenPx", StringComparison.Ordinal) &&
-            edgeSnap.Contains("ScreenToPdfDistance(PdfSnapBridgeToleranceScreenPx)", StringComparison.Ordinal) &&
+            edgeSnap.Contains("ScreenToPdfDistance((float)PdfSnapBridgeToleranceScreenPx)", StringComparison.Ordinal) &&
             edgeSnap.Contains("PdfSnapBridgeToleranceMaxPt", StringComparison.Ordinal) &&
             edgeSnap.Contains("matchedPoint", StringComparison.Ordinal),
             "PDF/raster edge preview should bridge small screen-pixel gaps while preserving the next real segment endpoint");

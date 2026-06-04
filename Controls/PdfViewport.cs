@@ -132,6 +132,21 @@ public sealed partial class PdfViewport : SKElement
     public  string   ActiveAnnotationColor { get; set; } = "#FF4444";
     public  double   ActiveAnnotationStrokeWidth { get; set; } = 5.0;
     public  double   RulerStrokeWidth { get; set; } = 1.0;
+    private double _pdfSnapBridgeToleranceScreenPx = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
+    public double PdfSnapBridgeToleranceScreenPx
+    {
+        get => _pdfSnapBridgeToleranceScreenPx;
+        set
+        {
+            double clean = AppSettingsStore.NormalizePdfSnapBridgeTolerancePx(value);
+            if (Math.Abs(_pdfSnapBridgeToleranceScreenPx - clean) < 0.001)
+                return;
+
+            _pdfSnapBridgeToleranceScreenPx = clean;
+            ClearEdgeSnapPreview();
+            RequestRepaint();
+        }
+    }
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  string   ActiveCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;

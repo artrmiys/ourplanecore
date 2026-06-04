@@ -595,6 +595,7 @@ static void OutputSettingsDefaultExportAppearance()
     AssertClose(0.9619565217391305, settings.MeasurementLabelScale, "viewport labels should default to the current size");
     AssertClose(3.0, settings.ViewportMeasurementStrokeScale, "viewport stroke should default to the current size");
     AssertClose(1.0, settings.ViewportRulerStrokeWidth, "viewport ruler should default to a 1px screen line");
+    AssertClose(36.0, settings.ViewportPdfSnapBridgeTolerancePx, "viewport PDF Snap bridge should default to a larger continuation radius");
     AssertClose(2.0, settings.ViewportPointSizeScale, "viewport point size should default to the current size");
     AssertClose(0.25, settings.ViewportAreaEdgeScale, "viewport area edge should default to the current size");
     AssertClose(0.2826086956521738, settings.ViewportAreaFillOpacity, "viewport area fill should default to the current opacity");
@@ -614,6 +615,14 @@ static void OutputSettingsDefaultExportAppearance()
     settings.PdfExportMeasurementStrokeScale = 6.0;
     AppSettingsStore.NormalizeOutputSettings(settings);
     AssertClose(6.0, settings.PdfExportMeasurementStrokeScale, "PDF stroke can be made heavier than the old 4x cap");
+
+    settings.ViewportPdfSnapBridgeTolerancePx = 200.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(96.0, settings.ViewportPdfSnapBridgeTolerancePx, "PDF Snap bridge should clamp at the Viewport maximum");
+
+    settings.ViewportPdfSnapBridgeTolerancePx = -1.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(36.0, settings.ViewportPdfSnapBridgeTolerancePx, "PDF Snap bridge should recover invalid values to the default");
 
     settings.PdfExportMeasurementStrokeScale = 12.0;
     settings.PdfExportPointSizeScale = 12.0;
