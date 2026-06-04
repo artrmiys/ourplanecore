@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using OurPlaneCore.Controls;
@@ -26,10 +25,11 @@ public sealed record RasterSheetBitmapResult(
 
 public static class RasterSheetCacheService
 {
-    public const float DefaultRenderScale = 2.0f;
+    public const float DefaultRenderScale = 200f / 72f;
     public const string CacheFolderName = "raster";
     public const string WorkingImageName = "working.png";
     public const string SnapIndexName = "snap.json";
+    public const string ReadableRasterProfile = "readable-raster-v2";
     public const string ReadableLineBoostProfile = "lineboost-v1";
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
@@ -62,8 +62,7 @@ public static class RasterSheetCacheService
         if (decoded == null)
             return Failed("Rendered image could not be decoded.");
 
-        byte[] workingImageBytes = TryEncodeReadableWorkingImage(decoded, out bool lineBoosted)
-            ?? render.ImageBytes;
+        byte[] workingImageBytes = render.ImageBytes;
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         Directory.CreateDirectory(rasterDir);
@@ -78,7 +77,7 @@ public static class RasterSheetCacheService
             Enabled = true,
             Image = Path.GetRelativePath(page.FolderPath, imagePath),
             Format = "png",
-            RenderProfile = lineBoosted ? ReadableLineBoostProfile : "",
+            RenderProfile = ReadableRasterProfile,
             RenderScale = render.WidthPt > 0 ? decoded.Width / render.WidthPt : scale,
             WidthPt = render.WidthPt,
             HeightPt = render.HeightPt,
@@ -126,12 +125,14 @@ public static class RasterSheetCacheService
             return "Raster off";
         if (IsStale(page.PdfPath, source))
             return "Raster stale";
+        if (IsLegacyLineBoost(source))
+            return "Raster legacy";
 
         string scale = source.RenderScale > 0
             ? source.RenderScale.ToString("0.#", CultureInfo.InvariantCulture)
             : "?";
-        string profile = string.Equals(source.RenderProfile, ReadableLineBoostProfile, StringComparison.OrdinalIgnoreCase)
-            ? "+boost"
+        string profile = string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase)
+            ? "+readable"
             : "";
         string snap = source.SnapPointCount + source.SnapSegmentCount > 0 ? "+snap" : "";
         return $"Raster {scale}x{profile}{snap}";
@@ -248,6 +249,11 @@ public static class RasterSheetCacheService
             reason = "source PDF changed";
             return false;
         }
+        if (IsLegacyLineBoost(source))
+        {
+            reason = "legacy lineboost raster cache";
+            return false;
+        }
 
         string imagePath = ResolveImagePath(pageFolder, source);
         if (!File.Exists(imagePath))
@@ -281,89 +287,8 @@ public static class RasterSheetCacheService
                 source.PdfLastWriteUtcTicks != pdfInfo.LastWriteTimeUtc.Ticks);
     }
 
-    private static byte[]? TryEncodeReadableWorkingImage(SKBitmap source, out bool lineBoosted)
-    {
-        lineBoosted = false;
-        if (source.Width <= 0 || source.Height <= 0)
-            return null;
-
-        long pixelCount = (long)source.Width * source.Height;
-        if (pixelCount <= 0 || pixelCount > 120_000_000)
-            return null;
-
-        using var normalized = new SKBitmap(new SKImageInfo(
-            source.Width,
-            source.Height,
-            SKColorType.Bgra8888,
-            SKAlphaType.Premul));
-        using (var canvas = new SKCanvas(normalized))
-            canvas.DrawBitmap(source, 0, 0);
-
-        int rowBytes = normalized.RowBytes;
-        byte[] input = new byte[normalized.ByteCount];
-        Marshal.Copy(normalized.GetPixels(), input, 0, input.Length);
-        byte[] output = (byte[])input.Clone();
-
-        for (int y = 0; y < normalized.Height; y++)
-        {
-            int row = y * rowBytes;
-            for (int x = 0; x < normalized.Width; x++)
-            {
-                int offset = row + x * 4;
-                if (!IsDarkLinePixel(input, offset))
-                    continue;
-
-                BoostPixel(output, offset, 0);
-                if (x > 0)
-                    BoostPixel(output, offset - 4, 32);
-                if (x + 1 < normalized.Width)
-                    BoostPixel(output, offset + 4, 32);
-                if (y > 0)
-                    BoostPixel(output, offset - rowBytes, 32);
-                if (y + 1 < normalized.Height)
-                    BoostPixel(output, offset + rowBytes, 32);
-                lineBoosted = true;
-            }
-        }
-
-        if (!lineBoosted)
-            return null;
-
-        using var enhanced = new SKBitmap(new SKImageInfo(
-            normalized.Width,
-            normalized.Height,
-            SKColorType.Bgra8888,
-            SKAlphaType.Premul));
-        Marshal.Copy(output, 0, enhanced.GetPixels(), output.Length);
-        using SKImage image = SKImage.FromBitmap(enhanced);
-        using SKData? data = image.Encode(SKEncodedImageFormat.Png, 100);
-        return data == null || data.Size <= 0 ? null : data.ToArray();
-    }
-
-    private static bool IsDarkLinePixel(byte[] pixels, int offset)
-    {
-        byte blue = pixels[offset];
-        byte green = pixels[offset + 1];
-        byte red = pixels[offset + 2];
-        byte alpha = pixels[offset + 3];
-        if (alpha < 180)
-            return false;
-
-        int max = Math.Max(red, Math.Max(green, blue));
-        int min = Math.Min(red, Math.Min(green, blue));
-        int average = (red + green + blue) / 3;
-        return average <= 118 && max <= 150 && max - min <= 58;
-    }
-
-    private static void BoostPixel(byte[] pixels, int offset, byte target)
-    {
-        if (pixels[offset + 3] < 180)
-            pixels[offset + 3] = 255;
-
-        pixels[offset] = Math.Min(pixels[offset], target);
-        pixels[offset + 1] = Math.Min(pixels[offset + 1], target);
-        pixels[offset + 2] = Math.Min(pixels[offset + 2], target);
-    }
+    private static bool IsLegacyLineBoost(RasterSheetSource source) =>
+        string.Equals(source.RenderProfile, ReadableLineBoostProfile, StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveImagePath(string pageFolder, RasterSheetSource source)
     {

@@ -107,7 +107,10 @@ public sealed partial class PdfViewport
             return;
 
         if (_usingRasterSheetRender)
+        {
+            QueueDetailRenderIfNeeded(force);
             return;
+        }
 
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
             return;
@@ -163,7 +166,12 @@ public sealed partial class PdfViewport
             return;
 
         if (_usingRasterSheetRender)
+        {
+            _zoomRerenderForce = _zoomRerenderForce || force;
+            _zoomRerenderTimer.Stop();
+            _zoomRerenderTimer.Start();
             return;
+        }
 
         if (!force && _renderedScale > 0)
         {

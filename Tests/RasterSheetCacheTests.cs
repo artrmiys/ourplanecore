@@ -21,6 +21,10 @@ internal static class RasterSheetCacheTests
             string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
             PageInfo page = OurPlaneCoreJobStore.ImportPdf(job, pdfPath, ["Raster Test"], importFolder).Single();
 
+            AssertTrue(
+                Math.Abs(RasterSheetCacheService.DefaultRenderScale - 200f / 72f) < 0.0001f,
+                "default raster cache should use a PlanSwift-like 200 DPI display render scale");
+
             RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, 0.5f);
             AssertTrue(build.Ok, build.Error);
 
@@ -29,8 +33,8 @@ internal static class RasterSheetCacheTests
             AssertTrue(refreshed.RasterSheet != null, "source.json should persist raster sheet metadata");
             AssertTrue(refreshed.RasterSheet!.Enabled, "raster sheet should be enabled after build");
             AssertTrue(
-                string.Equals(refreshed.RasterSheet.RenderProfile, RasterSheetCacheService.ReadableLineBoostProfile, StringComparison.Ordinal),
-                "working raster should be generated with the readable black-line boost profile");
+                string.Equals(refreshed.RasterSheet.RenderProfile, RasterSheetCacheService.ReadableRasterProfile, StringComparison.Ordinal),
+                "working raster should be generated with the readable antialiased raster profile");
             AssertTrue(refreshed.RasterSheet.SnapBlackOnly, "raster snap manifest should stay strict black-line only");
             AssertTrue(refreshed.RasterSheet.SnapIndex.EndsWith("snap.json", StringComparison.OrdinalIgnoreCase), "snap manifest path should be saved");
 
@@ -39,7 +43,7 @@ internal static class RasterSheetCacheTests
             AssertTrue(File.Exists(imagePath), "working raster image should be written beside the page");
             AssertTrue(File.Exists(snapPath), "strict snap manifest should be written beside the page");
             AssertTrue(
-                RasterSheetCacheService.DisplayStatus(refreshed).Contains("+boost", StringComparison.Ordinal),
+                RasterSheetCacheService.DisplayStatus(refreshed).Contains("+readable", StringComparison.Ordinal),
                 "Sheet Manager raster status should report the readable raster profile");
 
             AssertTrue(
@@ -51,6 +55,21 @@ internal static class RasterSheetCacheTests
                     out string reason),
                 reason);
             bitmap.Bitmap.Dispose();
+
+            RasterSheetSource legacy = refreshed.RasterSheet.Clone();
+            legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;
+            AssertFalse(
+                RasterSheetCacheService.TryReadReady(
+                    refreshed.FolderPath,
+                    refreshed.PdfPath,
+                    legacy,
+                    out RasterSheetBitmapResult legacyBitmap,
+                    out string legacyReason),
+                "legacy lineboost raster cache should be rejected so v4 cannot show blocky boosted PNGs");
+            legacyBitmap.Bitmap.Dispose();
+            AssertTrue(
+                legacyReason.Contains("legacy lineboost", StringComparison.OrdinalIgnoreCase),
+                "legacy raster rejection reason should be visible in the log");
         }
         finally
         {
@@ -83,6 +102,12 @@ internal static class RasterSheetCacheTests
     private static void AssertTrue(bool condition, string message)
     {
         if (!condition)
+            throw new InvalidOperationException(message);
+    }
+
+    private static void AssertFalse(bool condition, string message)
+    {
+        if (condition)
             throw new InvalidOperationException(message);
     }
 }

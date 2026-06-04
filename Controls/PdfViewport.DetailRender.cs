@@ -87,9 +87,6 @@ public sealed partial class PdfViewport
 
     private void QueueDetailRenderIfNeeded(bool force)
     {
-        if (_usingRasterSheetRender)
-            return;
-
         if (ShouldHoldDetailRender(force))
         {
             QueueDetailRenderAfterHold();
@@ -193,7 +190,6 @@ public sealed partial class PdfViewport
             _pdfW <= 0 ||
             _pdfH <= 0 ||
             _bitmapScale <= 0 ||
-            _usingRasterSheetRender ||
             _showingPreviousPageDuringSwitch)
         {
             return false;

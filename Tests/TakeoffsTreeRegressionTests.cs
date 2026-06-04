@@ -1213,6 +1213,10 @@ internal static class TakeoffsTreeRegressionTests
             pdfSnap.Contains("out string rasterSnapReason", StringComparison.Ordinal) &&
             pdfSnap.Contains("live PDF", StringComparison.Ordinal),
             "empty raster snap indexes must fall back to live PDF snap extraction instead of blocking contour tracing");
+        AssertFalse(
+            raster.Contains("TryEncodeReadableWorkingImage", StringComparison.Ordinal) ||
+            raster.Contains("BoostPixel", StringComparison.Ordinal),
+            "display raster PNGs must not be pixel-boosted into blocky square linework");
     }
 
     public static void RasterSheetRenderSkipsDelayedPdfZoomRefresh()
@@ -1231,19 +1235,21 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("_usingRasterSheetRender = true;", StringComparison.Ordinal),
             "viewport must track when the visible page bitmap is the raster working sheet");
         AssertTrue(
-            viewTransform.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) ||
-            viewTransform.Contains("if (_usingRasterSheetRender)\n            return;", StringComparison.Ordinal),
-            "raster sheet mode must not schedule full PDF zoom refreshes");
+            viewTransform.Contains("if (_usingRasterSheetRender)\r\n        {\r\n            QueueDetailRenderIfNeeded(force);\r\n            return;\r\n        }", StringComparison.Ordinal) ||
+            viewTransform.Contains("if (_usingRasterSheetRender)\n        {\n            QueueDetailRenderIfNeeded(force);\n            return;\n        }", StringComparison.Ordinal),
+            "raster sheet mode should skip full PDF zoom refreshes but queue clipped detail renders");
         AssertTrue(
             detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force)", StringComparison.Ordinal) &&
-            (detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) ||
-             detailRender.Contains("if (_usingRasterSheetRender)\n            return;", StringComparison.Ordinal)) &&
-            detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
-            "raster sheet mode must block delayed clipped PDF detail renders");
+            !detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) &&
+            !detailRender.Contains("if (_usingRasterSheetRender)\n            return;", StringComparison.Ordinal) &&
+            !detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
+            "raster sheet mode must allow delayed clipped PDF detail renders");
         AssertTrue(
             rendering.Contains("FilterQuality = _usingRasterSheetRender", StringComparison.Ordinal) &&
-            rendering.Contains("? SKFilterQuality.None", StringComparison.Ordinal),
-            "raster sheet mode should use stable bitmap sampling instead of switching quality during navigation");
+            rendering.Contains("? SKFilterQuality.Low", StringComparison.Ordinal) &&
+            rendering.Contains(": SKFilterQuality.Medium", StringComparison.Ordinal) &&
+            !rendering.Contains("? SKFilterQuality.None", StringComparison.Ordinal),
+            "raster sheet mode should use smoothed bitmap sampling instead of nearest-neighbor blocks");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
@@ -1252,6 +1258,20 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("DrawRasterSheetLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
             rendering.Contains("_zoom > 0.55f", StringComparison.Ordinal),
             "raster sheet low zoom should overlay strict snap segments so thin source lines remain readable below 50% zoom");
+    }
+
+    public static void PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules()
+    {
+        string helper = ReadRepoFile("Tools/pdf_layers_helper.py");
+
+        AssertTrue(
+            helper.Contains("def _sheet_number_code(sheet_label: str | None) -> int | None:", StringComparison.Ordinal) &&
+            helper.Contains("minor.zfill(2)", StringComparison.Ordinal) &&
+            helper.Contains("sheet_num = _sheet_number_code(sheet_label)", StringComparison.Ordinal),
+            "PDF metadata helper should parse dotted sheet labels as compact sheet numbers such as A4.50 -> 450");
+        AssertFalse(
+            helper.Contains("num_match = re.search(r\"(\\d{2,4})\", label)", StringComparison.Ordinal),
+            "dotted sheet suffix rules must not read A4.50 as 50 and classify it as a note sheet");
     }
 
     public static void PdfRasterEdgeSnapPreviewIsWired()

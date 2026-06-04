@@ -808,6 +808,21 @@ def _has_shear_word(value: str | None) -> bool:
     return bool(re.search(r"\bshear(?:[\s_-]*walls?)?\b|\bshearwalls?\b", value or "", flags=re.IGNORECASE))
 
 
+def _sheet_number_code(sheet_label: str | None) -> int | None:
+    label = re.sub(r"[\s-]+", "", (sheet_label or "").strip().lower())
+    match = re.match(r"^[a-z]+(?P<major>\d{1,4})(?:\.(?P<minor>\d{1,3}))?", label)
+    if not match:
+        return None
+    try:
+        major = int(match.group("major"))
+        minor = match.group("minor")
+        if minor is not None:
+            return int(f"{major}{minor.zfill(2)}")
+        return major
+    except Exception:
+        return None
+
+
 def _detect_suffix(
     sheet_title: str | None,
     has_details: bool,
@@ -819,11 +834,10 @@ def _detect_suffix(
     title = _title_rule_text(sheet_title)
     body = _title_rule_text(body_text)
     combined = f"{title} {body}".strip()
-    label = (sheet_label or "").strip().lower().replace("-", "")
+    label = re.sub(r"[\s-]+", "", (sheet_label or "").strip().lower())
     is_arch = label.startswith("a")
     is_struct = label.startswith("s")
-    num_match = re.search(r"(\d{2,4})", label)
-    sheet_num = int(num_match.group(1)) if num_match else None
+    sheet_num = _sheet_number_code(sheet_label)
     ordinals = {
         1: "1st",
         2: "2nd",
