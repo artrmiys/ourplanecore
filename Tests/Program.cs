@@ -4368,7 +4368,7 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         new(new SKPoint(16, 0), new SKPoint(30, 0), "pdf-line"),
         new(new SKPoint(36, 0), new SKPoint(50, 0), "pdf-line"),
     };
-    object?[] bridgeArgs = [bridgeSegments, 0, 7f, false, 0];
+    object?[] bridgeArgs = [bridgeSegments, 0, 7f, false, false, 0];
     var bridgePoints = (List<SKPoint>)method.Invoke(null, bridgeArgs)!;
     AssertEqual("0,0|10,0|16,0|30,0|36,0|50,0", FormatPoints(bridgePoints), "small endpoint gaps should bridge along an unambiguous chain");
 
@@ -4378,7 +4378,7 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         new(new SKPoint(70, 3), new SKPoint(100, 3), "pdf-line"),
         new(new SKPoint(108, 3), new SKPoint(130, 3), "pdf-line"),
     };
-    object?[] directionalGapArgs = [directionalGapSegments, 0, 20f, false, 0];
+    object?[] directionalGapArgs = [directionalGapSegments, 0, 20f, false, false, 0];
     var directionalGapPoints = (List<SKPoint>)method.Invoke(null, directionalGapArgs)!;
     AssertEqual("0,0|20,0|70,3|100,3|108,3|130,3", FormatPoints(directionalGapPoints), "shifted collinear gaps should continue through window-like breaks");
 
@@ -4388,7 +4388,7 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         new(new SKPoint(15, 0), new SKPoint(30, 0), "pdf-line"),
         new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line"),
     };
-    object?[] closestBranchArgs = [closestBranchSegments, 0, 7f, false, 0];
+    object?[] closestBranchArgs = [closestBranchSegments, 0, 7f, false, false, 0];
     var closestBranchPoints = (List<SKPoint>)method.Invoke(null, closestBranchArgs)!;
     AssertEqual("0,0|10,0|15,0|30,0", FormatPoints(closestBranchPoints), "near branches should prefer the best same-axis continuation");
 
@@ -4398,7 +4398,7 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         new(new SKPoint(15, 0), new SKPoint(30, 0), "pdf-line", "", 0.5f),
         new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line", "", 6f),
     };
-    object?[] thickBranchArgs = [thickBranchSegments, 0, 7f, false, 0];
+    object?[] thickBranchArgs = [thickBranchSegments, 0, 7f, false, false, 0];
     var thickBranchPoints = (List<SKPoint>)method.Invoke(null, thickBranchArgs)!;
     AssertEqual("0,0|10,0|15,2|30,2", FormatPoints(thickBranchPoints), "thick exterior linework should stay on the matching stroke width");
 
@@ -4408,9 +4408,23 @@ static void PdfRasterEdgeSnapBridgesSmallEndpointGaps()
         new(new SKPoint(15, 2), new SKPoint(30, 2), "pdf-line"),
         new(new SKPoint(15, -2), new SKPoint(30, -2), "pdf-line"),
     };
-    object?[] ambiguousBranchArgs = [ambiguousBranchSegments, 0, 7f, false, 0];
+    object?[] ambiguousBranchArgs = [ambiguousBranchSegments, 0, 7f, false, false, 0];
     var ambiguousBranchPoints = (List<SKPoint>)method.Invoke(null, ambiguousBranchArgs)!;
     AssertEqual("0,0|10,0", FormatPoints(ambiguousBranchPoints), "equally likely branches should not be guessed");
+
+    var openRectangleSegments = new List<PdfGeometrySnapSegment>
+    {
+        new(new SKPoint(0, 0), new SKPoint(80, 0), "pdf-line"),
+        new(new SKPoint(80, 0), new SKPoint(80, 50), "pdf-line"),
+        new(new SKPoint(80, 50), new SKPoint(0, 50), "pdf-line"),
+        new(new SKPoint(0, 50), new SKPoint(0, 32), "pdf-line"),
+        new(new SKPoint(0, 18), new SKPoint(0, 0), "pdf-line"),
+    };
+    object?[] boundaryArgs = [openRectangleSegments, 0, 16f, true, false, 0];
+    var boundaryPoints = (List<SKPoint>)method.Invoke(null, boundaryArgs)!;
+    AssertTrue(boundaryArgs[4] is true, "Area PDF boundary pass should close a likely exterior contour across bridge-sized door/window gaps");
+    double boundaryArea = Math.Abs(SignedAreaForTest(boundaryPoints));
+    AssertTrue(boundaryArea > 3000, $"closed PDF boundary contour should preserve the probable exterior footprint area, got {boundaryArea:0.0}: {FormatPoints(boundaryPoints)}");
 }
 
 static string FormatPoints(IReadOnlyList<SKPoint> points) =>

@@ -154,12 +154,13 @@ public sealed partial class PdfViewport
     {
         try
         {
-            if (RasterSheetCacheService.TryReadSnapIndex(
+            bool rasterSnapAvailable = RasterSheetCacheService.TryReadSnapIndex(
                     pageFolder,
                     pdfPath,
                     rasterSheet,
                     out PdfGeometrySnapResult snapIndex,
-                    out _))
+                    out string rasterSnapReason);
+            if (rasterSnapAvailable)
             {
                 if (!IsCurrentPdfSnapRequest(version, pdfPath, pdfIndex, pageFolder))
                     return;
@@ -186,7 +187,12 @@ public sealed partial class PdfViewport
             _pdfSnapIndex = new PdfSnapPointIndex(result.Result.Points, result.Result.Segments);
             _pdfSnapCacheKey = cacheKey;
             if (_pdfSnapEnabled)
-                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points/lines.");
+            {
+                string fallback = !string.IsNullOrWhiteSpace(rasterSnapReason)
+                    ? $" ({rasterSnapReason}; live PDF)"
+                    : "";
+                PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points/lines{fallback}.");
+            }
         }
         catch (Exception ex)
         {

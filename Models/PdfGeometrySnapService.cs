@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using SkiaSharp;
 
@@ -342,6 +343,7 @@ public static class PdfGeometrySnapService
         public float Y1 { get; set; }
         public string Kind { get; set; } = "";
         public string LayerName { get; set; } = "";
+        [JsonPropertyName("stroke_width")]
         public float StrokeWidth { get; set; }
     }
 

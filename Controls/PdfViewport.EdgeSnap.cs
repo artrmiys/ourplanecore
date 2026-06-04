@@ -60,7 +60,19 @@ public sealed partial class PdfViewport
 
     private bool TryCycleEdgeSnapPreview()
     {
-        if (!_lastPointerPdf.HasValue || !CanUseEdgeSnapPreview())
+        if (!_lastPointerPdf.HasValue)
+            return false;
+
+        if (CanPrepareEdgeSnapPreviewForTab() && (!SnapEnabled || !PdfSnapEnabled))
+        {
+            SnapEnabled = true;
+            PdfSnapEnabled = true;
+            QueuePdfSnapPointLoad(force: false);
+            PostStatus("PDF Snap loading for edge contour. Press Tab again when ready.");
+            return true;
+        }
+
+        if (!CanUseEdgeSnapPreview())
             return false;
 
         _edgeSnapCycleMode = NextEdgeSnapCycleMode();
@@ -136,6 +148,9 @@ public sealed partial class PdfViewport
 
     private bool CanUseEdgeSnapPreview() =>
         SnapEnabled &&
+        CanPrepareEdgeSnapPreviewForTab();
+
+    private bool CanPrepareEdgeSnapPreviewForTab() =>
         _pageBitmap != null &&
         _drawPts.Count == 0 &&
         !BoxModeEnabled &&
@@ -305,6 +320,7 @@ public sealed partial class PdfViewport
             segments,
             selectedIndex,
             PdfSnapBridgeTolerancePt(),
+            _tool == ViewerTool.Area,
             out bool closed,
             out int segmentIndex);
         if (contour.Count < 2)
@@ -343,6 +359,7 @@ public sealed partial class PdfViewport
         IReadOnlyList<PdfGeometrySnapSegment> segments,
         int selectedIndex,
         float bridgeTolerancePt,
+        bool preferClosedBoundary,
         out bool closed,
         out int selectedSegmentIndex)
     {
@@ -350,6 +367,19 @@ public sealed partial class PdfViewport
         selectedSegmentIndex = 0;
         if (selectedIndex < 0 || selectedIndex >= segments.Count)
             return [];
+
+        if (preferClosedBoundary &&
+            TryBuildPdfSnapBoundaryContour(
+                segments,
+                selectedIndex,
+                bridgeTolerancePt,
+                out List<SKPoint> boundary,
+                out int boundarySegmentIndex))
+        {
+            closed = true;
+            selectedSegmentIndex = boundarySegmentIndex;
+            return boundary;
+        }
 
         PdfGeometrySnapSegment selected = segments[selectedIndex];
         var points = new List<SKPoint>

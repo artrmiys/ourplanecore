@@ -1201,11 +1201,18 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             raster.Contains("SnapIndexName = \"snap.json\"", StringComparison.Ordinal) &&
             raster.Contains("StrokeWidth", StringComparison.Ordinal) &&
+            raster.Contains("[JsonPropertyName(\"stroke_width\")]", StringComparison.Ordinal) &&
+            raster.Contains("snap index contains no geometry", StringComparison.Ordinal) &&
             snapService.Contains("StrokeWidth", StringComparison.Ordinal) &&
+            snapService.Contains("[JsonPropertyName(\"stroke_width\")]", StringComparison.Ordinal) &&
             raster.Contains("blackOnly: true", StringComparison.Ordinal) &&
             pdfSnap.Contains("RasterSheetCacheService.TryReadSnapIndex", StringComparison.Ordinal) &&
             pdfSnap.Contains("PDF Snap ready from raster index", StringComparison.Ordinal),
             "viewport should prefer the persisted strict raster snap index before live PDF snap extraction");
+        AssertTrue(
+            pdfSnap.Contains("out string rasterSnapReason", StringComparison.Ordinal) &&
+            pdfSnap.Contains("live PDF", StringComparison.Ordinal),
+            "empty raster snap indexes must fall back to live PDF snap extraction instead of blocking contour tracing");
     }
 
     public static void RasterSheetRenderSkipsDelayedPdfZoomRefresh()
@@ -1250,6 +1257,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PdfRasterEdgeSnapPreviewIsWired()
     {
         string edgeSnap = ReadRepoFile("Controls/PdfViewport.EdgeSnap.cs");
+        string contour = ReadRepoFile("Controls/PdfViewport.EdgeSnapContour.cs");
         string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
         string snapService = ReadRepoFile("Models/PdfGeometrySnapService.cs");
 
@@ -1261,7 +1269,8 @@ internal static class TakeoffsTreeRegressionTests
             edgeSnap.Contains("TryFindPdfEdgeSnapCandidate", StringComparison.Ordinal) &&
             edgeSnap.Contains("_pdfSnapIndex.TryFindSegment", StringComparison.Ordinal) &&
             edgeSnap.Contains("_pdfSnapIndex.Segments", StringComparison.Ordinal) &&
-            edgeSnap.Contains("BuildPdfSnapContour", StringComparison.Ordinal),
+            edgeSnap.Contains("BuildPdfSnapContour", StringComparison.Ordinal) &&
+            edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal),
             "Edge Snap should use loaded PDF/raster snap segments as a second preview source");
         AssertTrue(
             edgeSnap.Contains("TryFindUniqueConnectedPdfSnapSegment", StringComparison.Ordinal) &&
@@ -1285,6 +1294,18 @@ internal static class TakeoffsTreeRegressionTests
             edgeSnap.Contains("_tool == ViewerTool.Area", StringComparison.Ordinal) &&
             edgeSnap.Contains("return EdgeSnapModeContour;", StringComparison.Ordinal),
             "Area should jump straight to closed PDF/raster contour mode so thick exterior line loops can become Area takeoffs");
+        AssertTrue(
+            edgeSnap.Contains("CanPrepareEdgeSnapPreviewForTab", StringComparison.Ordinal) &&
+            edgeSnap.Contains("SnapEnabled = true;", StringComparison.Ordinal) &&
+            edgeSnap.Contains("PdfSnapEnabled = true;", StringComparison.Ordinal) &&
+            edgeSnap.Contains("PDF Snap loading for edge contour", StringComparison.Ordinal),
+            "Tab in Line/Area should arm Snap and PDF Snap when the user starts from both toggles off");
+        AssertTrue(
+            contour.Contains("TryBuildPdfSnapBoundaryContour", StringComparison.Ordinal) &&
+            contour.Contains("TryBuildPdfSnapRasterBoundaryContour", StringComparison.Ordinal) &&
+            contour.Contains("PdfSnapDirectionalBridgeFactor", StringComparison.Ordinal) &&
+            contour.Contains("ProjectPdfSnapBoundaryPoints", StringComparison.Ordinal),
+            "Area PDF/raster contour mode should include a bridge-tolerance-driven probable closed boundary pass before falling back to the line chain");
     }
 
     public static void PdfPreviewRenderCacheIsWiredBeforeLayerRender()

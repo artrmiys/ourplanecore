@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using OurPlaneCore.Controls;
 using SkiaSharp;
 
@@ -197,6 +198,12 @@ public static class RasterSheetCacheService
                         Math.Max(0f, segment.StrokeWidth)))
                     .ToList(),
             };
+            if (result.Points.Count + result.Segments.Count == 0)
+            {
+                reason = "snap index contains no geometry";
+                return false;
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -466,6 +473,7 @@ public static class RasterSheetCacheService
         public float Y1 { get; set; }
         public string Kind { get; set; } = "";
         public string LayerName { get; set; } = "";
+        [JsonPropertyName("stroke_width")]
         public float StrokeWidth { get; set; }
     }
 }
