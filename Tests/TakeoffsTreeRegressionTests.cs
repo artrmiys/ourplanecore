@@ -1274,8 +1274,9 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             viewTransform.Contains("if (_usingRasterSheetRender)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
+            viewTransform.Contains("TryUpgradeRasterSheetToReadyDpiForCurrentZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal),
-            "raster sheet mode should skip full PDF zoom refreshes, keep raster sheets during low-zoom navigation, and queue clipped detail renders");
+            "raster sheet mode should skip full PDF zoom refreshes, keep raster sheets during low-zoom navigation, prefer ready higher-DPI rasters, and only then queue clipped detail renders");
         AssertTrue(
             detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force)", StringComparison.Ordinal) &&
             !detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) &&
@@ -1515,6 +1516,14 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
             rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
             "image-backed PlanSwift PNG/TIF raster sheets should use full source pixels when they are fast enough, reserve overview rasters for oversized low-zoom opens, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
+        AssertTrue(
+            rasterSheetViewport.Contains("private bool TryUpgradeRasterSheetToReadyDpiForCurrentZoom()", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ReadyRasterSheetDpiForCurrentZoom(page, currentDpi)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("RasterSheetCacheService.RenderScaleToDpi(_bitmapScale)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("Raster sheet {targetDpi} DPI", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("private PageInfo CurrentRasterSheetPageInfo()", StringComparison.Ordinal),
+            "zoomed Raster On sheets should switch to an already prepared 300/400 DPI raster before falling back to delayed PDF detail rendering");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
