@@ -32,7 +32,7 @@ internal static class RasterSheetCacheTests
 
             RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, 0.5f);
             AssertTrue(build.Ok, build.Error);
-            AssertFalse(build.Reused, "first raster build should render a new working PNG");
+            AssertFalse(build.Reused, "first raster build should render a new working raster image");
 
             PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after build.");
@@ -47,6 +47,10 @@ internal static class RasterSheetCacheTests
             string imagePath = Path.GetFullPath(Path.Combine(refreshed.FolderPath, refreshed.RasterSheet.Image));
             string snapPath = Path.GetFullPath(Path.Combine(refreshed.FolderPath, refreshed.RasterSheet.SnapIndex));
             AssertTrue(File.Exists(imagePath), "working raster image should be written beside the page");
+            AssertTrue(
+                string.Equals(refreshed.RasterSheet.Format, RasterSheetCacheService.WebpRasterFormat, StringComparison.OrdinalIgnoreCase) &&
+                imagePath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase),
+                "new readable raster cache images should be stored as compact lossless WebP");
             AssertTrue(File.Exists(snapPath), "strict snap manifest should be written beside the page");
             AssertTrue(
                 RasterSheetCacheService.DisplayStatus(refreshed).Contains("+readable", StringComparison.Ordinal),
@@ -73,11 +77,11 @@ internal static class RasterSheetCacheTests
             AssertTrue(reused.Reused, "matching active raster cache should be reported as reused");
             AssertTrue(
                 File.GetLastWriteTimeUtc(imagePath) == reusedMarkerUtc,
-                "matching raster cache should be enabled from disk without re-rendering the working PNG");
+                "matching raster cache should be enabled from disk without re-rendering the working image");
 
             RasterSheetBuildResult higherDpi = RasterSheetCacheService.BuildAndEnable(refreshed, 1.0f);
             AssertTrue(higherDpi.Ok, higherDpi.Error);
-            AssertFalse(higherDpi.Reused, "different raster DPI should render a separate working PNG the first time");
+            AssertFalse(higherDpi.Reused, "different raster DPI should render a separate working image the first time");
             PageInfo higherRefreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after higher DPI build.");
             AssertTrue(
@@ -86,7 +90,7 @@ internal static class RasterSheetCacheTests
             AssertTrue(
                 higherRefreshed.RasterSheet != null &&
                 higherRefreshed.RasterSheet.Image.Contains("72dpi", StringComparison.OrdinalIgnoreCase),
-                "higher DPI build should point source.json at a DPI-specific working PNG");
+                "higher DPI build should point source.json at a DPI-specific working image");
 
             DateTime variantMarkerUtc = DateTime.UtcNow.AddMinutes(-6);
             File.SetLastWriteTimeUtc(imagePath, variantMarkerUtc);
@@ -96,7 +100,7 @@ internal static class RasterSheetCacheTests
             AssertTrue(switchedBack.Reused, "previously built raster DPI variant should be reused when switching back");
             AssertTrue(
                 File.GetLastWriteTimeUtc(imagePath) == variantMarkerUtc,
-                "switching back to a ready raster DPI variant should not re-render its PNG");
+                "switching back to a ready raster DPI variant should not re-render its image");
 
             PageInfo switchedBackPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after switching back.");
@@ -121,7 +125,7 @@ internal static class RasterSheetCacheTests
             AssertTrue(
                 readySnapshot.TryGetValue(Path.GetFullPath(preparedOnlyPage.FolderPath), out IReadOnlyList<int>? readyDpis) &&
                 readyDpis.SequenceEqual([36, 72, 90]),
-                "Sheet Manager raster status refresh should build one ready-DPI snapshot with every cached PNG variant");
+                "Sheet Manager raster status refresh should build one ready-DPI snapshot with every cached raster image variant");
             AssertTrue(
                 RasterSheetCacheService.DisplayStatus(preparedOnlyPage, readySnapshot).Contains("ready 36/72/90", StringComparison.Ordinal),
                 "Sheet Manager raster status should format ready DPI variants from its bulk snapshot");
@@ -146,7 +150,7 @@ internal static class RasterSheetCacheTests
                 "ready-only raster enable should switch source.json to the prepared DPI image");
             RasterSheetCacheCompactResult compact = RasterSheetCacheService.CompactCache(readyOnlyPage);
             AssertTrue(compact.Ok, compact.Error);
-            AssertTrue(compact.DeletedFiles >= 2, "raster cache compact should delete unused DPI PNG variants");
+            AssertTrue(compact.DeletedFiles >= 2, "raster cache compact should delete unused DPI raster image variants");
             AssertTrue(compact.DeletedBytes > 0, "raster cache compact should report freed disk space");
             PageInfo compactedPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after compact.");
@@ -175,7 +179,7 @@ internal static class RasterSheetCacheTests
                     legacy,
                     out RasterSheetBitmapResult legacyBitmap,
                     out string legacyReason),
-                "legacy lineboost raster cache should be rejected so v4 cannot show blocky boosted PNGs");
+                "legacy lineboost raster cache should be rejected so v4 cannot show blocky boosted raster images");
             legacyBitmap.Bitmap.Dispose();
             AssertTrue(
                 legacyReason.Contains("legacy lineboost", StringComparison.OrdinalIgnoreCase),

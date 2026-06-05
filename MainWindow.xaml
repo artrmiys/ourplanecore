@@ -1608,12 +1608,12 @@
                             <ComboBoxItem Content="300 DPI" Tag="300"/>
                             <ComboBoxItem Content="400 DPI" Tag="400"/>
                         </ComboBox>
-                        <Button x:Name="SheetManagerBuildRasterButton" Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build raster working PNGs in the background at the selected DPI for selected sheets, or all sheets if none are selected"/>
+                        <Button x:Name="SheetManagerBuildRasterButton" Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build compact raster working images in the background at the selected DPI for selected sheets, or all sheets if none are selected"/>
                         <Button x:Name="SheetManagerPrepareRasterButton" Content="Prepare" Click="BtnSheetManagerPrepareRaster_Click" ToolTip="Build selected raster DPI caches in the background so the UI stays usable"/>
                         <Button x:Name="SheetManagerCancelRasterButton" Content="Cancel" Click="BtnSheetManagerCancelRaster_Click" IsEnabled="False" ToolTip="Cancel the background raster preparation after the current sheet finishes"/>
                         <Button x:Name="SheetManagerRasterOnButton" Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets; builds missing caches at the selected DPI"/>
                         <Button x:Name="SheetManagerRasterOffButton" Content="Raster Off" Click="BtnSheetManagerRasterOff_Click" ToolTip="Return selected sheets to live PDF rendering without deleting the raster cache"/>
-                        <Button x:Name="SheetManagerCleanRasterButton" Content="Clean PNGs" Click="BtnSheetManagerCompactRaster_Click" Margin="0,0,12,4" ToolTip="Delete unused raster PNG variants for selected sheets, or all sheets if none are selected; keeps the active raster image"/>
+                        <Button x:Name="SheetManagerCleanRasterButton" Content="Clean Raster" Click="BtnSheetManagerCompactRaster_Click" Margin="0,0,12,4" ToolTip="Delete unused raster image variants for selected sheets, or all sheets if none are selected; keeps the active raster image"/>
                         <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>
                         <Button Content="Analyze" Click="BtnSheetManagerAnalyze_Click" ToolTip="Read PDF text/layers and preview sheet metadata"/>

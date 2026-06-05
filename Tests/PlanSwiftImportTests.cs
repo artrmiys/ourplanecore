@@ -874,8 +874,9 @@ internal static class PlanSwiftImportTests
             raster.RenderProfile,
             "PlanSwift image raster cache profile");
         AssertTrue(
-            raster.Image.EndsWith(Path.Combine(RasterSheetCacheService.CacheFolderName, RasterSheetCacheService.WorkingImageName), StringComparison.OrdinalIgnoreCase),
-            "PlanSwift image raster cache should live beside the page");
+            raster.Image.EndsWith(Path.Combine(RasterSheetCacheService.CacheFolderName, RasterSheetCacheService.CompactWorkingImageName), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(raster.Format, RasterSheetCacheService.WebpRasterFormat, StringComparison.OrdinalIgnoreCase),
+            "PlanSwift image raster cache should live beside the page as compact lossless WebP");
         if (expectOverview)
         {
             AssertTrue(

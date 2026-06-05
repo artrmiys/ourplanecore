@@ -1233,7 +1233,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertFalse(
             raster.Contains("TryEncodeReadableWorkingImage", StringComparison.Ordinal) ||
             raster.Contains("BoostPixel", StringComparison.Ordinal),
-            "display raster PNGs must not be pixel-boosted into blocky square linework");
+            "display raster cache images must not be pixel-boosted into blocky square linework");
     }
 
     public static void RasterSheetRenderSkipsDelayedPdfZoomRefresh()
@@ -1301,7 +1301,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("TryBuildRasterSheetBitmapCacheKey", StringComparison.Ordinal) &&
             layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
-            "raster sheet opens should reuse decoded PNG bitmaps from RAM and prefetch nearby raster sheets instead of decoding every switch on the UI path");
+            "raster sheet opens should reuse decoded raster bitmaps from RAM and prefetch nearby raster sheets instead of decoding every switch on the UI path");
         AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = 2.75f", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 2.35f", StringComparison.Ordinal) &&
@@ -1324,7 +1324,7 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("BtnSheetManagerPrepareRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerCancelRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCancelRaster_Click", StringComparison.Ordinal) &&
-            xaml.Contains("Content=\"Clean PNGs\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Clean Raster\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerRasterOnButton\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerRasterOffButton\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerCleanRasterButton\"", StringComparison.Ordinal) &&
@@ -1425,14 +1425,14 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SetSheetManagerRasterPrepareRunning", StringComparison.Ordinal) &&
             workspaceManagers.Contains("CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster())", StringComparison.Ordinal) &&
             compactRasterMethod.Contains("CompactSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
-            compactRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Clean PNGs\"", StringComparison.Ordinal) &&
+            compactRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Cleanup\"", StringComparison.Ordinal) &&
             compactRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
             !compactRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: false)", StringComparison.Ordinal) &&
             compactRasterBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
-            compactRasterBackgroundMethod.Contains("Sheet Manager Raster Clean PNGs done", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("Sheet Manager Raster Cleanup done", StringComparison.Ordinal) &&
             !compactRasterBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("FormatRasterCacheBytes(deletedBytes)", StringComparison.Ordinal) &&
@@ -1458,7 +1458,10 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("public static float RasterDpiToRenderScale(int dpi)", StringComparison.Ordinal) &&
             raster.Contains("public static int RenderScaleToDpi(double renderScale)", StringComparison.Ordinal) &&
             raster.Contains("public static string WorkingImageNameForRenderScale", StringComparison.Ordinal) &&
-            raster.Contains("Directory.EnumerateFiles(rasterDir, \"working-*dpi.png\")", StringComparison.Ordinal) &&
+            raster.Contains("Directory.EnumerateFiles(rasterDir, \"working-*dpi.*\")", StringComparison.Ordinal) &&
+            raster.Contains("SKWebpEncoderCompression.Lossless", StringComparison.Ordinal) &&
+            raster.Contains("CompactWorkingImageName = \"working.webp\"", StringComparison.Ordinal) &&
+            raster.Contains("WebpRasterFormat = \"webp\"", StringComparison.Ordinal) &&
             raster.Contains("TryParseWorkingImageDpi", StringComparison.Ordinal) &&
             raster.Contains("TryBuildReusableReadableVariant", StringComparison.Ordinal) &&
             raster.Contains("WorkingImageCandidatesForRenderScale", StringComparison.Ordinal) &&
@@ -1473,7 +1476,7 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("if (!enabled)", StringComparison.Ordinal) &&
             raster.Contains("Reused: true", StringComparison.Ordinal) &&
             !prepareRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal),
-            "Sheet Manager raster builds should keep 200 DPI as the default, allow selected sheets to rebuild at 300 or 400 DPI, reuse ready per-DPI PNG variants, and prepare caches in the background without a modal busy overlay");
+            "Sheet Manager raster builds should keep 200 DPI as the default, write compact lossless WebP raster images, allow selected sheets to rebuild at 300 or 400 DPI, reuse ready per-DPI variants, and prepare caches in the background without a modal busy overlay");
         AssertTrue(
             raster.Contains("SourceImageRasterProfile = \"source-image-v1\"", StringComparison.Ordinal) &&
             raster.Contains("SourceImageOverviewMaxPixels = 8_000_000", StringComparison.Ordinal) &&

@@ -495,12 +495,12 @@ public partial class MainWindow
 
     private async void BtnSheetManagerCompactRaster_Click(object sender, RoutedEventArgs e)
     {
-        if (TryBlockSheetManagerRasterCommandDuringPrepare("Clean PNGs"))
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Clean Raster"))
             return;
 
         await RunAsyncUiHandler(
             () => CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster()),
-            "Clean PNGs failed.",
+            "Clean Raster failed.",
             "Sheet Manager Raster");
     }
 
@@ -968,21 +968,21 @@ public partial class MainWindow
     {
         if (pages.Count == 0)
         {
-            TxtStatus.Text = "Sheet Manager Raster Clean PNGs: no sheets selected.";
+            TxtStatus.Text = "Sheet Manager Raster Cleanup: no sheets selected.";
             return;
         }
 
         if (_sheetManagerRasterPrepareCts != null)
         {
-            TxtStatus.Text = "Sheet Manager Raster Clean PNGs: another raster background job is already running.";
+            TxtStatus.Text = "Sheet Manager Raster Cleanup: another raster background job is already running.";
             return;
         }
 
         var cts = new CancellationTokenSource();
         _sheetManagerRasterPrepareCts = cts;
-        _sheetManagerRasterBackgroundLabel = "Clean PNGs";
+        _sheetManagerRasterBackgroundLabel = "Cleanup";
         SetSheetManagerRasterPrepareRunning(true);
-        TxtStatus.Text = $"Sheet Manager Raster Clean PNGs: queued {pages.Count} sheet(s).";
+        TxtStatus.Text = $"Sheet Manager Raster Cleanup: queued {pages.Count} sheet(s).";
         _ = CompactSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), cts);
         await Task.CompletedTask;
     }
@@ -1004,7 +1004,7 @@ public partial class MainWindow
                 cts.Token.ThrowIfCancellationRequested();
 
                 PageInfo page = pages[i];
-                TxtStatus.Text = $"Sheet Manager Raster Clean PNGs {i + 1}/{pages.Count}: {page.Name}";
+                TxtStatus.Text = $"Sheet Manager Raster Cleanup {i + 1}/{pages.Count}: {page.Name}";
 
                 RasterSheetCacheCompactResult result;
                 try
@@ -1059,8 +1059,8 @@ public partial class MainWindow
                 RefreshSheetManager();
             RefreshPageTreePageSnapshots(pages);
             TxtStatus.Text = cancelled
-                ? $"Sheet Manager Raster Clean PNGs cancelled: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}."
-                : $"Sheet Manager Raster Clean PNGs done: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}.";
+                ? $"Sheet Manager Raster Cleanup cancelled: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}."
+                : $"Sheet Manager Raster Cleanup done: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}.";
         }
     }
 
