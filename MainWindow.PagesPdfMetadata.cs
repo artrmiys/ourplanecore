@@ -307,7 +307,8 @@ public partial class MainWindow
     private IEnumerable<PdfMetadataPreviewRow> BuildPdfMetadataPreviewRows(
         IReadOnlyList<PdfMetadataPageResult> results,
         bool defaultRename,
-        bool defaultScale)
+        bool defaultScale,
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? readyRasterDpisByPageFolder = null)
     {
         var candidates = results
             .Where(result => result.Ok && result.Metadata != null)
@@ -363,7 +364,7 @@ public partial class MainWindow
                     : metadata.SkipScale ? "skip" : "",
                 Source = metadata.Source,
                 Confidence = learning.Confidence,
-                RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page),
+                RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page, readyRasterDpisByPageFolder),
                 Reason = PdfMetadataDecisionReason(metadata, learning, canRename, canScale, nameConflict, learnedConflict),
                 Warnings = string.Join("; ", warnings),
                 ApplyRename = defaultRename && canRename && !learnedConflict,

@@ -371,10 +371,12 @@ public static class RasterSheetCacheService
         return true;
     }
 
-    public static string DisplayStatus(PageInfo page)
+    public static string DisplayStatus(
+        PageInfo page,
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? readyDpisByPageFolder = null)
     {
         RasterSheetSource? source = page.RasterSheet;
-        string cachedDpis = CachedReadableDpiSummary(page);
+        string cachedDpis = CachedReadableDpiSummary(page, readyDpisByPageFolder);
         if (source == null || string.IsNullOrWhiteSpace(source.Image))
             return AppendCachedDpiSummary("PDF", cachedDpis);
 
@@ -400,9 +402,11 @@ public static class RasterSheetCacheService
         return AppendCachedDpiSummary($"Raster {scale}{profile}{snap}", cachedDpis);
     }
 
-    public static string CachedReadableDpiSummary(PageInfo page)
+    public static string CachedReadableDpiSummary(
+        PageInfo page,
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? readyDpisByPageFolder = null)
     {
-        IReadOnlyList<int> ready = ReadyReadableRasterDpis(page);
+        IReadOnlyList<int> ready = ReadyReadableRasterDpis(page, readyDpisByPageFolder);
         return ready.Count == 0
             ? ""
             : string.Join("/", ready.Select(dpi => dpi.ToString(CultureInfo.InvariantCulture)));
@@ -414,7 +418,35 @@ public static class RasterSheetCacheService
         return ready.Count == 0 ? 0 : ready[^1];
     }
 
-    public static IReadOnlyList<int> ReadyReadableRasterDpis(PageInfo page)
+    public static IReadOnlyDictionary<string, IReadOnlyList<int>> ReadyReadableRasterDpisByPageFolder(IEnumerable<PageInfo> pages)
+    {
+        var snapshot = new Dictionary<string, IReadOnlyList<int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (PageInfo page in pages)
+        {
+            string key = PageFolderSnapshotKey(page.FolderPath);
+            if (string.IsNullOrWhiteSpace(key) || snapshot.ContainsKey(key))
+                continue;
+
+            snapshot[key] = ReadyReadableRasterDpis(page);
+        }
+
+        return snapshot;
+    }
+
+    public static IReadOnlyList<int> ReadyReadableRasterDpis(
+        PageInfo page,
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? readyDpisByPageFolder = null)
+    {
+        if (readyDpisByPageFolder != null &&
+            readyDpisByPageFolder.TryGetValue(PageFolderSnapshotKey(page.FolderPath), out IReadOnlyList<int>? ready))
+        {
+            return ready;
+        }
+
+        return ReadyReadableRasterDpisFromDisk(page);
+    }
+
+    private static IReadOnlyList<int> ReadyReadableRasterDpisFromDisk(PageInfo page)
     {
         RasterSheetSource? source = page.RasterSheet;
         if (!CanTrustReadableRasterMetadata(page, source))
@@ -435,6 +467,21 @@ public static class RasterSheetCacheService
             ready.Add(DefaultRasterDpi);
 
         return ready.Distinct().Order().ToList();
+    }
+
+    private static string PageFolderSnapshotKey(string pageFolder)
+    {
+        if (string.IsNullOrWhiteSpace(pageFolder))
+            return "";
+
+        try
+        {
+            return Path.GetFullPath(pageFolder.Trim());
+        }
+        catch
+        {
+            return pageFolder.Trim();
+        }
     }
 
     private static string AppendCachedDpiSummary(string status, string cachedDpis) =>

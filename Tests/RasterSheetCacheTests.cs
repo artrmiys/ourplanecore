@@ -116,6 +116,15 @@ internal static class RasterSheetCacheTests
             AssertTrue(
                 RasterSheetCacheService.BestReadyReadableRasterDpi(preparedOnlyPage) == 90,
                 "Auto raster quality should see cache-only prepared DPI variants from disk");
+            IReadOnlyDictionary<string, IReadOnlyList<int>> readySnapshot =
+                RasterSheetCacheService.ReadyReadableRasterDpisByPageFolder([preparedOnlyPage]);
+            AssertTrue(
+                readySnapshot.TryGetValue(Path.GetFullPath(preparedOnlyPage.FolderPath), out IReadOnlyList<int>? readyDpis) &&
+                readyDpis.SequenceEqual([36, 72, 90]),
+                "Sheet Manager raster status refresh should build one ready-DPI snapshot with every cached PNG variant");
+            AssertTrue(
+                RasterSheetCacheService.DisplayStatus(preparedOnlyPage, readySnapshot).Contains("ready 36/72/90", StringComparison.Ordinal),
+                "Sheet Manager raster status should format ready DPI variants from its bulk snapshot");
 
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;

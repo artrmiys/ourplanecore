@@ -223,29 +223,40 @@ public partial class MainWindow
             return;
         }
 
+        List<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
+        IReadOnlyDictionary<string, IReadOnlyList<int>> readyRasterDpisByPageFolder =
+            RasterSheetCacheService.ReadyReadableRasterDpisByPageFolder(pages);
         var results = new List<PdfMetadataPageResult>();
-        var rows = new List<PdfMetadataPreviewRow>();
-        foreach (PageInfo page in CollectPagesUnder(_currentJob.PagesRoot))
+        foreach (PageInfo page in pages)
         {
             PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
             if (metadata != null)
-            {
-                var result = new PdfMetadataPageResult(page, true, metadata, "");
-                results.Add(result);
-                rows.AddRange(BuildPdfMetadataPreviewRows([result], defaultRename: false, defaultScale: false));
-                continue;
-            }
+                results.Add(new PdfMetadataPageResult(page, true, metadata, ""));
+        }
 
-            rows.Add(new PdfMetadataPreviewRow
-            {
-                PageFolder = page.FolderPath,
-                CurrentPageName = page.Name,
-                ProposedPageName = page.Name,
-                ProposedScale = SheetManagerScaleText(page.ScaleMetersPerPt),
-                RasterStatus = RasterSheetCacheService.DisplayStatus(page),
-                Reason = "No saved PDF metadata. Click Analyze / Auto Name / Auto Scale.",
-                Confidence = page.ScaleMetersPerPt > 0 ? "scale-set" : "",
-            });
+        Dictionary<string, PdfMetadataPreviewRow> metadataRowsByFolder = BuildPdfMetadataPreviewRows(
+                results,
+                defaultRename: false,
+                defaultScale: false,
+                readyRasterDpisByPageFolder)
+            .ToDictionary(row => row.PageFolder, StringComparer.OrdinalIgnoreCase);
+
+        var rows = new List<PdfMetadataPreviewRow>();
+        foreach (PageInfo page in pages)
+        {
+            if (metadataRowsByFolder.TryGetValue(page.FolderPath, out PdfMetadataPreviewRow? metadataRow))
+                rows.Add(metadataRow);
+            else
+                rows.Add(new PdfMetadataPreviewRow
+                {
+                    PageFolder = page.FolderPath,
+                    CurrentPageName = page.Name,
+                    ProposedPageName = page.Name,
+                    ProposedScale = SheetManagerScaleText(page.ScaleMetersPerPt),
+                    RasterStatus = RasterSheetCacheService.DisplayStatus(page, readyRasterDpisByPageFolder),
+                    Reason = "No saved PDF metadata. Click Analyze / Auto Name / Auto Scale.",
+                    Confidence = page.ScaleMetersPerPt > 0 ? "scale-set" : "",
+                });
         }
 
         _sheetManagerMetadataResults = results;
@@ -293,14 +304,21 @@ public partial class MainWindow
         }
 
         _sheetManagerMetadataResults = results;
-        var rows = BuildPdfMetadataPreviewRows(results, defaultRename, defaultScale).ToList();
+        IReadOnlyDictionary<string, IReadOnlyList<int>> readyRasterDpisByPageFolder =
+            RasterSheetCacheService.ReadyReadableRasterDpisByPageFolder(results.Select(result => result.Page));
+        var rows = BuildPdfMetadataPreviewRows(
+                results,
+                defaultRename,
+                defaultScale,
+                readyRasterDpisByPageFolder)
+            .ToList();
         rows.AddRange(results
             .Where(result => !result.Ok)
             .Select(result => new PdfMetadataPreviewRow
             {
                 PageFolder = result.Page.FolderPath,
                 CurrentPageName = result.Page.Name,
-                RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page),
+                RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page, readyRasterDpisByPageFolder),
                 Reason = result.Error,
                 Warnings = result.Error,
             }));

@@ -1250,6 +1250,7 @@ internal static class TakeoffsTreeRegressionTests
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
         string xaml = ReadRepoFile("MainWindow.xaml");
         string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
+        string pagesPdfMetadata = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
         string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
@@ -1314,6 +1315,11 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerRasterDpiBox?.SelectedItem is ComboBoxItem", StringComparison.Ordinal) &&
             workspaceManagers.Contains("EffectiveSheetManagerRasterDpi", StringComparison.Ordinal) &&
             workspaceManagers.Contains("BestReadyReadableRasterDpi(page)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("ReadyReadableRasterDpisByPageFolder(pages)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("readyRasterDpisByPageFolder", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("DisplayStatus(page, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
+            pagesPdfMetadata.Contains("readyRasterDpisByPageFolder = null", StringComparison.Ordinal) &&
+            pagesPdfMetadata.Contains("DisplayStatus(result.Page, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterDpiProgressLabel", StringComparison.Ordinal) &&
             workspaceManagers.Contains("ApplySheetManagerRowRasterDpiAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRowFromButton", StringComparison.Ordinal) &&
@@ -1352,7 +1358,9 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("WorkingImageCandidatesForRenderScale", StringComparison.Ordinal) &&
             raster.Contains("CachedReadableDpiSummary", StringComparison.Ordinal) &&
             raster.Contains("public static int BestReadyReadableRasterDpi(PageInfo page)", StringComparison.Ordinal) &&
-            raster.Contains("public static IReadOnlyList<int> ReadyReadableRasterDpis(PageInfo page)", StringComparison.Ordinal) &&
+            raster.Contains("public static IReadOnlyDictionary<string, IReadOnlyList<int>> ReadyReadableRasterDpisByPageFolder", StringComparison.Ordinal) &&
+            raster.Contains("readyDpisByPageFolder.TryGetValue", StringComparison.Ordinal) &&
+            raster.Contains("private static IReadOnlyList<int> ReadyReadableRasterDpisFromDisk", StringComparison.Ordinal) &&
             raster.Contains("AppendCachedDpiSummary", StringComparison.Ordinal) &&
             raster.Contains("| ready", StringComparison.Ordinal) &&
             raster.Contains("out bool changed", StringComparison.Ordinal) &&
