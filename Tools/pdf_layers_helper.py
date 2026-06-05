@@ -1001,6 +1001,10 @@ def _detect_suffix(
             floor_suffix = _sheet_label_floor_suffix(sheet_label)
             if floor_suffix:
                 return floor_suffix, False
+            if 900 <= sheet_num <= 999:
+                if has_schedule or _has_schedule_word(title):
+                    return "sc", True
+                return "d", True
             if 200 <= sheet_num <= 299:
                 return "el", False
             if 300 <= sheet_num <= 499:

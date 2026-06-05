@@ -1364,6 +1364,10 @@ internal static class TakeoffsTreeRegressionTests
             helper.Contains("minor.zfill(2)", StringComparison.Ordinal) &&
             helper.Contains("sheet_num = _sheet_number_code(sheet_label)", StringComparison.Ordinal),
             "PDF metadata helper should parse dotted sheet labels as compact sheet numbers such as A4.50 -> 450");
+        AssertTrue(
+            helper.Contains("if 900 <= sheet_num <= 999:", StringComparison.Ordinal) &&
+            helper.Contains("return \"d\", True", StringComparison.Ordinal),
+            "A9 architectural door/window/detail sheets should fall back to detail suffixes instead of notes or blank suffixes when title text is weak");
         AssertFalse(
             helper.Contains("num_match = re.search(r\"(\\d{2,4})\", label)", StringComparison.Ordinal),
             "dotted sheet suffix rules must not read A4.50 as 50 and classify it as a note sheet");
