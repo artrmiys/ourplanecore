@@ -723,6 +723,9 @@ public sealed partial class PdfViewport
                     await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
                     if (!IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version))
                         return;
+
+                    if (ShouldSkipQueuedNonFastPreviewForCurrentView(request.RenderScale))
+                        return;
                 }
 
                 if (ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale))
@@ -1093,6 +1096,29 @@ public sealed partial class PdfViewport
         return _zoom < ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom &&
                _bitmapScale <= 0 &&
                renderScale > ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 1.05f;
+    }
+
+    private bool ShouldSkipQueuedNonFastPreviewForCurrentView(float renderScale)
+    {
+        if (!IsPreviewRenderScale(renderScale) ||
+            IsFastPreviewRenderScale(renderScale))
+        {
+            return false;
+        }
+
+        if (_usingRasterSheetRender || _usingRasterSheetOverviewRender)
+            return true;
+
+        if (_bitmapScale >= renderScale * 0.95f)
+            return true;
+
+        if (ShouldUseDetailRenderForSharpUpgrade())
+        {
+            QueueDetailRenderIfNeeded(force: false);
+            return true;
+        }
+
+        return false;
     }
 
     private bool IsCurrentPageRenderTarget(

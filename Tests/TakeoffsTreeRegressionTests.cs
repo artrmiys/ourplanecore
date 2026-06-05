@@ -1560,6 +1560,7 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("PageSwitchSharpUpgradeIdleMs", StringComparison.Ordinal) &&
             layers.Contains("ShouldUseDetailRenderForSharpUpgrade()", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipSharpLayerUpgradeForLowZoom()", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipQueuedNonFastPreviewForCurrentView(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("CurrentPostPreviewBaseRenderScale()", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeMinZoom", StringComparison.Ordinal) &&
@@ -1816,6 +1817,8 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(scale)", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(renderScale)", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale)", StringComparison.Ordinal) &&
+            layers.Contains("private bool ShouldSkipQueuedNonFastPreviewForCurrentView(float renderScale)", StringComparison.Ordinal) &&
+            layers.Contains("_usingRasterSheetRender || _usingRasterSheetOverviewRender", StringComparison.Ordinal) &&
             layers.Contains("!IsFastPreviewRenderScale(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             layers.Contains("_bitmapScale <= 0", StringComparison.Ordinal) &&
