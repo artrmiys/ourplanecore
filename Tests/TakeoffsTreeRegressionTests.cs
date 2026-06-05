@@ -1252,6 +1252,7 @@ internal static class TakeoffsTreeRegressionTests
         string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
+        string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
 
         AssertTrue(
             viewport.Contains("private bool _usingRasterSheetRender;", StringComparison.Ordinal) &&
@@ -1301,9 +1302,11 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster\" Binding=\"{Binding RasterStatus}\" Width=\"180\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRasterPdf_Click", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRaster200_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRaster300_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRaster400_Click", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Auto\" MinWidth=\"40\"", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private CancellationTokenSource? _sheetManagerRasterPrepareCts;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private const int SheetManagerAutoRasterDpi = 0;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private int SelectedSheetManagerRasterDpi()", StringComparison.Ordinal) &&
@@ -1316,7 +1319,12 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerRowFromButton", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerPageFromRow", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshSheetManagerRasterRow", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("refreshSheetManager: false", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SetSheetManagerRasterRowEnabledAsync", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("Sheet Manager Raster Row", StringComparison.Ordinal) &&
+            rowRasterMethod.Contains("BuildAndEnable(page, renderScale)", StringComparison.Ordinal) &&
+            rowRasterMethod.Contains("RefreshSheetManagerRasterRow(row)", StringComparison.Ordinal) &&
+            !rowRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (refreshSheetManager)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("already {already}", StringComparison.Ordinal) &&
             previewDialog.Contains("private string _rasterStatus = \"\";", StringComparison.Ordinal) &&

@@ -512,11 +512,13 @@ public partial class MainWindow
         }
 
         await RunAsyncUiHandler(
-            () => SetSheetManagerRasterEnabledAsync([page], enabled: false, refreshSheetManager: false),
+            () => SetSheetManagerRasterRowEnabledAsync(row, page, enabled: false),
             "Sheet row PDF failed.",
             "Sheet Manager Raster");
-        RefreshSheetManagerRasterRow(row);
     }
+
+    private async void BtnSheetManagerRowRasterAuto_Click(object sender, RoutedEventArgs e) =>
+        await ApplySheetManagerRowRasterDpiAsync(sender, SheetManagerAutoRasterDpi);
 
     private async void BtnSheetManagerRowRaster200_Click(object sender, RoutedEventArgs e) =>
         await ApplySheetManagerRowRasterDpiAsync(sender, 200);
@@ -529,7 +531,8 @@ public partial class MainWindow
 
     private async Task ApplySheetManagerRowRasterDpiAsync(object sender, int rasterDpi)
     {
-        if (TryBlockSheetManagerRasterCommandDuringPrepare($"row {rasterDpi} DPI raster") ||
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        if (TryBlockSheetManagerRasterCommandDuringPrepare($"row {rasterDpiLabel} raster") ||
             SheetManagerRowFromButton(sender) is not { } row ||
             SheetManagerPageFromRow(row) is not { } page)
         {
@@ -537,10 +540,58 @@ public partial class MainWindow
         }
 
         await RunAsyncUiHandler(
-            () => SetSheetManagerRasterEnabledAsync([page], enabled: true, rasterDpi, refreshSheetManager: false),
-            $"Sheet row {rasterDpi} DPI failed.",
+            () => SetSheetManagerRasterRowEnabledAsync(row, page, enabled: true, rasterDpi),
+            $"Sheet row {rasterDpiLabel} failed.",
             "Sheet Manager Raster");
+    }
+
+    private async Task SetSheetManagerRasterRowEnabledAsync(
+        PdfMetadataPreviewRow row,
+        PageInfo page,
+        bool enabled,
+        int rasterDpi = RasterSheetCacheService.DefaultRasterDpi)
+    {
+        bool changed = false;
+        bool reused = false;
+        int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+
+        if (enabled && !RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
+        {
+            float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+            TxtStatus.Text = $"Sheet Manager Raster Row {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)}: {page.Name}";
+            RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page, renderScale));
+            if (!build.Ok)
+            {
+                AppLog.Warn($"Raster cache row build failed for '{page.Name}': {build.Error}");
+                TxtStatus.Text = $"Sheet Manager Raster Row {rasterDpiLabel}: failed for {page.Name}.";
+                RefreshSheetManagerRasterRow(row);
+                return;
+            }
+
+            changed = true;
+            reused = build.Reused;
+        }
+        else if (RasterSheetCacheService.TrySetEnabled(page, enabled, out string error, out bool toggled))
+        {
+            changed = toggled;
+        }
+        else
+        {
+            AppLog.Warn($"Raster cache row toggle failed for '{page.Name}': {error}");
+            TxtStatus.Text = enabled
+                ? $"Sheet Manager Raster Row {rasterDpiLabel}: failed for {page.Name}."
+                : $"Sheet Manager Raster Row PDF: failed for {page.Name}.";
+            RefreshSheetManagerRasterRow(row);
+            return;
+        }
+
+        InvalidatePagePreviewPrefetchCache();
+        ReloadCurrentPageIfRasterChanged([page]);
         RefreshSheetManagerRasterRow(row);
+        TxtStatus.Text = enabled
+            ? $"Sheet Manager Raster Row {rasterDpiLabel}: {(reused ? "reused" : changed ? "changed" : "already")} {page.Name}."
+            : $"Sheet Manager Raster Row PDF: {(changed ? "changed" : "already")} {page.Name}.";
     }
 
     private PdfMetadataPreviewRow? SheetManagerRowFromButton(object sender)

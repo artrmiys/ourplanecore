@@ -1659,11 +1659,12 @@
                             <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="100" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Confidence" Binding="{Binding Confidence}" Width="110" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Raster" Binding="{Binding RasterStatus}" Width="180" IsReadOnly="True"/>
-                            <DataGridTemplateColumn Header="Raster Action" Width="190" IsReadOnly="True">
+                            <DataGridTemplateColumn Header="Raster Action" Width="228" IsReadOnly="True">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal" Margin="0,1,0,1">
                                             <Button Content="PDF" MinWidth="36" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRasterPdf_Click" ToolTip="Use live PDF rendering for this sheet"/>
+                                            <Button Content="Auto" MinWidth="40" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRasterAuto_Click" ToolTip="Use the best ready raster cache for this sheet, or build 200 DPI if none exists"/>
                                             <Button Content="200" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster200_Click" ToolTip="Use or build 200 DPI raster for this sheet"/>
                                             <Button Content="300" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster300_Click" ToolTip="Use or build 300 DPI raster for this sheet"/>
                                             <Button Content="400" MinWidth="34" Height="22" Padding="4,0" Click="BtnSheetManagerRowRaster400_Click" ToolTip="Use or build 400 DPI raster for this sheet"/>
