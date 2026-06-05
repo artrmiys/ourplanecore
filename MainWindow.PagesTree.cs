@@ -276,6 +276,41 @@ public partial class MainWindow
         RefreshPageTreeRowsByFolderKeys(refreshed);
     }
 
+    private void RefreshPageTreePageSnapshots(IReadOnlyList<PageInfo> pages)
+    {
+        if (pages.Count == 0)
+            return;
+
+        var refreshed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (UsePageMeasurementLookup())
+        {
+            foreach (PageInfo page in pages)
+            {
+                string key = NormalizePathForCompare(page.FolderPath);
+                if (string.IsNullOrWhiteSpace(key) ||
+                    refreshed.Contains(key) ||
+                    FindPageTreeItemByFolderKeyIndexed(key) is not { } item ||
+                    OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { } refreshedPage)
+                {
+                    continue;
+                }
+
+                bool wasExpanded = item.IsExpanded;
+                item.Tag = refreshedPage;
+                item.Header = BuildPageHeader(refreshedPage);
+                RebuildPageTakeoffNodes(item, refreshedPage);
+                item.IsExpanded = wasExpanded;
+                refreshed.Add(key);
+            }
+        }
+
+        if (refreshed.Count == 0)
+            return;
+
+        RebuildPageTreeItemIndex();
+        RefreshPageTreeRowsByFolderKeys(refreshed);
+    }
+
     private void RefreshPageTakeoffIndicatorsForActiveChange(
         string? previousActiveTakeoffFolder,
         IReadOnlyList<TakeoffItem> selectedTakeoffs)
