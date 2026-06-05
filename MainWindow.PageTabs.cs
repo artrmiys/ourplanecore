@@ -703,6 +703,7 @@ public partial class MainWindow
 
         PageInfo page = pages[index];
         PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage);
+        PdfViewport.PrefetchRasterSheetRefresh(page);
     }
 
     private static void QueueCleanRenderPrefetchAt(IReadOnlyList<PageInfo> pages, int index)

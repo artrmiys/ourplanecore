@@ -105,8 +105,9 @@ internal static class TakeoffsTreeRegressionTests
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetRefresh", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews around the active sheet and clean renders only for the closest neighbors");
+            "nearby page prefetch should warm cheap previews around the active sheet, refresh stale raster caches in the background, and clean renders only for the closest neighbors");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()
@@ -1229,6 +1230,7 @@ internal static class TakeoffsTreeRegressionTests
         string detailRender = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
         string rasterSheetViewport = ReadRepoFile("Controls/PdfViewport.RasterSheet.cs");
+        string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
@@ -1312,13 +1314,21 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldSelfHealRasterSheet", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("legacy lineboost", StringComparison.Ordinal) &&
+            renderCache.Contains("PrefetchRasterSheetRefresh(PageInfo page)", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetRefreshPrefetchSemaphore", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetRefreshPrefetchDelayMs", StringComparison.Ordinal) &&
+            renderCache.Contains("ShouldQueueRasterSheetRefreshPrefetch(page)", StringComparison.Ordinal) &&
+            renderCache.Contains("Task.Run(() =>", StringComparison.Ordinal) &&
+            renderCache.Contains("ConfigureAwait(false)", StringComparison.Ordinal) &&
+            renderCache.Contains("Viewport raster refresh prefetched", StringComparison.Ordinal) &&
+            renderCache.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("BuildOverviewForExistingSourceImageRaster(page)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("BuildAndEnable(page)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("IsCurrentPageRasterTarget", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("CaptureViewState()", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("_pdfLayersLoadedForPage || _usingLayerRenderer", StringComparison.Ordinal),
-            "legacy or stale raster sheets should rebuild in the background, while old oversized image rasters get overview-only rebuilds, then apply only to the still-current non-layer page");
+            "legacy or stale raster sheets should rebuild in current-page and prefetch background paths, while old oversized image rasters get overview-only rebuilds, then apply only to the still-current non-layer page");
     }
 
     public static void PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules()
