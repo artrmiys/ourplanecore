@@ -26,6 +26,7 @@ public sealed partial class PdfViewport
         Math.Clamp(Environment.ProcessorCount / 3, 1, 4));
     private static readonly object RasterSheetRefreshPrefetchGate = new();
     private static readonly HashSet<string> RasterSheetRefreshPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly SemaphoreSlim RasterSheetRefreshPrefetchCadenceSemaphore = new(1, 1);
     private static readonly SemaphoreSlim RasterSheetRefreshPrefetchSemaphore = new(1, 1);
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
@@ -838,6 +839,7 @@ public sealed partial class PdfViewport
         {
             await Task.Delay(ViewportRenderPolicy.RasterSheetRefreshPrefetchDelayMs).ConfigureAwait(false);
             await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+            await WaitForRasterSheetRefreshPrefetchCadenceAsync().ConfigureAwait(false);
             await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -895,6 +897,20 @@ public sealed partial class PdfViewport
         {
             lock (RasterSheetRefreshPrefetchGate)
                 RasterSheetRefreshPrefetchInFlight.Remove(cacheKey);
+        }
+    }
+
+    private static async Task WaitForRasterSheetRefreshPrefetchCadenceAsync()
+    {
+        await RasterSheetRefreshPrefetchCadenceSemaphore.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await Task.Delay(ViewportRenderPolicy.RasterSheetRefreshPrefetchCadenceMs).ConfigureAwait(false);
+            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            RasterSheetRefreshPrefetchCadenceSemaphore.Release();
         }
     }
 

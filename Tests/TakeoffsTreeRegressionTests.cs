@@ -110,7 +110,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterWarmupRunMethod.Contains("ViewportRenderPolicy.JobOpenRasterSheetRefreshWarmupCount", StringComparison.Ordinal) &&
             rasterWarmupRunMethod.Contains("Task.Run(() => QueueJobRasterSheetRefreshWarmup(queuedPages))", StringComparison.Ordinal) &&
             rasterWarmupQueueMethod.Contains("PdfViewport.PrefetchRasterSheetRefresh(page)", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 512", StringComparison.Ordinal),
+            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 64", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetRefreshPrefetchCadenceMs = 6500", StringComparison.Ordinal),
             "job-open raster warmup should queue stale raster refreshes separately from preview rendering so legacy PNG/TIFF pages heal beyond the first few opened sheets");
         AssertTrue(
             nearbyPrefetchMethod.Contains("CachedPagesForPreviewPrefetch()", StringComparison.Ordinal) &&
@@ -1330,10 +1331,15 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetViewport.Contains("legacy lineboost", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetRefresh(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetRefreshPrefetchSemaphore", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetRefreshPrefetchCadenceSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetRefreshPrefetchDelayMs", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetRefreshPrefetchCadenceMs", StringComparison.Ordinal) &&
+            renderCache.Contains("WaitForRasterSheetRefreshPrefetchCadenceAsync", StringComparison.Ordinal) &&
             renderCache.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             viewTransform.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs)", StringComparison.Ordinal) &&
             renderCache.Contains("ShouldQueueRasterSheetRefreshPrefetch(page)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("RasterSheetRefreshPrefetchSemaphore.Release();", StringComparison.Ordinal) &&
             renderCache.Contains("Task.Run(() =>", StringComparison.Ordinal) &&
             renderCache.Contains("ConfigureAwait(false)", StringComparison.Ordinal) &&
             renderCache.Contains("Viewport raster refresh prefetched", StringComparison.Ordinal) &&
@@ -1509,6 +1515,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
         string mainLayers = ReadRepoFile("MainWindow.PdfLayers.cs");
@@ -1596,6 +1603,8 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("PreviewPrefetchPausedUntilUtcTicks", StringComparison.Ordinal) &&
             renderCache.Contains("WaitForPreviewPrefetchQuietWindowAsync", StringComparison.Ordinal) &&
             renderCache.Contains("PausePreviewPrefetchFor", StringComparison.Ordinal) &&
+            detail.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs)", StringComparison.Ordinal) &&
+            detail.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchAfterActiveRenderHoldMs)", StringComparison.Ordinal) &&
             layers.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs)", StringComparison.Ordinal) &&
             layers.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs)", StringComparison.Ordinal) &&
             renderCache.Contains("PreviewPrefetchSemaphore", StringComparison.Ordinal) &&

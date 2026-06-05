@@ -88,9 +88,21 @@ public sealed partial class PdfViewport
                     out _) ||
                 (RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
                  rasterSkipReason.Contains("overview", StringComparison.OrdinalIgnoreCase));
-            RasterSheetBuildResult result = await Task.Run(() => overviewOnly
-                ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
-                : RasterSheetCacheService.BuildAndEnable(page));
+            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+            await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
+            RasterSheetBuildResult result;
+            try
+            {
+                await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+                result = await Task.Run(() => overviewOnly
+                    ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
+                    : RasterSheetCacheService.BuildAndEnable(page)).ConfigureAwait(false);
+            }
+            finally
+            {
+                RasterSheetRefreshPrefetchSemaphore.Release();
+            }
+
             if (!result.Ok || result.Source == null)
             {
                 AppLog.Warn(

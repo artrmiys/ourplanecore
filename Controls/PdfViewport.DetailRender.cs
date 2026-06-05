@@ -355,6 +355,7 @@ public sealed partial class PdfViewport
         _detailRenderInProgress = true;
         try
         {
+            PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);
             Stopwatch renderWatch = Stopwatch.StartNew();
             var renderResult = await PdfLayerRenderService.TryRenderAsync(
                 request.PdfPath,
@@ -396,6 +397,7 @@ public sealed partial class PdfViewport
             if (ReferenceEquals(_activeDetailRender, request))
                 _activeDetailRender = null;
             _detailRenderInProgress = false;
+            PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchAfterActiveRenderHoldMs);
             if (_pendingDetailRender != null)
                 _ = StartNextDetailRenderAsync();
         }
