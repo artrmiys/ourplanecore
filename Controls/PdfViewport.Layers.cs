@@ -577,6 +577,9 @@ public sealed partial class PdfViewport
             return;
 
         float scale = Math.Clamp(renderScale, 0.10f, 4.0f);
+        if (IsPreviewRenderScale(scale))
+            PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs);
+
         int version = ++_docnetRenderVersion;
         var request = new DocnetRenderRequest(
             version,
@@ -627,12 +630,14 @@ public sealed partial class PdfViewport
                     fromCache = DocnetRenderCache.TryGet(cacheKey, out cached);
                     if (!fromCache)
                     {
+                        PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);
                         render = await TryRenderPreviewWithPyMuPdfAsync(request);
                         usedFastPreviewRenderer = render != null;
                         render ??= await Task.Run(() =>
                             RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
                         DocnetRenderCache.Put(cacheKey, render);
                         TryWriteDocnetPreviewCache(request, render);
+                        PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchAfterActiveRenderHoldMs);
                     }
                 }
                 finally
@@ -710,12 +715,17 @@ public sealed partial class PdfViewport
             bool usedFastPreviewRenderer = false;
             if (!fromCache)
             {
+                if (IsPreviewRenderScale(request.RenderScale))
+                    PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);
+
                 render = await TryRenderPreviewWithPyMuPdfAsync(request);
                 usedFastPreviewRenderer = render != null;
                 render ??= await Task.Run(() =>
                     RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
                 DocnetRenderCache.Put(cacheKey, render);
                 TryWriteDocnetPreviewCache(request, render);
+                if (IsPreviewRenderScale(request.RenderScale))
+                    PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchAfterActiveRenderHoldMs);
             }
             renderWatch.Stop();
             ReportSlowPdfRender(

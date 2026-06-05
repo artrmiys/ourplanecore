@@ -1572,11 +1572,25 @@ internal static class TakeoffsTreeRegressionTests
             "explicit layer refresh paths should still be able to apply a persisted clean full render before falling back to PyMuPDF");
         AssertTrue(
             renderCache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
-            renderCache.Contains("Task.Delay(75)", StringComparison.Ordinal) &&
+            renderCache.Contains("ViewportRenderPolicy.PreviewPrefetchDelayMs", StringComparison.Ordinal) &&
+            policy.Contains("PreviewPrefetchDelayMs = 250", StringComparison.Ordinal) &&
+            policy.Contains("PreviewPrefetchNavigationQuietMs = 1100", StringComparison.Ordinal) &&
+            policy.Contains("PreviewPrefetchActiveRenderHoldMs = 3000", StringComparison.Ordinal) &&
+            policy.Contains("PreviewPrefetchAfterActiveRenderHoldMs = 750", StringComparison.Ordinal) &&
+            renderCache.Contains("PreviewPrefetchPausedUntilUtcTicks", StringComparison.Ordinal) &&
+            renderCache.Contains("WaitForPreviewPrefetchQuietWindowAsync", StringComparison.Ordinal) &&
+            renderCache.Contains("PausePreviewPrefetchFor", StringComparison.Ordinal) &&
+            layers.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs)", StringComparison.Ordinal) &&
+            layers.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs)", StringComparison.Ordinal) &&
             renderCache.Contains("PreviewPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("LivePreviewRenderSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             renderCache.Contains("DecodePdfLayerRenderBitmap(preview)", StringComparison.Ordinal) &&
+            renderCache.Contains("TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, preview)", StringComparison.Ordinal) &&
+            renderCache.Contains("TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, render)", StringComparison.Ordinal) &&
+            renderCache.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal) &&
+            renderCache.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal) &&
+            renderCache.Contains("Viewport preview prefetched", StringComparison.Ordinal) &&
             layers.Contains("TryWriteDocnetPreviewCache", StringComparison.Ordinal) &&
             layers.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal) &&
             layers.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal) &&

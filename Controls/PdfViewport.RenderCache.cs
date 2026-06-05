@@ -18,6 +18,7 @@ public sealed partial class PdfViewport
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
     private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
     private static readonly SemaphoreSlim LivePreviewRenderSemaphore = new(1, 1);
+    private static long PreviewPrefetchPausedUntilUtcTicks;
     private static readonly object CleanRenderPrefetchGate = new();
     private static readonly HashSet<string> CleanRenderPrefetchInFlight = [];
     private static readonly SemaphoreSlim CleanRenderPrefetchSemaphore = new(
@@ -592,13 +593,17 @@ public sealed partial class PdfViewport
         SKBitmap? decodedBitmap = null;
         try
         {
-            await Task.Delay(75).ConfigureAwait(false);
+            await Task.Delay(ViewportRenderPolicy.PreviewPrefetchDelayMs).ConfigureAwait(false);
+            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
             await PreviewPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
+                await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
                 if (DocnetRenderCache.Contains(cacheKey))
                     return;
 
+                bool previewFromPersistedCache = false;
+                bool previewFromLiveRenderer = false;
                 if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pageIndex, renderScale, out PdfLayerRenderResult preview))
                 {
                     var rendered = await PdfLayerRenderService.TryRenderDedicatedProcessAsync(
@@ -611,12 +616,17 @@ public sealed partial class PdfViewport
                     if (rendered.Ok)
                     {
                         preview = rendered.Result;
+                        previewFromLiveRenderer = true;
                     }
                     else
                     {
                         if (!string.IsNullOrWhiteSpace(rendered.Error))
                             AppLog.Warn($"Viewport PyMuPDF preview prefetch unavailable: {rendered.Error}");
                     }
+                }
+                else
+                {
+                    previewFromPersistedCache = true;
                 }
 
                 if (preview.ImageBytes.Length > 0 && preview.WidthPt > 0 && preview.HeightPt > 0)
@@ -626,12 +636,21 @@ public sealed partial class PdfViewport
                     {
                         float bitmapScale = decodedBitmap.Width / preview.WidthPt;
                         DocnetRenderCache.Put(cacheKey, preview.WidthPt, preview.HeightPt, bitmapScale, decodedBitmap);
+                        if (previewFromLiveRenderer)
+                            TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, preview);
+                        AppLog.Info(
+                            $"Viewport preview prefetched; source='{(previewFromPersistedCache ? "persisted" : "pymupdf")}'; " +
+                            $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}; scale={renderScale:0.###}; bitmapScale={bitmapScale:0.###}");
                         return;
                     }
                 }
 
                 render = await Task.Run(() => RenderPageBitmapWithDocnet(pdfPath, pageIndex, renderScale)).ConfigureAwait(false);
                 DocnetRenderCache.Put(cacheKey, render);
+                TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, render);
+                AppLog.Info(
+                    $"Viewport preview prefetched; source='docnet'; pdf='{Path.GetFileName(pdfPath)}'; " +
+                    $"pdfPage={pageIndex + 1}; scale={renderScale:0.###}; bitmapScale={render.BitmapScale:0.###}");
             }
             finally
             {
@@ -648,6 +667,96 @@ public sealed partial class PdfViewport
             render?.Bitmap.Dispose();
             lock (DocnetPreviewPrefetchGate)
                 DocnetPreviewPrefetchInFlight.Remove(cacheKey);
+        }
+    }
+
+    private static void PausePreviewPrefetchFor(int milliseconds)
+    {
+        if (milliseconds <= 0)
+            return;
+
+        long pausedUntil = DateTime.UtcNow.AddMilliseconds(milliseconds).Ticks;
+        while (true)
+        {
+            long current = Interlocked.Read(ref PreviewPrefetchPausedUntilUtcTicks);
+            if (current >= pausedUntil)
+                return;
+
+            if (Interlocked.CompareExchange(
+                    ref PreviewPrefetchPausedUntilUtcTicks,
+                    pausedUntil,
+                    current) == current)
+            {
+                return;
+            }
+        }
+    }
+
+    private static async Task WaitForPreviewPrefetchQuietWindowAsync()
+    {
+        while (true)
+        {
+            long pausedUntil = Interlocked.Read(ref PreviewPrefetchPausedUntilUtcTicks);
+            int delayMs = (int)Math.Ceiling((new DateTime(pausedUntil, DateTimeKind.Utc) - DateTime.UtcNow).TotalMilliseconds);
+            if (delayMs <= 0)
+                return;
+
+            await Task.Delay(Math.Min(delayMs, 500)).ConfigureAwait(false);
+        }
+    }
+
+    private static void TryWritePrefetchedPreviewCache(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
+        PdfLayerRenderResult result)
+    {
+        if (result.ImageBytes.Length == 0 || result.WidthPt <= 0 || result.HeightPt <= 0)
+            return;
+
+        if (Math.Abs(renderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) <= 0.001f)
+            PdfPreviewRenderCache.TryWriteCleanPreview(pdfPath, pageIndex, renderScale, result);
+        else
+            PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, renderScale, result);
+    }
+
+    private static void TryWritePrefetchedPreviewCache(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
+        DocnetRenderResult render)
+    {
+        if (render.WidthPt <= 0 ||
+            render.HeightPt <= 0 ||
+            render.Bitmap.Width <= 0 ||
+            render.Bitmap.Height <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using SKImage image = SKImage.FromBitmap(render.Bitmap);
+            using SKData? data = image.Encode(SKEncodedImageFormat.Png, 85);
+            if (data == null || data.Size <= 0)
+                return;
+
+            TryWritePrefetchedPreviewCache(
+                pdfPath,
+                pageIndex,
+                renderScale,
+                new PdfLayerRenderResult
+                {
+                    ImageBytes = data.ToArray(),
+                    WidthPt = render.WidthPt,
+                    HeightPt = render.HeightPt,
+                    Layers = [],
+                    LayersCaptured = false,
+                });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport prefetched preview cache write failed for {Path.GetFileName(pdfPath)} page {pageIndex + 1}");
         }
     }
 
