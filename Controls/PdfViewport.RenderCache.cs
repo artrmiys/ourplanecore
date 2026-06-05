@@ -837,9 +837,11 @@ public sealed partial class PdfViewport
         try
         {
             await Task.Delay(ViewportRenderPolicy.RasterSheetRefreshPrefetchDelayMs).ConfigureAwait(false);
+            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
             await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
+                await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
                 PageInfo? page = OurPlaneCoreJobStore.TryReadPage(pageFolder);
                 if (page?.RasterSheet?.Enabled != true ||
                     string.IsNullOrWhiteSpace(page.PdfPath) ||

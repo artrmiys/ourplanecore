@@ -38,6 +38,9 @@ internal static class TakeoffsTreeRegressionTests
         string prefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetchDeferred(");
         string warmupMethod = SliceMethod(pageTabs, "private void QueueJobPagePreviewWarmupDeferred(");
         string warmupRunMethod = SliceMethod(pageTabs, "private void QueueJobPagePreviewWarmup(PageInfo activePage)");
+        string rasterWarmupMethod = SliceMethod(pageTabs, "private void QueueJobRasterSheetRefreshWarmupDeferred(");
+        string rasterWarmupRunMethod = SliceMethod(pageTabs, "private void QueueJobRasterSheetRefreshWarmup(PageInfo activePage)");
+        string rasterWarmupQueueMethod = SliceMethod(pageTabs, "private static void QueueJobRasterSheetRefreshWarmup(");
         string nearbyPrefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)");
         string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
         string queueCleanRenderPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueCleanRenderPrefetchAt(");
@@ -74,6 +77,7 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("LoadSheetOverlay(_currentPage ?? viewportPage, restoreView)", StringComparison.Ordinal) &&
             deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
@@ -98,6 +102,16 @@ internal static class TakeoffsTreeRegressionTests
             warmupRunMethod.Contains("ViewportRenderPolicy.JobOpenPreviewWarmupCount", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupCount = 12", StringComparison.Ordinal),
             "job-open preview warmup should run once per job at idle priority and use a small active-page-first order");
+        AssertTrue(
+            rasterWarmupMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
+            rasterWarmupMethod.Contains("_pageRasterRefreshWarmupJobRoot", StringComparison.Ordinal) &&
+            rasterWarmupMethod.Contains("QueueJobRasterSheetRefreshWarmup(viewportPage)", StringComparison.Ordinal) &&
+            rasterWarmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
+            rasterWarmupRunMethod.Contains("ViewportRenderPolicy.JobOpenRasterSheetRefreshWarmupCount", StringComparison.Ordinal) &&
+            rasterWarmupRunMethod.Contains("Task.Run(() => QueueJobRasterSheetRefreshWarmup(queuedPages))", StringComparison.Ordinal) &&
+            rasterWarmupQueueMethod.Contains("PdfViewport.PrefetchRasterSheetRefresh(page)", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 512", StringComparison.Ordinal),
+            "job-open raster warmup should queue stale raster refreshes separately from preview rendering so legacy PNG/TIFF pages heal beyond the first few opened sheets");
         AssertTrue(
             nearbyPrefetchMethod.Contains("CachedPagesForPreviewPrefetch()", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
@@ -1317,6 +1331,8 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("PrefetchRasterSheetRefresh(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetRefreshPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetRefreshPrefetchDelayMs", StringComparison.Ordinal) &&
+            renderCache.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
+            viewTransform.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs)", StringComparison.Ordinal) &&
             renderCache.Contains("ShouldQueueRasterSheetRefreshPrefetch(page)", StringComparison.Ordinal) &&
             renderCache.Contains("Task.Run(() =>", StringComparison.Ordinal) &&
             renderCache.Contains("ConfigureAwait(false)", StringComparison.Ordinal) &&
@@ -1788,9 +1804,12 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("ShouldSkipFullPageSharpUpgradeAtLowZoom", StringComparison.Ordinal) &&
             policy.Contains("targetBitmapScale > currentBitmapScale * 1.05f", StringComparison.Ordinal) &&
-            layers.Contains("ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, scale)", StringComparison.Ordinal) &&
-            layers.Contains("ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, renderScale)", StringComparison.Ordinal) &&
-            layers.Contains("ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, request.RenderScale)", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(scale)", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(renderScale)", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale)", StringComparison.Ordinal) &&
+            layers.Contains("!IsFastPreviewRenderScale(request.RenderScale)", StringComparison.Ordinal) &&
+            layers.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
+            layers.Contains("_bitmapScale <= 0", StringComparison.Ordinal) &&
             policy.Contains("ShouldPreferLowerScalePageBitmapForNavigation", StringComparison.Ordinal) &&
             policy.Contains("LowZoomBitmapDowngradeRatio", StringComparison.Ordinal),
             "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards and use the zoom-refresh clarity threshold");

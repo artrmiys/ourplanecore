@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,6 +17,7 @@ public partial class MainWindow
     private const int MaxBatchSheetOpenCount = 64;
     private string _pagePreviewPrefetchJobRoot = "";
     private string _pagePreviewWarmupJobRoot = "";
+    private string _pageRasterRefreshWarmupJobRoot = "";
     private IReadOnlyList<PageInfo> _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     private int _pageOpenDeferredVersion;
     private PageTabState? _pendingPageTabDrag;
@@ -25,6 +27,7 @@ public partial class MainWindow
     {
         _pagePreviewPrefetchJobRoot = "";
         _pagePreviewWarmupJobRoot = "";
+        _pageRasterRefreshWarmupJobRoot = "";
         _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     }
 
@@ -403,6 +406,7 @@ public partial class MainWindow
             QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
             trace?.Mark("prefetch-queued");
             QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
+            QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage);
             _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
             ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();
@@ -480,6 +484,38 @@ public partial class MainWindow
                 catch (Exception ex)
                 {
                     AppLog.Warn(ex, $"Job page preview warmup failed for {viewportPage.Name}");
+                }
+            }),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void QueueJobRasterSheetRefreshWarmupDeferred(int deferredVersion, PageInfo viewportPage)
+    {
+        if (_currentJob == null)
+            return;
+
+        string jobRoot = _currentJob.RootPath;
+        if (string.Equals(_pageRasterRefreshWarmupJobRoot, jobRoot, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _pageRasterRefreshWarmupJobRoot = jobRoot;
+        Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                try
+                {
+                    if (_currentJob == null ||
+                        !string.Equals(_currentJob.RootPath, jobRoot, StringComparison.OrdinalIgnoreCase) ||
+                        !IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                    {
+                        return;
+                    }
+
+                    QueueJobRasterSheetRefreshWarmup(viewportPage);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, $"Job raster sheet refresh warmup failed for {viewportPage.Name}");
                 }
             }),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
@@ -636,6 +672,38 @@ public partial class MainWindow
         {
             QueuePreviewPrefetchAt(pages, index);
         }
+    }
+
+    private void QueueJobRasterSheetRefreshWarmup(PageInfo activePage)
+    {
+        IReadOnlyList<PageInfo> pages = CachedPagesForPreviewPrefetch();
+        if (pages.Count == 0)
+            return;
+
+        int activeIndex = -1;
+        for (int i = 0; i < pages.Count; i++)
+        {
+            if (string.Equals(pages[i].FolderPath, activePage.FolderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                activeIndex = i;
+                break;
+            }
+        }
+
+        IReadOnlyList<PageInfo> queuedPages = BuildPreviewWarmupOrder(pages.Count, activeIndex)
+            .Take(ViewportRenderPolicy.JobOpenRasterSheetRefreshWarmupCount)
+            .Select(index => pages[index])
+            .ToList();
+        if (queuedPages.Count == 0)
+            return;
+
+        _ = Task.Run(() => QueueJobRasterSheetRefreshWarmup(queuedPages));
+    }
+
+    private static void QueueJobRasterSheetRefreshWarmup(IReadOnlyList<PageInfo> pages)
+    {
+        foreach (PageInfo page in pages)
+            PdfViewport.PrefetchRasterSheetRefresh(page);
     }
 
     private static IEnumerable<int> BuildPreviewWarmupOrder(int count, int activeIndex)

@@ -577,7 +577,7 @@ public sealed partial class PdfViewport
             return;
 
         float scale = Math.Clamp(renderScale, 0.10f, 4.0f);
-        if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, scale))
+        if (ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(scale))
             return;
 
         if (IsPreviewRenderScale(scale))
@@ -718,7 +718,14 @@ public sealed partial class PdfViewport
             bool usedFastPreviewRenderer = false;
             if (!fromCache)
             {
-                if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, request.RenderScale))
+                if (IsPreviewRenderScale(request.RenderScale) && !IsFastPreviewRenderScale(request.RenderScale))
+                {
+                    await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+                    if (!IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version))
+                        return;
+                }
+
+                if (ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale))
                     return;
 
                 if (IsPreviewRenderScale(request.RenderScale))
@@ -1064,7 +1071,7 @@ public sealed partial class PdfViewport
             return false;
 
         float renderScale = CurrentPostPreviewBaseRenderScale();
-        if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, renderScale))
+        if (ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(renderScale))
             return true;
 
         if (ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation(
@@ -1076,6 +1083,16 @@ public sealed partial class PdfViewport
         }
 
         return _bitmapScale >= renderScale * 0.95f;
+    }
+
+    private bool ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(float renderScale)
+    {
+        if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, renderScale))
+            return true;
+
+        return _zoom < ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom &&
+               _bitmapScale <= 0 &&
+               renderScale > ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 1.05f;
     }
 
     private bool IsCurrentPageRenderTarget(

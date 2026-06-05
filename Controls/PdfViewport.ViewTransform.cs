@@ -39,6 +39,7 @@ public sealed partial class PdfViewport
     {
         _isFastNavigating = true;
         _lastFastNavigationAt = DateTime.UtcNow;
+        PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs);
         _navigationIdleTimer.Stop();
         _navigationIdleTimer.Start();
     }
