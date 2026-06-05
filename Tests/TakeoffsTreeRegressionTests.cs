@@ -1525,6 +1525,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("BuildRasterSheetDpiUpgradeForCurrentPageAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("BuildAndEnable(buildPage, targetScale)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("WarmRasterSheetDpiUpgradeBitmapCache(queuedPage, result.Source, targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryPutRasterSheetBitmapCache(page.FolderPath, page.PdfPath, source, preferOverview: false, bitmap)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetDpiUpgradeKey", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("Dispatcher.InvokeAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("if (_isFastNavigating)", StringComparison.Ordinal) &&
