@@ -985,6 +985,19 @@ internal static class PlanSwiftImportTests
         AssertTrue(
             RasterSheetCacheService.HasSourceImageOverview(upgraded),
             "existing oversized source-image raster should be upgraded with overview metadata");
+        RasterSheetSource lowQualityOverview = upgraded.Clone();
+        lowQualityOverview.OverviewRenderScale = upgraded.OverviewRenderScale * 0.5;
+        OurPlaneCoreJobStore.SavePageRasterSheet(upgradedPage.FolderPath, lowQualityOverview);
+        PageInfo lowQualityOverviewPage = OurPlaneCoreJobStore.TryReadPage(upgradedPage.FolderPath)
+            ?? throw new InvalidOperationException("Low-quality overview page source was not readable.");
+        AssertTrue(
+            RasterSheetCacheService.ShouldBuildSourceImageOverview(
+                lowQualityOverviewPage.FolderPath,
+                lowQualityOverviewPage.PdfPath,
+                lowQualityOverviewPage.RasterSheet,
+                out string lowQualityReason),
+            lowQualityReason);
+        OurPlaneCoreJobStore.SavePageRasterSheet(upgradedPage.FolderPath, upgraded);
         AssertTrue(
             RasterSheetCacheService.TryReadOverviewReady(
                 upgradedPage.FolderPath,

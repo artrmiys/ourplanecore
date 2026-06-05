@@ -1305,6 +1305,9 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("TryReadOverviewReady", StringComparison.Ordinal) &&
             raster.Contains("BuildOverviewForExistingSourceImageRaster", StringComparison.Ordinal) &&
             raster.Contains("CreateSourceImageOverviewBitmap", StringComparison.Ordinal) &&
+            raster.Contains("ShouldUpgradeSourceImageOverviewQuality", StringComparison.Ordinal) &&
+            raster.Contains("TargetSourceImageOverviewRenderScale", StringComparison.Ordinal) &&
+            raster.Contains("source image overview below current quality", StringComparison.Ordinal) &&
             raster.Contains("SKColorFilter.CreateHighContrast", StringComparison.Ordinal) &&
             raster.Contains("PageImageBitmapDecoder.Decode(sourceImagePath)", StringComparison.Ordinal) &&
             raster.Contains("ShouldBuildSourceImageOverview", StringComparison.Ordinal) &&

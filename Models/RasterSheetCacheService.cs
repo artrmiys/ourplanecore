@@ -35,6 +35,7 @@ public static class RasterSheetCacheService
     public const string ReadableLineBoostProfile = "lineboost-v1";
     public const long SourceImageOverviewMaxPixels = 8_000_000;
     public const long SourceImageFastOpenMaxPixels = 18_000_000;
+    private const double SourceImageOverviewScaleTolerance = 0.92;
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
     {
@@ -367,6 +368,12 @@ public static class RasterSheetCacheService
             return true;
         }
 
+        if (ShouldUpgradeSourceImageOverviewQuality(source))
+        {
+            reason = "source image overview below current quality";
+            return true;
+        }
+
         return false;
     }
 
@@ -669,6 +676,26 @@ public static class RasterSheetCacheService
 
     private static double EstimateSourceImagePixels(RasterSheetSource source) =>
         source.WidthPt * source.HeightPt * source.RenderScale * source.RenderScale;
+
+    private static bool ShouldUpgradeSourceImageOverviewQuality(RasterSheetSource source)
+    {
+        double targetScale = TargetSourceImageOverviewRenderScale(source);
+        return targetScale > 0 &&
+               source.OverviewRenderScale > 0 &&
+               source.OverviewRenderScale < targetScale * SourceImageOverviewScaleTolerance;
+    }
+
+    private static double TargetSourceImageOverviewRenderScale(RasterSheetSource source)
+    {
+        double estimatedPixels = EstimateSourceImagePixels(source);
+        if (!IsValidPixelEstimate(estimatedPixels) || source.RenderScale <= 0)
+            return 0;
+
+        double resizeRatio = estimatedPixels > SourceImageOverviewMaxPixels
+            ? Math.Sqrt(SourceImageOverviewMaxPixels / estimatedPixels)
+            : 1.0;
+        return source.RenderScale * resizeRatio;
+    }
 
     private static bool IsValidPixelEstimate(double estimatedPixels) =>
         estimatedPixels > 0 &&
