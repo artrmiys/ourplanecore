@@ -1276,8 +1276,8 @@ internal static class TakeoffsTreeRegressionTests
             !rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal),
             "raster sheet mode should use smoothed still-frame bitmap sampling instead of switching back to blocky stretch sampling");
         AssertTrue(
-            policy.Contains("RasterSheetDisplayMinZoom = 2.0f", StringComparison.Ordinal) &&
-            policy.Contains("RasterSheetDisplayExitZoom = 1.8f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayMinZoom = 2.75f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayExitZoom = 2.35f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&

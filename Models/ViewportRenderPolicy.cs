@@ -51,8 +51,8 @@ public static class ViewportRenderPolicy
     public const float FastPageSwitchPreviewRenderScale = 0.35f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float LowZoomBitmapDowngradeRatio = 1.38f;
-    public const float RasterSheetDisplayMinZoom = 2.0f;
-    public const float RasterSheetDisplayExitZoom = 1.8f;
+    public const float RasterSheetDisplayMinZoom = 2.75f;
+    public const float RasterSheetDisplayExitZoom = 2.35f;
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;
     public const float SheetOverlayMaxRenderPixels = 48_000_000f;
