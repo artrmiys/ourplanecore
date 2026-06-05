@@ -222,7 +222,6 @@ public sealed partial class PdfViewport
 
     private bool ShouldUseSharperSourceImageRasterSampling() =>
         !_renderNavigationFastFrame &&
-        _zoom <= _bitmapScale * 1.05f &&
         RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource);
 
     private void DrawCursorGuide(SKCanvas canvas, SKRect visiblePdf)

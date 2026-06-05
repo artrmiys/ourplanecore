@@ -189,7 +189,7 @@ public static class RasterSheetCacheService
         string sourceImagePath = ResolveImagePath(page.FolderPath, source);
         if (!File.Exists(sourceImagePath))
             return Failed("Source image raster file is missing.");
-        using SKBitmap? decoded = SKBitmap.Decode(sourceImagePath);
+        using SKBitmap? decoded = PageImageBitmapDecoder.Decode(sourceImagePath);
         if (decoded == null)
             return Failed("Source image raster could not be decoded.");
 
@@ -606,9 +606,7 @@ public static class RasterSheetCacheService
 
         try
         {
-            using SKBitmap? overview = source.Resize(
-                new SKImageInfo(targetWidth, targetHeight, SKColorType.Bgra8888, SKAlphaType.Premul),
-                SKFilterQuality.High);
+            using SKBitmap? overview = CreateSourceImageOverviewBitmap(source, targetWidth, targetHeight);
             if (overview == null)
             {
                 error = "source image resize failed";
@@ -638,6 +636,35 @@ public static class RasterSheetCacheService
             error = ex.Message;
             return false;
         }
+    }
+
+    private static SKBitmap? CreateSourceImageOverviewBitmap(SKBitmap source, int targetWidth, int targetHeight)
+    {
+        using SKBitmap? resized = source.Resize(
+            new SKImageInfo(targetWidth, targetHeight, SKColorType.Bgra8888, SKAlphaType.Premul),
+            SKFilterQuality.High);
+        if (resized == null)
+            return null;
+
+        using SKColorFilter? contrast = SKColorFilter.CreateHighContrast(
+            grayscale: false,
+            invertStyle: SKHighContrastConfigInvertStyle.NoInvert,
+            contrast: 0.28f);
+        if (contrast == null)
+            return resized.Copy();
+
+        var enhanced = new SKBitmap(
+            new SKImageInfo(resized.Width, resized.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using var canvas = new SKCanvas(enhanced);
+        using var paint = new SKPaint
+        {
+            ColorFilter = contrast,
+            FilterQuality = SKFilterQuality.None,
+            IsAntialias = false,
+        };
+        canvas.Clear(SKColors.White);
+        canvas.DrawBitmap(resized, 0, 0, paint);
+        return enhanced;
     }
 
     private static double EstimateSourceImagePixels(RasterSheetSource source) =>

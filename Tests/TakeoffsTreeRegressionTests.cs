@@ -1255,8 +1255,9 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("ShouldUseSharperSourceImageRasterSampling()", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
+            !rendering.Contains("_zoom <= _bitmapScale * 1.05f", StringComparison.Ordinal) &&
             !rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal),
-            "raster sheet mode should use smoothed bitmap sampling instead of nearest-neighbor blocks");
+            "raster sheet mode should use smoothed still-frame bitmap sampling instead of switching back to blocky stretch sampling");
         AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = 2.0f", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 1.8f", StringComparison.Ordinal) &&
@@ -1286,12 +1287,15 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("OverviewImageName = \"overview.png\"", StringComparison.Ordinal) &&
             raster.Contains("TryReadOverviewReady", StringComparison.Ordinal) &&
             raster.Contains("BuildOverviewForExistingSourceImageRaster", StringComparison.Ordinal) &&
+            raster.Contains("CreateSourceImageOverviewBitmap", StringComparison.Ordinal) &&
+            raster.Contains("SKColorFilter.CreateHighContrast", StringComparison.Ordinal) &&
+            raster.Contains("PageImageBitmapDecoder.Decode(sourceImagePath)", StringComparison.Ordinal) &&
             raster.Contains("ShouldBuildSourceImageOverview", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldBuildSourceImageOverview", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("mode='{(overviewOnly ? \"overview\" : \"full\")}'", StringComparison.Ordinal) &&
             rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
             rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
-            "image-backed PlanSwift PNG/TIF raster sheets should open through safe overview rasters, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
+            "image-backed PlanSwift PNG/TIF raster sheets should open through contrast-preserved overview rasters, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
