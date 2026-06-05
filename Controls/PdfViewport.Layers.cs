@@ -91,6 +91,24 @@ public sealed partial class PdfViewport
         bool usingOverview = false;
         if (preferOverview)
         {
+            if (TryGetRasterSheetBitmapCache(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    preferOverview: true,
+                    out RasterSheetBitmapResult cachedOverview))
+            {
+                return ApplyRasterSheetBitmapRender(
+                    pdfPath,
+                    pdfIndex,
+                    pageFolder,
+                    rasterSheet,
+                    cachedOverview,
+                    restoreView,
+                    fitAfter,
+                    usingOverview: true);
+            }
+
             if (RasterSheetCacheService.TryReadOverviewReady(
                     pageFolder,
                     pdfPath,
@@ -98,6 +116,7 @@ public sealed partial class PdfViewport
                     out RasterSheetBitmapResult overview,
                     out string overviewReason))
             {
+                TryPutRasterSheetBitmapCache(pageFolder, pdfPath, rasterSheet, preferOverview: true, overview);
                 return ApplyRasterSheetBitmapRender(
                     pdfPath,
                     pdfIndex,
@@ -119,6 +138,24 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        if (TryGetRasterSheetBitmapCache(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                preferOverview: false,
+                out RasterSheetBitmapResult cachedRaster))
+        {
+            return ApplyRasterSheetBitmapRender(
+                pdfPath,
+                pdfIndex,
+                pageFolder,
+                rasterSheet,
+                cachedRaster,
+                restoreView,
+                fitAfter,
+                usingOverview);
+        }
+
         if (!RasterSheetCacheService.TryReadReady(
                 pageFolder,
                 pdfPath,
@@ -136,6 +173,7 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        TryPutRasterSheetBitmapCache(pageFolder, pdfPath, rasterSheet, preferOverview: false, raster);
         return ApplyRasterSheetBitmapRender(
             pdfPath,
             pdfIndex,

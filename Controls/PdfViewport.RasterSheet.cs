@@ -235,10 +235,7 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (restoreView.HasValue)
-            return restoreView.Value.Zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom;
-
-        return !fitAfter && ShouldUseRasterSheetForCurrentZoom();
+        return rasterSheet?.Enabled == true;
     }
 
     private static bool ShouldUseRasterSheetOverviewForPageOpen(

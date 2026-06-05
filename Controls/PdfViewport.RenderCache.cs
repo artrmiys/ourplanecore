@@ -13,6 +13,7 @@ public sealed partial class PdfViewport
 {
     private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 16, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
     private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 96, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 10, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
     private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 32, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
@@ -28,12 +29,20 @@ public sealed partial class PdfViewport
     private static readonly HashSet<string> RasterSheetRefreshPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim RasterSheetRefreshPrefetchCadenceSemaphore = new(1, 1);
     private static readonly SemaphoreSlim RasterSheetRefreshPrefetchSemaphore = new(1, 1);
+    private static readonly object RasterSheetBitmapPrefetchGate = new();
+    private static readonly HashSet<string> RasterSheetBitmapPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly SemaphoreSlim RasterSheetBitmapPrefetchSemaphore = new(
+        Math.Clamp(Environment.ProcessorCount / 4, 1, 2),
+        Math.Clamp(Environment.ProcessorCount / 4, 1, 2));
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
         ResolveViewportRamBudget(192_000_000L, 768_000_000L, 0.025);
 
     private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
         ResolveViewportRamBudget(128_000_000L, 384_000_000L, 0.015);
+
+    private static long ResolveRasterSheetBitmapCacheBudgetBytes() =>
+        ResolveViewportRamBudget(384_000_000L, 1_200_000_000L, 0.04);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
         ResolveViewportRamBudget(384_000_000L, 1_200_000_000L, 0.05);
@@ -141,6 +150,16 @@ public sealed partial class PdfViewport
                 _totalBytes += entry.EstimatedBytes;
                 Trim();
             }
+        }
+
+        public bool TryPut(string key, float widthPt, float heightPt, float bitmapScale, SKBitmap bitmap)
+        {
+            long bytes = EstimateBitmapBytes(bitmap);
+            if (bytes <= 0 || bytes > _maxBytes)
+                return false;
+
+            Put(key, widthPt, heightPt, bitmapScale, bitmap);
+            return true;
         }
 
         private void Trim()
@@ -551,6 +570,56 @@ public sealed partial class PdfViewport
         _ = PrefetchCleanLayerRenderAsync(pdfPath, pageIndex, renderScale, cachedLayers, cacheKey, signature);
     }
 
+    public static void PrefetchRasterSheetBitmap(PageInfo page)
+    {
+        if (page.RasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath) ||
+            page.PdfPage < 0)
+        {
+            return;
+        }
+
+        if (RasterSheetCacheService.HasSourceImageOverview(page.RasterSheet))
+            QueueRasterSheetBitmapPrefetch(page, preferOverview: true);
+
+        if (!RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet) ||
+            !RasterSheetCacheService.HasSourceImageOverview(page.RasterSheet))
+        {
+            QueueRasterSheetBitmapPrefetch(page, preferOverview: false);
+        }
+    }
+
+    private static void QueueRasterSheetBitmapPrefetch(PageInfo page, bool preferOverview)
+    {
+        if (!TryBuildRasterSheetBitmapCacheKey(
+                page.FolderPath,
+                page.PdfPath,
+                page.RasterSheet,
+                preferOverview,
+                out string cacheKey,
+                out _))
+        {
+            return;
+        }
+
+        if (RasterSheetBitmapCache.Contains(cacheKey))
+            return;
+
+        lock (RasterSheetBitmapPrefetchGate)
+        {
+            if (!RasterSheetBitmapPrefetchInFlight.Add(cacheKey))
+                return;
+        }
+
+        _ = PrefetchRasterSheetBitmapAsync(
+            page.FolderPath,
+            page.PdfPath,
+            page.RasterSheet!.Clone(),
+            preferOverview,
+            cacheKey);
+    }
+
     public static void PrefetchRasterSheetRefresh(PageInfo page)
     {
         if (page.RasterSheet?.Enabled != true ||
@@ -582,6 +651,168 @@ public sealed partial class PdfViewport
         }
 
         _ = PrefetchRasterSheetRefreshAsync(page.FolderPath, cacheKey);
+    }
+
+    private static async Task PrefetchRasterSheetBitmapAsync(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource rasterSheet,
+        bool preferOverview,
+        string cacheKey)
+    {
+        RasterSheetBitmapResult result = new(new SKBitmap(), 0, 0, 0, "");
+        try
+        {
+            await Task.Delay(250).ConfigureAwait(false);
+            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+            await RasterSheetBitmapPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (RasterSheetBitmapCache.Contains(cacheKey))
+                    return;
+
+                string reason;
+                bool ok = preferOverview
+                    ? RasterSheetCacheService.TryReadOverviewReady(pageFolder, pdfPath, rasterSheet, out result, out reason)
+                    : RasterSheetCacheService.TryReadReady(pageFolder, pdfPath, rasterSheet, out result, out reason);
+                if (!ok)
+                    return;
+
+                TryPutRasterSheetBitmapCache(pageFolder, pdfPath, rasterSheet, preferOverview, result);
+                AppLog.Info(
+                    $"Viewport raster sheet bitmap prefetched; mode='{(preferOverview ? "overview" : "full")}'; " +
+                    $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; scale={result.BitmapScale:0.###}; image='{result.ImagePath}'");
+            }
+            finally
+            {
+                RasterSheetBitmapPrefetchSemaphore.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport raster sheet bitmap prefetch failed for {pageFolder}");
+        }
+        finally
+        {
+            result.Bitmap.Dispose();
+            lock (RasterSheetBitmapPrefetchGate)
+                RasterSheetBitmapPrefetchInFlight.Remove(cacheKey);
+        }
+    }
+
+    private static bool TryGetRasterSheetBitmapCache(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet,
+        bool preferOverview,
+        out RasterSheetBitmapResult result)
+    {
+        result = new RasterSheetBitmapResult(new SKBitmap(), 0, 0, 0, "");
+        if (!TryBuildRasterSheetBitmapCacheKey(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                preferOverview,
+                out string cacheKey,
+                out string imagePath))
+        {
+            return false;
+        }
+
+        if (!RasterSheetBitmapCache.TryGet(cacheKey, out CachedBitmapRender cached))
+            return false;
+
+        result = new RasterSheetBitmapResult(
+            cached.Bitmap,
+            cached.WidthPt,
+            cached.HeightPt,
+            cached.BitmapScale,
+            imagePath);
+        return true;
+    }
+
+    private static bool TryPutRasterSheetBitmapCache(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet,
+        bool preferOverview,
+        RasterSheetBitmapResult result)
+    {
+        if (!TryBuildRasterSheetBitmapCacheKey(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                preferOverview,
+                out string cacheKey,
+                out _))
+        {
+            return false;
+        }
+
+        return RasterSheetBitmapCache.TryPut(
+            cacheKey,
+            result.WidthPt,
+            result.HeightPt,
+            result.BitmapScale,
+            result.Bitmap);
+    }
+
+    private static bool TryBuildRasterSheetBitmapCacheKey(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet,
+        bool preferOverview,
+        out string cacheKey,
+        out string imagePath)
+    {
+        cacheKey = "";
+        imagePath = "";
+        if (rasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(pageFolder) ||
+            string.IsNullOrWhiteSpace(pdfPath))
+        {
+            return false;
+        }
+
+        string relativeImage = preferOverview ? rasterSheet.OverviewImage : rasterSheet.Image;
+        if (string.IsNullOrWhiteSpace(relativeImage))
+            return false;
+
+        imagePath = ResolvePageRelativePath(pageFolder, relativeImage);
+        var imageInfo = new FileInfo(imagePath);
+        if (!imageInfo.Exists)
+            return false;
+
+        var pdfInfo = new FileInfo(pdfPath);
+        if (!pdfInfo.Exists)
+            return false;
+
+        double renderScale = preferOverview ? rasterSheet.OverviewRenderScale : rasterSheet.RenderScale;
+        cacheKey = string.Join(
+            '|',
+            "raster-sheet-bitmap-v1",
+            Path.GetFullPath(pageFolder).ToLowerInvariant(),
+            pdfInfo.FullName.ToLowerInvariant(),
+            pdfInfo.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture),
+            pdfInfo.Length.ToString(CultureInfo.InvariantCulture),
+            preferOverview ? "overview" : "full",
+            imageInfo.FullName.ToLowerInvariant(),
+            imageInfo.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture),
+            imageInfo.Length.ToString(CultureInfo.InvariantCulture),
+            rasterSheet.RenderProfile,
+            rasterSheet.GeneratedAtUtc,
+            rasterSheet.WidthPt.ToString(CultureInfo.InvariantCulture),
+            rasterSheet.HeightPt.ToString(CultureInfo.InvariantCulture),
+            renderScale.ToString(CultureInfo.InvariantCulture));
+        return true;
+    }
+
+    private static string ResolvePageRelativePath(string pageFolder, string path)
+    {
+        if (Path.IsPathRooted(path))
+            return Path.GetFullPath(path);
+
+        return Path.GetFullPath(Path.Combine(pageFolder, path));
     }
 
     private static async Task PrefetchPagePreviewAsync(

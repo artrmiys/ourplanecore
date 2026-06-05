@@ -120,9 +120,10 @@ internal static class TakeoffsTreeRegressionTests
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetBitmap", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetRefresh", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews around the active sheet, refresh stale raster caches in the background, and clean renders only for the closest neighbors");
+            "nearby page prefetch should warm cheap previews and decoded raster bitmaps around the active sheet, refresh stale raster caches in the background, and clean renders only for the closest neighbors");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()
@@ -1284,14 +1285,26 @@ internal static class TakeoffsTreeRegressionTests
             !rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal),
             "raster sheet mode should use smoothed still-frame bitmap sampling instead of switching back to blocky stretch sampling");
         AssertTrue(
+            renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
+            renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
+            renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetBitmapPrefetchSemaphore", StringComparison.Ordinal) &&
+            renderCache.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
+            renderCache.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal) &&
+            renderCache.Contains("TryBuildRasterSheetBitmapCacheKey", StringComparison.Ordinal) &&
+            layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
+            layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
+            "raster sheet opens should reuse decoded PNG bitmaps from RAM and prefetch nearby raster sheets instead of decoding every switch on the UI path");
+        AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = 2.75f", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 2.35f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true;", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "high-DPI raster sheets should be a deep-zoom LOD, not the default bitmap for overview page browsing");
+            "ordinary readable raster sheets should open as the first sharp frame, then still allow zoom-driven raster/preview switching");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&

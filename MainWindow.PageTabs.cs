@@ -771,6 +771,7 @@ public partial class MainWindow
 
         PageInfo page = pages[index];
         PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage);
+        PdfViewport.PrefetchRasterSheetBitmap(page);
         PdfViewport.PrefetchRasterSheetRefresh(page);
     }
 
