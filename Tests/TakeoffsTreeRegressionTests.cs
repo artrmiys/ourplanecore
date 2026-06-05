@@ -1254,6 +1254,7 @@ internal static class TakeoffsTreeRegressionTests
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
         string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
+        string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
 
         AssertTrue(
             viewport.Contains("private bool _usingRasterSheetRender;", StringComparison.Ordinal) &&
@@ -1328,6 +1329,11 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SetSheetManagerRasterOffFastAsync(pages, refreshSheetManager)", StringComparison.Ordinal) &&
+            rasterOffMethod.Contains("Task.Run(", StringComparison.Ordinal) &&
+            rasterOffMethod.Contains("TrySetEnabled(page, enabled: false", StringComparison.Ordinal) &&
+            rasterOffMethod.Contains("RefreshSheetManagerRasterRows(pages)", StringComparison.Ordinal) &&
+            !rasterOffMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterRowEnabledAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster Row", StringComparison.Ordinal) &&

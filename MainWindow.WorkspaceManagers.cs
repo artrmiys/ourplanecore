@@ -883,15 +883,19 @@ public partial class MainWindow
             return;
         }
 
+        if (!enabled)
+        {
+            await SetSheetManagerRasterOffFastAsync(pages, refreshSheetManager);
+            return;
+        }
+
         int changed = 0;
         int built = 0;
         int reused = 0;
         int already = 0;
         int failed = 0;
         string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
-        string busyText = enabled
-            ? $"Enabling {rasterDpiLabel} raster for {pages.Count} sheet(s)..."
-            : $"Disabling raster for {pages.Count} sheet(s)...";
+        string busyText = $"Enabling {rasterDpiLabel} raster for {pages.Count} sheet(s)...";
         using (ShowBusyOverlay(busyText))
         {
             await WaitForBusyOverlayRenderAsync();
@@ -920,9 +924,7 @@ public partial class MainWindow
                     continue;
                 }
 
-                BusyOverlayText.Text = enabled
-                    ? $"Raster On {rasterDpiLabel} {i + 1}/{pages.Count}: {page.Name}"
-                    : $"Raster Off {i + 1}/{pages.Count}: {page.Name}";
+                BusyOverlayText.Text = $"Raster On {rasterDpiLabel} {i + 1}/{pages.Count}: {page.Name}";
                 if (RasterSheetCacheService.TrySetEnabled(page, enabled, out string error, out bool toggled))
                 {
                     if (toggled)
@@ -945,9 +947,46 @@ public partial class MainWindow
                 RefreshSheetManager();
         }
         ReloadCurrentPageIfRasterChanged(pages);
-        TxtStatus.Text = enabled
-            ? $"Sheet Manager Raster On {rasterDpiLabel}: changed {changed}, built {built}, reused {reused}, already {already}, failed {failed}."
-            : $"Sheet Manager Raster Off: changed {changed}, already {already}, failed {failed}.";
+        TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: changed {changed}, built {built}, reused {reused}, already {already}, failed {failed}.";
+    }
+
+    private async Task SetSheetManagerRasterOffFastAsync(
+        IReadOnlyList<PageInfo> pages,
+        bool refreshSheetManager)
+    {
+        TxtStatus.Text = $"Sheet Manager Raster Off: updating {pages.Count} sheet(s)...";
+        (int changed, int already, int failed) = await Task.Run(() =>
+        {
+            int changedCount = 0;
+            int alreadyCount = 0;
+            int failedCount = 0;
+            foreach (PageInfo page in pages)
+            {
+                if (RasterSheetCacheService.TrySetEnabled(page, enabled: false, out string error, out bool toggled))
+                {
+                    if (toggled)
+                        changedCount++;
+                    else
+                        alreadyCount++;
+                }
+                else
+                {
+                    failedCount++;
+                    AppLog.Warn($"Raster cache toggle failed for '{page.Name}': {error}");
+                }
+            }
+
+            return (changedCount, alreadyCount, failedCount);
+        });
+
+        InvalidatePagePreviewPrefetchCache();
+        if (refreshSheetManager)
+        {
+            if (!RefreshSheetManagerRasterRows(pages))
+                RefreshSheetManager();
+        }
+        ReloadCurrentPageIfRasterChanged(pages);
+        TxtStatus.Text = $"Sheet Manager Raster Off: changed {changed}, already {already}, failed {failed}.";
     }
 
     private void ReloadCurrentPageIfRasterChanged(IReadOnlyList<PageInfo> changedPages)
