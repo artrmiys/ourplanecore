@@ -1,4 +1,5 @@
 using OurPlaneCore;
+using SkiaSharp;
 
 internal static class RasterSheetCacheTests
 {
@@ -68,6 +69,47 @@ internal static class RasterSheetCacheTests
                     out string reason),
                 reason);
             bitmap.Bitmap.Dispose();
+
+            string legacyPngPath = Path.ChangeExtension(imagePath, ".png");
+            using (SKBitmap? webpBitmap = SKBitmap.Decode(imagePath))
+            {
+                AssertTrue(webpBitmap != null, "test WebP raster should decode before legacy PNG migration setup");
+                using SKImage image = SKImage.FromBitmap(webpBitmap!);
+                using SKData? pngData = image.Encode(SKEncodedImageFormat.Png, 100);
+                AssertTrue(pngData != null && pngData.Size > 0, "test raster should encode as a legacy PNG");
+                File.WriteAllBytes(legacyPngPath, pngData!.ToArray());
+            }
+
+            File.Delete(imagePath);
+            RasterSheetSource legacyPngActive = refreshed.RasterSheet.Clone();
+            legacyPngActive.Image = Path.GetRelativePath(refreshed.FolderPath, legacyPngPath);
+            legacyPngActive.Format = RasterSheetCacheService.PngRasterFormat;
+            OurPlaneCoreJobStore.SavePageRasterSheet(refreshed.FolderPath, legacyPngActive);
+            PageInfo legacyPngPage = OurPlaneCoreJobStore.TryReadPage(refreshed.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after legacy PNG setup.");
+            RasterSheetCacheCompactResult migration = RasterSheetCacheService.CompactCache(legacyPngPage);
+            AssertTrue(migration.Ok, migration.Error);
+            AssertTrue(migration.DeletedFiles >= 1, "raster cache compact should delete the migrated active PNG after writing WebP");
+            PageInfo migratedPage = OurPlaneCoreJobStore.TryReadPage(refreshed.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after legacy PNG migration.");
+            AssertTrue(
+                migratedPage.RasterSheet != null &&
+                string.Equals(migratedPage.RasterSheet.Format, RasterSheetCacheService.WebpRasterFormat, StringComparison.OrdinalIgnoreCase) &&
+                migratedPage.RasterSheet.Image.EndsWith(".webp", StringComparison.OrdinalIgnoreCase),
+                "raster cache compact should update source.json from legacy PNG to compact WebP");
+            imagePath = Path.GetFullPath(Path.Combine(migratedPage.FolderPath, migratedPage.RasterSheet!.Image));
+            AssertTrue(File.Exists(imagePath), "migrated active WebP raster should exist");
+            AssertFalse(File.Exists(legacyPngPath), "migrated active PNG raster should be removed after source.json points to WebP");
+            AssertTrue(
+                RasterSheetCacheService.TryReadReady(
+                    migratedPage.FolderPath,
+                    migratedPage.PdfPath,
+                    migratedPage.RasterSheet,
+                    out RasterSheetBitmapResult migratedBitmap,
+                    out string migratedReason),
+                migratedReason);
+            migratedBitmap.Bitmap.Dispose();
+            refreshed = migratedPage;
 
             DateTime reusedMarkerUtc = DateTime.UtcNow.AddMinutes(-5);
             File.SetLastWriteTimeUtc(imagePath, reusedMarkerUtc);

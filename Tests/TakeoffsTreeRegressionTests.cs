@@ -1452,6 +1452,10 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("public static bool TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
             raster.Contains("public sealed record RasterSheetCacheCompactResult", StringComparison.Ordinal) &&
             raster.Contains("public static RasterSheetCacheCompactResult CompactCache(PageInfo page)", StringComparison.Ordinal) &&
+            raster.Contains("TryCompactActiveRasterImage(page, source", StringComparison.Ordinal) &&
+            raster.Contains("IsLegacyPngRasterImage", StringComparison.Ordinal) &&
+            raster.Contains("CompactRasterImageNameForLegacyPng", StringComparison.Ordinal) &&
+            raster.Contains("OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, compacted)", StringComparison.Ordinal) &&
             raster.Contains("AddReferencedCachePath(page.FolderPath, source.Image", StringComparison.Ordinal) &&
             raster.Contains("IsCompactableCacheFile", StringComparison.Ordinal) &&
             raster.Contains("TryFindReusableReadableRaster(page, scale", StringComparison.Ordinal) &&

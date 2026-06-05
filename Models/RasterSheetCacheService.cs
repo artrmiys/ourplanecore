@@ -439,8 +439,22 @@ public static class RasterSheetCacheService
         if (!Directory.Exists(rasterDir))
             return new RasterSheetCacheCompactResult(true, 0, 0, "");
 
-        var keepPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         RasterSheetSource? source = CurrentRasterSheetSource(page);
+        int deleted = 0;
+        long bytes = 0;
+        int failed = 0;
+        string firstError = "";
+        if (TryCompactActiveRasterImage(page, source, out RasterSheetSource? compactedSource, out string compactError))
+        {
+            source = compactedSource;
+        }
+        else if (!string.IsNullOrWhiteSpace(compactError))
+        {
+            failed++;
+            firstError = compactError;
+        }
+
+        var keepPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (source != null)
         {
             AddReferencedCachePath(page.FolderPath, source.Image, keepPaths);
@@ -448,10 +462,6 @@ public static class RasterSheetCacheService
             AddReferencedCachePath(page.FolderPath, source.SnapIndex, keepPaths);
         }
 
-        int deleted = 0;
-        long bytes = 0;
-        int failed = 0;
-        string firstError = "";
         foreach (string path in Directory.EnumerateFiles(rasterDir).Where(IsCompactableCacheFile).ToList())
         {
             string fullPath = Path.GetFullPath(path);
@@ -484,6 +494,70 @@ public static class RasterSheetCacheService
         }
 
         return new RasterSheetCacheCompactResult(true, deleted, bytes, "");
+    }
+
+    private static bool TryCompactActiveRasterImage(
+        PageInfo page,
+        RasterSheetSource? source,
+        out RasterSheetSource? compactedSource,
+        out string error)
+    {
+        compactedSource = source;
+        error = "";
+        if (source == null ||
+            string.IsNullOrWhiteSpace(source.Image) ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            !IsLegacyPngRasterImage(source.Image))
+        {
+            return false;
+        }
+
+        string imagePath;
+        try
+        {
+            imagePath = ResolveImagePath(page.FolderPath, source);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+
+        if (!File.Exists(imagePath))
+            return false;
+
+        using SKBitmap? bitmap = SKBitmap.Decode(imagePath);
+        if (bitmap == null)
+        {
+            error = $"active raster image could not be decoded: {imagePath}";
+            return false;
+        }
+
+        if (!TryEncodeLosslessWebp(bitmap, out byte[] webpBytes))
+        {
+            error = $"active raster image could not be encoded as WebP: {imagePath}";
+            return false;
+        }
+
+        string? directory = Path.GetDirectoryName(imagePath);
+        if (string.IsNullOrWhiteSpace(directory))
+            return false;
+
+        string compactPath = Path.Combine(directory, CompactRasterImageNameForLegacyPng(imagePath));
+        if (string.Equals(Path.GetFullPath(imagePath), Path.GetFullPath(compactPath), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        string tempPath = compactPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        File.WriteAllBytes(tempPath, webpBytes);
+        File.Move(tempPath, compactPath, overwrite: true);
+
+        RasterSheetSource compacted = source.Clone();
+        compacted.Image = Path.GetRelativePath(page.FolderPath, compactPath);
+        compacted.Format = WebpRasterFormat;
+        compacted.GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, compacted);
+        compactedSource = compacted;
+        return true;
     }
 
     public static string DisplayStatus(
@@ -1051,6 +1125,24 @@ public static class RasterSheetCacheService
         }
 
         return false;
+    }
+
+    private static bool IsLegacyPngRasterImage(string imagePath)
+    {
+        string name = Path.GetFileName(imagePath);
+        return string.Equals(name, WorkingImageName, StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("working-", StringComparison.OrdinalIgnoreCase) &&
+               name.EndsWith("dpi.png", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string CompactRasterImageNameForLegacyPng(string imagePath)
+    {
+        string name = Path.GetFileName(imagePath);
+        if (string.Equals(name, WorkingImageName, StringComparison.OrdinalIgnoreCase))
+            return CompactWorkingImageName;
+
+        string withoutExtension = Path.GetFileNameWithoutExtension(name);
+        return $"{withoutExtension}.webp";
     }
 
     private static bool HasReadySnapIndex(string pageFolder, RasterSheetSource source) =>
