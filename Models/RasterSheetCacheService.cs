@@ -674,10 +674,9 @@ public static class RasterSheetCacheService
         if (!IsSourceImageRaster(source) || source!.WidthPt <= 0 || source.HeightPt <= 0 || source.RenderScale <= 0)
             return false;
 
-        if (HasSourceImageOverview(source))
-            return true;
-
-        return !NeedsSourceImageOverview(source);
+        double estimatedPixels = EstimateSourceImagePixels(source);
+        return IsValidPixelEstimate(estimatedPixels) &&
+               estimatedPixels <= SourceImageFastOpenMaxPixels;
     }
 
     public static bool NeedsSourceImageOverview(RasterSheetSource? source)

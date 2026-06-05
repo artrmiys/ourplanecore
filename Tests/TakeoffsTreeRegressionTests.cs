@@ -1275,7 +1275,7 @@ internal static class TakeoffsTreeRegressionTests
             viewTransform.Contains("if (_usingRasterSheetRender)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal),
-            "raster sheet mode should skip full PDF zoom refreshes, exit to preview at low zoom, and queue clipped detail renders");
+            "raster sheet mode should skip full PDF zoom refreshes, keep raster sheets during low-zoom navigation, and queue clipped detail renders");
         AssertTrue(
             detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force)", StringComparison.Ordinal) &&
             !detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) &&
@@ -1309,9 +1309,10 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetViewport.Contains("return rasterSheet?.Enabled == true;", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should open as the first sharp frame, then still allow zoom-driven raster/preview switching");
+            "ordinary readable raster sheets should open as the first sharp frame and stay raster at low zoom instead of flashing back to a blurry PDF preview");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
@@ -1478,6 +1479,7 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("SourceImageOverviewMaxPixels = 8_000_000", StringComparison.Ordinal) &&
             raster.Contains("SourceImageFastOpenMaxPixels", StringComparison.Ordinal) &&
             raster.Contains("ShouldUseSourceImageRasterForFastOpen", StringComparison.Ordinal) &&
+            raster.Contains("estimatedPixels <= SourceImageFastOpenMaxPixels", StringComparison.Ordinal) &&
             raster.Contains("NeedsSourceImageOverview", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView", StringComparison.Ordinal) &&
             pageApi.Contains("QueueRasterSheetSelfHealIfNeeded(", StringComparison.Ordinal) &&
@@ -1485,6 +1487,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetViewport.Contains("ShouldUseRasterSheetOverviewForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("IsLowZoomRasterSheetPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("!RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldKeepRasterSheetAtLowZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("HasSourceImageOverview(_rasterSheetSource)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("preferOverview: true", StringComparison.Ordinal) &&
@@ -1504,7 +1507,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetViewport.Contains("mode='{(overviewOnly ? \"overview\" : \"full\")}'", StringComparison.Ordinal) &&
             rendering.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource)", StringComparison.Ordinal) &&
             rendering.Contains("!_renderNavigationFastFrame", StringComparison.Ordinal),
-            "image-backed PlanSwift PNG/TIF raster sheets should open through contrast-preserved overview rasters, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
+            "image-backed PlanSwift PNG/TIF raster sheets should use full source pixels when they are fast enough, reserve overview rasters for oversized low-zoom opens, background-upgrade old caches, switch to full source pixels on zoom, and get sharper still-frame sampling");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&

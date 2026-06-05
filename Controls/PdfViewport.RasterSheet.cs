@@ -230,7 +230,8 @@ public sealed partial class PdfViewport
         if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
         {
             if (IsLowZoomRasterSheetPageOpen(restoreView, fitAfter))
-                return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+                return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet) ||
+                       RasterSheetCacheService.HasSourceImageOverview(rasterSheet);
 
             return true;
         }
@@ -246,7 +247,8 @@ public sealed partial class PdfViewport
         if (!RasterSheetCacheService.HasSourceImageOverview(rasterSheet))
             return false;
 
-        return IsLowZoomRasterSheetPageOpen(restoreView, fitAfter);
+        return IsLowZoomRasterSheetPageOpen(restoreView, fitAfter) &&
+               !RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
     }
 
     private static bool IsLowZoomRasterSheetPageOpen(ViewState? restoreView, bool fitAfter)
@@ -303,6 +305,9 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        if (ShouldKeepRasterSheetAtLowZoom())
+            return false;
+
         ViewState currentView = CaptureViewState();
         if (!_usingRasterSheetOverviewRender &&
             RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource) &&
@@ -320,9 +325,6 @@ public sealed partial class PdfViewport
             RequestRepaint();
             return true;
         }
-
-        if (ShouldKeepRasterSheetAtLowZoom())
-            return false;
 
         if (TryApplyPersistedPreviewRender(
                 _pdfPath,
@@ -351,6 +353,8 @@ public sealed partial class PdfViewport
         $"{Path.GetFullPath(pdfPath)}|{pageIndex}|{Path.GetFullPath(pageFolder)}";
 
     private bool ShouldKeepRasterSheetAtLowZoom() =>
-        RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) &&
-        (!RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource) || _usingRasterSheetOverviewRender);
+        _rasterSheetSource?.Enabled == true &&
+        (!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+         RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
+         _usingRasterSheetOverviewRender);
 }
