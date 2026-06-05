@@ -701,7 +701,7 @@ public partial class MainWindow
                 try
                 {
                     result = await Task.Run(
-                        () => RasterSheetCacheService.BuildAndEnable(page, renderScale),
+                        () => RasterSheetCacheService.BuildCachePreservingEnabled(page, renderScale),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -744,7 +744,6 @@ public partial class MainWindow
             cts.Dispose();
             InvalidatePagePreviewPrefetchCache();
             RefreshSheetManager();
-            ReloadCurrentPageIfRasterChanged(pages);
             TxtStatus.Text = cancelled
                 ? $"Sheet Manager Raster Prepare {rasterDpiLabel} cancelled: built {built}, reused {reused}, failed {failed}."
                 : $"Sheet Manager Raster Prepare {rasterDpiLabel} done: built {built}, reused {reused}, failed {failed}.";

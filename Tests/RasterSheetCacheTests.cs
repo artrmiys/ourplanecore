@@ -98,6 +98,25 @@ internal static class RasterSheetCacheTests
                 File.GetLastWriteTimeUtc(imagePath) == variantMarkerUtc,
                 "switching back to a ready raster DPI variant should not re-render its PNG");
 
+            PageInfo switchedBackPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after switching back.");
+            RasterSheetSource disabledForPrepare = switchedBackPage.RasterSheet!.Clone();
+            disabledForPrepare.Enabled = false;
+            OurPlaneCoreJobStore.SavePageRasterSheet(switchedBackPage.FolderPath, disabledForPrepare);
+            PageInfo disabledPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable before cache-only prepare.");
+            RasterSheetBuildResult preparedOnly = RasterSheetCacheService.BuildCachePreservingEnabled(disabledPage, 1.25f);
+            AssertTrue(preparedOnly.Ok, preparedOnly.Error);
+            AssertFalse(preparedOnly.Reused, "cache-only prepare should render a missing DPI variant once");
+            PageInfo preparedOnlyPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after cache-only prepare.");
+            AssertTrue(
+                preparedOnlyPage.RasterSheet != null && !preparedOnlyPage.RasterSheet.Enabled,
+                "background raster prepare should not convert a PDF/off sheet to raster mode");
+            AssertTrue(
+                RasterSheetCacheService.BestReadyReadableRasterDpi(preparedOnlyPage) == 90,
+                "Auto raster quality should see cache-only prepared DPI variants from disk");
+
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;
             AssertFalse(

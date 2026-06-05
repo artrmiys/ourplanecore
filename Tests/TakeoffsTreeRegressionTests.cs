@@ -1328,14 +1328,18 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
             workspaceManagers.Contains("string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi)", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("BuildAndEnable(page, renderScale)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("BuildCachePreservingEnabled(page, renderScale)", StringComparison.Ordinal) &&
+            !prepareRasterMethod.Contains("ReloadCurrentPageIfRasterChanged", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster On {rasterDpiLabel}:", StringComparison.Ordinal) &&
             workspaceManagers.Contains("reused {reused}", StringComparison.Ordinal) &&
             raster.Contains("public const int DefaultRasterDpi = 200;", StringComparison.Ordinal) &&
             raster.Contains("public const int MaxRasterDpi = 400;", StringComparison.Ordinal) &&
+            raster.Contains("public static RasterSheetBuildResult BuildCachePreservingEnabled", StringComparison.Ordinal) &&
             raster.Contains("public static float RasterDpiToRenderScale(int dpi)", StringComparison.Ordinal) &&
             raster.Contains("public static int RenderScaleToDpi(double renderScale)", StringComparison.Ordinal) &&
             raster.Contains("public static string WorkingImageNameForRenderScale", StringComparison.Ordinal) &&
+            raster.Contains("Directory.EnumerateFiles(rasterDir, \"working-*dpi.png\")", StringComparison.Ordinal) &&
+            raster.Contains("TryParseWorkingImageDpi", StringComparison.Ordinal) &&
             raster.Contains("TryBuildReusableReadableVariant", StringComparison.Ordinal) &&
             raster.Contains("WorkingImageCandidatesForRenderScale", StringComparison.Ordinal) &&
             raster.Contains("CachedReadableDpiSummary", StringComparison.Ordinal) &&

@@ -108,6 +108,33 @@ public static class RasterSheetCacheService
             new(false, null, "", error);
     }
 
+    public static RasterSheetBuildResult BuildCachePreservingEnabled(PageInfo page, float renderScale = DefaultRenderScale)
+    {
+        RasterSheetSource? original = CurrentRasterSheetSource(page)?.Clone();
+        bool originalEnabled = original?.Enabled == true;
+        bool restoreOriginal =
+            original != null &&
+            (CanTrustReadableRasterMetadata(page, original) || IsSourceImageRaster(original));
+
+        RasterSheetBuildResult result = BuildAndEnable(page, renderScale);
+        if (!result.Ok)
+            return result;
+
+        if (restoreOriginal)
+        {
+            OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, original);
+            return result with { Source = original };
+        }
+
+        if (result.Source == null)
+            return result;
+
+        RasterSheetSource prepared = result.Source.Clone();
+        prepared.Enabled = originalEnabled;
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, prepared);
+        return result with { Source = prepared };
+    }
+
     private static bool TryReuseReadableRasterAndEnable(
         PageInfo page,
         float renderScale,
@@ -393,31 +420,21 @@ public static class RasterSheetCacheService
         if (!CanTrustReadableRasterMetadata(page, source))
             return [];
 
-        var dpiValues = new SortedSet<int>
-        {
-            DefaultRasterDpi,
-            300,
-            MaxRasterDpi,
-        };
-
-        int activeDpi = RenderScaleToDpi(source!.RenderScale);
-        if (activeDpi > 0)
-            dpiValues.Add(activeDpi);
+        string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        if (!Directory.Exists(rasterDir))
+            return [];
 
         var ready = new List<int>();
-        foreach (int dpi in dpiValues)
+        foreach (string imagePath in Directory.EnumerateFiles(rasterDir, "working-*dpi.png"))
         {
-            float scale = dpi == activeDpi
-                ? (float)source.RenderScale
-                : RasterDpiToRenderScale(dpi);
-            if (WorkingImageCandidatesForRenderScale(scale)
-                .Any(name => File.Exists(Path.Combine(page.FolderPath, CacheFolderName, name))))
-            {
+            if (TryParseWorkingImageDpi(Path.GetFileName(imagePath), out int dpi))
                 ready.Add(dpi);
-            }
         }
 
-        return ready;
+        if (File.Exists(Path.Combine(rasterDir, WorkingImageName)))
+            ready.Add(DefaultRasterDpi);
+
+        return ready.Distinct().Order().ToList();
     }
 
     private static string AppendCachedDpiSummary(string status, string cachedDpis) =>
@@ -806,6 +823,24 @@ public static class RasterSheetCacheService
         {
             yield return WorkingImageName;
         }
+    }
+
+    private static bool TryParseWorkingImageDpi(string? fileName, out int dpi)
+    {
+        dpi = 0;
+        const string prefix = "working-";
+        const string suffix = "dpi.png";
+        if (string.IsNullOrWhiteSpace(fileName) ||
+            !fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string raw = fileName[prefix.Length..^suffix.Length];
+        return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dpi) &&
+               dpi > 0 &&
+               dpi <= MaxRasterDpi;
     }
 
     private static bool HasReadySnapIndex(string pageFolder, RasterSheetSource source) =>
