@@ -1254,6 +1254,8 @@ internal static class TakeoffsTreeRegressionTests
         string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
         string pagesPdfMetadata = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
+        string buildRasterMethod = SliceMethod(workspaceManagers, "private Task BuildSheetManagerRasterCacheAsync(");
+        string buildRasterBackgroundMethod = SliceMethod(workspaceManagers, "private async Task BuildSheetManagerRasterCacheInBackgroundAsync(");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
         string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
         string rasterOnMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterEnabledAsync(");
@@ -1314,6 +1316,7 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Content=\"200 DPI\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"300 DPI\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"400 DPI\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerBuildRasterButton\"", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerPrepareRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerPrepareRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerCancelRasterButton", StringComparison.Ordinal) &&
@@ -1349,13 +1352,27 @@ internal static class TakeoffsTreeRegressionTests
             pagesTree.Contains("item.Tag = refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTakeoffNodes(item, refreshedPage)", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTreeItemIndex()", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerBuildRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots([page])", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots(readyBatch.FastPages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots(pages)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private void RefreshSheetManagerRasterBackgroundPage(PageInfo page, bool refreshSheetManager, bool reloadCurrentPage)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: false)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager, reloadCurrentPage: true)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshSheetManagerRasterRow", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
+            buildRasterMethod.Contains("BuildSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
+            buildRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Build\"", StringComparison.Ordinal) &&
+            buildRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
+            !buildRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
+            buildRasterBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
+            buildRasterBackgroundMethod.Contains("BuildAndEnable(page, renderScale)", StringComparison.Ordinal) &&
+            buildRasterBackgroundMethod.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: true)", StringComparison.Ordinal) &&
+            buildRasterBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
+            buildRasterBackgroundMethod.Contains("Sheet Manager Raster Build {rasterDpiLabel} done", StringComparison.Ordinal) &&
+            !buildRasterBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("bool fastRowsRefreshed = true", StringComparison.Ordinal) &&
             workspaceManagers.Contains("readyBatch.MissingPages.Count == 0", StringComparison.Ordinal) &&

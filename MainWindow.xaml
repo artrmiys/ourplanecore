@@ -1608,7 +1608,7 @@
                             <ComboBoxItem Content="300 DPI" Tag="300"/>
                             <ComboBoxItem Content="400 DPI" Tag="400"/>
                         </ComboBox>
-                        <Button Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build raster working PNGs at the selected DPI for selected sheets, or all sheets if none are selected"/>
+                        <Button x:Name="SheetManagerBuildRasterButton" Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build raster working PNGs in the background at the selected DPI for selected sheets, or all sheets if none are selected"/>
                         <Button x:Name="SheetManagerPrepareRasterButton" Content="Prepare" Click="BtnSheetManagerPrepareRaster_Click" ToolTip="Build selected raster DPI caches in the background so the UI stays usable"/>
                         <Button x:Name="SheetManagerCancelRasterButton" Content="Cancel" Click="BtnSheetManagerCancelRaster_Click" IsEnabled="False" ToolTip="Cancel the background raster preparation after the current sheet finishes"/>
                         <Button Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets; builds missing caches at the selected DPI"/>
