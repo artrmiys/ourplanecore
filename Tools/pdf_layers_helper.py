@@ -808,6 +808,10 @@ def _has_shear_word(value: str | None) -> bool:
     return bool(re.search(r"\bshear(?:[\s_-]*walls?)?\b|\bshearwalls?\b", value or "", flags=re.IGNORECASE))
 
 
+def _has_schedule_word(value: str | None) -> bool:
+    return bool(re.search(r"\bschedules?\b", value or "", flags=re.IGNORECASE))
+
+
 def _sheet_number_code(sheet_label: str | None) -> int | None:
     label = re.sub(r"[\s-]+", "", (sheet_label or "").strip().lower())
     match = re.match(r"^[a-z]+(?P<major>\d{1,4})(?:\.(?P<minor>\d{1,3}))?", label)
@@ -821,6 +825,31 @@ def _sheet_number_code(sheet_label: str | None) -> int | None:
         return major
     except Exception:
         return None
+
+
+def _sheet_label_floor_suffix(sheet_label: str | None) -> str | None:
+    label = re.sub(r"[\s-]+", "", (sheet_label or "").strip().lower())
+    match = re.match(r"^a1\.(?P<floor>0?[1-8])(?:[a-z])?$", label)
+    if not match:
+        return None
+    return {
+        "1": "1st",
+        "01": "1st",
+        "2": "2nd",
+        "02": "2nd",
+        "3": "3rd",
+        "03": "3rd",
+        "4": "4th",
+        "04": "4th",
+        "5": "5th",
+        "05": "5th",
+        "6": "6th",
+        "06": "6th",
+        "7": "7th",
+        "07": "7th",
+        "8": "8th",
+        "08": "8th",
+    }.get(match.group("floor"))
 
 
 def _detect_suffix(
@@ -859,7 +888,7 @@ def _detect_suffix(
         return "wt", True
     if "door schedule" in title and ("window type" in title or "door type" in title):
         return "w d sc", True
-    if "room finish" in title and "schedule" in title:
+    if "room finish" in title and _has_schedule_word(title):
         return "sc", True
     if "accessible unit type" in title or ("unit type" in title and "plan" not in title):
         return "u sc", False
@@ -889,7 +918,7 @@ def _detect_suffix(
             return "f d", True
         return "d", True
     if is_struct and (has_shear or _has_shear_word(combined)) and (
-        has_schedule or "schedule" in title or sheet_num == 902
+        has_schedule or _has_schedule_word(title) or sheet_num == 902
     ):
         return "shw", True
     if has_shear or _has_shear_word(title):
@@ -909,7 +938,7 @@ def _detect_suffix(
         or "special inspections" in title
     ):
         return "n", True
-    if has_schedule or "schedule" in title or "schedules" in title:
+    if has_schedule or _has_schedule_word(title):
         return "sc", True
     if "wall type" in title or "wall types" in title or "partition type" in title or "partition types" in title:
         return "wt", True
@@ -969,6 +998,9 @@ def _detect_suffix(
         if label.startswith(("g", "t")) or (label.startswith(("a", "s")) and sheet_num < 100):
             return "n", True
         if label.startswith("a"):
+            floor_suffix = _sheet_label_floor_suffix(sheet_label)
+            if floor_suffix:
+                return floor_suffix, False
             if 200 <= sheet_num <= 299:
                 return "el", False
             if 300 <= sheet_num <= 499:

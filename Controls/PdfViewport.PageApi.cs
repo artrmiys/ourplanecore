@@ -146,7 +146,7 @@ public sealed partial class PdfViewport
             rasterSkipReason = deferredRebuildReason;
         }
 
-        float previewScale = ViewportRenderPolicy.InstantPagePreviewRenderScale;
+        float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
         bool previewCacheHit = TryApplyPersistedPreviewRender(
             pdfPath,
             pageIndex,

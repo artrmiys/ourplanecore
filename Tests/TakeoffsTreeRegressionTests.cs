@@ -1323,12 +1323,17 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             helper.Contains("def _sheet_number_code(sheet_label: str | None) -> int | None:", StringComparison.Ordinal) &&
+            helper.Contains("def _sheet_label_floor_suffix(sheet_label: str | None) -> str | None:", StringComparison.Ordinal) &&
+            helper.Contains("def _has_schedule_word(value: str | None) -> bool:", StringComparison.Ordinal) &&
             helper.Contains("minor.zfill(2)", StringComparison.Ordinal) &&
             helper.Contains("sheet_num = _sheet_number_code(sheet_label)", StringComparison.Ordinal),
             "PDF metadata helper should parse dotted sheet labels as compact sheet numbers such as A4.50 -> 450");
         AssertFalse(
             helper.Contains("num_match = re.search(r\"(\\d{2,4})\", label)", StringComparison.Ordinal),
             "dotted sheet suffix rules must not read A4.50 as 50 and classify it as a note sheet");
+        AssertFalse(
+            helper.Contains("\"schedule\" in title", StringComparison.Ordinal),
+            "suffix rules must not classify phrases such as 'hardware as scheduled' as schedule sheets");
 
         PdfImportRasterOptionUsesReadableCacheWording();
     }
@@ -1492,6 +1497,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
             pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
+            pageApi.Contains("float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
             pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
@@ -1517,6 +1523,8 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("PageSwitchSharpUpgradeIdleMs", StringComparison.Ordinal) &&
             layers.Contains("ShouldUseDetailRenderForSharpUpgrade()", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipSharpLayerUpgradeForLowZoom()", StringComparison.Ordinal) &&
+            layers.Contains("CurrentPostPreviewBaseRenderScale()", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeMinZoom", StringComparison.Ordinal) &&
             layers.Contains("IsCurrentPageRenderTarget", StringComparison.Ordinal) &&
             layers.Contains("allowLiveRender: true", StringComparison.Ordinal) &&
@@ -1717,6 +1725,8 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
+            transform.Contains("QueueLowZoomBitmapDowngradeIfNeeded()", StringComparison.Ordinal) &&
+            transform.Contains("ShouldRequestLowZoomBitmapDowngrade()", StringComparison.Ordinal) &&
             transform.Contains("bool needsDetailRender", StringComparison.Ordinal) &&
             transform.Contains("_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
@@ -1742,7 +1752,9 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("PageSwitchSharpUpgradeDelayMs = 900", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 700", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal),
+            policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
+            policy.Contains("ShouldPreferLowerScalePageBitmapForNavigation", StringComparison.Ordinal) &&
+            policy.Contains("LowZoomBitmapDowngradeRatio", StringComparison.Ordinal),
             "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards and use the zoom-refresh clarity threshold");
         AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&

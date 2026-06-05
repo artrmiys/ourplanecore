@@ -42,6 +42,7 @@ public static class ViewportRenderPolicy
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.35f;
     public const float InitialPagePreviewRenderScale = 0.75f;
+    public const float LowZoomBitmapDowngradeRatio = 1.38f;
     public const float RasterSheetDisplayMinZoom = 2.0f;
     public const float RasterSheetDisplayExitZoom = 1.8f;
     public const float SheetOverlayViewportRenderScale = 2.0f;
@@ -169,6 +170,22 @@ public static class ViewportRenderPolicy
             return true;
 
         return zoom >= bitmapScale * DetailRenderMinScaleGain;
+    }
+
+    public static bool ShouldPreferLowerScalePageBitmapForNavigation(
+        float zoom,
+        float currentBitmapScale,
+        float targetBitmapScale)
+    {
+        if (zoom <= 0 ||
+            currentBitmapScale <= 0 ||
+            targetBitmapScale <= 0 ||
+            zoom >= FarZoomFastFrameThreshold)
+        {
+            return false;
+        }
+
+        return currentBitmapScale > targetBitmapScale * LowZoomBitmapDowngradeRatio;
     }
 
     public static bool ShouldSkipFullRefreshDuringDetail(float bitmapScale) =>

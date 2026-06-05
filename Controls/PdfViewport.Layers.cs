@@ -791,10 +791,20 @@ public sealed partial class PdfViewport
             PostStatus(request.StatusAfter);
     }
 
-    private bool ShouldSkipLowerQualityDocnetPreview(DocnetRenderRequest request) =>
-        IsPageBitmapFor(request.PdfPath, request.PdfIndex, request.PageFolder) &&
-        _pageBitmap != null &&
-        _bitmapScale > request.RenderScale * 1.05f;
+    private bool ShouldSkipLowerQualityDocnetPreview(DocnetRenderRequest request)
+    {
+        if (!IsPageBitmapFor(request.PdfPath, request.PdfIndex, request.PageFolder) ||
+            _pageBitmap == null ||
+            _bitmapScale <= request.RenderScale * 1.05f)
+        {
+            return false;
+        }
+
+        return !ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation(
+            _zoom,
+            _bitmapScale,
+            request.RenderScale);
+    }
 
     private static bool IsFastPreviewRenderScale(float renderScale) =>
         Math.Abs(renderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) <= 0.001f;
@@ -911,9 +921,7 @@ public sealed partial class PdfViewport
                     if (ShouldSkipSharpLayerUpgradeForLowZoom())
                         return;
 
-                    float renderScale = Math.Max(
-                        CurrentBaseRenderScale(),
-                        ViewportRenderPolicy.ResponsiveMinRenderScale);
+                    float renderScale = CurrentPostPreviewBaseRenderScale();
                     if (_bitmapScale >= renderScale * 0.95f)
                     {
                         QueueDetailRenderIfNeeded(force: false);
@@ -975,9 +983,7 @@ public sealed partial class PdfViewport
                     if (ShouldSkipSharpLayerUpgradeForLowZoom())
                         return;
 
-                    float renderScale = Math.Max(
-                        CurrentBaseRenderScale(),
-                        ViewportRenderPolicy.ResponsiveMinRenderScale);
+                    float renderScale = CurrentPostPreviewBaseRenderScale();
                     if (_bitmapScale >= renderScale * 0.95f)
                     {
                         QueueDetailRenderIfNeeded(force: false);
@@ -1008,8 +1014,31 @@ public sealed partial class PdfViewport
     private bool ShouldUseDetailRenderForSharpUpgrade() =>
         ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale);
 
-    private bool ShouldSkipSharpLayerUpgradeForLowZoom() =>
-        _zoom < ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom;
+    private float CurrentPostPreviewBaseRenderScale()
+    {
+        float renderScale = CurrentBaseRenderScale();
+        if (_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold)
+            return Math.Max(renderScale, ViewportRenderPolicy.InitialPagePreviewRenderScale);
+
+        return Math.Max(renderScale, ViewportRenderPolicy.ResponsiveMinRenderScale);
+    }
+
+    private bool ShouldSkipSharpLayerUpgradeForLowZoom()
+    {
+        if (_zoom >= ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom)
+            return false;
+
+        float renderScale = CurrentPostPreviewBaseRenderScale();
+        if (ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation(
+                _zoom,
+                _bitmapScale,
+                renderScale))
+        {
+            return false;
+        }
+
+        return _bitmapScale >= renderScale * 0.95f;
+    }
 
     private bool IsCurrentPageRenderTarget(
         string pdfPath,

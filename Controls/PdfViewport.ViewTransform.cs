@@ -129,7 +129,10 @@ public sealed partial class PdfViewport
             return;
 
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
+        {
+            QueueLowZoomBitmapDowngradeIfNeeded();
             return;
+        }
 
         bool needsDetailRender = ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale);
         if (needsDetailRender)
@@ -195,7 +198,15 @@ public sealed partial class PdfViewport
         }
 
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
+        {
+            if (ShouldRequestLowZoomBitmapDowngrade())
+            {
+                _zoomRerenderForce = _zoomRerenderForce || force;
+                _zoomRerenderTimer.Stop();
+                _zoomRerenderTimer.Start();
+            }
             return;
+        }
 
         if (ShouldUseRasterSheetForCurrentZoom() && _rasterSheetSource?.Enabled == true)
         {
@@ -234,6 +245,37 @@ public sealed partial class PdfViewport
             ? $"  |  {PdfSheetMetadataService.FormatImperialScale(ScaleMetersPerPt)}"
             : "  |  scale: not set";
         PostStatus($"x={p.X:F1}  y={p.Y:F1} pt  |  zoom: {_zoom * 100:F0}%{scaleStr}");
+    }
+
+    private bool ShouldRequestLowZoomBitmapDowngrade()
+    {
+        if (_pageBitmap == null || _bitmapScale <= 0)
+            return false;
+
+        return ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation(
+            _zoom,
+            _bitmapScale,
+            CurrentBaseRenderScale());
+    }
+
+    private void QueueLowZoomBitmapDowngradeIfNeeded()
+    {
+        if (!ShouldRequestLowZoomBitmapDowngrade())
+            return;
+
+        float desired = CurrentBaseRenderScale();
+        if (_usingLayerRenderer)
+        {
+            QueueLayerRender(
+                resetLayerStates: false,
+                renderScale: desired,
+                allowImmediateCache: true,
+                allowLiveRender: true,
+                allowMemoryBitmap: true);
+            return;
+        }
+
+        QueueDocnetRender(desired);
     }
 
     private SKPoint ScreenToPdf(float sx, float sy)
