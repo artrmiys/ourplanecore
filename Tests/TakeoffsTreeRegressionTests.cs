@@ -1786,6 +1786,11 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 1200", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
+            policy.Contains("ShouldSkipFullPageSharpUpgradeAtLowZoom", StringComparison.Ordinal) &&
+            policy.Contains("targetBitmapScale > currentBitmapScale * 1.05f", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, scale)", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, renderScale)", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, request.RenderScale)", StringComparison.Ordinal) &&
             policy.Contains("ShouldPreferLowerScalePageBitmapForNavigation", StringComparison.Ordinal) &&
             policy.Contains("LowZoomBitmapDowngradeRatio", StringComparison.Ordinal),
             "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards and use the zoom-refresh clarity threshold");

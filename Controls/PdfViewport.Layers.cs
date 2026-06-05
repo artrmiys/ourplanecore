@@ -577,6 +577,9 @@ public sealed partial class PdfViewport
             return;
 
         float scale = Math.Clamp(renderScale, 0.10f, 4.0f);
+        if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, scale))
+            return;
+
         if (IsPreviewRenderScale(scale))
             PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs);
 
@@ -715,6 +718,9 @@ public sealed partial class PdfViewport
             bool usedFastPreviewRenderer = false;
             if (!fromCache)
             {
+                if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, request.RenderScale))
+                    return;
+
                 if (IsPreviewRenderScale(request.RenderScale))
                     PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);
 
@@ -1058,6 +1064,9 @@ public sealed partial class PdfViewport
             return false;
 
         float renderScale = CurrentPostPreviewBaseRenderScale();
+        if (ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(_zoom, _bitmapScale, renderScale))
+            return true;
+
         if (ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation(
                 _zoom,
                 _bitmapScale,

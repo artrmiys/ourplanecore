@@ -194,6 +194,22 @@ public static class ViewportRenderPolicy
         return currentBitmapScale > targetBitmapScale * LowZoomBitmapDowngradeRatio;
     }
 
+    public static bool ShouldSkipFullPageSharpUpgradeAtLowZoom(
+        float zoom,
+        float currentBitmapScale,
+        float targetBitmapScale)
+    {
+        if (zoom >= PageSwitchSharpUpgradeMinZoom ||
+            currentBitmapScale <= 0 ||
+            targetBitmapScale <= 0 ||
+            currentBitmapScale < FastPageSwitchPreviewRenderScale * 0.95f)
+        {
+            return false;
+        }
+
+        return targetBitmapScale > currentBitmapScale * 1.05f;
+    }
+
     public static bool ShouldSkipFullRefreshDuringDetail(float bitmapScale) =>
         bitmapScale >= ResponsiveMinRenderScale * 0.95f;
 
