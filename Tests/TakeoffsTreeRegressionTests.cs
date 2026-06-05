@@ -1286,7 +1286,7 @@ internal static class TakeoffsTreeRegressionTests
             "high-DPI raster sheets should be a deep-zoom LOD, not the default bitmap for overview page browsing");
         AssertTrue(
             raster.Contains("SourceImageRasterProfile = \"source-image-v1\"", StringComparison.Ordinal) &&
-            raster.Contains("SourceImageOverviewMaxPixels", StringComparison.Ordinal) &&
+            raster.Contains("SourceImageOverviewMaxPixels = 8_000_000", StringComparison.Ordinal) &&
             raster.Contains("SourceImageFastOpenMaxPixels", StringComparison.Ordinal) &&
             raster.Contains("ShouldUseSourceImageRasterForFastOpen", StringComparison.Ordinal) &&
             raster.Contains("NeedsSourceImageOverview", StringComparison.Ordinal) &&

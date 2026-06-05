@@ -33,7 +33,7 @@ public static class RasterSheetCacheService
     public const string ReadableRasterProfile = "readable-raster-v2";
     public const string SourceImageRasterProfile = "source-image-v1";
     public const string ReadableLineBoostProfile = "lineboost-v1";
-    public const long SourceImageOverviewMaxPixels = 4_000_000;
+    public const long SourceImageOverviewMaxPixels = 8_000_000;
     public const long SourceImageFastOpenMaxPixels = 18_000_000;
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
