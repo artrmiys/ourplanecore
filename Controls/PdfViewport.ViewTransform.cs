@@ -87,6 +87,9 @@ public sealed partial class PdfViewport
         if (_zoom <= 0)
             return 1.0f;
 
+        if (_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold)
+            return ViewportRenderPolicy.InitialPagePreviewRenderScale;
+
         return ViewportRenderPolicy.SelectRenderScale(_zoom, RenderScaleSteps, _pdfW, _pdfH);
     }
 

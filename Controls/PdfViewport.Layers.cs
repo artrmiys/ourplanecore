@@ -248,8 +248,11 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pdfIndex, renderScale, out PdfLayerRenderResult render))
+        if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pdfIndex, renderScale, out PdfLayerRenderResult render) &&
+            !PdfPreviewRenderCache.TryReadCleanRender(pdfPath, pdfIndex, renderScale, out render))
+        {
             return false;
+        }
 
         var bitmap = SKBitmap.Decode(render.ImageBytes);
         if (bitmap == null)
@@ -611,7 +614,7 @@ public sealed partial class PdfViewport
             bool usedFastPreviewRenderer = false;
             if (!fromCache)
             {
-                render = await TryRenderFastPreviewWithPyMuPdfAsync(request);
+                render = await TryRenderPreviewWithPyMuPdfAsync(request);
                 usedFastPreviewRenderer = render != null;
                 render ??= await Task.Run(() =>
                     RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
@@ -688,7 +691,7 @@ public sealed partial class PdfViewport
             bool usedFastPreviewRenderer = false;
             if (!fromCache)
             {
-                render = await TryRenderFastPreviewWithPyMuPdfAsync(request);
+                render = await TryRenderPreviewWithPyMuPdfAsync(request);
                 usedFastPreviewRenderer = render != null;
                 render ??= await Task.Run(() =>
                     RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
@@ -796,9 +799,13 @@ public sealed partial class PdfViewport
     private static bool IsFastPreviewRenderScale(float renderScale) =>
         Math.Abs(renderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) <= 0.001f;
 
-    private static async Task<DocnetRenderResult?> TryRenderFastPreviewWithPyMuPdfAsync(DocnetRenderRequest request)
+    private static bool IsPreviewRenderScale(float renderScale) =>
+        IsFastPreviewRenderScale(renderScale) ||
+        Math.Abs(renderScale - ViewportRenderPolicy.InitialPagePreviewRenderScale) <= 0.001f;
+
+    private static async Task<DocnetRenderResult?> TryRenderPreviewWithPyMuPdfAsync(DocnetRenderRequest request)
     {
-        if (!IsFastPreviewRenderScale(request.RenderScale))
+        if (!IsPreviewRenderScale(request.RenderScale))
             return null;
 
         try
@@ -1071,7 +1078,7 @@ public sealed partial class PdfViewport
 
     private static void TryWriteDocnetPreviewCache(DocnetRenderRequest request, DocnetRenderResult render)
     {
-        if (Math.Abs(request.RenderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) > 0.001f ||
+        if (!IsPreviewRenderScale(request.RenderScale) ||
             render.WidthPt <= 0 ||
             render.HeightPt <= 0 ||
             render.Bitmap.Width <= 0 ||
@@ -1087,18 +1094,18 @@ public sealed partial class PdfViewport
             if (data == null || data.Size <= 0)
                 return;
 
-            PdfPreviewRenderCache.TryWriteCleanPreview(
-                request.PdfPath,
-                request.PdfIndex,
-                request.RenderScale,
-                new PdfLayerRenderResult
-                {
-                    ImageBytes = data.ToArray(),
-                    WidthPt = render.WidthPt,
-                    HeightPt = render.HeightPt,
-                    Layers = [],
-                    LayersCaptured = false,
-                });
+            var result = new PdfLayerRenderResult
+            {
+                ImageBytes = data.ToArray(),
+                WidthPt = render.WidthPt,
+                HeightPt = render.HeightPt,
+                Layers = [],
+                LayersCaptured = false,
+            };
+            if (IsFastPreviewRenderScale(request.RenderScale))
+                PdfPreviewRenderCache.TryWriteCleanPreview(request.PdfPath, request.PdfIndex, request.RenderScale, result);
+            else
+                PdfPreviewRenderCache.TryWriteCleanRender(request.PdfPath, request.PdfIndex, request.RenderScale, result);
         }
         catch (Exception ex)
         {

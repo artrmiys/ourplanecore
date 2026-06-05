@@ -1556,16 +1556,19 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("DecodePdfLayerRenderBitmap(preview)", StringComparison.Ordinal) &&
             layers.Contains("TryWriteDocnetPreviewCache", StringComparison.Ordinal) &&
             layers.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal) &&
+            layers.Contains("PdfPreviewRenderCache.TryWriteCleanRender", StringComparison.Ordinal) &&
             layers.Contains("SKEncodedImageFormat.Png", StringComparison.Ordinal),
             "nearby sheet prefetch and cold Docnet preview renders should warm the same lightweight persisted preview cache used by page switching");
         AssertTrue(
-            layers.Contains("TryRenderFastPreviewWithPyMuPdfAsync", StringComparison.Ordinal) &&
+            layers.Contains("TryRenderPreviewWithPyMuPdfAsync", StringComparison.Ordinal) &&
+            layers.Contains("IsPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("PdfLayerRenderService.TryRenderIsolatedProcessAsync", StringComparison.Ordinal) &&
             layers.Contains("StartFastPreviewRenderAsync", StringComparison.Ordinal) &&
             layers.Contains("preview-pymupdf", StringComparison.Ordinal) &&
             layers.Contains("RenderPageBitmapWithDocnet", StringComparison.Ordinal),
-            "cold page-switch previews should prefer the faster PyMuPDF preview worker and retain Docnet as a fallback");
+            "cold page-switch and overview-sharp previews should prefer the faster PyMuPDF preview worker and retain Docnet as a fallback");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()
@@ -1712,6 +1715,8 @@ internal static class TakeoffsTreeRegressionTests
             "main PDF bitmap paint must not use high-quality sampling on the interactive path");
         AssertTrue(
             transform.Contains("ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
+            transform.Contains("_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold", StringComparison.Ordinal) &&
+            transform.Contains("ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
             transform.Contains("bool needsDetailRender", StringComparison.Ordinal) &&
             transform.Contains("_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
