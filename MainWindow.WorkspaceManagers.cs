@@ -21,6 +21,14 @@ public partial class MainWindow
     private bool _updatingSheetManagerBulkEdit;
     private CancellationTokenSource? _sheetManagerRasterPrepareCts;
 
+    private sealed record SheetManagerRasterReadyBatch(
+        IReadOnlyList<PageInfo> FastPages,
+        IReadOnlyList<PageInfo> MissingPages,
+        int Ready,
+        int Source,
+        int Already,
+        int Failed);
+
     private void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ReferenceEquals(e.OriginalSource, WorkspaceTabs))
@@ -941,56 +949,54 @@ public partial class MainWindow
             return;
         }
 
-        if (await TrySetSheetManagerRasterOnReadyFastAsync(pages, rasterDpi, refreshSheetManager))
-            return;
+        SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi);
+        bool fastRowsRefreshed = true;
+        if (readyBatch.FastPages.Count > 0)
+        {
+            InvalidatePagePreviewPrefetchCache();
+            if (refreshSheetManager)
+                fastRowsRefreshed = RefreshSheetManagerRasterRows(readyBatch.FastPages);
+            ReloadCurrentPageIfRasterChanged(readyBatch.FastPages);
+        }
 
-        int changed = 0;
-        int built = 0;
-        int reused = 0;
-        int already = 0;
-        int failed = 0;
         string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
-        string busyText = $"Enabling {rasterDpiLabel} raster for {pages.Count} sheet(s)...";
+        if (readyBatch.MissingPages.Count == 0)
+        {
+            if (refreshSheetManager && readyBatch.FastPages.Count > 0 && !fastRowsRefreshed)
+                RefreshSheetManager();
+            TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: ready {readyBatch.Ready}, source {readyBatch.Source}, already {readyBatch.Already}, failed {readyBatch.Failed}.";
+            return;
+        }
+
+        int changed = readyBatch.Ready + readyBatch.Source;
+        int built = 0;
+        int reused = readyBatch.Ready;
+        int already = readyBatch.Already;
+        int failed = readyBatch.Failed;
+        IReadOnlyList<PageInfo> buildPages = readyBatch.MissingPages;
+        string busyText = $"Building missing {rasterDpiLabel} raster for {buildPages.Count} of {pages.Count} sheet(s)...";
         using (ShowBusyOverlay(busyText))
         {
             await WaitForBusyOverlayRenderAsync();
-            for (int i = 0; i < pages.Count; i++)
+            for (int i = 0; i < buildPages.Count; i++)
             {
-                PageInfo page = pages[i];
-                if (enabled && !RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
+                PageInfo page = buildPages[i];
+                int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+                float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+                BusyOverlayText.Text = $"Raster On {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{buildPages.Count}: {page.Name}";
+                RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page, renderScale));
+                if (build.Ok)
                 {
-                    int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
-                    float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-                    BusyOverlayText.Text = $"Raster On {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{pages.Count}: {page.Name}";
-                    RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page, renderScale));
-                    if (build.Ok)
-                    {
-                        if (build.Reused)
-                            reused++;
-                        else
-                            built++;
-                        changed++;
-                    }
+                    if (build.Reused)
+                        reused++;
                     else
-                    {
-                        failed++;
-                        AppLog.Warn($"Raster cache build failed for '{page.Name}': {build.Error}");
-                    }
-                    continue;
-                }
-
-                BusyOverlayText.Text = $"Raster On {rasterDpiLabel} {i + 1}/{pages.Count}: {page.Name}";
-                if (RasterSheetCacheService.TrySetEnabled(page, enabled, out string error, out bool toggled))
-                {
-                    if (toggled)
-                        changed++;
-                    else
-                        already++;
+                        built++;
+                    changed++;
                 }
                 else
                 {
                     failed++;
-                    AppLog.Warn($"Raster cache toggle failed for '{page.Name}': {error}");
+                    AppLog.Warn($"Raster cache build failed for '{page.Name}': {build.Error}");
                 }
             }
         }
@@ -1005,16 +1011,16 @@ public partial class MainWindow
         TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: changed {changed}, built {built}, reused {reused}, already {already}, failed {failed}.";
     }
 
-    private async Task<bool> TrySetSheetManagerRasterOnReadyFastAsync(
+    private async Task<SheetManagerRasterReadyBatch> EnableSheetManagerReadyRasterPagesAsync(
         IReadOnlyList<PageInfo> pages,
-        int rasterDpi,
-        bool refreshSheetManager)
+        int rasterDpi)
     {
         string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
         TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: checking ready cache for {pages.Count} sheet(s)...";
-        (bool allReady, int ready, int source, int already, int failed) = await Task.Run(() =>
+        return await Task.Run(() =>
         {
             var plans = new List<(PageInfo Page, float RenderScale, bool SourceImage)>();
+            var missingPages = new List<PageInfo>();
             foreach (PageInfo page in pages)
             {
                 if (RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
@@ -1026,11 +1032,15 @@ public partial class MainWindow
                 int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
                 float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
                 if (!RasterSheetCacheService.HasReadyReadableRaster(page, renderScale))
-                    return (false, 0, 0, 0, 0);
+                {
+                    missingPages.Add(page);
+                    continue;
+                }
 
                 plans.Add((page, renderScale, false));
             }
 
+            var fastPages = new List<PageInfo>();
             int readyCount = 0;
             int sourceCount = 0;
             int alreadyCount = 0;
@@ -1042,9 +1052,14 @@ public partial class MainWindow
                     if (RasterSheetCacheService.TrySetEnabled(plan.Page, enabled: true, out string error, out bool toggled))
                     {
                         if (toggled)
+                        {
                             sourceCount++;
+                            fastPages.Add(plan.Page);
+                        }
                         else
+                        {
                             alreadyCount++;
+                        }
                     }
                     else
                     {
@@ -1061,6 +1076,7 @@ public partial class MainWindow
                         out RasterSheetBuildResult result))
                 {
                     readyCount++;
+                    fastPages.Add(plan.Page);
                 }
                 else
                 {
@@ -1069,21 +1085,14 @@ public partial class MainWindow
                 }
             }
 
-            return (true, readyCount, sourceCount, alreadyCount, failedCount);
+            return new SheetManagerRasterReadyBatch(
+                fastPages,
+                missingPages,
+                readyCount,
+                sourceCount,
+                alreadyCount,
+                failedCount);
         });
-
-        if (!allReady)
-            return false;
-
-        InvalidatePagePreviewPrefetchCache();
-        if (refreshSheetManager)
-        {
-            if (!RefreshSheetManagerRasterRows(pages))
-                RefreshSheetManager();
-        }
-        ReloadCurrentPageIfRasterChanged(pages);
-        TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: ready {ready}, source {source}, already {already}, failed {failed}.";
-        return true;
     }
 
     private async Task SetSheetManagerRasterOffFastAsync(

@@ -1255,7 +1255,7 @@ internal static class TakeoffsTreeRegressionTests
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
         string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
-        string rasterOnReadyMethod = SliceMethod(workspaceManagers, "private async Task<bool> TrySetSheetManagerRasterOnReadyFastAsync(");
+        string rasterOnReadyMethod = SliceMethod(workspaceManagers, "private async Task<SheetManagerRasterReadyBatch> EnableSheetManagerReadyRasterPagesAsync(");
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
 
         AssertTrue(
@@ -1345,13 +1345,19 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("TrySetSheetManagerRasterOnReadyFastAsync(pages, rasterDpi, refreshSheetManager)", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("(bool allReady, int ready, int source, int already, int failed) = await Task.Run(", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("bool fastRowsRefreshed = true", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("readyBatch.MissingPages.Count == 0", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("!fastRowsRefreshed", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("IReadOnlyList<PageInfo> buildPages = readyBatch.MissingPages", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("Building missing {rasterDpiLabel} raster for {buildPages.Count} of {pages.Count}", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("return await Task.Run(() =>", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("var missingPages = new List<PageInfo>();", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("HasReadyReadableRaster(page, renderScale)", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("return (false, 0, 0, 0, 0);", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("if (!allReady)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("missingPages.Add(page)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("fastPages.Add(plan.Page)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("new SheetManagerRasterReadyBatch", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("RefreshSheetManagerRasterRows(pages)", StringComparison.Ordinal) &&
             !rasterOnReadyMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterOffFastAsync(pages, refreshSheetManager)", StringComparison.Ordinal) &&
             rasterOffMethod.Contains("Task.Run(", StringComparison.Ordinal) &&
