@@ -1109,6 +1109,12 @@ public sealed partial class PdfViewport
         if (_usingRasterSheetRender || _usingRasterSheetOverviewRender)
             return true;
 
+        if (_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold &&
+            _bitmapScale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f)
+        {
+            return true;
+        }
+
         if (_bitmapScale >= renderScale * 0.95f)
             return true;
 

@@ -1819,6 +1819,8 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("private bool ShouldSkipQueuedNonFastPreviewForCurrentView(float renderScale)", StringComparison.Ordinal) &&
             layers.Contains("_usingRasterSheetRender || _usingRasterSheetOverviewRender", StringComparison.Ordinal) &&
+            layers.Contains("_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f", StringComparison.Ordinal) &&
             layers.Contains("!IsFastPreviewRenderScale(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             layers.Contains("_bitmapScale <= 0", StringComparison.Ordinal) &&
