@@ -80,6 +80,15 @@ public sealed partial class PdfViewport
                 RasterSheet = rasterSheet?.Clone(),
             };
 
+            if (!await WaitForCurrentPageRasterRebuildWindowAsync(
+                    pdfPath,
+                    pageIndex,
+                    pageFolder,
+                    rasterSkipReason).ConfigureAwait(false))
+            {
+                return;
+            }
+
             bool overviewOnly =
                 RasterSheetCacheService.ShouldBuildSourceImageOverview(
                     pageFolder,
@@ -88,12 +97,19 @@ public sealed partial class PdfViewport
                     out _) ||
                 (RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
                  rasterSkipReason.Contains("overview", StringComparison.OrdinalIgnoreCase));
-            await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
             await RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
             RasterSheetBuildResult result;
             try
             {
-                await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+                if (!await WaitForCurrentPageRasterRebuildWindowAsync(
+                        pdfPath,
+                        pageIndex,
+                        pageFolder,
+                        rasterSkipReason).ConfigureAwait(false))
+                {
+                    return;
+                }
+
                 result = await Task.Run(() => overviewOnly
                     ? RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(page)
                     : RasterSheetCacheService.BuildAndEnable(page)).ConfigureAwait(false);
@@ -179,6 +195,22 @@ public sealed partial class PdfViewport
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(rebuildKey);
         }
+    }
+
+    private async Task<bool> WaitForCurrentPageRasterRebuildWindowAsync(
+        string pdfPath,
+        int pageIndex,
+        string pageFolder,
+        string reason)
+    {
+        await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+        if (IsCurrentPageRasterTarget(pdfPath, pageIndex, pageFolder))
+            return true;
+
+        AppLog.Info(
+            $"Viewport raster sheet self-heal skipped stale page; reason='{reason}'; " +
+            $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}");
+        return false;
     }
 
     private bool IsCurrentPageRasterTarget(string pdfPath, int pageIndex, string pageFolder) =>

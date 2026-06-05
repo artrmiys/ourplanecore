@@ -1349,6 +1349,8 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("BuildOverviewForExistingSourceImageRaster(page)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("BuildAndEnable(page)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("WaitForCurrentPageRasterRebuildWindowAsync", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("Viewport raster sheet self-heal skipped stale page", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("IsCurrentPageRasterTarget", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("CaptureViewState()", StringComparison.Ordinal) &&
             pageApi.Contains("ShouldRebuildForReadableDisplay", StringComparison.Ordinal) &&
@@ -1630,6 +1632,9 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("SKEncodedImageFormat.Png", StringComparison.Ordinal),
             "nearby sheet prefetch and cold Docnet preview renders should warm the same lightweight persisted preview cache used by page switching");
         AssertTrue(
+            layers.Contains("TryRenderFastPreviewForPageSwitchAsync", StringComparison.Ordinal) &&
+            layers.Contains("TryRenderPreviewWithDocnetAsync", StringComparison.Ordinal) &&
+            layers.Contains("return (docnet, false)", StringComparison.Ordinal) &&
             layers.Contains("TryRenderPreviewWithPyMuPdfAsync", StringComparison.Ordinal) &&
             layers.Contains("IsPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
@@ -1640,7 +1645,7 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("StartFastPreviewRenderAsync", StringComparison.Ordinal) &&
             layers.Contains("preview-pymupdf", StringComparison.Ordinal) &&
             layers.Contains("RenderPageBitmapWithDocnet", StringComparison.Ordinal),
-            "cold page-switch and overview-sharp previews should prefer the faster PyMuPDF preview worker, coalesce stale page switches, and retain Docnet as a fallback");
+            "cold page-switch previews should prefer in-process Docnet, retain PyMuPDF as a fallback, and coalesce stale page switches while overview-sharp previews keep the isolated worker path");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()

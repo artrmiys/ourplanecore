@@ -634,10 +634,10 @@ public sealed partial class PdfViewport
                     if (!fromCache)
                     {
                         PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);
-                        render = await TryRenderPreviewWithPyMuPdfAsync(request);
-                        usedFastPreviewRenderer = render != null;
-                        render ??= await Task.Run(() =>
-                            RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
+                        (render, usedFastPreviewRenderer) = await TryRenderFastPreviewForPageSwitchAsync(request);
+                        if (render == null)
+                            return;
+
                         DocnetRenderCache.Put(cacheKey, render);
                         TryWriteDocnetPreviewCache(request, render);
                         PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchAfterActiveRenderHoldMs);
@@ -857,6 +857,33 @@ public sealed partial class PdfViewport
     private static bool IsPreviewRenderScale(float renderScale) =>
         IsFastPreviewRenderScale(renderScale) ||
         Math.Abs(renderScale - ViewportRenderPolicy.InitialPagePreviewRenderScale) <= 0.001f;
+
+    private static async Task<(DocnetRenderResult? Render, bool UsedPyMuPdf)> TryRenderFastPreviewForPageSwitchAsync(DocnetRenderRequest request)
+    {
+        DocnetRenderResult? docnet = await TryRenderPreviewWithDocnetAsync(request);
+        if (docnet != null)
+            return (docnet, false);
+
+        DocnetRenderResult? pymupdf = await TryRenderPreviewWithPyMuPdfAsync(request);
+        return (pymupdf, pymupdf != null);
+    }
+
+    private static async Task<DocnetRenderResult?> TryRenderPreviewWithDocnetAsync(DocnetRenderRequest request)
+    {
+        if (!IsFastPreviewRenderScale(request.RenderScale))
+            return null;
+
+        try
+        {
+            return await Task.Run(() =>
+                RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport fast Docnet preview failed for {Path.GetFileName(request.PdfPath)} page {request.PdfIndex + 1}");
+            return null;
+        }
+    }
 
     private static async Task<DocnetRenderResult?> TryRenderPreviewWithPyMuPdfAsync(DocnetRenderRequest request)
     {
