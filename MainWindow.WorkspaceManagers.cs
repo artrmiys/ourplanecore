@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,8 +16,10 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private const int SheetManagerAutoRasterDpi = 0;
     private bool _sheetManagerEditableColumnsConfigured;
     private bool _updatingSheetManagerBulkEdit;
+    private CancellationTokenSource? _sheetManagerRasterPrepareCts;
 
     private void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -430,26 +433,155 @@ public partial class MainWindow
 
     private async void BtnSheetManagerBuildRaster_Click(object sender, RoutedEventArgs e)
     {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Build Raster"))
+            return;
+
+        int rasterDpi = SelectedSheetManagerRasterDpi();
         await RunAsyncUiHandler(
-            () => BuildSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster()),
+            () => BuildSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster(), rasterDpi),
             "Build Raster failed.",
             "Sheet Manager Raster");
     }
 
     private async void BtnSheetManagerRasterOn_Click(object sender, RoutedEventArgs e)
     {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Raster On"))
+            return;
+
+        int rasterDpi = SelectedSheetManagerRasterDpi();
         await RunAsyncUiHandler(
-            () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: true),
+            () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: true, rasterDpi),
             "Raster On failed.",
             "Sheet Manager Raster");
     }
 
     private async void BtnSheetManagerRasterOff_Click(object sender, RoutedEventArgs e)
     {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Raster Off"))
+            return;
+
         await RunAsyncUiHandler(
             () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: false),
             "Raster Off failed.",
             "Sheet Manager Raster");
+    }
+
+    private void BtnSheetManagerPrepareRaster_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sheetManagerRasterPrepareCts != null)
+        {
+            TxtStatus.Text = "Sheet Manager Raster Prepare is already running.";
+            return;
+        }
+
+        IReadOnlyList<PageInfo> pages = SelectedSheetManagerPagesForRaster();
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "Sheet Manager Raster Prepare: no sheets selected.";
+            return;
+        }
+
+        int rasterDpi = SelectedSheetManagerRasterDpi();
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        var cts = new CancellationTokenSource();
+        _sheetManagerRasterPrepareCts = cts;
+        SetSheetManagerRasterPrepareRunning(true);
+        TxtStatus.Text = $"Sheet Manager Raster Prepare {rasterDpiLabel}: queued {pages.Count} sheet(s).";
+        _ = PrepareSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), rasterDpi, cts);
+    }
+
+    private void BtnSheetManagerCancelRaster_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sheetManagerRasterPrepareCts == null)
+        {
+            TxtStatus.Text = "Sheet Manager Raster Prepare: nothing to cancel.";
+            return;
+        }
+
+        _sheetManagerRasterPrepareCts.Cancel();
+        TxtStatus.Text = "Sheet Manager Raster Prepare: cancelling after the current sheet...";
+    }
+
+    private async void BtnSheetManagerRowRasterPdf_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("row PDF raster toggle") ||
+            SheetManagerRowFromButton(sender) is not { } row ||
+            SheetManagerPageFromRow(row) is not { } page)
+        {
+            return;
+        }
+
+        await RunAsyncUiHandler(
+            () => SetSheetManagerRasterEnabledAsync([page], enabled: false, refreshSheetManager: false),
+            "Sheet row PDF failed.",
+            "Sheet Manager Raster");
+        RefreshSheetManagerRasterRow(row);
+    }
+
+    private async void BtnSheetManagerRowRaster200_Click(object sender, RoutedEventArgs e) =>
+        await ApplySheetManagerRowRasterDpiAsync(sender, 200);
+
+    private async void BtnSheetManagerRowRaster300_Click(object sender, RoutedEventArgs e) =>
+        await ApplySheetManagerRowRasterDpiAsync(sender, 300);
+
+    private async void BtnSheetManagerRowRaster400_Click(object sender, RoutedEventArgs e) =>
+        await ApplySheetManagerRowRasterDpiAsync(sender, 400);
+
+    private async Task ApplySheetManagerRowRasterDpiAsync(object sender, int rasterDpi)
+    {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare($"row {rasterDpi} DPI raster") ||
+            SheetManagerRowFromButton(sender) is not { } row ||
+            SheetManagerPageFromRow(row) is not { } page)
+        {
+            return;
+        }
+
+        await RunAsyncUiHandler(
+            () => SetSheetManagerRasterEnabledAsync([page], enabled: true, rasterDpi, refreshSheetManager: false),
+            $"Sheet row {rasterDpi} DPI failed.",
+            "Sheet Manager Raster");
+        RefreshSheetManagerRasterRow(row);
+    }
+
+    private PdfMetadataPreviewRow? SheetManagerRowFromButton(object sender)
+    {
+        if (sender is FrameworkElement { DataContext: PdfMetadataPreviewRow row })
+            return row;
+
+        TxtStatus.Text = "Sheet Manager Raster: sheet row is not available.";
+        return null;
+    }
+
+    private PageInfo? SheetManagerPageFromRow(PdfMetadataPreviewRow row)
+    {
+        if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } page)
+            return page;
+
+        TxtStatus.Text = "Sheet Manager Raster: sheet row page is not available.";
+        return null;
+    }
+
+    private void RefreshSheetManagerRasterRow(PdfMetadataPreviewRow row)
+    {
+        if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } refreshedPage)
+            row.RasterStatus = RasterSheetCacheService.DisplayStatus(refreshedPage);
+    }
+
+    private bool TryBlockSheetManagerRasterCommandDuringPrepare(string command)
+    {
+        if (_sheetManagerRasterPrepareCts == null)
+            return false;
+
+        TxtStatus.Text = $"Sheet Manager Raster Prepare is running. Cancel it before {command}.";
+        return true;
+    }
+
+    private void SetSheetManagerRasterPrepareRunning(bool running)
+    {
+        if (SheetManagerPrepareRasterButton != null)
+            SheetManagerPrepareRasterButton.IsEnabled = !running;
+        if (SheetManagerCancelRasterButton != null)
+            SheetManagerCancelRasterButton.IsEnabled = running;
     }
 
     private IReadOnlyList<PageInfo> SelectedSheetManagerPagesForRaster()
@@ -463,7 +595,44 @@ public partial class MainWindow
             : CollectPagesUnder(_currentJob.PagesRoot).ToList();
     }
 
-    private async Task BuildSheetManagerRasterCacheAsync(IReadOnlyList<PageInfo> pages)
+    private int SelectedSheetManagerRasterDpi()
+    {
+        if (SheetManagerRasterDpiBox?.SelectedItem is ComboBoxItem item)
+        {
+            string raw = item.Tag?.ToString() ?? item.Content?.ToString() ?? "";
+            if (string.Equals(raw.Trim(), "auto", StringComparison.OrdinalIgnoreCase))
+                return SheetManagerAutoRasterDpi;
+
+            string digits = new(raw.Where(char.IsDigit).ToArray());
+            if (int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out int dpi))
+                return Math.Clamp(dpi, 72, RasterSheetCacheService.MaxRasterDpi);
+        }
+
+        return RasterSheetCacheService.DefaultRasterDpi;
+    }
+
+    private static string SheetManagerRasterDpiLabel(int rasterDpi) =>
+        rasterDpi <= SheetManagerAutoRasterDpi
+            ? "Auto"
+            : $"{rasterDpi.ToString(CultureInfo.InvariantCulture)} DPI";
+
+    private static int EffectiveSheetManagerRasterDpi(PageInfo page, int rasterDpi)
+    {
+        if (rasterDpi > SheetManagerAutoRasterDpi)
+            return rasterDpi;
+
+        int bestReadyDpi = RasterSheetCacheService.BestReadyReadableRasterDpi(page);
+        return bestReadyDpi > 0
+            ? bestReadyDpi
+            : RasterSheetCacheService.DefaultRasterDpi;
+    }
+
+    private static string SheetManagerRasterDpiProgressLabel(int rasterDpi, int effectiveDpi) =>
+        rasterDpi <= SheetManagerAutoRasterDpi
+            ? $"Auto->{effectiveDpi.ToString(CultureInfo.InvariantCulture)} DPI"
+            : $"{effectiveDpi.ToString(CultureInfo.InvariantCulture)} DPI";
+
+    private async Task BuildSheetManagerRasterCacheAsync(IReadOnlyList<PageInfo> pages, int rasterDpi)
     {
         if (pages.Count == 0)
         {
@@ -471,18 +640,27 @@ public partial class MainWindow
             return;
         }
 
-        int ok = 0;
+        int built = 0;
+        int reused = 0;
         int failed = 0;
-        using (ShowBusyOverlay($"Building raster cache for {pages.Count} sheet(s)..."))
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        using (ShowBusyOverlay($"Building {rasterDpiLabel} raster cache for {pages.Count} sheet(s)..."))
         {
             await WaitForBusyOverlayRenderAsync();
             for (int i = 0; i < pages.Count; i++)
             {
                 PageInfo page = pages[i];
-                BusyOverlayText.Text = $"Raster {i + 1}/{pages.Count}: {page.Name}";
-                RasterSheetBuildResult result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+                int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+                float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+                BusyOverlayText.Text = $"Raster {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{pages.Count}: {page.Name}";
+                RasterSheetBuildResult result = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page, renderScale));
                 if (result.Ok)
-                    ok++;
+                {
+                    if (result.Reused)
+                        reused++;
+                    else
+                        built++;
+                }
                 else
                 {
                     failed++;
@@ -494,10 +672,90 @@ public partial class MainWindow
         InvalidatePagePreviewPrefetchCache();
         RefreshSheetManager();
         ReloadCurrentPageIfRasterChanged(pages);
-        TxtStatus.Text = $"Sheet Manager Raster: built {ok}, failed {failed}.";
+        TxtStatus.Text = $"Sheet Manager Raster {rasterDpiLabel}: built {built}, reused {reused}, failed {failed}.";
     }
 
-    private async Task SetSheetManagerRasterEnabledAsync(IReadOnlyList<PageInfo> pages, bool enabled)
+    private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(
+        IReadOnlyList<PageInfo> pages,
+        int rasterDpi,
+        CancellationTokenSource cts)
+    {
+        int built = 0;
+        int reused = 0;
+        int failed = 0;
+        bool cancelled = false;
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+
+        try
+        {
+            for (int i = 0; i < pages.Count; i++)
+            {
+                cts.Token.ThrowIfCancellationRequested();
+
+                PageInfo page = pages[i];
+                int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+                float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+                TxtStatus.Text = $"Sheet Manager Raster Prepare {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{pages.Count}: {page.Name}";
+
+                RasterSheetBuildResult result;
+                try
+                {
+                    result = await Task.Run(
+                        () => RasterSheetCacheService.BuildAndEnable(page, renderScale),
+                        cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    AppLog.Warn(ex, $"Raster cache prepare crashed for '{page.Name}'");
+                    continue;
+                }
+
+                if (result.Ok)
+                {
+                    if (result.Reused)
+                        reused++;
+                    else
+                        built++;
+                }
+                else
+                {
+                    failed++;
+                    AppLog.Warn($"Raster cache prepare failed for '{page.Name}': {result.Error}");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
+        finally
+        {
+            if (ReferenceEquals(_sheetManagerRasterPrepareCts, cts))
+            {
+                _sheetManagerRasterPrepareCts = null;
+                SetSheetManagerRasterPrepareRunning(false);
+            }
+
+            cts.Dispose();
+            InvalidatePagePreviewPrefetchCache();
+            RefreshSheetManager();
+            ReloadCurrentPageIfRasterChanged(pages);
+            TxtStatus.Text = cancelled
+                ? $"Sheet Manager Raster Prepare {rasterDpiLabel} cancelled: built {built}, reused {reused}, failed {failed}."
+                : $"Sheet Manager Raster Prepare {rasterDpiLabel} done: built {built}, reused {reused}, failed {failed}.";
+        }
+    }
+
+    private async Task SetSheetManagerRasterEnabledAsync(
+        IReadOnlyList<PageInfo> pages,
+        bool enabled,
+        int rasterDpi = RasterSheetCacheService.DefaultRasterDpi,
+        bool refreshSheetManager = true)
     {
         if (pages.Count == 0)
         {
@@ -507,20 +765,31 @@ public partial class MainWindow
 
         int changed = 0;
         int built = 0;
+        int reused = 0;
+        int already = 0;
         int failed = 0;
-        using (ShowBusyOverlay($"{(enabled ? "Enabling" : "Disabling")} raster for {pages.Count} sheet(s)..."))
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string busyText = enabled
+            ? $"Enabling {rasterDpiLabel} raster for {pages.Count} sheet(s)..."
+            : $"Disabling raster for {pages.Count} sheet(s)...";
+        using (ShowBusyOverlay(busyText))
         {
             await WaitForBusyOverlayRenderAsync();
             for (int i = 0; i < pages.Count; i++)
             {
                 PageInfo page = pages[i];
-                BusyOverlayText.Text = $"{(enabled ? "Raster On" : "Raster Off")} {i + 1}/{pages.Count}: {page.Name}";
-                if (enabled && (page.RasterSheet == null || string.IsNullOrWhiteSpace(page.RasterSheet.Image)))
+                if (enabled && !RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
                 {
-                    RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+                    int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+                    float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+                    BusyOverlayText.Text = $"Raster On {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{pages.Count}: {page.Name}";
+                    RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page, renderScale));
                     if (build.Ok)
                     {
-                        built++;
+                        if (build.Reused)
+                            reused++;
+                        else
+                            built++;
                         changed++;
                     }
                     else
@@ -531,8 +800,16 @@ public partial class MainWindow
                     continue;
                 }
 
-                if (RasterSheetCacheService.TrySetEnabled(page, enabled, out string error))
-                    changed++;
+                BusyOverlayText.Text = enabled
+                    ? $"Raster On {rasterDpiLabel} {i + 1}/{pages.Count}: {page.Name}"
+                    : $"Raster Off {i + 1}/{pages.Count}: {page.Name}";
+                if (RasterSheetCacheService.TrySetEnabled(page, enabled, out string error, out bool toggled))
+                {
+                    if (toggled)
+                        changed++;
+                    else
+                        already++;
+                }
                 else
                 {
                     failed++;
@@ -542,11 +819,12 @@ public partial class MainWindow
         }
 
         InvalidatePagePreviewPrefetchCache();
-        RefreshSheetManager();
+        if (refreshSheetManager)
+            RefreshSheetManager();
         ReloadCurrentPageIfRasterChanged(pages);
         TxtStatus.Text = enabled
-            ? $"Sheet Manager Raster On: changed {changed}, built {built}, failed {failed}."
-            : $"Sheet Manager Raster Off: changed {changed}, failed {failed}.";
+            ? $"Sheet Manager Raster On {rasterDpiLabel}: changed {changed}, built {built}, reused {reused}, already {already}, failed {failed}."
+            : $"Sheet Manager Raster Off: changed {changed}, already {already}, failed {failed}.";
     }
 
     private void ReloadCurrentPageIfRasterChanged(IReadOnlyList<PageInfo> changedPages)

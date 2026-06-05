@@ -13,6 +13,7 @@ public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
 {
     private string _proposedPageName = "";
     private string _proposedScale = "";
+    private string _rasterStatus = "";
     private bool _applyRename;
     private bool _applyScale;
 
@@ -35,7 +36,11 @@ public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
     }
     public string Source { get; init; } = "";
     public string Confidence { get; init; } = "";
-    public string RasterStatus { get; init; } = "";
+    public string RasterStatus
+    {
+        get => _rasterStatus;
+        set => SetField(ref _rasterStatus, value ?? "");
+    }
     public string Reason { get; init; } = "";
     public string Warnings { get; init; } = "";
     public bool ApplyRename

@@ -1597,8 +1597,21 @@
                         <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" ToolTip="Import PDF measurement annotations into takeoff items"/>
                         <Button Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
                         <TextBlock Text="Raster" Style="{StaticResource ManagerGroupLabel}"/>
-                        <Button Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build fast raster working sheets and strict black-line snap indexes for selected sheets, or all sheets if none are selected"/>
-                        <Button Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets"/>
+                        <ComboBox x:Name="SheetManagerRasterDpiBox"
+                                  Width="88"
+                                  Height="24"
+                                  Margin="0,0,4,4"
+                                  SelectedIndex="0"
+                                  ToolTip="Raster quality for selected sheets; Auto uses the best ready cache, or builds 200 DPI when none exists">
+                            <ComboBoxItem Content="Auto" Tag="auto"/>
+                            <ComboBoxItem Content="200 DPI" Tag="200"/>
+                            <ComboBoxItem Content="300 DPI" Tag="300"/>
+                            <ComboBoxItem Content="400 DPI" Tag="400"/>
+                        </ComboBox>
+                        <Button Content="Build Raster" Click="BtnSheetManagerBuildRaster_Click" ToolTip="Build raster working PNGs at the selected DPI for selected sheets, or all sheets if none are selected"/>
+                        <Button x:Name="SheetManagerPrepareRasterButton" Content="Prepare" Click="BtnSheetManagerPrepareRaster_Click" ToolTip="Build selected raster DPI caches in the background so the UI stays usable"/>
+                        <Button x:Name="SheetManagerCancelRasterButton" Content="Cancel" Click="BtnSheetManagerCancelRaster_Click" IsEnabled="False" ToolTip="Cancel the background raster preparation after the current sheet finishes"/>
+                        <Button Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets; builds missing caches at the selected DPI"/>
                         <Button Content="Raster Off" Click="BtnSheetManagerRasterOff_Click" Margin="0,0,12,4" ToolTip="Return selected sheets to live PDF rendering without deleting the raster cache"/>
                         <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>
@@ -1645,7 +1658,19 @@
                             <DataGridTextColumn Header="Title" Binding="{Binding SheetTitle}" Width="240" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="100" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Confidence" Binding="{Binding Confidence}" Width="110" IsReadOnly="True"/>
-                            <DataGridTextColumn Header="Raster" Binding="{Binding RasterStatus}" Width="110" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Raster" Binding="{Binding RasterStatus}" Width="180" IsReadOnly="True"/>
+                            <DataGridTemplateColumn Header="Raster Action" Width="190" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,1">
+                                            <Button Content="PDF" MinWidth="36" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRasterPdf_Click" ToolTip="Use live PDF rendering for this sheet"/>
+                                            <Button Content="200" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster200_Click" ToolTip="Use or build 200 DPI raster for this sheet"/>
+                                            <Button Content="300" MinWidth="34" Height="22" Padding="4,0" Margin="0,0,3,0" Click="BtnSheetManagerRowRaster300_Click" ToolTip="Use or build 300 DPI raster for this sheet"/>
+                                            <Button Content="400" MinWidth="34" Height="22" Padding="4,0" Click="BtnSheetManagerRowRaster400_Click" ToolTip="Use or build 400 DPI raster for this sheet"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Why" Binding="{Binding Reason}" Width="320" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Warnings" Binding="{Binding Warnings}" Width="280" IsReadOnly="True"/>
                         </DataGrid.Columns>

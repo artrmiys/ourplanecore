@@ -14,7 +14,8 @@ public sealed record RasterSheetBuildResult(
     bool Ok,
     RasterSheetSource? Source,
     string ImagePath,
-    string Error);
+    string Error,
+    bool Reused = false);
 
 public sealed record RasterSheetBitmapResult(
     SKBitmap Bitmap,
@@ -25,6 +26,8 @@ public sealed record RasterSheetBitmapResult(
 
 public static class RasterSheetCacheService
 {
+    public const int DefaultRasterDpi = 200;
+    public const int MaxRasterDpi = 400;
     public const float DefaultRenderScale = 200f / 72f;
     public const string CacheFolderName = "raster";
     public const string WorkingImageName = "working.png";
@@ -46,7 +49,10 @@ public static class RasterSheetCacheService
         if (page.PdfPage < 0)
             return Failed("PDF page index is invalid.");
 
-        float scale = Math.Clamp(renderScale, 0.35f, 4.0f);
+        float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
+        if (TryReuseReadableRasterAndEnable(page, scale, out RasterSheetBuildResult reused))
+            return reused;
+
         if (!PdfLayerRenderService.TryRender(
                 page.PdfPath,
                 page.PdfPage,
@@ -71,7 +77,7 @@ public static class RasterSheetCacheService
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         Directory.CreateDirectory(rasterDir);
-        string imagePath = Path.Combine(rasterDir, WorkingImageName);
+        string imagePath = Path.Combine(rasterDir, WorkingImageNameForRenderScale(scale));
         string tempPath = imagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         File.WriteAllBytes(tempPath, workingImageBytes);
         File.Move(tempPath, imagePath, overwrite: true);
@@ -100,6 +106,97 @@ public static class RasterSheetCacheService
 
         static RasterSheetBuildResult Failed(string error) =>
             new(false, null, "", error);
+    }
+
+    private static bool TryReuseReadableRasterAndEnable(
+        PageInfo page,
+        float renderScale,
+        out RasterSheetBuildResult result)
+    {
+        result = new RasterSheetBuildResult(false, null, "", "");
+        RasterSheetSource? source = CurrentRasterSheetSource(page);
+
+        if (source == null ||
+            !IsReusableReadableRaster(page, source, renderScale, out string imagePath))
+        {
+            if (!TryBuildReusableReadableVariant(page, source, renderScale, out source, out imagePath))
+                return false;
+        }
+
+        if (source == null)
+            return false;
+
+        string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        if (!HasReadySnapIndex(page.FolderPath, source))
+        {
+            Directory.CreateDirectory(rasterDir);
+            TryWriteSnapIndex(page, rasterDir, source, out string snapError);
+            if (!string.IsNullOrWhiteSpace(snapError))
+                AppLog.Warn($"Raster sheet snap index unavailable for '{page.Name}': {snapError}");
+        }
+
+        source.Enabled = true;
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        result = new RasterSheetBuildResult(true, source, imagePath, "", Reused: true);
+        return true;
+    }
+
+    private static RasterSheetSource? CurrentRasterSheetSource(PageInfo page)
+    {
+        RasterSheetSource? source = page.RasterSheet?.Clone();
+        if (source != null ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { RasterSheet: not null } persistedPage)
+        {
+            return source;
+        }
+
+        return persistedPage.RasterSheet.Clone();
+    }
+
+    private static bool TryBuildReusableReadableVariant(
+        PageInfo page,
+        RasterSheetSource? source,
+        float renderScale,
+        out RasterSheetSource? reusable,
+        out string imagePath)
+    {
+        reusable = null;
+        imagePath = "";
+        if (!CanTrustReadableRasterMetadata(page, source))
+            return false;
+
+        foreach (string candidateName in WorkingImageCandidatesForRenderScale(renderScale))
+        {
+            string candidatePath = Path.Combine(page.FolderPath, CacheFolderName, candidateName);
+            if (!File.Exists(candidatePath))
+                continue;
+
+            using SKBitmap? bitmap = SKBitmap.Decode(candidatePath);
+            if (bitmap == null)
+                continue;
+
+            double actualScale = source!.WidthPt > 0 ? bitmap.Width / source.WidthPt : 0;
+            if (RenderScaleToDpi(actualScale) != RenderScaleToDpi(renderScale))
+                continue;
+
+            var pdfInfo = new FileInfo(page.PdfPath);
+            RasterSheetSource clone = source.Clone();
+            clone.Enabled = true;
+            clone.Image = Path.GetRelativePath(page.FolderPath, candidatePath);
+            clone.OverviewImage = "";
+            clone.Format = "png";
+            clone.RenderProfile = ReadableRasterProfile;
+            clone.RenderScale = actualScale;
+            clone.PdfLastWriteUtcTicks = pdfInfo.LastWriteTimeUtc.Ticks;
+            clone.PdfLength = pdfInfo.Length;
+            clone.GeneratedAtUtc = File.GetLastWriteTimeUtc(candidatePath).ToString("O", CultureInfo.InvariantCulture);
+            reusable = clone;
+            imagePath = candidatePath;
+            return true;
+        }
+
+        return false;
     }
 
     public static RasterSheetBuildResult BuildFromImageAndEnable(
@@ -221,13 +318,26 @@ public static class RasterSheetCacheService
 
     public static bool TrySetEnabled(PageInfo page, bool enabled, out string error)
     {
+        return TrySetEnabled(page, enabled, out error, out _);
+    }
+
+    public static bool TrySetEnabled(PageInfo page, bool enabled, out string error, out bool changed)
+    {
         error = "";
+        changed = false;
         RasterSheetSource? source = page.RasterSheet?.Clone();
         if (source == null || string.IsNullOrWhiteSpace(source.Image))
         {
+            if (!enabled)
+                return true;
+
             error = "No raster cache exists for this sheet.";
             return false;
         }
+
+        changed = source.Enabled != enabled;
+        if (!changed)
+            return true;
 
         source.Enabled = enabled;
         OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
@@ -237,21 +347,22 @@ public static class RasterSheetCacheService
     public static string DisplayStatus(PageInfo page)
     {
         RasterSheetSource? source = page.RasterSheet;
+        string cachedDpis = CachedReadableDpiSummary(page);
         if (source == null || string.IsNullOrWhiteSpace(source.Image))
-            return "PDF";
+            return AppendCachedDpiSummary("PDF", cachedDpis);
 
         string imagePath = ResolveImagePath(page.FolderPath, source);
         if (!File.Exists(imagePath))
-            return source.Enabled ? "Raster missing" : "Raster off";
+            return AppendCachedDpiSummary(source.Enabled ? "Raster missing" : "Raster off", cachedDpis);
         if (!source.Enabled)
-            return "Raster off";
+            return AppendCachedDpiSummary("Raster off", cachedDpis);
         if (IsStale(page.PdfPath, source))
             return "Raster stale";
         if (IsLegacyLineBoost(source))
             return "Raster legacy";
 
         string scale = source.RenderScale > 0
-            ? source.RenderScale.ToString("0.#", CultureInfo.InvariantCulture)
+            ? $"{RenderScaleToDpi(source.RenderScale).ToString(CultureInfo.InvariantCulture)}dpi"
             : "?";
         string profile = string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase)
             ? "+readable"
@@ -259,8 +370,78 @@ public static class RasterSheetCacheService
             ? "+image"
             : "";
         string snap = source.SnapPointCount + source.SnapSegmentCount > 0 ? "+snap" : "";
-        return $"Raster {scale}x{profile}{snap}";
+        return AppendCachedDpiSummary($"Raster {scale}{profile}{snap}", cachedDpis);
     }
+
+    public static string CachedReadableDpiSummary(PageInfo page)
+    {
+        IReadOnlyList<int> ready = ReadyReadableRasterDpis(page);
+        return ready.Count == 0
+            ? ""
+            : string.Join("/", ready.Select(dpi => dpi.ToString(CultureInfo.InvariantCulture)));
+    }
+
+    public static int BestReadyReadableRasterDpi(PageInfo page)
+    {
+        IReadOnlyList<int> ready = ReadyReadableRasterDpis(page);
+        return ready.Count == 0 ? 0 : ready[^1];
+    }
+
+    public static IReadOnlyList<int> ReadyReadableRasterDpis(PageInfo page)
+    {
+        RasterSheetSource? source = page.RasterSheet;
+        if (!CanTrustReadableRasterMetadata(page, source))
+            return [];
+
+        var dpiValues = new SortedSet<int>
+        {
+            DefaultRasterDpi,
+            300,
+            MaxRasterDpi,
+        };
+
+        int activeDpi = RenderScaleToDpi(source!.RenderScale);
+        if (activeDpi > 0)
+            dpiValues.Add(activeDpi);
+
+        var ready = new List<int>();
+        foreach (int dpi in dpiValues)
+        {
+            float scale = dpi == activeDpi
+                ? (float)source.RenderScale
+                : RasterDpiToRenderScale(dpi);
+            if (WorkingImageCandidatesForRenderScale(scale)
+                .Any(name => File.Exists(Path.Combine(page.FolderPath, CacheFolderName, name))))
+            {
+                ready.Add(dpi);
+            }
+        }
+
+        return ready;
+    }
+
+    private static string AppendCachedDpiSummary(string status, string cachedDpis) =>
+        string.IsNullOrWhiteSpace(cachedDpis)
+            ? status
+            : $"{status} | ready {cachedDpis}";
+
+    public static float RasterDpiToRenderScale(int dpi) =>
+        Math.Clamp(dpi, 72, MaxRasterDpi) / 72f;
+
+    public static int RenderScaleToDpi(double renderScale)
+    {
+        if (double.IsNaN(renderScale) || double.IsInfinity(renderScale) || renderScale <= 0)
+            return 0;
+
+        return Math.Max(1, (int)Math.Round(renderScale * 72.0, MidpointRounding.AwayFromZero));
+    }
+
+    public static string WorkingImageNameForRenderScale(double renderScale) =>
+        $"working-{Math.Clamp(RenderScaleToDpi(renderScale), 1, MaxRasterDpi).ToString(CultureInfo.InvariantCulture)}dpi.png";
+
+    public static bool IsSourceImageRasterProfile(RasterSheetSource? source) =>
+        source != null &&
+        string.Equals(source.RenderProfile, SourceImageRasterProfile, StringComparison.OrdinalIgnoreCase);
 
     public static bool ShouldRebuildForReadableDisplay(
         string pageFolder,
@@ -574,6 +755,63 @@ public static class RasterSheetCacheService
 
     private static bool IsLegacyLineBoost(RasterSheetSource source) =>
         string.Equals(source.RenderProfile, ReadableLineBoostProfile, StringComparison.OrdinalIgnoreCase);
+
+    private static bool CanTrustReadableRasterMetadata(PageInfo page, RasterSheetSource? source) =>
+        source != null &&
+        !string.IsNullOrWhiteSpace(page.FolderPath) &&
+        !string.IsNullOrWhiteSpace(page.PdfPath) &&
+        File.Exists(page.PdfPath) &&
+        source.WidthPt > 0 &&
+        source.HeightPt > 0 &&
+        source.PdfLength > 0 &&
+        source.PdfLastWriteUtcTicks > 0 &&
+        string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase) &&
+        !IsStale(page.PdfPath, source);
+
+    private static bool IsReusableReadableRaster(
+        PageInfo page,
+        RasterSheetSource? source,
+        float renderScale,
+        out string imagePath)
+    {
+        imagePath = "";
+        if (source == null ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath) ||
+            !File.Exists(page.PdfPath) ||
+            source.WidthPt <= 0 ||
+            source.HeightPt <= 0 ||
+            source.PdfLength <= 0 ||
+            source.PdfLastWriteUtcTicks <= 0 ||
+            string.IsNullOrWhiteSpace(source.Image) ||
+            !string.Equals(source.Format, "png", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase) ||
+            IsStale(page.PdfPath, source) ||
+            RenderScaleToDpi(source.RenderScale) != RenderScaleToDpi(renderScale))
+        {
+            return false;
+        }
+
+        imagePath = ResolveImagePath(page.FolderPath, source);
+        return File.Exists(imagePath);
+    }
+
+    private static IEnumerable<string> WorkingImageCandidatesForRenderScale(float renderScale)
+    {
+        string primary = WorkingImageNameForRenderScale(renderScale);
+        yield return primary;
+
+        if (RenderScaleToDpi(renderScale) == DefaultRasterDpi &&
+            !string.Equals(primary, WorkingImageName, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return WorkingImageName;
+        }
+    }
+
+    private static bool HasReadySnapIndex(string pageFolder, RasterSheetSource source) =>
+        source.SnapBlackOnly &&
+        !string.IsNullOrWhiteSpace(source.SnapIndex) &&
+        File.Exists(ResolvePagePath(pageFolder, source.SnapIndex));
 
     private static string ResolveImagePath(string pageFolder, RasterSheetSource source)
     {

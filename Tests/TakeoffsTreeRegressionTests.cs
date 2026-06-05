@@ -1248,6 +1248,10 @@ internal static class TakeoffsTreeRegressionTests
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
+        string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
+        string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
 
         AssertTrue(
             viewport.Contains("private bool _usingRasterSheetRender;", StringComparison.Ordinal) &&
@@ -1284,6 +1288,66 @@ internal static class TakeoffsTreeRegressionTests
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
             "high-DPI raster sheets should be a deep-zoom LOD, not the default bitmap for overview page browsing");
+        AssertTrue(
+            xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"200 DPI\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"300 DPI\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"400 DPI\"", StringComparison.Ordinal) &&
+            xaml.Contains("SheetManagerPrepareRasterButton", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerPrepareRaster_Click", StringComparison.Ordinal) &&
+            xaml.Contains("SheetManagerCancelRasterButton", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerCancelRaster_Click", StringComparison.Ordinal) &&
+            xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
+            xaml.Contains("Header=\"Raster\" Binding=\"{Binding RasterStatus}\" Width=\"180\"", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRowRasterPdf_Click", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRowRaster200_Click", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRowRaster300_Click", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRowRaster400_Click", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private CancellationTokenSource? _sheetManagerRasterPrepareCts;", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private const int SheetManagerAutoRasterDpi = 0;", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private int SelectedSheetManagerRasterDpi()", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("string.Equals(raw.Trim(), \"auto\"", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterDpiBox?.SelectedItem is ComboBoxItem", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("EffectiveSheetManagerRasterDpi", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("BestReadyReadableRasterDpi(page)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterDpiProgressLabel", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("ApplySheetManagerRowRasterDpiAsync", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRowFromButton", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerPageFromRow", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("RefreshSheetManagerRasterRow", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("refreshSheetManager: false", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("if (refreshSheetManager)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("already {already}", StringComparison.Ordinal) &&
+            previewDialog.Contains("private string _rasterStatus = \"\";", StringComparison.Ordinal) &&
+            previewDialog.Contains("set => SetField(ref _rasterStatus, value ?? \"\");", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("TryBlockSheetManagerRasterCommandDuringPrepare", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SetSheetManagerRasterPrepareRunning", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("PrepareSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("Task.Run(", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("BuildAndEnable(page, renderScale)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("Sheet Manager Raster On {rasterDpiLabel}:", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("reused {reused}", StringComparison.Ordinal) &&
+            raster.Contains("public const int DefaultRasterDpi = 200;", StringComparison.Ordinal) &&
+            raster.Contains("public const int MaxRasterDpi = 400;", StringComparison.Ordinal) &&
+            raster.Contains("public static float RasterDpiToRenderScale(int dpi)", StringComparison.Ordinal) &&
+            raster.Contains("public static int RenderScaleToDpi(double renderScale)", StringComparison.Ordinal) &&
+            raster.Contains("public static string WorkingImageNameForRenderScale", StringComparison.Ordinal) &&
+            raster.Contains("TryBuildReusableReadableVariant", StringComparison.Ordinal) &&
+            raster.Contains("WorkingImageCandidatesForRenderScale", StringComparison.Ordinal) &&
+            raster.Contains("CachedReadableDpiSummary", StringComparison.Ordinal) &&
+            raster.Contains("public static int BestReadyReadableRasterDpi(PageInfo page)", StringComparison.Ordinal) &&
+            raster.Contains("public static IReadOnlyList<int> ReadyReadableRasterDpis(PageInfo page)", StringComparison.Ordinal) &&
+            raster.Contains("AppendCachedDpiSummary", StringComparison.Ordinal) &&
+            raster.Contains("| ready", StringComparison.Ordinal) &&
+            raster.Contains("out bool changed", StringComparison.Ordinal) &&
+            raster.Contains("if (!enabled)", StringComparison.Ordinal) &&
+            raster.Contains("Reused: true", StringComparison.Ordinal) &&
+            !prepareRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal),
+            "Sheet Manager raster builds should keep 200 DPI as the default, allow selected sheets to rebuild at 300 or 400 DPI, reuse ready per-DPI PNG variants, and prepare caches in the background without a modal busy overlay");
         AssertTrue(
             raster.Contains("SourceImageRasterProfile = \"source-image-v1\"", StringComparison.Ordinal) &&
             raster.Contains("SourceImageOverviewMaxPixels = 8_000_000", StringComparison.Ordinal) &&

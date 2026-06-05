@@ -22,11 +22,17 @@ internal static class RasterSheetCacheTests
             PageInfo page = OurPlaneCoreJobStore.ImportPdf(job, pdfPath, ["Raster Test"], importFolder).Single();
 
             AssertTrue(
+                RasterSheetCacheService.TrySetEnabled(page, enabled: false, out string pdfError, out bool pdfChanged),
+                pdfError);
+            AssertFalse(pdfChanged, "disabling raster on a sheet without a cache should be a no-op PDF state, not a failure");
+
+            AssertTrue(
                 Math.Abs(RasterSheetCacheService.DefaultRenderScale - 200f / 72f) < 0.0001f,
                 "default raster cache should use a PlanSwift-like 200 DPI display render scale");
 
             RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, 0.5f);
             AssertTrue(build.Ok, build.Error);
+            AssertFalse(build.Reused, "first raster build should render a new working PNG");
 
             PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after build.");
@@ -45,6 +51,9 @@ internal static class RasterSheetCacheTests
             AssertTrue(
                 RasterSheetCacheService.DisplayStatus(refreshed).Contains("+readable", StringComparison.Ordinal),
                 "Sheet Manager raster status should report the readable raster profile");
+            AssertTrue(
+                RasterSheetCacheService.DisplayStatus(refreshed).Contains("ready", StringComparison.Ordinal),
+                "Sheet Manager raster status should show ready DPI cache variants");
 
             AssertTrue(
                 RasterSheetCacheService.TryReadReady(
@@ -55,6 +64,39 @@ internal static class RasterSheetCacheTests
                     out string reason),
                 reason);
             bitmap.Bitmap.Dispose();
+
+            DateTime reusedMarkerUtc = DateTime.UtcNow.AddMinutes(-5);
+            File.SetLastWriteTimeUtc(imagePath, reusedMarkerUtc);
+            reusedMarkerUtc = File.GetLastWriteTimeUtc(imagePath);
+            RasterSheetBuildResult reused = RasterSheetCacheService.BuildAndEnable(refreshed, 0.5f);
+            AssertTrue(reused.Ok, reused.Error);
+            AssertTrue(reused.Reused, "matching active raster cache should be reported as reused");
+            AssertTrue(
+                File.GetLastWriteTimeUtc(imagePath) == reusedMarkerUtc,
+                "matching raster cache should be enabled from disk without re-rendering the working PNG");
+
+            RasterSheetBuildResult higherDpi = RasterSheetCacheService.BuildAndEnable(refreshed, 1.0f);
+            AssertTrue(higherDpi.Ok, higherDpi.Error);
+            AssertFalse(higherDpi.Reused, "different raster DPI should render a separate working PNG the first time");
+            PageInfo higherRefreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after higher DPI build.");
+            AssertTrue(
+                RasterSheetCacheService.BestReadyReadableRasterDpi(higherRefreshed) == 72,
+                "Auto raster quality should prefer the highest ready DPI cache instead of forcing a new render");
+            AssertTrue(
+                higherRefreshed.RasterSheet != null &&
+                higherRefreshed.RasterSheet.Image.Contains("72dpi", StringComparison.OrdinalIgnoreCase),
+                "higher DPI build should point source.json at a DPI-specific working PNG");
+
+            DateTime variantMarkerUtc = DateTime.UtcNow.AddMinutes(-6);
+            File.SetLastWriteTimeUtc(imagePath, variantMarkerUtc);
+            variantMarkerUtc = File.GetLastWriteTimeUtc(imagePath);
+            RasterSheetBuildResult switchedBack = RasterSheetCacheService.BuildAndEnable(higherRefreshed, 0.5f);
+            AssertTrue(switchedBack.Ok, switchedBack.Error);
+            AssertTrue(switchedBack.Reused, "previously built raster DPI variant should be reused when switching back");
+            AssertTrue(
+                File.GetLastWriteTimeUtc(imagePath) == variantMarkerUtc,
+                "switching back to a ready raster DPI variant should not re-render its PNG");
 
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;
