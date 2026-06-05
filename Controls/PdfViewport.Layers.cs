@@ -614,12 +614,31 @@ public sealed partial class PdfViewport
             bool usedFastPreviewRenderer = false;
             if (!fromCache)
             {
-                render = await TryRenderPreviewWithPyMuPdfAsync(request);
-                usedFastPreviewRenderer = render != null;
-                render ??= await Task.Run(() =>
-                    RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
-                DocnetRenderCache.Put(cacheKey, render);
-                TryWriteDocnetPreviewCache(request, render);
+                await Task.Delay(ViewportRenderPolicy.FastPageSwitchPreviewCoalesceMs);
+                if (!IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version))
+                    return;
+
+                await LivePreviewRenderSemaphore.WaitAsync();
+                try
+                {
+                    if (!IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version))
+                        return;
+
+                    fromCache = DocnetRenderCache.TryGet(cacheKey, out cached);
+                    if (!fromCache)
+                    {
+                        render = await TryRenderPreviewWithPyMuPdfAsync(request);
+                        usedFastPreviewRenderer = render != null;
+                        render ??= await Task.Run(() =>
+                            RenderPageBitmapWithDocnet(request.PdfPath, request.PdfIndex, request.RenderScale));
+                        DocnetRenderCache.Put(cacheKey, render);
+                        TryWriteDocnetPreviewCache(request, render);
+                    }
+                }
+                finally
+                {
+                    LivePreviewRenderSemaphore.Release();
+                }
             }
             renderWatch.Stop();
             ReportSlowPdfRender(

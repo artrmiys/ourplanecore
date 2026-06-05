@@ -67,6 +67,7 @@ public sealed partial class PdfViewport
         RasterSheetSource? rasterSheet = null)
     {
         CancelTransientNavigationRenderWork();
+        BeginFastNavigation();
         BeginPageSwitchDetailRenderHold();
 
         _pdfPath    = pdfPath;
@@ -146,7 +147,7 @@ public sealed partial class PdfViewport
             rasterSkipReason = deferredRebuildReason;
         }
 
-        float previewScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
+        float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
         bool previewCacheHit = TryApplyPersistedPreviewRender(
             pdfPath,
             pageIndex,

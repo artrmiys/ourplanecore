@@ -17,6 +17,7 @@ public sealed partial class PdfViewport
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
     private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
+    private static readonly SemaphoreSlim LivePreviewRenderSemaphore = new(1, 1);
     private static readonly object CleanRenderPrefetchGate = new();
     private static readonly HashSet<string> CleanRenderPrefetchInFlight = [];
     private static readonly SemaphoreSlim CleanRenderPrefetchSemaphore = new(

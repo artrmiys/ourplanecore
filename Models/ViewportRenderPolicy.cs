@@ -31,13 +31,14 @@ public static class ViewportRenderPolicy
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
     public const int PageSwitchDetailRenderDelayMs = 320;
+    public const int FastPageSwitchPreviewCoalesceMs = 45;
     public const int PageSwitchSharpUpgradeDelayMs = 900;
-    public const int PageSwitchSharpUpgradeIdleMs = 700;
+    public const int PageSwitchSharpUpgradeIdleMs = 1200;
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
     public const float PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
-    public const int JobOpenPreviewWarmupCount = 96;
+    public const int JobOpenPreviewWarmupCount = 12;
     public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.35f;
