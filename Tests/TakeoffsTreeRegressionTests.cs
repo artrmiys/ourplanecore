@@ -1257,6 +1257,8 @@ internal static class TakeoffsTreeRegressionTests
         string buildRasterMethod = SliceMethod(workspaceManagers, "private Task BuildSheetManagerRasterCacheAsync(");
         string buildRasterBackgroundMethod = SliceMethod(workspaceManagers, "private async Task BuildSheetManagerRasterCacheInBackgroundAsync(");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
+        string compactRasterMethod = SliceMethod(workspaceManagers, "private async Task CompactSheetManagerRasterCacheAsync(");
+        string compactRasterBackgroundMethod = SliceMethod(workspaceManagers, "private async Task CompactSheetManagerRasterCacheInBackgroundAsync(");
         string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
         string rasterOnMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterEnabledAsync(");
         string rasterOnReadyMethod = SliceMethod(workspaceManagers, "private async Task<SheetManagerRasterReadyBatch> EnableSheetManagerReadyRasterPagesAsync(");
@@ -1322,6 +1324,9 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("SheetManagerCancelRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCancelRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Clean PNGs\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterOnButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterOffButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerCleanRasterButton\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCompactRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster\" Binding=\"{Binding RasterStatus}\" Width=\"180\"", StringComparison.Ordinal) &&
@@ -1353,6 +1358,9 @@ internal static class TakeoffsTreeRegressionTests
             pagesTree.Contains("RebuildPageTakeoffNodes(item, refreshedPage)", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTreeItemIndex()", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerBuildRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterOnButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterOffButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerCleanRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots([page])", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots(readyBatch.FastPages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots(pages)", StringComparison.Ordinal) &&
@@ -1415,6 +1423,16 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("TryBlockSheetManagerRasterCommandDuringPrepare", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterPrepareRunning", StringComparison.Ordinal) &&
             workspaceManagers.Contains("CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster())", StringComparison.Ordinal) &&
+            compactRasterMethod.Contains("CompactSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
+            compactRasterMethod.Contains("_sheetManagerRasterBackgroundLabel = \"Clean PNGs\"", StringComparison.Ordinal) &&
+            compactRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
+            !compactRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: false)", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
+            compactRasterBackgroundMethod.Contains("Sheet Manager Raster Clean PNGs done", StringComparison.Ordinal) &&
+            !compactRasterBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("FormatRasterCacheBytes(deletedBytes)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("PrepareSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&

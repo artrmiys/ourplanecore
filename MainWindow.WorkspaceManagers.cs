@@ -508,7 +508,7 @@ public partial class MainWindow
     {
         if (_sheetManagerRasterPrepareCts != null)
         {
-            TxtStatus.Text = "Sheet Manager Raster Prepare is already running.";
+            TxtStatus.Text = $"Sheet Manager Raster {_sheetManagerRasterBackgroundLabel} is already running.";
             return;
         }
 
@@ -723,6 +723,12 @@ public partial class MainWindow
             SheetManagerBuildRasterButton.IsEnabled = !running;
         if (SheetManagerPrepareRasterButton != null)
             SheetManagerPrepareRasterButton.IsEnabled = !running;
+        if (SheetManagerRasterOnButton != null)
+            SheetManagerRasterOnButton.IsEnabled = !running;
+        if (SheetManagerRasterOffButton != null)
+            SheetManagerRasterOffButton.IsEnabled = !running;
+        if (SheetManagerCleanRasterButton != null)
+            SheetManagerCleanRasterButton.IsEnabled = !running;
         if (SheetManagerCancelRasterButton != null)
             SheetManagerCancelRasterButton.IsEnabled = running;
     }
@@ -966,24 +972,66 @@ public partial class MainWindow
             return;
         }
 
+        if (_sheetManagerRasterPrepareCts != null)
+        {
+            TxtStatus.Text = "Sheet Manager Raster Clean PNGs: another raster background job is already running.";
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _sheetManagerRasterPrepareCts = cts;
+        _sheetManagerRasterBackgroundLabel = "Clean PNGs";
+        SetSheetManagerRasterPrepareRunning(true);
+        TxtStatus.Text = $"Sheet Manager Raster Clean PNGs: queued {pages.Count} sheet(s).";
+        _ = CompactSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), cts);
+        await Task.CompletedTask;
+    }
+
+    private async Task CompactSheetManagerRasterCacheInBackgroundAsync(
+        IReadOnlyList<PageInfo> pages,
+        CancellationTokenSource cts)
+    {
         int cleaned = 0;
         int failed = 0;
         int deletedFiles = 0;
         long deletedBytes = 0;
-        using (ShowBusyOverlay($"Cleaning raster PNG cache for {pages.Count} sheet(s)..."))
+        bool cancelled = false;
+
+        try
         {
-            await WaitForBusyOverlayRenderAsync();
             for (int i = 0; i < pages.Count; i++)
             {
+                cts.Token.ThrowIfCancellationRequested();
+
                 PageInfo page = pages[i];
-                BusyOverlayText.Text = $"Clean PNGs {i + 1}/{pages.Count}: {page.Name}";
-                RasterSheetCacheCompactResult result = await Task.Run(() => RasterSheetCacheService.CompactCache(page));
+                TxtStatus.Text = $"Sheet Manager Raster Clean PNGs {i + 1}/{pages.Count}: {page.Name}";
+
+                RasterSheetCacheCompactResult result;
+                try
+                {
+                    result = await Task.Run(
+                        () => RasterSheetCacheService.CompactCache(page),
+                        cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    AppLog.Warn(ex, $"Raster cache compact crashed for '{page.Name}'");
+                    continue;
+                }
+
                 deletedFiles += result.DeletedFiles;
                 deletedBytes += result.DeletedBytes;
                 if (result.Ok)
                 {
                     if (result.DeletedFiles > 0)
                         cleaned++;
+                    if (result.DeletedFiles > 0)
+                        RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: false);
                 }
                 else
                 {
@@ -992,11 +1040,28 @@ public partial class MainWindow
                 }
             }
         }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
+        finally
+        {
+            if (ReferenceEquals(_sheetManagerRasterPrepareCts, cts))
+            {
+                _sheetManagerRasterPrepareCts = null;
+                _sheetManagerRasterBackgroundLabel = "Prepare";
+                SetSheetManagerRasterPrepareRunning(false);
+            }
 
-        if (!RefreshSheetManagerRasterRows(pages))
-            RefreshSheetManager();
-        TxtStatus.Text =
-            $"Sheet Manager Raster Clean PNGs: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}.";
+            cts.Dispose();
+            InvalidatePagePreviewPrefetchCache();
+            if (!RefreshSheetManagerRasterRows(pages))
+                RefreshSheetManager();
+            RefreshPageTreePageSnapshots(pages);
+            TxtStatus.Text = cancelled
+                ? $"Sheet Manager Raster Clean PNGs cancelled: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}."
+                : $"Sheet Manager Raster Clean PNGs done: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}.";
+        }
     }
 
     private async Task SetSheetManagerRasterEnabledAsync(
