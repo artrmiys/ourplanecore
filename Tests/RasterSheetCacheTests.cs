@@ -125,6 +125,25 @@ internal static class RasterSheetCacheTests
             AssertTrue(
                 RasterSheetCacheService.DisplayStatus(preparedOnlyPage, readySnapshot).Contains("ready 36/72/90", StringComparison.Ordinal),
                 "Sheet Manager raster status should format ready DPI variants from its bulk snapshot");
+            AssertTrue(
+                RasterSheetCacheService.HasReadyReadableRaster(preparedOnlyPage, 1.25f),
+                "Raster On fast path should detect a prepared readable DPI cache without rendering");
+            AssertFalse(
+                RasterSheetCacheService.HasReadyReadableRaster(preparedOnlyPage, 2.0f),
+                "Raster On fast path should fall back to rendering when the requested readable DPI cache is missing");
+            AssertTrue(
+                RasterSheetCacheService.TryEnableReadyReadableRaster(
+                    preparedOnlyPage,
+                    1.25f,
+                    out RasterSheetBuildResult readyOnly),
+                readyOnly.Error);
+            AssertTrue(readyOnly.Reused, "ready-only raster enable should report reuse instead of a new render");
+            PageInfo readyOnlyPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after ready-only enable.");
+            AssertTrue(
+                readyOnlyPage.RasterSheet is { Enabled: true } &&
+                readyOnlyPage.RasterSheet.Image.Contains("90dpi", StringComparison.OrdinalIgnoreCase),
+                "ready-only raster enable should switch source.json to the prepared DPI image");
 
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;

@@ -50,7 +50,7 @@ public static class RasterSheetCacheService
             return Failed("PDF page index is invalid.");
 
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
-        if (TryReuseReadableRasterAndEnable(page, scale, out RasterSheetBuildResult reused))
+        if (TryEnableReadyReadableRaster(page, scale, out RasterSheetBuildResult reused))
             return reused;
 
         if (!PdfLayerRenderService.TryRender(
@@ -135,23 +135,24 @@ public static class RasterSheetCacheService
         return result with { Source = prepared };
     }
 
-    private static bool TryReuseReadableRasterAndEnable(
+    public static bool HasReadyReadableRaster(PageInfo page, float renderScale = DefaultRenderScale)
+    {
+        float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
+        return TryFindReusableReadableRaster(page, scale, out _, out _);
+    }
+
+    public static bool TryEnableReadyReadableRaster(
         PageInfo page,
         float renderScale,
         out RasterSheetBuildResult result)
     {
         result = new RasterSheetBuildResult(false, null, "", "");
-        RasterSheetSource? source = CurrentRasterSheetSource(page);
-
-        if (source == null ||
-            !IsReusableReadableRaster(page, source, renderScale, out string imagePath))
+        float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
+        if (!TryFindReusableReadableRaster(page, scale, out RasterSheetSource? source, out string imagePath) ||
+            source == null)
         {
-            if (!TryBuildReusableReadableVariant(page, source, renderScale, out source, out imagePath))
-                return false;
-        }
-
-        if (source == null)
             return false;
+        }
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         if (!HasReadySnapIndex(page.FolderPath, source))
@@ -166,6 +167,24 @@ public static class RasterSheetCacheService
         OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         result = new RasterSheetBuildResult(true, source, imagePath, "", Reused: true);
         return true;
+    }
+
+    private static bool TryFindReusableReadableRaster(
+        PageInfo page,
+        float renderScale,
+        out RasterSheetSource? source,
+        out string imagePath)
+    {
+        imagePath = "";
+        source = CurrentRasterSheetSource(page);
+
+        if (source != null &&
+            IsReusableReadableRaster(page, source, renderScale, out imagePath))
+        {
+            return true;
+        }
+
+        return TryBuildReusableReadableVariant(page, source, renderScale, out source, out imagePath);
     }
 
     private static RasterSheetSource? CurrentRasterSheetSource(PageInfo page)

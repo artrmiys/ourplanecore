@@ -1254,6 +1254,7 @@ internal static class TakeoffsTreeRegressionTests
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
         string prepareRasterMethod = SliceMethod(workspaceManagers, "private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(");
         string rowRasterMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterRowEnabledAsync(");
+        string rasterOnReadyMethod = SliceMethod(workspaceManagers, "private async Task<bool> TrySetSheetManagerRasterOnReadyFastAsync(");
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
 
         AssertTrue(
@@ -1329,6 +1330,11 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("TrySetSheetManagerRasterOnReadyFastAsync(pages, rasterDpi, refreshSheetManager)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("HasReadyReadableRaster(page, renderScale)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("RefreshSheetManagerRasterRows(pages)", StringComparison.Ordinal) &&
+            !rasterOnReadyMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterOffFastAsync(pages, refreshSheetManager)", StringComparison.Ordinal) &&
             rasterOffMethod.Contains("Task.Run(", StringComparison.Ordinal) &&
             rasterOffMethod.Contains("TrySetEnabled(page, enabled: false", StringComparison.Ordinal) &&
@@ -1358,6 +1364,9 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("public const int DefaultRasterDpi = 200;", StringComparison.Ordinal) &&
             raster.Contains("public const int MaxRasterDpi = 400;", StringComparison.Ordinal) &&
             raster.Contains("public static RasterSheetBuildResult BuildCachePreservingEnabled", StringComparison.Ordinal) &&
+            raster.Contains("public static bool HasReadyReadableRaster(PageInfo page", StringComparison.Ordinal) &&
+            raster.Contains("public static bool TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
+            raster.Contains("TryFindReusableReadableRaster(page, scale", StringComparison.Ordinal) &&
             raster.Contains("public static float RasterDpiToRenderScale(int dpi)", StringComparison.Ordinal) &&
             raster.Contains("public static int RenderScaleToDpi(double renderScale)", StringComparison.Ordinal) &&
             raster.Contains("public static string WorkingImageNameForRenderScale", StringComparison.Ordinal) &&

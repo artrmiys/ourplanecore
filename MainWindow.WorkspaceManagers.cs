@@ -889,6 +889,9 @@ public partial class MainWindow
             return;
         }
 
+        if (await TrySetSheetManagerRasterOnReadyFastAsync(pages, rasterDpi, refreshSheetManager))
+            return;
+
         int changed = 0;
         int built = 0;
         int reused = 0;
@@ -948,6 +951,84 @@ public partial class MainWindow
         }
         ReloadCurrentPageIfRasterChanged(pages);
         TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: changed {changed}, built {built}, reused {reused}, already {already}, failed {failed}.";
+    }
+
+    private async Task<bool> TrySetSheetManagerRasterOnReadyFastAsync(
+        IReadOnlyList<PageInfo> pages,
+        int rasterDpi,
+        bool refreshSheetManager)
+    {
+        var plans = new List<(PageInfo Page, int EffectiveDpi, float RenderScale, bool SourceImage)>();
+        foreach (PageInfo page in pages)
+        {
+            if (RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
+            {
+                plans.Add((page, 0, 0f, true));
+                continue;
+            }
+
+            int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+            float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+            if (!RasterSheetCacheService.HasReadyReadableRaster(page, renderScale))
+                return false;
+
+            plans.Add((page, effectiveDpi, renderScale, false));
+        }
+
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: enabling ready cache for {pages.Count} sheet(s)...";
+        (int ready, int source, int already, int failed) = await Task.Run(() =>
+        {
+            int readyCount = 0;
+            int sourceCount = 0;
+            int alreadyCount = 0;
+            int failedCount = 0;
+            foreach (var plan in plans)
+            {
+                if (plan.SourceImage)
+                {
+                    if (RasterSheetCacheService.TrySetEnabled(plan.Page, enabled: true, out string error, out bool toggled))
+                    {
+                        if (toggled)
+                            sourceCount++;
+                        else
+                            alreadyCount++;
+                    }
+                    else
+                    {
+                        failedCount++;
+                        AppLog.Warn($"Raster cache toggle failed for '{plan.Page.Name}': {error}");
+                    }
+
+                    continue;
+                }
+
+                if (RasterSheetCacheService.TryEnableReadyReadableRaster(
+                        plan.Page,
+                        plan.RenderScale,
+                        out RasterSheetBuildResult result))
+                {
+                    readyCount++;
+                }
+                else
+                {
+                    failedCount++;
+                    AppLog.Warn($"Ready raster cache enable failed for '{plan.Page.Name}': {result.Error}");
+                }
+            }
+
+            return (readyCount, sourceCount, alreadyCount, failedCount);
+        });
+
+        InvalidatePagePreviewPrefetchCache();
+        if (refreshSheetManager)
+        {
+            if (!RefreshSheetManagerRasterRows(pages))
+                RefreshSheetManager();
+        }
+        ReloadCurrentPageIfRasterChanged(pages);
+        TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: ready {ready}, source {source}, already {already}, failed {failed}.";
+        return true;
     }
 
     private async Task SetSheetManagerRasterOffFastAsync(
