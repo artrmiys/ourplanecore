@@ -671,17 +671,13 @@ public sealed partial class PdfViewport
                 if (RasterSheetBitmapCache.Contains(cacheKey))
                     return;
 
-                string reason;
-                bool ok = preferOverview
-                    ? RasterSheetCacheService.TryReadOverviewReady(pageFolder, pdfPath, rasterSheet, out result, out reason)
-                    : RasterSheetCacheService.TryReadReady(pageFolder, pdfPath, rasterSheet, out result, out reason);
-                if (!ok)
-                    return;
-
-                TryPutRasterSheetBitmapCache(pageFolder, pdfPath, rasterSheet, preferOverview, result);
-                AppLog.Info(
-                    $"Viewport raster sheet bitmap prefetched; mode='{(preferOverview ? "overview" : "full")}'; " +
-                    $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; scale={result.BitmapScale:0.###}; image='{result.ImagePath}'");
+                TryWarmRasterSheetBitmapCache(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    preferOverview,
+                    action: "prefetched",
+                    logFailure: false);
             }
             finally
             {

@@ -185,7 +185,7 @@ public sealed partial class PdfViewport
             AppLog.Info(
                 $"Viewport raster DPI upgrade built; dpi={targetDpi}; reused={result.Reused}; " +
                 $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
-            WarmRasterSheetDpiUpgradeBitmapCache(queuedPage, result.Source, targetDpi);
+            WarmRasterSheetBitmapCache(queuedPage, result.Source);
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -213,41 +213,6 @@ public sealed partial class PdfViewport
         {
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(rebuildKey);
-        }
-    }
-
-    private void WarmRasterSheetDpiUpgradeBitmapCache(PageInfo page, RasterSheetSource source, int targetDpi)
-    {
-        RasterSheetBitmapResult bitmap = new(new SkiaSharp.SKBitmap(), 0, 0, 0, "");
-        try
-        {
-            if (!RasterSheetCacheService.TryReadReady(
-                    page.FolderPath,
-                    page.PdfPath,
-                    source,
-                    out bitmap,
-                    out string reason))
-            {
-                AppLog.Warn(
-                    $"Viewport raster DPI upgrade bitmap warm skipped; dpi={targetDpi}; reason='{reason}'; " +
-                    $"page='{page.FolderPath}'; pdf='{Path.GetFileName(page.PdfPath)}'; pdfPage={page.PdfPage + 1}");
-                return;
-            }
-
-            if (TryPutRasterSheetBitmapCache(page.FolderPath, page.PdfPath, source, preferOverview: false, bitmap))
-            {
-                AppLog.Info(
-                    $"Viewport raster DPI upgrade bitmap warmed; dpi={targetDpi}; " +
-                    $"page='{page.FolderPath}'; pdf='{Path.GetFileName(page.PdfPath)}'; scale={bitmap.BitmapScale:0.###}; image='{bitmap.ImagePath}'");
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"Viewport raster DPI upgrade bitmap warm failed for {page.Name}");
-        }
-        finally
-        {
-            bitmap.Bitmap.Dispose();
         }
     }
 

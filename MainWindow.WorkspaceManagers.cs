@@ -599,7 +599,7 @@ public partial class MainWindow
         {
             float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
             TxtStatus.Text = $"Sheet Manager Raster Row {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)}: {page.Name}";
-            RasterSheetBuildResult build = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page, renderScale));
+            RasterSheetBuildResult build = await Task.Run(() => BuildAndWarmSheetManagerRaster(page, renderScale));
             if (!build.Ok)
             {
                 AppLog.Warn($"Raster cache row build failed for '{page.Name}': {build.Error}");
@@ -831,7 +831,7 @@ public partial class MainWindow
                 try
                 {
                     result = await Task.Run(
-                        () => RasterSheetCacheService.BuildAndEnable(page, renderScale),
+                        () => BuildAndWarmSheetManagerRaster(page, renderScale),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -911,7 +911,7 @@ public partial class MainWindow
                 try
                 {
                     result = await Task.Run(
-                        () => RasterSheetCacheService.BuildCachePreservingEnabled(page, renderScale),
+                        () => PrepareAndWarmSheetManagerRaster(page, renderScale),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -1167,7 +1167,7 @@ public partial class MainWindow
                 try
                 {
                     build = await Task.Run(
-                        () => RasterSheetCacheService.BuildAndEnable(page, renderScale),
+                        () => BuildAndWarmSheetManagerRaster(page, renderScale),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -1267,6 +1267,8 @@ public partial class MainWindow
                     {
                         if (toggled)
                         {
+                            if (OurPlaneCoreJobStore.TryReadPage(plan.Page.FolderPath) is { } refreshedPage)
+                                PdfViewport.WarmRasterSheetBitmapCache(refreshedPage);
                             sourceCount++;
                             fastPages.Add(plan.Page);
                         }
@@ -1289,6 +1291,7 @@ public partial class MainWindow
                         plan.RenderScale,
                         out RasterSheetBuildResult result))
                 {
+                    WarmSheetManagerRasterBitmap(plan.Page, result);
                     readyCount++;
                     fastPages.Add(plan.Page);
                 }
@@ -1307,6 +1310,26 @@ public partial class MainWindow
                 alreadyCount,
                 failedCount);
         });
+    }
+
+    private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(PageInfo page, float renderScale)
+    {
+        RasterSheetBuildResult result = RasterSheetCacheService.BuildAndEnable(page, renderScale);
+        WarmSheetManagerRasterBitmap(page, result);
+        return result;
+    }
+
+    private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale)
+    {
+        RasterSheetBuildResult result = RasterSheetCacheService.BuildCachePreservingEnabled(page, renderScale);
+        WarmSheetManagerRasterBitmap(page, result);
+        return result;
+    }
+
+    private static void WarmSheetManagerRasterBitmap(PageInfo page, RasterSheetBuildResult result)
+    {
+        if (result.Ok && result.Source != null)
+            PdfViewport.WarmRasterSheetBitmapCache(page, result.Source);
     }
 
     private async Task SetSheetManagerRasterOffFastAsync(
