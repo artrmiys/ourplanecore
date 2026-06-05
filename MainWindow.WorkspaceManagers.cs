@@ -636,6 +636,56 @@ public partial class MainWindow
             row.RasterStatus = RasterSheetCacheService.DisplayStatus(refreshedPage);
     }
 
+    private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)
+    {
+        if (pages.Count == 0)
+            return false;
+
+        List<PdfMetadataPreviewRow> rows = SheetManagerRows();
+        if (rows.Count == 0)
+            return false;
+
+        var targetPageFolders = pages
+            .Select(page => NormalizePathForCompare(page.FolderPath))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (targetPageFolders.Count == 0)
+            return false;
+
+        List<PdfMetadataPreviewRow> targetRows = rows
+            .Where(row => targetPageFolders.Contains(NormalizePathForCompare(row.PageFolder)))
+            .ToList();
+        if (targetRows.Count == 0)
+            return false;
+
+        var refreshedPagesByFolder = new Dictionary<string, PageInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (PdfMetadataPreviewRow row in targetRows)
+        {
+            string key = NormalizePathForCompare(row.PageFolder);
+            if (refreshedPagesByFolder.ContainsKey(key) ||
+                OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is not { } refreshedPage)
+            {
+                continue;
+            }
+
+            refreshedPagesByFolder[key] = refreshedPage;
+        }
+
+        if (refreshedPagesByFolder.Count == 0)
+            return false;
+
+        IReadOnlyDictionary<string, IReadOnlyList<int>> readyRasterDpisByPageFolder =
+            RasterSheetCacheService.ReadyReadableRasterDpisByPageFolder(refreshedPagesByFolder.Values);
+        foreach (PdfMetadataPreviewRow row in targetRows)
+        {
+            string key = NormalizePathForCompare(row.PageFolder);
+            if (refreshedPagesByFolder.TryGetValue(key, out PageInfo? refreshedPage))
+                row.RasterStatus = RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder);
+        }
+
+        return true;
+    }
+
     private bool TryBlockSheetManagerRasterCommandDuringPrepare(string command)
     {
         if (_sheetManagerRasterPrepareCts == null)
@@ -739,7 +789,8 @@ public partial class MainWindow
         }
 
         InvalidatePagePreviewPrefetchCache();
-        RefreshSheetManager();
+        if (!RefreshSheetManagerRasterRows(pages))
+            RefreshSheetManager();
         ReloadCurrentPageIfRasterChanged(pages);
         TxtStatus.Text = $"Sheet Manager Raster {rasterDpiLabel}: built {built}, reused {reused}, failed {failed}.";
     }
@@ -812,7 +863,8 @@ public partial class MainWindow
 
             cts.Dispose();
             InvalidatePagePreviewPrefetchCache();
-            RefreshSheetManager();
+            if (!RefreshSheetManagerRasterRows(pages))
+                RefreshSheetManager();
             TxtStatus.Text = cancelled
                 ? $"Sheet Manager Raster Prepare {rasterDpiLabel} cancelled: built {built}, reused {reused}, failed {failed}."
                 : $"Sheet Manager Raster Prepare {rasterDpiLabel} done: built {built}, reused {reused}, failed {failed}.";
@@ -888,7 +940,10 @@ public partial class MainWindow
 
         InvalidatePagePreviewPrefetchCache();
         if (refreshSheetManager)
-            RefreshSheetManager();
+        {
+            if (!RefreshSheetManagerRasterRows(pages))
+                RefreshSheetManager();
+        }
         ReloadCurrentPageIfRasterChanged(pages);
         TxtStatus.Text = enabled
             ? $"Sheet Manager Raster On {rasterDpiLabel}: changed {changed}, built {built}, reused {reused}, already {already}, failed {failed}."

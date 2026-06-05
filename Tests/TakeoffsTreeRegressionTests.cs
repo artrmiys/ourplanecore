@@ -1325,6 +1325,9 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerRowFromButton", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerPageFromRow", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshSheetManagerRasterRow", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterRowEnabledAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster Row", StringComparison.Ordinal) &&
