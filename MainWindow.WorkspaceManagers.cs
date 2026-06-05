@@ -484,6 +484,17 @@ public partial class MainWindow
             "Sheet Manager Raster");
     }
 
+    private async void BtnSheetManagerCompactRaster_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Clean PNGs"))
+            return;
+
+        await RunAsyncUiHandler(
+            () => CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster()),
+            "Clean PNGs failed.",
+            "Sheet Manager Raster");
+    }
+
     private void BtnSheetManagerPrepareRaster_Click(object sender, RoutedEventArgs e)
     {
         if (_sheetManagerRasterPrepareCts != null)
@@ -871,6 +882,47 @@ public partial class MainWindow
         }
     }
 
+    private async Task CompactSheetManagerRasterCacheAsync(IReadOnlyList<PageInfo> pages)
+    {
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "Sheet Manager Raster Clean PNGs: no sheets selected.";
+            return;
+        }
+
+        int cleaned = 0;
+        int failed = 0;
+        int deletedFiles = 0;
+        long deletedBytes = 0;
+        using (ShowBusyOverlay($"Cleaning raster PNG cache for {pages.Count} sheet(s)..."))
+        {
+            await WaitForBusyOverlayRenderAsync();
+            for (int i = 0; i < pages.Count; i++)
+            {
+                PageInfo page = pages[i];
+                BusyOverlayText.Text = $"Clean PNGs {i + 1}/{pages.Count}: {page.Name}";
+                RasterSheetCacheCompactResult result = await Task.Run(() => RasterSheetCacheService.CompactCache(page));
+                deletedFiles += result.DeletedFiles;
+                deletedBytes += result.DeletedBytes;
+                if (result.Ok)
+                {
+                    if (result.DeletedFiles > 0)
+                        cleaned++;
+                }
+                else
+                {
+                    failed++;
+                    AppLog.Warn($"Raster cache compact failed for '{page.Name}': {result.Error}");
+                }
+            }
+        }
+
+        if (!RefreshSheetManagerRasterRows(pages))
+            RefreshSheetManager();
+        TxtStatus.Text =
+            $"Sheet Manager Raster Clean PNGs: cleaned {cleaned}, deleted {deletedFiles} file(s), freed {FormatRasterCacheBytes(deletedBytes)}, failed {failed}.";
+    }
+
     private async Task SetSheetManagerRasterEnabledAsync(
         IReadOnlyList<PageInfo> pages,
         bool enabled,
@@ -1083,6 +1135,23 @@ public partial class MainWindow
         }
 
         LoadPageIntoViewport(refreshedPage, _viewport.CaptureViewState());
+    }
+
+    private static string FormatRasterCacheBytes(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes.ToString(CultureInfo.InvariantCulture)} B";
+
+        string[] units = ["KB", "MB", "GB"];
+        double value = bytes / 1024.0;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024.0;
+            unit++;
+        }
+
+        return $"{value:0.##} {units[unit]}";
     }
 
     private static string SheetManagerScaleText(double scaleMetersPerPt)

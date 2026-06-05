@@ -1302,6 +1302,8 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("BtnSheetManagerPrepareRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerCancelRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCancelRaster_Click", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Clean PNGs\"", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerCompactRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster\" Binding=\"{Binding RasterStatus}\" Width=\"180\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRasterPdf_Click", StringComparison.Ordinal) &&
@@ -1355,6 +1357,9 @@ internal static class TakeoffsTreeRegressionTests
             previewDialog.Contains("set => SetField(ref _rasterStatus, value ?? \"\");", StringComparison.Ordinal) &&
             workspaceManagers.Contains("TryBlockSheetManagerRasterCommandDuringPrepare", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterPrepareRunning", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("CompactSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster())", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("RasterSheetCacheService.CompactCache(page)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("FormatRasterCacheBytes(deletedBytes)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("PrepareSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Task.Run(", StringComparison.Ordinal) &&
             workspaceManagers.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
@@ -1369,6 +1374,10 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("public static RasterSheetBuildResult BuildCachePreservingEnabled", StringComparison.Ordinal) &&
             raster.Contains("public static bool HasReadyReadableRaster(PageInfo page", StringComparison.Ordinal) &&
             raster.Contains("public static bool TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
+            raster.Contains("public sealed record RasterSheetCacheCompactResult", StringComparison.Ordinal) &&
+            raster.Contains("public static RasterSheetCacheCompactResult CompactCache(PageInfo page)", StringComparison.Ordinal) &&
+            raster.Contains("AddReferencedCachePath(page.FolderPath, source.Image", StringComparison.Ordinal) &&
+            raster.Contains("IsCompactableCacheFile", StringComparison.Ordinal) &&
             raster.Contains("TryFindReusableReadableRaster(page, scale", StringComparison.Ordinal) &&
             raster.Contains("public static float RasterDpiToRenderScale(int dpi)", StringComparison.Ordinal) &&
             raster.Contains("public static int RenderScaleToDpi(double renderScale)", StringComparison.Ordinal) &&

@@ -24,6 +24,12 @@ public sealed record RasterSheetBitmapResult(
     float BitmapScale,
     string ImagePath);
 
+public sealed record RasterSheetCacheCompactResult(
+    bool Ok,
+    int DeletedFiles,
+    long DeletedBytes,
+    string Error);
+
 public static class RasterSheetCacheService
 {
     public const int DefaultRasterDpi = 200;
@@ -390,6 +396,62 @@ public static class RasterSheetCacheService
         return true;
     }
 
+    public static RasterSheetCacheCompactResult CompactCache(PageInfo page)
+    {
+        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
+            return new RasterSheetCacheCompactResult(true, 0, 0, "");
+
+        string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
+        if (!Directory.Exists(rasterDir))
+            return new RasterSheetCacheCompactResult(true, 0, 0, "");
+
+        var keepPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        RasterSheetSource? source = CurrentRasterSheetSource(page);
+        if (source != null)
+        {
+            AddReferencedCachePath(page.FolderPath, source.Image, keepPaths);
+            AddReferencedCachePath(page.FolderPath, source.OverviewImage, keepPaths);
+            AddReferencedCachePath(page.FolderPath, source.SnapIndex, keepPaths);
+        }
+
+        int deleted = 0;
+        long bytes = 0;
+        int failed = 0;
+        string firstError = "";
+        foreach (string path in Directory.EnumerateFiles(rasterDir).Where(IsCompactableCacheFile).ToList())
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (keepPaths.Contains(fullPath))
+                continue;
+
+            try
+            {
+                var info = new FileInfo(fullPath);
+                long length = info.Exists ? info.Length : 0;
+                File.Delete(fullPath);
+                deleted++;
+                bytes += Math.Max(0, length);
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                if (string.IsNullOrWhiteSpace(firstError))
+                    firstError = ex.Message;
+            }
+        }
+
+        TryDeleteEmptyRasterDirectory(rasterDir);
+        if (failed > 0)
+        {
+            string error = $"{failed.ToString(CultureInfo.InvariantCulture)} raster cache file(s) could not be deleted";
+            if (!string.IsNullOrWhiteSpace(firstError))
+                error += $": {firstError}";
+            return new RasterSheetCacheCompactResult(false, deleted, bytes, error);
+        }
+
+        return new RasterSheetCacheCompactResult(true, deleted, bytes, "");
+    }
+
     public static string DisplayStatus(
         PageInfo page,
         IReadOnlyDictionary<string, IReadOnlyList<int>>? readyDpisByPageFolder = null)
@@ -500,6 +562,43 @@ public static class RasterSheetCacheService
         catch
         {
             return pageFolder.Trim();
+        }
+    }
+
+    private static void AddReferencedCachePath(string pageFolder, string relativePath, HashSet<string> keepPaths)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return;
+
+        try
+        {
+            keepPaths.Add(ResolvePagePath(pageFolder, relativePath));
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool IsCompactableCacheFile(string path)
+    {
+        string name = Path.GetFileName(path);
+        return string.Equals(name, WorkingImageName, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, OverviewImageName, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, SnapIndexName, StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("working-", StringComparison.OrdinalIgnoreCase) &&
+               name.EndsWith("dpi.png", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void TryDeleteEmptyRasterDirectory(string rasterDir)
+    {
+        try
+        {
+            if (Directory.Exists(rasterDir) && !Directory.EnumerateFileSystemEntries(rasterDir).Any())
+                Directory.Delete(rasterDir);
+        }
+        catch
+        {
         }
     }
 

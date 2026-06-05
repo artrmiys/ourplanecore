@@ -144,6 +144,27 @@ internal static class RasterSheetCacheTests
                 readyOnlyPage.RasterSheet is { Enabled: true } &&
                 readyOnlyPage.RasterSheet.Image.Contains("90dpi", StringComparison.OrdinalIgnoreCase),
                 "ready-only raster enable should switch source.json to the prepared DPI image");
+            RasterSheetCacheCompactResult compact = RasterSheetCacheService.CompactCache(readyOnlyPage);
+            AssertTrue(compact.Ok, compact.Error);
+            AssertTrue(compact.DeletedFiles >= 2, "raster cache compact should delete unused DPI PNG variants");
+            AssertTrue(compact.DeletedBytes > 0, "raster cache compact should report freed disk space");
+            PageInfo compactedPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after compact.");
+            IReadOnlyDictionary<string, IReadOnlyList<int>> compactedReadySnapshot =
+                RasterSheetCacheService.ReadyReadableRasterDpisByPageFolder([compactedPage]);
+            AssertTrue(
+                compactedReadySnapshot.TryGetValue(Path.GetFullPath(compactedPage.FolderPath), out IReadOnlyList<int>? compactedReadyDpis) &&
+                compactedReadyDpis.SequenceEqual([90]),
+                "raster cache compact should keep only the active readable DPI variant");
+            AssertTrue(
+                RasterSheetCacheService.TryReadReady(
+                    compactedPage.FolderPath,
+                    compactedPage.PdfPath,
+                    compactedPage.RasterSheet,
+                    out RasterSheetBitmapResult compactedBitmap,
+                    out string compactedReason),
+                compactedReason);
+            compactedBitmap.Bitmap.Dispose();
 
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;
