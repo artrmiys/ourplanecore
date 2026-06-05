@@ -1331,7 +1331,10 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("if (!RefreshSheetManagerRasterRows(pages))", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.DisplayStatus(refreshedPage, readyRasterDpisByPageFolder)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("TrySetSheetManagerRasterOnReadyFastAsync(pages, rasterDpi, refreshSheetManager)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("(bool allReady, int ready, int source, int already, int failed) = await Task.Run(", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("HasReadyReadableRaster(page, renderScale)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("return (false, 0, 0, 0, 0);", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("if (!allReady)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("RefreshSheetManagerRasterRows(pages)", StringComparison.Ordinal) &&
             !rasterOnReadyMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&

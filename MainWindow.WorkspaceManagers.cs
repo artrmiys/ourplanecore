@@ -958,27 +958,27 @@ public partial class MainWindow
         int rasterDpi,
         bool refreshSheetManager)
     {
-        var plans = new List<(PageInfo Page, int EffectiveDpi, float RenderScale, bool SourceImage)>();
-        foreach (PageInfo page in pages)
+        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: checking ready cache for {pages.Count} sheet(s)...";
+        (bool allReady, int ready, int source, int already, int failed) = await Task.Run(() =>
         {
-            if (RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
+            var plans = new List<(PageInfo Page, float RenderScale, bool SourceImage)>();
+            foreach (PageInfo page in pages)
             {
-                plans.Add((page, 0, 0f, true));
-                continue;
+                if (RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
+                {
+                    plans.Add((page, 0f, true));
+                    continue;
+                }
+
+                int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
+                float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
+                if (!RasterSheetCacheService.HasReadyReadableRaster(page, renderScale))
+                    return (false, 0, 0, 0, 0);
+
+                plans.Add((page, renderScale, false));
             }
 
-            int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
-            float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-            if (!RasterSheetCacheService.HasReadyReadableRaster(page, renderScale))
-                return false;
-
-            plans.Add((page, effectiveDpi, renderScale, false));
-        }
-
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
-        TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: enabling ready cache for {pages.Count} sheet(s)...";
-        (int ready, int source, int already, int failed) = await Task.Run(() =>
-        {
             int readyCount = 0;
             int sourceCount = 0;
             int alreadyCount = 0;
@@ -1017,8 +1017,11 @@ public partial class MainWindow
                 }
             }
 
-            return (readyCount, sourceCount, alreadyCount, failedCount);
+            return (true, readyCount, sourceCount, alreadyCount, failedCount);
         });
+
+        if (!allReady)
+            return false;
 
         InvalidatePagePreviewPrefetchCache();
         if (refreshSheetManager)
