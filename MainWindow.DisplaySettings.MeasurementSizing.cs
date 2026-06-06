@@ -331,6 +331,54 @@ public partial class MainWindow
         TxtStatus.Text = $"PDF Snap bridge radius: {_settings.ViewportPdfSnapBridgeTolerancePx:0.#}px.";
     }
 
+    private void TxtZoomWheelFactor_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+            return;
+
+        ApplyZoomWheelFactorFromText();
+        e.Handled = true;
+    }
+
+    private void TxtZoomWheelFactor_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyZoomWheelFactorFromText();
+
+    private void ApplyZoomWheelFactorFromText()
+    {
+        string raw = TxtZoomWheelFactor.Text.Trim().TrimEnd('x', 'X', '×').Replace(",", ".", StringComparison.Ordinal);
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double factor) ||
+            factor < AppSettingsStore.ViewportZoomWheelFactorMin ||
+            factor > AppSettingsStore.ViewportZoomWheelFactorMax)
+        {
+            TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtStatus.Text =
+                $"Wheel zoom step must be {AppSettingsStore.ViewportZoomWheelFactorMin:0.##} - {AppSettingsStore.ViewportZoomWheelFactorMax:0.##}x.";
+            return;
+        }
+
+        SetZoomWheelFactor(factor);
+    }
+
+    private void SetZoomWheelFactor(double factor)
+    {
+        _settings.ViewportZoomWheelFactor = NormalizeZoomWheelFactor(factor);
+        ApplyDisplaySettingsToViewport();
+        SaveAppSettings();
+        TxtStatus.Text = $"Mouse-wheel zoom step: {_settings.ViewportZoomWheelFactor:0.##}x per notch.";
+    }
+
+    private void SldZoomWheelFactor_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized || _isApplyingSettings)
+            return;
+
+        _settings.ViewportZoomWheelFactor = NormalizeZoomWheelFactor(e.NewValue);
+        _viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
+        TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Mouse-wheel zoom step: {_settings.ViewportZoomWheelFactor:0.##}x per notch.";
+    }
+
     private void SldAreaEdge_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!IsInitialized || _isApplyingSettings)
@@ -490,6 +538,17 @@ public partial class MainWindow
             return 1.0;
 
         return Math.Clamp(scale, 0.25, 4.00);
+    }
+
+    private static double NormalizeZoomWheelFactor(double factor)
+    {
+        if (double.IsNaN(factor) || double.IsInfinity(factor) || factor <= 1.0)
+            return AppSettingsStore.ViewportZoomWheelFactorDefault;
+
+        return Math.Clamp(
+            factor,
+            AppSettingsStore.ViewportZoomWheelFactorMin,
+            AppSettingsStore.ViewportZoomWheelFactorMax);
     }
 
     private static IReadOnlyList<(string Label, double Scale)> StrokeSizeOptions() =>

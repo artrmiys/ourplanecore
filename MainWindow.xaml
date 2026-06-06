@@ -364,7 +364,13 @@
                             </Border>
                         </StackPanel>
 
-                        <Border Style="{StaticResource RibbonGroupSep}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Display">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6,1">
 
                         <!-- GROUP: LABELS -->
                         <StackPanel Style="{StaticResource RibbonGroup}">
@@ -473,6 +479,16 @@
                                 <ToggleButton x:Name="BtnDisplayDarkTheme" Content="Dark" Checked="BtnDarkTheme_Checked" Unchecked="BtnDarkTheme_Unchecked"
                                               Style="{StaticResource TopCommandToggle}"
                                               ToolTip="Toggle dark/light UI theme"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Zoom" Style="{StaticResource RibbonRowLabel}"/>
+                                <Slider x:Name="SldZoomWheelFactor" Minimum="1.05" Maximum="2.5" SmallChange="0.05" LargeChange="0.25"
+                                        Style="{StaticResource RibbonSlider}"
+                                        ValueChanged="SldZoomWheelFactor_ValueChanged" PreviewMouseUp="Slider_CommitSave" KeyUp="Slider_CommitSave"
+                                        ToolTip="Mouse-wheel zoom step per notch 1.05 - 2.5x (PlanSwift-fast at 2x)"/>
+                                <TextBox x:Name="TxtZoomWheelFactor" Text="2.0" Style="{StaticResource RibbonValue}"
+                                         KeyDown="TxtZoomWheelFactor_KeyDown" LostFocus="TxtZoomWheelFactor_LostFocus"
+                                         ToolTip="Type a wheel zoom step 1.05 - 2.5x and press Enter"/>
                             </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">

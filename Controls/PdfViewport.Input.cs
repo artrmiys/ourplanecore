@@ -25,7 +25,8 @@ public sealed partial class PdfViewport
     {
         Focus();
         var pos    = ViewPointToCanvas(e.GetPosition(this));
-        float fac  = e.Delta > 0 ? 1.12f : 1f / 1.12f;
+        float step = (float)Math.Clamp(ZoomWheelFactor, 1.01, 4.0);
+        float fac  = e.Delta > 0 ? step : 1f / step;
         ApplyZoom(fac, (float)pos.X, (float)pos.Y);
         e.Handled = true;
     }

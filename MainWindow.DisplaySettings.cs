@@ -120,6 +120,7 @@ public partial class MainWindow
         _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(_settings.ViewportRulerStrokeWidth);
         _settings.ViewportPdfSnapBridgeTolerancePx = NormalizePdfSnapBridgeTolerance(_settings.ViewportPdfSnapBridgeTolerancePx);
         _settings.ViewportPointSizeScale = NormalizePointScale(_settings.ViewportPointSizeScale);
+        _settings.ViewportZoomWheelFactor = NormalizeZoomWheelFactor(_settings.ViewportZoomWheelFactor);
         _viewport.ShowMeasurementLabels = _settings.ShowMeasurementLabels;
         _viewport.ShowLineLabels = _settings.ShowLineLabels;
         _viewport.ShowAreaLabels = _settings.ShowAreaLabels;
@@ -130,6 +131,7 @@ public partial class MainWindow
         _viewport.RulerStrokeWidth = _settings.ViewportRulerStrokeWidth;
         _viewport.PdfSnapBridgeToleranceScreenPx = _settings.ViewportPdfSnapBridgeTolerancePx;
         _viewport.PointSizeScale = _settings.ViewportPointSizeScale;
+        _viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
         _viewport.AreaEdgeScale = _settings.ViewportAreaEdgeScale;
         _viewport.AreaFillOpacity = _settings.ViewportAreaFillOpacity;
         _viewport.ScaleMeasurementLabelsWithPage = _settings.ScaleMeasurementLabelsWithPage;
@@ -167,6 +169,7 @@ public partial class MainWindow
             TxtRulerStrokeWidth.Text = _settings.ViewportRulerStrokeWidth.ToString("0.##", CultureInfo.InvariantCulture);
             TxtPdfSnapBridgeTolerance.Text = _settings.ViewportPdfSnapBridgeTolerancePx.ToString("0.#", CultureInfo.InvariantCulture);
             TxtMeasurementPointScale.Text = _settings.ViewportPointSizeScale.ToString("0.##", CultureInfo.InvariantCulture);
+            TxtZoomWheelFactor.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture);
             TxtAreaEdgeScale.Text = _settings.ViewportAreaEdgeScale.ToString("0.##", CultureInfo.InvariantCulture);
             TxtAreaFillOpacity.Text = Math.Round(_settings.ViewportAreaFillOpacity * 100.0).ToString("0", CultureInfo.InvariantCulture);
             SldLabelScale.Value = _settings.MeasurementLabelScale;
@@ -174,6 +177,7 @@ public partial class MainWindow
             SldRulerThickness.Value = _settings.ViewportRulerStrokeWidth;
             SldPdfSnapBridgeTolerance.Value = _settings.ViewportPdfSnapBridgeTolerancePx;
             SldPointSize.Value = _settings.ViewportPointSizeScale;
+            SldZoomWheelFactor.Value = _settings.ViewportZoomWheelFactor;
             SldAreaEdge.Value = _settings.ViewportAreaEdgeScale;
             SldAreaFill.Value = Math.Round(_settings.ViewportAreaFillOpacity * 100.0);
             SyncOutputSettingsControls();

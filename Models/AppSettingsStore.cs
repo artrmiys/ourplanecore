@@ -39,6 +39,7 @@ public sealed class AppSettings
     public double ViewportRulerStrokeWidth { get; set; } = 1.0;
     public double ViewportPdfSnapBridgeTolerancePx { get; set; } = AppSettingsStore.ViewportPdfSnapBridgeToleranceDefaultPx;
     public double ViewportPointSizeScale { get; set; } = 2.0;
+    public double ViewportZoomWheelFactor { get; set; } = AppSettingsStore.ViewportZoomWheelFactorDefault;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
     public bool PdfExportIncludeMeasurements { get; set; } = true;
@@ -94,6 +95,11 @@ public static class AppSettingsStore
     public const double ViewportPdfSnapBridgeToleranceDefaultPx = 36.0;
     public const double ViewportPdfSnapBridgeToleranceMinPx = 4.0;
     public const double ViewportPdfSnapBridgeToleranceMaxPx = 96.0;
+    // Mouse-wheel zoom step (multiplier per notch). Default 2x doubles per notch,
+    // PlanSwift-fast; tunable in the Display ribbon.
+    public const double ViewportZoomWheelFactorDefault = 2.0;
+    public const double ViewportZoomWheelFactorMin = 1.05;
+    public const double ViewportZoomWheelFactorMax = 2.5;
 
     public static readonly string[] SuggestedOpenAiModels =
     [
@@ -366,6 +372,11 @@ public static class AppSettingsStore
             fallback: 2.0,
             min: 0.25,
             max: 4.0);
+        settings.ViewportZoomWheelFactor = NormalizeScale(
+            settings.ViewportZoomWheelFactor,
+            fallback: ViewportZoomWheelFactorDefault,
+            min: ViewportZoomWheelFactorMin,
+            max: ViewportZoomWheelFactorMax);
         settings.ViewportAreaEdgeScale = NormalizeScale(
             settings.ViewportAreaEdgeScale,
             fallback: 0.25,

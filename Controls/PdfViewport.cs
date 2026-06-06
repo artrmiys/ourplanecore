@@ -188,6 +188,8 @@ public sealed partial class PdfViewport : SKElement
     public  double   AreaEdgeScale { get; set; } = 1.0;
     public  double   AreaFillOpacity { get; set; } = 0.24;
     public  double   PointSizeScale { get; set; } = 1.0;
+    // Mouse-wheel zoom step (multiplier per notch). Set from settings.
+    public  double   ZoomWheelFactor { get; set; } = 2.0;
     public  string   SheetLegendAnchor { get; set; } = "BottomLeft";
     public  double   SheetLegendScale { get; set; } = 1.0;
     public  double   SheetHeaderScale { get; set; } = 1.0;
