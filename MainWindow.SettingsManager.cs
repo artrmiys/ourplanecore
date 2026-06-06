@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -16,6 +17,11 @@ public partial class MainWindow
     private ListBox? _settingsCategoryList;
     private ContentControl _settingsHost = new();
     private readonly Dictionary<string, FrameworkElement> _settingsPanels = new();
+
+    // Defaults panel: live mouse-wheel zoom step control.
+    private Slider? _defaultsZoomSlider;
+    private TextBlock? _defaultsZoomValue;
+    private bool _defaultsZoomSyncing;
 
     private FolderTemplateConfig _ftConfig = FolderTemplateConfig.BuildDefault();
     private PageSortConfig _psConfig = PageSortConfig.BuildDefault();
@@ -147,6 +153,7 @@ public partial class MainWindow
             case "Sort A/S": BindArchStruct(); break;
             case "Sort D/Sec/WT": BindSuffixSort(); break;
             case "Auto Rename / Scale": LoadRuleRows(); break;
+            case "Defaults": SyncDefaultsZoomControl(); break;
         }
     }
 
@@ -603,18 +610,96 @@ public partial class MainWindow
     private FrameworkElement BuildDefaultsPanel()
     {
         var root = new StackPanel { Margin = new Thickness(2) };
+
+        root.Children.Add(Header("Viewport interaction"));
+        root.Children.Add(new TextBlock
+        {
+            Text = "Mouse-wheel zoom step — how much one wheel notch zooms in/out "
+                 + $"({AppSettingsStore.ViewportZoomWheelFactorMin:0.##} - {AppSettingsStore.ViewportZoomWheelFactorMax:0.##}x). "
+                 + "Higher = fewer notches to zoom, like PlanSwift.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 0, 0, 6),
+            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
+        });
+
+        double initial = NormalizeZoomWheelFactor(_settings.ViewportZoomWheelFactor);
+        var zoomRow = HBar();
+        zoomRow.Children.Add(new TextBlock
+        {
+            Text = "Zoom step (× / notch)",
+            VerticalAlignment = VerticalAlignment.Center, Width = 150, FontSize = 12,
+        });
+        _defaultsZoomSlider = new Slider
+        {
+            Minimum = AppSettingsStore.ViewportZoomWheelFactorMin,
+            Maximum = AppSettingsStore.ViewportZoomWheelFactorMax,
+            SmallChange = 0.05, LargeChange = 0.25,
+            Width = 220, VerticalAlignment = VerticalAlignment.Center,
+            Value = initial,
+        };
+        _defaultsZoomSlider.ValueChanged += DefaultsZoomSlider_ValueChanged;
+        _defaultsZoomSlider.PreviewMouseUp += Slider_CommitSave;
+        _defaultsZoomSlider.KeyUp += Slider_CommitSave;
+        zoomRow.Children.Add(_defaultsZoomSlider);
+        _defaultsZoomValue = new TextBlock
+        {
+            Text = initial.ToString("0.##", CultureInfo.InvariantCulture) + "x",
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0),
+            MinWidth = 44, FontSize = 12,
+        };
+        zoomRow.Children.Add(_defaultsZoomValue);
+        root.Children.Add(zoomRow);
+
+        var zoomActions = HBar();
+        zoomActions.Children.Add(MgrButton(
+            $"Reset to default ({AppSettingsStore.ViewportZoomWheelFactorDefault:0.##}x)",
+            (_, _) => { SetZoomWheelFactor(AppSettingsStore.ViewportZoomWheelFactorDefault); SyncDefaultsZoomControl(); }));
+        root.Children.Add(zoomActions);
+
         root.Children.Add(Header("Display & export defaults"));
         root.Children.Add(new TextBlock
         {
-            Text = "Viewport and PDF export appearance defaults live on the top ribbon tabs.",
+            Text = "More viewport and PDF export appearance defaults live on the top ribbon tabs.",
             TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 0, 0, 8),
             Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
         });
         var row = HBar();
         row.Children.Add(MgrButton("Open Viewport defaults", (_, _) => SelectTopTab("Viewport")));
+        row.Children.Add(MgrButton("Open Display defaults", (_, _) => SelectTopTab("Display")));
         row.Children.Add(MgrButton("Open PDF Output defaults", (_, _) => SelectTopTab("PDF Output")));
         root.Children.Add(row);
         return root;
+    }
+
+    private void DefaultsZoomSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized || _isApplyingSettings || _defaultsZoomSyncing)
+            return;
+
+        _settings.ViewportZoomWheelFactor = NormalizeZoomWheelFactor(e.NewValue);
+        _viewport.ZoomWheelFactor = _settings.ViewportZoomWheelFactor;
+        if (_defaultsZoomValue != null)
+            _defaultsZoomValue.Text = _settings.ViewportZoomWheelFactor.ToString("0.##", CultureInfo.InvariantCulture) + "x";
+        _viewportScaleDirty = true;
+        TxtStatus.Text = $"Mouse-wheel zoom step: {_settings.ViewportZoomWheelFactor:0.##}x per notch.";
+    }
+
+    private void SyncDefaultsZoomControl()
+    {
+        if (_defaultsZoomSlider == null)
+            return;
+
+        _defaultsZoomSyncing = true;
+        try
+        {
+            double value = NormalizeZoomWheelFactor(_settings.ViewportZoomWheelFactor);
+            _defaultsZoomSlider.Value = value;
+            if (_defaultsZoomValue != null)
+                _defaultsZoomValue.Text = value.ToString("0.##", CultureInfo.InvariantCulture) + "x";
+        }
+        finally
+        {
+            _defaultsZoomSyncing = false;
+        }
     }
 
     private void SelectTopTab(string header)

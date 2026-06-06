@@ -181,6 +181,7 @@ public partial class MainWindow
             SldAreaEdge.Value = _settings.ViewportAreaEdgeScale;
             SldAreaFill.Value = Math.Round(_settings.ViewportAreaFillOpacity * 100.0);
             SyncOutputSettingsControls();
+            SyncDefaultsZoomControl();
         }
         finally
         {
