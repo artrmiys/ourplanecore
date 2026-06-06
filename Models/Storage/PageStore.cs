@@ -734,6 +734,7 @@ internal static class PageStore
         copy.SnapPointCount = Math.Max(0, copy.SnapPointCount);
         copy.SnapSegmentCount = Math.Max(0, copy.SnapSegmentCount);
         copy.SnapGeneratedAtUtc = (copy.SnapGeneratedAtUtc ?? "").Trim();
+        copy.SnapSchemaVersion = Math.Max(0, copy.SnapSchemaVersion);
         return copy;
     }
 

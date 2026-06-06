@@ -1781,13 +1781,58 @@ def pdf_snap_data(req: dict) -> dict:
             if len(points) >= max_points and len(segments) >= max_segments:
                 break
 
+        result_points = list(points.values())[:max_points]
+        result_segments = list(segments.values())[:max_segments]
+
+        # get_cdrawings() returns coordinates in the page's unrotated (mediabox)
+        # space, but the raster is rendered with get_pixmap() which applies the
+        # page /Rotate. Map the snap geometry into the same rotated page.rect
+        # space so the overlay lines up with the raster. Identity for /Rotate=0.
+        _apply_page_rotation_to_snap(page, result_points, result_segments)
+
         return {
             "ok": True,
-            "points": list(points.values())[:max_points],
-            "segments": list(segments.values())[:max_segments],
+            "points": result_points,
+            "segments": result_segments,
         }
     finally:
         doc.close()
+
+
+def _apply_page_rotation_to_snap(page, snap_points: list[dict], snap_segments: list[dict]) -> None:
+    rotation = int(getattr(page, "rotation", 0) or 0)
+    if rotation % 360 == 0:
+        return
+
+    matrix = page.rotation_matrix
+    for point in snap_points:
+        rotated = fitz.Point(point["x"], point["y"]) * matrix
+        point["x"] = float(rotated.x)
+        point["y"] = float(rotated.y)
+    for segment in snap_segments:
+        start = fitz.Point(segment["x0"], segment["y0"]) * matrix
+        end = fitz.Point(segment["x1"], segment["y1"]) * matrix
+        segment["x0"] = float(start.x)
+        segment["y0"] = float(start.y)
+        segment["x1"] = float(end.x)
+        segment["y1"] = float(end.y)
+
+
+def _apply_page_rotation_to_measurements(page, measurements: list[dict]) -> None:
+    # Layer Trace geometry comes from get_cdrawings()/get_bboxlog(), which report
+    # coordinates in the page's unrotated (mediabox) space. Map the traced points
+    # into the rotated page.rect space so the created takeoffs land on the linework
+    # of the rotated raster. Identity for /Rotate=0.
+    rotation = int(getattr(page, "rotation", 0) or 0)
+    if rotation % 360 == 0:
+        return
+
+    matrix = page.rotation_matrix
+    for measurement in measurements:
+        for point in measurement.get("points") or []:
+            rotated = fitz.Point(point["x"], point["y"]) * matrix
+            point["x"] = float(rotated.x)
+            point["y"] = float(rotated.y)
 
 
 def _segment_measurement(
@@ -1941,6 +1986,7 @@ def trace_layer_data(req: dict) -> dict:
             for segment in sorted(segments, key=_segment_length, reverse=True)[:max_measurements]:
                 measurements.append(_segment_measurement(segment, layer_name, "all edges"))
 
+        _apply_page_rotation_to_measurements(page, measurements)
         return {
             "ok": True,
             "layer": layer_id,

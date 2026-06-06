@@ -155,6 +155,13 @@ public sealed class RasterSheetSource
     [JsonPropertyName("snap_generated_at_utc")]
     public string SnapGeneratedAtUtc { get; set; } = "";
 
+    // Schema version of the cached snap index. Bumped when the snap geometry
+    // coordinate space changes (e.g. applying page /Rotate). Caches written by
+    // an older version are treated as outdated so the rotated-page ghost overlay
+    // is suppressed and the index is rebuilt. 0 = legacy/unrotated.
+    [JsonPropertyName("snap_schema_version")]
+    public int SnapSchemaVersion { get; set; }
+
     public RasterSheetSource Clone() =>
         new()
         {
@@ -175,6 +182,7 @@ public sealed class RasterSheetSource
             SnapPointCount = SnapPointCount,
             SnapSegmentCount = SnapSegmentCount,
             SnapGeneratedAtUtc = SnapGeneratedAtUtc,
+            SnapSchemaVersion = SnapSchemaVersion,
         };
 }
 

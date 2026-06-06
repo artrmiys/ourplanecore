@@ -40,6 +40,10 @@ public static class RasterSheetCacheService
     public const string CompactWorkingImageName = "working.webp";
     public const string OverviewImageName = "overview.png";
     public const string SnapIndexName = "snap.json";
+    // Bump when the snap geometry coordinate space changes. v2 maps snap
+    // geometry through the page /Rotate so the overlay lines up with the rotated
+    // raster; v0/v1 caches were in unrotated mediabox space and must be rebuilt.
+    public const int CurrentSnapSchemaVersion = 2;
     public const string ReadableRasterProfile = "readable-raster-v2";
     public const string SourceImageRasterProfile = "source-image-v1";
     public const string ReadableLineBoostProfile = "lineboost-v1";
@@ -889,6 +893,14 @@ public static class RasterSheetCacheService
                 reason = file?.Error ?? "snap index file is invalid";
                 return false;
             }
+            if (file.Version < CurrentSnapSchemaVersion)
+            {
+                // Legacy cache in unrotated mediabox space. Reject it so a rotated
+                // page does not paint a rotated ghost of the linework; the index
+                // is rebuilt (in rotated space) the next time the raster is built.
+                reason = $"snap index outdated (v{file.Version} < v{CurrentSnapSchemaVersion})";
+                return false;
+            }
 
             result = new PdfGeometrySnapResult
             {
@@ -1147,6 +1159,7 @@ public static class RasterSheetCacheService
 
     private static bool HasReadySnapIndex(string pageFolder, RasterSheetSource source) =>
         source.SnapBlackOnly &&
+        source.SnapSchemaVersion >= CurrentSnapSchemaVersion &&
         !string.IsNullOrWhiteSpace(source.SnapIndex) &&
         File.Exists(ResolvePagePath(pageFolder, source.SnapIndex));
 
@@ -1344,6 +1357,7 @@ public static class RasterSheetCacheService
         var file = new RasterSheetSnapFile
         {
             Ok = true,
+            Version = CurrentSnapSchemaVersion,
             GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             BlackOnly = true,
             Points = snap.Points
@@ -1378,6 +1392,7 @@ public static class RasterSheetCacheService
         source.SnapPointCount = file.Points.Count;
         source.SnapSegmentCount = file.Segments.Count;
         source.SnapGeneratedAtUtc = file.GeneratedAtUtc;
+        source.SnapSchemaVersion = CurrentSnapSchemaVersion;
     }
 
     private static string ResolvePagePath(string pageFolder, string path)
@@ -1394,6 +1409,7 @@ public static class RasterSheetCacheService
     private sealed class RasterSheetSnapFile
     {
         public bool Ok { get; set; }
+        public int Version { get; set; }
         public string Error { get; set; } = "";
         public bool BlackOnly { get; set; }
         public string GeneratedAtUtc { get; set; } = "";
