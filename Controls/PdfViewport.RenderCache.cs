@@ -580,14 +580,26 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (RasterSheetCacheService.HasSourceImageOverview(page.RasterSheet))
+        if (ShouldPrefetchRasterSheetBitmap(page.RasterSheet, preferOverview: true))
             QueueRasterSheetBitmapPrefetch(page, preferOverview: true);
 
-        if (!RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet) ||
-            !RasterSheetCacheService.HasSourceImageOverview(page.RasterSheet))
-        {
+        if (ShouldPrefetchRasterSheetBitmap(page.RasterSheet, preferOverview: false))
             QueueRasterSheetBitmapPrefetch(page, preferOverview: false);
-        }
+    }
+
+    private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)
+    {
+        if (source?.Enabled != true)
+            return false;
+
+        if (preferOverview)
+            return RasterSheetCacheService.HasSourceImageOverview(source);
+
+        if (!RasterSheetCacheService.IsSourceImageRaster(source))
+            return false;
+
+        return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source) ||
+               !RasterSheetCacheService.HasSourceImageOverview(source);
     }
 
     private static void QueueRasterSheetBitmapPrefetch(PageInfo page, bool preferOverview)

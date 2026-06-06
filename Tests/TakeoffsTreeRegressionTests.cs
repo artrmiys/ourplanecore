@@ -123,7 +123,7 @@ internal static class TakeoffsTreeRegressionTests
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetBitmap", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetRefresh", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews and decoded raster bitmaps around the active sheet, refresh stale raster caches in the background, and clean renders only for the closest neighbors");
+            "nearby page prefetch should warm cheap previews and only fast/overview raster bitmaps around the active sheet, refresh stale raster caches in the background, and clean renders only for the closest neighbors");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()
@@ -1307,6 +1307,10 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
+            renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
+            renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
+            renderCache.Contains("return false;", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("TryWarmRasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetBitmapPrefetchSemaphore", StringComparison.Ordinal) &&
@@ -1315,18 +1319,20 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("TryBuildRasterSheetBitmapCacheKey", StringComparison.Ordinal) &&
             layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
-            "raster sheet opens should reuse decoded raster bitmaps from RAM and prefetch nearby raster sheets instead of decoding every switch on the UI path");
+            "raster sheet opens should reuse decoded raster bitmaps from RAM while nearby warmup skips heavy full readable raster bitmaps that are not useful at low zoom");
         AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = 2.75f", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 2.35f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true;", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("!IsLowZoomRasterSheetPageOpen(restoreView, fitAfter)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
+            !rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should open as the first sharp frame and stay raster at low zoom instead of flashing back to a blurry PDF preview");
+            "ordinary readable raster sheets should avoid painting heavy full-sheet rasters at low zoom and switch back to preview when zoomed out");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&

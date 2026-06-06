@@ -236,7 +236,8 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        return rasterSheet?.Enabled == true;
+        return rasterSheet?.Enabled == true &&
+               !IsLowZoomRasterSheetPageOpen(restoreView, fitAfter);
     }
 
     private static bool ShouldUseRasterSheetOverviewForPageOpen(
@@ -354,7 +355,7 @@ public sealed partial class PdfViewport
 
     private bool ShouldKeepRasterSheetAtLowZoom() =>
         _rasterSheetSource?.Enabled == true &&
-        (!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
-         RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
+        RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) &&
+        (RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
          _usingRasterSheetOverviewRender);
 }

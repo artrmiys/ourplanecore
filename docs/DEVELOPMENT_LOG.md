@@ -1,5 +1,26 @@
 ﻿# Development Log
 
+## 2026-06-06 Low-Zoom Raster Paint Lag Pass
+
+- Fixed a remaining sheet-open lag where fit/low-zoom page opens could apply a
+  high-DPI readable raster sheet, including 300/400 DPI full-page bitmaps, even
+  though the user was viewing the whole sheet.
+- Ordinary readable raster sheets now skip full-raster page-open at low zoom and
+  use the fast PDF preview until the current zoom reaches the raster display
+  threshold. When zooming back out, they switch back to preview instead of
+  continuing to paint the heavy full-sheet bitmap.
+- Source-image PlanSwift rasters keep their existing behavior: fast small
+  source images may stay visible, and oversized source images can still use
+  their overview raster.
+- Nearby/job-open warmup no longer decodes full readable raster bitmaps for
+  ordinary PDF-derived pages. It keeps cheap previews hot and only prefetches
+  source-image fast-open/overview bitmaps, so the first seconds after opening a
+  job no longer compete with large 200/400 DPI bitmap decodes that low-zoom
+  viewing will not use.
+- This directly targets the observed packaged runtime log line where a
+  `5.556x` raster sheet at `zoom=0.172` produced a `181ms` slow frame with
+  `page:169ms`.
+
 ## 2026-06-06 Sheet Render Sharpness Pass
 
 - Shifted the viewport sharpness path toward visible clipped detail rendering
