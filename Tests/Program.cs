@@ -7,6 +7,9 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
+if (Environment.GetEnvironmentVariable("OPC_BENCH") == "1")
+    return RenderPerfBenchmark.Run();
+
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "opc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
@@ -600,6 +603,7 @@ static void OutputSettingsDefaultExportAppearance()
     AssertClose(2.0, settings.ViewportPointSizeScale, "viewport point size should default to the current size");
     AssertClose(0.25, settings.ViewportAreaEdgeScale, "viewport area edge should default to the current size");
     AssertClose(0.2826086956521738, settings.ViewportAreaFillOpacity, "viewport area fill should default to the current opacity");
+    AssertClose(2.0, settings.ViewportZoomWheelFactor, "mouse-wheel zoom step should default to 2x per notch");
     AssertFalse(settings.PdfExportIncludeAnnotations, "PDF annotations should default to the current export profile");
     AssertFalse(settings.PdfExportShowLineLabels, "PDF line labels should default to the current export profile");
     AssertFalse(settings.PdfExportShowAreaLabels, "PDF area labels should default to the current export profile");
@@ -624,6 +628,18 @@ static void OutputSettingsDefaultExportAppearance()
     settings.ViewportPdfSnapBridgeTolerancePx = -1.0;
     AppSettingsStore.NormalizeOutputSettings(settings);
     AssertClose(36.0, settings.ViewportPdfSnapBridgeTolerancePx, "PDF Snap bridge should recover invalid values to the default");
+
+    settings.ViewportZoomWheelFactor = 9.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(2.5, settings.ViewportZoomWheelFactor, "wheel zoom step should clamp at the maximum");
+
+    settings.ViewportZoomWheelFactor = 1.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(1.05, settings.ViewportZoomWheelFactor, "wheel zoom step should clamp at the minimum");
+
+    settings.ViewportZoomWheelFactor = 0.0;
+    AppSettingsStore.NormalizeOutputSettings(settings);
+    AssertClose(2.0, settings.ViewportZoomWheelFactor, "wheel zoom step should recover invalid values to the default");
 
     settings.PdfExportMeasurementStrokeScale = 12.0;
     settings.PdfExportPointSizeScale = 12.0;
