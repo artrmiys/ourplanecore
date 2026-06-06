@@ -15,8 +15,8 @@ public static class ViewportRenderPolicy
     public const float ResponsiveMaxRenderPixels = 96_000_000f;
     public const float ZoomRefreshMinZoom = 0.30f;
     public const bool DetailRenderEnabled = true;
-    public const float DetailRenderMinZoom = 1.0f;
-    public const float DetailRenderMinScaleGain = 1.18f;
+    public const float DetailRenderMinZoom = 0.75f;
+    public const float DetailRenderMinScaleGain = 1.04f;
     public const float DetailRenderMaxScale = 16.0f;
     public const float DetailRenderMaxPixels = 96_000_000f;
     public const float DetailRenderPaddingScreenPx = 1024f;
@@ -26,11 +26,11 @@ public static class ViewportRenderPolicy
     public const int DetailRenderPrefetchConcurrency = 1;
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
-    public const int DetailRenderCoalesceDelayMs = 850;
+    public const int DetailRenderCoalesceDelayMs = 120;
     public const int DetailRenderMaxPaintTiles = 2;
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
-    public const int PageSwitchDetailRenderDelayMs = 320;
+    public const int PageSwitchDetailRenderDelayMs = 100;
     public const int FastPageSwitchPreviewCoalesceMs = 45;
     public const int PageSwitchSharpUpgradeDelayMs = 900;
     public const int PageSwitchSharpUpgradeIdleMs = 1200;
@@ -100,9 +100,9 @@ public static class ViewportRenderPolicy
 
     private static RenderQuality CurrentQuality => _qualityMode switch
     {
-        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f, 1.35f),
-        MaxQualityMode => new RenderQuality(4.0f, 240_000_000f, DetailRenderMaxScale, 160_000_000f, 768f, 1.5f),
-        _ => new RenderQuality(3.0f, 160_000_000f, 12.0f, 120_000_000f, 640f, 1.4f),
+        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f, ResponsiveMaxRenderScale),
+        MaxQualityMode => new RenderQuality(4.0f, 240_000_000f, DetailRenderMaxScale, 160_000_000f, 768f, 6.0f),
+        _ => new RenderQuality(3.0f, 160_000_000f, 12.0f, 120_000_000f, 640f, 4.0f),
     };
 
     public static bool ShouldUseFastNavigationFrame(

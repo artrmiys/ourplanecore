@@ -1024,7 +1024,7 @@ public sealed partial class PdfViewport
 
                     if (ShouldUseDetailRenderForSharpUpgrade())
                     {
-                        QueueDetailRenderIfNeeded(force: false);
+                        QueueDetailRenderIfNeeded(force: false, immediate: true);
                         return;
                     }
 
@@ -1034,7 +1034,7 @@ public sealed partial class PdfViewport
                     float renderScale = CurrentPostPreviewBaseRenderScale();
                     if (_bitmapScale >= renderScale * 0.95f)
                     {
-                        QueueDetailRenderIfNeeded(force: false);
+                        QueueDetailRenderIfNeeded(force: false, immediate: true);
                         return;
                     }
 
@@ -1086,7 +1086,7 @@ public sealed partial class PdfViewport
 
                     if (ShouldUseDetailRenderForSharpUpgrade())
                     {
-                        QueueDetailRenderIfNeeded(force: false);
+                        QueueDetailRenderIfNeeded(force: false, immediate: true);
                         return;
                     }
 
@@ -1096,7 +1096,7 @@ public sealed partial class PdfViewport
                     float renderScale = CurrentPostPreviewBaseRenderScale();
                     if (_bitmapScale >= renderScale * 0.95f)
                     {
-                        QueueDetailRenderIfNeeded(force: false);
+                        QueueDetailRenderIfNeeded(force: false, immediate: true);
                         return;
                     }
 
@@ -1185,7 +1185,7 @@ public sealed partial class PdfViewport
 
         if (ShouldUseDetailRenderForSharpUpgrade())
         {
-            QueueDetailRenderIfNeeded(force: false);
+            QueueDetailRenderIfNeeded(force: false, immediate: true);
             return true;
         }
 

@@ -85,7 +85,7 @@ public sealed partial class PdfViewport
         _detailPageKey = "";
     }
 
-    private void QueueDetailRenderIfNeeded(bool force)
+    private void QueueDetailRenderIfNeeded(bool force, bool immediate = false)
     {
         if (ShouldHoldDetailRender(force))
         {
@@ -114,7 +114,7 @@ public sealed partial class PdfViewport
             return;
 
         _pendingDetailRender = request with { Version = ++_detailRenderVersion };
-        QueueDetailRenderStart(force);
+        QueueDetailRenderStart(force || immediate);
     }
 
     private void QueueDetailRenderStart(bool immediate)
@@ -171,7 +171,7 @@ public sealed partial class PdfViewport
                         await Task.Delay(delay);
 
                     _detailRenderHoldResumeQueued = false;
-                    QueueDetailRenderIfNeeded(force: false);
+                    QueueDetailRenderIfNeeded(force: false, immediate: true);
                 }
                 catch (Exception ex)
                 {

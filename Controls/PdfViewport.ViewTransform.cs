@@ -53,7 +53,7 @@ public sealed partial class PdfViewport
         _isFastNavigating = false;
         MaybeRequestSheetOverlayRenderScaleRefresh();
         if (!TryUpgradeRasterSheetToReadyDpiForCurrentZoom())
-            QueueDetailRenderIfNeeded(force: false);
+            QueueDetailRenderIfNeeded(force: false, immediate: true);
         RequestRepaint();
     }
 

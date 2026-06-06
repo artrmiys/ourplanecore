@@ -1289,7 +1289,7 @@ internal static class TakeoffsTreeRegressionTests
             viewTransform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal),
             "raster sheet mode should skip full PDF zoom refreshes, keep raster sheets during low-zoom navigation, prefer ready higher-DPI rasters, and only then queue clipped detail renders");
         AssertTrue(
-            detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force)", StringComparison.Ordinal) &&
+            detailRender.Contains("private void QueueDetailRenderIfNeeded(bool force, bool immediate = false)", StringComparison.Ordinal) &&
             !detailRender.Contains("if (_usingRasterSheetRender)\r\n            return;", StringComparison.Ordinal) &&
             !detailRender.Contains("if (_usingRasterSheetRender)\n            return;", StringComparison.Ordinal) &&
             !detailRender.Contains("_usingRasterSheetRender ||", StringComparison.Ordinal),
@@ -1988,7 +1988,8 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("new RenderQuality(3.0f, 160_000_000f", StringComparison.Ordinal) &&
             policy.Contains("new RenderQuality(4.0f, 240_000_000f", StringComparison.Ordinal) &&
             policy.Contains("ZoomRefreshMinZoom = 0.30f", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderMinZoom = 1.0f", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMinZoom = 0.75f", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMinScaleGain = 1.04f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxScale = 16.0f", StringComparison.Ordinal) &&
             policy.Contains("SelectDetailRenderScale", StringComparison.Ordinal) &&
             policy.Contains("ShouldUseZoomRefreshRender", StringComparison.Ordinal) &&
@@ -1998,7 +1999,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderPrefetchEnabled = false", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchMinZoom = 6.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderCoalesceDelayMs = 850", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderCoalesceDelayMs = 120", StringComparison.Ordinal) &&
             policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPaintTiles = 2", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderStableTileScreenPx", StringComparison.Ordinal) &&
@@ -2037,7 +2038,7 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("ViewportRenderPolicy.ShouldPreferDetailRenderOverFullRefresh(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale)", StringComparison.Ordinal) &&
-            transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
+            transform.Contains("QueueDetailRenderIfNeeded(force: false, immediate: true)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
@@ -2047,12 +2048,12 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("BeginPageSwitchDetailRenderHold()", StringComparison.Ordinal) &&
             detail.Contains("ShouldHoldDetailRender(force)", StringComparison.Ordinal) &&
             detail.Contains("QueueDetailRenderAfterHold()", StringComparison.Ordinal) &&
-            detail.Contains("QueueDetailRenderStart(force)", StringComparison.Ordinal) &&
+            detail.Contains("QueueDetailRenderStart(force || immediate)", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderCoalesceDelayMs", StringComparison.Ordinal) &&
-            detail.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal) &&
+            detail.Contains("QueueDetailRenderIfNeeded(force: false, immediate: true)", StringComparison.Ordinal) &&
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchDetailRenderDelayMs = 320", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchDetailRenderDelayMs = 100", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewCoalesceMs = 45", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeDelayMs = 900", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 1200", StringComparison.Ordinal) &&

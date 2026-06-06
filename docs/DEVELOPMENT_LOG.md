@@ -1,5 +1,28 @@
 ﻿# Development Log
 
+## 2026-06-06 Sheet Render Sharpness Pass
+
+- Shifted the viewport sharpness path toward visible clipped detail rendering
+  instead of higher whole-sheet raster DPI.
+- `ViewportRenderPolicy` now starts detail rendering earlier:
+  `DetailRenderMinZoom = 0.75`, `DetailRenderMinScaleGain = 1.04`,
+  `DetailRenderCoalesceDelayMs = 120`, and
+  `PageSwitchDetailRenderDelayMs = 100`.
+- Raised the interactive clipped-detail scale caps so High/Max can actually
+  sharpen work zooms and raster-sheet views: High can render visible clips up
+  to `4x`, Max up to `6x`, while the existing pixel-budget caps still bound
+  oversized clips.
+- Reduced navigation idle before sharp detail work from `420ms` to `260ms` and
+  made detail render start immediately after navigation idle / delayed sharp
+  upgrade paths instead of adding another coalesce wait.
+- Verification: `dotnet build .\ourplanecore.sln` passed with `0` warnings /
+  `0` errors; `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj
+  --no-build` passed `290/290` tests.
+- Render benchmark after the change on the Mallory fixture:
+  full-sheet PNG averaged `1957.1ms`, visible clip raw averaged `675.9ms`,
+  clip cache hit was `0.0ms`, so visible rendering stayed `65.5%` faster than
+  full-sheet rendering.
+
 ## 2026-06-06 Job Move Autorepair / Detail Legend Sort
 
 - Implemented automatic repair for non-empty stale measurement `page_folder`

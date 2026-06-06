@@ -3932,6 +3932,21 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
             "ordinary zoom should use a refresh render, not an expensive clipped detail render");
+        AssertTrue(
+            ViewportRenderPolicy.ShouldUseDetailRender(0.80f, 0.35f),
+            "work zoom above the preview should use clipped detail instead of waiting for a full-sheet refresh");
+        AssertClose(
+            0.80,
+            ViewportRenderPolicy.SelectDetailRenderScale(0.80f, 800f, 600f, 0.35f),
+            "preview-backed work zoom should render the visible clip at screen-matched scale");
+        float defaultRasterScale = RasterSheetCacheService.DefaultRenderScale;
+        AssertTrue(
+            ViewportRenderPolicy.ShouldUseDetailRender(3.0f, defaultRasterScale),
+            "raster sheet zoom just above 200dpi should be eligible for clipped sharp detail");
+        AssertClose(
+            3.0,
+            ViewportRenderPolicy.SelectDetailRenderScale(3.0f, 600f, 400f, defaultRasterScale),
+            "detail render should sharpen over the 200dpi raster sheet instead of being blocked by a low cap");
         AssertFalse(
             ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(0.35f),
             "cheap preview should still be allowed to refresh to a normal base bitmap");
@@ -3939,18 +3954,18 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(1.0f),
             "deep zoom should rely on clipped detail once a normal base bitmap exists");
         AssertClose(
-            1.4,
+            4.0,
             ViewportRenderPolicy.SelectDetailRenderScale(4.0f, 300f, 220f, 1.0f),
-            "interactive detail render should cap below the viewport zoom to avoid long clip renders");
+            "interactive detail render should reach screen-matched scale for normal visible clips");
         AssertTrue(
             ViewportRenderPolicy.SelectDetailRenderScale(16.0f, 3200f, 2200f, 1.0f) < 6.0f,
             "very large visible clips should be capped by the detail render pixel budget");
 
         ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.MaxQualityMode);
         AssertClose(
-            0.0,
+            2.0,
             ViewportRenderPolicy.SelectDetailRenderScale(2.0f, 100f, 100f, 1.5f),
-            "detail render should skip when the required gain exceeds the interactive render cap");
+            "max quality should allow clipped detail to sharpen above a 1.5x base bitmap");
     }
     finally
     {
@@ -4003,9 +4018,9 @@ static void ViewportHighZoomUsesResponsiveNavigationFrame()
             hasBlockingInteraction: false),
         "enabled fast navigation should use fast frames at high zoom");
     AssertTrue(
-        ViewportConstants.NavigationIdleMs >= 400 &&
+        ViewportConstants.NavigationIdleMs >= 240 &&
         ViewportConstants.NavigationIdleMs > ViewportConstants.ZoomRerenderDelayMs,
-        "high-zoom pan bursts should not be treated as idle before the zoom rerender timer settles");
+        "high-zoom pan bursts should stay idle-gated but start detail soon after the zoom rerender timer settles");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(
