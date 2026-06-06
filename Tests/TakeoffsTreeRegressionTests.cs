@@ -1778,7 +1778,7 @@ internal static class TakeoffsTreeRegressionTests
             cacheBranch > cacheApply &&
             docnetFallback > cacheBranch &&
             status > docnetFallback,
-            "page open should avoid full-clean synchronous decode and queue a fast Docnet preview fallback after a preview cache miss");
+            "page open should avoid full-clean synchronous decode and queue a fast lightweight preview fallback after a preview cache miss");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
@@ -1876,16 +1876,22 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("TryRenderPreviewWithDocnetAsync", StringComparison.Ordinal) &&
             layers.Contains("return (docnet, false)", StringComparison.Ordinal) &&
             layers.Contains("TryRenderPreviewWithPyMuPdfAsync", StringComparison.Ordinal) &&
+            layers.Contains("return (pymupdf, true)", StringComparison.Ordinal) &&
             layers.Contains("IsPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewCoalesceMs", StringComparison.Ordinal) &&
             layers.Contains("LivePreviewRenderSemaphore.WaitAsync", StringComparison.Ordinal) &&
-            layers.Contains("PdfLayerRenderService.TryRenderIsolatedProcessAsync", StringComparison.Ordinal) &&
+            layers.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
             layers.Contains("StartFastPreviewRenderAsync", StringComparison.Ordinal) &&
             layers.Contains("preview-pymupdf", StringComparison.Ordinal) &&
             layers.Contains("RenderPageBitmapWithDocnet", StringComparison.Ordinal),
-            "cold page-switch previews should prefer in-process Docnet, retain PyMuPDF as a fallback, and coalesce stale page switches while overview-sharp previews keep the isolated worker path");
+            "cold page-switch previews should prefer the reusable PyMuPDF worker, retain Docnet as a fallback, and coalesce stale page switches");
+        string fastPreviewMethod = SliceMethod(layers, "private static async Task<(DocnetRenderResult? Render, bool UsedPyMuPdf)> TryRenderFastPreviewForPageSwitchAsync(");
+        AssertTrue(
+            fastPreviewMethod.IndexOf("TryRenderPreviewWithPyMuPdfAsync(request)", StringComparison.Ordinal) <
+            fastPreviewMethod.IndexOf("TryRenderPreviewWithDocnetAsync(request)", StringComparison.Ordinal),
+            "live page-switch preview should try PyMuPDF before the slower Docnet fallback on cold cache misses");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()
@@ -2100,9 +2106,11 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
+            detail.Contains("PdfLayerRenderService.CancelDetailRenderWorker()", StringComparison.Ordinal) &&
             detail.Contains("DecodePdfLayerRenderBitmap(renderResult.Result)", StringComparison.Ordinal) &&
             detail.Contains("Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length)", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
+            service.Contains("public static void CancelDetailRenderWorker()", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)", StringComparison.Ordinal) &&
             detail.Contains("BuildStableDetailRenderClip", StringComparison.Ordinal) &&
             detail.Contains("stableScale >= targetScale * 0.92f", StringComparison.Ordinal) &&
@@ -2120,6 +2128,11 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("ViewportRenderPolicy.DetailRenderMaxPaintTiles", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
             "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, and decode them off the UI path");
+        string startDetailRender = SliceMethod(detail, "private async Task StartNextDetailRenderAsync()");
+        AssertTrue(
+            startDetailRender.IndexOf("if (!IsCurrentDetailRequest(request))", StringComparison.Ordinal) <
+            startDetailRender.IndexOf("ReportViewportRenderProfile(", StringComparison.Ordinal),
+            "stale clipped detail renders should be discarded before they are recorded as useful performance samples");
         AssertTrue(
             layers.Contains("DecodePdfLayerRenderBitmap(renderResult.Result)", StringComparison.Ordinal) &&
             layers.Contains("ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap)", StringComparison.Ordinal),

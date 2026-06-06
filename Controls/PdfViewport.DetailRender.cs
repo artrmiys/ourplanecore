@@ -58,8 +58,14 @@ public sealed partial class PdfViewport
 
     private void ClearDetailRender()
     {
+        bool cancelActiveDetailRender =
+            _detailRenderInProgress ||
+            _activeDetailRender != null ||
+            _pendingDetailRender != null;
         _pendingDetailRender = null;
         _detailRenderVersion++;
+        if (cancelActiveDetailRender)
+            PdfLayerRenderService.CancelDetailRenderWorker();
         ClearDetailRenderBitmap();
     }
 
@@ -366,6 +372,9 @@ public sealed partial class PdfViewport
                 request.CachedLayers,
                 request.ClipRect);
             renderWatch.Stop();
+            if (!IsCurrentDetailRequest(request))
+                return;
+
             ReportViewportRenderProfile(
                 "detail",
                 request.PageFolder,
@@ -375,9 +384,6 @@ public sealed partial class PdfViewport
                 renderWatch.ElapsedMilliseconds,
                 fromCache: false,
                 request.ClipRect);
-
-            if (!IsCurrentDetailRequest(request))
-                return;
 
             SKBitmap? decodedBitmap = null;
             if (renderResult.Ok)

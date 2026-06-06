@@ -266,6 +266,11 @@ public static partial class PdfLayerRenderService
         }
     }
 
+    public static void CancelDetailRenderWorker()
+    {
+        ResetWorker(WorkerRole.Detail);
+    }
+
     private static SemaphoreSlim WorkerSemaphoreFor(WorkerRole role) => role switch
     {
         WorkerRole.Detail => DetailWorkerSemaphore,

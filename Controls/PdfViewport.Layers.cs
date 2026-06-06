@@ -898,12 +898,12 @@ public sealed partial class PdfViewport
 
     private static async Task<(DocnetRenderResult? Render, bool UsedPyMuPdf)> TryRenderFastPreviewForPageSwitchAsync(DocnetRenderRequest request)
     {
-        DocnetRenderResult? docnet = await TryRenderPreviewWithDocnetAsync(request);
-        if (docnet != null)
-            return (docnet, false);
-
         DocnetRenderResult? pymupdf = await TryRenderPreviewWithPyMuPdfAsync(request);
-        return (pymupdf, pymupdf != null);
+        if (pymupdf != null)
+            return (pymupdf, true);
+
+        DocnetRenderResult? docnet = await TryRenderPreviewWithDocnetAsync(request);
+        return (docnet, false);
     }
 
     private static async Task<DocnetRenderResult?> TryRenderPreviewWithDocnetAsync(DocnetRenderRequest request)
@@ -930,7 +930,7 @@ public sealed partial class PdfViewport
 
         try
         {
-            var renderResult = await PdfLayerRenderService.TryRenderIsolatedProcessAsync(
+            var renderResult = await PdfLayerRenderService.TryRenderAsync(
                 request.PdfPath,
                 request.PdfIndex,
                 request.RenderScale,

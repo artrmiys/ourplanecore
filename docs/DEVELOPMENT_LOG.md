@@ -21,6 +21,17 @@
   `5.556x` raster sheet at `zoom=0.172` produced a `181ms` slow frame with
   `page:169ms`.
 
+## 2026-06-06 Page-Switch Preview and Stale Detail Render Pass
+
+- Changed cold page-switch preview rendering to try the reusable PyMuPDF worker
+  before Docnet, keeping Docnet as fallback. This targets stress runs where a
+  missing preview cache could spend up to about one second in a 0.35-scale
+  Docnet preview before the sheet became ready.
+- When a page switch or render clear makes an in-flight clipped detail render
+  stale, the viewport now cancels the detail worker instead of letting that
+  obsolete render compete with the next sheet. Stale detail completions are
+  discarded before they are recorded as useful render samples.
+
 ## 2026-06-06 Sheet Render Sharpness Pass
 
 - Shifted the viewport sharpness path toward visible clipped detail rendering
