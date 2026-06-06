@@ -13,10 +13,20 @@ instead of scanning dozens of dated handoffs.
 
 ## Current Priority Context
 
+- `00-start-here/NEXT_TASK_JOB_MOVE_AUTOREPAIR_AND_SHEET_RENDER_PERF_2026_06_06.md`
+  - handoff/history for moved-job `page_folder` repair plus the next
+    sheet-render performance strategy; the code-side job-move autorepair is now
+    implemented.
+- `00-start-here/DOCS_AUDIT_2026_06_06.md`
+  - latest markdown inventory and cleanup notes.
 - `10-performance-render/OURPLANECORE_SPEED_ACCELERATION_ANALYSIS_2026_06_02.md`
   - latest speed and render acceleration plan.
 - `10-performance-render/SHEET_RENDER_STRATEGY_2026_06_01.md`
   - canonical sheet render strategy.
+- `10-performance-render/SHEET_RENDERING_ANALYSIS_AND_INSTANT_STRATEGY_2026_06_04.md`
+  - root-cause analysis for whole-sheet raster slowness/blur.
+- `20-import-pages-metadata/JOB_CREATION_AND_STORAGE_FLOW_2026_06_05.md`
+  - current job/page/takeoff storage flow and page-folder link contract.
 - `30-takeoffs-measurements/TAKEOFF_TEMPLATE_PRESETS_2026_06_01.md`
   - latest Takeoff Templates preset rollout.
 

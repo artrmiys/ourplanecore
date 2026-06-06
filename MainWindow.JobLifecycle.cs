@@ -432,6 +432,7 @@ public partial class MainWindow
                                   InferNeighborMeasurementPage(
                                       item.Measurements,
                                       index,
+                                      _currentJob.PagesRoot,
                                       pagesByPath,
                                       pagesByLeaf,
                                       pagesByPdfPage);
@@ -451,7 +452,13 @@ public partial class MainWindow
                 }
 
                 string oldPath = NormalizePageReferencePath(measurement.PageFolder);
-                if (!pagesByPath.TryGetValue(oldPath, out matchedPage))
+                matchedPage = ResolveMeasurementPage(
+                    oldPath,
+                    _currentJob.PagesRoot,
+                    pagesByPath,
+                    pagesByLeaf,
+                    pagesByPdfPage);
+                if (matchedPage == null)
                 {
                     if (!Directory.Exists(oldPath))
                         unresolved++;
@@ -480,19 +487,20 @@ public partial class MainWindow
     private PageInfo? InferNeighborMeasurementPage(
         IReadOnlyList<Measurement> measurements,
         int index,
+        string pagesRoot,
         Dictionary<string, PageInfo> pagesByPath,
         Dictionary<string, List<PageInfo>> pagesByLeaf,
         Dictionary<int, List<PageInfo>> pagesByPdfPage)
     {
         for (int i = index - 1; i >= 0; i--)
         {
-            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
+            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesRoot, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
                 return page;
         }
 
         for (int i = index + 1; i < measurements.Count; i++)
         {
-            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
+            if (TryResolveMeasurementPage(measurements[i].PageFolder, pagesRoot, pagesByPath, pagesByLeaf, pagesByPdfPage, out PageInfo page))
                 return page;
         }
 
@@ -501,6 +509,7 @@ public partial class MainWindow
 
     private bool TryResolveMeasurementPage(
         string? pageFolder,
+        string pagesRoot,
         Dictionary<string, PageInfo> pagesByPath,
         Dictionary<string, List<PageInfo>> pagesByLeaf,
         Dictionary<int, List<PageInfo>> pagesByPdfPage,
@@ -512,6 +521,7 @@ public partial class MainWindow
 
         PageInfo? resolved = ResolveMeasurementPage(
             NormalizePageReferencePath(pageFolder),
+            pagesRoot,
             pagesByPath,
             pagesByLeaf,
             pagesByPdfPage);
@@ -524,12 +534,16 @@ public partial class MainWindow
 
     private static PageInfo? ResolveMeasurementPage(
         string oldPath,
+        string pagesRoot,
         Dictionary<string, PageInfo> pagesByPath,
         Dictionary<string, List<PageInfo>> pagesByLeaf,
         Dictionary<int, List<PageInfo>> pagesByPdfPage)
     {
         if (pagesByPath.TryGetValue(oldPath, out PageInfo? exactPage))
             return exactPage;
+
+        if (ResolveMovedJobPage(oldPath, pagesRoot, pagesByPath) is { } movedPage)
+            return movedPage;
 
         string leaf = Path.GetFileName(oldPath);
         if (!string.IsNullOrWhiteSpace(leaf) &&
@@ -542,6 +556,45 @@ public partial class MainWindow
         return TryResolveLegacyImportedPage(leaf, pagesByPdfPage, out PageInfo legacyPage)
             ? legacyPage
             : null;
+    }
+
+    private static PageInfo? ResolveMovedJobPage(
+        string oldPath,
+        string pagesRoot,
+        Dictionary<string, PageInfo> pagesByPath)
+    {
+        if (string.IsNullOrWhiteSpace(oldPath) || string.IsNullOrWhiteSpace(pagesRoot))
+            return null;
+
+        if (!TryGetSuffixAfterPathSegment(oldPath, "Pages", out string[] suffixSegments) || suffixSegments.Length == 0)
+            return null;
+
+        string normalizedPagesRoot = NormalizePath(pagesRoot);
+        string candidate = NormalizePath(Path.Combine([normalizedPagesRoot, .. suffixSegments]));
+        return pagesByPath.TryGetValue(candidate, out PageInfo? page)
+            ? page
+            : null;
+    }
+
+    private static bool TryGetSuffixAfterPathSegment(string path, string segment, out string[] suffixSegments)
+    {
+        suffixSegments = [];
+        string[] parts = path
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0)
+            .ToArray();
+
+        for (int i = parts.Length - 2; i >= 0; i--)
+        {
+            if (!string.Equals(parts[i], segment, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            suffixSegments = parts[(i + 1)..];
+            return suffixSegments.Length > 0;
+        }
+
+        return false;
     }
 
     private static bool TryResolveLegacyImportedPage(

@@ -1,5 +1,54 @@
 ﻿# Development Log
 
+## 2026-06-06 Job Move Autorepair / Detail Legend Sort
+
+- Implemented automatic repair for non-empty stale measurement `page_folder`
+  values when a whole job folder is moved. The loader now resolves page links by
+  exact path first, then by the suffix after the real `Pages` path segment under
+  the current job root, before falling back to unique leaf / legacy `Page N`
+  matching.
+- Updated the sheet/detail reference comparer so takeoffs like `1/S5.5`,
+  `2/S5.5`, `4/S5.10`, and `13/S5.10` sort by sheet number parts first and
+  detail number second. This feeds page legend order and takeoff tree sorting.
+- Fixed the live page legend/export path to respect saved manual legend order;
+  new takeoffs not in the saved order append by the same auto-sort rules.
+- Verification: `dotnet build .\ourplanecore.sln` passed with `0` warnings /
+  `0` errors; `dotnet run --project .\Tests\OurPlaneCore.Tests.csproj
+  --no-build` passed `290/290` tests.
+- Published compressed single-file Release to
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe` and verified
+  runtime from the packaged exe. Latest log section showed
+  `Loaded takeoffs tree with 981 item(s)`, viewport activity on the moved
+  Commerce job, and `0` errors after `Application startup.`.
+
+## 2026-06-06 Docs Cleanup / Next Task Handoff
+
+- Repaired the moved Commerce job data in place before this docs update:
+  `4520 / 4520` stale measurement `page_folder` values were rewritten from the
+  old absolute job root to the current Desktop job root by preserving the suffix
+  after `\Pages\`; missing/empty page links after repair were `0`.
+- Packaged runtime verification for that job passed from
+  `C:\Users\User\Desktop\updates\OurPlaneCore\ourplanecore.exe`: latest log
+  section showed `Loaded takeoffs tree with 933 item(s)`, viewport activity,
+  and `0` errors after the latest `Application startup.` marker.
+- Wrote the next implementation handoff:
+  `docs/00-start-here/NEXT_TASK_JOB_MOVE_AUTOREPAIR_AND_SHEET_RENDER_PERF_2026_06_06.md`.
+  It covers whole-job-move autodetect for `page_folder` repair and the next
+  measured strategy for sheet render speed/clarity.
+- Audited markdown organization and restored the root `docs/` folder to
+  canonical files only. Moved:
+  - `docs/JOB_CREATION_AND_STORAGE_FLOW_2026_06_05.md` ->
+    `docs/20-import-pages-metadata/JOB_CREATION_AND_STORAGE_FLOW_2026_06_05.md`;
+  - `docs/SHEET_RENDERING_ANALYSIS_AND_INSTANT_STRATEGY.md` ->
+    `docs/10-performance-render/SHEET_RENDERING_ANALYSIS_AND_INSTANT_STRATEGY_2026_06_04.md`;
+  - `docs/CHANGELOG_2026-06-06_rotation-zoom-ribbon.md` ->
+    `docs/90-archive-prompts/CHANGELOG_2026-06-06_rotation-zoom-ribbon.md`.
+- Added the markdown audit note:
+  `docs/00-start-here/DOCS_AUDIT_2026_06_06.md`.
+- Updated `docs/README.md`, `docs/OURPLANECORE_TASK_ROADMAP.md`, and
+  `docs/CURRENT_OURPLANECORE_STATUS.md` so the current top priority is no
+  longer hidden behind older UX/3D tasks.
+
 ## 2026-06-02 Takeoff Tree Page Navigation / v2 Release
 
 - Stabilized takeoff-tree page navigation:

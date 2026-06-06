@@ -264,7 +264,35 @@ public partial class MainWindow
         if (takeoffs.Count <= 1)
             return takeoffs;
 
+        if (IsPageLegendManual(page) && page.LegendTakeoffOrder.Count > 0)
+            return ManualOrderedTakeoffsForPage(page, takeoffs);
+
         return AutoOrderTakeoffs(takeoffs);
+    }
+
+    private IReadOnlyList<TakeoffItem> ManualOrderedTakeoffsForPage(PageInfo page, IReadOnlyList<TakeoffItem> takeoffs)
+    {
+        var byKey = takeoffs
+            .GroupBy(TakeoffLegendOrderKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<TakeoffItem>();
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string stored in page.LegendTakeoffOrder.Select(NormalizeTakeoffLegendOrderKey))
+        {
+            if (string.IsNullOrWhiteSpace(stored) ||
+                !used.Add(stored) ||
+                !byKey.TryGetValue(stored, out TakeoffItem? takeoff))
+            {
+                continue;
+            }
+
+            ordered.Add(takeoff);
+        }
+
+        IEnumerable<TakeoffItem> remaining = takeoffs
+            .Where(takeoff => !used.Contains(TakeoffLegendOrderKey(takeoff)));
+        ordered.AddRange(AutoOrderTakeoffs(remaining));
+        return ordered;
     }
 
     private static List<TakeoffItem> AutoOrderTakeoffs(IEnumerable<TakeoffItem> takeoffs) =>

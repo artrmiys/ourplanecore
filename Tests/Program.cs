@@ -94,7 +94,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression keeps siblings after corrupt measurements", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsSiblingsWhenMeasurementsJsonIsCorrupt),
     ("takeoff tree regression page lookup enabled for large tree refresh", TakeoffsTreeRegressionTests.PageMeasurementLookupEnabledForLargeTreeRefresh),
     ("takeoff tree regression pages drop batches and refreshes silently", TakeoffsTreeRegressionTests.PagesDropUsesBatchMoveAndSilentRefresh),
-    ("takeoff tree regression page repair exact only", TakeoffsTreeRegressionTests.PageRepairDoesNotLeafRebaseNonEmptyReferences),
+    ("takeoff tree regression page repair moved job suffix", TakeoffsTreeRegressionTests.PageRepairUsesMovedJobSuffixForNonEmptyReferences),
     ("takeoff tree regression drag uses mouse down anchor", TakeoffsTreeRegressionTests.TreeDragUsesMouseDownAnchor),
     ("takeoff tree regression nested rows resolve drop target", TakeoffsTreeRegressionTests.NestedTreeRowsResolveToOwningDropTargets),
     ("takeoff tree regression measurement paste keeps source name", TakeoffsTreeRegressionTests.MeasurementPasteNewTakeoffKeepsSourceName),
@@ -1641,12 +1641,20 @@ static void TakeoffDetailRefsSortBySheetThenDetail()
         new TakeoffItem { Name = "13/S101", MeasurementType = "line" },
         new TakeoffItem { Name = "2/S102", MeasurementType = "line" },
         new TakeoffItem { Name = "14/S101", MeasurementType = "line" },
+        new TakeoffItem { Name = "13/S5.10", MeasurementType = "line" },
+        new TakeoffItem { Name = "2/S5.5", MeasurementType = "line" },
+        new TakeoffItem { Name = "1/S5.5", MeasurementType = "line" },
+        new TakeoffItem { Name = "4/S5.10", MeasurementType = "line" },
+        new TakeoffItem { Name = "3/S5.2", MeasurementType = "line" },
+        new TakeoffItem { Name = "8/S6.1", MeasurementType = "line" },
     };
 
     string legendOrder = string.Join(",",
         TakeoffAutoRoutingService.SortPageLegendItems(items)
             .Select(item => item.Name));
-    AssertEqual("13/S101,14/S101,2/S102,14/S502", legendOrder, "detail refs legend order");
+    const string expected =
+        "3/S5.2,1/S5.5,2/S5.5,4/S5.10,13/S5.10,8/S6.1,13/S101,14/S101,2/S102,14/S502";
+    AssertEqual(expected, legendOrder, "detail refs legend order");
 
     WithTempJob("detail_ref_sort", job =>
     {
@@ -1654,9 +1662,15 @@ static void TakeoffDetailRefsSortBySheetThenDetail()
         OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S101", "#FF4444", "line");
         OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S102", "#FF4444", "line");
         OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S101", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S5.10", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S5.5", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "1/S5.5", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "4/S5.10", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "3/S5.2", "#FF4444", "line");
+        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "8/S6.1", "#FF4444", "line");
 
         OurPlaneCoreJobStore.SortTakeoffChildren(job.TakeoffsRoot, descending: false);
-        AssertTakeoffChildOrder(job.TakeoffsRoot, "13/S101,14/S101,2/S102,14/S502", "detail refs takeoff tree order");
+        AssertTakeoffChildOrder(job.TakeoffsRoot, expected, "detail refs takeoff tree order");
     });
 }
 

@@ -680,20 +680,28 @@ internal static class TakeoffsTreeRegressionTests
             "Pages drop refresh should not synchronously relayout or open the moved sheet through selection change");
     }
 
-    public static void PageRepairDoesNotLeafRebaseNonEmptyReferences()
+    public static void PageRepairUsesMovedJobSuffixForNonEmptyReferences()
     {
         string source = ReadRepoFile("MainWindow.JobLifecycle.cs");
         string repairMethod = SliceMethod(source, "private int RepairMeasurementPageFolderReferences()");
         string nonEmptyBranch = repairMethod[
             repairMethod.IndexOf("string oldPath = NormalizePageReferencePath(measurement.PageFolder);", StringComparison.Ordinal)..];
+        string resolver = SliceMethod(source, "private static PageInfo? ResolveMeasurementPage(");
+        string movedResolver = SliceMethod(source, "private static PageInfo? ResolveMovedJobPage(");
 
         AssertTrue(
-            nonEmptyBranch.Contains("if (!pagesByPath.TryGetValue(oldPath, out matchedPage))", StringComparison.Ordinal),
-            "non-empty PageFolder repair must require an exact page path match");
-        AssertFalse(
-            nonEmptyBranch.Contains("ResolveMeasurementPage(\r\n                    oldPath", StringComparison.Ordinal) ||
-            nonEmptyBranch.Contains("ResolveMeasurementPage(\n                    oldPath", StringComparison.Ordinal),
-            "non-empty PageFolder repair must not move measurements by leaf-name fallback");
+            nonEmptyBranch.Contains("matchedPage = ResolveMeasurementPage(", StringComparison.Ordinal) &&
+            nonEmptyBranch.Contains("_currentJob.PagesRoot", StringComparison.Ordinal),
+            "non-empty PageFolder repair should route stale paths through the moved-job resolver");
+        int movedIndex = resolver.IndexOf("ResolveMovedJobPage(oldPath, pagesRoot, pagesByPath)", StringComparison.Ordinal);
+        int leafIndex = resolver.IndexOf("string leaf = Path.GetFileName(oldPath);", StringComparison.Ordinal);
+        AssertTrue(
+            movedIndex >= 0 && leafIndex >= 0 && movedIndex < leafIndex,
+            "moved-job suffix matching should run before loose leaf-name fallback");
+        AssertTrue(
+            movedResolver.Contains("TryGetSuffixAfterPathSegment(oldPath, \"Pages\"", StringComparison.Ordinal) &&
+            movedResolver.Contains("Path.Combine([normalizedPagesRoot, .. suffixSegments])", StringComparison.Ordinal),
+            "moved-job repair should only rebase the suffix after a real Pages path segment");
     }
 
     public static void TreeDragUsesMouseDownAnchor()

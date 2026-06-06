@@ -20,6 +20,27 @@ Root files intentionally kept:
 - `docs/DEVELOPMENT_LOG.md`
 - `docs/ARCHITECTURE_AUDIT_AND_REFACTOR_PLAN_2026_05_05.md`
 
+## 2026-06-06 Follow-Up Audit
+
+The docs set was checked again after the moved-job page-link repair and render
+performance discussion.
+
+Current policy remains unchanged: keep only stable canonical files in
+`docs/` root and put active handoffs in topic folders.
+
+Moved during the follow-up cleanup:
+
+| Source | Destination |
+| --- | --- |
+| `JOB_CREATION_AND_STORAGE_FLOW_2026_06_05.md` | `20-import-pages-metadata/` |
+| `SHEET_RENDERING_ANALYSIS_AND_INSTANT_STRATEGY.md` | `10-performance-render/SHEET_RENDERING_ANALYSIS_AND_INSTANT_STRATEGY_2026_06_04.md` |
+| `CHANGELOG_2026-06-06_rotation-zoom-ribbon.md` | `90-archive-prompts/` |
+
+New start-here docs:
+
+- `docs/00-start-here/NEXT_TASK_JOB_MOVE_AUTOREPAIR_AND_SHEET_RENDER_PERF_2026_06_06.md`
+- `docs/00-start-here/DOCS_AUDIT_2026_06_06.md`
+
 ## Folder Policy
 
 | Folder | Use |
