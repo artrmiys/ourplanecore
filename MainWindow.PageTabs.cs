@@ -284,7 +284,12 @@ public partial class MainWindow
             .ToList();
 
         totalDistinct = distinct.Count;
-        return distinct.Take(MaxBatchSheetOpenCount).ToList();
+        return distinct
+            .Select(page => OurPlaneCoreJobStore.TryReadPage(page.FolderPath))
+            .Where(page => page != null)
+            .Cast<PageInfo>()
+            .Take(MaxBatchSheetOpenCount)
+            .ToList();
     }
 
     private void ActivatePageTab(PageTabState tab, PageInfo? fallbackPage = null)
@@ -304,10 +309,13 @@ public partial class MainWindow
 
     private void LoadPageFromTab(PageTabState tab, PageInfo? fallbackPage = null)
     {
-        PageInfo? page = fallbackPage != null &&
-                         string.Equals(fallbackPage.FolderPath, tab.PageFolder, StringComparison.OrdinalIgnoreCase)
-            ? fallbackPage
-            : OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);
+        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);
+        if (page == null &&
+            fallbackPage != null &&
+            string.Equals(fallbackPage.FolderPath, tab.PageFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            page = fallbackPage;
+        }
 
         if (page == null)
         {

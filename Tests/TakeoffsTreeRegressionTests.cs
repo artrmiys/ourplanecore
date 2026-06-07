@@ -32,7 +32,9 @@ internal static class TakeoffsTreeRegressionTests
     public static void PageOpenDefersHeavyUiWork()
     {
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string loadFromTabMethod = SliceMethod(pageTabs, "private void LoadPageFromTab(");
         string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
+        string distinctBatchPagesMethod = SliceMethod(pageTabs, "private static IReadOnlyList<PageInfo> DistinctBatchPages(");
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
         string deferredQuietMethod = SliceMethod(pageTabs, "private async void RunDeferredPageOpenWorkWhenQuiet(");
         string quietWaitMethod = SliceMethod(pageTabs, "private async Task WaitForDeferredPageOpenQuietAsync(");
@@ -53,6 +55,16 @@ internal static class TakeoffsTreeRegressionTests
         AssertFalse(
             loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
             "page open must not re-read source.json after LoadPageFromTab already loaded the page");
+        AssertTrue(
+            loadFromTabMethod.Contains("PageInfo? page = OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);", StringComparison.Ordinal) &&
+            loadFromTabMethod.Contains("if (page == null &&", StringComparison.Ordinal) &&
+            loadFromTabMethod.Contains("page = fallbackPage;", StringComparison.Ordinal),
+            "LoadPageFromTab should prefer the latest source.json page snapshot before using a stale fallback page");
+        AssertTrue(
+            distinctBatchPagesMethod.Contains(".Select(page => OurPlaneCoreJobStore.TryReadPage(page.FolderPath))", StringComparison.Ordinal) &&
+            distinctBatchPagesMethod.Contains(".Where(page => page != null)", StringComparison.Ordinal) &&
+            distinctBatchPagesMethod.Contains(".Cast<PageInfo>()", StringComparison.Ordinal),
+            "batch tab/detached opens should refresh selected pages from source.json before passing raster metadata into viewports");
 
         int loadPage = loadMethod.IndexOf("_viewport.LoadPage(", StringComparison.Ordinal);
         int visibility = loadMethod.IndexOf("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal);
