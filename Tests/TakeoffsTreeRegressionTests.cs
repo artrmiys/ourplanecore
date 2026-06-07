@@ -1439,6 +1439,7 @@ internal static class TakeoffsTreeRegressionTests
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
         string xaml = ReadRepoFile("MainWindow.xaml");
         string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
+        string pdfImport = ReadRepoFile("MainWindow.PdfImport.cs");
         string pagesPdfMetadata = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
         string buildRasterMethod = SliceMethod(workspaceManagers, "private Task BuildSheetManagerRasterCacheAsync(");
@@ -1452,6 +1453,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterOnBackgroundMethod = SliceMethod(workspaceManagers, "private async Task EnableMissingSheetManagerRasterOnInBackgroundAsync(");
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
         string rasterDpiUpgradeMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task BuildRasterSheetDpiUpgradeForCurrentPageAsync(");
+        string importedRasterMethod = SliceMethod(pdfImport, "private static RasterSheetBuildResult BuildAndWarmImportedRaster(");
 
         AssertTrue(
             viewport.Contains("private bool _usingRasterSheetRender;", StringComparison.Ordinal) &&
@@ -1630,6 +1632,9 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private static void WarmSheetManagerRasterBitmap(PageInfo page, RasterSheetBuildResult result)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("PdfViewport.WarmRasterSheetBitmapCache(page, result.Source)", StringComparison.Ordinal) &&
+            pdfImport.Contains("BuildAndWarmImportedRaster(page)", StringComparison.Ordinal) &&
+            importedRasterMethod.Contains("RasterSheetCacheService.BuildAndEnable(page)", StringComparison.Ordinal) &&
+            importedRasterMethod.Contains("PdfViewport.WarmRasterSheetBitmapCache(page, result.Source)", StringComparison.Ordinal) &&
             rowRasterMethod.Contains("RefreshSheetManagerRasterRow(row)", StringComparison.Ordinal) &&
             !rowRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (refreshSheetManager)", StringComparison.Ordinal) &&

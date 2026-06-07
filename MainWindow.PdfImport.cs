@@ -238,7 +238,7 @@ public partial class MainWindow
                         {
                             PageInfo page = created[pageIndex];
                             ((IProgress<string>)progress).Report($"building raster {pageIndex + 1}/{created.Count}...");
-                            RasterSheetBuildResult raster = await Task.Run(() => RasterSheetCacheService.BuildAndEnable(page));
+                            RasterSheetBuildResult raster = await Task.Run(() => BuildAndWarmImportedRaster(page));
                             if (raster.Ok)
                                 rasterOk++;
                             else
@@ -364,6 +364,15 @@ public partial class MainWindow
         };
 
         return win.ShowDialog() == true ? result : null;
+    }
+
+    private static RasterSheetBuildResult BuildAndWarmImportedRaster(PageInfo page)
+    {
+        RasterSheetBuildResult result = RasterSheetCacheService.BuildAndEnable(page);
+        if (result.Ok && result.Source != null)
+            PdfViewport.WarmRasterSheetBitmapCache(page, result.Source);
+
+        return result;
     }
 
     private static Dictionary<int, IReadOnlyList<PdfLayerInfo>> BuildPdfLayerCache(
