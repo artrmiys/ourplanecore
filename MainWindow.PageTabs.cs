@@ -343,7 +343,6 @@ public partial class MainWindow
         TxtStatusPage.Text = viewportPage.Name;
         _viewport.ScaleMetersPerPt = viewportPage.ScaleMetersPerPt;
         UpdateScaleUi(viewportPage.ScaleMetersPerPt);
-        IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt);
         trace?.Mark("read+scale");
         _viewport.LoadPage(
             viewportPage.PdfPath,
@@ -357,13 +356,12 @@ public partial class MainWindow
         _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
-        QueueDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView);
+        QueueDeferredPageOpenWork(deferredVersion, viewportPage, trace, restoreView);
     }
 
     private void QueueDeferredPageOpenWork(
         int deferredVersion,
         PageInfo viewportPage,
-        IReadOnlyList<TakeoffItem> scaledItems,
         PageOpenTrace? trace,
         PdfViewport.ViewState? restoreView)
     {
@@ -375,7 +373,6 @@ public partial class MainWindow
                     RunDeferredPageOpenWorkWhenQuiet(
                         deferredVersion,
                         viewportPage,
-                        scaledItems,
                         trace,
                         restoreView);
                 }),
@@ -391,7 +388,6 @@ public partial class MainWindow
     private async void RunDeferredPageOpenWorkWhenQuiet(
         int deferredVersion,
         PageInfo viewportPage,
-        IReadOnlyList<TakeoffItem> scaledItems,
         PageOpenTrace? trace,
         PdfViewport.ViewState? restoreView)
     {
@@ -408,7 +404,7 @@ public partial class MainWindow
 
             trace?.Mark("deferred-quiet");
             handedOff = true;
-            RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView);
+            RunDeferredPageOpenWork(deferredVersion, viewportPage, trace, restoreView);
         }
         catch (Exception ex)
         {
@@ -437,7 +433,6 @@ public partial class MainWindow
     private void RunDeferredPageOpenWork(
         int deferredVersion,
         PageInfo viewportPage,
-        IReadOnlyList<TakeoffItem> scaledItems,
         PageOpenTrace? trace,
         PdfViewport.ViewState? restoreView)
     {
@@ -467,7 +462,10 @@ public partial class MainWindow
 
             bool autoLoaded = _currentJob == null && _takeoffItems.Count == 0 && TryAutoLoad();
             if (!autoLoaded)
+            {
+                IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt);
                 RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems);
+            }
             trace?.Mark("takeoff-refresh");
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
