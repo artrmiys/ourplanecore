@@ -1343,8 +1343,8 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
             "raster sheet opens should apply decoded bitmaps from RAM, warm cold bitmaps off the UI thread, and prefetch nearby readable rasters for work zoom");
         AssertTrue(
-            policy.Contains("RasterSheetDisplayMinZoom = 0.95f", StringComparison.Ordinal) &&
-            policy.Contains("RasterSheetDisplayExitZoom = 0.85f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayMinZoom = 0.55f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayExitZoom = 0.45f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("!IsLowZoomRasterSheetPageOpen(restoreView, fitAfter)", StringComparison.Ordinal) &&
@@ -1354,7 +1354,7 @@ internal static class TakeoffsTreeRegressionTests
             !rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should be used at 100-200% work zoom, keep fit/overview cheap, and switch back to preview when zoomed out");
+            "ordinary readable raster sheets should be used at 60-200% work zoom, keep fit/overview cheap, and switch back to preview when zoomed out");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&

@@ -3941,9 +3941,9 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             "preview-backed work zoom should render the visible clip at screen-matched scale");
         float defaultRasterScale = RasterSheetCacheService.DefaultRenderScale;
         AssertTrue(
-            ViewportRenderPolicy.RasterSheetDisplayMinZoom <= 1.0f &&
+            ViewportRenderPolicy.RasterSheetDisplayMinZoom <= 0.60f &&
             ViewportRenderPolicy.RasterSheetDisplayExitZoom < ViewportRenderPolicy.RasterSheetDisplayMinZoom,
-            "raster sheet display should engage at 100% work zoom with lower-zoom hysteresis back to preview");
+            "raster sheet display should engage at 60% work zoom with lower-zoom hysteresis back to preview");
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(2.0f, defaultRasterScale),
             "100-200% work zoom should stay on the 200dpi raster sheet instead of waiting for PDF detail rendering");
