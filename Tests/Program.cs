@@ -3946,7 +3946,7 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             "raster sheet display should replace full-page sharp refresh at work zoom with lower-zoom hysteresis back to preview");
         AssertTrue(
             ViewportRenderPolicy.SelectRasterSheetDisplayDpi(0.60f) == 72 &&
-            ViewportRenderPolicy.SelectRasterSheetDisplayDpi(1.28f) == 100 &&
+            ViewportRenderPolicy.SelectRasterSheetDisplayDpi(1.28f) == 144 &&
             ViewportRenderPolicy.SelectRasterSheetDisplayDpi(2.56f) == 200 &&
             ViewportRenderPolicy.SelectRasterSheetDisplayDpi(5.50f) == 200,
             "raster sheet display should choose the smallest readable DPI tier for the current zoom and avoid painting oversized 300/400dpi full-page bitmaps");

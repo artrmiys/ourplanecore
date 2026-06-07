@@ -15,20 +15,16 @@ namespace OurPlaneCore;
 public partial class MainWindow
 {
     private const int MaxBatchSheetOpenCount = 64;
-    private string _pagePreviewPrefetchJobRoot = "";
     private string _pagePreviewWarmupJobRoot = "";
     private string _pageRasterRefreshWarmupJobRoot = "";
-    private IReadOnlyList<PageInfo> _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     private int _pageOpenDeferredVersion;
     private PageTabState? _pendingPageTabDrag;
     private Point _pendingPageTabDragStart;
 
     private void InvalidatePagePreviewPrefetchCache()
     {
-        _pagePreviewPrefetchJobRoot = "";
         _pagePreviewWarmupJobRoot = "";
         _pageRasterRefreshWarmupJobRoot = "";
-        _pagePreviewPrefetchPages = Array.Empty<PageInfo>();
     }
 
     private void PageTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -668,16 +664,25 @@ public partial class MainWindow
         if (_currentJob == null || string.IsNullOrWhiteSpace(activePage.FolderPath))
             return;
 
-        IReadOnlyList<PageInfo> pages = CachedPagesForPreviewPrefetch();
-        int activeIndex = -1;
-        for (int i = 0; i < pages.Count; i++)
+        string pagesRoot = _currentJob.PagesRoot;
+        _ = Task.Run(() =>
         {
-            if (string.Equals(pages[i].FolderPath, activePage.FolderPath, StringComparison.OrdinalIgnoreCase))
+            try
             {
-                activeIndex = i;
-                break;
+                QueueNearbyPagePreviewPrefetch(
+                    LoadPagesForPreviewPrefetch(pagesRoot),
+                    activePage.FolderPath);
             }
-        }
+            catch (Exception ex)
+            {
+                AppLog.Warn(ex, $"Nearby page preview prefetch background load failed for {activePage.Name}");
+            }
+        });
+    }
+
+    private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder)
+    {
+        int activeIndex = FindPreviewPrefetchPageIndex(pages, activePageFolder);
 
         if (activeIndex < 0)
             return;
@@ -697,46 +702,75 @@ public partial class MainWindow
 
     private void QueueJobPagePreviewWarmup(PageInfo activePage)
     {
-        IReadOnlyList<PageInfo> pages = CachedPagesForPreviewPrefetch();
+        if (_currentJob == null || string.IsNullOrWhiteSpace(activePage.FolderPath))
+            return;
+
+        string pagesRoot = _currentJob.PagesRoot;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                QueueJobPagePreviewWarmup(
+                    LoadPagesForPreviewPrefetch(pagesRoot),
+                    activePage.FolderPath);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn(ex, $"Job page preview warmup background load failed for {activePage.Name}");
+            }
+        });
+    }
+
+    private static void QueueJobPagePreviewWarmup(IReadOnlyList<PageInfo> pages, string activePageFolder)
+    {
         if (pages.Count == 0)
             return;
 
-        int activeIndex = -1;
-        for (int i = 0; i < pages.Count; i++)
-        {
-            if (string.Equals(pages[i].FolderPath, activePage.FolderPath, StringComparison.OrdinalIgnoreCase))
-            {
-                activeIndex = i;
-                break;
-            }
-        }
+        int activeIndex = FindPreviewPrefetchPageIndex(pages, activePageFolder);
 
+        int rasterWarmupCount = ViewportRenderPolicy.SelectJobOpenRasterSheetBitmapWarmupCount(pages.Count);
+        int warmupOrdinal = 0;
         foreach (int index in BuildPreviewWarmupOrder(pages.Count, activeIndex)
                      .Take(ViewportRenderPolicy.SelectJobOpenPreviewWarmupCount(pages.Count)))
         {
+            bool includeRasterSheetWarmup = warmupOrdinal < rasterWarmupCount;
             QueuePreviewPrefetchAt(
                 pages,
                 index,
                 ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
-                includeRasterSheetWarmup: false);
+                includeRasterSheetWarmup: includeRasterSheetWarmup,
+                includeRasterSheetRefresh: false);
+            warmupOrdinal++;
         }
     }
 
     private void QueueJobRasterSheetRefreshWarmup(PageInfo activePage)
     {
-        IReadOnlyList<PageInfo> pages = CachedPagesForPreviewPrefetch();
+        if (_currentJob == null || string.IsNullOrWhiteSpace(activePage.FolderPath))
+            return;
+
+        string pagesRoot = _currentJob.PagesRoot;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                QueueJobRasterSheetRefreshWarmup(
+                    LoadPagesForPreviewPrefetch(pagesRoot),
+                    activePage.FolderPath);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn(ex, $"Job raster sheet refresh warmup background load failed for {activePage.Name}");
+            }
+        });
+    }
+
+    private static void QueueJobRasterSheetRefreshWarmup(IReadOnlyList<PageInfo> pages, string activePageFolder)
+    {
         if (pages.Count == 0)
             return;
 
-        int activeIndex = -1;
-        for (int i = 0; i < pages.Count; i++)
-        {
-            if (string.Equals(pages[i].FolderPath, activePage.FolderPath, StringComparison.OrdinalIgnoreCase))
-            {
-                activeIndex = i;
-                break;
-            }
-        }
+        int activeIndex = FindPreviewPrefetchPageIndex(pages, activePageFolder);
 
         IReadOnlyList<PageInfo> queuedPages = BuildPreviewWarmupOrder(pages.Count, activeIndex)
             .Take(ViewportRenderPolicy.SelectJobOpenRasterSheetRefreshWarmupCount(pages.Count))
@@ -745,7 +779,7 @@ public partial class MainWindow
         if (queuedPages.Count == 0)
             return;
 
-        _ = Task.Run(() => QueueJobRasterSheetRefreshWarmup(queuedPages));
+        QueueJobRasterSheetRefreshWarmup(queuedPages);
     }
 
     private static void QueueJobRasterSheetRefreshWarmup(IReadOnlyList<PageInfo> pages)
@@ -790,44 +824,52 @@ public partial class MainWindow
         }
     }
 
-    private IReadOnlyList<PageInfo> CachedPagesForPreviewPrefetch()
+    private static int FindPreviewPrefetchPageIndex(IReadOnlyList<PageInfo> pages, string activePageFolder)
     {
-        if (_currentJob == null)
+        for (int i = 0; i < pages.Count; i++)
+        {
+            if (string.Equals(pages[i].FolderPath, activePageFolder, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static IReadOnlyList<PageInfo> LoadPagesForPreviewPrefetch(string pagesRoot)
+    {
+        if (!Directory.Exists(pagesRoot))
             return Array.Empty<PageInfo>();
 
-        if (string.Equals(_pagePreviewPrefetchJobRoot, _currentJob.RootPath, StringComparison.OrdinalIgnoreCase))
-            return _pagePreviewPrefetchPages;
-
-        _pagePreviewPrefetchJobRoot = _currentJob.RootPath;
-        _pagePreviewPrefetchPages = Directory.Exists(_currentJob.PagesRoot)
-            ? Directory.EnumerateFiles(_currentJob.PagesRoot, "source.json", SearchOption.AllDirectories)
-                .Select(Path.GetDirectoryName)
-                .Where(folder => !string.IsNullOrWhiteSpace(folder))
-                .Select(folder => OurPlaneCoreJobStore.TryReadPage(folder!))
-                .Where(page => page != null && File.Exists(page.PdfPath))
-                .Cast<PageInfo>()
-                .OrderBy(page => page.FolderPath, StringComparer.OrdinalIgnoreCase)
-                .ToList()
-            : Array.Empty<PageInfo>();
-        return _pagePreviewPrefetchPages;
+        return Directory.EnumerateFiles(pagesRoot, "source.json", SearchOption.AllDirectories)
+            .Select(Path.GetDirectoryName)
+            .Where(folder => !string.IsNullOrWhiteSpace(folder))
+            .Select(folder => OurPlaneCoreJobStore.TryReadPage(folder!))
+            .Where(page => page != null && File.Exists(page.PdfPath))
+            .Cast<PageInfo>()
+            .OrderBy(page => page.FolderPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static void QueuePreviewPrefetchAt(
         IReadOnlyList<PageInfo> pages,
         int index,
         float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
-        bool includeRasterSheetWarmup = true)
+        bool includeRasterSheetWarmup = true,
+        bool includeRasterSheetRefresh = true)
     {
         if (index < 0 || index >= pages.Count)
             return;
 
         PageInfo page = pages[index];
         PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage, renderScale);
-        if (!includeRasterSheetWarmup)
-            return;
+        if (includeRasterSheetWarmup)
+        {
+            PdfViewport.PrefetchRasterSheetBitmap(page);
+            PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(page);
+        }
 
-        PdfViewport.PrefetchRasterSheetBitmap(page);
-        PdfViewport.PrefetchRasterSheetRefresh(page);
+        if (includeRasterSheetRefresh)
+            PdfViewport.PrefetchRasterSheetRefresh(page);
     }
 
     private static void QueueCleanRenderPrefetchAt(IReadOnlyList<PageInfo> pages, int index)

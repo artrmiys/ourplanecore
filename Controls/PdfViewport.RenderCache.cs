@@ -11,10 +11,10 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 10, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
-    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 64, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
-    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 6, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
-    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 16, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 32, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
+    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 256, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 8, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
+    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 24, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
     private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
@@ -34,18 +34,21 @@ public sealed partial class PdfViewport
     private static readonly SemaphoreSlim RasterSheetBitmapPrefetchSemaphore = new(
         Math.Clamp(Environment.ProcessorCount / 4, 1, 2),
         Math.Clamp(Environment.ProcessorCount / 4, 1, 2));
+    private static readonly object RasterSheetWorkZoomWarmupGate = new();
+    private static readonly HashSet<string> RasterSheetWorkZoomWarmupInFlight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly SemaphoreSlim RasterSheetWorkZoomWarmupSemaphore = new(1, 1);
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
-        ResolveViewportRamBudget(128_000_000L, 384_000_000L, 0.015);
+        ResolveViewportRamBudget(192_000_000L, 640_000_000L, 0.020);
 
     private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(96_000_000L, 256_000_000L, 0.010);
+        ResolveViewportRamBudget(192_000_000L, 512_000_000L, 0.018);
 
     private static long ResolveRasterSheetBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(192_000_000L, 512_000_000L, 0.020);
+        ResolveViewportRamBudget(256_000_000L, 640_000_000L, 0.025);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(192_000_000L, 512_000_000L, 0.020);
+        ResolveViewportRamBudget(256_000_000L, 768_000_000L, 0.030);
 
     private static long ResolveViewportRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
     {
@@ -222,7 +225,7 @@ public sealed partial class PdfViewport
         public LayerRenderBitmapCache(int maxEntries, long maxBytes)
         {
             _maxEntries = Math.Max(1, maxEntries);
-            _maxBytes = Math.Max(96_000_000L, maxBytes);
+            _maxBytes = Math.Max(256_000_000L, maxBytes);
         }
 
         public bool TryGet(string key, out CachedLayerBitmapRender render)
@@ -590,6 +593,29 @@ public sealed partial class PdfViewport
             QueueRasterSheetBitmapPrefetch(page, preferOverview: false);
     }
 
+    public static void PrefetchRasterSheetWorkZoomBitmaps(PageInfo page, bool buildMissingDpis = false)
+    {
+        if (page.RasterSheet?.Enabled != true ||
+            RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet) ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath) ||
+            page.PdfPage < 0 ||
+            !Directory.Exists(page.FolderPath) ||
+            !File.Exists(page.PdfPath))
+        {
+            return;
+        }
+
+        string cacheKey = RasterSheetWorkZoomWarmupKey(page, buildMissingDpis);
+        lock (RasterSheetWorkZoomWarmupGate)
+        {
+            if (!RasterSheetWorkZoomWarmupInFlight.Add(cacheKey))
+                return;
+        }
+
+        _ = PrefetchRasterSheetWorkZoomBitmapsAsync(page, cacheKey, buildMissingDpis);
+    }
+
     private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)
     {
         if (source?.Enabled != true)
@@ -599,7 +625,7 @@ public sealed partial class PdfViewport
             return RasterSheetCacheService.HasSourceImageOverview(source);
 
         if (!RasterSheetCacheService.IsSourceImageRaster(source))
-            return true;
+            return RasterSheetCacheService.RenderScaleToDpi(source.RenderScale) <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi;
 
         return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source) ||
                !RasterSheetCacheService.HasSourceImageOverview(source);
@@ -709,6 +735,92 @@ public sealed partial class PdfViewport
             lock (RasterSheetBitmapPrefetchGate)
                 RasterSheetBitmapPrefetchInFlight.Remove(cacheKey);
         }
+    }
+
+    private static async Task PrefetchRasterSheetWorkZoomBitmapsAsync(
+        PageInfo queuedPage,
+        string cacheKey,
+        bool buildMissingDpis)
+    {
+        try
+        {
+            int delayMs = buildMissingDpis
+                ? ViewportRenderPolicy.RasterSheetCurrentWorkZoomBuildDelayMs
+                : ViewportRenderPolicy.RasterSheetWorkZoomWarmupDelayMs;
+            await Task.Delay(delayMs).ConfigureAwait(false);
+            if (!buildMissingDpis)
+                await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
+            await RasterSheetWorkZoomWarmupSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                PageInfo page = OurPlaneCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                if (page.RasterSheet?.Enabled != true ||
+                    RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet))
+                {
+                    return;
+                }
+
+                IReadOnlyList<int> warmupDpis = buildMissingDpis
+                    ? ViewportRenderPolicy.RasterSheetWorkZoomBuildDpiSteps
+                    : ViewportRenderPolicy.RasterSheetWorkZoomWarmupDpiSteps;
+                foreach (int dpi in warmupDpis)
+                    WarmRasterSheetWorkZoomDpi(page, dpi, buildMissingDpis);
+            }
+            finally
+            {
+                RasterSheetWorkZoomWarmupSemaphore.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport raster work-zoom warmup failed for {queuedPage.Name}");
+        }
+        finally
+        {
+            lock (RasterSheetWorkZoomWarmupGate)
+                RasterSheetWorkZoomWarmupInFlight.Remove(cacheKey);
+        }
+    }
+
+    private static void WarmRasterSheetWorkZoomDpi(PageInfo page, int dpi, bool buildMissingDpis)
+    {
+        if (dpi <= 0 || dpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
+            return;
+
+        float scale = RasterSheetCacheService.RasterDpiToRenderScale(dpi);
+        PageInfo currentPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        if (currentPage.RasterSheet?.Enabled != true)
+            return;
+
+        if (!RasterSheetCacheService.HasReadyReadableRaster(currentPage, scale))
+        {
+            if (!buildMissingDpis)
+                return;
+
+            RasterSheetBuildResult build = RasterSheetCacheService.BuildCachePreservingEnabled(currentPage, scale);
+            if (!build.Ok)
+            {
+                AppLog.Warn(
+                    $"Viewport raster work-zoom warmup build skipped; dpi={dpi}; error='{build.Error}'; " +
+                    $"page='{page.FolderPath}'; pdf='{Path.GetFileName(page.PdfPath)}'; pdfPage={page.PdfPage + 1}");
+                return;
+            }
+        }
+
+        currentPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? currentPage;
+        if (!RasterSheetCacheService.TryGetReadyReadableRasterSource(currentPage, scale, out RasterSheetSource? source) ||
+            source == null)
+        {
+            return;
+        }
+
+        TryWarmRasterSheetBitmapCache(
+            currentPage.FolderPath,
+            currentPage.PdfPath,
+            source,
+            preferOverview: false,
+            action: $"work-zoom-{dpi}dpi warmed",
+            logFailure: false);
     }
 
     private static bool TryGetRasterSheetBitmapCache(
@@ -1190,6 +1302,24 @@ public sealed partial class PdfViewport
             raster.GeneratedAtUtc,
             raster.OverviewImage,
             raster.OverviewRenderScale.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static string RasterSheetWorkZoomWarmupKey(PageInfo page, bool buildMissingDpis)
+    {
+        RasterSheetSource raster = page.RasterSheet ?? new RasterSheetSource();
+        IReadOnlyList<int> warmupDpis = buildMissingDpis
+            ? ViewportRenderPolicy.RasterSheetWorkZoomBuildDpiSteps
+            : ViewportRenderPolicy.RasterSheetWorkZoomWarmupDpiSteps;
+        return string.Join(
+            '|',
+            "work-zoom",
+            Path.GetFullPath(page.FolderPath).ToLowerInvariant(),
+            Path.GetFullPath(page.PdfPath).ToLowerInvariant(),
+            page.PdfPage.ToString(CultureInfo.InvariantCulture),
+            buildMissingDpis ? "build" : "warm",
+            raster.RenderProfile,
+            raster.GeneratedAtUtc,
+            string.Join(",", warmupDpis));
     }
 
     private static readonly IReadOnlyDictionary<int, bool> EmptyLayerStates =

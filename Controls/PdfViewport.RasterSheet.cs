@@ -275,13 +275,30 @@ public sealed partial class PdfViewport
     {
         if (!ShouldWarmRasterSheetForWorkZoomOnPageOpen(pageFolder, pdfPath, rasterSheet))
             return;
+        RasterSheetSource source = rasterSheet!;
 
-        QueueRasterSheetBitmapApplyAfterWarmup(
-            pdfPath,
-            pageIndex,
-            pageFolder,
-            rasterSheet,
-            preferOverview: false);
+        if (ShouldWarmRasterSheetSourceBitmapForPageOpen(source))
+        {
+            QueueRasterSheetBitmapApplyAfterWarmup(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                source,
+                preferOverview: false);
+        }
+
+        PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(
+            new PageInfo
+            {
+                Name = string.IsNullOrWhiteSpace(pageFolder) ? $"Page {pageIndex + 1}" : Path.GetFileName(pageFolder),
+                FolderPath = pageFolder,
+                PdfPath = pdfPath,
+                PdfPage = pageIndex,
+                PdfLayersCached = _cachedLayers != null,
+                PdfLayers = _cachedLayers ?? Array.Empty<PdfLayerInfo>(),
+                RasterSheet = source.Clone(),
+            },
+            buildMissingDpis: true);
     }
 
     private static bool ShouldWarmRasterSheetForWorkZoomOnPageOpen(
@@ -297,6 +314,15 @@ public sealed partial class PdfViewport
 
         return !RasterSheetCacheService.IsSourceImageRaster(rasterSheet) ||
                RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+    }
+
+    private static bool ShouldWarmRasterSheetSourceBitmapForPageOpen(RasterSheetSource rasterSheet)
+    {
+        if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
+            return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+
+        return RasterSheetCacheService.RenderScaleToDpi(rasterSheet.RenderScale) <=
+               ViewportRenderPolicy.RasterSheetPageOpenImmediateWarmMaxDpi;
     }
 
     private bool TryApplyReadyRasterSheetForCurrentZoom()

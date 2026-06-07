@@ -37,23 +37,31 @@ public static class ViewportRenderPolicy
     public const int PageSwitchSharpUpgradeIdleMs = 1200;
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
     public const float PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom;
-    public const int PageOpenDeferredNavigationQuietMs = 900;
+    public const int PageOpenDeferredNavigationQuietMs = 1800;
     public const int PreviewPrefetchDelayMs = 250;
     public const int PreviewPrefetchNavigationQuietMs = 1100;
     public const int PreviewPrefetchActiveRenderHoldMs = 3000;
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
-    public const int JobOpenPreviewWarmupCount = 96;
-    public const int JobOpenPreviewWarmupLargeJobCount = 64;
-    public const int JobOpenPreviewWarmupHugeJobCount = 48;
-    public const int JobOpenRasterSheetRefreshWarmupCount = 16;
-    public const int JobOpenRasterSheetRefreshWarmupLargeJobCount = 8;
-    public const int JobOpenRasterSheetRefreshWarmupHugeJobCount = 6;
+    public const bool JobOpenPreviewWarmupAllPages = true;
+    public const bool JobOpenRasterSheetRefreshWarmupAllPages = false;
+    public const int JobOpenPreviewWarmupCount = 384;
+    public const int JobOpenPreviewWarmupLargeJobCount = 384;
+    public const int JobOpenPreviewWarmupHugeJobCount = 512;
+    public const int JobOpenRasterSheetBitmapWarmupCount = 12;
+    public const int JobOpenRasterSheetBitmapWarmupLargeJobCount = 16;
+    public const int JobOpenRasterSheetBitmapWarmupHugeJobCount = 24;
+    public const int JobOpenRasterSheetRefreshWarmupCount = 32;
+    public const int JobOpenRasterSheetRefreshWarmupLargeJobCount = 48;
+    public const int JobOpenRasterSheetRefreshWarmupHugeJobCount = 64;
     public const int JobOpenWarmupLargeJobThreshold = 160;
     public const int JobOpenWarmupHugeJobThreshold = 320;
     public const int RasterSheetRefreshPrefetchDelayMs = 1800;
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
+    public const int RasterSheetWorkZoomWarmupDelayMs = 2400;
+    public const int RasterSheetCurrentWorkZoomBuildDelayMs = 80;
+    public const int RasterSheetPageOpenImmediateWarmMaxDpi = 144;
     public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.35f;
@@ -77,22 +85,41 @@ public static class ViewportRenderPolicy
     public const float VisibleGeometryPaddingScreenPx = 96f;
     private static string _qualityMode = HighQualityMode;
     private static readonly float[] SheetOverlayRenderScaleSteps = [2.0f, 2.25f, 3.0f, 4.0f];
+    private static readonly int[] RasterSheetWorkZoomWarmupDpis = [144];
+    private static readonly int[] RasterSheetWorkZoomBuildDpis = [144];
 
     public static string QualityMode => _qualityMode;
 
     public static int SelectJobOpenPreviewWarmupCount(int pageCount) =>
-        SelectAdaptiveWarmupCount(
-            pageCount,
-            JobOpenPreviewWarmupCount,
-            JobOpenPreviewWarmupLargeJobCount,
-            JobOpenPreviewWarmupHugeJobCount);
+        JobOpenPreviewWarmupAllPages
+            ? Math.Max(0, pageCount)
+            : SelectAdaptiveWarmupCount(
+                pageCount,
+                JobOpenPreviewWarmupCount,
+                JobOpenPreviewWarmupLargeJobCount,
+                JobOpenPreviewWarmupHugeJobCount);
 
     public static int SelectJobOpenRasterSheetRefreshWarmupCount(int pageCount) =>
+        JobOpenRasterSheetRefreshWarmupAllPages
+            ? Math.Max(0, pageCount)
+            : SelectAdaptiveWarmupCount(
+                pageCount,
+                JobOpenRasterSheetRefreshWarmupCount,
+                JobOpenRasterSheetRefreshWarmupLargeJobCount,
+                JobOpenRasterSheetRefreshWarmupHugeJobCount);
+
+    public static int SelectJobOpenRasterSheetBitmapWarmupCount(int pageCount) =>
         SelectAdaptiveWarmupCount(
             pageCount,
-            JobOpenRasterSheetRefreshWarmupCount,
-            JobOpenRasterSheetRefreshWarmupLargeJobCount,
-            JobOpenRasterSheetRefreshWarmupHugeJobCount);
+            JobOpenRasterSheetBitmapWarmupCount,
+            JobOpenRasterSheetBitmapWarmupLargeJobCount,
+            JobOpenRasterSheetBitmapWarmupHugeJobCount);
+
+    public static int RasterSheetDisplayMaxDpi => RasterSheetDisplayDpiSteps[^1];
+
+    public static IReadOnlyList<int> RasterSheetWorkZoomWarmupDpiSteps => RasterSheetWorkZoomWarmupDpis;
+
+    public static IReadOnlyList<int> RasterSheetWorkZoomBuildDpiSteps => RasterSheetWorkZoomBuildDpis;
 
     public static float CurrentResponsiveMaxRenderScale => CurrentQuality.ResponsiveMaxScale;
     public static float CurrentDetailRenderPaddingScreenPx => CurrentQuality.DetailPaddingScreenPx;
@@ -226,6 +253,9 @@ public static class ViewportRenderPolicy
     {
         if (zoom <= 0)
             return RasterSheetDisplayDpiSteps[0];
+
+        if (zoom >= 0.95f && zoom < 2.0f)
+            return 144;
 
         int desiredDpi = (int)Math.Ceiling(Math.Clamp(zoom * 72.0f, 72.0f, RasterSheetDisplayDpiSteps[^1]) - 0.001f);
         foreach (int dpi in RasterSheetDisplayDpiSteps)
