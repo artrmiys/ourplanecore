@@ -1576,14 +1576,22 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("Dispatcher.InvokeAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("if (_isFastNavigating)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForNavigation()", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.ResponsiveMinRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayDpiSteps = [72, 100, 144, 200]", StringComparison.Ordinal) &&
+            policy.Contains("SelectRasterSheetDisplayDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TargetRasterSheetDpiForZoom(restoreView?.Zoom ?? _zoom)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.SelectRasterSheetDisplayDpi(zoom)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
+            pageApi.Contains("responsiveRasterDpiForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("TryApplyReadyResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet)", StringComparison.Ordinal) &&
             rasterDpiUpgradeMethod.Contains("RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             !rasterDpiUpgradeMethod.Contains("WaitForPreviewPrefetchQuietWindowAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.RenderScaleToDpi(_bitmapScale)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("Raster sheet {targetDpi} DPI", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("private PageInfo CurrentRasterSheetPageInfo()", StringComparison.Ordinal),
+            rasterSheetDpiUpgrade.Contains("private PageInfo CurrentRasterSheetPageInfo(RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal),
             "zoomed Raster On sheets should switch to an already prepared responsive DPI raster first, otherwise prepare that raster DPI in the background instead of relying on delayed PDF detail rendering");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&

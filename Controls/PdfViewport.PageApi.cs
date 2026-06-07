@@ -121,8 +121,22 @@ public sealed partial class PdfViewport
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         string rasterSkipReason = "";
         bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
+        bool responsiveRasterDpiForOpen =
+            shouldUseRasterSheetForOpen &&
+            ShouldUseResponsiveRasterSheetDpiForView(rasterSheet, restoreView);
         bool preferRasterOverviewForOpen = ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
+        if (responsiveRasterDpiForOpen &&
+            TryApplyReadyResponsiveRasterSheetDpiForPageOpen(
+                rasterSheet,
+                restoreView,
+                fitAfter: !restoreView.HasValue))
+        {
+            PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
+            RequestRepaint();
+            return;
+        }
         if (shouldUseRasterSheetForOpen &&
+            !responsiveRasterDpiForOpen &&
             TryApplyRasterSheetRender(
                 pdfPath,
                 pageIndex,
@@ -146,6 +160,7 @@ public sealed partial class PdfViewport
             return;
         }
         if (shouldUseRasterSheetForOpen &&
+            !responsiveRasterDpiForOpen &&
             IsRasterSheetBitmapCacheWarmingReason(rasterSkipReason))
         {
             QueueRasterSheetBitmapApplyAfterWarmup(
@@ -162,6 +177,10 @@ public sealed partial class PdfViewport
                 pageIndex,
                 pageFolder,
                 rasterSheet);
+        }
+        if (responsiveRasterDpiForOpen)
+        {
+            QueueResponsiveRasterSheetDpiBuildForPageOpen(rasterSheet, restoreView);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(

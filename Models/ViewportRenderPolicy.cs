@@ -56,6 +56,7 @@ public static class ViewportRenderPolicy
     public const float LowZoomBitmapDowngradeRatio = 1.38f;
     public const float RasterSheetDisplayMinZoom = ZoomRefreshMinZoom;
     public const float RasterSheetDisplayExitZoom = 0.45f;
+    private static readonly int[] RasterSheetDisplayDpiSteps = [72, 100, 144, 200];
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;
     public const float SheetOverlayMaxRenderPixels = 48_000_000f;
@@ -181,6 +182,21 @@ public static class ViewportRenderPolicy
             return true;
 
         return zoom >= bitmapScale * DetailRenderMinScaleGain;
+    }
+
+    public static int SelectRasterSheetDisplayDpi(float zoom)
+    {
+        if (zoom <= 0)
+            return RasterSheetDisplayDpiSteps[0];
+
+        int desiredDpi = (int)Math.Ceiling(Math.Clamp(zoom * 72.0f, 72.0f, RasterSheetDisplayDpiSteps[^1]) - 0.001f);
+        foreach (int dpi in RasterSheetDisplayDpiSteps)
+        {
+            if (desiredDpi <= dpi)
+                return dpi;
+        }
+
+        return RasterSheetDisplayDpiSteps[^1];
     }
 
     public static bool ShouldPreferLowerScalePageBitmapForNavigation(

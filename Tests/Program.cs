@@ -3944,6 +3944,12 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             Math.Abs(ViewportRenderPolicy.RasterSheetDisplayMinZoom - ViewportRenderPolicy.ZoomRefreshMinZoom) < 0.001f &&
             ViewportRenderPolicy.RasterSheetDisplayExitZoom < ViewportRenderPolicy.RasterSheetDisplayMinZoom,
             "raster sheet display should replace full-page sharp refresh at work zoom with lower-zoom hysteresis back to preview");
+        AssertTrue(
+            ViewportRenderPolicy.SelectRasterSheetDisplayDpi(0.60f) == 72 &&
+            ViewportRenderPolicy.SelectRasterSheetDisplayDpi(1.28f) == 100 &&
+            ViewportRenderPolicy.SelectRasterSheetDisplayDpi(2.56f) == 200 &&
+            ViewportRenderPolicy.SelectRasterSheetDisplayDpi(5.50f) == 200,
+            "raster sheet display should choose the smallest readable DPI tier for the current zoom and avoid painting oversized 300/400dpi full-page bitmaps");
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(2.0f, defaultRasterScale),
             "100-200% work zoom should stay on the 200dpi raster sheet instead of waiting for PDF detail rendering");
