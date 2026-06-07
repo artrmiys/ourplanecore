@@ -1119,7 +1119,10 @@ def _layers(doc: fitz.Document) -> list[dict]:
 
 
 def _page_layer_names(doc: fitz.Document, doc_key: tuple[str, int, int, str], page_index: int) -> set[str] | None:
+    previous_states: dict[int, bool] | None = None
     try:
+        previous_states = {int(layer["xref"]): bool(layer.get("on", True)) for layer in _layers(doc)}
+        previous_states.update({int(xref): bool(on) for xref, on in _DOC_LAYER_STATES.get(doc_key, {}).items()})
         _set_all_layers(doc, True, doc_key=doc_key)
         page = doc.load_page(page_index)
         names: set[str] = set()
@@ -1132,6 +1135,13 @@ def _page_layer_names(doc: fitz.Document, doc_key: tuple[str, int, int, str], pa
         return names
     except Exception:
         return None
+    finally:
+        if previous_states is not None:
+            for layer_id, on in previous_states.items():
+                try:
+                    _set_layer_state(doc, doc_key, layer_id, on)
+                except Exception:
+                    pass
 
 
 def _filter_layers_for_page(

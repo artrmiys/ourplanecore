@@ -45,6 +45,29 @@ public sealed partial class PdfViewport
         _pdfLayerTraceCandidates.Count > 0 ? "Hover" :
         "Probe";
 
+    public bool TryRebindCurrentPageFolder(string oldPageFolder, string newPageFolder, string pdfPath, int pdfIndex)
+    {
+        if (!string.Equals(_pageFolder, oldPageFolder, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(_pdfPath, pdfPath, StringComparison.OrdinalIgnoreCase) ||
+            _pdfIndex != pdfIndex)
+        {
+            return false;
+        }
+
+        _pageFolder = newPageFolder;
+        if (_pageBitmapPdfIndex == pdfIndex &&
+            string.Equals(_pageBitmapPdfPath, pdfPath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(_pageBitmapPageFolder, oldPageFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            _pageBitmapPageFolder = newPageFolder;
+        }
+
+        if (string.Equals(_pagePaintedPageFolder, oldPageFolder, StringComparison.OrdinalIgnoreCase))
+            _pagePaintedPageFolder = newPageFolder;
+
+        return true;
+    }
+
     public void RestoreViewState(ViewState state)
     {
         bool hasVisiblePage = _pageBitmap != null && !_showingPreviousPageDuringSwitch;

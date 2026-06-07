@@ -154,15 +154,8 @@ public partial class MainWindow
                 Mode = BindingMode.TwoWay,
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
             });
-        textBox.AddHandler(UIElement.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_GotKeyboardFocus));
         textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(SheetManagerTextBox_TextChanged));
         return new DataTemplate { VisualTree = textBox };
-    }
-
-    private static void SheetManagerTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (sender is TextBox textBox)
-            textBox.SelectAll();
     }
 
     private static void SheetManagerTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -175,7 +168,23 @@ public partial class MainWindow
             return;
         }
 
+        owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, textBox.Text);
         owner.ApplySheetManagerTextToSelectedRows(editedRow, bindingPath, textBox.Text);
+    }
+
+    private void MarkSheetManagerTextRowForApply(PdfMetadataPreviewRow row, string bindingPath, string value)
+    {
+        if (_updatingSheetManagerBulkEdit)
+            return;
+
+        if (string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedPageName), StringComparison.Ordinal))
+        {
+            row.ApplyRename = ShouldApplySheetManagerRename(row, value);
+        }
+        else if (string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedScale), StringComparison.Ordinal))
+        {
+            row.ApplyScale = ShouldApplySheetManagerScale(row, value);
+        }
     }
 
     private void ApplySheetManagerTextToSelectedRows(PdfMetadataPreviewRow editedRow, string bindingPath, string value)

@@ -64,7 +64,8 @@ public partial class MainWindow
             SaveAppSettings();
         }
 
-        if (activeAffected)
+        bool reloadActiveTab = activeAffected && !TryRebindCurrentPageAfterMovedPath(normalizedMoves);
+        if (reloadActiveTab)
         {
             _currentPage = null;
             _currentPdfPath = "";
@@ -79,7 +80,31 @@ public partial class MainWindow
             RefreshEstimateTable();
         }
 
-        return activeAffected;
+        return reloadActiveTab;
+    }
+
+    private bool TryRebindCurrentPageAfterMovedPath(IReadOnlyList<(string OldPath, string NewPath)> moves)
+    {
+        if (_currentPage == null ||
+            !TryRebaseMovedPagePath(moves, _currentPage.FolderPath, out string rebasedCurrentFolder) ||
+            OurPlaneCoreJobStore.TryReadPage(rebasedCurrentFolder) is not { } rebasedPage ||
+            !_viewport.TryRebindCurrentPageFolder(
+                _currentPage.FolderPath,
+                rebasedPage.FolderPath,
+                rebasedPage.PdfPath,
+                rebasedPage.PdfPage))
+        {
+            return false;
+        }
+
+        _currentPage = rebasedPage;
+        _currentPdfPath = rebasedPage.PdfPath;
+        TxtStatusPage.Text = rebasedPage.Name;
+        _viewport.ScaleMetersPerPt = rebasedPage.ScaleMetersPerPt;
+        UpdateScaleUi(rebasedPage.ScaleMetersPerPt);
+        RefreshFloatingPageSetup(rebasedPage.FolderPath);
+        ApplyRulerVisibilityToViewport();
+        return true;
     }
 
     private bool RebaseMeasurementPageFolderReferences(IReadOnlyList<(string OldPath, string NewPath)> moves)

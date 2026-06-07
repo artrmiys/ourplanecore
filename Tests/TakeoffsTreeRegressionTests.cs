@@ -717,6 +717,69 @@ internal static class TakeoffsTreeRegressionTests
             "Pages drop refresh should not synchronously relayout or open the moved sheet through selection change");
     }
 
+    public static void PagesMovedActiveSheetRebindsViewportWithoutReload()
+    {
+        string references = ReadRepoFile("MainWindow.PagePathReferences.cs");
+        string updateMethod = SliceMethod(references, "private bool UpdatePageReferencesForMovedPaths");
+        string rebindMethod = SliceMethod(references, "private bool TryRebindCurrentPageAfterMovedPath");
+        string viewport = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
+        string metadataApply = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
+
+        AssertTrue(
+            updateMethod.Contains("TryRebindCurrentPageAfterMovedPath(normalizedMoves)", StringComparison.Ordinal) &&
+            updateMethod.Contains("return reloadActiveTab;", StringComparison.Ordinal),
+            "moved active page references should try to rebind the existing viewport before requesting a reload");
+        AssertTrue(
+            rebindMethod.Contains("_viewport.TryRebindCurrentPageFolder(", StringComparison.Ordinal) &&
+            rebindMethod.Contains("_currentPage = rebasedPage;", StringComparison.Ordinal) &&
+            !rebindMethod.Contains("_viewport.ClearPage()", StringComparison.Ordinal),
+            "active page rebind should update current page state without clearing the visible page");
+        AssertTrue(
+            viewport.Contains("public bool TryRebindCurrentPageFolder(", StringComparison.Ordinal) &&
+            viewport.Contains("_pageFolder = newPageFolder;", StringComparison.Ordinal) &&
+            viewport.Contains("_pageBitmapPageFolder = newPageFolder;", StringComparison.Ordinal),
+            "viewport should expose a narrow page-folder rebind for same-PDF page moves");
+        AssertTrue(
+            metadataApply.Contains("UpdatePageReferencesForMovedPath(currentPath, renamedPath)", StringComparison.Ordinal) &&
+            !metadataApply.Contains("_currentPage = null;\r\n        _currentPdfPath = \"\";\r\n        ReloadPagesTree();", StringComparison.Ordinal) &&
+            !metadataApply.Contains("_currentPage = null;\n        _currentPdfPath = \"\";\n        ReloadPagesTree();", StringComparison.Ordinal),
+            "metadata rename apply should rebase page references instead of forcing the current sheet to reopen");
+    }
+
+    public static void PdfSheetMetadataLayerDiscoveryRestoresLayerStates()
+    {
+        string helper = ReadRepoFile("Tools/pdf_layers_helper.py");
+        int start = helper.IndexOf("def _page_layer_names(", StringComparison.Ordinal);
+        int end = helper.IndexOf("\n\ndef _cached_layers(", start, StringComparison.Ordinal);
+        AssertTrue(start >= 0 && end > start, "pdf helper page-layer discovery function should be present");
+        string pageLayerNames = helper[start..end];
+
+        AssertTrue(
+            pageLayerNames.Contains("previous_states", StringComparison.Ordinal) &&
+            pageLayerNames.Contains("_set_all_layers(doc, True, doc_key=doc_key)", StringComparison.Ordinal) &&
+            pageLayerNames.Contains("finally:", StringComparison.Ordinal) &&
+            pageLayerNames.Contains("_set_layer_state(doc, doc_key, layer_id, on)", StringComparison.Ordinal),
+            "metadata layer discovery should restore the cached PDF layer states after temporarily enabling layers");
+    }
+
+    public static void SheetManagerNameEditsStayCheckedAndDoNotSelectAllOnFocus()
+    {
+        string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
+        string createTemplate = SliceMethod(workspaceManagers, "private static DataTemplate CreateSheetManagerTextBoxTemplate");
+        string textChanged = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_TextChanged");
+        string markMethod = SliceMethod(workspaceManagers, "private void MarkSheetManagerTextRowForApply");
+
+        AssertTrue(
+            !createTemplate.Contains("GotKeyboardFocusEvent", StringComparison.Ordinal) &&
+            !workspaceManagers.Contains("SheetManagerTextBox_GotKeyboardFocus", StringComparison.Ordinal),
+            "Sheet Manager name cells should not select all text on focus because that can erase custom typed names");
+        AssertTrue(
+            textChanged.Contains("owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, textBox.Text)", StringComparison.Ordinal) &&
+            markMethod.Contains("row.ApplyRename = ShouldApplySheetManagerRename(row, value);", StringComparison.Ordinal) &&
+            markMethod.Contains("row.ApplyScale = ShouldApplySheetManagerScale(row, value);", StringComparison.Ordinal),
+            "Sheet Manager text edits should immediately mark the edited row for apply");
+    }
+
     public static void PageRepairUsesMovedJobSuffixForNonEmptyReferences()
     {
         string source = ReadRepoFile("MainWindow.JobLifecycle.cs");

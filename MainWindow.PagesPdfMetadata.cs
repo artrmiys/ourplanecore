@@ -157,6 +157,7 @@ public partial class MainWindow
         int renamed = 0;
         int scaled = 0;
         int failed = 0;
+        bool reloadActiveTab = false;
         string? selectAfter = null;
         var resultsByFolder = results
             .Where(result => result.Ok && result.Metadata != null)
@@ -213,6 +214,7 @@ public partial class MainWindow
                         !string.Equals(proposedName, finalName, StringComparison.OrdinalIgnoreCase))
                     {
                         string renamedPath = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(currentPath, proposedName);
+                        reloadActiveTab = UpdatePageReferencesForMovedPath(currentPath, renamedPath) || reloadActiveTab;
                         currentPath = renamedPath;
                         finalName = OurPlaneCoreJobStore.DisplayName(renamedPath);
                         renamed++;
@@ -257,11 +259,16 @@ public partial class MainWindow
             }
         }
 
-        _currentPage = null;
-        _currentPdfPath = "";
         ReloadPagesTree();
+        ReloadActivePageTabAfterPathChange(reloadActiveTab);
         if (!string.IsNullOrWhiteSpace(selectAfter))
-            SelectPageByFolder(selectAfter);
+        {
+            if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, selectAfter))
+                SelectPageTreeNodeSilently(selectAfter);
+            else
+                SelectPageByFolder(selectAfter);
+        }
+
         TxtStatus.Text = $"PDF metadata applied: {renamed} renamed, {scaled} scaled, {failed} failed.";
         return new PdfMetadataApplySummary(renamed, scaled, failed);
     }
