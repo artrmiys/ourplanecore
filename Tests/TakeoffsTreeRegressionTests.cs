@@ -1332,6 +1332,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetBitmapCache.Contains("WarmRequestedRasterSheetBitmapCache", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("RasterSheetBitmapCacheWarmingReason", StringComparison.Ordinal) &&
+            pageApi.Contains("QueueRasterSheetWorkZoomWarmupForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldWarmRasterSheetForWorkZoomOnPageOpen", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("TryWarmRasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetBitmapPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&

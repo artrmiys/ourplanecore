@@ -12,8 +12,6 @@ public sealed partial class PdfViewport
         int pageIndex,
         string pageFolder,
         RasterSheetSource? rasterSheet,
-        ViewState? restoreView,
-        bool fitAfter,
         bool preferOverview)
     {
         if (rasterSheet?.Enabled != true ||
@@ -52,7 +50,7 @@ public sealed partial class PdfViewport
             RasterSheet = rasterSheet.Clone(),
         };
 
-        _ = WarmRasterSheetBitmapAndApplyAsync(warmKey, page, rasterSheet.Clone(), restoreView, fitAfter, preferOverview);
+        _ = WarmRasterSheetBitmapAndApplyAsync(warmKey, page, rasterSheet.Clone(), preferOverview);
         return true;
     }
 
@@ -60,8 +58,6 @@ public sealed partial class PdfViewport
         string warmKey,
         PageInfo queuedPage,
         RasterSheetSource rasterSheet,
-        ViewState? restoreView,
-        bool fitAfter,
         bool preferOverview)
     {
         try
@@ -80,27 +76,22 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                if (preferOverview)
-                {
-                    if (ShouldUseRasterSheetForCurrentZoom())
-                        return;
-                }
-                else if (!ShouldUseRasterSheetForCurrentZoom() &&
-                         !(RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
-                           RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet)))
-                {
+                bool applyAtCurrentView = preferOverview
+                    ? !ShouldUseRasterSheetForCurrentZoom()
+                    : ShouldUseRasterSheetForCurrentZoom() ||
+                      RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
+                      RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+                if (!applyAtCurrentView)
                     return;
-                }
 
-                ViewState? applyView = _pageBitmap != null ? CaptureViewState() : restoreView;
-                bool applyFitAfter = _pageBitmap == null && fitAfter;
+                ViewState applyView = CaptureViewState();
                 if (TryApplyRasterSheetRender(
                         queuedPage.PdfPath,
                         queuedPage.PdfPage,
                         queuedPage.FolderPath,
                         rasterSheet,
                         applyView,
-                        applyFitAfter,
+                        fitAfter: false,
                         preferOverview,
                         requireCachedBitmap: true,
                         out string applyReason))

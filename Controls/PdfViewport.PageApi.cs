@@ -153,9 +153,15 @@ public sealed partial class PdfViewport
                 pageIndex,
                 pageFolder,
                 rasterSheet,
-                restoreView,
-                fitAfter: !restoreView.HasValue,
                 preferRasterOverviewForOpen);
+        }
+        if (!shouldUseRasterSheetForOpen)
+        {
+            QueueRasterSheetWorkZoomWarmupForPageOpen(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                rasterSheet);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(

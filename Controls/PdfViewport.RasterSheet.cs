@@ -267,6 +267,38 @@ public sealed partial class PdfViewport
     private bool ShouldUseRasterSheetForCurrentZoom() =>
         _zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom;
 
+    private void QueueRasterSheetWorkZoomWarmupForPageOpen(
+        string pdfPath,
+        int pageIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet)
+    {
+        if (!ShouldWarmRasterSheetForWorkZoomOnPageOpen(pageFolder, pdfPath, rasterSheet))
+            return;
+
+        QueueRasterSheetBitmapApplyAfterWarmup(
+            pdfPath,
+            pageIndex,
+            pageFolder,
+            rasterSheet,
+            preferOverview: false);
+    }
+
+    private static bool ShouldWarmRasterSheetForWorkZoomOnPageOpen(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet)
+    {
+        if (rasterSheet?.Enabled != true ||
+            RasterSheetCacheService.ShouldRebuildForReadableDisplay(pageFolder, pdfPath, rasterSheet, out _))
+        {
+            return false;
+        }
+
+        return !RasterSheetCacheService.IsSourceImageRaster(rasterSheet) ||
+               RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+    }
+
     private bool TryApplyReadyRasterSheetForCurrentZoom()
     {
         if (!ShouldUseRasterSheetForCurrentZoom() ||
@@ -301,8 +333,6 @@ public sealed partial class PdfViewport
                 _pdfIndex,
                 _pageFolder,
                 _rasterSheetSource,
-                currentView,
-                fitAfter: false,
                 preferOverview: false);
         }
 
