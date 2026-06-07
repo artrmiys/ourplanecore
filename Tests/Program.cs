@@ -289,6 +289,7 @@ var tests = new List<(string Name, Action Run)>
     ("viewport edge snap command is wired", TakeoffsTreeRegressionTests.ViewportEdgeSnapCommandIsWired),
     ("sheet overlay render cache round trips", SheetOverlayRenderCacheRoundTrips),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
+    ("viewport pan allows edge overscroll", ViewportPanAllowsEdgeOverscroll),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
     ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
     ("viewport background tints comfort colors", ViewportBackgroundTintsComfortColors),
@@ -3988,6 +3989,30 @@ static void ViewportRenderScaleChoosesNextQualityStep()
     {
         ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.HighQualityMode);
     }
+}
+
+static void ViewportPanAllowsEdgeOverscroll()
+{
+    AssertClose(
+        -500,
+        ViewportRenderPolicy.ClampPanWithOverscroll(-900, pageSizePt: 2000, visibleSizePt: 1000),
+        "large sheet can pan left edge to viewport center");
+    AssertClose(
+        1500,
+        ViewportRenderPolicy.ClampPanWithOverscroll(1900, pageSizePt: 2000, visibleSizePt: 1000),
+        "large sheet can pan right edge to viewport center");
+    AssertClose(
+        640,
+        ViewportRenderPolicy.ClampPanWithOverscroll(640, pageSizePt: 2000, visibleSizePt: 1000),
+        "ordinary in-page pan remains unchanged");
+    AssertClose(
+        -500,
+        ViewportRenderPolicy.ClampPanWithOverscroll(-900, pageSizePt: 500, visibleSizePt: 1000),
+        "small sheet can pan left edge to viewport center");
+    AssertClose(
+        0,
+        ViewportRenderPolicy.ClampPanWithOverscroll(400, pageSizePt: 500, visibleSizePt: 1000),
+        "small sheet can pan right edge to viewport center");
 }
 
 static void ViewportBackgroundDefaultsToOpaqueWhite()

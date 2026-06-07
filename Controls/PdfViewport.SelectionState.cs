@@ -166,8 +166,8 @@ public sealed partial class PdfViewport
 
         float visibleW = ScreenToPdfDistance(ViewportCanvasWidth);
         float visibleH = ScreenToPdfDistance(ViewportCanvasHeight);
-        _panX = Math.Clamp(_panX, 0, Math.Max(0, _pdfW - visibleW));
-        _panY = Math.Clamp(_panY, 0, Math.Max(0, _pdfH - visibleH));
+        _panX = ViewportRenderPolicy.ClampPanWithOverscroll(_panX, _pdfW, visibleW);
+        _panY = ViewportRenderPolicy.ClampPanWithOverscroll(_panY, _pdfH, visibleH);
     }
 
     private void ClearSelection()

@@ -83,6 +83,7 @@ public static class ViewportRenderPolicy
     public const int SlowRenderLogMs = 220;
     public const int SlowSnapLogMs = 18;
     public const float VisibleGeometryPaddingScreenPx = 96f;
+    public const float PanOverscrollScreenFraction = 0.50f;
     private static string _qualityMode = HighQualityMode;
     private static readonly float[] SheetOverlayRenderScaleSteps = [2.0f, 2.25f, 3.0f, 4.0f];
     private static readonly int[] RasterSheetWorkZoomWarmupDpis = [144];
@@ -406,6 +407,24 @@ public static class ViewportRenderPolicy
 
     public static float VisibleGeometryPaddingPdf(float zoom) =>
         VisibleGeometryPaddingScreenPx / Math.Max(zoom, 0.001f);
+
+    public static float ClampPanWithOverscroll(float pan, float pageSizePt, float visibleSizePt)
+    {
+        if (pageSizePt <= 0 || visibleSizePt <= 0)
+            return pan;
+
+        float margin = visibleSizePt * PanOverscrollScreenFraction;
+        float min = -margin;
+        float max = pageSizePt - visibleSizePt + margin;
+        if (max < min)
+        {
+            float center = (min + max) / 2f;
+            min = center;
+            max = center;
+        }
+
+        return Math.Clamp(pan, min, max);
+    }
 
     private readonly record struct RenderQuality(
         float ResponsiveMaxScale,
