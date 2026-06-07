@@ -770,10 +770,15 @@ internal static class TakeoffsTreeRegressionTests
         string markMethod = SliceMethod(workspaceManagers, "private void MarkSheetManagerTextRowForApply");
         string restoreMethod = SliceMethod(workspaceManagers, "private void RestoreSheetManagerTextSelection");
         string bulkMethod = SliceMethod(workspaceManagers, "private void ApplySheetManagerTextToSelectedRows");
+        string gotFocus = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_GotKeyboardFocus");
+        string lostFocus = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_LostKeyboardFocus");
+        string refreshMethod = SliceMethod(workspaceManagers, "private void RefreshSheetManager()");
+        string rasterRowsMethod = SliceMethod(workspaceManagers, "private bool RefreshSheetManagerRasterRows");
 
         AssertTrue(
-            !createTemplate.Contains("GotKeyboardFocusEvent", StringComparison.Ordinal) &&
-            !workspaceManagers.Contains("SheetManagerTextBox_GotKeyboardFocus", StringComparison.Ordinal),
+            createTemplate.Contains("SheetManagerTextBox_GotKeyboardFocus", StringComparison.Ordinal) &&
+            gotFocus.Contains("SelectionLength = 0", StringComparison.Ordinal) &&
+            !gotFocus.Contains("SelectAll", StringComparison.Ordinal),
             "Sheet Manager name cells should not select all text on focus because that can erase custom typed names");
         AssertTrue(
             textChanged.Contains("owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, value)", StringComparison.Ordinal) &&
@@ -785,6 +790,13 @@ internal static class TakeoffsTreeRegressionTests
             restoreMethod.Contains("textBox.Select(start, length);", StringComparison.Ordinal) &&
             bulkMethod.Contains("if (ReferenceEquals(row, editedRow))", StringComparison.Ordinal),
             "Sheet Manager edits should not rebind the actively edited cell or leave its text selected after each key");
+        AssertTrue(
+            workspaceManagers.Contains("private bool _sheetManagerRefreshPendingAfterEdit;", StringComparison.Ordinal) &&
+            refreshMethod.Contains("if (IsSheetManagerTextEditActive())", StringComparison.Ordinal) &&
+            refreshMethod.Contains("_sheetManagerRefreshPendingAfterEdit = true;", StringComparison.Ordinal) &&
+            lostFocus.Contains("owner.RefreshSheetManager();", StringComparison.Ordinal) &&
+            rasterRowsMethod.Contains("if (IsSheetManagerTextEditActive())", StringComparison.Ordinal),
+            "Sheet Manager background refreshes should wait until the active name/scale edit loses focus");
     }
 
     public static void PageRepairUsesMovedJobSuffixForNonEmptyReferences()

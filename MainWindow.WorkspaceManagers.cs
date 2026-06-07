@@ -19,6 +19,7 @@ public partial class MainWindow
     private const int SheetManagerAutoRasterDpi = 0;
     private bool _sheetManagerEditableColumnsConfigured;
     private bool _updatingSheetManagerBulkEdit;
+    private bool _sheetManagerRefreshPendingAfterEdit;
     private CancellationTokenSource? _sheetManagerRasterPrepareCts;
     private string _sheetManagerRasterBackgroundLabel = "Prepare";
 
@@ -154,8 +155,44 @@ public partial class MainWindow
                 Mode = BindingMode.TwoWay,
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
             });
+        textBox.AddHandler(TextBox.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_GotKeyboardFocus));
+        textBox.AddHandler(TextBox.LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_LostKeyboardFocus));
         textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(SheetManagerTextBox_TextChanged));
         return new DataTemplate { VisualTree = textBox };
+    }
+
+    private static void SheetManagerTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            textBox.SelectionLength = 0;
+            textBox.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (textBox.IsKeyboardFocusWithin &&
+                    textBox.Text.Length > 0 &&
+                    textBox.SelectionLength >= textBox.Text.Length)
+                {
+                    textBox.SelectionLength = 0;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    private static void SheetManagerTextBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox ||
+            Window.GetWindow(textBox) is not MainWindow owner ||
+            !owner._sheetManagerRefreshPendingAfterEdit)
+        {
+            return;
+        }
+
+        owner._sheetManagerRefreshPendingAfterEdit = false;
+        owner.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!owner.IsSheetManagerTextEditActive())
+                owner.RefreshSheetManager();
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private static void SheetManagerTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -258,6 +295,13 @@ public partial class MainWindow
     {
         ConfigureSheetManagerEditableColumns();
 
+        if (IsSheetManagerTextEditActive())
+        {
+            _sheetManagerRefreshPendingAfterEdit = true;
+            TxtStatus.Text = "Sheet Manager: refresh queued until the current edit is finished.";
+            return;
+        }
+
         if (_currentJob == null)
         {
             _sheetManagerMetadataResults = [];
@@ -305,6 +349,17 @@ public partial class MainWindow
         SheetManagerGrid.ItemsSource = rows;
         TxtStatus.Text = $"Sheet Manager: {rows.Count} sheet(s).";
     }
+
+    private bool IsSheetManagerTextEditActive() =>
+        SheetManagerGrid.IsKeyboardFocusWithin &&
+        Keyboard.FocusedElement is TextBox textBox &&
+        textBox.DataContext is PdfMetadataPreviewRow &&
+        textBox.Tag is string bindingPath &&
+        IsSheetManagerEditableBinding(bindingPath);
+
+    private static bool IsSheetManagerEditableBinding(string bindingPath) =>
+        string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedPageName), StringComparison.Ordinal) ||
+        string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedScale), StringComparison.Ordinal);
 
     private async Task AnalyzeSheetManagerAsync(bool defaultRename, bool defaultScale)
     {
@@ -687,12 +742,24 @@ public partial class MainWindow
 
     private void RefreshSheetManagerRasterRow(PdfMetadataPreviewRow row)
     {
+        if (IsSheetManagerTextEditActive())
+        {
+            _sheetManagerRefreshPendingAfterEdit = true;
+            return;
+        }
+
         if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } refreshedPage)
             row.RasterStatus = RasterSheetCacheService.DisplayStatus(refreshedPage);
     }
 
     private bool RefreshSheetManagerRasterRows(IReadOnlyList<PageInfo> pages)
     {
+        if (IsSheetManagerTextEditActive())
+        {
+            _sheetManagerRefreshPendingAfterEdit = true;
+            return true;
+        }
+
         if (pages.Count == 0)
             return false;
 
