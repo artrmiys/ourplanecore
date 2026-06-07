@@ -279,6 +279,8 @@ var tests = new List<(string Name, Action Run)>
     ("pdf preview render cache round trips", PdfPreviewRenderCacheRoundTrips),
     ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
+    ("viewport raster page open applies hot bitmap cache", ViewportRasterPageOpenAppliesHotBitmapCache),
+    ("viewport raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
     ("pdf sheet metadata handles rotated bottom title block", TakeoffsTreeRegressionTests.PdfSheetMetadataHandlesRotatedBottomTitleBlock),
@@ -4300,6 +4302,55 @@ static Measurement SpatialIndexLine(string id, float x1, float y1, float x2, flo
         ],
     };
 
+static void ViewportRasterPageOpenAppliesHotBitmapCache()
+{
+    WithTempRasterBackedPage("raster_hot_open", page =>
+    {
+        AssertTrue(
+            PdfViewport.WarmRasterSheetBitmapCache(page),
+            "raster bitmap cache should warm before hot page open");
+
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(page.PdfPath, page.PdfPage, page.FolderPath, rasterSheet: page.RasterSheet);
+
+            AssertTrue(
+                GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                "hot raster-backed page open should apply raster bitmap synchronously");
+            AssertFalse(
+                GetPrivateField<bool>(viewport, "_showingPreviousPageDuringSwitch"),
+                "hot raster-backed page open should not keep a previous sheet placeholder");
+            AssertTrue(
+                GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                "hot raster-backed page open must not queue docnet PDF render");
+            AssertTrue(
+                GetPrivateFieldValue(viewport, "_pageBitmap") is SKBitmap { Width: > 0, Height: > 0 },
+                "hot raster-backed page open should load a visible bitmap");
+        });
+    });
+}
+
+static void ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback()
+{
+    WithTempRasterBackedPage("raster_cold_open", page =>
+    {
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(page.PdfPath, page.PdfPage, page.FolderPath, rasterSheet: page.RasterSheet);
+
+            bool usingRaster = GetPrivateField<bool>(viewport, "_usingRasterSheetRender");
+            AssertTrue(
+                usingRaster || HasRasterBitmapWarmupInFlight(viewport),
+                "cold raster-backed page open should either apply raster immediately or queue bitmap warmup");
+            AssertTrue(
+                GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                "cold raster-backed page open must not fall back to docnet while raster bitmap warmup is queued");
+        });
+    });
+}
+
 static void ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback()
 {
     RunOnStaThread(() =>
@@ -4356,6 +4407,31 @@ static int LoadedViewportMeasurementCount(PdfViewport viewport)
     if (field?.GetValue(viewport) is not ICollection<Measurement> measurements)
         throw new InvalidOperationException("PdfViewport measurement index was not available for test inspection.");
     return measurements.Count;
+}
+
+static T GetPrivateField<T>(object instance, string name)
+{
+    object? value = GetPrivateFieldValue(instance, name);
+    if (value is not T typed)
+        throw new InvalidOperationException($"{instance.GetType().Name}.{name} was not a {typeof(T).Name} for test inspection.");
+    return typed;
+}
+
+static object? GetPrivateFieldValue(object instance, string name)
+{
+    FieldInfo field = instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)
+        ?? throw new MissingFieldException(instance.GetType().FullName, name);
+    return field.GetValue(instance);
+}
+
+static bool HasRasterBitmapWarmupInFlight(PdfViewport viewport)
+{
+    object gate = GetPrivateField<object>(viewport, "_rasterSheetRebuildGate");
+    lock (gate)
+    {
+        HashSet<string> inFlight = GetPrivateField<HashSet<string>>(viewport, "_rasterSheetRebuildsInFlight");
+        return inFlight.Any(key => key.Contains("|bitmap:full", StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 static void RunOnStaThread(Action action)
@@ -4812,6 +4888,56 @@ static PageInfo CreatePageItem(OurPlaneCoreJob job, string parentFolder, string 
         File.WriteAllText(sourcePdf, "%PDF-1.4 test");
 
     return OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, name, parentFolder);
+}
+
+static void WithTempRasterBackedPage(string name, Action<PageInfo> action)
+{
+    string pdfPath = Path.Combine(
+        FindRepoRoot(),
+        "reference",
+        "window_detector_poc",
+        "outputs",
+        "wind_window_points_marked.pdf");
+    if (!File.Exists(pdfPath))
+        throw new FileNotFoundException("Raster-backed viewport test PDF is missing.", pdfPath);
+
+    string tempRoot = Path.Combine(Path.GetTempPath(), "opc_viewport_raster_tests", Guid.NewGuid().ToString("N"));
+    try
+    {
+        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(tempRoot, name);
+        string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
+        PageInfo page = OurPlaneCoreJobStore.ImportPdf(job, pdfPath, [$"{name}_sheet"], importFolder).Single();
+        RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, 0.5f);
+        AssertTrue(build.Ok, build.Error);
+
+        PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            ?? throw new InvalidOperationException("Raster-backed viewport test page was not readable after build.");
+        AssertTrue(
+            refreshed.RasterSheet is { Enabled: true },
+            "raster-backed viewport test page should have enabled raster metadata");
+        action(refreshed);
+    }
+    finally
+    {
+        TryDeleteDirectory(tempRoot);
+    }
+}
+
+static string FindRepoRoot()
+{
+    string dir = Directory.GetCurrentDirectory();
+    while (!string.IsNullOrWhiteSpace(dir))
+    {
+        if (File.Exists(Path.Combine(dir, "ourplanecore.csproj")))
+            return dir;
+
+        string? parent = Directory.GetParent(dir)?.FullName;
+        if (string.Equals(parent, dir, StringComparison.OrdinalIgnoreCase))
+            break;
+        dir = parent ?? "";
+    }
+
+    throw new DirectoryNotFoundException("Could not locate ourplanecore repo root.");
 }
 
 static void AssertTakeoffChildOrder(string parentFolder, string expected, string message)
