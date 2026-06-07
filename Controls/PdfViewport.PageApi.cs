@@ -137,6 +137,7 @@ public sealed partial class PdfViewport
         _layerRenderVersion++;
         _pendingDocnetRender = null;
         _docnetRenderVersion++;
+        _persistedPreviewRenderVersion++;
         ClearDetailRender();
         QueuePdfSnapPointLoad(force: true);
         FireLayersChanged();
@@ -226,7 +227,20 @@ public sealed partial class PdfViewport
             pageIndex,
             previewScale,
             restoreView,
-            fitAfter: !restoreView.HasValue);
+            fitAfter: !restoreView.HasValue,
+            allowDiskRead: false);
+        if (!previewCacheHit)
+        {
+            QueuePersistedPreviewRenderAfterFirstRepaint(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                previewScale,
+                restoreView,
+                fitAfter: !restoreView.HasValue,
+                queueSharpBaseAfterPreview: !rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen,
+                statusAfter: loadedStatus);
+        }
 
         if (previewCacheHit)
         {

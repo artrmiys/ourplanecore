@@ -1980,6 +1980,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string persistedPreview = ReadRepoFile("Controls/PdfViewport.PersistedPreview.cs");
         string service = ReadPdfLayerRenderServiceSources();
         string cache = ReadRepoFile("Models/PdfPreviewRenderCache.cs");
 
@@ -2000,11 +2001,11 @@ internal static class TakeoffsTreeRegressionTests
             "cached PyMuPDF previews should stay outside layer-render mode so zoom refreshes do not schedule layer-cache-only work");
         AssertTrue(
             layers.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
-            layers.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) &&
+            persistedPreview.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) &&
             layers.Contains("TryApplyPersistedPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("PersistedPreviewBitmapCache.TryGet", StringComparison.Ordinal) &&
-            layers.Contains("PersistedPreviewBitmapCache.Put", StringComparison.Ordinal) &&
+            persistedPreview.Contains("PersistedPreviewBitmapCache.Put", StringComparison.Ordinal) &&
             layers.Contains("preview-memory", StringComparison.Ordinal) &&
             layers.Contains("ApplyInitialPreviewView", StringComparison.Ordinal) &&
             layers.Contains("Viewport PyMuPDF preview cache hit", StringComparison.Ordinal),
@@ -2028,10 +2029,14 @@ internal static class TakeoffsTreeRegressionTests
     {
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string persistedPreview = ReadRepoFile("Controls/PdfViewport.PersistedPreview.cs");
         string detail = ReadRepoFile("Controls/PdfViewport.DetailRender.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
         string mainLayers = ReadRepoFile("MainWindow.PdfLayers.cs");
+        string loadPageMethod = SliceMethod(pageApi, "public void LoadPage(");
+        string previewApplyMethod = SliceMethod(layers, "private bool TryApplyPersistedPreviewRenderScale(");
+        string queuedPreviewMethod = SliceMethod(persistedPreview, "private async Task StartPersistedPreviewRenderAfterFirstRepaintAsync(");
 
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
         int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
@@ -2058,6 +2063,8 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("rasterBitmapWarmupQueuedForOpen = QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
             pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
+            pageApi.Contains("QueuePersistedPreviewRenderAfterFirstRepaint(", StringComparison.Ordinal) &&
+            pageApi.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
             pageApi.Contains("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("else if (responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("(rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiBuildQueuedForOpen) && !previewCacheHit", StringComparison.Ordinal) &&
@@ -2067,6 +2074,19 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
             mainLayers.Contains("PDF layers not loaded. Click Load to scan this sheet.", StringComparison.Ordinal),
             "normal page opens should keep PDF layers lazy, and raster-warm page opens should not start a sharp PDF render while the readable raster is being decoded");
+        AssertTrue(
+            loadPageMethod.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
+            loadPageMethod.Contains("QueuePersistedPreviewRenderAfterFirstRepaint(", StringComparison.Ordinal) &&
+            previewApplyMethod.Contains("if (!allowDiskRead)", StringComparison.Ordinal) &&
+            queuedPreviewMethod.Contains("Dispatcher.Yield", StringComparison.Ordinal) &&
+            queuedPreviewMethod.Contains("Task.Run", StringComparison.Ordinal) &&
+            queuedPreviewMethod.Contains("IsCurrentPersistedPreviewRenderTarget", StringComparison.Ordinal) &&
+            queuedPreviewMethod.Contains("ShouldSkipPersistedPreviewRender", StringComparison.Ordinal),
+            "page open should keep persisted preview disk reads and PNG decode off the immediate UI-thread path");
+        AssertFalse(
+            loadPageMethod.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) ||
+            loadPageMethod.Contains("SKBitmap.Decode", StringComparison.Ordinal),
+            "LoadPage itself must not synchronously read or decode persisted preview images before the first repaint");
         AssertTrue(
             layers.Contains("if (_cachedLayers != null)", StringComparison.Ordinal) &&
             layers.Contains("PDF Layers: loading cached page layers...", StringComparison.Ordinal) &&

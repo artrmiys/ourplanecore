@@ -320,14 +320,15 @@ public sealed partial class PdfViewport
         int pdfIndex,
         float renderScale,
         ViewState? restoreView,
-        bool fitAfter)
+        bool fitAfter,
+        bool allowDiskRead = true)
     {
-        if (TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, renderScale, restoreView, fitAfter))
+        if (TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, renderScale, restoreView, fitAfter, allowDiskRead))
             return true;
 
         float fastScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
         if (Math.Abs(renderScale - fastScale) > 0.001f &&
-            TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter))
+            TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter, allowDiskRead))
         {
             return true;
         }
@@ -338,7 +339,8 @@ public sealed partial class PdfViewport
                    pdfIndex,
                    ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
                    restoreView,
-                   fitAfter);
+                   fitAfter,
+                   allowDiskRead);
     }
 
     private static float PageSwitchLivePreviewScale(ViewState? restoreView, bool fitAfter) =>
@@ -359,7 +361,8 @@ public sealed partial class PdfViewport
         int pdfIndex,
         float renderScale,
         ViewState? restoreView,
-        bool fitAfter)
+        bool fitAfter,
+        bool allowDiskRead = true)
     {
         string cacheKey = DocnetRenderCacheKey(pdfPath, pdfIndex, renderScale);
         if (PersistedPreviewBitmapCache.TryGet(cacheKey, out CachedBitmapRender cachedPreview))
@@ -381,19 +384,15 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pdfIndex, renderScale, out PdfLayerRenderResult render) &&
-            !PdfPreviewRenderCache.TryReadCleanRender(pdfPath, pdfIndex, renderScale, out render))
-        {
-            return false;
-        }
-
-        var bitmap = SKBitmap.Decode(render.ImageBytes);
-        if (bitmap == null)
+        if (!allowDiskRead)
             return false;
 
-        float bitmapScale = render.WidthPt > 0 ? bitmap.Width / render.WidthPt : renderScale;
-        ApplyPreviewBitmapRender(bitmap, render.WidthPt, render.HeightPt, bitmapScale, restoreView, fitAfter);
-        PersistedPreviewBitmapCache.Put(cacheKey, render.WidthPt, render.HeightPt, bitmapScale, bitmap);
+        if (!TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, renderScale, out CachedBitmapRender render))
+            return false;
+
+        ApplyPreviewBitmapRender(render.Bitmap, render.WidthPt, render.HeightPt, render.BitmapScale, restoreView, fitAfter);
+        PersistedPreviewBitmapCache.Put(cacheKey, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
+        DocnetRenderCache.Put(cacheKey, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
         AppLog.Info(
             $"Viewport PyMuPDF preview cache hit; page='{_pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
