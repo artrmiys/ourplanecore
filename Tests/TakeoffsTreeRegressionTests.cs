@@ -1474,6 +1474,9 @@ internal static class TakeoffsTreeRegressionTests
         string rasterOnBackgroundMethod = SliceMethod(workspaceManagers, "private async Task EnableMissingSheetManagerRasterOnInBackgroundAsync(");
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
         string rasterDpiUpgradeMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task BuildRasterSheetDpiUpgradeForCurrentPageAsync(");
+        string pageOpenReadyDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyReadyResponsiveRasterSheetDpiForPageOpen(");
+        string pageOpenDpiQueueMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(");
+        string readyDpiWarmApplyMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task ApplyReadyRasterSheetDpiAfterWarmupAsync(");
         string importedRasterMethod = SliceMethod(pdfImport, "private static RasterSheetBuildResult BuildAndWarmImportedRaster(");
 
         AssertTrue(
@@ -1789,6 +1792,16 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryPrepareRasterSheetBitmapForImmediateRepaint()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
+            pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi, restoreView, fitAfter)", StringComparison.Ordinal) &&
+            pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpiAtOrAboveFromMemory(page, targetDpi, currentDpi, restoreView, fitAfter)", StringComparison.Ordinal) &&
+            !pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpi(page, targetDpi", StringComparison.Ordinal) &&
+            pageOpenDpiQueueMethod.Contains("allowImmediateReadyApply: false", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("QueueReadyRasterSheetDpiApplyAfterWarmup", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("Task.Run", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("WarmRasterSheetBitmapCache(queuedPage, result.Source)", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiAtOrAbove", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("SelectReadyRasterSheetDpiAtOrAbove", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
