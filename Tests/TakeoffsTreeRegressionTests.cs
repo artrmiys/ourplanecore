@@ -1375,6 +1375,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PdfSnapDuplicateLoadGuardIsWired()
     {
         string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+        string currentSnapLoad = SliceMethod(pdfSnap, "private async Task LoadPdfSnapPointsAsync(");
 
         AssertTrue(
             pdfSnap.Contains("_pdfSnapInProgressCacheKey", StringComparison.Ordinal) &&
@@ -1388,6 +1389,11 @@ internal static class TakeoffsTreeRegressionTests
             pdfSnap.Contains("_overlayPdfSnapInProgressCacheKey = cacheKey;", StringComparison.Ordinal) &&
             pdfSnap.Contains("_overlayPdfSnapInProgressCacheKey = \"\";", StringComparison.Ordinal),
             "overlay PDF Snap loads should skip duplicate in-flight cache keys");
+        AssertTrue(
+            currentSnapLoad.Contains("var rasterSnap = await Task.Run", StringComparison.Ordinal) &&
+            currentSnapLoad.Contains("RasterSheetCacheService.TryReadSnapIndex", StringComparison.Ordinal) &&
+            currentSnapLoad.Contains("PdfGeometrySnapService.TryReadSnapPointsAsync", StringComparison.Ordinal),
+            "current sheet PDF Snap should keep raster snap-index reads off the synchronous page-open path");
     }
 
     public static void RasterSnapStrictBlackLinesOnlyIsWired()
@@ -1819,9 +1825,13 @@ internal static class TakeoffsTreeRegressionTests
             "zoomed Raster On sheets should switch only to the exact prepared responsive DPI for the current zoom, avoid stale page-open zoom targets, avoid automatic 400 DPI display, and build only 144 DPI for the active working zoom path");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
-            pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
+            pdfSnap.Contains("QueueRasterSheetVisualSegmentsLoad", StringComparison.Ordinal) &&
+            pdfSnap.Contains("LoadRasterSheetVisualSegmentsAsync", StringComparison.Ordinal) &&
+            pdfSnap.Contains("var read = await Task.Run", StringComparison.Ordinal) &&
             pdfSnap.Contains("RasterSheetCacheService.TryReadSnapIndex", StringComparison.Ordinal) &&
-            layers.Contains("LoadRasterSheetVisualSegments(pageFolder, pdfPath, rasterSheet)", StringComparison.Ordinal) &&
+            pdfSnap.Contains("version != _rasterSheetVisualSegmentVersion", StringComparison.Ordinal) &&
+            pdfSnap.Contains("RequestRepaint();", StringComparison.Ordinal) &&
+            layers.Contains("QueueRasterSheetVisualSegmentsLoad(pageFolder, pdfPath, pdfIndex, rasterSheet)", StringComparison.Ordinal) &&
             rendering.Contains("DrawLowZoomLineOverlay(canvas, visiblePdf)", StringComparison.Ordinal) &&
             rendering.Contains("LowZoomVisualSegments()", StringComparison.Ordinal) &&
             rendering.Contains("_renderNavigationFastFrame", StringComparison.Ordinal) &&

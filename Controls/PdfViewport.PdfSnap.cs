@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
@@ -15,6 +16,7 @@ public sealed partial class PdfViewport
     private bool _pdfSnapLoadInProgress;
     private bool _pdfSnapReloadPending;
     private int _pdfSnapLoadVersion;
+    private int _rasterSheetVisualSegmentVersion;
     private string _overlayPdfSnapPath = "";
     private int _overlayPdfSnapPageIndex;
     private string _overlayPdfSnapName = "";
@@ -63,21 +65,52 @@ public sealed partial class PdfViewport
     private void ClearRasterSheetVisualSegments()
     {
         _rasterSheetVisualSegments = [];
+        _rasterSheetVisualSegmentVersion++;
     }
 
-    private void LoadRasterSheetVisualSegments(
+    private void QueueRasterSheetVisualSegmentsLoad(
         string pageFolder,
         string pdfPath,
+        int pdfIndex,
         RasterSheetSource? rasterSheet)
     {
-        _rasterSheetVisualSegments = RasterSheetCacheService.TryReadSnapIndex(
-                pageFolder,
-                pdfPath,
-                rasterSheet,
-                out PdfGeometrySnapResult snapIndex,
-                out _)
-            ? snapIndex.Segments
-            : [];
+        _rasterSheetVisualSegments = [];
+        int version = ++_rasterSheetVisualSegmentVersion;
+        _ = LoadRasterSheetVisualSegmentsAsync(version, pageFolder, pdfPath, pdfIndex, rasterSheet?.Clone());
+    }
+
+    private async Task LoadRasterSheetVisualSegmentsAsync(
+        int version,
+        string pageFolder,
+        string pdfPath,
+        int pdfIndex,
+        RasterSheetSource? rasterSheet)
+    {
+        try
+        {
+            var read = await Task.Run(() =>
+            {
+                bool ok = RasterSheetCacheService.TryReadSnapIndex(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    out PdfGeometrySnapResult snapIndex,
+                    out _);
+                return (Ok: ok, SnapIndex: snapIndex);
+            });
+            if (version != _rasterSheetVisualSegmentVersion ||
+                !IsCurrentPageRasterTarget(pdfPath, pdfIndex, pageFolder))
+            {
+                return;
+            }
+
+            _rasterSheetVisualSegments = read.Ok ? read.SnapIndex.Segments : [];
+            RequestRepaint();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport raster sheet visual segments failed for {Path.GetFileName(pdfPath)}");
+        }
     }
 
     private void SetOverlayPdfSnapSource(
@@ -154,18 +187,22 @@ public sealed partial class PdfViewport
     {
         try
         {
-            bool rasterSnapAvailable = RasterSheetCacheService.TryReadSnapIndex(
+            var rasterSnap = await Task.Run(() =>
+            {
+                bool ok = RasterSheetCacheService.TryReadSnapIndex(
                     pageFolder,
                     pdfPath,
                     rasterSheet,
                     out PdfGeometrySnapResult snapIndex,
                     out string rasterSnapReason);
-            if (rasterSnapAvailable)
+                return (Ok: ok, SnapIndex: snapIndex, Reason: rasterSnapReason);
+            });
+            if (rasterSnap.Ok)
             {
                 if (!IsCurrentPdfSnapRequest(version, pdfPath, pdfIndex, pageFolder))
                     return;
 
-                _pdfSnapIndex = new PdfSnapPointIndex(snapIndex.Points, snapIndex.Segments);
+                _pdfSnapIndex = new PdfSnapPointIndex(rasterSnap.SnapIndex.Points, rasterSnap.SnapIndex.Segments);
                 _pdfSnapCacheKey = cacheKey;
                 if (_pdfSnapEnabled)
                     PostStatus($"PDF Snap ready from raster index: {_pdfSnapIndex.Count} strict black line points/segments.");
@@ -188,8 +225,8 @@ public sealed partial class PdfViewport
             _pdfSnapCacheKey = cacheKey;
             if (_pdfSnapEnabled)
             {
-                string fallback = !string.IsNullOrWhiteSpace(rasterSnapReason)
-                    ? $" ({rasterSnapReason}; live PDF)"
+                string fallback = !string.IsNullOrWhiteSpace(rasterSnap.Reason)
+                    ? $" ({rasterSnap.Reason}; live PDF)"
                     : "";
                 PostStatus($"PDF Snap ready: {_pdfSnapIndex.Count} sheet points/lines{fallback}.");
             }
