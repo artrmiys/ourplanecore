@@ -94,11 +94,13 @@ public sealed partial class PdfViewport
             return false;
 
         PageInfo page = CurrentRasterSheetPageInfo();
-        if (currentDpi <= targetDpi)
+        if (currentDpi == targetDpi)
+            return false;
+
+        if (currentDpi < targetDpi)
             return TryApplyReadyRasterSheetDpiAtOrAboveFromMemory(page, targetDpi, currentDpi);
 
-        return TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi) ||
-               TryApplyReadyRasterSheetDpiAtOrAboveFromMemory(page, targetDpi, currentDpi);
+        return TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi);
     }
 
     private bool ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet) =>
@@ -157,28 +159,13 @@ public sealed partial class PdfViewport
             return 0;
 
         IReadOnlyList<int> readyDpis = RasterSheetCacheService.ReadyReadableRasterDpis(page);
-        int smallestReadyAtOrAboveDesired = 0;
-        int largestReadyAboveCurrent = 0;
         foreach (int readyDpi in readyDpis)
         {
-            if (readyDpi <= currentDpi)
-                continue;
-            if (readyDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
-                continue;
-
-            if (readyDpi > largestReadyAboveCurrent)
-                largestReadyAboveCurrent = readyDpi;
-
-            if (readyDpi >= desiredDpi &&
-                (smallestReadyAtOrAboveDesired == 0 || readyDpi < smallestReadyAtOrAboveDesired))
-            {
-                smallestReadyAtOrAboveDesired = readyDpi;
-            }
+            if (readyDpi == desiredDpi)
+                return readyDpi;
         }
 
-        return smallestReadyAtOrAboveDesired > 0
-            ? smallestReadyAtOrAboveDesired
-            : largestReadyAboveCurrent;
+        return 0;
     }
 
     private int DesiredRasterSheetDpiForCurrentZoom(int currentDpi)
@@ -250,10 +237,13 @@ public sealed partial class PdfViewport
 
     private int SelectReadyRasterSheetDpiAtOrAbove(PageInfo page, int targetDpi, int currentDpi)
     {
+        if (currentDpi >= targetDpi)
+            return 0;
+
         int selectedDpi = 0;
         foreach (int readyDpi in RasterSheetCacheService.ReadyReadableRasterDpis(page))
         {
-            if (readyDpi < targetDpi)
+            if (readyDpi != targetDpi)
                 continue;
             if (readyDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
                 continue;

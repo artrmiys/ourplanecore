@@ -1605,6 +1605,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.SelectRasterSheetDisplayDpi(zoom)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
             pageApi.Contains("responsiveRasterDpiForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("restoreView.HasValue", StringComparison.Ordinal) &&
             pageApi.Contains("TryApplyReadyResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
             pageApi.Contains("QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet)", StringComparison.Ordinal) &&
@@ -1613,6 +1614,12 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiAtOrAbove", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("SelectReadyRasterSheetDpiAtOrAbove", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("if (currentDpi == targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("if (currentDpi < targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("if (currentDpi >= targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("readyDpi == desiredDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("readyDpi != targetDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("return TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi);", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("currentDpi >= targetDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("currentDpi <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("targetDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
@@ -1638,7 +1645,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.RenderScaleToDpi(_bitmapScale)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("Raster sheet {targetDpi} DPI", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("private PageInfo CurrentRasterSheetPageInfo(RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal),
-            "zoomed Raster On sheets should switch to an already prepared responsive DPI raster first, use the nearest capped work-zoom DPI to avoid blur, avoid automatic 400 DPI display, and build only 144 DPI for the active working zoom path");
+            "zoomed Raster On sheets should switch only to the exact prepared responsive DPI for the current zoom, avoid stale page-open zoom targets, avoid automatic 400 DPI display, and build only 144 DPI for the active working zoom path");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&

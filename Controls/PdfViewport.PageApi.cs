@@ -123,6 +123,7 @@ public sealed partial class PdfViewport
         bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         bool responsiveRasterDpiForOpen =
             shouldUseRasterSheetForOpen &&
+            restoreView.HasValue &&
             ShouldUseResponsiveRasterSheetDpiForView(rasterSheet, restoreView);
         bool preferRasterOverviewForOpen = ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         if (responsiveRasterDpiForOpen &&
