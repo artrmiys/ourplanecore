@@ -599,7 +599,7 @@ public sealed partial class PdfViewport
             return RasterSheetCacheService.HasSourceImageOverview(source);
 
         if (!RasterSheetCacheService.IsSourceImageRaster(source))
-            return false;
+            return true;
 
         return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source) ||
                !RasterSheetCacheService.HasSourceImageOverview(source);

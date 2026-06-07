@@ -121,6 +121,7 @@ public sealed partial class PdfViewport
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         string rasterSkipReason = "";
         bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
+        bool preferRasterOverviewForOpen = ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         if (shouldUseRasterSheetForOpen &&
             TryApplyRasterSheetRender(
                 pdfPath,
@@ -129,7 +130,8 @@ public sealed partial class PdfViewport
                 rasterSheet,
                 restoreView,
                 fitAfter: !restoreView.HasValue,
-                preferOverview: ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue),
+                preferRasterOverviewForOpen,
+                requireCachedBitmap: true,
                 out rasterSkipReason))
         {
             PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
@@ -142,6 +144,18 @@ public sealed partial class PdfViewport
                 rasterSkipReason);
             RequestRepaint();
             return;
+        }
+        if (shouldUseRasterSheetForOpen &&
+            IsRasterSheetBitmapCacheWarmingReason(rasterSkipReason))
+        {
+            QueueRasterSheetBitmapApplyAfterWarmup(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                rasterSheet,
+                restoreView,
+                fitAfter: !restoreView.HasValue,
+                preferRasterOverviewForOpen);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(

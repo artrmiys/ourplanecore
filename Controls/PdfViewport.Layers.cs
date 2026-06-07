@@ -18,6 +18,8 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private const string RasterSheetBitmapCacheWarmingReason = "bitmap cache warming";
+
     // ── Layer API ─────────────────────────────────────────────────────────────
 
     private static DocnetRenderResult RenderPageBitmapWithDocnet(string pdfPath, int pdfIndex, float renderScale)
@@ -85,6 +87,27 @@ public sealed partial class PdfViewport
         ViewState? restoreView,
         bool fitAfter,
         bool preferOverview,
+        out string skipReason) =>
+        TryApplyRasterSheetRender(
+            pdfPath,
+            pdfIndex,
+            pageFolder,
+            rasterSheet,
+            restoreView,
+            fitAfter,
+            preferOverview,
+            requireCachedBitmap: false,
+            out skipReason);
+
+    private bool TryApplyRasterSheetRender(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter,
+        bool preferOverview,
+        bool requireCachedBitmap,
         out string skipReason)
     {
         skipReason = "";
@@ -107,6 +130,12 @@ public sealed partial class PdfViewport
                     restoreView,
                     fitAfter,
                     usingOverview: true);
+            }
+
+            if (requireCachedBitmap)
+            {
+                skipReason = RasterSheetBitmapCacheMissReason(pageFolder, pdfPath, rasterSheet, preferOverview: true);
+                return false;
             }
 
             if (RasterSheetCacheService.TryReadOverviewReady(
@@ -156,6 +185,12 @@ public sealed partial class PdfViewport
                 usingOverview);
         }
 
+        if (requireCachedBitmap)
+        {
+            skipReason = RasterSheetBitmapCacheMissReason(pageFolder, pdfPath, rasterSheet, preferOverview: false);
+            return false;
+        }
+
         if (!RasterSheetCacheService.TryReadReady(
                 pageFolder,
                 pdfPath,
@@ -183,6 +218,42 @@ public sealed partial class PdfViewport
             restoreView,
             fitAfter,
             usingOverview);
+    }
+
+    private static bool IsRasterSheetBitmapCacheWarmingReason(string reason) =>
+        string.Equals(reason, RasterSheetBitmapCacheWarmingReason, StringComparison.OrdinalIgnoreCase);
+
+    private static string RasterSheetBitmapCacheMissReason(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet,
+        bool preferOverview)
+    {
+        if (preferOverview)
+        {
+            if (!RasterSheetCacheService.HasSourceImageOverview(rasterSheet))
+                return "overview image is missing";
+            if (RasterSheetCacheService.ShouldBuildSourceImageOverview(
+                    pageFolder,
+                    pdfPath,
+                    rasterSheet,
+                    out string overviewReason))
+            {
+                return string.IsNullOrWhiteSpace(overviewReason)
+                    ? "source image overview missing"
+                    : overviewReason;
+            }
+
+            return RasterSheetBitmapCacheWarmingReason;
+        }
+
+        return RasterSheetCacheService.ShouldRebuildForReadableDisplay(
+            pageFolder,
+            pdfPath,
+            rasterSheet,
+            out string reason)
+            ? reason
+            : RasterSheetBitmapCacheWarmingReason;
     }
 
     private bool TryApplyRasterSheetRender(

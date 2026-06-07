@@ -130,6 +130,7 @@ public sealed partial class PdfViewport
             AppLog.Info(
                 $"Viewport raster sheet self-heal built; mode='{(overviewOnly ? "overview" : "full")}'; reason='{rasterSkipReason}'; " +
                 $"page='{pageFolder}'; pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}");
+            WarmRasterSheetBitmapCache(page, result.Source);
 
             if (!IsCurrentPageRasterTarget(pdfPath, pageIndex, pageFolder))
                 return;
@@ -149,6 +150,7 @@ public sealed partial class PdfViewport
                         currentView,
                         fitAfter: false,
                         preferOverview: true,
+                        requireCachedBitmap: true,
                         out string overviewApplyReason))
                 {
                     PostStatus($"Raster overview built: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
@@ -174,6 +176,8 @@ public sealed partial class PdfViewport
                     result.Source,
                     currentView,
                     fitAfter: false,
+                    preferOverview: false,
+                    requireCachedBitmap: true,
                     out string applyReason))
             {
                 PostStatus($"Raster sheet rebuilt: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
@@ -281,11 +285,25 @@ public sealed partial class PdfViewport
                 _rasterSheetSource,
                 currentView,
                 fitAfter: false,
+                preferOverview: false,
+                requireCachedBitmap: true,
                 out string rasterSkipReason))
         {
             PostStatus($"Raster sheet: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
             RequestRepaint();
             return true;
+        }
+
+        if (IsRasterSheetBitmapCacheWarmingReason(rasterSkipReason))
+        {
+            return QueueRasterSheetBitmapApplyAfterWarmup(
+                _pdfPath,
+                _pdfIndex,
+                _pageFolder,
+                _rasterSheetSource,
+                currentView,
+                fitAfter: false,
+                preferOverview: false);
         }
 
         QueueRasterSheetSelfHealIfNeeded(

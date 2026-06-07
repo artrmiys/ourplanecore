@@ -1324,9 +1324,14 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
             renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
-            renderCache.Contains("return false;", StringComparison.Ordinal) &&
+            renderCache.Contains("return true;", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("WarmRasterSheetBitmapAndApplyAsync", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("WarmRequestedRasterSheetBitmapCache", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
+            layers.Contains("RasterSheetBitmapCacheWarmingReason", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("TryWarmRasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetBitmapPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
@@ -1334,10 +1339,10 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("TryBuildRasterSheetBitmapCacheKey", StringComparison.Ordinal) &&
             layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
-            "raster sheet opens should reuse decoded raster bitmaps from RAM while nearby warmup skips heavy full readable raster bitmaps that are not useful at low zoom");
+            "raster sheet opens should apply decoded bitmaps from RAM, warm cold bitmaps off the UI thread, and prefetch nearby readable rasters for work zoom");
         AssertTrue(
-            policy.Contains("RasterSheetDisplayMinZoom = 2.75f", StringComparison.Ordinal) &&
-            policy.Contains("RasterSheetDisplayExitZoom = 2.35f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayMinZoom = 0.95f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetDisplayExitZoom = 0.85f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("!IsLowZoomRasterSheetPageOpen(restoreView, fitAfter)", StringComparison.Ordinal) &&
@@ -1347,7 +1352,7 @@ internal static class TakeoffsTreeRegressionTests
             !rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should avoid painting heavy full-sheet rasters at low zoom and switch back to preview when zoomed out");
+            "ordinary readable raster sheets should be used at 100-200% work zoom, keep fit/overview cheap, and switch back to preview when zoomed out");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&

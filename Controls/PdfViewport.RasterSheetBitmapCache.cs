@@ -1,11 +1,138 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using SkiaSharp;
 
 namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
+    private bool QueueRasterSheetBitmapApplyAfterWarmup(
+        string pdfPath,
+        int pageIndex,
+        string pageFolder,
+        RasterSheetSource? rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter,
+        bool preferOverview)
+    {
+        if (rasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(pageFolder) ||
+            string.IsNullOrWhiteSpace(pdfPath) ||
+            pageIndex < 0)
+        {
+            return false;
+        }
+
+        string warmKey;
+        try
+        {
+            warmKey = $"{RasterSheetRebuildKey(pdfPath, pageIndex, pageFolder)}|bitmap:{(preferOverview ? "overview" : "full")}";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport raster sheet bitmap warmup skipped for {pageFolder}");
+            return false;
+        }
+
+        lock (_rasterSheetRebuildGate)
+        {
+            if (!_rasterSheetRebuildsInFlight.Add(warmKey))
+                return true;
+        }
+
+        PageInfo page = new()
+        {
+            Name = string.IsNullOrWhiteSpace(pageFolder) ? $"Page {pageIndex + 1}" : Path.GetFileName(pageFolder),
+            FolderPath = pageFolder,
+            PdfPath = pdfPath,
+            PdfPage = pageIndex,
+            PdfLayersCached = _cachedLayers != null,
+            PdfLayers = _cachedLayers ?? Array.Empty<PdfLayerInfo>(),
+            RasterSheet = rasterSheet.Clone(),
+        };
+
+        _ = WarmRasterSheetBitmapAndApplyAsync(warmKey, page, rasterSheet.Clone(), restoreView, fitAfter, preferOverview);
+        return true;
+    }
+
+    private async Task WarmRasterSheetBitmapAndApplyAsync(
+        string warmKey,
+        PageInfo queuedPage,
+        RasterSheetSource rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter,
+        bool preferOverview)
+    {
+        try
+        {
+            bool warmed = await Task.Run(() => WarmRequestedRasterSheetBitmapCache(queuedPage, rasterSheet, preferOverview))
+                .ConfigureAwait(false);
+            if (!warmed)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
+                    _pdfLayersLoadedForPage ||
+                    _usingLayerRenderer)
+                {
+                    return;
+                }
+
+                if (preferOverview)
+                {
+                    if (ShouldUseRasterSheetForCurrentZoom())
+                        return;
+                }
+                else if (!ShouldUseRasterSheetForCurrentZoom() &&
+                         !(RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
+                           RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet)))
+                {
+                    return;
+                }
+
+                ViewState? applyView = _pageBitmap != null ? CaptureViewState() : restoreView;
+                bool applyFitAfter = _pageBitmap == null && fitAfter;
+                if (TryApplyRasterSheetRender(
+                        queuedPage.PdfPath,
+                        queuedPage.PdfPage,
+                        queuedPage.FolderPath,
+                        rasterSheet,
+                        applyView,
+                        applyFitAfter,
+                        preferOverview,
+                        requireCachedBitmap: true,
+                        out string applyReason))
+                {
+                    PostStatus($"{(preferOverview ? "Raster overview" : "Raster sheet")}: {Path.GetFileName(queuedPage.PdfPath)}  page {queuedPage.PdfPage + 1}");
+                    RequestRepaint();
+                    return;
+                }
+
+                if (!IsRasterSheetBitmapCacheWarmingReason(applyReason))
+                {
+                    QueueRasterSheetSelfHealIfNeeded(
+                        queuedPage.PdfPath,
+                        queuedPage.PdfPage,
+                        queuedPage.FolderPath,
+                        queuedPage.PdfLayers,
+                        rasterSheet,
+                        applyReason);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport raster sheet bitmap warmup crashed for {queuedPage.Name}");
+        }
+        finally
+        {
+            lock (_rasterSheetRebuildGate)
+                _rasterSheetRebuildsInFlight.Remove(warmKey);
+        }
+    }
+
     public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)
     {
         RasterSheetSource? source = rasterSheet?.Clone() ?? page.RasterSheet?.Clone();
@@ -42,6 +169,29 @@ public sealed partial class PdfViewport
         }
 
         return warmed;
+    }
+
+    private static bool WarmRequestedRasterSheetBitmapCache(
+        PageInfo page,
+        RasterSheetSource rasterSheet,
+        bool preferOverview)
+    {
+        RasterSheetSource source = rasterSheet.Clone();
+        if (source.Enabled != true ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath) ||
+            page.PdfPage < 0)
+        {
+            return false;
+        }
+
+        return TryWarmRasterSheetBitmapCache(
+            page.FolderPath,
+            page.PdfPath,
+            source,
+            preferOverview,
+            action: "warmed",
+            logFailure: true);
     }
 
     private static bool TryWarmRasterSheetBitmapCache(
