@@ -56,8 +56,8 @@ public static class RasterSheetCacheService
 
     public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
     {
-        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
-            return Failed("Page folder is missing.");
+        if (!TryValidateCurrentPageFolder(page, out string pageError))
+            return Failed(pageError);
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
         if (page.PdfPage < 0)
@@ -102,6 +102,9 @@ public static class RasterSheetCacheService
             workingImageName = LegacyWorkingImageNameForRenderScale(scale);
             workingImageFormat = PngRasterFormat;
         }
+
+        if (!TryValidateCurrentPageFolder(page, out pageError))
+            return Failed(pageError);
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         Directory.CreateDirectory(rasterDir);
@@ -189,6 +192,12 @@ public static class RasterSheetCacheService
         out RasterSheetBuildResult result)
     {
         result = new RasterSheetBuildResult(false, null, "", "");
+        if (!TryValidateCurrentPageFolder(page, out string pageError))
+        {
+            result = new RasterSheetBuildResult(false, null, "", pageError);
+            return false;
+        }
+
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
         if (!TryFindReusableReadableRaster(page, scale, out RasterSheetSource? source, out string imagePath) ||
             source == null)
@@ -242,6 +251,40 @@ public static class RasterSheetCacheService
         return persistedPage.RasterSheet.Clone();
     }
 
+    private static bool TryValidateCurrentPageFolder(PageInfo page, out string error)
+    {
+        error = "";
+        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
+        {
+            error = "Page folder is missing.";
+            return false;
+        }
+
+        if (OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { } persistedPage)
+        {
+            error = "Page source is missing; raster cache skipped for stale page path.";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(page.PdfPath) &&
+            !string.Equals(
+                Path.GetFullPath(persistedPage.PdfPath),
+                Path.GetFullPath(page.PdfPath),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Page source changed; raster cache skipped for stale page snapshot.";
+            return false;
+        }
+
+        if (page.PdfPage >= 0 && persistedPage.PdfPage != page.PdfPage)
+        {
+            error = "Page index changed; raster cache skipped for stale page snapshot.";
+            return false;
+        }
+
+        return true;
+    }
+
     private static bool TryBuildReusableReadableVariant(
         PageInfo page,
         RasterSheetSource? source,
@@ -293,8 +336,8 @@ public static class RasterSheetCacheService
         double widthPt,
         double heightPt)
     {
-        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
-            return Failed("Page folder is missing.");
+        if (!TryValidateCurrentPageFolder(page, out string pageError))
+            return Failed(pageError);
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
         if (string.IsNullOrWhiteSpace(sourceImagePath) || !File.Exists(sourceImagePath))
@@ -326,6 +369,9 @@ public static class RasterSheetCacheService
             workingImageName = WorkingImageName;
             workingImageFormat = PngRasterFormat;
         }
+
+        if (!TryValidateCurrentPageFolder(page, out pageError))
+            return Failed(pageError);
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         Directory.CreateDirectory(rasterDir);
@@ -372,8 +418,8 @@ public static class RasterSheetCacheService
 
     public static RasterSheetBuildResult BuildOverviewForExistingSourceImageRaster(PageInfo page)
     {
-        if (string.IsNullOrWhiteSpace(page.FolderPath) || !Directory.Exists(page.FolderPath))
-            return Failed("Page folder is missing.");
+        if (!TryValidateCurrentPageFolder(page, out string pageError))
+            return Failed(pageError);
         if (string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
             return Failed($"Source PDF is missing: {page.PdfPath}");
 
@@ -394,6 +440,9 @@ public static class RasterSheetCacheService
         using SKBitmap? decoded = PageImageBitmapDecoder.Decode(sourceImagePath);
         if (decoded == null)
             return Failed("Source image raster could not be decoded.");
+
+        if (!TryValidateCurrentPageFolder(page, out pageError))
+            return Failed(pageError);
 
         string rasterDir = Path.Combine(page.FolderPath, CacheFolderName);
         Directory.CreateDirectory(rasterDir);

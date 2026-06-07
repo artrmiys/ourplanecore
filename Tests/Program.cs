@@ -116,6 +116,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf sheet metadata parses dotted sheet numbers for suffix rules", TakeoffsTreeRegressionTests.PdfSheetMetadataParsesDottedSheetNumbersForSuffixRules),
     ("pdf raster edge snap preview is wired", TakeoffsTreeRegressionTests.PdfRasterEdgeSnapPreviewIsWired),
     ("pages tree selected sheet scale menu is wired", TakeoffsTreeRegressionTests.PagesTreeSelectedSheetScaleMenuIsWired),
+    ("raster sheet cache skips stale page paths", RasterSheetCacheTests.StalePageSnapshotDoesNotCreateRasterFolder),
     ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
     ("takeoff auto routing sorts page legend labels", TakeoffAutoRoutingSortsPageLegendLabels),

@@ -238,6 +238,63 @@ internal static class RasterSheetCacheTests
         }
     }
 
+    public static void StalePageSnapshotDoesNotCreateRasterFolder()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), "opc_raster_sheet_tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string staleFolder = Path.Combine(tempRoot, "Pages", "B", "a9.40 d");
+            Directory.CreateDirectory(staleFolder);
+
+            var stalePage = new PageInfo
+            {
+                Name = "a9.40 d",
+                FolderPath = staleFolder,
+                PdfPath = Path.Combine(tempRoot, "missing.pdf"),
+                PdfPage = 0,
+                RasterSheet = new RasterSheetSource
+                {
+                    Enabled = true,
+                    Image = Path.Combine(RasterSheetCacheService.CacheFolderName, RasterSheetCacheService.CompactWorkingImageName),
+                    RenderProfile = RasterSheetCacheService.ReadableRasterProfile,
+                    RenderScale = 2,
+                    WidthPt = 100,
+                    HeightPt = 100,
+                },
+            };
+
+            RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(stalePage, 0.5f);
+            AssertFalse(build.Ok, "stale page path should not build a raster cache");
+            AssertTrue(
+                build.Error.Contains("Page source is missing", StringComparison.OrdinalIgnoreCase),
+                "stale raster build should report the missing page source");
+            AssertFalse(
+                Directory.Exists(Path.Combine(staleFolder, RasterSheetCacheService.CacheFolderName)),
+                "stale page path must not be materialized as a folder by creating a raster cache");
+
+            bool enabled = RasterSheetCacheService.TryEnableReadyReadableRaster(
+                stalePage,
+                0.5f,
+                out RasterSheetBuildResult ready);
+            AssertFalse(enabled, "stale page path should not enable a ready raster cache");
+            AssertTrue(
+                ready.Error.Contains("Page source is missing", StringComparison.OrdinalIgnoreCase),
+                "ready-raster enable should reject stale page paths before writing snap metadata");
+            AssertFalse(
+                Directory.Exists(Path.Combine(staleFolder, RasterSheetCacheService.CacheFolderName)),
+                "ready-raster enable must not create a raster folder for a stale page path");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, recursive: true);
+            }
+            catch { }
+        }
+    }
+
     private static string FindRepoRoot()
     {
         string dir = Directory.GetCurrentDirectory();
