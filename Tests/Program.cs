@@ -281,6 +281,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
     ("viewport raster page open applies hot bitmap cache", ViewportRasterPageOpenAppliesHotBitmapCache),
     ("viewport raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
+    ("viewport oversized raster page open queues responsive dpi without docnet", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallback),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
     ("pdf sheet metadata handles rotated bottom title block", TakeoffsTreeRegressionTests.PdfSheetMetadataHandlesRotatedBottomTitleBlock),
@@ -4357,6 +4358,41 @@ static void ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback()
     });
 }
 
+static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallback()
+{
+    WithTempRasterBackedPage("raster_oversized_open", page =>
+    {
+        AssertEqual(
+            "200",
+            RasterSheetCacheService.RenderScaleToDpi(page.RasterSheet?.RenderScale ?? 0).ToString(),
+            "oversized raster-backed viewport test should start from active 200dpi metadata");
+
+        foreach ((float zoom, int expectedDpi) in new[] { (0.67f, 72), (1.50f, 144) })
+        {
+            RunOnStaThread(() =>
+            {
+                var viewport = new PdfViewport();
+                viewport.LoadPage(
+                    page.PdfPath,
+                    page.PdfPage,
+                    page.FolderPath,
+                    restoreView: new PdfViewport.ViewState(zoom, 0, 0),
+                    rasterSheet: page.RasterSheet);
+
+                AssertTrue(
+                    HasRasterDpiBuildInFlight(viewport, expectedDpi) || HasReadyRasterDpi(page, expectedDpi),
+                    $"oversized 200dpi raster page open at {zoom:P0} should queue or prepare {expectedDpi}dpi raster");
+                AssertFalse(
+                    GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                    $"oversized 200dpi raster page open at {zoom:P0} should not paint the oversized bitmap while lower dpi is missing");
+                AssertTrue(
+                    GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                    $"oversized 200dpi raster page open at {zoom:P0} must not fall back to docnet while responsive raster dpi is queued");
+            });
+        }
+    }, RasterSheetCacheService.DefaultRenderScale);
+}
+
 static void ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback()
 {
     RunOnStaThread(() =>
@@ -4438,6 +4474,24 @@ static bool HasRasterBitmapWarmupInFlight(PdfViewport viewport)
         HashSet<string> inFlight = GetPrivateField<HashSet<string>>(viewport, "_rasterSheetRebuildsInFlight");
         return inFlight.Any(key => key.Contains("|bitmap:full", StringComparison.OrdinalIgnoreCase));
     }
+}
+
+static bool HasRasterDpiBuildInFlight(PdfViewport viewport, int dpi)
+{
+    object gate = GetPrivateField<object>(viewport, "_rasterSheetRebuildGate");
+    lock (gate)
+    {
+        HashSet<string> inFlight = GetPrivateField<HashSet<string>>(viewport, "_rasterSheetRebuildsInFlight");
+        string marker = $"|dpi:{dpi}";
+        return inFlight.Any(key => key.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    }
+}
+
+static bool HasReadyRasterDpi(PageInfo page, int dpi)
+{
+    PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+    float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(dpi);
+    return RasterSheetCacheService.HasReadyReadableRaster(refreshed, renderScale);
 }
 
 static void RunOnStaThread(Action action)
@@ -4896,7 +4950,10 @@ static PageInfo CreatePageItem(OurPlaneCoreJob job, string parentFolder, string 
     return OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, name, parentFolder);
 }
 
-static void WithTempRasterBackedPage(string name, Action<PageInfo> action)
+static void WithTempRasterBackedPage(
+    string name,
+    Action<PageInfo> action,
+    float renderScale = 0.5f)
 {
     string pdfPath = Path.Combine(
         FindRepoRoot(),
@@ -4913,7 +4970,7 @@ static void WithTempRasterBackedPage(string name, Action<PageInfo> action)
         OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(tempRoot, name);
         string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
         PageInfo page = OurPlaneCoreJobStore.ImportPdf(job, pdfPath, [$"{name}_sheet"], importFolder).Single();
-        RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, 0.5f);
+        RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, renderScale);
         AssertTrue(build.Ok, build.Error);
 
         PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
