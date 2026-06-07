@@ -169,6 +169,20 @@ public static class RasterSheetCacheService
         return TryFindReusableReadableRaster(page, scale, out _, out _);
     }
 
+    public static bool TryGetReadyReadableRasterSource(
+        PageInfo page,
+        float renderScale,
+        out RasterSheetSource? source)
+    {
+        source = null;
+        float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
+        if (!TryFindReusableReadableRaster(page, scale, out source, out _) || source == null)
+            return false;
+
+        source.Enabled = true;
+        return true;
+    }
+
     public static bool TryEnableReadyReadableRaster(
         PageInfo page,
         float renderScale,

@@ -11,10 +11,10 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 16, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
-    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 96, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
-    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 10, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
-    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 32, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 10, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
+    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 64, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 6, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
+    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 16, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
     private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
@@ -36,16 +36,16 @@ public sealed partial class PdfViewport
         Math.Clamp(Environment.ProcessorCount / 4, 1, 2));
 
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
-        ResolveViewportRamBudget(192_000_000L, 768_000_000L, 0.025);
-
-    private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
         ResolveViewportRamBudget(128_000_000L, 384_000_000L, 0.015);
 
+    private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
+        ResolveViewportRamBudget(96_000_000L, 256_000_000L, 0.010);
+
     private static long ResolveRasterSheetBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(384_000_000L, 1_200_000_000L, 0.04);
+        ResolveViewportRamBudget(192_000_000L, 512_000_000L, 0.020);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(384_000_000L, 1_200_000_000L, 0.05);
+        ResolveViewportRamBudget(192_000_000L, 512_000_000L, 0.020);
 
     private static long ResolveViewportRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
     {
@@ -222,7 +222,7 @@ public sealed partial class PdfViewport
         public LayerRenderBitmapCache(int maxEntries, long maxBytes)
         {
             _maxEntries = Math.Max(1, maxEntries);
-            _maxBytes = Math.Max(256_000_000L, maxBytes);
+            _maxBytes = Math.Max(96_000_000L, maxBytes);
         }
 
         public bool TryGet(string key, out CachedLayerBitmapRender render)

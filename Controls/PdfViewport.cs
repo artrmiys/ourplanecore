@@ -537,6 +537,7 @@ public sealed partial class PdfViewport : SKElement
             return;
         }
 
+        PrepareBitmapForImmediateRepaint();
         if (_repaintQueued)
             return;
 
@@ -546,6 +547,18 @@ public sealed partial class PdfViewport : SKElement
         {
             _repaintQueued = false;
         }));
+    }
+
+    private void PrepareBitmapForImmediateRepaint()
+    {
+        try
+        {
+            TryPrepareRasterSheetBitmapForImmediateRepaint();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, "Viewport immediate repaint bitmap preparation failed.");
+        }
     }
 
     // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ

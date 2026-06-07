@@ -712,7 +712,7 @@ public partial class MainWindow
         }
 
         foreach (int index in BuildPreviewWarmupOrder(pages.Count, activeIndex)
-                     .Take(ViewportRenderPolicy.JobOpenPreviewWarmupCount))
+                     .Take(ViewportRenderPolicy.SelectJobOpenPreviewWarmupCount(pages.Count)))
         {
             QueuePreviewPrefetchAt(
                 pages,
@@ -739,7 +739,7 @@ public partial class MainWindow
         }
 
         IReadOnlyList<PageInfo> queuedPages = BuildPreviewWarmupOrder(pages.Count, activeIndex)
-            .Take(ViewportRenderPolicy.JobOpenRasterSheetRefreshWarmupCount)
+            .Take(ViewportRenderPolicy.SelectJobOpenRasterSheetRefreshWarmupCount(pages.Count))
             .Select(index => pages[index])
             .ToList();
         if (queuedPages.Count == 0)

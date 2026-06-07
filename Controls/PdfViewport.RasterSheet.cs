@@ -349,7 +349,9 @@ public sealed partial class PdfViewport
         return false;
     }
 
-    private bool TrySwitchRasterSheetToFastPreviewForLowZoom()
+    private bool TrySwitchRasterSheetToFastPreviewForLowZoom(
+        bool requestRepaint = true,
+        bool requireCachedBitmap = false)
     {
         if (!_usingRasterSheetRender ||
             _zoom >= ViewportRenderPolicy.RasterSheetDisplayExitZoom)
@@ -371,12 +373,17 @@ public sealed partial class PdfViewport
                 currentView,
                 fitAfter: false,
                 preferOverview: true,
+                requireCachedBitmap: requireCachedBitmap,
                 out _))
         {
             PostStatus($"Raster overview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
-            RequestRepaint();
+            if (requestRepaint)
+                RequestRepaint();
             return true;
         }
+
+        if (requireCachedBitmap)
+            return false;
 
         if (TryApplyPersistedPreviewRender(
                 _pdfPath,
@@ -386,7 +393,8 @@ public sealed partial class PdfViewport
                 fitAfter: false))
         {
             PostStatus($"Fast preview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
-            RequestRepaint();
+            if (requestRepaint)
+                RequestRepaint();
             return true;
         }
 

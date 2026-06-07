@@ -109,22 +109,25 @@ internal static class TakeoffsTreeRegressionTests
             warmupMethod.Contains("_pagePreviewWarmupJobRoot", StringComparison.Ordinal) &&
             warmupMethod.Contains("QueueJobPagePreviewWarmup(viewportPage)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
-            warmupRunMethod.Contains("ViewportRenderPolicy.JobOpenPreviewWarmupCount", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("ViewportRenderPolicy.SelectJobOpenPreviewWarmupCount(pages.Count)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("includeRasterSheetWarmup: false", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenPreviewWarmupCount = 512", StringComparison.Ordinal),
-            "job-open preview warmup should run once per job at idle priority and warm the lightweight cold-preview cache active-page-first across the job");
+            policy.Contains("JobOpenPreviewWarmupCount = 96", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupHugeJobCount = 48", StringComparison.Ordinal) &&
+            policy.Contains("SelectJobOpenPreviewWarmupCount", StringComparison.Ordinal),
+            "job-open preview warmup should run once per job at idle priority and warm a bounded lightweight cold-preview cache active-page-first");
         AssertTrue(
             rasterWarmupMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
             rasterWarmupMethod.Contains("_pageRasterRefreshWarmupJobRoot", StringComparison.Ordinal) &&
             rasterWarmupMethod.Contains("QueueJobRasterSheetRefreshWarmup(viewportPage)", StringComparison.Ordinal) &&
             rasterWarmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
-            rasterWarmupRunMethod.Contains("ViewportRenderPolicy.JobOpenRasterSheetRefreshWarmupCount", StringComparison.Ordinal) &&
+            rasterWarmupRunMethod.Contains("ViewportRenderPolicy.SelectJobOpenRasterSheetRefreshWarmupCount(pages.Count)", StringComparison.Ordinal) &&
             rasterWarmupRunMethod.Contains("Task.Run(() => QueueJobRasterSheetRefreshWarmup(queuedPages))", StringComparison.Ordinal) &&
             rasterWarmupQueueMethod.Contains("PdfViewport.PrefetchRasterSheetRefresh(page)", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 64", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 16", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupHugeJobCount = 6", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetRefreshPrefetchCadenceMs = 6500", StringComparison.Ordinal),
-            "job-open raster warmup should queue stale raster refreshes separately from preview rendering so legacy PNG/TIFF pages heal beyond the first few opened sheets");
+            "job-open raster warmup should queue stale raster refreshes separately from preview rendering without competing with the current viewport across huge jobs");
         AssertTrue(
             nearbyPrefetchMethod.Contains("CachedPagesForPreviewPrefetch()", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
@@ -1586,13 +1589,19 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("TryApplyReadyResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
             pageApi.Contains("QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryPrepareRasterSheetBitmapForImmediateRepaint()", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("requestRepaint: false, requireCachedBitmap: true", StringComparison.Ordinal) &&
+            viewport.Contains("PrepareBitmapForImmediateRepaint()", StringComparison.Ordinal) &&
+            raster.Contains("TryGetReadyReadableRasterSource", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet)", StringComparison.Ordinal) &&
             rasterDpiUpgradeMethod.Contains("RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             !rasterDpiUpgradeMethod.Contains("WaitForPreviewPrefetchQuietWindowAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.RenderScaleToDpi(_bitmapScale)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("Raster sheet {targetDpi} DPI", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("private PageInfo CurrentRasterSheetPageInfo(RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal),
-            "zoomed Raster On sheets should switch to an already prepared responsive DPI raster first, otherwise prepare that raster DPI in the background instead of relying on delayed PDF detail rendering");
+            "zoomed Raster On sheets should switch to an already prepared responsive DPI raster first, downshift from RAM before paint, otherwise prepare that raster DPI in the background instead of relying on delayed PDF detail rendering");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("LoadRasterSheetVisualSegments", StringComparison.Ordinal) &&
@@ -2056,7 +2065,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderPrefetchEnabled = false", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchMinZoom = 6.0f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderCoalesceDelayMs = 120", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderCoalesceDelayMs = 80", StringComparison.Ordinal) &&
             policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPaintTiles = 2", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderStableTileScreenPx", StringComparison.Ordinal) &&
@@ -2119,9 +2128,9 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 100", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderNavigationQuietMs = 1100", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderNavigationQuietMs = 450", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewCoalesceMs = 45", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchSharpUpgradeDelayMs = 900", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeDelayMs = 450", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 1200", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
@@ -2211,7 +2220,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("ResolveLayerBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
             renderCache.Contains("CleanRenderPrefetchSemaphore", StringComparison.Ordinal) &&
-            renderCache.Contains("1_200_000_000L", StringComparison.Ordinal),
+            renderCache.Contains("512_000_000L", StringComparison.Ordinal),
             "decoded full-sheet PyMuPDF bitmaps should be reused from a bounded RAM cache before rerendering, including best-scale fallback, clean prefetch, and completed stale high-zoom renders");
         AssertTrue(
             service.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal),
