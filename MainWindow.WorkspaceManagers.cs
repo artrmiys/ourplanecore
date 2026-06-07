@@ -168,8 +168,29 @@ public partial class MainWindow
             return;
         }
 
-        owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, textBox.Text);
-        owner.ApplySheetManagerTextToSelectedRows(editedRow, bindingPath, textBox.Text);
+        int selectionStart = textBox.SelectionStart;
+        int selectionLength = textBox.SelectionLength;
+        string value = textBox.Text;
+
+        owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, value);
+        owner.ApplySheetManagerTextToSelectedRows(editedRow, bindingPath, value);
+        owner.RestoreSheetManagerTextSelection(textBox, value, selectionStart, selectionLength);
+    }
+
+    private void RestoreSheetManagerTextSelection(TextBox textBox, string value, int selectionStart, int selectionLength)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!textBox.IsKeyboardFocusWithin ||
+                !string.Equals(textBox.Text, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            int start = Math.Clamp(selectionStart, 0, textBox.Text.Length);
+            int length = Math.Clamp(selectionLength, 0, textBox.Text.Length - start);
+            textBox.Select(start, length);
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void MarkSheetManagerTextRowForApply(PdfMetadataPreviewRow row, string bindingPath, string value)
@@ -207,6 +228,9 @@ public partial class MainWindow
         {
             foreach (PdfMetadataPreviewRow row in selectedRows)
             {
+                if (ReferenceEquals(row, editedRow))
+                    continue;
+
                 if (string.Equals(bindingPath, nameof(PdfMetadataPreviewRow.ProposedPageName), StringComparison.Ordinal))
                 {
                     row.ProposedPageName = value;

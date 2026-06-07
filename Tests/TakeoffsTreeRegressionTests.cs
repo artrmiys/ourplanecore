@@ -768,16 +768,23 @@ internal static class TakeoffsTreeRegressionTests
         string createTemplate = SliceMethod(workspaceManagers, "private static DataTemplate CreateSheetManagerTextBoxTemplate");
         string textChanged = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_TextChanged");
         string markMethod = SliceMethod(workspaceManagers, "private void MarkSheetManagerTextRowForApply");
+        string restoreMethod = SliceMethod(workspaceManagers, "private void RestoreSheetManagerTextSelection");
+        string bulkMethod = SliceMethod(workspaceManagers, "private void ApplySheetManagerTextToSelectedRows");
 
         AssertTrue(
             !createTemplate.Contains("GotKeyboardFocusEvent", StringComparison.Ordinal) &&
             !workspaceManagers.Contains("SheetManagerTextBox_GotKeyboardFocus", StringComparison.Ordinal),
             "Sheet Manager name cells should not select all text on focus because that can erase custom typed names");
         AssertTrue(
-            textChanged.Contains("owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, textBox.Text)", StringComparison.Ordinal) &&
+            textChanged.Contains("owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, value)", StringComparison.Ordinal) &&
             markMethod.Contains("row.ApplyRename = ShouldApplySheetManagerRename(row, value);", StringComparison.Ordinal) &&
             markMethod.Contains("row.ApplyScale = ShouldApplySheetManagerScale(row, value);", StringComparison.Ordinal),
             "Sheet Manager text edits should immediately mark the edited row for apply");
+        AssertTrue(
+            textChanged.Contains("owner.RestoreSheetManagerTextSelection(textBox, value, selectionStart, selectionLength)", StringComparison.Ordinal) &&
+            restoreMethod.Contains("textBox.Select(start, length);", StringComparison.Ordinal) &&
+            bulkMethod.Contains("if (ReferenceEquals(row, editedRow))", StringComparison.Ordinal),
+            "Sheet Manager edits should not rebind the actively edited cell or leave its text selected after each key");
     }
 
     public static void PageRepairUsesMovedJobSuffixForNonEmptyReferences()
