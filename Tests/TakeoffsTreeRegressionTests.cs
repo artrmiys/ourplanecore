@@ -67,19 +67,19 @@ internal static class TakeoffsTreeRegressionTests
             "batch tab/detached opens should refresh selected pages from source.json before passing raster metadata into viewports");
 
         int loadPage = loadMethod.IndexOf("_viewport.LoadPage(", StringComparison.Ordinal);
-        int visibility = loadMethod.IndexOf("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal);
         int deferred = loadMethod.IndexOf("QueueDeferredPageOpenWork", StringComparison.Ordinal);
         AssertTrue(
-            loadPage >= 0 && visibility > loadPage && deferred > visibility,
-            "page open should load the viewport, apply takeoff visibility, then defer slower UI refresh work");
+            loadPage >= 0 && deferred > loadPage,
+            "page open should load the viewport before scheduling slower follow-up work");
 
         AssertFalse(
             loadMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal) ||
             loadMethod.Contains("LoadPageAnnotations(", StringComparison.Ordinal) ||
+            loadMethod.Contains("ApplyViewportPageTakeoffVisibility(", StringComparison.Ordinal) ||
             loadMethod.Contains("ApplyScaleToCurrentPageMeasurements(", StringComparison.Ordinal) ||
             loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
             loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
-            "page open should not run overlays, annotations, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
+            "page open should not run overlays, annotations, takeoff visibility, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
         AssertFalse(
             loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage, restoreView)", StringComparison.Ordinal),
             "page open should not synchronously decode cached sheet overlays before the first viewport frame");
@@ -104,6 +104,7 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("LoadSheetOverlay(_currentPage ?? viewportPage, restoreView)", StringComparison.Ordinal) &&
+            deferredMethod.Contains("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&

@@ -352,7 +352,6 @@ public partial class MainWindow
             restoreView,
             viewportPage.RasterSheet);
         trace?.Mark("decode");
-        ApplyViewportPageTakeoffVisibility(viewportPage);
         _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
@@ -450,6 +449,7 @@ public partial class MainWindow
             trace?.Mark("prefetch-queued");
             QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
             QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage);
+            ApplyViewportPageTakeoffVisibility(viewportPage);
             _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
             ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();
