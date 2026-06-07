@@ -33,8 +33,37 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        return QueueRasterSheetDpiUpgradeForCurrentZoom(page, currentDpi);
+        return QueueRasterSheetDpiBuildForCurrentZoom(page, currentDpi, targetDpi);
     }
+
+    private bool TryApplyResponsiveRasterSheetDpiForCurrentZoom()
+    {
+        if (!ShouldUseResponsiveRasterSheetDpiForCurrentZoom(_rasterSheetSource))
+            return false;
+
+        PageInfo page = CurrentRasterSheetPageInfo();
+        int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
+        int targetDpi = RasterSheetCacheService.RenderScaleToDpi(ViewportRenderPolicy.ResponsiveMinRenderScale);
+        if (_usingRasterSheetRender && currentDpi == targetDpi)
+            return false;
+
+        if (TryApplyReadyRasterSheetDpi(page, targetDpi))
+            return true;
+
+        if (!QueueRasterSheetDpiBuildForCurrentZoom(page, currentDpi, targetDpi))
+            return false;
+
+        TrySwitchRasterSheetToFastPreviewForNavigation();
+        return true;
+    }
+
+    private bool ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet) =>
+        rasterSheet?.Enabled == true &&
+        !RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
+        !_pdfLayersLoadedForPage &&
+        !_usingLayerRenderer &&
+        ShouldUseRasterSheetForCurrentZoom() &&
+        _zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold;
 
     private int ReadyRasterSheetDpiForCurrentZoom(PageInfo page, int currentDpi)
     {
@@ -113,10 +142,10 @@ public sealed partial class PdfViewport
         return ApplyRasterSheetDpiUpgradeResult(result.Source, targetDpi, "ready", out _);
     }
 
-    private bool QueueRasterSheetDpiUpgradeForCurrentZoom(PageInfo page, int currentDpi)
+    private bool QueueRasterSheetDpiBuildForCurrentZoom(PageInfo page, int currentDpi, int targetDpi)
     {
-        int targetDpi = DesiredRasterSheetDpiForCurrentZoom(currentDpi);
-        if (targetDpi <= currentDpi ||
+        if (targetDpi <= 0 ||
+            targetDpi == currentDpi ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
             string.IsNullOrWhiteSpace(page.PdfPath) ||
             !Directory.Exists(page.FolderPath) ||
@@ -137,7 +166,7 @@ public sealed partial class PdfViewport
         }
 
         AppLog.Info(
-            $"Viewport raster DPI upgrade queued; dpi={targetDpi}; currentDpi={currentDpi}; " +
+            $"Viewport raster DPI build queued; dpi={targetDpi}; currentDpi={currentDpi}; " +
             $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
         PostStatus($"Raster sheet preparing {targetDpi} DPI: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
         _ = BuildRasterSheetDpiUpgradeForCurrentPageAsync(rebuildKey, page, targetDpi);

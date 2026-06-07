@@ -84,6 +84,12 @@ public sealed partial class PdfViewport
                 if (!applyAtCurrentView)
                     return;
 
+                if (!preferOverview && ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet))
+                {
+                    TryApplyResponsiveRasterSheetDpiForCurrentZoom();
+                    return;
+                }
+
                 ViewState applyView = CaptureViewState();
                 if (TryApplyRasterSheetRender(
                         queuedPage.PdfPath,

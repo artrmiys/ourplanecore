@@ -3926,9 +3926,9 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertFalse(
             ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.21f, 0.35f),
             "fit zoom should keep the instant preview instead of starting a full refresh");
-        AssertTrue(
+        AssertFalse(
             ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.32f, 0.35f),
-            "ordinary zoom from fit should upgrade the 0.35 preview to a sharper refresh render");
+            "far zoom should keep the instant preview instead of repainting a heavy full-page bitmap");
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
             "ordinary zoom should use a refresh render, not an expensive clipped detail render");
@@ -3941,9 +3941,9 @@ static void ViewportRenderScaleChoosesNextQualityStep()
             "preview-backed work zoom should render the visible clip at screen-matched scale");
         float defaultRasterScale = RasterSheetCacheService.DefaultRenderScale;
         AssertTrue(
-            ViewportRenderPolicy.RasterSheetDisplayMinZoom <= 0.60f &&
+            Math.Abs(ViewportRenderPolicy.RasterSheetDisplayMinZoom - ViewportRenderPolicy.ZoomRefreshMinZoom) < 0.001f &&
             ViewportRenderPolicy.RasterSheetDisplayExitZoom < ViewportRenderPolicy.RasterSheetDisplayMinZoom,
-            "raster sheet display should engage at 60% work zoom with lower-zoom hysteresis back to preview");
+            "raster sheet display should replace full-page sharp refresh at work zoom with lower-zoom hysteresis back to preview");
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(2.0f, defaultRasterScale),
             "100-200% work zoom should stay on the 200dpi raster sheet instead of waiting for PDF detail rendering");

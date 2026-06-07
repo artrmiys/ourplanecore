@@ -67,6 +67,12 @@ public sealed partial class PdfViewport
         _navigationIdleTimer.Stop();
         _isFastNavigating = false;
         MaybeRequestSheetOverlayRenderScaleRefresh();
+        if (TryApplyReadyRasterSheetForCurrentZoom())
+        {
+            RequestRepaint();
+            return;
+        }
+
         if (!TryUpgradeRasterSheetToReadyDpiForCurrentZoom())
             QueueDetailRenderIfNeeded(force: false);
         RequestRepaint();
@@ -136,6 +142,9 @@ public sealed partial class PdfViewport
             }
 
             if (TrySwitchRasterSheetToFastPreviewForLowZoom())
+                return;
+
+            if (TryApplyResponsiveRasterSheetDpiForCurrentZoom())
                 return;
 
             if (TryUpgradeRasterSheetToReadyDpiForCurrentZoom())

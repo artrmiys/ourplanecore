@@ -13,7 +13,7 @@ public static class ViewportRenderPolicy
     public const float ResponsiveMinRenderScale = 1.0f;
     public const float ResponsiveMaxRenderScale = 2.25f;
     public const float ResponsiveMaxRenderPixels = 96_000_000f;
-    public const float ZoomRefreshMinZoom = 0.30f;
+    public const float ZoomRefreshMinZoom = 0.55f;
     public const bool DetailRenderEnabled = true;
     public const float DetailRenderMinZoom = 0.75f;
     public const float DetailRenderMinScaleGain = 1.04f;
@@ -54,7 +54,7 @@ public static class ViewportRenderPolicy
     public const float ColdPageSwitchPreviewRenderScale = 0.22f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float LowZoomBitmapDowngradeRatio = 1.38f;
-    public const float RasterSheetDisplayMinZoom = 0.55f;
+    public const float RasterSheetDisplayMinZoom = ZoomRefreshMinZoom;
     public const float RasterSheetDisplayExitZoom = 0.45f;
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;

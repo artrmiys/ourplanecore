@@ -309,6 +309,9 @@ public sealed partial class PdfViewport
             return false;
         }
 
+        if (TryApplyResponsiveRasterSheetDpiForCurrentZoom())
+            return true;
+
         ViewState currentView = CaptureViewState();
         if (TryApplyRasterSheetRender(
                 _pdfPath,
@@ -395,6 +398,31 @@ public sealed partial class PdfViewport
             resetLayerStates: false,
             statusAfter: $"Fast preview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}",
             fireLayersAfter: false);
+        return true;
+    }
+
+    private bool TrySwitchRasterSheetToFastPreviewForNavigation()
+    {
+        if (!_usingRasterSheetRender ||
+            !_isFastNavigating ||
+            _zoom >= ViewportRenderPolicy.FarZoomFastFrameThreshold)
+        {
+            return false;
+        }
+
+        ViewState currentView = CaptureViewState();
+        if (!TryApplyPersistedPreviewRender(
+                _pdfPath,
+                _pdfIndex,
+                ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+                currentView,
+                fitAfter: false))
+        {
+            return false;
+        }
+
+        PostStatus($"Fast preview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
+        RequestRepaint();
         return true;
     }
 
