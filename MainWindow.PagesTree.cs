@@ -358,9 +358,48 @@ public partial class MainWindow
             return;
         }
 
-        RefreshPageTreeRowsByFolderKeys(pageFolders
-            .Select(NormalizePathForCompare)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        RefreshKnownPageTakeoffIndicatorsForFolders(pageFolders);
+    }
+
+    private void RefreshKnownPageTakeoffIndicatorsForFolders(IEnumerable<string> pageFolders)
+    {
+        var folders = pageFolders
+            .Where(folder => !string.IsNullOrWhiteSpace(folder))
+            .GroupBy(NormalizePathForCompare, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+        if (folders.Count == 0)
+            return;
+
+        var refreshed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool rebuiltAny = false;
+        using (UsePageMeasurementLookup())
+        {
+            foreach (string folder in folders)
+            {
+                string key = NormalizePathForCompare(folder);
+                if (FindPageTreeItemByFolderKeyIndexed(key) is not { } item)
+                    continue;
+
+                if (TryRefreshPageTreeItemFromStore(item, folder, out string refreshedKey))
+                {
+                    rebuiltAny = true;
+                    refreshed.Add(refreshedKey);
+                }
+                else
+                {
+                    refreshed.Add(key);
+                }
+            }
+        }
+
+        if (refreshed.Count == 0)
+            return;
+
+        if (rebuiltAny)
+            RebuildPageTreeItemIndex();
+
+        RefreshPageTreeRowsByFolderKeys(refreshed);
     }
 
     private void AddPageFoldersForTakeoffFolder(string? takeoffFolder, HashSet<string> pageFolders)

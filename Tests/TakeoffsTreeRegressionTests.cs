@@ -528,10 +528,19 @@ internal static class TakeoffsTreeRegressionTests
             "takeoff selection sync should wait out mouse-held drag arming instead of opening a page during drag/drop");
 
         string pagesSource = ReadRepoFile("MainWindow.PagesTree.cs");
+        string activePageRefreshMethod = SliceMethod(pagesSource, "private void RefreshPageTakeoffIndicatorsForActiveChange(");
+        string knownPageRefreshMethod = SliceMethod(pagesSource, "private void RefreshKnownPageTakeoffIndicatorsForFolders(");
         AssertTrue(
             pagesSource.Contains("private void RefreshPageTakeoffIndicatorsForActiveChange(", StringComparison.Ordinal) &&
-            pagesSource.Contains("RefreshPageTreeRowsByFolderKeys(pageFolders", StringComparison.Ordinal),
-            "targeted selection refresh should repaint touched page rows without rebuilding linked takeoff nodes");
+            activePageRefreshMethod.Contains("RefreshKnownPageTakeoffIndicatorsForFolders(pageFolders)", StringComparison.Ordinal),
+            "targeted selection refresh should keep the touched page refresh path narrow");
+        AssertTrue(
+            knownPageRefreshMethod.Contains("FindPageTreeItemByFolderKeyIndexed(key)", StringComparison.Ordinal) &&
+            knownPageRefreshMethod.Contains("TryRefreshPageTreeItemFromStore(item, folder, out string refreshedKey)", StringComparison.Ordinal) &&
+            knownPageRefreshMethod.Contains("if (rebuiltAny)") &&
+            knownPageRefreshMethod.Contains("RebuildPageTreeItemIndex();") &&
+            knownPageRefreshMethod.Contains("RefreshPageTreeRowsByFolderKeys(refreshed)", StringComparison.Ordinal),
+            "targeted selection refresh should re-read touched page rows so stale folder nodes become sheets without a full reload");
 
         string helpersSource = ReadRepoFile("MainWindow.EstimateRows.cs");
         AssertTrue(
@@ -703,6 +712,7 @@ internal static class TakeoffsTreeRegressionTests
         string refreshOne = SliceMethod(pagesTree, "private void RefreshPageTakeoffIndicatorsForFolder");
         string refreshMany = SliceMethod(pagesTree, "private void RefreshPageTakeoffIndicatorsForFolders");
         string snapshots = SliceMethod(pagesTree, "private void RefreshPageTreePageSnapshots");
+        string activeRefresh = SliceMethod(pagesTree, "private void RefreshKnownPageTakeoffIndicatorsForFolders");
         string helper = SliceMethod(pagesTree, "private bool TryRefreshPageTreeItemFromStore");
 
         AssertTrue(
@@ -722,7 +732,8 @@ internal static class TakeoffsTreeRegressionTests
             refreshOne.Contains("TryRefreshPageTreeItemFromStore(item, pageFolder, out string refreshedKey)", StringComparison.Ordinal) &&
             refreshOne.Contains("ReloadPagesTree(pageFolder, selectSilently: true)", StringComparison.Ordinal) &&
             refreshMany.Contains("TryRefreshPageTreeItemFromStore(item, folder, out string refreshedKey)", StringComparison.Ordinal) &&
-            snapshots.Contains("TryRefreshPageTreeItemFromStore(item, page.FolderPath, out string refreshedKey)", StringComparison.Ordinal),
+            snapshots.Contains("TryRefreshPageTreeItemFromStore(item, page.FolderPath, out string refreshedKey)", StringComparison.Ordinal) &&
+            activeRefresh.Contains("TryRefreshPageTreeItemFromStore(item, folder, out string refreshedKey)", StringComparison.Ordinal),
             "targeted page refreshes should not leave a repaired sheet displayed as a folder node");
     }
 
