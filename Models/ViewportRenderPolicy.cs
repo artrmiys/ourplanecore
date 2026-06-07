@@ -268,6 +268,14 @@ public static class ViewportRenderPolicy
         return RasterSheetDisplayDpiSteps[^1];
     }
 
+    public static bool ShouldPreferLowerRasterSheetDpi(int currentDpi, int targetDpi)
+    {
+        if (currentDpi <= 0 || targetDpi <= 0 || currentDpi <= targetDpi)
+            return false;
+
+        return currentDpi > targetDpi * LowZoomBitmapDowngradeRatio;
+    }
+
     public static bool ShouldPreferLowerScalePageBitmapForNavigation(
         float zoom,
         float currentBitmapScale,

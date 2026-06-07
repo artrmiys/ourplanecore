@@ -1765,8 +1765,14 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TargetRasterSheetDpiForZoom(restoreView?.Zoom ?? _zoom)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.SelectRasterSheetDisplayDpi(zoom)", StringComparison.Ordinal) &&
+            policy.Contains("ShouldPreferLowerRasterSheetDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ShouldSkipOversizedRasterSheetForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
             pageApi.Contains("responsiveRasterDpiForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("skipOversizedRasterSheetForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("responsiveRasterDpiBuildQueuedForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("!skipOversizedRasterSheetForOpen", StringComparison.Ordinal) &&
             pageApi.Contains("restoreView.HasValue", StringComparison.Ordinal) &&
             pageApi.Contains("TryApplyReadyResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
             pageApi.Contains("QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
@@ -1784,7 +1790,6 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("readyDpi != targetDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("return TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi);", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("currentDpi >= targetDpi", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("currentDpi <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("targetDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("requestRepaint: false, requireCachedBitmap: true", StringComparison.Ordinal) &&
@@ -2044,8 +2049,9 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             pageApi.Contains("PageSwitchLivePreviewScale(restoreView, fitAfter: !restoreView.HasValue)", StringComparison.Ordinal) &&
             pageApi.Contains("bool rasterBitmapWarmupQueuedForOpen = false;", StringComparison.Ordinal) &&
+            pageApi.Contains("bool responsiveRasterDpiBuildQueuedForOpen = false;", StringComparison.Ordinal) &&
             pageApi.Contains("rasterBitmapWarmupQueuedForOpen = QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
-            pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
+            pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("Raster preparing:", StringComparison.Ordinal) &&

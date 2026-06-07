@@ -44,6 +44,7 @@ public sealed partial class PdfViewport
         PageInfo page = CurrentRasterSheetPageInfo();
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
         int targetDpi = TargetRasterSheetDpiForCurrentZoom();
+        bool preferLowerDpi = ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi);
         if (_usingRasterSheetRender && currentDpi == targetDpi)
             return false;
 
@@ -55,7 +56,8 @@ public sealed partial class PdfViewport
 
         if (_usingRasterSheetRender &&
             currentDpi >= targetDpi &&
-            currentDpi <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
+            currentDpi <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi &&
+            !preferLowerDpi)
         {
             return false;
         }
@@ -117,6 +119,21 @@ public sealed partial class PdfViewport
         zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom &&
         TargetRasterSheetDpiForZoom(zoom) > 0 &&
         RasterSheetCacheService.RenderScaleToDpi(rasterSheet.RenderScale) != TargetRasterSheetDpiForZoom(zoom);
+
+    private bool ShouldSkipOversizedRasterSheetForPageOpen(RasterSheetSource? rasterSheet, ViewState? restoreView)
+    {
+        if (!ShouldUseResponsiveRasterSheetDpiForView(rasterSheet, restoreView))
+            return false;
+
+        int currentDpi = RasterSheetCacheService.RenderScaleToDpi(rasterSheet!.RenderScale);
+        int targetDpi = TargetRasterSheetDpiForZoom(restoreView?.Zoom ?? _zoom);
+        if (!ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi))
+            return false;
+
+        PageInfo page = CurrentRasterSheetPageInfo(rasterSheet);
+        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
+        return !RasterSheetCacheService.HasReadyReadableRaster(page, targetScale);
+    }
 
     private int TargetRasterSheetDpiForCurrentZoom() =>
         TargetRasterSheetDpiForZoom(_zoom);
@@ -287,7 +304,8 @@ public sealed partial class PdfViewport
         if (targetDpi <= 0 ||
             targetDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi ||
             targetDpi == currentDpi ||
-            currentDpi >= targetDpi && currentDpi <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi ||
+            currentDpi > targetDpi &&
+            !ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi) ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
             string.IsNullOrWhiteSpace(page.PdfPath) ||
             !Directory.Exists(page.FolderPath) ||
