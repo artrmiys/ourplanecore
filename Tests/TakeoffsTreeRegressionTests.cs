@@ -765,21 +765,34 @@ internal static class TakeoffsTreeRegressionTests
     public static void SheetManagerNameEditsStayCheckedAndDoNotSelectAllOnFocus()
     {
         string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
+        string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
+        string textBoxBehavior = ReadRepoFile("Controls/PdfMetadataTextBoxBehavior.cs");
         string createTemplate = SliceMethod(workspaceManagers, "private static DataTemplate CreateSheetManagerTextBoxTemplate");
         string textChanged = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_TextChanged");
         string markMethod = SliceMethod(workspaceManagers, "private void MarkSheetManagerTextRowForApply");
         string restoreMethod = SliceMethod(workspaceManagers, "private void RestoreSheetManagerTextSelection");
         string bulkMethod = SliceMethod(workspaceManagers, "private void ApplySheetManagerTextToSelectedRows");
-        string gotFocus = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_GotKeyboardFocus");
         string lostFocus = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_LostKeyboardFocus");
         string refreshMethod = SliceMethod(workspaceManagers, "private void RefreshSheetManager()");
         string rasterRowsMethod = SliceMethod(workspaceManagers, "private bool RefreshSheetManagerRasterRows");
+        string previewMouse = SliceMethod(textBoxBehavior, "private static void TextBox_PreviewMouseLeftButtonDown");
+        string clearSelection = SliceMethod(textBoxBehavior, "private static void ClearWholeSelection");
+        string editablePreviewTemplate = SliceMethod(previewDialog, "private static DataTemplate EditableTextTemplate");
 
         AssertTrue(
-            createTemplate.Contains("SheetManagerTextBox_GotKeyboardFocus", StringComparison.Ordinal) &&
-            gotFocus.Contains("SelectionLength = 0", StringComparison.Ordinal) &&
-            !gotFocus.Contains("SelectAll", StringComparison.Ordinal),
-            "Sheet Manager name cells should not select all text on focus because that can erase custom typed names");
+            createTemplate.Contains("PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);", StringComparison.Ordinal) &&
+            textBoxBehavior.Contains("PreviewMouseLeftButtonDownEvent", StringComparison.Ordinal) &&
+            previewMouse.Contains("e.Handled = true;", StringComparison.Ordinal) &&
+            previewMouse.Contains("textBox.Select(caret, 0);", StringComparison.Ordinal) &&
+            clearSelection.Contains("textBox.Select(safeCaret, 0);", StringComparison.Ordinal) &&
+            !textBoxBehavior.Contains("SelectAll", StringComparison.Ordinal),
+            "Sheet Manager name/scale cells should take ownership of the first click and place the caret instead of selecting all text");
+        AssertTrue(
+            previewDialog.Contains("EditableTextColumn(\"Proposed Name\", nameof(PdfMetadataPreviewRow.ProposedPageName)", StringComparison.Ordinal) &&
+            previewDialog.Contains("EditableTextColumn(\"Scale\", nameof(PdfMetadataPreviewRow.ProposedScale)", StringComparison.Ordinal) &&
+            editablePreviewTemplate.Contains("PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);", StringComparison.Ordinal) &&
+            editablePreviewTemplate.Contains("PdfMetadataPreviewTextBox_TextChanged", StringComparison.Ordinal),
+            "Name/Scale preview dialog should use the same protected editable text cells as Sheet Manager");
         AssertTrue(
             textChanged.Contains("owner.MarkSheetManagerTextRowForApply(editedRow, bindingPath, value)", StringComparison.Ordinal) &&
             markMethod.Contains("row.ApplyRename = ShouldApplySheetManagerRename(row, value);", StringComparison.Ordinal) &&

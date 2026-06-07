@@ -123,8 +123,8 @@ public sealed class PdfMetadataPreviewDialog : Window
         grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Rename", Binding = new Binding(nameof(PdfMetadataPreviewRow.ApplyRename)) });
         grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Scale", Binding = new Binding(nameof(PdfMetadataPreviewRow.ApplyScale)) });
         grid.Columns.Add(TextColumn("Current Page", nameof(PdfMetadataPreviewRow.CurrentPageName), 150));
-        grid.Columns.Add(TextColumn("Proposed Name", nameof(PdfMetadataPreviewRow.ProposedPageName), 140));
-        grid.Columns.Add(TextColumn("Scale", nameof(PdfMetadataPreviewRow.ProposedScale), 120));
+        grid.Columns.Add(EditableTextColumn("Proposed Name", nameof(PdfMetadataPreviewRow.ProposedPageName), 140));
+        grid.Columns.Add(EditableTextColumn("Scale", nameof(PdfMetadataPreviewRow.ProposedScale), 120));
         grid.Columns.Add(TextColumn("Label", nameof(PdfMetadataPreviewRow.SheetLabel), 80));
         grid.Columns.Add(TextColumn("Suffix", nameof(PdfMetadataPreviewRow.Suffix), 60));
         grid.Columns.Add(TextColumn("Title", nameof(PdfMetadataPreviewRow.SheetTitle), 230));
@@ -176,4 +176,58 @@ public sealed class PdfMetadataPreviewDialog : Window
             Width = width,
             IsReadOnly = true,
         };
+
+    private static DataGridTemplateColumn EditableTextColumn(string header, string property, double width) =>
+        new()
+        {
+            Header = header,
+            Width = width,
+            SortMemberPath = property,
+            CellTemplate = EditableTextTemplate(property),
+        };
+
+    private static DataTemplate EditableTextTemplate(string property)
+    {
+        var textBox = new FrameworkElementFactory(typeof(TextBox));
+        textBox.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
+        textBox.SetValue(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1));
+        textBox.SetValue(TextBox.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+        textBox.SetValue(FrameworkElement.TagProperty, property);
+        textBox.SetValue(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center);
+        textBox.SetValue(FrameworkElement.MinWidthProperty, 70.0);
+        textBox.SetBinding(
+            TextBox.TextProperty,
+            new Binding(property)
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+            });
+        PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);
+        textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(PdfMetadataPreviewTextBox_TextChanged));
+        return new DataTemplate { VisualTree = textBox };
+    }
+
+    private static void PdfMetadataPreviewTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox ||
+            !textBox.IsKeyboardFocusWithin ||
+            textBox.DataContext is not PdfMetadataPreviewRow row ||
+            textBox.Tag is not string property)
+        {
+            return;
+        }
+
+        if (property == nameof(PdfMetadataPreviewRow.ProposedPageName))
+        {
+            row.ApplyRename =
+                !string.IsNullOrWhiteSpace(row.ProposedPageName) &&
+                !string.Equals(row.ProposedPageName, row.CurrentPageName, System.StringComparison.OrdinalIgnoreCase);
+        }
+        else if (property == nameof(PdfMetadataPreviewRow.ProposedScale))
+        {
+            row.ApplyScale =
+                !string.IsNullOrWhiteSpace(row.ProposedScale) &&
+                !string.Equals(row.ProposedScale.Trim(), "skip", System.StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }

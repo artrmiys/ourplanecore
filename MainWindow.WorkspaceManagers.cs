@@ -155,27 +155,10 @@ public partial class MainWindow
                 Mode = BindingMode.TwoWay,
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
             });
-        textBox.AddHandler(TextBox.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_GotKeyboardFocus));
+        PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);
         textBox.AddHandler(TextBox.LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_LostKeyboardFocus));
         textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(SheetManagerTextBox_TextChanged));
         return new DataTemplate { VisualTree = textBox };
-    }
-
-    private static void SheetManagerTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (sender is TextBox textBox)
-        {
-            textBox.SelectionLength = 0;
-            textBox.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (textBox.IsKeyboardFocusWithin &&
-                    textBox.Text.Length > 0 &&
-                    textBox.SelectionLength >= textBox.Text.Length)
-                {
-                    textBox.SelectionLength = 0;
-                }
-            }), System.Windows.Threading.DispatcherPriority.Background);
-        }
     }
 
     private static void SheetManagerTextBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
