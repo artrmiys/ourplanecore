@@ -141,7 +141,7 @@ public partial class MainWindow
 
     private static DataTemplate CreateSheetManagerTextBoxTemplate(string bindingPath)
     {
-        var textBox = new FrameworkElementFactory(typeof(TextBox));
+        var textBox = new FrameworkElementFactory(typeof(PdfMetadataTextBox));
         textBox.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
         textBox.SetValue(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1));
         textBox.SetValue(TextBox.BackgroundProperty, Brushes.Transparent);
@@ -155,7 +155,6 @@ public partial class MainWindow
                 Mode = BindingMode.TwoWay,
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
             });
-        PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);
         textBox.AddHandler(TextBox.LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SheetManagerTextBox_LostKeyboardFocus));
         textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(SheetManagerTextBox_TextChanged));
         return new DataTemplate { VisualTree = textBox };

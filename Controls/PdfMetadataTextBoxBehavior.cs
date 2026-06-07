@@ -7,50 +7,64 @@ using System.Windows.Threading;
 
 namespace OurPlaneCore.Controls;
 
-public static class PdfMetadataTextBoxBehavior
+public sealed class PdfMetadataTextBox : TextBox
 {
-    public static void AttachCaretOnClick(FrameworkElementFactory textBox)
-    {
-        textBox.AddHandler(
-            UIElement.PreviewMouseLeftButtonDownEvent,
-            new MouseButtonEventHandler(TextBox_PreviewMouseLeftButtonDown));
-        textBox.AddHandler(
-            TextBox.GotKeyboardFocusEvent,
-            new KeyboardFocusChangedEventHandler(TextBox_GotKeyboardFocus));
-    }
+    private bool _clearingSelection;
+    private int _protectedCaret;
+    private DateTime _protectWholeSelectionUntilUtc;
 
-    private static void TextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
     {
-        if (sender is not TextBox textBox)
-            return;
-
         bool shouldOwnFirstClick =
-            !textBox.IsKeyboardFocusWithin ||
-            IsWholeTextSelected(textBox);
-        if (!shouldOwnFirstClick)
+            !IsKeyboardFocusWithin ||
+            IsWholeTextSelected();
+        if (shouldOwnFirstClick)
+        {
+            e.Handled = true;
+            int caret = CharacterIndexFromMouse(e);
+            SelectOwningRowForPlainClick();
+            Focus();
+            ProtectCaret(caret);
             return;
+        }
 
-        e.Handled = true;
-        SelectOwningRowForPlainClick(textBox);
-        textBox.Focus();
-
-        int caret = CharacterIndexFromMouse(textBox, e);
-        textBox.Select(caret, 0);
-        QueueClearWholeSelection(textBox, caret);
+        base.OnPreviewMouseLeftButtonDown(e);
     }
 
-    private static void TextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
     {
-        if (sender is TextBox textBox)
-            QueueClearWholeSelection(textBox, textBox.CaretIndex);
+        base.OnGotKeyboardFocus(e);
+        ProtectCaret(CaretIndex);
     }
 
-    private static void SelectOwningRowForPlainClick(TextBox textBox)
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            _protectWholeSelectionUntilUtc = DateTime.MinValue;
+
+        base.OnPreviewKeyDown(e);
+    }
+
+    protected override void OnSelectionChanged(RoutedEventArgs e)
+    {
+        base.OnSelectionChanged(e);
+        if (_clearingSelection ||
+            !IsKeyboardFocusWithin ||
+            DateTime.UtcNow > _protectWholeSelectionUntilUtc ||
+            !IsWholeTextSelected())
+        {
+            return;
+        }
+
+        ClearWholeSelection(_protectedCaret);
+    }
+
+    private void SelectOwningRowForPlainClick()
     {
         if (Keyboard.Modifiers != ModifierKeys.None)
             return;
 
-        DataGridRow? row = FindAncestor<DataGridRow>(textBox);
+        DataGridRow? row = FindAncestor<DataGridRow>(this);
         if (row == null || row.IsSelected)
             return;
 
@@ -59,43 +73,53 @@ public static class PdfMetadataTextBoxBehavior
         row.IsSelected = true;
     }
 
-    private static int CharacterIndexFromMouse(TextBox textBox, MouseButtonEventArgs e)
+    private int CharacterIndexFromMouse(MouseButtonEventArgs e)
     {
-        Point point = e.GetPosition(textBox);
-        int index = textBox.GetCharacterIndexFromPoint(point, snapToText: true);
+        Point point = e.GetPosition(this);
+        int index = GetCharacterIndexFromPoint(point, snapToText: true);
         if (index < 0)
-            index = point.X <= 0 ? 0 : textBox.Text.Length;
+            index = point.X <= 0 ? 0 : Text.Length;
 
-        return Math.Clamp(index, 0, textBox.Text.Length);
+        return Math.Clamp(index, 0, Text.Length);
     }
 
-    private static void QueueClearWholeSelection(TextBox textBox, int caret)
+    private void ProtectCaret(int caret)
     {
-        ClearWholeSelection(textBox, caret);
-        textBox.Dispatcher.BeginInvoke(
-            new Action(() => ClearWholeSelection(textBox, caret)),
+        _protectedCaret = Math.Clamp(caret, 0, Text.Length);
+        _protectWholeSelectionUntilUtc = DateTime.UtcNow.AddSeconds(1);
+        ClearWholeSelection(_protectedCaret);
+        Dispatcher.BeginInvoke(
+            new Action(() => ClearWholeSelection(_protectedCaret)),
             DispatcherPriority.Input);
-        textBox.Dispatcher.BeginInvoke(
-            new Action(() => ClearWholeSelection(textBox, caret)),
+        Dispatcher.BeginInvoke(
+            new Action(() => ClearWholeSelection(_protectedCaret)),
             DispatcherPriority.Background);
-        textBox.Dispatcher.BeginInvoke(
-            new Action(() => ClearWholeSelection(textBox, caret)),
+        Dispatcher.BeginInvoke(
+            new Action(() => ClearWholeSelection(_protectedCaret)),
             DispatcherPriority.ContextIdle);
     }
 
-    private static void ClearWholeSelection(TextBox textBox, int caret)
+    private void ClearWholeSelection(int caret)
     {
-        if (!textBox.IsKeyboardFocusWithin || !IsWholeTextSelected(textBox))
+        if (!IsKeyboardFocusWithin || !IsWholeTextSelected())
             return;
 
-        int safeCaret = Math.Clamp(caret, 0, textBox.Text.Length);
-        textBox.Select(safeCaret, 0);
+        _clearingSelection = true;
+        try
+        {
+            int safeCaret = Math.Clamp(caret, 0, Text.Length);
+            Select(safeCaret, 0);
+        }
+        finally
+        {
+            _clearingSelection = false;
+        }
     }
 
-    private static bool IsWholeTextSelected(TextBox textBox) =>
-        textBox.Text.Length > 0 &&
-        textBox.SelectionStart == 0 &&
-        textBox.SelectionLength >= textBox.Text.Length;
+    private bool IsWholeTextSelected() =>
+        Text.Length > 0 &&
+        SelectionStart == 0 &&
+        SelectionLength >= Text.Length;
 
     private static T? FindAncestor<T>(DependencyObject node)
         where T : DependencyObject

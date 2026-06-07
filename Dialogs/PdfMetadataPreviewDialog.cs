@@ -188,7 +188,7 @@ public sealed class PdfMetadataPreviewDialog : Window
 
     private static DataTemplate EditableTextTemplate(string property)
     {
-        var textBox = new FrameworkElementFactory(typeof(TextBox));
+        var textBox = new FrameworkElementFactory(typeof(PdfMetadataTextBox));
         textBox.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
         textBox.SetValue(TextBox.PaddingProperty, new Thickness(4, 1, 4, 1));
         textBox.SetValue(TextBox.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
@@ -202,7 +202,6 @@ public sealed class PdfMetadataPreviewDialog : Window
                 Mode = BindingMode.TwoWay,
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
             });
-        PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);
         textBox.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(PdfMetadataPreviewTextBox_TextChanged));
         return new DataTemplate { VisualTree = textBox };
     }

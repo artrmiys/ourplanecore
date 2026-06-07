@@ -766,7 +766,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string workspaceManagers = ReadRepoFile("MainWindow.WorkspaceManagers.cs");
         string previewDialog = ReadRepoFile("Dialogs/PdfMetadataPreviewDialog.cs");
-        string textBoxBehavior = ReadRepoFile("Controls/PdfMetadataTextBoxBehavior.cs");
+        string metadataTextBox = ReadRepoFile("Controls/PdfMetadataTextBoxBehavior.cs");
         string createTemplate = SliceMethod(workspaceManagers, "private static DataTemplate CreateSheetManagerTextBoxTemplate");
         string textChanged = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_TextChanged");
         string markMethod = SliceMethod(workspaceManagers, "private void MarkSheetManagerTextRowForApply");
@@ -775,22 +775,24 @@ internal static class TakeoffsTreeRegressionTests
         string lostFocus = SliceMethod(workspaceManagers, "private static void SheetManagerTextBox_LostKeyboardFocus");
         string refreshMethod = SliceMethod(workspaceManagers, "private void RefreshSheetManager()");
         string rasterRowsMethod = SliceMethod(workspaceManagers, "private bool RefreshSheetManagerRasterRows");
-        string previewMouse = SliceMethod(textBoxBehavior, "private static void TextBox_PreviewMouseLeftButtonDown");
-        string clearSelection = SliceMethod(textBoxBehavior, "private static void ClearWholeSelection");
+        string previewMouse = SliceMethod(metadataTextBox, "protected override void OnPreviewMouseLeftButtonDown");
+        string selectionChanged = SliceMethod(metadataTextBox, "protected override void OnSelectionChanged");
+        string clearSelection = SliceMethod(metadataTextBox, "private void ClearWholeSelection");
         string editablePreviewTemplate = SliceMethod(previewDialog, "private static DataTemplate EditableTextTemplate");
 
         AssertTrue(
-            createTemplate.Contains("PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);", StringComparison.Ordinal) &&
-            textBoxBehavior.Contains("PreviewMouseLeftButtonDownEvent", StringComparison.Ordinal) &&
+            createTemplate.Contains("new FrameworkElementFactory(typeof(PdfMetadataTextBox))", StringComparison.Ordinal) &&
+            metadataTextBox.Contains("public sealed class PdfMetadataTextBox : TextBox", StringComparison.Ordinal) &&
             previewMouse.Contains("e.Handled = true;", StringComparison.Ordinal) &&
-            previewMouse.Contains("textBox.Select(caret, 0);", StringComparison.Ordinal) &&
-            clearSelection.Contains("textBox.Select(safeCaret, 0);", StringComparison.Ordinal) &&
-            !textBoxBehavior.Contains("SelectAll", StringComparison.Ordinal),
+            previewMouse.Contains("ProtectCaret(caret);", StringComparison.Ordinal) &&
+            selectionChanged.Contains("ClearWholeSelection(_protectedCaret);", StringComparison.Ordinal) &&
+            clearSelection.Contains("Select(safeCaret, 0);", StringComparison.Ordinal) &&
+            !metadataTextBox.Contains("SelectAll", StringComparison.Ordinal),
             "Sheet Manager name/scale cells should take ownership of the first click and place the caret instead of selecting all text");
         AssertTrue(
             previewDialog.Contains("EditableTextColumn(\"Proposed Name\", nameof(PdfMetadataPreviewRow.ProposedPageName)", StringComparison.Ordinal) &&
             previewDialog.Contains("EditableTextColumn(\"Scale\", nameof(PdfMetadataPreviewRow.ProposedScale)", StringComparison.Ordinal) &&
-            editablePreviewTemplate.Contains("PdfMetadataTextBoxBehavior.AttachCaretOnClick(textBox);", StringComparison.Ordinal) &&
+            editablePreviewTemplate.Contains("new FrameworkElementFactory(typeof(PdfMetadataTextBox))", StringComparison.Ordinal) &&
             editablePreviewTemplate.Contains("PdfMetadataPreviewTextBox_TextChanged", StringComparison.Ordinal),
             "Name/Scale preview dialog should use the same protected editable text cells as Sheet Manager");
         AssertTrue(
