@@ -2602,7 +2602,10 @@ internal static class TakeoffsTreeRegressionTests
             setPage.Contains("bool preserveScaleEdit = samePage && _scaleBox.IsKeyboardFocusWithin;", StringComparison.Ordinal) &&
             setPage.Contains("if (!preservePageNameEdit)") &&
             setPage.Contains("if (!preserveScaleEdit)") &&
-            setPage.Contains("if (IsVisible && !preservePageNameEdit && !preserveScaleEdit)") &&
+            setPage.Contains("bool selectName = false", StringComparison.Ordinal) &&
+            setPage.Contains("if (selectName && IsVisible && !preservePageNameEdit && !preserveScaleEdit)", StringComparison.Ordinal) &&
+            pageSetup.Contains("RefreshFloatingPageSetup(appliedPage?.FolderPath, selectName: false)", StringComparison.Ordinal) &&
+            pageSetup.Contains("RefreshFloatingPageSetup(pages[targetIndex].FolderPath, selectName: true)", StringComparison.Ordinal) &&
             pageSetupWindow.Contains("private bool IsSamePage(string pageFolder, int pageIndex)", StringComparison.Ordinal),
             "floating Page Setup refreshes should not overwrite or reselect the active name/scale edit for the same sheet");
         AssertTrue(
@@ -2614,7 +2617,7 @@ internal static class TakeoffsTreeRegressionTests
             "floating Page Setup must cancel stale deferred SelectAll callbacks so typing cannot be selected twice");
         AssertTrue(
             pageSetupWindow.Contains("Loaded += (_, _) => SelectPageNameText(force: false);", StringComparison.Ordinal) &&
-            setPage.Contains("if (IsVisible && !preservePageNameEdit && !preserveScaleEdit)", StringComparison.Ordinal) &&
+            setPage.Contains("if (selectName && IsVisible && !preservePageNameEdit && !preserveScaleEdit)", StringComparison.Ordinal) &&
             userAlreadyPlacedTextFocus.Contains("_scaleBox.IsKeyboardFocusWithin", StringComparison.Ordinal) &&
             userAlreadyPlacedTextFocus.Contains("!ReferenceEquals(focusedTextBox, target)", StringComparison.Ordinal) &&
             userAlreadyPlacedTextFocus.Contains("!IsWholeTextSelected(focusedTextBox)", StringComparison.Ordinal),

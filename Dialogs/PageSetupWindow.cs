@@ -100,7 +100,13 @@ public sealed class PageSetupWindow : Window
         Loaded += (_, _) => SelectPageNameText(force: false);
     }
 
-    public void SetPage(string pageName, string scaleText, int pageIndex, int pageCount, string pageFolder = "")
+    public void SetPage(
+        string pageName,
+        string scaleText,
+        int pageIndex,
+        int pageCount,
+        string pageFolder = "",
+        bool selectName = false)
     {
         bool samePage = IsSamePage(pageFolder, pageIndex);
         bool preservePageNameEdit = samePage && _pageNameBox.IsKeyboardFocusWithin;
@@ -120,7 +126,7 @@ public sealed class PageSetupWindow : Window
         _nextButton.IsEnabled = pageIndex >= 0 && pageIndex < pageCount - 1;
         _statusText.Text = "";
 
-        if (IsVisible && !preservePageNameEdit && !preserveScaleEdit)
+        if (selectName && IsVisible && !preservePageNameEdit && !preserveScaleEdit)
             SelectPageNameText(force: true);
     }
 

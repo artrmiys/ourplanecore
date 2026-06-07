@@ -55,7 +55,7 @@ public partial class MainWindow
     {
         if (TryApplyFloatingPageSetup(out PageInfo? appliedPage))
         {
-            RefreshFloatingPageSetup(appliedPage?.FolderPath);
+            RefreshFloatingPageSetup(appliedPage?.FolderPath, selectName: false);
             _pageSetupWindow?.ShowStatus($"Applied {appliedPage?.Name ?? "page"}.");
         }
     }
@@ -84,12 +84,12 @@ public partial class MainWindow
         int targetIndex = Math.Clamp(index + Math.Sign(e.Direction), 0, pages.Count - 1);
         if (targetIndex == index || pages.Count == 0)
         {
-            RefreshFloatingPageSetup(appliedPage?.FolderPath);
+            RefreshFloatingPageSetup(appliedPage?.FolderPath, selectName: false);
             return;
         }
 
         OpenPageInActiveTab(pages[targetIndex]);
-        RefreshFloatingPageSetup(pages[targetIndex].FolderPath);
+        RefreshFloatingPageSetup(pages[targetIndex].FolderPath, selectName: true);
     }
 
     private bool TryApplyFloatingPageSetup(out PageInfo? appliedPage)
@@ -181,7 +181,7 @@ public partial class MainWindow
         return changed;
     }
 
-    private void RefreshFloatingPageSetup(string? preferredPageFolder = null)
+    private void RefreshFloatingPageSetup(string? preferredPageFolder = null, bool selectName = false)
     {
         if (_pageSetupWindow == null || _currentJob == null)
             return;
@@ -206,7 +206,8 @@ public partial class MainWindow
             PdfSheetMetadataService.FormatImperialScale(page.ScaleMetersPerPt),
             index,
             pages.Count,
-            page.FolderPath);
+            page.FolderPath,
+            selectName);
     }
 
     private void PositionFloatingPageSetup()
