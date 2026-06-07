@@ -189,7 +189,7 @@ public partial class MainWindow
         IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         if (pages.Count == 0)
         {
-            _pageSetupWindow.SetPage("", "", -1, 0);
+            _pageSetupWindow.SetPage("", "", -1, 0, "");
             return;
         }
 
@@ -205,7 +205,8 @@ public partial class MainWindow
             page.Name,
             PdfSheetMetadataService.FormatImperialScale(page.ScaleMetersPerPt),
             index,
-            pages.Count);
+            pages.Count,
+            page.FolderPath);
     }
 
     private void PositionFloatingPageSetup()

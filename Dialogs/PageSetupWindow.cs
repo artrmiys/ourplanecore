@@ -13,6 +13,8 @@ public sealed class PageSetupWindow : Window
     private readonly TextBlock _statusText;
     private readonly Button _prevButton;
     private readonly Button _nextButton;
+    private string _pageFolder = "";
+    private int _pageIndex = -1;
 
     public event EventHandler? ApplyRequested;
     public event EventHandler<PageSetupNavigateEventArgs>? NavigateRequested;
@@ -97,17 +99,28 @@ public sealed class PageSetupWindow : Window
         Loaded += (_, _) => SelectPageNameText();
     }
 
-    public void SetPage(string pageName, string scaleText, int pageIndex, int pageCount)
+    public void SetPage(string pageName, string scaleText, int pageIndex, int pageCount, string pageFolder = "")
     {
-        _pageNameBox.Text = pageName;
-        _scaleBox.Text = scaleText;
+        bool samePage = IsSamePage(pageFolder, pageIndex);
+        bool preservePageNameEdit = samePage && _pageNameBox.IsKeyboardFocusWithin;
+        bool preserveScaleEdit = samePage && _scaleBox.IsKeyboardFocusWithin;
+
+        if (!preservePageNameEdit)
+            _pageNameBox.Text = pageName;
+        if (!preserveScaleEdit)
+            _scaleBox.Text = scaleText;
+
+        _pageFolder = pageFolder ?? "";
+        _pageIndex = pageIndex;
         _pageCounter.Text = pageCount > 0
             ? $"Sheet {Math.Clamp(pageIndex + 1, 1, pageCount)} of {pageCount}"
             : "No sheet";
         _prevButton.IsEnabled = pageIndex > 0;
         _nextButton.IsEnabled = pageIndex >= 0 && pageIndex < pageCount - 1;
         _statusText.Text = "";
-        SelectPageNameText();
+
+        if (!preservePageNameEdit && !preserveScaleEdit)
+            SelectPageNameText();
     }
 
     public void ShowStatus(string message) =>
@@ -148,6 +161,14 @@ public sealed class PageSetupWindow : Window
         Grid.SetColumn(textBox, 1);
         grid.Children.Add(textBox);
         return textBox;
+    }
+
+    private bool IsSamePage(string pageFolder, int pageIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(pageFolder) && !string.IsNullOrWhiteSpace(_pageFolder))
+            return string.Equals(pageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
+
+        return pageIndex >= 0 && _pageIndex >= 0 && pageIndex == _pageIndex;
     }
 
     private static Button AddButton(Panel panel, string content, double width, bool primary)

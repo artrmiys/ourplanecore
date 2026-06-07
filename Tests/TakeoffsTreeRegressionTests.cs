@@ -2501,6 +2501,9 @@ internal static class TakeoffsTreeRegressionTests
         string commands = ReadRepoFile("MainWindow.PagesCommands.cs");
         string scale = ReadRepoFile("MainWindow.PagesScale.cs");
         string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
+        string pageSetup = ReadRepoFile("MainWindow.PageSetup.cs");
+        string pageSetupWindow = ReadRepoFile("Dialogs/PageSetupWindow.cs");
+        string setPage = SliceMethod(pageSetupWindow, "public void SetPage(");
 
         AssertTrue(
             commands.Contains("SetSelectedPagesScaleFromContext(item)", StringComparison.Ordinal) &&
@@ -2517,6 +2520,15 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             callbacks.Contains("private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements", StringComparison.Ordinal),
             "page-scale updates should reuse a page-scoped measurement scale helper");
+        AssertTrue(
+            pageSetup.Contains("page.FolderPath", StringComparison.Ordinal) &&
+            setPage.Contains("bool preservePageNameEdit = samePage && _pageNameBox.IsKeyboardFocusWithin;", StringComparison.Ordinal) &&
+            setPage.Contains("bool preserveScaleEdit = samePage && _scaleBox.IsKeyboardFocusWithin;", StringComparison.Ordinal) &&
+            setPage.Contains("if (!preservePageNameEdit)") &&
+            setPage.Contains("if (!preserveScaleEdit)") &&
+            setPage.Contains("if (!preservePageNameEdit && !preserveScaleEdit)") &&
+            pageSetupWindow.Contains("private bool IsSamePage(string pageFolder, int pageIndex)", StringComparison.Ordinal),
+            "floating Page Setup refreshes should not overwrite or reselect the active name/scale edit for the same sheet");
     }
 
     public static void ViewportRenderingPreservesDpiMatrix()
