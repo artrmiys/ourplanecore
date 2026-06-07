@@ -159,8 +159,10 @@ public sealed partial class PdfViewport
             RequestRepaint();
             return;
         }
+        if (responsiveRasterDpiForOpen)
+            QueueResponsiveRasterSheetDpiBuildForPageOpen(rasterSheet, restoreView);
+
         if (shouldUseRasterSheetForOpen &&
-            !responsiveRasterDpiForOpen &&
             TryApplyRasterSheetRender(
                 pdfPath,
                 pageIndex,
@@ -184,7 +186,6 @@ public sealed partial class PdfViewport
             return;
         }
         if (shouldUseRasterSheetForOpen &&
-            !responsiveRasterDpiForOpen &&
             IsRasterSheetBitmapCacheWarmingReason(rasterSkipReason))
         {
             QueueRasterSheetBitmapApplyAfterWarmup(
@@ -201,10 +202,6 @@ public sealed partial class PdfViewport
                 pageIndex,
                 pageFolder,
                 rasterSheet);
-        }
-        if (responsiveRasterDpiForOpen)
-        {
-            QueueResponsiveRasterSheetDpiBuildForPageOpen(rasterSheet, restoreView);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(

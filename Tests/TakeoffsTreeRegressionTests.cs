@@ -119,13 +119,14 @@ internal static class TakeoffsTreeRegressionTests
             warmupRunMethod.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("includeRasterSheetWarmup: includeRasterSheetWarmup", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("includeRasterSheetRefresh: false", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenPreviewWarmupAllPages = true", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenPreviewWarmupCount = 384", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenPreviewWarmupHugeJobCount = 512", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupAllPages = false", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupCount = 48", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupLargeJobCount = 64", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupHugeJobCount = 96", StringComparison.Ordinal) &&
             policy.Contains("JobOpenRasterSheetBitmapWarmupCount = 12", StringComparison.Ordinal) &&
             policy.Contains("JobOpenRasterSheetBitmapWarmupHugeJobCount = 24", StringComparison.Ordinal) &&
             policy.Contains("SelectJobOpenPreviewWarmupCount", StringComparison.Ordinal),
-            "job-open preview warmup should run once per job at idle priority, warm all lightweight previews, and limit heavier raster bitmap queues to active-page-first nearby sheets");
+            "job-open preview warmup should run once per job at idle priority, keep preview work bounded, and limit heavier raster bitmap queues to active-page-first nearby sheets");
         AssertTrue(
             rasterWarmupMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
             rasterWarmupMethod.Contains("_pageRasterRefreshWarmupJobRoot", StringComparison.Ordinal) &&
@@ -135,8 +136,9 @@ internal static class TakeoffsTreeRegressionTests
             rasterWarmupRunMethod.Contains("QueueJobRasterSheetRefreshWarmup(queuedPages)", StringComparison.Ordinal) &&
             rasterWarmupQueueMethod.Contains("PdfViewport.PrefetchRasterSheetRefresh(page)", StringComparison.Ordinal) &&
             policy.Contains("JobOpenRasterSheetRefreshWarmupAllPages = false", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 32", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenRasterSheetRefreshWarmupHugeJobCount = 64", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 12", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupLargeJobCount = 16", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupHugeJobCount = 24", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetRefreshPrefetchCadenceMs = 6500", StringComparison.Ordinal),
             "job-open raster warmup should queue stale raster refreshes separately from preview rendering while keeping the heavy refresh queue bounded");
         AssertTrue(
@@ -692,6 +694,36 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             source.Contains("_pageMeasurementLookup = null;", StringComparison.Ordinal),
             "page measurement lookup must remain scoped so stale measurement data is not reused after edits");
+    }
+
+    public static void PageTreeRefreshReclassifiesStaleFolderNodes()
+    {
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string refreshAll = SliceMethod(pagesTree, "private void RefreshPagesTakeoffIndicators()");
+        string refreshOne = SliceMethod(pagesTree, "private void RefreshPageTakeoffIndicatorsForFolder");
+        string refreshMany = SliceMethod(pagesTree, "private void RefreshPageTakeoffIndicatorsForFolders");
+        string snapshots = SliceMethod(pagesTree, "private void RefreshPageTreePageSnapshots");
+        string helper = SliceMethod(pagesTree, "private bool TryRefreshPageTreeItemFromStore");
+
+        AssertTrue(
+            helper.Contains("OurPlaneCoreJobStore.TryReadPage(pageFolder)", StringComparison.Ordinal) &&
+            helper.Contains("item.Tag = refreshedPage;", StringComparison.Ordinal) &&
+            helper.Contains("item.Header = BuildPageHeader(refreshedPage);", StringComparison.Ordinal) &&
+            helper.Contains("RebuildPageTakeoffNodes(item, refreshedPage);", StringComparison.Ordinal),
+            "page tree partial refresh should re-read source.json and convert stale folder nodes back into page nodes");
+        AssertTrue(
+            refreshAll.Contains("item.Tag is PageTakeoffNode or PageOverlayNode", StringComparison.Ordinal) &&
+            refreshAll.Contains("TryRefreshPageTreeItemFromStore(item, path, out _)", StringComparison.Ordinal) &&
+            refreshAll.Contains("if (reloadNeeded)", StringComparison.Ordinal) &&
+            refreshAll.Contains("RebuildPageTreeItemIndex();", StringComparison.Ordinal),
+            "full indicator refresh should reclassify page/folder nodes and rebuild the index after changing child nodes");
+        AssertTrue(
+            refreshOne.Contains("FindPageTreeItemByFolder(pageFolder) is not { } item", StringComparison.Ordinal) &&
+            refreshOne.Contains("TryRefreshPageTreeItemFromStore(item, pageFolder, out string refreshedKey)", StringComparison.Ordinal) &&
+            refreshOne.Contains("ReloadPagesTree(pageFolder, selectSilently: true)", StringComparison.Ordinal) &&
+            refreshMany.Contains("TryRefreshPageTreeItemFromStore(item, folder, out string refreshedKey)", StringComparison.Ordinal) &&
+            snapshots.Contains("TryRefreshPageTreeItemFromStore(item, page.FolderPath, out string refreshedKey)", StringComparison.Ordinal),
+            "targeted page refreshes should not leave a repaired sheet displayed as a folder node");
     }
 
     public static void PagesDropUsesBatchMoveAndSilentRefresh()
@@ -1440,6 +1472,7 @@ internal static class TakeoffsTreeRegressionTests
             "raster sheet mode should use smoothed still-frame bitmap sampling instead of switching back to blocky stretch sampling");
         AssertTrue(
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 24", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
@@ -1450,6 +1483,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetBitmapCache.Contains("QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("WarmRasterSheetBitmapAndApplyAsync", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("WarmRequestedRasterSheetBitmapCache", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("ShouldApplyWarmedRasterSheetBitmap", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("!RasterSheetCacheService.HasSourceImageOverview(rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("RasterSheetBitmapCacheWarmingReason", StringComparison.Ordinal) &&
             pageApi.Contains("QueueRasterSheetWorkZoomWarmupForPageOpen", StringComparison.Ordinal) &&
@@ -1466,16 +1501,17 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("RasterSheetDisplayMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 0.45f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("!IsLowZoomRasterSheetPageOpen(restoreView, fitAfter)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true;", StringComparison.Ordinal) &&
+            !rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForNavigation", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("!RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource)", StringComparison.Ordinal) &&
             !rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should be used at 60-200% work zoom, keep fit/overview cheap, and switch back to preview when zoomed out");
+            "ordinary readable raster sheets should be used on page open and at 60-200% work zoom, including fit opens when no overview exists, while source-image rasters keep their overview path");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
@@ -1517,7 +1553,8 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerRowFromButton", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerPageFromRow", StringComparison.Ordinal) &&
             pagesTree.Contains("private void RefreshPageTreePageSnapshots(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
-            pagesTree.Contains("OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { } refreshedPage", StringComparison.Ordinal) &&
+            pagesTree.Contains("private bool TryRefreshPageTreeItemFromStore(TreeViewItem item, string pageFolder", StringComparison.Ordinal) &&
+            pagesTree.Contains("OurPlaneCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("item.Tag = refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTakeoffNodes(item, refreshedPage)", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTreeItemIndex()", StringComparison.Ordinal) &&
@@ -1705,6 +1742,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("restoreView.HasValue", StringComparison.Ordinal) &&
             pageApi.Contains("TryApplyReadyResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
             pageApi.Contains("QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
+            !pageApi.Contains("!responsiveRasterDpiForOpen", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryPrepareRasterSheetBitmapForImmediateRepaint()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiFromMemory", StringComparison.Ordinal) &&

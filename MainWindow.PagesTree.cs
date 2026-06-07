@@ -199,20 +199,38 @@ public partial class MainWindow
 
     private void RefreshPagesTakeoffIndicators()
     {
+        bool rebuiltAny = false;
+        bool reloadNeeded = false;
         using (UsePageMeasurementLookup())
         {
             foreach (TreeViewItem item in EnumeratePageTreeItems().ToList())
             {
-                if (item.Tag is PageInfo page)
+                if (item.Tag is PageTakeoffNode or PageOverlayNode)
+                    continue;
+
+                string? path = GetPagesNodePath(item);
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                if (TryRefreshPageTreeItemFromStore(item, path, out _))
                 {
-                    bool wasExpanded = item.IsExpanded;
-                    item.Header = BuildPageHeader(page);
-                    RebuildPageTakeoffNodes(item, page);
-                    item.IsExpanded = wasExpanded;
+                    rebuiltAny = true;
+                    continue;
                 }
+
+                if (item.Tag is PageInfo)
+                    reloadNeeded = true;
             }
         }
 
+        if (reloadNeeded)
+        {
+            ReloadPagesTree();
+            return;
+        }
+
+        if (rebuiltAny)
+            RebuildPageTreeItemIndex();
         ClearDirtyPageTakeoffIndicators();
         ApplyPagesMultiSelectionVisuals();
     }
@@ -227,19 +245,17 @@ public partial class MainWindow
 
         using (UsePageMeasurementLookup())
         {
-            if (FindPageTreeItemByFolder(pageFolder) is not { Tag: PageInfo page } item)
+            if (FindPageTreeItemByFolder(pageFolder) is not { } item ||
+                !TryRefreshPageTreeItemFromStore(item, pageFolder, out string refreshedKey))
             {
-                RefreshPagesTakeoffIndicators();
+                ReloadPagesTree(pageFolder, selectSilently: true);
                 return;
             }
 
-            bool wasExpanded = item.IsExpanded;
-            item.Header = BuildPageHeader(page);
-            RebuildPageTakeoffNodes(item, page);
-            item.IsExpanded = wasExpanded;
+            RebuildPageTreeItemIndex();
             RefreshPageTreeRowsByFolderKeys(new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                NormalizePathForCompare(page.FolderPath),
+                refreshedKey,
             });
         }
     }
@@ -259,20 +275,18 @@ public partial class MainWindow
         {
             foreach (string folder in folders)
             {
-                if (FindPageTreeItemByFolder(folder) is not { Tag: PageInfo page } item)
+                if (FindPageTreeItemByFolder(folder) is not { } item ||
+                    !TryRefreshPageTreeItemFromStore(item, folder, out string refreshedKey))
                 {
-                    RefreshPagesTakeoffIndicators();
+                    ReloadPagesTree(folder, selectSilently: true);
                     return;
                 }
 
-                bool wasExpanded = item.IsExpanded;
-                item.Header = BuildPageHeader(page);
-                RebuildPageTakeoffNodes(item, page);
-                item.IsExpanded = wasExpanded;
-                refreshed.Add(NormalizePathForCompare(page.FolderPath));
+                refreshed.Add(refreshedKey);
             }
         }
 
+        RebuildPageTreeItemIndex();
         RefreshPageTreeRowsByFolderKeys(refreshed);
     }
 
@@ -282,6 +296,7 @@ public partial class MainWindow
             return;
 
         var refreshed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool reloadNeeded = false;
         using (UsePageMeasurementLookup())
         {
             foreach (PageInfo page in pages)
@@ -289,19 +304,22 @@ public partial class MainWindow
                 string key = NormalizePathForCompare(page.FolderPath);
                 if (string.IsNullOrWhiteSpace(key) ||
                     refreshed.Contains(key) ||
-                    FindPageTreeItemByFolderKeyIndexed(key) is not { } item ||
-                    OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { } refreshedPage)
+                    FindPageTreeItemByFolderKeyIndexed(key) is not { } item)
                 {
                     continue;
                 }
 
-                bool wasExpanded = item.IsExpanded;
-                item.Tag = refreshedPage;
-                item.Header = BuildPageHeader(refreshedPage);
-                RebuildPageTakeoffNodes(item, refreshedPage);
-                item.IsExpanded = wasExpanded;
-                refreshed.Add(key);
+                if (TryRefreshPageTreeItemFromStore(item, page.FolderPath, out string refreshedKey))
+                    refreshed.Add(refreshedKey);
+                else
+                    reloadNeeded = true;
             }
+        }
+
+        if (reloadNeeded)
+        {
+            ReloadPagesTree();
+            return;
         }
 
         if (refreshed.Count == 0)
@@ -309,6 +327,21 @@ public partial class MainWindow
 
         RebuildPageTreeItemIndex();
         RefreshPageTreeRowsByFolderKeys(refreshed);
+    }
+
+    private bool TryRefreshPageTreeItemFromStore(TreeViewItem item, string pageFolder, out string refreshedKey)
+    {
+        refreshedKey = "";
+        if (OurPlaneCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage)
+            return false;
+
+        bool wasExpanded = item.IsExpanded;
+        item.Tag = refreshedPage;
+        item.Header = BuildPageHeader(refreshedPage);
+        RebuildPageTakeoffNodes(item, refreshedPage);
+        item.IsExpanded = wasExpanded;
+        refreshedKey = NormalizePathForCompare(refreshedPage.FolderPath);
+        return !string.IsNullOrWhiteSpace(refreshedKey);
     }
 
     private void RefreshPageTakeoffIndicatorsForActiveChange(

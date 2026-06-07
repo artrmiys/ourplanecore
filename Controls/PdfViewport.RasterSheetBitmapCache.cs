@@ -76,12 +76,7 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                bool applyAtCurrentView = preferOverview
-                    ? !ShouldUseRasterSheetForCurrentZoom()
-                    : ShouldUseRasterSheetForCurrentZoom() ||
-                      RasterSheetCacheService.IsSourceImageRaster(rasterSheet) &&
-                      RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
-                if (!applyAtCurrentView)
+                if (!ShouldApplyWarmedRasterSheetBitmap(rasterSheet, preferOverview))
                     return;
 
                 if (!preferOverview && ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet))
@@ -128,6 +123,20 @@ public sealed partial class PdfViewport
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(warmKey);
         }
+    }
+
+    private bool ShouldApplyWarmedRasterSheetBitmap(RasterSheetSource rasterSheet, bool preferOverview)
+    {
+        if (preferOverview)
+            return !ShouldUseRasterSheetForCurrentZoom();
+
+        if (ShouldUseRasterSheetForCurrentZoom())
+            return true;
+
+        if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
+            return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
+
+        return !RasterSheetCacheService.HasSourceImageOverview(rasterSheet);
     }
 
     public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)

@@ -93,6 +93,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression loads nested mixed items", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsNestedMixedTreeItems),
     ("takeoff tree regression keeps siblings after corrupt measurements", TakeoffsTreeRegressionTests.LoadTakeoffItemsKeepsSiblingsWhenMeasurementsJsonIsCorrupt),
     ("takeoff tree regression page lookup enabled for large tree refresh", TakeoffsTreeRegressionTests.PageMeasurementLookupEnabledForLargeTreeRefresh),
+    ("page tree refresh reclassifies stale folder nodes", TakeoffsTreeRegressionTests.PageTreeRefreshReclassifiesStaleFolderNodes),
     ("takeoff tree regression pages drop batches and refreshes silently", TakeoffsTreeRegressionTests.PagesDropUsesBatchMoveAndSilentRefresh),
     ("takeoff tree regression moved active sheet rebinds viewport", TakeoffsTreeRegressionTests.PagesMovedActiveSheetRebindsViewportWithoutReload),
     ("pdf sheet metadata layer discovery restores states", TakeoffsTreeRegressionTests.PdfSheetMetadataLayerDiscoveryRestoresLayerStates),
