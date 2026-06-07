@@ -125,7 +125,8 @@ public sealed partial class PdfViewport
 
     private void QueueDetailRenderStart(bool immediate)
     {
-        if (immediate)
+        TimeSpan delay = DetailRenderStartDelay(immediate);
+        if (delay <= TimeSpan.Zero)
         {
             _detailRenderStartQueued = false;
             _ = StartNextDetailRenderAsync();
@@ -142,7 +143,7 @@ public sealed partial class PdfViewport
             {
                 try
                 {
-                    await Task.Delay(ViewportRenderPolicy.DetailRenderCoalesceDelayMs);
+                    await Task.Delay(delay);
                 }
                 catch
                 {
@@ -155,6 +156,18 @@ public sealed partial class PdfViewport
                 }
             }));
     }
+
+    private TimeSpan DetailRenderStartDelay(bool immediate)
+    {
+        TimeSpan coalesceDelay = immediate
+            ? TimeSpan.Zero
+            : TimeSpan.FromMilliseconds(ViewportRenderPolicy.DetailRenderCoalesceDelayMs);
+        TimeSpan navigationDelay = DetailRenderNavigationQuietDelay();
+        return navigationDelay > coalesceDelay ? navigationDelay : coalesceDelay;
+    }
+
+    private TimeSpan DetailRenderNavigationQuietDelay()
+        => NavigationQuietDelay(TimeSpan.FromMilliseconds(ViewportRenderPolicy.DetailRenderNavigationQuietMs));
 
     private bool ShouldHoldDetailRender(bool force) =>
         force &&
@@ -351,6 +364,12 @@ public sealed partial class PdfViewport
     {
         if (_detailRenderInProgress || _pendingDetailRender == null)
             return;
+
+        if (DetailRenderNavigationQuietDelay() > TimeSpan.Zero)
+        {
+            QueueDetailRenderStart(immediate: true);
+            return;
+        }
 
         DetailRenderRequest request = _pendingDetailRender;
         _pendingDetailRender = null;

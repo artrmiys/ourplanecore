@@ -4019,8 +4019,11 @@ static void ViewportHighZoomUsesResponsiveNavigationFrame()
         "enabled fast navigation should use fast frames at high zoom");
     AssertTrue(
         ViewportConstants.NavigationIdleMs >= 240 &&
-        ViewportConstants.NavigationIdleMs > ViewportConstants.ZoomRerenderDelayMs,
-        "high-zoom pan bursts should stay idle-gated but start detail soon after the zoom rerender timer settles");
+        ViewportConstants.NavigationIdleMs > ViewportConstants.ZoomRerenderDelayMs &&
+        ViewportRenderPolicy.DetailRenderNavigationQuietMs >= ViewportConstants.NavigationIdleMs &&
+        ViewportRenderPolicy.DetailRenderNavigationQuietMs > ViewportRenderPolicy.DetailRenderCoalesceDelayMs &&
+        ViewportRenderPolicy.PageOpenDeferredNavigationQuietMs >= ViewportConstants.NavigationIdleMs,
+        "high-zoom pan bursts should stay idle-gated while detail render waits for a real navigation quiet window");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldUseFastNavigationFrame(

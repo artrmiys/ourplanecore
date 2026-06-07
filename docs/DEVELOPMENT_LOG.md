@@ -31,6 +31,19 @@
   stale, the viewport now cancels the detail worker instead of letting that
   obsolete render compete with the next sheet. Stale detail completions are
   discarded before they are recorded as useful render samples.
+- Navigation idle now coalesces clipped detail rendering instead of starting it
+  immediately, reducing the chance that a short pan/zoom burst waits behind a
+  detail worker startup while still sharpening after the user stops.
+- Clipped detail rendering now also waits for a real navigation quiet window
+  after pan/zoom before starting its worker, so the delayed sharp upgrade cannot
+  land inside a short zoom/pan sequence and hold the UI.
+- Deferred page-open follow-up work (overlays, annotations, settings save,
+  takeoff visual refresh, floating setup/hints) now also waits for the viewport
+  navigation quiet window and rechecks the active page, so opening a sheet and
+  immediately zooming/panning is not interrupted by tree/legend/UI refreshes.
+- Automated viewport stress runs now skip the stale recovery `MessageBox` and
+  overwrite their own lock, so a killed hidden run does not block the next
+  measurement before the first sheet opens.
 
 ## 2026-06-06 Sheet Render Sharpness Pass
 

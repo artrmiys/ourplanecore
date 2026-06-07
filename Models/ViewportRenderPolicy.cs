@@ -27,6 +27,7 @@ public static class ViewportRenderPolicy
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
     public const int DetailRenderCoalesceDelayMs = 120;
+    public const int DetailRenderNavigationQuietMs = 1100;
     public const int DetailRenderMaxPaintTiles = 2;
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
@@ -36,6 +37,7 @@ public static class ViewportRenderPolicy
     public const int PageSwitchSharpUpgradeIdleMs = 1200;
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
     public const float PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom;
+    public const int PageOpenDeferredNavigationQuietMs = 900;
     public const int PreviewPrefetchDelayMs = 250;
     public const int PreviewPrefetchNavigationQuietMs = 1100;
     public const int PreviewPrefetchActiveRenderHoldMs = 3000;

@@ -34,6 +34,8 @@ internal static class TakeoffsTreeRegressionTests
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
         string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
+        string deferredQuietMethod = SliceMethod(pageTabs, "private async void RunDeferredPageOpenWorkWhenQuiet(");
+        string quietWaitMethod = SliceMethod(pageTabs, "private async Task WaitForDeferredPageOpenQuietAsync(");
         string deferredMethod = SliceMethod(pageTabs, "private void RunDeferredPageOpenWork(");
         string prefetchMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetchDeferred(");
         string warmupMethod = SliceMethod(pageTabs, "private void QueueJobPagePreviewWarmupDeferred(");
@@ -70,8 +72,16 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             queueMethod.Contains("Dispatcher.BeginInvoke", StringComparison.Ordinal) &&
             queueMethod.Contains("DispatcherPriority.Background", StringComparison.Ordinal) &&
-            queueMethod.Contains("RunDeferredPageOpenWork", StringComparison.Ordinal),
+            queueMethod.Contains("RunDeferredPageOpenWorkWhenQuiet", StringComparison.Ordinal),
             "slow page-open follow-up work should be scheduled at background dispatcher priority");
+        AssertTrue(
+            deferredQuietMethod.Contains("WaitForDeferredPageOpenQuietAsync", StringComparison.Ordinal) &&
+            deferredQuietMethod.Contains("RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView)", StringComparison.Ordinal) &&
+            deferredQuietMethod.Contains("if (!handedOff)", StringComparison.Ordinal) &&
+            quietWaitMethod.Contains("ViewportRenderPolicy.PageOpenDeferredNavigationQuietMs", StringComparison.Ordinal) &&
+            quietWaitMethod.Contains("_viewport.NavigationQuietDelay(quietWindow)", StringComparison.Ordinal) &&
+            policy.Contains("PageOpenDeferredNavigationQuietMs = 900", StringComparison.Ordinal),
+            "deferred page-open work should wait for a viewport navigation quiet window before refreshing overlays, settings, tree state, and legends");
 
         AssertTrue(
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
@@ -2050,8 +2060,13 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("ViewportRenderPolicy.ShouldPreferDetailRenderOverFullRefresh(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale)", StringComparison.Ordinal) &&
-            transform.Contains("QueueDetailRenderIfNeeded(force: false, immediate: true)", StringComparison.Ordinal),
+            transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
+        string endFastNavigation = SliceMethod(transform, "private void EndFastNavigation()");
+        AssertTrue(
+            endFastNavigation.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal) &&
+            !endFastNavigation.Contains("immediate: true", StringComparison.Ordinal),
+            "navigation idle should coalesce clipped detail renders instead of starting them during short pan/zoom bursts");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
@@ -2062,10 +2077,14 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("QueueDetailRenderAfterHold()", StringComparison.Ordinal) &&
             detail.Contains("QueueDetailRenderStart(force || immediate)", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderCoalesceDelayMs", StringComparison.Ordinal) &&
+            detail.Contains("DetailRenderNavigationQuietDelay()", StringComparison.Ordinal) &&
+            detail.Contains("ViewportRenderPolicy.DetailRenderNavigationQuietMs", StringComparison.Ordinal) &&
+            detail.Contains("StartNextDetailRenderAsync()", StringComparison.Ordinal) &&
             detail.Contains("QueueDetailRenderIfNeeded(force: false, immediate: true)", StringComparison.Ordinal) &&
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 100", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderNavigationQuietMs = 1100", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewCoalesceMs = 45", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeDelayMs = 900", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 1200", StringComparison.Ordinal) &&
@@ -2230,6 +2249,7 @@ internal static class TakeoffsTreeRegressionTests
         string recorder = ReadRepoFile(Path.Combine("Models", "ViewportPerformanceRecorder.cs"));
         string detail = ReadRepoFile(Path.Combine("Controls", "PdfViewport.DetailRender.cs"));
         string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
+        string recovery = ReadRepoFile("MainWindow.JobRecovery.cs");
 
         AssertTrue(
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM", StringComparison.Ordinal) &&
@@ -2284,6 +2304,11 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("ViewportPerformanceRecorder.RecordRenderProfile", StringComparison.Ordinal) &&
             rendering.Contains("ViewportPerformanceRecorder.RecordSlowFrame", StringComparison.Ordinal),
             "viewport render and paint paths must feed the perf recorder");
+        AssertTrue(
+            recovery.Contains("ShouldSuppressAutomatedRecoveryPrompt", StringComparison.Ordinal) &&
+            recovery.Contains("ViewportPageStressSmokeEnv", StringComparison.Ordinal) &&
+            recovery.Contains("Skipping stale recovery prompt during automation", StringComparison.Ordinal),
+            "hidden viewport stress smoke must not block on the stale recovery MessageBox before opening the first sheet");
     }
 
     public static void PagesTreeSelectedSheetScaleMenuIsWired()

@@ -368,14 +368,12 @@ public partial class MainWindow
             Dispatcher.BeginInvoke(
                 new Action(() =>
                 {
-                    try
-                    {
-                        RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView);
-                    }
-                    catch (Exception ex)
-                    {
-                        AppLog.Warn(ex, $"Deferred page open work failed for {viewportPage.Name}");
-                    }
+                    RunDeferredPageOpenWorkWhenQuiet(
+                        deferredVersion,
+                        viewportPage,
+                        scaledItems,
+                        trace,
+                        restoreView);
                 }),
                 System.Windows.Threading.DispatcherPriority.Background);
         }
@@ -383,6 +381,52 @@ public partial class MainWindow
         {
             trace?.Dispose();
             throw;
+        }
+    }
+
+    private async void RunDeferredPageOpenWorkWhenQuiet(
+        int deferredVersion,
+        PageInfo viewportPage,
+        IReadOnlyList<TakeoffItem> scaledItems,
+        PageOpenTrace? trace,
+        PdfViewport.ViewState? restoreView)
+    {
+        bool handedOff = false;
+        try
+        {
+            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                return;
+
+            trace?.Mark("deferred-start");
+            await WaitForDeferredPageOpenQuietAsync(deferredVersion, viewportPage.FolderPath);
+            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
+                return;
+
+            trace?.Mark("deferred-quiet");
+            handedOff = true;
+            RunDeferredPageOpenWork(deferredVersion, viewportPage, scaledItems, trace, restoreView);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Deferred page open work failed for {viewportPage.Name}");
+        }
+        finally
+        {
+            if (!handedOff)
+                trace?.Dispose();
+        }
+    }
+
+    private async Task WaitForDeferredPageOpenQuietAsync(int deferredVersion, string pageFolder)
+    {
+        TimeSpan quietWindow = TimeSpan.FromMilliseconds(ViewportRenderPolicy.PageOpenDeferredNavigationQuietMs);
+        while (IsCurrentPageOpen(deferredVersion, pageFolder))
+        {
+            TimeSpan delay = _viewport.NavigationQuietDelay(quietWindow);
+            if (delay <= TimeSpan.Zero)
+                return;
+
+            await Task.Delay(delay);
         }
     }
 

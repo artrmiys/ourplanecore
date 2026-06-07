@@ -37,13 +37,20 @@ public partial class MainWindow
             {
                 if (JobRecoveryService.IsStaleLock(info))
                 {
-                    var result = MessageBox.Show(
-                        "This job has a recovery marker from a previous session. Create a metadata snapshot before continuing?",
-                        "Job Recovery",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning);
-                    if (result == MessageBoxResult.Yes)
-                        SaveJobRecoverySnapshot("recovery_marker");
+                    if (ShouldSuppressAutomatedRecoveryPrompt())
+                    {
+                        AppLog.Info($"Skipping stale recovery prompt during automation for process {info.ProcessId}.");
+                    }
+                    else
+                    {
+                        var result = MessageBox.Show(
+                            "This job has a recovery marker from a previous session. Create a metadata snapshot before continuing?",
+                            "Job Recovery",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning);
+                        if (result == MessageBoxResult.Yes)
+                            SaveJobRecoverySnapshot("recovery_marker");
+                    }
                 }
                 else if (!JobRecoveryService.IsCurrentProcessLock(info))
                 {
@@ -60,6 +67,11 @@ public partial class MainWindow
             TxtStatus.Text = $"Recovery marker skipped: {ex.Message}";
         }
     }
+
+    private static bool ShouldSuppressAutomatedRecoveryPrompt() =>
+        IsTruthyEnvironment(ViewportPageStressSmokeEnv) ||
+        IsTruthyEnvironment(TakeoffsMoveSmokeEnv) ||
+        IsTruthyEnvironment(GuideScreenshotCaptureEnv);
 
     private string? SaveJobRecoverySnapshot(string reason)
     {
