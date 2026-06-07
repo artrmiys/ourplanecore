@@ -83,7 +83,7 @@ public static class ViewportRenderPolicy
     public const int SlowRenderLogMs = 220;
     public const int SlowSnapLogMs = 18;
     public const float VisibleGeometryPaddingScreenPx = 96f;
-    public const float PanOverscrollScreenFraction = 0.50f;
+    public const float PanOverscrollScreenFraction = 1.00f;
     private static string _qualityMode = HighQualityMode;
     private static readonly float[] SheetOverlayRenderScaleSteps = [2.0f, 2.25f, 3.0f, 4.0f];
     private static readonly int[] RasterSheetWorkZoomWarmupDpis = [144];

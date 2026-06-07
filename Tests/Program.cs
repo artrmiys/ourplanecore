@@ -295,6 +295,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay render cache round trips", SheetOverlayRenderCacheRoundTrips),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport pan allows edge overscroll", ViewportPanAllowsEdgeOverscroll),
+    ("viewport pan allows sheet past frame at work zooms", ViewportPanAllowsSheetPastFrameAtWorkZooms),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
     ("viewport background strips transparency", ViewportBackgroundStripsTransparency),
     ("viewport background tints comfort colors", ViewportBackgroundTintsComfortColors),
@@ -4005,25 +4006,69 @@ static void ViewportRenderScaleChoosesNextQualityStep()
 static void ViewportPanAllowsEdgeOverscroll()
 {
     AssertClose(
-        -500,
-        ViewportRenderPolicy.ClampPanWithOverscroll(-900, pageSizePt: 2000, visibleSizePt: 1000),
-        "large sheet can pan left edge to viewport center");
+        -1000,
+        ViewportRenderPolicy.ClampPanWithOverscroll(-1900, pageSizePt: 2000, visibleSizePt: 1000),
+        "large sheet can pan left edge past the viewport frame");
     AssertClose(
-        1500,
+        1900,
         ViewportRenderPolicy.ClampPanWithOverscroll(1900, pageSizePt: 2000, visibleSizePt: 1000),
-        "large sheet can pan right edge to viewport center");
+        "ordinary near-edge pan remains unchanged before the right overscroll limit");
     AssertClose(
         640,
         ViewportRenderPolicy.ClampPanWithOverscroll(640, pageSizePt: 2000, visibleSizePt: 1000),
         "ordinary in-page pan remains unchanged");
     AssertClose(
-        -500,
-        ViewportRenderPolicy.ClampPanWithOverscroll(-900, pageSizePt: 500, visibleSizePt: 1000),
-        "small sheet can pan left edge to viewport center");
+        -1000,
+        ViewportRenderPolicy.ClampPanWithOverscroll(-1500, pageSizePt: 500, visibleSizePt: 1000),
+        "small sheet can pan left edge beyond the viewport frame");
     AssertClose(
-        0,
-        ViewportRenderPolicy.ClampPanWithOverscroll(400, pageSizePt: 500, visibleSizePt: 1000),
-        "small sheet can pan right edge to viewport center");
+        500,
+        ViewportRenderPolicy.ClampPanWithOverscroll(900, pageSizePt: 500, visibleSizePt: 1000),
+        "small sheet can pan right edge beyond the viewport frame");
+}
+
+static void ViewportPanAllowsSheetPastFrameAtWorkZooms()
+{
+    RunOnStaThread(() =>
+    {
+        var viewport = new PdfViewport();
+        SetPrivateField(viewport, "_pdfW", 1000f);
+        SetPrivateField(viewport, "_pdfH", 800f);
+        InvokePrivate(viewport, "UpdateCanvasMetrics", 1200, 900);
+
+        foreach (float zoom in new[] { 0.67f, 1.50f })
+        {
+            SetPrivateField(viewport, "_zoom", zoom);
+
+            SetPrivateField(viewport, "_panX", -9999f);
+            SetPrivateField(viewport, "_panY", 9999f);
+            InvokePrivate(viewport, "ClampPanToPage");
+            PdfViewport.ViewState state = viewport.CaptureViewState();
+
+            AssertClose(
+                -1200f / zoom,
+                state.PanX,
+                $"viewport at {zoom:P0} should allow the sheet left edge to pan past the right frame");
+            AssertClose(
+                800f,
+                state.PanY,
+                $"viewport at {zoom:P0} should allow the sheet bottom edge to pan past the top frame");
+
+            SetPrivateField(viewport, "_panX", 9999f);
+            SetPrivateField(viewport, "_panY", -9999f);
+            InvokePrivate(viewport, "ClampPanToPage");
+            state = viewport.CaptureViewState();
+
+            AssertClose(
+                1000f,
+                state.PanX,
+                $"viewport at {zoom:P0} should allow the sheet right edge to pan past the left frame");
+            AssertClose(
+                -900f / zoom,
+                state.PanY,
+                $"viewport at {zoom:P0} should allow the sheet top edge to pan past the bottom frame");
+        }
+    });
 }
 
 static void ViewportBackgroundDefaultsToOpaqueWhite()
@@ -4458,6 +4503,24 @@ static T GetPrivateField<T>(object instance, string name)
     if (value is not T typed)
         throw new InvalidOperationException($"{instance.GetType().Name}.{name} was not a {typeof(T).Name} for test inspection.");
     return typed;
+}
+
+static void SetPrivateField<T>(object instance, string name, T value)
+{
+    FieldInfo field = instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)
+        ?? throw new MissingFieldException(instance.GetType().FullName, name);
+    field.SetValue(instance, value);
+}
+
+static object? InvokePrivate(object instance, string name, params object[] args)
+{
+    MethodInfo method = instance.GetType()
+        .GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+        .FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, name, StringComparison.Ordinal) &&
+            candidate.GetParameters().Length == args.Length)
+        ?? throw new MissingMethodException(instance.GetType().FullName, name);
+    return method.Invoke(instance, args);
 }
 
 static object? GetPrivateFieldValue(object instance, string name)
