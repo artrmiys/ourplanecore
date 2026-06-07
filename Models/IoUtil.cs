@@ -23,10 +23,9 @@ public static class IoUtil
                 {
                     File.Replace(tempPath, path, null);
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
                 {
-                    File.Copy(tempPath, path, overwrite: true);
-                    File.Delete(tempPath);
+                    File.Move(tempPath, path, overwrite: true);
                 }
             }
             else

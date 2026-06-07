@@ -204,6 +204,51 @@ internal static class StorageTests
         });
     }
 
+    public static void PageSourceJsonRepairsFromSheetMetadata()
+    {
+        WithTempJob("Repair Source", job =>
+        {
+            PageInfo page = CreatePageItem(job, "A300");
+            OurPlaneCoreJobStore.WriteSourcePdfMetadata(
+                page.FolderPath,
+                new PdfSheetMetadata
+                {
+                    Source = "test",
+                    PdfPath = page.PdfPath,
+                    PageIndex = page.PdfPage,
+                    PageNumber = page.PdfPage + 1,
+                    SheetLabel = "A300",
+                    RenameCandidate = "A300",
+                    SelectedScaleMetersPerPt = 0.3048,
+                    Layers =
+                    [
+                        new PdfLayerInfo { Number = 7, Name = "Walls", IsOn = true },
+                    ],
+                });
+
+            string sourcePath = Path.Combine(page.FolderPath, "source.json");
+            File.WriteAllText(sourcePath, "{ bad json");
+            _ = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+
+            PageInfo repaired = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("page source should repair from sheet metadata");
+            IReadOnlyList<string> quarantined = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+            SourceInfo repairedSource = OurPlaneCoreJobStore.ReadSource(page.FolderPath)
+                ?? throw new InvalidOperationException("repaired source missing");
+            PageLayerManifest manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath)
+                ?? throw new InvalidOperationException("repaired layer manifest missing");
+
+            AssertEqual("A300", repaired.Name, "repaired page name");
+            AssertTrue(File.Exists(repaired.PdfPath), "repaired page pdf should resolve");
+            AssertClose(0.3048, repaired.ScaleMetersPerPt, "repaired page scale");
+            AssertTrue(repaired.PdfLayersCached, "repaired page should keep metadata layers cached");
+            AssertFalse(Path.IsPathRooted(repairedSource.Pdf), "repaired source pdf should be relative");
+            AssertEqual("1", Directory.GetFiles(page.FolderPath, "source.json.corrupt-*").Length.ToString(), "corrupt source backup count");
+            AssertTrue(quarantined.Any(path => path.Contains("source.json", StringComparison.OrdinalIgnoreCase)), "quarantine report");
+            AssertEqual("1", manifest.LayerCount.ToString(), "repaired layer manifest count");
+        });
+    }
+
     public static void PageAnnotationsSaveLoadNormalizeDefaults()
     {
         WithTempJob("Page Annotations", job =>

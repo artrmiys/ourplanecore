@@ -153,7 +153,8 @@ internal static class PageStore
     public static PageInfo? TryReadPage(string pageFolder)
     {
         SourceInfo? src = ReadSource(pageFolder);
-        if (src == null) return null;
+        if (src == null && !PageSourceRepair.TryRepairFromMetadata(pageFolder, out src))
+            return null;
 
         string pdfPath = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
         return new PageInfo
