@@ -15,6 +15,7 @@ public sealed class PageSetupWindow : Window
     private readonly Button _nextButton;
     private string _pageFolder = "";
     private int _pageIndex = -1;
+    private int _selectRequestVersion;
 
     public event EventHandler? ApplyRequested;
     public event EventHandler<PageSetupNavigateEventArgs>? NavigateRequested;
@@ -96,7 +97,7 @@ public sealed class PageSetupWindow : Window
         _nextButton.Click += (_, _) => NavigateRequested?.Invoke(this, new PageSetupNavigateEventArgs(1));
         okButton.Click += (_, _) => ApplyRequested?.Invoke(this, EventArgs.Empty);
         PreviewKeyDown += PageSetupWindow_PreviewKeyDown;
-        Loaded += (_, _) => SelectPageNameText();
+        Loaded += (_, _) => SelectPageNameText(force: false);
     }
 
     public void SetPage(string pageName, string scaleText, int pageIndex, int pageCount, string pageFolder = "")
@@ -119,8 +120,8 @@ public sealed class PageSetupWindow : Window
         _nextButton.IsEnabled = pageIndex >= 0 && pageIndex < pageCount - 1;
         _statusText.Text = "";
 
-        if (!preservePageNameEdit && !preserveScaleEdit)
-            SelectPageNameText();
+        if (IsVisible && !preservePageNameEdit && !preserveScaleEdit)
+            SelectPageNameText(force: true);
     }
 
     public void ShowStatus(string message) =>
@@ -190,7 +191,7 @@ public sealed class PageSetupWindow : Window
         {
             if (_pageNameBox.IsKeyboardFocusWithin)
             {
-                SelectScaleText();
+                SelectScaleText(force: true);
             }
             else if (_scaleBox.IsKeyboardFocusWithin)
             {
@@ -198,7 +199,7 @@ public sealed class PageSetupWindow : Window
             }
             else
             {
-                SelectPageNameText();
+                SelectPageNameText(force: true);
             }
 
             e.Handled = true;
@@ -212,11 +213,15 @@ public sealed class PageSetupWindow : Window
         e.Handled = true;
     }
 
-    private void SelectPageNameText()
+    private void SelectPageNameText(bool force)
     {
+        int requestVersion = ++_selectRequestVersion;
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (!IsVisible)
+            if (!IsVisible || requestVersion != _selectRequestVersion)
+                return;
+
+            if (!force && UserAlreadyPlacedTextFocus(_pageNameBox))
                 return;
 
             _pageNameBox.Focus();
@@ -225,11 +230,15 @@ public sealed class PageSetupWindow : Window
         }), System.Windows.Threading.DispatcherPriority.Input);
     }
 
-    private void SelectScaleText()
+    private void SelectScaleText(bool force)
     {
+        int requestVersion = ++_selectRequestVersion;
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (!IsVisible)
+            if (!IsVisible || requestVersion != _selectRequestVersion)
+                return;
+
+            if (!force && UserAlreadyPlacedTextFocus(_scaleBox))
                 return;
 
             _scaleBox.Focus();
@@ -237,6 +246,26 @@ public sealed class PageSetupWindow : Window
             _scaleBox.SelectAll();
         }), System.Windows.Threading.DispatcherPriority.Input);
     }
+
+    private bool UserAlreadyPlacedTextFocus(TextBox target)
+    {
+        TextBox? focusedTextBox =
+            _pageNameBox.IsKeyboardFocusWithin ? _pageNameBox :
+            _scaleBox.IsKeyboardFocusWithin ? _scaleBox :
+            null;
+        if (focusedTextBox == null)
+            return false;
+
+        if (!ReferenceEquals(focusedTextBox, target))
+            return true;
+
+        return !IsWholeTextSelected(focusedTextBox);
+    }
+
+    private static bool IsWholeTextSelected(TextBox textBox) =>
+        textBox.Text.Length > 0 &&
+        textBox.SelectionStart == 0 &&
+        textBox.SelectionLength >= textBox.Text.Length;
 }
 
 public sealed class PageSetupNavigateEventArgs(int direction) : EventArgs
