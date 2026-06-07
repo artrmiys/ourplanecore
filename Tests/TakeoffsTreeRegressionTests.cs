@@ -1999,26 +1999,33 @@ internal static class TakeoffsTreeRegressionTests
 
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
         int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
+        int rasterWarmBranch = pageApi.IndexOf("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal);
         int docnetFallback = pageApi.IndexOf("QueueDocnetRender(", StringComparison.Ordinal);
-        int status = pageApi.IndexOf("PostStatus(previewCacheHit", StringComparison.Ordinal);
+        int status = pageApi.IndexOf("PostStatus(rasterBitmapWarmupQueuedForOpen", StringComparison.Ordinal);
         AssertTrue(
             cacheApply >= 0 &&
             cacheBranch > cacheApply &&
-            docnetFallback > cacheBranch &&
+            rasterWarmBranch > cacheBranch &&
+            docnetFallback > rasterWarmBranch &&
             status > docnetFallback,
-            "page open should avoid full-clean synchronous decode and queue a fast lightweight preview fallback after a preview cache miss");
+            "page open should avoid full-clean synchronous decode, let raster warmups win, then queue a fast lightweight preview fallback only when no raster bitmap is warming");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
             pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             pageApi.Contains("PageSwitchLivePreviewScale(restoreView, fitAfter: !restoreView.HasValue)", StringComparison.Ordinal) &&
+            pageApi.Contains("bool rasterBitmapWarmupQueuedForOpen = false;", StringComparison.Ordinal) &&
+            pageApi.Contains("rasterBitmapWarmupQueuedForOpen = QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
+            pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
+            pageApi.Contains("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
+            pageApi.Contains("Raster preparing:", StringComparison.Ordinal) &&
             pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
             pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
             pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
             mainLayers.Contains("PDF layers not loaded. Click Load to scan this sheet.", StringComparison.Ordinal),
-            "normal page opens should keep PDF layers lazy and clear the layer panel without starting layer discovery/render work");
+            "normal page opens should keep PDF layers lazy, and raster-warm page opens should not start a sharp PDF render while the readable raster is being decoded");
         AssertTrue(
             layers.Contains("if (_cachedLayers != null)", StringComparison.Ordinal) &&
             layers.Contains("PDF Layers: loading cached page layers...", StringComparison.Ordinal) &&
