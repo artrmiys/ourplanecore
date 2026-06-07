@@ -495,12 +495,15 @@ public sealed partial class PdfViewport
         return string.Join('|', parts);
     }
 
-    public static void PrefetchPagePreview(string pdfPath, int pageIndex)
+    public static void PrefetchPagePreview(string pdfPath, int pageIndex) =>
+        PrefetchPagePreview(pdfPath, pageIndex, ViewportRenderPolicy.FastPageSwitchPreviewRenderScale);
+
+    public static void PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)
     {
         if (string.IsNullOrWhiteSpace(pdfPath) || pageIndex < 0)
             return;
 
-        float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
+        renderScale = Math.Clamp(renderScale, 0.10f, 4.0f);
         string cacheKey;
         try
         {

@@ -12,7 +12,7 @@ namespace OurPlaneCore;
 public static class PdfPreviewRenderCache
 {
     public const string CacheRootEnvironmentVariable = "OURPLANECORE_PDF_PREVIEW_CACHE_ROOT";
-    private const int MaxEntries = 512;
+    private const int MaxEntries = 1024;
     private const long MaxBytes = 1_500_000_000;
     private const float MaxPersistedRenderScale = 2.25f;
     private const long MaxPersistedRenderPixels = 30_000_000;
@@ -20,10 +20,13 @@ public static class PdfPreviewRenderCache
     private const int MaxMemoryEntries = 96;
     private const long MaxMemoryBytes = 512_000_000;
     private const long MaxMemoryEntryBytes = 96_000_000;
+    private const int PdfFingerprintChunkBytes = 64 * 1024;
     private static readonly object MemoryCacheLock = new();
     private static readonly Dictionary<string, MemoryCacheEntry> MemoryCache = [];
     private static long MemoryCacheBytes;
     private static long MemoryCacheClock;
+    private static readonly object RelocatedLegacyIndexLock = new();
+    private static Dictionary<string, CachePaths>? RelocatedLegacyIndex;
     private static readonly object PruneLock = new();
     private static DateTime LastPruneUtc = DateTime.MinValue;
     private static readonly TimeSpan MinPruneInterval = TimeSpan.FromSeconds(20);
@@ -55,6 +58,31 @@ public static class PdfPreviewRenderCache
         if (TryReadMemoryCleanRender(identity.Key, out result))
             return true;
 
+        if (TryReadCleanRenderFromPaths(paths, identity, out result))
+            return true;
+
+        if (TryBuildLegacyCachePaths(identity, out CachePaths legacyPaths) &&
+            TryReadCleanRenderFromPaths(legacyPaths, identity, out result))
+        {
+            TryWriteCleanRender(pdfPath, pageIndex, renderScale, result);
+            return true;
+        }
+
+        if (TryReadRelocatedLegacyCleanRender(identity, out result))
+        {
+            TryWriteCleanRender(pdfPath, pageIndex, renderScale, result);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadCleanRenderFromPaths(
+        CachePaths paths,
+        PreviewCacheIdentity identity,
+        out PdfLayerRenderResult result)
+    {
+        result = new PdfLayerRenderResult();
         try
         {
             if (!File.Exists(paths.MetadataPath) || !File.Exists(paths.ImagePath))
@@ -93,7 +121,7 @@ public static class PdfPreviewRenderCache
         }
         catch (Exception ex)
         {
-            AppLog.Warn(ex, $"PyMuPDF render cache read failed for {pdfPath} page {pageIndex + 1}");
+            AppLog.Warn(ex, $"PyMuPDF render cache read failed for {identity.PdfPath} page {identity.PageIndex + 1}");
             TryDelete(paths);
             result = new PdfLayerRenderResult();
             return false;
@@ -129,6 +157,7 @@ public static class PdfPreviewRenderCache
             var metadata = new PreviewCacheMetadata
             {
                 PdfPath = identity.PdfPath,
+                PdfFingerprint = identity.PdfFingerprint,
                 PdfLastWriteUtcTicks = identity.PdfLastWriteUtcTicks,
                 PdfLength = identity.PdfLength,
                 PageIndex = identity.PageIndex,
@@ -193,7 +222,7 @@ public static class PdfPreviewRenderCache
         out PreviewCacheIdentity identity)
     {
         paths = new CachePaths("", "", "");
-        identity = new PreviewCacheIdentity("", 0, 0, 0, 0);
+        identity = new PreviewCacheIdentity("", "", 0, 0, 0, 0);
         if (string.IsNullOrWhiteSpace(pdfPath) || pageIndex < 0)
             return false;
 
@@ -202,8 +231,10 @@ public static class PdfPreviewRenderCache
             return false;
 
         string fullPath = info.FullName;
+        string fingerprint = BuildPdfFingerprint(info);
         identity = new PreviewCacheIdentity(
             fullPath,
+            fingerprint,
             info.LastWriteTimeUtc.Ticks,
             info.Length,
             pageIndex,
@@ -216,6 +247,92 @@ public static class PdfPreviewRenderCache
             Path.Combine(directory, hash + ".png"),
             Path.Combine(directory, hash + ".json"));
         return true;
+    }
+
+    private static bool TryBuildLegacyCachePaths(PreviewCacheIdentity identity, out CachePaths paths)
+    {
+        paths = new CachePaths("", "", "");
+        if (string.IsNullOrWhiteSpace(identity.PdfPath))
+            return false;
+
+        string hash = Hash(identity.LegacyKey);
+        string root = CacheRoot();
+        string directory = Path.Combine(root, hash[..2]);
+        paths = new CachePaths(
+            directory,
+            Path.Combine(directory, hash + ".png"),
+            Path.Combine(directory, hash + ".json"));
+        return true;
+    }
+
+    private static bool TryReadRelocatedLegacyCleanRender(
+        PreviewCacheIdentity identity,
+        out PdfLayerRenderResult result)
+    {
+        result = new PdfLayerRenderResult();
+        Dictionary<string, CachePaths> index = RelocatedLegacyCacheIndex();
+        string key = RelocatedLegacyKey(identity);
+        if (!index.TryGetValue(key, out CachePaths paths))
+            return false;
+
+        return TryReadCleanRenderFromPaths(paths, identity, out result);
+    }
+
+    private static Dictionary<string, CachePaths> RelocatedLegacyCacheIndex()
+    {
+        lock (RelocatedLegacyIndexLock)
+        {
+            if (RelocatedLegacyIndex != null)
+                return RelocatedLegacyIndex;
+
+            RelocatedLegacyIndex = BuildRelocatedLegacyCacheIndex();
+            return RelocatedLegacyIndex;
+        }
+    }
+
+    private static Dictionary<string, CachePaths> BuildRelocatedLegacyCacheIndex()
+    {
+        var index = new Dictionary<string, CachePaths>(StringComparer.Ordinal);
+        try
+        {
+            string root = CacheRoot();
+            if (!Directory.Exists(root))
+                return index;
+
+            foreach (string metadataPath in Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories))
+            {
+                PreviewCacheMetadata? metadata = TryReadMetadata(metadataPath);
+                if (metadata == null || !metadata.IsUsable)
+                    continue;
+
+                string imagePath = Path.ChangeExtension(metadataPath, ".png");
+                if (!File.Exists(imagePath))
+                    continue;
+
+                string key = RelocatedLegacyKey(metadata);
+                if (string.IsNullOrWhiteSpace(key) || index.ContainsKey(key))
+                    continue;
+
+                index[key] = new CachePaths(Path.GetDirectoryName(metadataPath) ?? root, imagePath, metadataPath);
+            }
+        }
+        catch { }
+
+        return index;
+    }
+
+    private static PreviewCacheMetadata? TryReadMetadata(string metadataPath)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<PreviewCacheMetadata>(
+                File.ReadAllText(metadataPath),
+                JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string CacheRoot()
@@ -233,7 +350,7 @@ public static class PdfPreviewRenderCache
     private static bool IsPersistedRenderScale(double renderScale)
     {
         float scale = NormalizeScale(renderScale);
-        return scale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale - 0.001f &&
+        return scale >= ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale - 0.001f &&
                scale <= MaxPersistedRenderScale + 0.001f;
     }
 
@@ -254,6 +371,44 @@ public static class PdfPreviewRenderCache
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private static string BuildPdfFingerprint(FileInfo info)
+    {
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            AppendHashText(hash, info.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AppendHashText(hash, info.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AppendHashText(hash, info.Name.ToLowerInvariant());
+
+            byte[] buffer = new byte[PdfFingerprintChunkBytes];
+            using FileStream stream = info.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            int read = stream.Read(buffer, 0, buffer.Length);
+            if (read > 0)
+                hash.AppendData(buffer.AsSpan(0, read));
+
+            if (stream.Length > PdfFingerprintChunkBytes)
+            {
+                stream.Seek(Math.Max(0, stream.Length - PdfFingerprintChunkBytes), SeekOrigin.Begin);
+                read = stream.Read(buffer, 0, buffer.Length);
+                if (read > 0)
+                    hash.AppendData(buffer.AsSpan(0, read));
+            }
+
+            return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        }
+        catch
+        {
+            return string.Join(
+                "|",
+                info.Name.ToLowerInvariant(),
+                info.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                info.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+    }
+
+    private static void AppendHashText(IncrementalHash hash, string value) =>
+        hash.AppendData(Encoding.UTF8.GetBytes(value));
+
     private static void TryDelete(CachePaths paths)
     {
         try
@@ -264,6 +419,29 @@ public static class PdfPreviewRenderCache
                 File.Delete(paths.MetadataPath);
         }
         catch { }
+    }
+
+    private static string RelocatedLegacyKey(PreviewCacheIdentity identity) =>
+        string.Join(
+            "|",
+            Path.GetFileName(identity.PdfPath).ToLowerInvariant(),
+            identity.PdfLastWriteUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            identity.PdfLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            identity.PageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            identity.RenderScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+
+    private static string RelocatedLegacyKey(PreviewCacheMetadata metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata.PdfPath))
+            return "";
+
+        return string.Join(
+            "|",
+            Path.GetFileName(metadata.PdfPath).ToLowerInvariant(),
+            metadata.PdfLastWriteUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            metadata.PdfLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            metadata.PageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            metadata.RenderScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static bool TryReadMemoryCleanRender(string key, out PdfLayerRenderResult result)
@@ -394,12 +572,21 @@ public static class PdfPreviewRenderCache
 
     private readonly record struct PreviewCacheIdentity(
         string PdfPath,
+        string PdfFingerprint,
         long PdfLastWriteUtcTicks,
         long PdfLength,
         int PageIndex,
         float RenderScale)
     {
         public string Key =>
+            string.Concat(
+                PdfFingerprint,
+                "|",
+                PageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "|",
+                RenderScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+
+        public string LegacyKey =>
             string.Concat(
                 PdfPath.ToLowerInvariant(),
                 "|",
@@ -415,6 +602,7 @@ public static class PdfPreviewRenderCache
     private sealed class PreviewCacheMetadata
     {
         public string PdfPath { get; set; } = "";
+        public string PdfFingerprint { get; set; } = "";
         public long PdfLastWriteUtcTicks { get; set; }
         public long PdfLength { get; set; }
         public int PageIndex { get; set; }
@@ -426,13 +614,30 @@ public static class PdfPreviewRenderCache
         public DateTime CreatedUtc { get; set; }
 
         public bool Matches(PreviewCacheIdentity identity) =>
-            string.Equals(PdfPath, identity.PdfPath, StringComparison.OrdinalIgnoreCase) &&
+            MatchesPdf(identity) &&
             PdfLastWriteUtcTicks == identity.PdfLastWriteUtcTicks &&
             PdfLength == identity.PdfLength &&
             PageIndex == identity.PageIndex &&
             Math.Abs(RenderScale - identity.RenderScale) < 0.001 &&
+            IsUsable;
+
+        public bool IsUsable =>
             WidthPt > 0 &&
             HeightPt > 0;
+
+        private bool MatchesPdf(PreviewCacheIdentity identity)
+        {
+            if (!string.IsNullOrWhiteSpace(PdfFingerprint))
+                return string.Equals(PdfFingerprint, identity.PdfFingerprint, StringComparison.Ordinal);
+
+            if (string.Equals(PdfPath, identity.PdfPath, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return string.Equals(
+                Path.GetFileName(PdfPath),
+                Path.GetFileName(identity.PdfPath),
+                StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private sealed class MemoryCacheEntry

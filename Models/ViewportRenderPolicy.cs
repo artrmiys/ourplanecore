@@ -44,13 +44,14 @@ public static class ViewportRenderPolicy
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
-    public const int JobOpenPreviewWarmupCount = 12;
+    public const int JobOpenPreviewWarmupCount = 512;
     public const int JobOpenRasterSheetRefreshWarmupCount = 64;
     public const int RasterSheetRefreshPrefetchDelayMs = 1800;
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
     public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
     public const float FastPageSwitchPreviewRenderScale = 0.35f;
+    public const float ColdPageSwitchPreviewRenderScale = 0.22f;
     public const float InitialPagePreviewRenderScale = 0.75f;
     public const float LowZoomBitmapDowngradeRatio = 1.38f;
     public const float RasterSheetDisplayMinZoom = 2.75f;

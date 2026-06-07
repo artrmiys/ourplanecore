@@ -28,6 +28,7 @@ public sealed partial class PdfViewport
             ClampPanToPage();
 
         Stopwatch frameWatch = Stopwatch.StartNew();
+        bool paintedCurrentPage = false;
         var canvas = e.Surface.Canvas;
         canvas.Clear(GetCachedColor(ViewBackgroundColor, SKColors.White));
 
@@ -142,11 +143,14 @@ public sealed partial class PdfViewport
             DrawSheetHeaderOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
             DrawSheetLegendOverlay(canvas, (float)e.Info.Width, (float)e.Info.Height);
             screenOverlayMs += frameWatch.ElapsedMilliseconds - sectionStart;
+            paintedCurrentPage = true;
         }
         finally
         {
             ClearPaintJoistLayoutCache();
             frameWatch.Stop();
+            if (paintedCurrentPage)
+                MarkCurrentPagePainted();
             ReportSlowViewportFrame(
                 frameWatch.ElapsedMilliseconds,
                 activeMeasurements.Count,

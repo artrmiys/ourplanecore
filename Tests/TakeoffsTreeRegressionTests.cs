@@ -110,8 +110,10 @@ internal static class TakeoffsTreeRegressionTests
             warmupMethod.Contains("QueueJobPagePreviewWarmup(viewportPage)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("ViewportRenderPolicy.JobOpenPreviewWarmupCount", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenPreviewWarmupCount = 12", StringComparison.Ordinal),
-            "job-open preview warmup should run once per job at idle priority and use a small active-page-first order");
+            warmupRunMethod.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("includeRasterSheetWarmup: false", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupCount = 512", StringComparison.Ordinal),
+            "job-open preview warmup should run once per job at idle priority and warm the lightweight cold-preview cache active-page-first across the job");
         AssertTrue(
             rasterWarmupMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
             rasterWarmupMethod.Contains("_pageRasterRefreshWarmupJobRoot", StringComparison.Ordinal) &&
@@ -129,7 +131,10 @@ internal static class TakeoffsTreeRegressionTests
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex + offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius", StringComparison.Ordinal) &&
-            queuePreviewPrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("bool includeRasterSheetWarmup = true", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("PrefetchPagePreview(page.PdfPath, page.PdfPage, renderScale)", StringComparison.Ordinal) &&
+            queuePreviewPrefetchAtMethod.Contains("if (!includeRasterSheetWarmup)", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetBitmap", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetRefresh", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
@@ -1765,9 +1770,12 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             cache.Contains("CacheRootEnvironmentVariable", StringComparison.Ordinal) &&
             cache.Contains("LastWriteTimeUtc.Ticks", StringComparison.Ordinal) &&
-            cache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale - 0.001f", StringComparison.Ordinal) &&
+            cache.Contains("PreviewCacheIdentity", StringComparison.Ordinal) &&
+            cache.Contains("PdfFingerprint", StringComparison.Ordinal) &&
+            cache.Contains("RelocatedLegacyCacheIndex", StringComparison.Ordinal) &&
+            cache.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale - 0.001f", StringComparison.Ordinal) &&
             cache.Contains("File.Move(tempImage, paths.ImagePath, overwrite: true)", StringComparison.Ordinal),
-            "preview cache should be keyed by source identity, support fast page-switch previews, and write atomically through temp files");
+            "preview cache should be keyed by portable source identity, support cold and fast page-switch previews, and write atomically through temp files");
     }
 
     public static void PdfPageOpenUsesDocnetPreviewOnCacheMiss()
@@ -1794,6 +1802,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
             pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            pageApi.Contains("PageSwitchLivePreviewScale(restoreView, fitAfter: !restoreView.HasValue)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
             pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
@@ -1847,8 +1856,10 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
-            policy.Contains("FastPageSwitchPreviewRenderScale = 0.35f", StringComparison.Ordinal),
-            "cache-miss page switches should use a non-muddy lightweight preview instead of the old very low-resolution 0.15x image");
+            layers.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            policy.Contains("FastPageSwitchPreviewRenderScale = 0.35f", StringComparison.Ordinal) &&
+            policy.Contains("ColdPageSwitchPreviewRenderScale = 0.22f", StringComparison.Ordinal),
+            "cache-miss page switches should use a non-muddy lightweight preview and use an even cheaper cold fit preview when the view is fitted");
         AssertTrue(
             layers.Contains("private bool TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal) &&
             layers.Contains("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
@@ -1869,6 +1880,7 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs)", StringComparison.Ordinal) &&
             renderCache.Contains("PreviewPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("LivePreviewRenderSemaphore", StringComparison.Ordinal) &&
+            renderCache.Contains("PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)", StringComparison.Ordinal) &&
             renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             renderCache.Contains("DecodePdfLayerRenderBitmap(preview)", StringComparison.Ordinal) &&
             renderCache.Contains("TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, preview)", StringComparison.Ordinal) &&
@@ -1886,9 +1898,10 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("TryRenderPreviewWithDocnetAsync", StringComparison.Ordinal) &&
             layers.Contains("return (docnet, false)", StringComparison.Ordinal) &&
             layers.Contains("TryRenderPreviewWithPyMuPdfAsync", StringComparison.Ordinal) &&
-            layers.Contains("return (pymupdf, true)", StringComparison.Ordinal) &&
+            layers.Contains("return (pymupdf, pymupdf != null)", StringComparison.Ordinal) &&
             layers.Contains("IsPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewCoalesceMs", StringComparison.Ordinal) &&
             layers.Contains("LivePreviewRenderSemaphore.WaitAsync", StringComparison.Ordinal) &&
@@ -1896,12 +1909,12 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("StartFastPreviewRenderAsync", StringComparison.Ordinal) &&
             layers.Contains("preview-pymupdf", StringComparison.Ordinal) &&
             layers.Contains("RenderPageBitmapWithDocnet", StringComparison.Ordinal),
-            "cold page-switch previews should prefer the reusable PyMuPDF worker, retain Docnet as a fallback, and coalesce stale page switches");
+            "cold page-switch previews should prefer in-process Docnet, retain PyMuPDF as a fallback, and coalesce stale page switches");
         string fastPreviewMethod = SliceMethod(layers, "private static async Task<(DocnetRenderResult? Render, bool UsedPyMuPdf)> TryRenderFastPreviewForPageSwitchAsync(");
         AssertTrue(
-            fastPreviewMethod.IndexOf("TryRenderPreviewWithPyMuPdfAsync(request)", StringComparison.Ordinal) <
-            fastPreviewMethod.IndexOf("TryRenderPreviewWithDocnetAsync(request)", StringComparison.Ordinal),
-            "live page-switch preview should try PyMuPDF before the slower Docnet fallback on cold cache misses");
+            fastPreviewMethod.IndexOf("TryRenderPreviewWithDocnetAsync(request)", StringComparison.Ordinal) <
+            fastPreviewMethod.IndexOf("TryRenderPreviewWithPyMuPdfAsync(request)", StringComparison.Ordinal),
+            "live page-switch preview should try Docnet before the slower external PyMuPDF fallback on cold cache misses");
     }
 
     public static void PdfFullScaleRenderCacheIsWiredBeforeWorker()

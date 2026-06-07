@@ -66,6 +66,7 @@ public partial class MainWindow
         int timeoutMs = ReadEnvironmentInt(ViewportPageStressSmokeTimeoutEnv, 8000, 1000, 60000);
         int returnCount = ReadEnvironmentInt(ViewportPageStressSmokeReturnCountEnv, 6, 1, 50);
         int tabCount = ReadEnvironmentInt(ViewportPageStressSmokeTabCountEnv, 5, 1, 20);
+        await WaitForInitialViewportPagePaintAsync(report, timeoutMs);
         List<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         if (pages.Count == 0)
             throw new InvalidOperationException("No pages were found for viewport page stress smoke.");
@@ -115,6 +116,19 @@ public partial class MainWindow
             RunViewportTreeOpsSmoke(report);
     }
 
+    private async Task WaitForInitialViewportPagePaintAsync(ViewportPageStressSmokeReport report, int timeoutMs)
+    {
+        if (_currentPage == null)
+            return;
+
+        Stopwatch watch = Stopwatch.StartNew();
+        await WaitForViewportPageRenderAsync(_currentPage, timeoutMs);
+        await WaitForViewportPagePaintAsync(_currentPage, timeoutMs);
+        watch.Stop();
+        report.InitialPageName = _currentPage.Name;
+        report.InitialPageSettleMs = watch.ElapsedMilliseconds;
+    }
+
     private async Task<PageSmokeResult> OpenAndProbePageAsync(PageInfo page, int timeoutMs, string stage)
     {
         var result = CreatePageSmokeResult(page, stage);
@@ -124,9 +138,11 @@ public partial class MainWindow
             OpenPageInActiveTab(page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            await WaitForViewportPagePaintAsync(page, timeoutMs);
+            result.PaintReadyMs = watch.ElapsedMilliseconds;
             await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
-            await ExerciseViewportZoomAsync();
+            result.ZoomSteps = await ExerciseViewportZoomAsync();
             phaseWatch.Stop();
             result.ZoomExerciseMs = phaseWatch.ElapsedMilliseconds;
             phaseWatch.Restart();
@@ -163,9 +179,11 @@ public partial class MainWindow
             OpenPageInNewTab(page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            await WaitForViewportPagePaintAsync(page, timeoutMs);
+            result.PaintReadyMs = watch.ElapsedMilliseconds;
             await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
-            await ExerciseViewportZoomAsync();
+            result.ZoomSteps = await ExerciseViewportZoomAsync();
             phaseWatch.Stop();
             result.ZoomExerciseMs = phaseWatch.ElapsedMilliseconds;
             phaseWatch.Restart();
@@ -198,6 +216,8 @@ public partial class MainWindow
             ActivatePageTab(tab, page);
             await WaitForViewportPageRenderAsync(page, timeoutMs);
             result.RenderReadyMs = watch.ElapsedMilliseconds;
+            await WaitForViewportPagePaintAsync(page, timeoutMs);
+            result.PaintReadyMs = watch.ElapsedMilliseconds;
             await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
             result.VisualProbe = ProbeViewportSurfaceOpacity();
@@ -234,6 +254,21 @@ public partial class MainWindow
         throw new TimeoutException($"Viewport did not render '{page.Name}' within {timeoutMs} ms.");
     }
 
+    private async Task WaitForViewportPagePaintAsync(PageInfo page, int timeoutMs)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < timeoutMs)
+        {
+            if (_viewport.IsPagePaintReady(page.FolderPath))
+                return;
+
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(16);
+        }
+
+        throw new TimeoutException($"Viewport did not paint '{page.Name}' within {timeoutMs} ms.");
+    }
+
     private async Task WaitForViewportSheetOverlayAsync(PageInfo page, int timeoutMs, PageSmokeResult result)
     {
         result.HasOverlayConfigured =
@@ -258,15 +293,16 @@ public partial class MainWindow
         throw new TimeoutException($"Viewport did not apply sheet overlay for '{page.Name}' within {timeoutMs} ms.");
     }
 
-    private async Task ExerciseViewportZoomAsync()
+    private async Task<List<ZoomSmokeStep>> ExerciseViewportZoomAsync()
     {
+        var steps = new List<ZoomSmokeStep>();
         var start = _viewport.CaptureViewState();
         float targetZoom = ReadEnvironmentFloat(ViewportPageStressSmokeTargetZoomEnv, 0, 0, 20);
         if (targetZoom > 0)
         {
             int panSteps = ReadEnvironmentInt(ViewportPageStressSmokePanStepsEnv, 4, 0, 20);
             _viewport.RestoreViewState(new PdfViewport.ViewState(targetZoom, start.PanX, start.PanY));
-            await YieldViewportSmokeFrameAsync();
+            steps.Add(await YieldViewportSmokeFrameAsync("target"));
             for (int i = 0; i < panSteps; i++)
             {
                 var current = _viewport.CaptureViewState();
@@ -274,31 +310,43 @@ public partial class MainWindow
                     targetZoom,
                     current.PanX + 36,
                     current.PanY + 24));
-                await YieldViewportSmokeFrameAsync();
+                steps.Add(await YieldViewportSmokeFrameAsync($"pan-{i + 1}"));
             }
 
             _viewport.RestoreViewState(start);
-            await YieldViewportSmokeFrameAsync();
-            return;
+            steps.Add(await YieldViewportSmokeFrameAsync("restore"));
+            return steps;
         }
 
         _viewport.ZoomIn();
-        await YieldViewportSmokeFrameAsync();
+        steps.Add(await YieldViewportSmokeFrameAsync("zoom-in-1"));
         _viewport.ZoomIn();
-        await YieldViewportSmokeFrameAsync();
+        steps.Add(await YieldViewportSmokeFrameAsync("zoom-in-2"));
         var zoomed = _viewport.CaptureViewState();
         _viewport.RestoreViewState(new PdfViewport.ViewState(zoomed.Zoom, zoomed.PanX + 48, zoomed.PanY + 36));
-        await YieldViewportSmokeFrameAsync();
+        steps.Add(await YieldViewportSmokeFrameAsync("pan"));
         _viewport.ZoomOut();
-        await YieldViewportSmokeFrameAsync();
+        steps.Add(await YieldViewportSmokeFrameAsync("zoom-out"));
         _viewport.RestoreViewState(start);
-        await YieldViewportSmokeFrameAsync();
+        steps.Add(await YieldViewportSmokeFrameAsync("restore"));
+        return steps;
     }
 
-    private async Task YieldViewportSmokeFrameAsync()
+    private async Task<ZoomSmokeStep> YieldViewportSmokeFrameAsync(string name)
     {
+        Stopwatch watch = Stopwatch.StartNew();
+        Stopwatch renderWatch = Stopwatch.StartNew();
         await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+        renderWatch.Stop();
+        Stopwatch delayWatch = Stopwatch.StartNew();
         await Task.Delay(35);
+        delayWatch.Stop();
+        watch.Stop();
+        return new ZoomSmokeStep(
+            name,
+            renderWatch.ElapsedMilliseconds,
+            delayWatch.ElapsedMilliseconds,
+            watch.ElapsedMilliseconds);
     }
 
     private ViewportVisualProbe ProbeViewportSurfaceOpacity()
@@ -413,6 +461,8 @@ public partial class MainWindow
         public string JobPath { get; set; } = "";
         public int PageCount { get; set; }
         public int OpenSampleCount { get; set; }
+        public string InitialPageName { get; set; } = "";
+        public long InitialPageSettleMs { get; set; }
         public DateTime StartedUtc { get; set; }
         public DateTime FinishedUtc { get; set; }
         public List<PageSmokeResult> OpenResults { get; } = [];
@@ -430,9 +480,11 @@ public partial class MainWindow
         public string PageName { get; set; } = "";
         public string PageFolder { get; set; } = "";
         public long RenderReadyMs { get; set; }
+        public long PaintReadyMs { get; set; }
         public bool HasOverlayConfigured { get; set; }
         public long OverlayReadyMs { get; set; }
         public long ZoomExerciseMs { get; set; }
+        public List<ZoomSmokeStep> ZoomSteps { get; set; } = [];
         public long PostZoomRenderReadyMs { get; set; }
         public long VisualProbeMs { get; set; }
         public long ElapsedMs { get; set; }
@@ -440,6 +492,8 @@ public partial class MainWindow
         public string Error { get; set; } = "";
         public ViewportVisualProbe VisualProbe { get; set; } = ViewportVisualProbe.Empty;
     }
+
+    private sealed record ZoomSmokeStep(string Name, long RenderDispatchMs, long DelayMs, long ElapsedMs);
 
     private sealed record ViewportVisualProbe(
         bool Passed,

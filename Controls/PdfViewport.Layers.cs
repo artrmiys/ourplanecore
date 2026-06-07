@@ -255,8 +255,32 @@ public sealed partial class PdfViewport
             return true;
 
         float fastScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
-        return Math.Abs(renderScale - fastScale) > 0.001f &&
-               TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter);
+        if (Math.Abs(renderScale - fastScale) > 0.001f &&
+            TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter))
+        {
+            return true;
+        }
+
+        return ShouldUseColdPageSwitchPreview(restoreView, fitAfter) &&
+               TryApplyPersistedPreviewRenderScale(
+                   pdfPath,
+                   pdfIndex,
+                   ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
+                   restoreView,
+                   fitAfter);
+    }
+
+    private static float PageSwitchLivePreviewScale(ViewState? restoreView, bool fitAfter) =>
+        ShouldUseColdPageSwitchPreview(restoreView, fitAfter)
+            ? ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale
+            : ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
+
+    private static bool ShouldUseColdPageSwitchPreview(ViewState? restoreView, bool fitAfter)
+    {
+        if (fitAfter || !restoreView.HasValue)
+            return true;
+
+        return restoreView.Value.Zoom <= ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale * 0.95f;
     }
 
     private bool TryApplyPersistedPreviewRenderScale(
@@ -890,7 +914,8 @@ public sealed partial class PdfViewport
     }
 
     private static bool IsFastPreviewRenderScale(float renderScale) =>
-        Math.Abs(renderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) <= 0.001f;
+        Math.Abs(renderScale - ViewportRenderPolicy.FastPageSwitchPreviewRenderScale) <= 0.001f ||
+        Math.Abs(renderScale - ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale) <= 0.001f;
 
     private static bool IsPreviewRenderScale(float renderScale) =>
         IsFastPreviewRenderScale(renderScale) ||
@@ -898,12 +923,12 @@ public sealed partial class PdfViewport
 
     private static async Task<(DocnetRenderResult? Render, bool UsedPyMuPdf)> TryRenderFastPreviewForPageSwitchAsync(DocnetRenderRequest request)
     {
-        DocnetRenderResult? pymupdf = await TryRenderPreviewWithPyMuPdfAsync(request);
-        if (pymupdf != null)
-            return (pymupdf, true);
-
         DocnetRenderResult? docnet = await TryRenderPreviewWithDocnetAsync(request);
-        return (docnet, false);
+        if (docnet != null)
+            return (docnet, false);
+
+        DocnetRenderResult? pymupdf = await TryRenderPreviewWithPyMuPdfAsync(request);
+        return (pymupdf, pymupdf != null);
     }
 
     private static async Task<DocnetRenderResult?> TryRenderPreviewWithDocnetAsync(DocnetRenderRequest request)
@@ -974,6 +999,9 @@ public sealed partial class PdfViewport
         _pageBitmapPdfPath = pdfPath;
         _pageBitmapPdfIndex = pdfIndex;
         _pageBitmapPageFolder = pageFolder;
+        _pageBitmapGeneration++;
+        _pagePaintGeneration = 0;
+        _pagePaintedPageFolder = "";
     }
 
     private void ClearPageBitmapIdentity()
@@ -981,6 +1009,22 @@ public sealed partial class PdfViewport
         _pageBitmapPdfPath = "";
         _pageBitmapPdfIndex = -1;
         _pageBitmapPageFolder = "";
+        _pageBitmapGeneration++;
+        _pagePaintGeneration = 0;
+        _pagePaintedPageFolder = "";
+    }
+
+    private void MarkCurrentPagePainted()
+    {
+        if (_pageBitmap == null ||
+            _showingPreviousPageDuringSwitch ||
+            _pageBitmapGeneration <= 0)
+        {
+            return;
+        }
+
+        _pagePaintGeneration = _pageBitmapGeneration;
+        _pagePaintedPageFolder = _pageFolder;
     }
 
     private bool IsPageBitmapFor(string pdfPath, int pdfIndex, string pageFolder) =>

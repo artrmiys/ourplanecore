@@ -714,7 +714,11 @@ public partial class MainWindow
         foreach (int index in BuildPreviewWarmupOrder(pages.Count, activeIndex)
                      .Take(ViewportRenderPolicy.JobOpenPreviewWarmupCount))
         {
-            QueuePreviewPrefetchAt(pages, index);
+            QueuePreviewPrefetchAt(
+                pages,
+                index,
+                ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
+                includeRasterSheetWarmup: false);
         }
     }
 
@@ -808,13 +812,20 @@ public partial class MainWindow
         return _pagePreviewPrefetchPages;
     }
 
-    private static void QueuePreviewPrefetchAt(IReadOnlyList<PageInfo> pages, int index)
+    private static void QueuePreviewPrefetchAt(
+        IReadOnlyList<PageInfo> pages,
+        int index,
+        float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+        bool includeRasterSheetWarmup = true)
     {
         if (index < 0 || index >= pages.Count)
             return;
 
         PageInfo page = pages[index];
-        PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage);
+        PdfViewport.PrefetchPagePreview(page.PdfPath, page.PdfPage, renderScale);
+        if (!includeRasterSheetWarmup)
+            return;
+
         PdfViewport.PrefetchRasterSheetBitmap(page);
         PdfViewport.PrefetchRasterSheetRefresh(page);
     }

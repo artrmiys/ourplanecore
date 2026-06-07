@@ -82,6 +82,9 @@ public sealed partial class PdfViewport : SKElement
     private string _pageBitmapPdfPath = "";
     private int _pageBitmapPdfIndex = -1;
     private string _pageBitmapPageFolder = "";
+    private long _pageBitmapGeneration;
+    private long _pagePaintGeneration;
+    private string _pagePaintedPageFolder = "";
     private float     _pdfW, _pdfH;        // page size in PDF points (1pt = 1/72 in)
     private float     _bitmapScale;         // bitmap pixels per PDF point
     private float     _renderedScale;
@@ -528,14 +531,20 @@ public sealed partial class PdfViewport : SKElement
 
     private void RequestRepaint()
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(RequestRepaint));
+            return;
+        }
+
         if (_repaintQueued)
             return;
 
         _repaintQueued = true;
+        InvalidateVisual();
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() =>
         {
             _repaintQueued = false;
-            InvalidateVisual();
         }));
     }
 

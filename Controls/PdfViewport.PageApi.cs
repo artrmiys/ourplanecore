@@ -28,6 +28,12 @@ public sealed partial class PdfViewport
         !_showingPreviousPageDuringSwitch &&
         string.Equals(_pageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
 
+    public bool IsPagePaintReady(string pageFolder) =>
+        IsPageRenderReady(pageFolder) &&
+        _pageBitmapGeneration > 0 &&
+        _pagePaintGeneration == _pageBitmapGeneration &&
+        string.Equals(_pagePaintedPageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
+
     public bool IsPdfLayerTraceEnabled => _pdfLayerTraceEnabled;
     public bool ArePdfLayersLoaded => _pdfLayersLoadedForPage;
     public bool CanApplyPdfLayerTrace => _pdfLayerTraceEnabled && _pdfLayerTraceReadyToApply;
@@ -168,7 +174,7 @@ public sealed partial class PdfViewport
                 ClearPreviousPageBitmapDuringSwitch();
 
             QueueDocnetRender(
-                ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
+                PageSwitchLivePreviewScale(restoreView, fitAfter: !restoreView.HasValue),
                 restoreView,
                 fitAfter: !restoreView.HasValue,
                 queueLayerAfter: false,

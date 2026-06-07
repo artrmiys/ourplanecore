@@ -114,6 +114,9 @@ function Summarize-Results {
 
     Write-Host "Viewport page stress smoke report:" -ForegroundColor Cyan
     Write-Host "  pages opened: $($Report.PageCount)"
+    if (-not [string]::IsNullOrWhiteSpace($Report.InitialPageName)) {
+        Write-Host "  initial page settle: $($Report.InitialPageSettleMs) ms ($($Report.InitialPageName))"
+    }
     Write-Host "  return checks: $(@($Report.ReturnResults).Count)"
     Write-Host "  new tab checks: $(@($Report.TabResults).Count)"
     Write-Host "  tab return checks: $(@($Report.TabReturnResults).Count)"
