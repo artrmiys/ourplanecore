@@ -239,6 +239,11 @@ public sealed partial class PdfViewport
             if (hadCurrentPageBitmap)
                 _showingPreviousPageDuringSwitch = false;
         }
+        else if (responsiveRasterDpiBuildQueuedForOpen)
+        {
+            if (hadCurrentPageBitmap)
+                _showingPreviousPageDuringSwitch = false;
+        }
         else
         {
             if (hadCurrentPageBitmap && _bitmapScale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f)
@@ -256,7 +261,7 @@ public sealed partial class PdfViewport
                 fireLayersAfter: false);
         }
 
-        PostStatus(rasterBitmapWarmupQueuedForOpen && !previewCacheHit
+        PostStatus((rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiBuildQueuedForOpen) && !previewCacheHit
             ? $"Raster preparing: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
             : previewCacheHit
             ? $"Cached preview: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"

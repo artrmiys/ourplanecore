@@ -2033,13 +2033,15 @@ internal static class TakeoffsTreeRegressionTests
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
         int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
         int rasterWarmBranch = pageApi.IndexOf("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal);
+        int responsiveRasterBuildBranch = pageApi.IndexOf("else if (responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal);
         int docnetFallback = pageApi.IndexOf("QueueDocnetRender(", StringComparison.Ordinal);
-        int status = pageApi.IndexOf("PostStatus(rasterBitmapWarmupQueuedForOpen", StringComparison.Ordinal);
+        int status = pageApi.IndexOf("PostStatus((rasterBitmapWarmupQueuedForOpen", StringComparison.Ordinal);
         AssertTrue(
             cacheApply >= 0 &&
             cacheBranch > cacheApply &&
             rasterWarmBranch > cacheBranch &&
-            docnetFallback > rasterWarmBranch &&
+            responsiveRasterBuildBranch > rasterWarmBranch &&
+            docnetFallback > responsiveRasterBuildBranch &&
             status > docnetFallback,
             "page open should avoid full-clean synchronous decode, let raster warmups win, then queue a fast lightweight preview fallback only when no raster bitmap is warming");
         AssertTrue(
@@ -2054,6 +2056,8 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
+            pageApi.Contains("else if (responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
+            pageApi.Contains("(rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiBuildQueuedForOpen) && !previewCacheHit", StringComparison.Ordinal) &&
             pageApi.Contains("Raster preparing:", StringComparison.Ordinal) &&
             pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
             pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
