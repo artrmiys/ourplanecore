@@ -486,15 +486,26 @@ internal static class TakeoffsTreeRegressionTests
         string orderMethod = SliceMethod(source, "private bool TryRefreshTakeoffTreeParentOrderFast(");
         string structureMethod = SliceMethod(source, "private bool TryApplyTakeoffStructureMoveFast(");
         string fallbackMethod = SliceMethod(source, "private void ReloadTakeoffsForMoveSelection(");
-        AssertTrue(
-            source.Contains("private static readonly bool FastTakeoffsTreeRefreshEnabled = false;", StringComparison.Ordinal),
-            "broad takeoffs tree structure refresh must stay disabled by default");
+        AssertFalse(
+            source.Contains("FastTakeoffsTreeRefreshEnabled = true", StringComparison.Ordinal),
+            "broad takeoffs tree structure refresh must not be re-enabled");
         AssertFalse(
             orderMethod.Contains("FastTakeoffsTreeRefreshEnabled", StringComparison.Ordinal),
             "same-parent takeoff reorder should use the targeted existing-item refresh instead of reloading the whole tree");
+        AssertFalse(
+            structureMethod.Contains("if (!FastTakeoffsTreeRefreshEnabled)", StringComparison.Ordinal) ||
+            structureMethod.Contains("LoadTakeoffsForJob();", StringComparison.Ordinal),
+            "cross-parent takeoff moves should try a targeted existing-subtree refresh before full reload fallback");
         AssertTrue(
-            structureMethod.Contains("if (!FastTakeoffsTreeRefreshEnabled)", StringComparison.Ordinal),
-            "cross-parent structure moves must remain gated separately from same-parent reorder refresh");
+            structureMethod.Contains("UnregisterTakeoffTreeItemSubtree(item)", StringComparison.Ordinal) &&
+            structureMethod.Contains("oldParent.Items.Remove(item)", StringComparison.Ordinal) &&
+            structureMethod.Contains("RebaseTakeoffTreeItemPath(item, oldPath, newPath)", StringComparison.Ordinal) &&
+            structureMethod.Contains("RebaseExpandedTreePaths(_expandedTakeoffTreePaths, oldPath, newPath)", StringComparison.Ordinal) &&
+            structureMethod.Contains("RebaseTakeoffRangeAnchorPath(oldPath, newPath)", StringComparison.Ordinal) &&
+            structureMethod.Contains("targetControl.Items.Add(item)", StringComparison.Ordinal) &&
+            structureMethod.Contains("RegisterTakeoffTreeItemSubtree(item)", StringComparison.Ordinal) &&
+            structureMethod.Contains("TryRefreshTakeoffTreeParentOrderFast(", StringComparison.Ordinal),
+            "cross-parent takeoff moves should rebase and move existing UI subtrees, then order the target parent");
         AssertTrue(
             fallbackMethod.Contains("SelectFirstTakeoffPathForMoveFast(selectedPaths)", StringComparison.Ordinal) &&
             fallbackMethod.Contains("RefreshFastMoveActiveState(selected, previousActivePath)", StringComparison.Ordinal),

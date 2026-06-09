@@ -9,8 +9,6 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private static readonly bool FastTakeoffsTreeRefreshEnabled = false;
-
     private bool TryRefreshTakeoffTreeParentOrderFast(
         string parentFolder,
         IEnumerable<string> selectedPaths,
@@ -56,9 +54,6 @@ public partial class MainWindow
         string targetParent,
         IEnumerable<string> selectedPaths)
     {
-        if (!FastTakeoffsTreeRefreshEnabled)
-            return false;
-
         if (_currentJob == null || movedPaths.Count == 0)
             return false;
 
@@ -83,6 +78,10 @@ public partial class MainWindow
             UnregisterTakeoffTreeItemSubtree(item);
             oldParent.Items.Remove(item);
             RebaseTakeoffTreeItemPath(item, oldPath, newPath);
+            RebaseExpandedTreePaths(_expandedTakeoffTreePaths, oldPath, newPath);
+            RebaseTakeoffRangeAnchorPath(oldPath, newPath);
+            if (targetControl is TreeViewItem targetItem)
+                targetItem.IsExpanded = true;
             targetControl.Items.Add(item);
             RegisterTakeoffTreeItemSubtree(item);
         }
@@ -276,6 +275,17 @@ public partial class MainWindow
         item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
         foreach (Measurement measurement in item.Measurements)
             measurement.TakeoffFolder = item.FolderPath;
+    }
+
+    private void RebaseTakeoffRangeAnchorPath(string oldRoot, string newRoot)
+    {
+        if (string.IsNullOrWhiteSpace(_takeoffsRangeAnchorPath) ||
+            !OurPlaneCoreJobStore.IsSameOrDescendant(oldRoot, _takeoffsRangeAnchorPath))
+        {
+            return;
+        }
+
+        _takeoffsRangeAnchorPath = RebaseTakeoffPath(_takeoffsRangeAnchorPath, oldRoot, newRoot);
     }
 
     private static string RebaseTakeoffPath(string path, string oldRoot, string newRoot)
