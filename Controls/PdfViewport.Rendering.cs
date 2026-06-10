@@ -62,31 +62,40 @@ public sealed partial class PdfViewport
             //   sx = bx * zoom/bitmapScale - panX*zoom
             long sectionStart = frameWatch.ElapsedMilliseconds;
             {
+                bool detailCoversVisiblePage = DetailRenderCoversVisibleViewForPaint();
+                (SKBitmap paintBitmap, float paintScale) = detailCoversVisiblePage
+                    ? (_pageBitmap, _bitmapScale)
+                    : SelectPageBitmapForPaint();
+                if (paintScale <= 0)
+                    paintScale = _bitmapScale;
+
                 using var bitmapPaint = new SKPaint
                 {
                     IsAntialias = false,
                     FilterQuality = CurrentPageBitmapFilterQuality(),
                 };
+                // Mip bitmaps are already near screen resolution; bilinear is enough.
+                if (paintBitmap != _pageBitmap)
+                    bitmapPaint.FilterQuality = SKFilterQuality.Low;
 
                 float visibleW = ViewportCanvasWidth / Math.Max(_zoom, 0.001f);
                 float visibleH = ViewportCanvasHeight / Math.Max(_zoom, 0.001f);
-                float srcLeft = Math.Clamp(_panX * _bitmapScale, 0, _pageBitmap.Width);
-                float srcTop = Math.Clamp(_panY * _bitmapScale, 0, _pageBitmap.Height);
-                float srcRight = Math.Clamp((_panX + visibleW) * _bitmapScale, 0, _pageBitmap.Width);
-                float srcBottom = Math.Clamp((_panY + visibleH) * _bitmapScale, 0, _pageBitmap.Height);
+                float srcLeft = Math.Clamp(_panX * paintScale, 0, paintBitmap.Width);
+                float srcTop = Math.Clamp(_panY * paintScale, 0, paintBitmap.Height);
+                float srcRight = Math.Clamp((_panX + visibleW) * paintScale, 0, paintBitmap.Width);
+                float srcBottom = Math.Clamp((_panY + visibleH) * paintScale, 0, paintBitmap.Height);
 
                 if (srcRight > srcLeft && srcBottom > srcTop)
                 {
                     var src = new SKRect(srcLeft, srcTop, srcRight, srcBottom);
                     var dst = new SKRect(
-                        (srcLeft / _bitmapScale - _panX) * _zoom,
-                        (srcTop / _bitmapScale - _panY) * _zoom,
-                        (srcRight / _bitmapScale - _panX) * _zoom,
-                        (srcBottom / _bitmapScale - _panY) * _zoom);
-                    bool detailCoversVisiblePage = DetailRenderCoversVisibleViewForPaint();
+                        (srcLeft / paintScale - _panX) * _zoom,
+                        (srcTop / paintScale - _panY) * _zoom,
+                        (srcRight / paintScale - _panX) * _zoom,
+                        (srcBottom / paintScale - _panY) * _zoom);
                     DrawPagePaperUnderlay(canvas, dst);
                     if (!detailCoversVisiblePage)
-                        canvas.DrawBitmap(_pageBitmap, src, dst, bitmapPaint);
+                        canvas.DrawBitmap(paintBitmap, src, dst, bitmapPaint);
                     DrawDetailRenderTile(canvas);
                     DrawPageBackgroundTint(canvas, dst);
                     DrawPdfLayerTraceGhost(canvas, dst);

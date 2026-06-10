@@ -13,6 +13,10 @@ import fitz
 _DOC_CACHE: "OrderedDict[tuple[str, int, int, str], fitz.Document]" = OrderedDict()
 _DOC_LAYER_STATES: dict[tuple[str, int, int, str], dict[int, bool]] = {}
 _MAX_DOC_CACHE = 8
+# Display lists bake in the OCG visibility active when they were built, so the
+# cache key includes the doc's effective layer-state signature.
+_DL_CACHE: "OrderedDict[tuple, fitz.DisplayList]" = OrderedDict()
+_MAX_DL_CACHE = 16
 _PT_M = 25.4 / 72.0 / 1000.0
 _PDF_WHITESPACE = set(b"\x00\t\n\f\r ")
 _PDF_DELIMITERS = set(b"()<>[]{}/%")
@@ -1073,6 +1077,8 @@ def _get_doc(pdf_path: str, role: str = "base") -> tuple[fitz.Document, tuple[st
     while len(_DOC_CACHE) > _MAX_DOC_CACHE:
         old_key, old_doc = _DOC_CACHE.popitem(last=False)
         _DOC_LAYER_STATES.pop(old_key, None)
+        for dl_key in [k for k in _DL_CACHE if k[0] == old_key]:
+            _DL_CACHE.pop(dl_key, None)
         try:
             old_doc.close()
         except Exception:
@@ -2112,12 +2118,41 @@ def _render_samples(
     page_index: int,
     scale: float,
     raw_clip: dict | None = None,
+    dl_doc_key: tuple | None = None,
 ) -> tuple[fitz.Pixmap, float, float, dict | None]:
     page = doc.load_page(page_index)
     matrix = fitz.Matrix(scale, scale)
     clip = _clip_from_request(page, raw_clip)
-    pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=False)
+    pix = None
+    if dl_doc_key is not None:
+        dl = _get_display_list(dl_doc_key, page, page_index)
+        if dl is not None:
+            try:
+                pix = dl.get_pixmap(matrix=matrix, clip=clip, alpha=False)
+            except Exception:
+                pix = None
+    if pix is None:
+        pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=False)
     return pix, float(page.rect.width), float(page.rect.height), _clip_payload(clip)
+
+
+def _get_display_list(dl_doc_key: tuple, page: fitz.Page, page_index: int) -> "fitz.DisplayList | None":
+    signature = tuple(sorted((_DOC_LAYER_STATES.get(dl_doc_key) or {}).items()))
+    full_key = (dl_doc_key, signature, page_index)
+    dl = _DL_CACHE.get(full_key)
+    if dl is not None:
+        _DL_CACHE.move_to_end(full_key)
+        return dl
+
+    try:
+        dl = page.get_displaylist()
+    except Exception:
+        return None
+
+    _DL_CACHE[full_key] = dl
+    while len(_DL_CACHE) > _MAX_DL_CACHE:
+        _DL_CACHE.popitem(last=False)
+    return dl
 
 
 def _render_samples_for_states(
@@ -2141,8 +2176,22 @@ def _render_samples_for_states(
             doc.close()
 
     doc, doc_key = _get_doc(pdf_path, role)
+    _apply_render_states_if_changed(doc, doc_key, states)
+    return _render_samples(doc, page_index, scale, raw_clip, dl_doc_key=doc_key)
+
+
+def _apply_render_states_if_changed(
+    doc: fitz.Document,
+    doc_key: tuple[str, int, int, str],
+    states: dict[str, bool],
+) -> None:
+    desired = {
+        int(layer["xref"]): bool(states.get(str(int(layer["xref"])), True))
+        for layer in _layers(doc)
+    }
+    if _DOC_LAYER_STATES.get(doc_key) == desired:
+        return
     _apply_render_states(doc, doc_key, states)
-    return _render_samples(doc, page_index, scale, raw_clip)
 
 
 def _set_all_layers(

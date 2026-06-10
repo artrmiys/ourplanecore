@@ -25,12 +25,17 @@ public sealed partial class PdfViewport
     private static DocnetRenderResult RenderPageBitmapWithDocnet(string pdfPath, int pdfIndex, float renderScale)
     {
         float scale = Math.Clamp(renderScale, 0.10f, 4.0f);
-        using var docReader = _docLib.GetDocReader(pdfPath, new PageDimensions(scale));
-        using var pageReader = docReader.GetPageReader(pdfIndex);
-
-        int bw = pageReader.GetPageWidth();
-        int bh = pageReader.GetPageHeight();
-        byte[] bytes = pageReader.GetImage();
+        using DocnetDocumentCache.Lease lease = DocnetDocumentCache.Acquire(_docLib, pdfPath, scale);
+        int bw;
+        int bh;
+        byte[] bytes;
+        lock (lease.RenderLock)
+        {
+            using var pageReader = lease.Reader.GetPageReader(pdfIndex);
+            bw = pageReader.GetPageWidth();
+            bh = pageReader.GetPageHeight();
+            bytes = pageReader.GetImage();
+        }
 
         var info = new SKImageInfo(bw, bh, SKColorType.Bgra8888, SKAlphaType.Premul);
         var bitmap = new SKBitmap(info);
@@ -1139,6 +1144,7 @@ public sealed partial class PdfViewport
         _pageBitmapGeneration++;
         _pagePaintGeneration = 0;
         _pagePaintedPageFolder = "";
+        ClearPageBitmapMip();
     }
 
     private void ClearPageBitmapIdentity()
@@ -1149,6 +1155,7 @@ public sealed partial class PdfViewport
         _pageBitmapGeneration++;
         _pagePaintGeneration = 0;
         _pagePaintedPageFolder = "";
+        ClearPageBitmapMip();
     }
 
     private void MarkCurrentPagePainted()
