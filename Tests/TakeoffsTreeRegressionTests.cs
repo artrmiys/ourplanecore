@@ -2630,10 +2630,11 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             method.Contains("SKFilterQuality.None", StringComparison.Ordinal) &&
+            policy.Contains("SheetOverlayLowZoomRenderScale = 1.0f", StringComparison.Ordinal) &&
             policy.Contains("SheetOverlayViewportRenderScale = 2.0f", StringComparison.Ordinal) &&
             policy.Contains("SelectSheetOverlayRenderScale", StringComparison.Ordinal) &&
             policy.Contains("SheetOverlayMaxRenderPixels", StringComparison.Ordinal),
-            "sheet overlay underlay should start at a sharp 2x source render, scale up for zoom, and keep bitmap size bounded without smoothing blur");
+            "sheet overlay underlay should use a cheap 1x overview render, keep a sharp 2x work-zoom render, scale up for zoom, and keep bitmap size bounded without smoothing blur");
         AssertFalse(
             method.Contains("SKFilterQuality.Low", StringComparison.Ordinal) ||
             method.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) ||
@@ -2652,8 +2653,12 @@ internal static class TakeoffsTreeRegressionTests
             "sheet overlay should request a sharper cached/rendered bitmap when zoom outruns the current overlay source bitmap");
         AssertTrue(
             main.Contains("SelectSheetOverlayViewportRenderScale", StringComparison.Ordinal) &&
+            main.Contains("SelectSheetOverlayPageOpenFirstFrameRenderScale", StringComparison.Ordinal) &&
             main.Contains("ReadSheetOverlaySourceSize", StringComparison.Ordinal) &&
             main.Contains("requestedRenderScale", StringComparison.Ordinal) &&
+            main.Contains("fitAfter: !restoreView.HasValue", StringComparison.Ordinal) &&
+            main.Contains("ResizeSheetOverlaySourceBitmap", StringComparison.Ordinal) &&
+            main.Contains("sourceScale=", StringComparison.Ordinal) &&
             main.Contains("bitmapScale: renderScale", StringComparison.Ordinal) &&
             shell.Contains("SheetOverlayRenderScaleRefreshRequested += OnSheetOverlayRenderScaleRefreshRequested", StringComparison.Ordinal),
             "main window sheet overlay loading should use zoom-aware render scale selection and wire viewport refresh requests");

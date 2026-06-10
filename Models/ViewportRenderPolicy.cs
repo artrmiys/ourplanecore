@@ -79,6 +79,7 @@ public static class ViewportRenderPolicy
     public const float RasterSheetFarZoomFastPaintMaxScaleRatio = 0.30f;
     public const int RasterSheetNavigationMaxDpi = 144;
     private static readonly int[] RasterSheetDisplayDpiSteps = [72, 100, 144, 200];
+    public const float SheetOverlayLowZoomRenderScale = 1.0f;
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;
     public const float SheetOverlayMaxRenderPixels = 48_000_000f;
@@ -93,7 +94,7 @@ public static class ViewportRenderPolicy
     public const float VisibleGeometryPaddingScreenPx = 96f;
     public const float PanOverscrollScreenFraction = 1.00f;
     private static string _qualityMode = HighQualityMode;
-    private static readonly float[] SheetOverlayRenderScaleSteps = [2.0f, 2.25f, 3.0f, 4.0f];
+    private static readonly float[] SheetOverlayRenderScaleSteps = [1.0f, 2.0f, 2.25f, 3.0f, 4.0f];
     private static readonly int[] RasterSheetWorkZoomWarmupDpis = [72, 100, 144];
     private static readonly int[] RasterSheetWorkZoomBuildDpis = [72, 100, 144];
 
@@ -225,9 +226,13 @@ public static class ViewportRenderPolicy
         if (maxScale <= 0)
             return SheetOverlayViewportRenderScale;
 
-        float minScale = Math.Min(SheetOverlayViewportRenderScale, maxScale);
+        float minScale = Math.Min(SheetOverlayLowZoomRenderScale, maxScale);
+        float normalizedZoom = zoom <= 0 ? SheetOverlayLowZoomRenderScale : zoom;
+        float minimumForZoom = normalizedZoom < ZoomRefreshMinZoom
+            ? SheetOverlayLowZoomRenderScale
+            : SheetOverlayViewportRenderScale;
         float desired = Math.Clamp(
-            Math.Max(zoom <= 0 ? SheetOverlayViewportRenderScale : zoom, SheetOverlayViewportRenderScale),
+            Math.Max(normalizedZoom, minimumForZoom),
             minScale,
             maxScale);
         foreach (float step in SheetOverlayRenderScaleSteps)

@@ -356,7 +356,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
             return;
 
-        float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView);
+        float renderScale = SelectSheetOverlayPageOpenFirstFrameRenderScale(page, restoreView);
         _ = LoadSheetOverlayAsync(page, version, renderScale);
     }
 
@@ -466,13 +466,24 @@ public partial class MainWindow
     private float SelectSheetOverlayViewportRenderScale(
         PageInfo page,
         PdfViewport.ViewState? restoreView = null,
-        float? requestedRenderScale = null)
+        float? requestedRenderScale = null,
+        bool fitAfter = false)
     {
         float zoom = requestedRenderScale is > 0
             ? requestedRenderScale.Value
-            : restoreView?.Zoom ?? CurrentViewportZoomForSheetOverlay(page);
+            : restoreView?.Zoom ?? (fitAfter
+                ? ViewportRenderPolicy.SheetOverlayLowZoomRenderScale
+                : CurrentViewportZoomForSheetOverlay(page));
         (float widthPt, float heightPt) = ReadSheetOverlaySourceSize(page);
         return ViewportRenderPolicy.SelectSheetOverlayRenderScale(zoom, widthPt, heightPt);
+    }
+
+    private float SelectSheetOverlayPageOpenFirstFrameRenderScale(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView)
+    {
+        float selected = SelectSheetOverlayViewportRenderScale(page, restoreView, fitAfter: !restoreView.HasValue);
+        return Math.Min(selected, ViewportRenderPolicy.SheetOverlayLowZoomRenderScale);
     }
 
     private float CurrentViewportZoomForSheetOverlay(PageInfo page)
@@ -705,15 +716,44 @@ public partial class MainWindow
             return false;
         }
 
-        overlayBitmap = BuildTintedSheetOverlayBitmap(sourceBitmap, page.OverlayColor, page.OverlayOpacity);
+        using SKBitmap? scaledSourceBitmap = result.BitmapScale > renderScale * 1.05f
+            ? ResizeSheetOverlaySourceBitmap(sourceBitmap, result.WidthPt, result.HeightPt, renderScale)
+            : null;
+        if (result.BitmapScale > renderScale * 1.05f && scaledSourceBitmap == null)
+        {
+            error = "overlay raster sheet could not be resized to the requested scale.";
+            return false;
+        }
+
+        SKBitmap tintSource = scaledSourceBitmap ?? sourceBitmap;
+        overlayBitmap = BuildTintedSheetOverlayBitmap(tintSource, page.OverlayColor, page.OverlayOpacity);
         widthPt = result.WidthPt;
         heightPt = result.HeightPt;
         overlayName = overlayPage.Name;
         QueueSheetOverlayRenderCacheWrite(page, overlayPage, renderScale, overlayBitmap, widthPt, heightPt);
         AppLog.Info(
             $"Sheet overlay raster cache hit; base='{page.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
-            $"scale={renderScale:0.###}; bitmapScale={result.BitmapScale:0.###}");
+            $"scale={renderScale:0.###}; sourceScale={result.BitmapScale:0.###}; bitmapScale={renderScale:0.###}");
         return true;
+    }
+
+    private static SKBitmap? ResizeSheetOverlaySourceBitmap(
+        SKBitmap source,
+        float widthPt,
+        float heightPt,
+        float renderScale)
+    {
+        if (source.Width <= 0 || source.Height <= 0 || widthPt <= 0 || heightPt <= 0 || renderScale <= 0)
+            return null;
+
+        int targetWidth = Math.Max(1, (int)Math.Round(widthPt * renderScale));
+        int targetHeight = Math.Max(1, (int)Math.Round(heightPt * renderScale));
+        if (targetWidth >= source.Width && targetHeight >= source.Height)
+            return source.Copy();
+
+        return source.Resize(
+            new SKImageInfo(targetWidth, targetHeight, SKColorType.Bgra8888, SKAlphaType.Premul),
+            SKFilterQuality.High);
     }
 
     private static void QueueSheetOverlayRenderCacheWrite(

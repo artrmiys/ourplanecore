@@ -3957,7 +3957,8 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertClose(1.0, ViewportRenderPolicy.SelectRenderScale(0.4f, steps), "low zoom uses the responsive clarity floor");
         AssertClose(1.5, ViewportRenderPolicy.SelectRenderScale(1.2f, steps), "zoom chooses next higher render step");
         AssertClose(3.0, ViewportRenderPolicy.SelectRenderScale(8.0f, steps), "high quality mode uses a RAM-backed 3x responsive render cap");
-        AssertClose(2.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(0.4f), "sheet overlay keeps a 2x minimum source render");
+        AssertClose(1.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(0.4f), "sheet overlay uses a cheap 1x source render at low overview zoom");
+        AssertClose(2.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(1.0f), "sheet overlay keeps a 2x minimum source render at work zoom");
         AssertClose(3.0, ViewportRenderPolicy.SelectSheetOverlayRenderScale(2.6f), "sheet overlay upgrades to the high quality 3x source render at work zoom");
         AssertClose(
             3.0,
