@@ -352,6 +352,8 @@ public partial class MainWindow
             restoreView,
             viewportPage.RasterSheet);
         trace?.Mark("decode");
+        QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView);
+        trace?.Mark("overlay-queued");
         _settings.LastPageFolder = viewportPage.FolderPath;
         if (_currentJob != null)
             _settings.LastJobPath = _currentJob.RootPath;
@@ -437,11 +439,6 @@ public partial class MainWindow
     {
         try
         {
-            if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
-                return;
-
-            LoadSheetOverlay(_currentPage ?? viewportPage, restoreView);
-            trace?.Mark("overlay-queued");
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 

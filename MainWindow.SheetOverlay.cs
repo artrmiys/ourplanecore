@@ -349,6 +349,17 @@ public partial class MainWindow
         ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName, renderScale);
     }
 
+    private void QueueSheetOverlayLoadForPageOpen(PageInfo page, PdfViewport.ViewState? restoreView = null)
+    {
+        int version = ++_sheetOverlayLoadVersion;
+        _viewport.ClearSheetOverlay();
+        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
+            return;
+
+        float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView);
+        _ = LoadSheetOverlayAsync(page, version, renderScale);
+    }
+
     private void TryApplyCachedSheetOverlay(PageInfo page, PdfViewport.ViewState? restoreView = null)
     {
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
@@ -596,6 +607,21 @@ public partial class MainWindow
             return false;
         }
 
+        if (TryBuildSheetOverlayBitmapFromRasterSheet(
+                page,
+                overlayPage,
+                renderScale,
+                out overlayBitmap,
+                out widthPt,
+                out heightPt,
+                out overlayName,
+                out _) &&
+            overlayBitmap != null)
+        {
+            _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
+            return true;
+        }
+
         var layerStates = overlayPage.PdfLayers
             .GroupBy(layer => layer.Number)
             .ToDictionary(group => group.Key, group => group.First().IsOn);
@@ -634,6 +660,58 @@ public partial class MainWindow
         overlayName = overlayPage.Name;
         _sheetOverlayBitmapCache.Put(cacheKey, overlayBitmap, widthPt, heightPt, overlayName);
         SheetOverlayRenderCache.TryWrite(page, overlayPage, renderScale, overlayBitmap, widthPt, heightPt);
+        return true;
+    }
+
+    private bool TryBuildSheetOverlayBitmapFromRasterSheet(
+        PageInfo page,
+        PageInfo overlayPage,
+        float renderScale,
+        out SKBitmap? overlayBitmap,
+        out float widthPt,
+        out float heightPt,
+        out string overlayName,
+        out string error)
+    {
+        overlayBitmap = null;
+        widthPt = 0;
+        heightPt = 0;
+        overlayName = "";
+        error = "";
+
+        RasterSheetSource? rasterSheet = overlayPage.RasterSheet;
+        if (rasterSheet is not { Enabled: true } ||
+            string.IsNullOrWhiteSpace(rasterSheet.Image) ||
+            rasterSheet.RenderScale + 0.01 < renderScale)
+        {
+            error = "overlay raster sheet is not ready at the requested scale.";
+            return false;
+        }
+
+        if (!RasterSheetCacheService.TryReadReady(
+                overlayPage.FolderPath,
+                overlayPage.PdfPath,
+                rasterSheet,
+                out RasterSheetBitmapResult result,
+                out error))
+        {
+            return false;
+        }
+
+        using SKBitmap sourceBitmap = result.Bitmap;
+        if (result.BitmapScale + 0.01f < renderScale)
+        {
+            error = "overlay raster sheet bitmap scale is below the requested scale.";
+            return false;
+        }
+
+        overlayBitmap = BuildTintedSheetOverlayBitmap(sourceBitmap, page.OverlayColor, page.OverlayOpacity);
+        widthPt = result.WidthPt;
+        heightPt = result.HeightPt;
+        overlayName = overlayPage.Name;
+        AppLog.Info(
+            $"Sheet overlay raster cache hit; base='{page.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
+            $"scale={renderScale:0.###}; bitmapScale={result.BitmapScale:0.###}");
         return true;
     }
 

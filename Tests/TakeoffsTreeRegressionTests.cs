@@ -68,10 +68,11 @@ internal static class TakeoffsTreeRegressionTests
             "batch tab/detached opens should refresh selected pages from source.json before passing raster metadata into viewports");
 
         int loadPage = loadMethod.IndexOf("_viewport.LoadPage(", StringComparison.Ordinal);
+        int overlayQueue = loadMethod.IndexOf("QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView)", StringComparison.Ordinal);
         int deferred = loadMethod.IndexOf("QueueDeferredPageOpenWork", StringComparison.Ordinal);
         AssertTrue(
-            loadPage >= 0 && deferred > loadPage,
-            "page open should load the viewport before scheduling slower follow-up work");
+            loadPage >= 0 && overlayQueue > loadPage && deferred > overlayQueue,
+            "page open should load the viewport, queue async sheet overlay work, then schedule slower follow-up work");
 
         AssertFalse(
             loadMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal) ||
@@ -97,25 +98,22 @@ internal static class TakeoffsTreeRegressionTests
             quietWaitMethod.Contains("ViewportRenderPolicy.PageOpenDeferredNavigationQuietMs", StringComparison.Ordinal) &&
             quietWaitMethod.Contains("_viewport.NavigationQuietDelay(quietWindow)", StringComparison.Ordinal) &&
             policy.Contains("PageOpenDeferredNavigationQuietMs = 1800", StringComparison.Ordinal),
-            "deferred page-open work should wait for a viewport navigation quiet window before refreshing overlays, settings, tree state, and legends");
+            "deferred page-open work should wait for a viewport navigation quiet window before refreshing settings, tree state, and legends");
 
         AssertTrue(
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("LoadSheetOverlay(_currentPage ?? viewportPage, restoreView)", StringComparison.Ordinal) &&
             deferredMethod.Contains("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
-        int deferredOverlay = deferredMethod.IndexOf("LoadSheetOverlay(_currentPage ?? viewportPage, restoreView)", StringComparison.Ordinal);
-        int deferredPrefetch = deferredMethod.IndexOf("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal);
-        AssertTrue(
-            deferredOverlay >= 0 && deferredPrefetch > deferredOverlay,
-            "cold sheet overlay render should be queued before nearby page prefetch so the current page gets its overlay first");
+        AssertFalse(
+            deferredMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal),
+            "deferred page-open work should not restart sheet overlay loading after the immediate async overlay queue");
 
         AssertTrue(
             prefetchMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
@@ -1245,11 +1243,14 @@ internal static class TakeoffsTreeRegressionTests
             overlay.Contains("SheetOverlayRenderCache.TryRead", StringComparison.Ordinal) &&
             overlay.Contains("Sheet overlay cache hit", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayRenderCache.TryWrite", StringComparison.Ordinal) &&
+            overlay.Contains("TryBuildSheetOverlayBitmapFromRasterSheet", StringComparison.Ordinal) &&
+            overlay.Contains("RasterSheetCacheService.TryReadReady", StringComparison.Ordinal) &&
+            overlay.Contains("Sheet overlay raster cache hit", StringComparison.Ordinal) &&
             overlay.Contains("MinimumBrightSheetOverlayOpacity = 0.82", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayAlphaBoost = 1.85", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayTintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
             overlay.Contains("BuildBrightSheetOverlayColor", StringComparison.Ordinal),
-            "sheet overlay rendering must read persisted cache before rendering, write after tinting, and keep overlays bright");
+            "sheet overlay rendering must read persisted cache, reuse ready raster sheets before PDF rendering, write after tinting, and keep overlays bright");
         AssertTrue(
             overlay.Contains("SKColor[] sourcePixels = source.Pixels", StringComparison.Ordinal) &&
             overlay.Contains("tinted.Pixels = tintedPixels", StringComparison.Ordinal) &&
