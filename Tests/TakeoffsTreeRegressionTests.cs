@@ -2231,7 +2231,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("LivePreviewRenderSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)", StringComparison.Ordinal) &&
             renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
-            renderCache.Contains("DecodePdfLayerRenderBitmap(preview)", StringComparison.Ordinal) &&
+            renderCache.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
             renderCache.Contains("TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, preview)", StringComparison.Ordinal) &&
             renderCache.Contains("TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, render)", StringComparison.Ordinal) &&
             renderCache.Contains("PdfPreviewRenderCache.TryWriteCleanPreview", StringComparison.Ordinal) &&
@@ -2489,7 +2489,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.CancelDetailRenderWorker()", StringComparison.Ordinal) &&
-            detail.Contains("DecodePdfLayerRenderBitmap(renderResult.Result)", StringComparison.Ordinal) &&
+            detail.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
             detail.Contains("Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length)", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
             service.Contains("public static void CancelDetailRenderWorker()", StringComparison.Ordinal) &&
@@ -2516,7 +2516,7 @@ internal static class TakeoffsTreeRegressionTests
             startDetailRender.IndexOf("ReportViewportRenderProfile(", StringComparison.Ordinal),
             "stale clipped detail renders should be discarded before they are recorded as useful performance samples");
         AssertTrue(
-            layers.Contains("DecodePdfLayerRenderBitmap(renderResult.Result)", StringComparison.Ordinal) &&
+            layers.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
             layers.Contains("ApplyLayerRenderResult(completion.Result, completion.Request.ResetLayerStates, decodedBitmap)", StringComparison.Ordinal),
             "layer render bitmap decode should be done before UI-thread bitmap application and support the raw detail payload");
         AssertTrue(
@@ -2609,7 +2609,9 @@ internal static class TakeoffsTreeRegressionTests
         string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");
         string treeOps = ReadRepoFile("MainWindow.ViewportTreeOpsSmoke.cs");
         string script = ReadRepoFile(Path.Combine("Tools", "ui_viewport_page_stress_smoke.ps1"));
+        string compareScript = ReadRepoFile(Path.Combine("Tools", "compare_viewport_smoke_reports.ps1"));
         string recorder = ReadRepoFile(Path.Combine("Models", "ViewportPerformanceRecorder.cs"));
+        string scheduler = ReadRepoFile(Path.Combine("Models", "ViewportRenderScheduler.cs"));
         string detail = ReadRepoFile(Path.Combine("Controls", "PdfViewport.DetailRender.cs"));
         string rendering = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Rendering.cs"));
         string recovery = ReadRepoFile("MainWindow.JobRecovery.cs");
@@ -2660,13 +2662,40 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             recorder.Contains("RecordRenderProfile", StringComparison.Ordinal) &&
             recorder.Contains("RecordSlowFrame", StringComparison.Ordinal) &&
+            recorder.Contains("RecordRepaintRequest", StringComparison.Ordinal) &&
+            recorder.Contains("RecordRenderQueue", StringComparison.Ordinal) &&
+            recorder.Contains("RecordBitmapDecode", StringComparison.Ordinal) &&
             recorder.Contains("CacheHitRate", StringComparison.Ordinal) &&
-            recorder.Contains("MaxPageBitmapPaintMs", StringComparison.Ordinal),
-            "viewport perf recorder must capture render/cache and slow paint metrics");
+            recorder.Contains("MaxPageBitmapPaintMs", StringComparison.Ordinal) &&
+            recorder.Contains("RepaintCoalesceRate", StringComparison.Ordinal) &&
+            recorder.Contains("RenderQueueReplacementRate", StringComparison.Ordinal) &&
+            recorder.Contains("MaxBitmapDecodeMs", StringComparison.Ordinal),
+            "viewport perf recorder must capture render/cache, repaint, queue, decode, and slow paint metrics");
+        AssertTrue(
+            compareScript.Contains("BaselinePath", StringComparison.Ordinal) &&
+            compareScript.Contains("CurrentPath", StringComparison.Ordinal) &&
+            compareScript.Contains("FailOnRegression", StringComparison.Ordinal) &&
+            compareScript.Contains("MaxStepMs", StringComparison.Ordinal) &&
+            compareScript.Contains("MaxReadyMs", StringComparison.Ordinal) &&
+            compareScript.Contains("MaxZoomMs", StringComparison.Ordinal) &&
+            compareScript.Contains("CacheHitRate", StringComparison.Ordinal) &&
+            compareScript.Contains("RepaintRequestCount", StringComparison.Ordinal) &&
+            compareScript.Contains("RenderQueueReplacementCount", StringComparison.Ordinal) &&
+            compareScript.Contains("MaxBitmapDecodeMs", StringComparison.Ordinal) &&
+            compareScript.Contains("WorkingSetMb", StringComparison.Ordinal) &&
+            compareScript.Contains("Regressions:", StringComparison.Ordinal),
+            "viewport smoke reports should have a local comparison dashboard that can fail on timing, cache, paint, and memory regressions");
+        AssertTrue(
+            scheduler.Contains("public sealed class ViewportRenderScheduler", StringComparison.Ordinal) &&
+            scheduler.Contains("ViewportRenderPriority", StringComparison.Ordinal) &&
+            scheduler.Contains("TryDequeue", StringComparison.Ordinal) &&
+            scheduler.Contains("replaceSamePageAndKind", StringComparison.Ordinal),
+            "viewport render scheduling should have a small standalone skeleton ready for consolidating pending render queues");
         AssertTrue(
             detail.Contains("ViewportPerformanceRecorder.RecordRenderProfile", StringComparison.Ordinal) &&
+            detail.Contains("DecodePdfLayerRenderBitmapWithMetrics", StringComparison.Ordinal) &&
             rendering.Contains("ViewportPerformanceRecorder.RecordSlowFrame", StringComparison.Ordinal),
-            "viewport render and paint paths must feed the perf recorder");
+            "viewport render, decode, and paint paths must feed the perf recorder");
         AssertTrue(
             recovery.Contains("ShouldSuppressAutomatedRecoveryPrompt", StringComparison.Ordinal) &&
             recovery.Contains("ViewportPageStressSmokeEnv", StringComparison.Ordinal) &&

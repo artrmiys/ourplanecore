@@ -990,7 +990,12 @@ public sealed partial class PdfViewport
 
                 if (preview.ImageBytes.Length > 0 && preview.WidthPt > 0 && preview.HeightPt > 0)
                 {
-                    decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(preview)).ConfigureAwait(false);
+                    decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmapWithMetrics(
+                        "preview-prefetch",
+                        "",
+                        pdfPath,
+                        pageIndex,
+                        preview)).ConfigureAwait(false);
                     if (decodedBitmap != null)
                     {
                         float bitmapScale = decodedBitmap.Width / preview.WidthPt;
@@ -1157,7 +1162,12 @@ public sealed partial class PdfViewport
                     render = rendered.Result;
                 }
 
-                decodedBitmap = await Task.Run(() => SKBitmap.Decode(render.ImageBytes)).ConfigureAwait(false);
+                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmapWithMetrics(
+                    "clean-render-prefetch",
+                    "",
+                    pdfPath,
+                    pageIndex,
+                    render)).ConfigureAwait(false);
                 if (decodedBitmap == null || render.WidthPt <= 0 || render.HeightPt <= 0)
                     return;
 

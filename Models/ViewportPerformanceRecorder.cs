@@ -10,6 +10,8 @@ public static class ViewportPerformanceRecorder
 {
     private const int MaxRenderSamples = 600;
     private const int MaxSlowFrameSamples = 300;
+    private const int MaxQueueSamples = 400;
+    private const int MaxDecodeSamples = 300;
     private static readonly object Gate = new();
     private static ViewportPerformanceRun? _activeRun;
 
@@ -140,11 +142,93 @@ public static class ViewportPerformanceRecorder
         }
     }
 
+    public static void RecordRepaintRequest(string pageFolder, bool alreadyQueued, bool crossThreadRequest)
+    {
+        lock (Gate)
+        {
+            if (_activeRun == null)
+                return;
+
+            _activeRun.RepaintRequestCount++;
+            if (alreadyQueued)
+                _activeRun.RepaintCoalescedCount++;
+            if (crossThreadRequest)
+                _activeRun.CrossThreadRepaintRequestCount++;
+        }
+    }
+
+    public static void RecordRenderQueue(
+        string kind,
+        string pageFolder,
+        float renderScale,
+        bool replacedPending,
+        bool renderInProgress)
+    {
+        lock (Gate)
+        {
+            if (_activeRun == null)
+                return;
+
+            var sample = new ViewportRenderQueueSample
+            {
+                Kind = kind,
+                PageFolder = pageFolder,
+                RenderScale = Math.Round(renderScale, 4),
+                ReplacedPending = replacedPending,
+                RenderInProgress = renderInProgress,
+                Utc = DateTime.UtcNow,
+            };
+
+            _activeRun.TotalRenderQueueCount++;
+            if (replacedPending)
+                _activeRun.RenderQueueReplacementCount++;
+            if (renderInProgress)
+                _activeRun.RenderQueueWhileBusyCount++;
+            if (_activeRun.RenderQueues.Count < MaxQueueSamples)
+                _activeRun.RenderQueues.Add(sample);
+        }
+    }
+
+    public static void RecordBitmapDecode(
+        string kind,
+        string pageFolder,
+        string pdfName,
+        int pdfPage,
+        long elapsedMs,
+        bool ok)
+    {
+        lock (Gate)
+        {
+            if (_activeRun == null)
+                return;
+
+            var sample = new ViewportBitmapDecodeSample
+            {
+                Kind = kind,
+                PageFolder = pageFolder,
+                PdfName = pdfName,
+                PdfPage = pdfPage,
+                ElapsedMs = elapsedMs,
+                Ok = ok,
+                Utc = DateTime.UtcNow,
+            };
+
+            _activeRun.TotalBitmapDecodeCount++;
+            if (ok)
+                _activeRun.BitmapDecodeSuccessCount++;
+            _activeRun.TotalBitmapDecodeMs += elapsedMs;
+            if (_activeRun.BitmapDecodes.Count < MaxDecodeSamples)
+                _activeRun.BitmapDecodes.Add(sample);
+        }
+    }
+
     private static ViewportPerformanceSummary BuildSummary(ViewportPerformanceRun run)
     {
         using Process process = Process.GetCurrentProcess();
         List<ViewportRenderProfileSample> renders = run.RenderProfiles;
         List<ViewportSlowFrameSample> slowFrames = run.SlowFrames;
+        List<ViewportRenderQueueSample> queues = run.RenderQueues;
+        List<ViewportBitmapDecodeSample> decodes = run.BitmapDecodes;
 
         return new ViewportPerformanceSummary
         {
@@ -160,11 +244,46 @@ public static class ViewportPerformanceRecorder
             MaxRenderMs = renders.Count == 0 ? 0 : renders.Max(sample => sample.ElapsedMs),
             MaxSlowFrameMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.ElapsedMs),
             MaxPageBitmapPaintMs = slowFrames.Count == 0 ? 0 : slowFrames.Max(sample => sample.PageBitmapMs),
+            RepaintRequestCount = run.RepaintRequestCount,
+            RepaintCoalescedCount = run.RepaintCoalescedCount,
+            RepaintCoalesceRate = run.RepaintRequestCount == 0
+                ? 0
+                : Math.Round((double)run.RepaintCoalescedCount / run.RepaintRequestCount, 4),
+            CrossThreadRepaintRequestCount = run.CrossThreadRepaintRequestCount,
+            RenderQueueCount = run.TotalRenderQueueCount,
+            StoredRenderQueueCount = queues.Count,
+            RenderQueueReplacementCount = run.RenderQueueReplacementCount,
+            RenderQueueReplacementRate = run.TotalRenderQueueCount == 0
+                ? 0
+                : Math.Round((double)run.RenderQueueReplacementCount / run.TotalRenderQueueCount, 4),
+            RenderQueueWhileBusyCount = run.RenderQueueWhileBusyCount,
+            BitmapDecodeCount = run.TotalBitmapDecodeCount,
+            StoredBitmapDecodeCount = decodes.Count,
+            BitmapDecodeSuccessCount = run.BitmapDecodeSuccessCount,
+            MaxBitmapDecodeMs = decodes.Count == 0 ? 0 : decodes.Max(sample => sample.ElapsedMs),
+            AverageBitmapDecodeMs = run.TotalBitmapDecodeCount == 0
+                ? 0
+                : Math.Round((double)run.TotalBitmapDecodeMs / run.TotalBitmapDecodeCount, 2),
             RenderCountByKind = renders
                 .GroupBy(sample => sample.Kind, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase),
             AverageRenderMsByKind = renders
+                .GroupBy(sample => sample.Kind, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => Math.Round(group.Average(sample => sample.ElapsedMs), 2),
+                    StringComparer.OrdinalIgnoreCase),
+            RenderQueueCountByKind = queues
+                .GroupBy(sample => sample.Kind, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase),
+            BitmapDecodeCountByKind = decodes
+                .GroupBy(sample => sample.Kind, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase),
+            AverageBitmapDecodeMsByKind = decodes
                 .GroupBy(sample => sample.Kind, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
@@ -186,8 +305,19 @@ public sealed class ViewportPerformanceRun
     public int TotalRenderProfileCount { get; set; }
     public int CacheHitCount { get; set; }
     public int TotalSlowFrameCount { get; set; }
+    public int RepaintRequestCount { get; set; }
+    public int RepaintCoalescedCount { get; set; }
+    public int CrossThreadRepaintRequestCount { get; set; }
+    public int TotalRenderQueueCount { get; set; }
+    public int RenderQueueReplacementCount { get; set; }
+    public int RenderQueueWhileBusyCount { get; set; }
+    public int TotalBitmapDecodeCount { get; set; }
+    public int BitmapDecodeSuccessCount { get; set; }
+    public long TotalBitmapDecodeMs { get; set; }
     public List<ViewportRenderProfileSample> RenderProfiles { get; set; } = [];
     public List<ViewportSlowFrameSample> SlowFrames { get; set; } = [];
+    public List<ViewportRenderQueueSample> RenderQueues { get; set; } = [];
+    public List<ViewportBitmapDecodeSample> BitmapDecodes { get; set; } = [];
     public ViewportPerformanceSummary Summary { get; set; } = new();
 }
 
@@ -203,8 +333,25 @@ public sealed class ViewportPerformanceSummary
     public long MaxRenderMs { get; set; }
     public long MaxSlowFrameMs { get; set; }
     public long MaxPageBitmapPaintMs { get; set; }
+    public int RepaintRequestCount { get; set; }
+    public int RepaintCoalescedCount { get; set; }
+    public double RepaintCoalesceRate { get; set; }
+    public int CrossThreadRepaintRequestCount { get; set; }
+    public int RenderQueueCount { get; set; }
+    public int StoredRenderQueueCount { get; set; }
+    public int RenderQueueReplacementCount { get; set; }
+    public double RenderQueueReplacementRate { get; set; }
+    public int RenderQueueWhileBusyCount { get; set; }
+    public int BitmapDecodeCount { get; set; }
+    public int StoredBitmapDecodeCount { get; set; }
+    public int BitmapDecodeSuccessCount { get; set; }
+    public long MaxBitmapDecodeMs { get; set; }
+    public double AverageBitmapDecodeMs { get; set; }
     public Dictionary<string, int> RenderCountByKind { get; set; } = [];
     public Dictionary<string, double> AverageRenderMsByKind { get; set; } = [];
+    public Dictionary<string, int> RenderQueueCountByKind { get; set; } = [];
+    public Dictionary<string, int> BitmapDecodeCountByKind { get; set; } = [];
+    public Dictionary<string, double> AverageBitmapDecodeMsByKind { get; set; } = [];
     public long WorkingSetMb { get; set; }
     public long ManagedMemoryMb { get; set; }
 }
@@ -242,6 +389,27 @@ public sealed class ViewportSlowFrameSample
     public long InProgressMs { get; set; }
     public long LabelMs { get; set; }
     public long ScreenOverlayMs { get; set; }
+    public DateTime Utc { get; set; }
+}
+
+public sealed class ViewportRenderQueueSample
+{
+    public string Kind { get; set; } = "";
+    public string PageFolder { get; set; } = "";
+    public double RenderScale { get; set; }
+    public bool ReplacedPending { get; set; }
+    public bool RenderInProgress { get; set; }
+    public DateTime Utc { get; set; }
+}
+
+public sealed class ViewportBitmapDecodeSample
+{
+    public string Kind { get; set; } = "";
+    public string PageFolder { get; set; } = "";
+    public string PdfName { get; set; } = "";
+    public int PdfPage { get; set; }
+    public long ElapsedMs { get; set; }
+    public bool Ok { get; set; }
     public DateTime Utc { get; set; }
 }
 

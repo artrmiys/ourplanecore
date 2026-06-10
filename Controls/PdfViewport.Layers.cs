@@ -460,7 +460,16 @@ public sealed partial class PdfViewport
         if (!render.LayersCaptured && _cachedLayers == null)
             return false;
 
+        Stopwatch decodeWatch = Stopwatch.StartNew();
         var bitmap = SKBitmap.Decode(render.ImageBytes);
+        decodeWatch.Stop();
+        ViewportPerformanceRecorder.RecordBitmapDecode(
+            "layer-persisted-cache",
+            request.PageFolder,
+            Path.GetFileName(request.PdfPath),
+            request.PdfIndex + 1,
+            decodeWatch.ElapsedMilliseconds,
+            bitmap != null);
         if (bitmap == null)
             return false;
 
@@ -719,6 +728,13 @@ public sealed partial class PdfViewport
 
         if (IsPreviewRenderScale(scale))
             PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs);
+
+        ViewportPerformanceRecorder.RecordRenderQueue(
+            IsFastPreviewRenderScale(scale) ? "docnet-fast-preview" : "docnet",
+            _pageFolder,
+            scale,
+            replacedPending: _pendingDocnetRender != null,
+            renderInProgress: _docnetRenderInProgress);
 
         int version = ++_docnetRenderVersion;
         var request = new DocnetRenderRequest(
@@ -1044,7 +1060,12 @@ public sealed partial class PdfViewport
                 return null;
             }
 
-            SKBitmap? bitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(renderResult.Result));
+            SKBitmap? bitmap = await Task.Run(() => DecodePdfLayerRenderBitmapWithMetrics(
+                "preview-pymupdf",
+                request.PageFolder,
+                request.PdfPath,
+                request.PdfIndex,
+                renderResult.Result));
             if (bitmap == null ||
                 renderResult.Result.WidthPt <= 0 ||
                 renderResult.Result.HeightPt <= 0)
@@ -1448,7 +1469,12 @@ public sealed partial class PdfViewport
         bool resetLayerStates,
         SKBitmap? decodedBitmap = null)
     {
-        var bitmap = decodedBitmap ?? DecodePdfLayerRenderBitmap(render);
+        var bitmap = decodedBitmap ?? DecodePdfLayerRenderBitmapWithMetrics(
+            "layer-apply",
+            _pageFolder,
+            _pdfPath,
+            _pdfIndex,
+            render);
         if (bitmap == null)
         {
             PostStatus("Layer renderer returned an unreadable image.");
@@ -1521,6 +1547,13 @@ public sealed partial class PdfViewport
             fitAfter,
             statusAfter,
             fireLayersAfter);
+
+        ViewportPerformanceRecorder.RecordRenderQueue(
+            "layer",
+            request.PageFolder,
+            request.RenderScale,
+            replacedPending: _pendingLayerRender != null,
+            renderInProgress: _layerRenderInProgress);
 
         bool preserveDetailDuringZoomRefresh = ShouldPreserveDetailDuringLayerRender(request);
         if (!preserveDetailDuringZoomRefresh)
@@ -1855,7 +1888,14 @@ public sealed partial class PdfViewport
             renderWatch.Stop();
             SKBitmap? decodedBitmap = null;
             if (renderResult.Ok)
-                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(renderResult.Result));
+            {
+                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmapWithMetrics(
+                    "layer",
+                    request.PageFolder,
+                    request.PdfPath,
+                    request.PdfIndex,
+                    renderResult.Result));
+            }
             ReportSlowLayerRender(request, renderWatch.ElapsedMilliseconds);
             LayerRenderCompletion completion = new(
                 request,

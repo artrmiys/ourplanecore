@@ -532,14 +532,15 @@ public sealed partial class PdfViewport : SKElement
         ClearViewportUndoStack();
     }
 
-    private void RequestRepaint()
+    private void RequestRepaint(bool crossThreadRequest = false)
     {
         if (!Dispatcher.CheckAccess())
         {
-            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(RequestRepaint));
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => RequestRepaint(crossThreadRequest: true)));
             return;
         }
 
+        ViewportPerformanceRecorder.RecordRepaintRequest(_pageFolder, _repaintQueued, crossThreadRequest);
         PrepareBitmapForImmediateRepaint();
         if (_repaintQueued)
             return;

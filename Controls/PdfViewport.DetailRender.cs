@@ -406,7 +406,14 @@ public sealed partial class PdfViewport
 
             SKBitmap? decodedBitmap = null;
             if (renderResult.Ok)
-                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmap(renderResult.Result));
+            {
+                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmapWithMetrics(
+                    "detail",
+                    request.PageFolder,
+                    request.PdfPath,
+                    request.PdfIndex,
+                    renderResult.Result));
+            }
 
             if (renderResult.Ok)
                 ApplyDetailRenderResult(request, renderResult.Result, decodedBitmap);
@@ -589,6 +596,26 @@ public sealed partial class PdfViewport
         }
 
         Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length);
+        return bitmap;
+    }
+
+    private static SKBitmap? DecodePdfLayerRenderBitmapWithMetrics(
+        string kind,
+        string pageFolder,
+        string pdfPath,
+        int pdfIndex,
+        PdfLayerRenderResult render)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        SKBitmap? bitmap = DecodePdfLayerRenderBitmap(render);
+        watch.Stop();
+        ViewportPerformanceRecorder.RecordBitmapDecode(
+            kind,
+            pageFolder,
+            Path.GetFileName(pdfPath),
+            pdfIndex + 1,
+            watch.ElapsedMilliseconds,
+            bitmap != null);
         return bitmap;
     }
 
