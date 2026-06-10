@@ -282,7 +282,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
     ("viewport raster page open uses preview at fit and hot cache at work zoom", ViewportRasterPageOpenAppliesHotBitmapCache),
     ("viewport raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
-    ("viewport oversized raster page open queues responsive dpi without docnet", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallback),
+    ("viewport oversized raster page open queues responsive dpi with preview fallback", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallback),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
     ("pdf sheet metadata handles rotated bottom title block", TakeoffsTreeRegressionTests.PdfSheetMetadataHandlesRotatedBottomTitleBlock),
@@ -4467,7 +4467,7 @@ static void ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback()
     });
 }
 
-static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallback()
+static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallback()
 {
     WithTempRasterBackedPage("raster_oversized_open", page =>
     {
@@ -4475,6 +4475,23 @@ static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallb
             "200",
             RasterSheetCacheService.RenderScaleToDpi(page.RasterSheet?.RenderScale ?? 0).ToString(),
             "oversized raster-backed viewport test should start from active 200dpi metadata");
+
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(
+                page.PdfPath,
+                page.PdfPage,
+                page.FolderPath,
+                rasterSheet: page.RasterSheet);
+
+            AssertTrue(
+                HasRasterDpiBuildInFlight(viewport, 72) || HasReadyRasterDpi(page, 72),
+                "oversized 200dpi raster fit-open should queue or prepare 72dpi raster");
+            AssertFalse(
+                GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                "oversized 200dpi raster fit-open should not paint the oversized bitmap while lower dpi is missing");
+        });
 
         foreach ((float zoom, int expectedDpi) in new[] { (0.67f, 72), (1.50f, 144) })
         {
@@ -4494,9 +4511,6 @@ static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallb
                 AssertFalse(
                     GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
                     $"oversized 200dpi raster page open at {zoom:P0} should not paint the oversized bitmap while lower dpi is missing");
-                AssertTrue(
-                    GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
-                    $"oversized 200dpi raster page open at {zoom:P0} must not fall back to docnet while responsive raster dpi is queued");
             });
         }
     }, RasterSheetCacheService.DefaultRenderScale);

@@ -1464,6 +1464,7 @@ internal static class TakeoffsTreeRegressionTests
         string rendering = ReadRepoFile("Controls/PdfViewport.Rendering.cs");
         string rasterSheetViewport = ReadRepoFile("Controls/PdfViewport.RasterSheet.cs");
         string rasterSheetDpiUpgrade = ReadRepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs");
+        string rasterSheetPageOpenDpi = ReadRepoFile("Controls/PdfViewport.RasterSheetPageOpenDpi.cs");
         string rasterSheetBitmapCache = ReadRepoFile("Controls/PdfViewport.RasterSheetBitmapCache.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
@@ -1486,8 +1487,8 @@ internal static class TakeoffsTreeRegressionTests
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
         string rasterDpiUpgradeMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task BuildRasterSheetDpiUpgradeForCurrentPageAsync(");
         string responsiveDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyResponsiveRasterSheetDpiForCurrentZoom()");
-        string pageOpenReadyDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyReadyResponsiveRasterSheetDpiForPageOpen(");
-        string pageOpenDpiQueueMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(");
+        string pageOpenReadyDpiMethod = SliceMethod(rasterSheetPageOpenDpi, "private bool TryApplyReadyResponsiveRasterSheetDpiForPageOpen(");
+        string pageOpenDpiQueueMethod = SliceMethod(rasterSheetPageOpenDpi, "private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(");
         string readyDpiWarmApplyMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task ApplyReadyRasterSheetDpiAfterWarmupAsync(");
         string importedRasterMethod = SliceMethod(pdfImport, "private static RasterSheetBuildResult BuildAndWarmImportedRaster(");
 
@@ -1789,27 +1790,39 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("RasterSheetDisplayDpiSteps = [72, 100, 144, 200]", StringComparison.Ordinal) &&
             policy.Contains("SelectRasterSheetDisplayDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("TargetRasterSheetDpiForZoom(restoreView?.Zoom ?? _zoom)", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("TargetRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("PageOpenZoomForRasterSheet", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.SelectRasterSheetDisplayDpi(zoom)", StringComparison.Ordinal) &&
             policy.Contains("ShouldPreferLowerRasterSheetDpi", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("ShouldSkipOversizedRasterSheetForPageOpen", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("ShouldUseResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("ShouldSkipOversizedRasterSheetForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
             pageApi.Contains("responsiveRasterDpiForOpen", StringComparison.Ordinal) &&
             pageApi.Contains("skipOversizedRasterSheetForOpen", StringComparison.Ordinal) &&
-            pageApi.Contains("responsiveRasterDpiBuildQueuedForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("responsiveRasterDpiWorkQueuedForOpen", StringComparison.Ordinal) &&
             pageApi.Contains("!skipOversizedRasterSheetForOpen", StringComparison.Ordinal) &&
-            pageApi.Contains("restoreView.HasValue", StringComparison.Ordinal) &&
+            !pageApi.Contains("shouldUseRasterSheetForOpen &&\r\n            restoreView.HasValue", StringComparison.Ordinal) &&
+            !pageApi.Contains("shouldUseRasterSheetForOpen &&\n            restoreView.HasValue", StringComparison.Ordinal) &&
             pageApi.Contains("TryApplyReadyResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
             pageApi.Contains("QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
             !pageApi.Contains("!responsiveRasterDpiForOpen", StringComparison.Ordinal) &&
+            pageApi.Contains("queueSharpBaseAfterPreview: !rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiWorkQueuedForOpen", StringComparison.Ordinal) &&
+            !pageApi.Contains("else if (responsiveRasterDpiWorkQueuedForOpen)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(RasterSheetSource? rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryPrepareRasterSheetBitmapForImmediateRepaint()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
-            pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi, restoreView, fitAfter)", StringComparison.Ordinal) &&
-            pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpiAtOrAboveFromMemory(page, targetDpi, currentDpi, restoreView, fitAfter)", StringComparison.Ordinal) &&
+            pageOpenReadyDpiMethod.Contains("SelectReadyRasterSheetDpiForPageOpen(page, targetDpi, currentDpi)", StringComparison.Ordinal) &&
+            pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpiFromMemory(page, readyDpi, restoreView, fitAfter)", StringComparison.Ordinal) &&
             !pageOpenReadyDpiMethod.Contains("TryApplyReadyRasterSheetDpi(page, targetDpi", StringComparison.Ordinal) &&
-            pageOpenDpiQueueMethod.Contains("allowImmediateReadyApply: false", StringComparison.Ordinal) &&
+            pageOpenDpiQueueMethod.Contains("QueueReadyRasterSheetDpiApplyAfterWarmupForPageOpen", StringComparison.Ordinal) &&
+            pageOpenDpiQueueMethod.Contains("QueueRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("readyDpi != targetDpi", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("readyDpi > ViewportRenderPolicy.RasterSheetPageOpenImmediateWarmMaxDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ready-warmed-page-open", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("built-page-open", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("TryGetPageOpenRasterSheetDpiApplyView", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("_zoom >= ViewportRenderPolicy.RasterSheetDisplayMinZoom", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("QueueReadyRasterSheetDpiApplyAfterWarmup", StringComparison.Ordinal) &&
             readyDpiWarmApplyMethod.Contains("Task.Run", StringComparison.Ordinal) &&
             readyDpiWarmApplyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
@@ -2110,17 +2123,17 @@ internal static class TakeoffsTreeRegressionTests
         int cacheApply = pageApi.IndexOf("TryApplyPersistedPreviewRender", StringComparison.Ordinal);
         int cacheBranch = pageApi.IndexOf("if (previewCacheHit)", StringComparison.Ordinal);
         int rasterWarmBranch = pageApi.IndexOf("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal);
-        int responsiveRasterBuildBranch = pageApi.IndexOf("else if (responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal);
+        int responsiveRasterWork = pageApi.IndexOf("responsiveRasterDpiWorkQueuedForOpen = QueueResponsiveRasterSheetDpiBuildForPageOpen", StringComparison.Ordinal);
         int docnetFallback = pageApi.IndexOf("QueueDocnetRender(", StringComparison.Ordinal);
         int status = pageApi.IndexOf("PostStatus((rasterBitmapWarmupQueuedForOpen", StringComparison.Ordinal);
         AssertTrue(
             cacheApply >= 0 &&
+            responsiveRasterWork >= 0 &&
             cacheBranch > cacheApply &&
             rasterWarmBranch > cacheBranch &&
-            responsiveRasterBuildBranch > rasterWarmBranch &&
-            docnetFallback > responsiveRasterBuildBranch &&
+            docnetFallback > rasterWarmBranch &&
             status > docnetFallback,
-            "page open should avoid full-clean synchronous decode, let raster warmups win, then queue a fast lightweight preview fallback only when no raster bitmap is warming");
+            "page open should avoid full-clean synchronous decode, let blocking raster bitmap warmups win, then keep a fast lightweight preview fallback while responsive raster DPI warms in the background");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
@@ -2128,21 +2141,23 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             pageApi.Contains("PageSwitchLivePreviewScale(restoreView, fitAfter: !restoreView.HasValue)", StringComparison.Ordinal) &&
             pageApi.Contains("bool rasterBitmapWarmupQueuedForOpen = false;", StringComparison.Ordinal) &&
-            pageApi.Contains("bool responsiveRasterDpiBuildQueuedForOpen = false;", StringComparison.Ordinal) &&
+            pageApi.Contains("bool responsiveRasterDpiWorkQueuedForOpen = false;", StringComparison.Ordinal) &&
             pageApi.Contains("rasterBitmapWarmupQueuedForOpen = QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
-            pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
+            pageApi.Contains("if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiWorkQueuedForOpen)", StringComparison.Ordinal) &&
             pageApi.Contains("QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("QueuePersistedPreviewRenderAfterFirstRepaint(", StringComparison.Ordinal) &&
             pageApi.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
             pageApi.Contains("else if (rasterBitmapWarmupQueuedForOpen)", StringComparison.Ordinal) &&
-            pageApi.Contains("else if (responsiveRasterDpiBuildQueuedForOpen)", StringComparison.Ordinal) &&
-            pageApi.Contains("(rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiBuildQueuedForOpen) && !previewCacheHit", StringComparison.Ordinal) &&
+            !pageApi.Contains("else if (responsiveRasterDpiWorkQueuedForOpen)", StringComparison.Ordinal) &&
+            pageApi.Contains("(rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiWorkQueuedForOpen) && !previewCacheHit", StringComparison.Ordinal) &&
+            layers.Contains("CancelPendingDocnetRenderForAppliedBitmap", StringComparison.Ordinal) &&
+            layers.Contains("_docnetRenderVersion++", StringComparison.Ordinal) &&
             pageApi.Contains("Raster preparing:", StringComparison.Ordinal) &&
             pageApi.Contains("ArePdfLayersLoaded => _pdfLayersLoadedForPage", StringComparison.Ordinal) &&
             pageApi.Contains("_pdfLayersLoadedForPage = false", StringComparison.Ordinal) &&
             pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
             mainLayers.Contains("PDF layers not loaded. Click Load to scan this sheet.", StringComparison.Ordinal),
-            "normal page opens should keep PDF layers lazy, and raster-warm page opens should not start a sharp PDF render while the readable raster is being decoded");
+            "normal page opens should keep PDF layers lazy, and responsive raster-warm page opens should not start a sharp PDF render while still allowing a cheap preview fallback");
         AssertTrue(
             loadPageMethod.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
             loadPageMethod.Contains("QueuePersistedPreviewRenderAfterFirstRepaint(", StringComparison.Ordinal) &&

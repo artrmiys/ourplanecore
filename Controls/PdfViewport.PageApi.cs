@@ -145,15 +145,15 @@ public sealed partial class PdfViewport
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         string rasterSkipReason = "";
         bool rasterBitmapWarmupQueuedForOpen = false;
+        bool responsiveRasterDpiWorkQueuedForOpen = false;
         bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
-        bool responsiveRasterDpiForOpen =
-            shouldUseRasterSheetForOpen &&
-            restoreView.HasValue &&
-            ShouldUseResponsiveRasterSheetDpiForView(rasterSheet, restoreView);
+        bool responsiveRasterDpiForOpen = ShouldUseResponsiveRasterSheetDpiForPageOpen(
+            rasterSheet,
+            restoreView,
+            fitAfter: !restoreView.HasValue);
         bool skipOversizedRasterSheetForOpen =
             responsiveRasterDpiForOpen &&
-            ShouldSkipOversizedRasterSheetForPageOpen(rasterSheet, restoreView);
-        bool responsiveRasterDpiBuildQueuedForOpen = false;
+            ShouldSkipOversizedRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         bool preferRasterOverviewForOpen = ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         if (shouldUseRasterSheetForOpen)
         {
@@ -175,7 +175,12 @@ public sealed partial class PdfViewport
             return;
         }
         if (responsiveRasterDpiForOpen)
-            responsiveRasterDpiBuildQueuedForOpen = QueueResponsiveRasterSheetDpiBuildForPageOpen(rasterSheet, restoreView);
+        {
+            responsiveRasterDpiWorkQueuedForOpen = QueueResponsiveRasterSheetDpiBuildForPageOpen(
+                rasterSheet,
+                restoreView,
+                fitAfter: !restoreView.HasValue);
+        }
 
         if (shouldUseRasterSheetForOpen &&
             !skipOversizedRasterSheetForOpen &&
@@ -247,22 +252,17 @@ public sealed partial class PdfViewport
                 previewScale,
                 restoreView,
                 fitAfter: !restoreView.HasValue,
-                queueSharpBaseAfterPreview: !rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen,
+                queueSharpBaseAfterPreview: !rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiWorkQueuedForOpen,
                 statusAfter: loadedStatus);
         }
 
         if (previewCacheHit)
         {
             PostStatus(loadedStatus);
-            if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiBuildQueuedForOpen)
+            if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiWorkQueuedForOpen)
                 QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder);
         }
         else if (rasterBitmapWarmupQueuedForOpen)
-        {
-            if (hadCurrentPageBitmap)
-                _showingPreviousPageDuringSwitch = false;
-        }
-        else if (responsiveRasterDpiBuildQueuedForOpen)
         {
             if (hadCurrentPageBitmap)
                 _showingPreviousPageDuringSwitch = false;
@@ -284,7 +284,7 @@ public sealed partial class PdfViewport
                 fireLayersAfter: false);
         }
 
-        PostStatus((rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiBuildQueuedForOpen) && !previewCacheHit
+        PostStatus((rasterBitmapWarmupQueuedForOpen || responsiveRasterDpiWorkQueuedForOpen) && !previewCacheHit
             ? $"Raster preparing: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"
             : previewCacheHit
             ? $"Cached preview: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}"

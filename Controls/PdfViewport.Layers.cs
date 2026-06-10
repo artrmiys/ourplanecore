@@ -298,6 +298,7 @@ public sealed partial class PdfViewport
         _renderedScale = raster.BitmapScale;
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
+        CancelPendingDocnetRenderForAppliedBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
         AppLog.Info(
             $"Viewport raster sheet {(usingOverview ? "overview " : "")}cache hit; page='{pageFolder}'; " +
@@ -435,7 +436,14 @@ public sealed partial class PdfViewport
         ClearRasterSheetVisualSegments();
         _showingPreviousPageDuringSwitch = false;
         ClearDetailRenderBitmap();
+        CancelPendingDocnetRenderForAppliedBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
+    }
+
+    private void CancelPendingDocnetRenderForAppliedBitmap()
+    {
+        _pendingDocnetRender = null;
+        _docnetRenderVersion++;
     }
 
     private bool TryApplyPersistedCleanLayerRender(LayerRenderRequest request)
