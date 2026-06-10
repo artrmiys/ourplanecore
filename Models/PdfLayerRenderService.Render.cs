@@ -44,6 +44,29 @@ namespace OurPlaneCore;
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
         SKRect? clipRect,
         out PdfLayerRenderResult result,
+        out string error) =>
+        TryRender(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers,
+            clipRect,
+            allowRawFullPage: false,
+            out result,
+            out error);
+
+    internal static bool TryRender(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect,
+        bool allowRawFullPage,
+        out PdfLayerRenderResult result,
         out string error)
     {
         result = new PdfLayerRenderResult();
@@ -56,7 +79,8 @@ namespace OurPlaneCore;
             layerStates,
             highlightedLayers,
             cachedLayers,
-            hasClip ? clipRect : null);
+            hasClip ? clipRect : null,
+            allowRawFullPage);
         if (TryGetCachedRender(cacheKey, out result))
             return true;
 
@@ -76,7 +100,7 @@ namespace OurPlaneCore;
                 Image = imagePath,
                 InlineImage = true,
                 InlineImageMaxPixels = InlineRenderImageMaxPixels,
-                InlineRawImage = hasClip,
+                InlineRawImage = hasClip || allowRawFullPage,
                 InlineRawImageMaxPixels = InlineRawRenderImageMaxPixels,
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
@@ -125,7 +149,12 @@ namespace OurPlaneCore;
             };
             AddCachedRender(cacheKey, result);
             if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
-                PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+            {
+                if (result.ImageBytes.Length > 0)
+                    PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+                else if (result.RawImageBytes.Length > 0)
+                    QueueCleanRenderPersistFromRaw(pdfPath, pageIndex, renderScale, result);
+            }
             return true;
         }
         catch (Exception ex)
@@ -282,7 +311,12 @@ namespace OurPlaneCore;
             };
             AddCachedRender(cacheKey, result);
             if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
-                PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+            {
+                if (result.ImageBytes.Length > 0)
+                    PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+                else if (result.RawImageBytes.Length > 0)
+                    QueueCleanRenderPersistFromRaw(pdfPath, pageIndex, renderScale, result);
+            }
             return true;
         }
         catch (Exception ex)
@@ -300,6 +334,77 @@ namespace OurPlaneCore;
             }
             catch { }
         }
+    }
+
+    /// <summary>
+    /// Raw-pixel render responses skip the PNG encode on the hot path, but the
+    /// persisted clean-render cache stores PNG files — encode and write them in
+    /// the background so cold opens still get disk-cache hits later.
+    /// </summary>
+    private static void QueueCleanRenderPersistFromRaw(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        PdfLayerRenderResult result)
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                using SKBitmap? bitmap = CreateBitmapFromRawRender(result);
+                if (bitmap == null)
+                    return;
+
+                using SKImage image = SKImage.FromBitmap(bitmap);
+                using SKData? data = image.Encode(SKEncodedImageFormat.Png, 85);
+                if (data == null || data.Size <= 0)
+                    return;
+
+                var persisted = new PdfLayerRenderResult
+                {
+                    ImageBytes = data.ToArray(),
+                    WidthPt = result.WidthPt,
+                    HeightPt = result.HeightPt,
+                    Layers = result.Layers,
+                    LayersCaptured = result.LayersCaptured,
+                };
+                PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, persisted);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn(ex, $"Clean render PNG persist failed for {pdfPath} page {pageIndex + 1}");
+            }
+        });
+    }
+
+    private static SKBitmap? CreateBitmapFromRawRender(PdfLayerRenderResult render)
+    {
+        int width = render.RawImageWidth;
+        int height = render.RawImageHeight;
+        int channels = render.RawImageChannels;
+        byte[] source = render.RawImageBytes;
+        long pixelCount = (long)width * height;
+        if (pixelCount <= 0 ||
+            pixelCount > int.MaxValue / 4 ||
+            channels is not (3 or 4) ||
+            source.LongLength != pixelCount * channels)
+        {
+            return null;
+        }
+
+        var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        byte[] bgra = new byte[(int)(pixelCount * 4)];
+        int dst = 0;
+        for (int src = 0; src < source.Length; src += channels)
+        {
+            bgra[dst++] = source[src + 2];
+            bgra[dst++] = source[src + 1];
+            bgra[dst++] = source[src];
+            bgra[dst++] = channels == 4 ? source[src + 3] : (byte)255;
+        }
+
+        System.Runtime.InteropServices.Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length);
+        return bitmap;
     }
 
     private static bool TryReadRenderImagePayload(
@@ -414,7 +519,8 @@ namespace OurPlaneCore;
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
-        SKRect? clipRect = null)
+        SKRect? clipRect = null,
+        bool rawTransport = false)
     {
         var info = new FileInfo(pdfPath);
         var sb = new StringBuilder();
@@ -448,6 +554,11 @@ namespace OurPlaneCore;
               .Append(Math.Round(clip.Right, 1)).Append(',')
               .Append(Math.Round(clip.Bottom, 1));
         }
+
+        // Raw-transport results have empty ImageBytes; keep them out of the
+        // cache slots consumed by PNG-expecting callers (export, raster build).
+        if (rawTransport && !IsUsableClip(clipRect))
+            sb.Append("|rawfull");
 
         return sb.ToString();
     }

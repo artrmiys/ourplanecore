@@ -74,6 +74,51 @@ public sealed partial class PdfViewport
         _detailRenderStartedUtc != DateTime.MinValue &&
         (DateTime.UtcNow - _detailRenderStartedUtc).TotalMilliseconds > 2000;
 
+    private string _detailDocPrewarmedPageKey = "";
+
+    /// <summary>
+    /// Sends a tiny clipped render to the detail worker shortly after page open
+    /// so the worker builds its document + display-list caches in the
+    /// background. The first interactive detail tile then renders in ~25ms
+    /// instead of paying the 200-500ms doc/display-list build cost.
+    /// </summary>
+    private void QueueDetailRenderDocPrewarm()
+    {
+        if (!ViewportRenderPolicy.DetailRenderEnabled || string.IsNullOrWhiteSpace(_pdfPath))
+            return;
+
+        string pageKey = $"{_pdfPath}|{_pdfIndex}";
+        if (string.Equals(_detailDocPrewarmedPageKey, pageKey, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _detailDocPrewarmedPageKey = pageKey;
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        IReadOnlyList<PdfLayerInfo>? cachedLayers = LayerRenderCachedLayers();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(ViewportRenderPolicy.DetailRenderDocPrewarmDelayMs).ConfigureAwait(false);
+                if (!string.Equals(_pdfPath, pdfPath, StringComparison.OrdinalIgnoreCase) || _pdfIndex != pdfIndex)
+                    return;
+
+                await PdfLayerRenderService.TryRenderAsync(
+                    pdfPath,
+                    pdfIndex,
+                    1.0,
+                    EmptyLayerStates,
+                    EmptyHighlightedLayers,
+                    cachedLayers,
+                    new SKRect(0, 0, 32, 32)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn(ex, "Viewport detail doc prewarm failed.");
+            }
+        });
+    }
+
     private void BeginPageSwitchDetailRenderHold()
     {
         _detailRenderHoldUntilUtc = DateTime.UtcNow.AddMilliseconds(

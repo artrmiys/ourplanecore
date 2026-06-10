@@ -1119,7 +1119,9 @@ public sealed partial class PdfViewport
                 request.RenderScale,
                 EmptyLayerStates,
                 EmptyHighlightedLayers,
-                request.CachedLayers);
+                request.CachedLayers,
+                clipRect: null,
+                allowRawFullPage: true);
             if (!renderResult.Ok)
             {
                 if (!string.IsNullOrWhiteSpace(renderResult.Error))

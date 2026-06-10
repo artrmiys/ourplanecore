@@ -140,6 +140,7 @@ public sealed partial class PdfViewport
         _docnetRenderVersion++;
         _persistedPreviewRenderVersion++;
         ClearDetailRender();
+        QueueDetailRenderDocPrewarm();
         QueuePdfSnapPointLoad(force: true);
         FireLayersChanged();
 

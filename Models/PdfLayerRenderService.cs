@@ -57,7 +57,8 @@ public static partial class PdfLayerRenderService
         IReadOnlyDictionary<int, bool> layerStates,
         IReadOnlyCollection<int> highlightedLayers,
         IReadOnlyList<PdfLayerInfo>? cachedLayers,
-        SKRect? clipRect = null)
+        SKRect? clipRect = null,
+        bool allowRawFullPage = false)
     {
         string requestKey = BuildRenderCacheKey(
             pdfPath,
@@ -66,7 +67,8 @@ public static partial class PdfLayerRenderService
             layerStates,
             highlightedLayers,
             cachedLayers,
-            clipRect);
+            clipRect,
+            allowRawFullPage);
         if (TryGetCachedRender(requestKey, out PdfLayerRenderResult cached))
             return Task.FromResult((true, cached, ""));
 
@@ -85,6 +87,7 @@ public static partial class PdfLayerRenderService
                     highlightedLayers,
                     cachedLayers,
                     clipRect,
+                    allowRawFullPage,
                     out PdfLayerRenderResult result,
                     out string error);
                 return (ok, result, error);

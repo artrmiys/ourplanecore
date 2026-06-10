@@ -20,8 +20,8 @@ public static class ViewportRenderPolicy
     public const float DetailRenderMaxScale = 16.0f;
     public const float DetailRenderMaxPixels = 96_000_000f;
     public const float DetailRenderPaddingScreenPx = 1024f;
-    public const bool DetailRenderPrefetchEnabled = false;
-    public const float DetailRenderPrefetchMinZoom = 6.0f;
+    public const bool DetailRenderPrefetchEnabled = true;
+    public const float DetailRenderPrefetchMinZoom = 2.5f;
     public const int DetailRenderPrefetchTileCount = 1;
     public const int DetailRenderPrefetchConcurrency = 1;
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
@@ -32,6 +32,7 @@ public static class ViewportRenderPolicy
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
     public const int PageSwitchDetailRenderDelayMs = 100;
+    public const int DetailRenderDocPrewarmDelayMs = 350;
     public const int FastPageSwitchPreviewCoalesceMs = 45;
     public const int PageSwitchSharpUpgradeDelayMs = 180;
     public const int PageSwitchSharpUpgradeIdleMs = 500;
@@ -63,7 +64,7 @@ public static class ViewportRenderPolicy
     public const int JobOpenWarmupHugeJobThreshold = 320;
     public const int RasterSheetRefreshPrefetchDelayMs = 1800;
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
-    public const int RasterSheetWorkZoomWarmupDelayMs = 2400;
+    public const int RasterSheetWorkZoomWarmupDelayMs = 800;
     public const int RasterSheetCurrentWorkZoomBuildDelayMs = 80;
     public const int RasterSheetMotionQualityRestoreQuietMs = 450;
     public const int RasterSheetPageOpenImmediateWarmMaxDpi = 144;
@@ -393,7 +394,7 @@ public static class ViewportRenderPolicy
 
     public static bool ShouldUseDetailRenderPrefetch(float zoom, bool isFastNavigating) =>
         DetailRenderPrefetchEnabled &&
-        string.Equals(QualityMode, MaxQualityMode, StringComparison.Ordinal) &&
+        !string.Equals(QualityMode, BalancedQualityMode, StringComparison.Ordinal) &&
         !isFastNavigating &&
         zoom >= DetailRenderPrefetchMinZoom;
 

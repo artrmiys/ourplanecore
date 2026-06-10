@@ -2368,7 +2368,8 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("MaxRenderCacheEntries = 96", StringComparison.Ordinal) &&
             service.Contains("MaxRenderCacheBytes = 768_000_000", StringComparison.Ordinal) &&
             service.Contains("ImageBase64", StringComparison.Ordinal) &&
-            service.Contains("InlineRawImage = hasClip", StringComparison.Ordinal) &&
+            service.Contains("InlineRawImage = hasClip || allowRawFullPage", StringComparison.Ordinal) &&
+            service.Contains("QueueCleanRenderPersistFromRaw", StringComparison.Ordinal) &&
             service.Contains("InlineRawRenderImageMaxPixels = 4_000_000", StringComparison.Ordinal) &&
             service.Contains("ImageRawBase64", StringComparison.Ordinal) &&
             service.Contains("Convert.FromBase64String(response.ImageBase64)", StringComparison.Ordinal),
@@ -2435,8 +2436,8 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("ShouldSkipFullRefreshDuringDetail", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPaddingScreenPxForZoom", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderPrefetchEnabled = false", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderPrefetchMinZoom = 6.0f", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchEnabled = true", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchMinZoom = 2.5f", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderCoalesceDelayMs = 80", StringComparison.Ordinal) &&
             policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
