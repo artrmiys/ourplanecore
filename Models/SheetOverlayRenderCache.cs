@@ -10,7 +10,7 @@ using SkiaSharp;
 
 namespace OurPlaneCore;
 
-public static class SheetOverlayRenderCache
+public static partial class SheetOverlayRenderCache
 {
     public const string CacheRootEnvironmentVariable = "OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT";
     private const string TintStyleVersion = "bright-v2";
@@ -19,6 +19,8 @@ public static class SheetOverlayRenderCache
     private const long MaxBytes = 800_000_000;
     private const long MaxPixels = 48_000_000;
     private const long MaxPngBytes = 96_000_000;
+    private const int RawBytesPerPixel = 4;
+    private const string RawFormatVersion = "bgra8888-premul-v1";
     private const int PdfFingerprintChunkBytes = 64 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -44,8 +46,11 @@ public static class SheetOverlayRenderCache
 
         try
         {
-            if (!File.Exists(paths.MetadataPath) || !File.Exists(paths.ImagePath))
+            if (!File.Exists(paths.MetadataPath) ||
+                (!File.Exists(paths.ImagePath) && !File.Exists(paths.RawPath)))
+            {
                 return TryReadRelocatedCache(identity, paths, out bitmap, out widthPt, out heightPt);
+            }
 
             CacheMetadata? metadata = JsonSerializer.Deserialize<CacheMetadata>(
                 File.ReadAllText(paths.MetadataPath),
@@ -56,7 +61,20 @@ public static class SheetOverlayRenderCache
                 return TryReadRelocatedCache(identity, paths, out bitmap, out widthPt, out heightPt);
             }
 
-            SKBitmap? decoded = SKBitmap.Decode(paths.ImagePath);
+            SKBitmap? decoded = TryReadRaw(paths, metadata);
+            if (decoded == null)
+            {
+                if (!File.Exists(paths.ImagePath))
+                {
+                    TryDelete(paths);
+                    return false;
+                }
+
+                decoded = SKBitmap.Decode(paths.ImagePath);
+                if (decoded != null)
+                    TryWriteRawSidecar(paths, decoded, metadata, rewriteMetadata: true);
+            }
+
             if (decoded == null)
             {
                 TryDelete(paths);
@@ -68,6 +86,7 @@ public static class SheetOverlayRenderCache
             heightPt = metadata.HeightPt;
             TryTouch(paths.ImagePath);
             TryTouch(paths.MetadataPath);
+            TryTouch(paths.RawPath);
             return widthPt > 0 && heightPt > 0;
         }
         catch (Exception ex)
@@ -118,10 +137,23 @@ public static class SheetOverlayRenderCache
                     continue;
 
                 string imagePath = Path.ChangeExtension(metadataPath, ".png");
-                if (!File.Exists(imagePath))
+                string rawPath = Path.ChangeExtension(metadataPath, ".bgra");
+                if (!File.Exists(imagePath) && !File.Exists(rawPath))
                     continue;
 
-                SKBitmap? decoded = SKBitmap.Decode(imagePath);
+                var sourcePaths = new CachePaths(
+                    Path.GetDirectoryName(metadataPath) ?? "",
+                    imagePath,
+                    metadataPath,
+                    rawPath);
+                SKBitmap? decoded = TryReadRaw(sourcePaths, metadata);
+                if (decoded == null && File.Exists(imagePath))
+                {
+                    decoded = SKBitmap.Decode(imagePath);
+                    if (decoded != null)
+                        TryWriteRawSidecar(sourcePaths, decoded, metadata, rewriteMetadata: true);
+                }
+
                 if (decoded == null)
                     continue;
 
@@ -130,7 +162,8 @@ public static class SheetOverlayRenderCache
                 heightPt = metadata.HeightPt;
                 TryTouch(imagePath);
                 TryTouch(metadataPath);
-                PromoteRelocatedCache(metadataPath, imagePath, targetPaths);
+                TryTouch(rawPath);
+                PromoteRelocatedCache(metadataPath, imagePath, rawPath, targetPaths);
                 return widthPt > 0 && heightPt > 0;
             }
         }
@@ -144,13 +177,19 @@ public static class SheetOverlayRenderCache
         return false;
     }
 
-    private static void PromoteRelocatedCache(string metadataPath, string imagePath, CachePaths targetPaths)
+    private static void PromoteRelocatedCache(
+        string metadataPath,
+        string imagePath,
+        string rawPath,
+        CachePaths targetPaths)
     {
         try
         {
             Directory.CreateDirectory(targetPaths.DirectoryPath);
-            if (!File.Exists(targetPaths.ImagePath))
+            if (File.Exists(imagePath) && !File.Exists(targetPaths.ImagePath))
                 File.Copy(imagePath, targetPaths.ImagePath, overwrite: false);
+            if (File.Exists(rawPath) && !File.Exists(targetPaths.RawPath))
+                File.Copy(rawPath, targetPaths.RawPath, overwrite: false);
             if (!File.Exists(targetPaths.MetadataPath))
                 File.Copy(metadataPath, targetPaths.MetadataPath, overwrite: false);
         }
@@ -184,6 +223,7 @@ public static class SheetOverlayRenderCache
             Directory.CreateDirectory(paths.DirectoryPath);
             string tempImage = paths.ImagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             string tempMetadata = paths.MetadataPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            string tempRaw = paths.RawPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
             var metadata = new CacheMetadata
             {
@@ -203,6 +243,13 @@ public static class SheetOverlayRenderCache
 
             using (FileStream stream = File.Create(tempImage))
                 data.SaveTo(stream);
+            if (TryWriteBitmapRawFile(tempRaw, bitmap, out int pixelWidth, out int pixelHeight))
+            {
+                metadata.PixelWidth = pixelWidth;
+                metadata.PixelHeight = pixelHeight;
+                metadata.RawFormat = RawFormatVersion;
+                File.Move(tempRaw, paths.RawPath, overwrite: true);
+            }
             File.WriteAllText(tempMetadata, JsonSerializer.Serialize(metadata, JsonOptions));
             File.Move(tempImage, paths.ImagePath, overwrite: true);
             File.Move(tempMetadata, paths.MetadataPath, overwrite: true);
@@ -221,7 +268,7 @@ public static class SheetOverlayRenderCache
         out CachePaths paths,
         out CacheIdentity identity)
     {
-        paths = new CachePaths("", "", "");
+        paths = new CachePaths("", "", "", "");
         identity = new CacheIdentity("", "", 0, 0, 0, 0, "", 0, "");
 
         if (string.IsNullOrWhiteSpace(overlayPage.PdfPath) || overlayPage.PdfPage < 0)
@@ -247,7 +294,8 @@ public static class SheetOverlayRenderCache
         paths = new CachePaths(
             directory,
             Path.Combine(directory, hash + ".png"),
-            Path.Combine(directory, hash + ".json"));
+            Path.Combine(directory, hash + ".json"),
+            Path.Combine(directory, hash + ".bgra"));
         return true;
     }
 
@@ -338,6 +386,8 @@ public static class SheetOverlayRenderCache
         {
             if (File.Exists(paths.ImagePath))
                 File.Delete(paths.ImagePath);
+            if (File.Exists(paths.RawPath))
+                File.Delete(paths.RawPath);
             if (File.Exists(paths.MetadataPath))
                 File.Delete(paths.MetadataPath);
         }
@@ -352,29 +402,44 @@ public static class SheetOverlayRenderCache
             if (!Directory.Exists(root))
                 return;
 
-            var files = Directory
-                .EnumerateFiles(root, "*.png", SearchOption.AllDirectories)
-                .Select(path => new FileInfo(path))
-                .Where(file => file.Exists)
-                .OrderByDescending(file => file.LastWriteTimeUtc)
+            var entries = Directory
+                .EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
+                .Select(BuildCacheEntry)
+                .Where(entry => entry.Exists)
+                .OrderByDescending(entry => entry.LastWriteTimeUtc)
                 .ToList();
-            long totalBytes = files.Sum(file => file.Length);
-            foreach (FileInfo file in files.Skip(MaxEntries))
+            long totalBytes = entries.Sum(entry => entry.SizeBytes);
+            foreach (CacheEntryInfo entry in entries.Skip(MaxEntries))
             {
-                totalBytes -= file.Length;
-                DeleteCachePair(file.FullName);
+                totalBytes -= entry.SizeBytes;
+                DeleteCachePair(entry.ImagePath);
             }
 
-            foreach (FileInfo file in files.Take(MaxEntries).Reverse())
+            foreach (CacheEntryInfo entry in entries.Take(MaxEntries).Reverse())
             {
                 if (totalBytes <= MaxBytes)
                     break;
 
-                totalBytes -= file.Length;
-                DeleteCachePair(file.FullName);
+                totalBytes -= entry.SizeBytes;
+                DeleteCachePair(entry.ImagePath);
             }
         }
         catch { }
+    }
+
+    private static CacheEntryInfo BuildCacheEntry(string metadataPath)
+    {
+        string imagePath = Path.ChangeExtension(metadataPath, ".png");
+        string rawPath = Path.ChangeExtension(metadataPath, ".bgra");
+        long sizeBytes = FileLength(metadataPath) + FileLength(imagePath) + FileLength(rawPath);
+        DateTime lastWrite = new[]
+            {
+                LastWriteUtc(metadataPath),
+                LastWriteUtc(imagePath),
+                LastWriteUtc(rawPath),
+            }
+            .Max();
+        return new CacheEntryInfo(metadataPath, imagePath, rawPath, sizeBytes, lastWrite, sizeBytes > 0);
     }
 
     private static void DeleteCachePair(string imagePath)
@@ -386,11 +451,52 @@ public static class SheetOverlayRenderCache
             string metadataPath = Path.ChangeExtension(imagePath, ".json");
             if (File.Exists(metadataPath))
                 File.Delete(metadataPath);
+            string rawPath = Path.ChangeExtension(imagePath, ".bgra");
+            if (File.Exists(rawPath))
+                File.Delete(rawPath);
         }
         catch { }
     }
 
-    private readonly record struct CachePaths(string DirectoryPath, string ImagePath, string MetadataPath);
+    private static long FileLength(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.Length : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static DateTime LastWriteUtc(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue;
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    private readonly record struct CachePaths(
+        string DirectoryPath,
+        string ImagePath,
+        string MetadataPath,
+        string RawPath);
+
+    private readonly record struct CacheEntryInfo(
+        string MetadataPath,
+        string ImagePath,
+        string RawPath,
+        long SizeBytes,
+        DateTime LastWriteTimeUtc,
+        bool Exists);
 
     private readonly record struct CacheIdentity(
         string OverlayPdfPath,
@@ -437,6 +543,9 @@ public static class SheetOverlayRenderCache
         public string LayerStateKey { get; set; } = "";
         public float WidthPt { get; set; }
         public float HeightPt { get; set; }
+        public int PixelWidth { get; set; }
+        public int PixelHeight { get; set; }
+        public string RawFormat { get; set; } = "";
         public DateTime CreatedUtc { get; set; }
 
         public bool Matches(CacheIdentity identity) =>

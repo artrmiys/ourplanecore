@@ -3865,6 +3865,14 @@ static void SheetOverlayRenderCacheRoundTrips()
             "empty sheet overlay cache should miss");
 
         SheetOverlayRenderCache.TryWrite(page, overlayPage, 1.25f, bitmap, 612, 792);
+        string cacheRoot = Path.Combine(root, "cache");
+        string[] rawFiles = Directory.GetFiles(cacheRoot, "*.bgra", SearchOption.AllDirectories);
+        string[] pngFiles = Directory.GetFiles(cacheRoot, "*.png", SearchOption.AllDirectories);
+        AssertEqual("1", rawFiles.Length.ToString(), "written sheet overlay cache raw sidecar count");
+        AssertEqual("24", new FileInfo(rawFiles[0]).Length.ToString(), "written sheet overlay raw sidecar bytes");
+        AssertEqual("1", pngFiles.Length.ToString(), "written sheet overlay cache png count");
+
+        File.Delete(rawFiles[0]);
         AssertTrue(
             SheetOverlayRenderCache.TryRead(
                 page,
@@ -3881,6 +3889,26 @@ static void SheetOverlayRenderCacheRoundTrips()
         }
         AssertClose(612, widthPt, "cached overlay width pt");
         AssertClose(792, heightPt, "cached overlay height pt");
+
+        rawFiles = Directory.GetFiles(cacheRoot, "*.bgra", SearchOption.AllDirectories);
+        AssertEqual("1", rawFiles.Length.ToString(), "png fallback should rebuild sheet overlay raw sidecar");
+        File.Delete(pngFiles[0]);
+        AssertTrue(
+            SheetOverlayRenderCache.TryRead(
+                page,
+                overlayPage,
+                1.25f,
+                out SKBitmap? rawCached,
+                out widthPt,
+                out heightPt),
+            "sheet overlay raw sidecar should read when png is unavailable");
+        using (rawCached)
+        {
+            AssertEqual("3", rawCached?.Width.ToString() ?? "", "raw cached overlay bitmap width");
+            AssertEqual("2", rawCached?.Height.ToString() ?? "", "raw cached overlay bitmap height");
+        }
+        AssertClose(612, widthPt, "raw cached overlay width pt");
+        AssertClose(792, heightPt, "raw cached overlay height pt");
 
         string copiedPdf = Path.Combine(root, "Copied", "overlay.pdf");
         Directory.CreateDirectory(Path.GetDirectoryName(copiedPdf)!);
