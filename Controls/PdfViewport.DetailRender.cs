@@ -21,6 +21,7 @@ public sealed partial class PdfViewport
     private DetailRenderRequest? _pendingDetailRender;
     private DetailRenderRequest? _activeDetailRender;
     private bool _detailRenderInProgress;
+    private DateTime _detailRenderStartedUtc = DateTime.MinValue;
     private bool _detailRenderStartQueued;
     private int _detailRenderVersion;
     private int _detailTileGeneration;
@@ -58,16 +59,20 @@ public sealed partial class PdfViewport
 
     private void ClearDetailRender()
     {
-        bool cancelActiveDetailRender =
-            _detailRenderInProgress ||
-            _activeDetailRender != null ||
-            _pendingDetailRender != null;
         _pendingDetailRender = null;
         _detailRenderVersion++;
-        if (cancelActiveDetailRender)
+        // In-flight detail renders finish in ~25-300ms and are discarded by the
+        // version check, so let them complete: killing the worker here costs a
+        // 300-1100ms python restart and drops its document/display-list caches.
+        // Only kill a render that looks genuinely stuck.
+        if (_detailRenderInProgress && DetailRenderLooksStuck())
             PdfLayerRenderService.CancelDetailRenderWorker();
         ClearDetailRenderBitmap();
     }
+
+    private bool DetailRenderLooksStuck() =>
+        _detailRenderStartedUtc != DateTime.MinValue &&
+        (DateTime.UtcNow - _detailRenderStartedUtc).TotalMilliseconds > 2000;
 
     private void BeginPageSwitchDetailRenderHold()
     {
@@ -378,6 +383,7 @@ public sealed partial class PdfViewport
 
         _activeDetailRender = request;
         _detailRenderInProgress = true;
+        _detailRenderStartedUtc = DateTime.UtcNow;
         try
         {
             PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);

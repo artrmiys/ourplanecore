@@ -330,6 +330,21 @@ public sealed partial class PdfViewport
         bool allowDiskRead = true,
         bool requestRepaint = true)
     {
+        // At restored work zoom a 0.35 preview is a ~3x upscale; show the
+        // readable 0.75 cache first when it is already available.
+        if (ShouldPreferReadablePreviewFirst(restoreView, fitAfter, renderScale) &&
+            TryApplyPersistedPreviewRenderScale(
+                pdfPath,
+                pdfIndex,
+                ViewportRenderPolicy.InitialPagePreviewRenderScale,
+                restoreView,
+                fitAfter,
+                allowDiskRead,
+                requestRepaint))
+        {
+            return true;
+        }
+
         if (TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, renderScale, restoreView, fitAfter, allowDiskRead, requestRepaint))
             return true;
 
@@ -350,6 +365,12 @@ public sealed partial class PdfViewport
                     allowDiskRead,
                     requestRepaint);
     }
+
+    private static bool ShouldPreferReadablePreviewFirst(ViewState? restoreView, bool fitAfter, float renderScale) =>
+        !fitAfter &&
+        restoreView.HasValue &&
+        restoreView.Value.Zoom >= ViewportRenderPolicy.ZoomRefreshMinZoom &&
+        renderScale < ViewportRenderPolicy.InitialPagePreviewRenderScale * 0.95f;
 
     private static float PageSwitchLivePreviewScale(ViewState? restoreView, bool fitAfter) =>
         ShouldUseColdPageSwitchPreview(restoreView, fitAfter)

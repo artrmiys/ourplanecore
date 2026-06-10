@@ -27,7 +27,7 @@ public static class ViewportRenderPolicy
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
     public const int DetailRenderCoalesceDelayMs = 80;
-    public const int DetailRenderNavigationQuietMs = 280;
+    public const int DetailRenderNavigationQuietMs = 240;
     public const int DetailRenderMaxPaintTiles = 2;
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;

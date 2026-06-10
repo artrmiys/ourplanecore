@@ -1544,7 +1544,7 @@ internal static class TakeoffsTreeRegressionTests
             "raster sheet mode should use smoothed still-frame bitmap sampling while allowing cheaper sampling during navigation and heavily downsampled far-zoom paint");
         AssertTrue(
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
-            renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 24", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 32", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
@@ -2501,7 +2501,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 100", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderNavigationQuietMs = 280", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderNavigationQuietMs = 240", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewCoalesceMs = 45", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeDelayMs = 180", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 500", StringComparison.Ordinal) &&

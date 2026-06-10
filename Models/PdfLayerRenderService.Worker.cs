@@ -271,6 +271,36 @@ public static partial class PdfLayerRenderService
         ResetWorker(WorkerRole.Detail);
     }
 
+    /// <summary>
+    /// Spawns the persistent Python workers ahead of the first render so the
+    /// interpreter/import startup cost (300-1100ms) overlaps app startup
+    /// instead of delaying the first interactive detail tile.
+    /// </summary>
+    public static Task PrewarmWorkersAsync() =>
+        Task.Run(() =>
+        {
+            foreach (WorkerRole role in new[] { WorkerRole.Primary, WorkerRole.Detail, WorkerRole.Prefetch })
+            {
+                SemaphoreSlim semaphore = WorkerSemaphoreFor(role);
+                semaphore.Wait();
+                try
+                {
+                    if (!EnsureWorker(role, out string error) && !string.IsNullOrWhiteSpace(error))
+                        AppLog.Warn($"PyMuPDF {WorkerLogPrefix(role)} prewarm failed: {error}");
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, $"PyMuPDF {WorkerLogPrefix(role)} prewarm failed");
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }
+
+            AppLog.Info("PyMuPDF workers prewarmed.");
+        });
+
     private static SemaphoreSlim WorkerSemaphoreFor(WorkerRole role) => role switch
     {
         WorkerRole.Detail => DetailWorkerSemaphore,

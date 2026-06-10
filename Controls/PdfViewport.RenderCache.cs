@@ -13,7 +13,7 @@ public sealed partial class PdfViewport
 {
     private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 32, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
     private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 256, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
-    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 24, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 32, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
     private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 24, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
