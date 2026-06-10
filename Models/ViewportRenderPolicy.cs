@@ -22,13 +22,13 @@ public static class ViewportRenderPolicy
     public const float DetailRenderPaddingScreenPx = 1024f;
     public const bool DetailRenderPrefetchEnabled = true;
     public const float DetailRenderPrefetchMinZoom = 2.5f;
-    public const int DetailRenderPrefetchTileCount = 1;
+    public const int DetailRenderPrefetchTileCount = 4;
     public const int DetailRenderPrefetchConcurrency = 1;
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
     public const int DetailRenderCoalesceDelayMs = 80;
     public const int DetailRenderNavigationQuietMs = 240;
-    public const int DetailRenderMaxPaintTiles = 2;
+    public const int DetailRenderMaxPaintTiles = 4;
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
     public const int PageSwitchDetailRenderDelayMs = 100;

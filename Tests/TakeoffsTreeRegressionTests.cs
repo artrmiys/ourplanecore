@@ -2441,7 +2441,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderCoalesceDelayMs = 80", StringComparison.Ordinal) &&
             policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderMaxPaintTiles = 2", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderMaxPaintTiles = 4", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderStableTileScreenPx", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderStableTileMaxExpansionFactor", StringComparison.Ordinal) &&
             policy.Contains("ShouldUseDetailRenderPrefetch", StringComparison.Ordinal),
@@ -2539,7 +2539,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("IsSameDetailRequest(_activeDetailRender, request)", StringComparison.Ordinal) &&
             detail.Contains("_detailRenderVersion + 1", StringComparison.Ordinal) &&
             detail.Contains("private sealed class DetailRenderTile", StringComparison.Ordinal) &&
-            detail.Contains("MaxDetailRenderTileEntries = 16", StringComparison.Ordinal) &&
+            detail.Contains("MaxDetailRenderTileEntries = 32", StringComparison.Ordinal) &&
             detail.Contains("ResolveViewportRamBudget(160_000_000L, 512_000_000L, 0.025)", StringComparison.Ordinal) &&
             detail.Contains("TrimDetailRenderTiles", StringComparison.Ordinal) &&
             detail.Contains("request.ClipRect", StringComparison.Ordinal) &&

@@ -29,7 +29,7 @@ public sealed partial class PdfViewport
     private bool _detailRenderHoldResumeQueued;
     private readonly object _detailPrefetchGate = new();
     private readonly HashSet<string> _detailPrefetchInFlight = new(StringComparer.OrdinalIgnoreCase);
-    private const int MaxDetailRenderTileEntries = 16;
+    private const int MaxDetailRenderTileEntries = 32;
     private static readonly long MaxDetailRenderTileBytes =
         ResolveViewportRamBudget(160_000_000L, 512_000_000L, 0.025);
     private static readonly SemaphoreSlim DetailTilePrefetchSemaphore =
