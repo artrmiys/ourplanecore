@@ -19,6 +19,7 @@ public static class SheetOverlayRenderCache
     private const long MaxBytes = 800_000_000;
     private const long MaxPixels = 48_000_000;
     private const long MaxPngBytes = 96_000_000;
+    private const int PdfFingerprintChunkBytes = 64 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -44,7 +45,7 @@ public static class SheetOverlayRenderCache
         try
         {
             if (!File.Exists(paths.MetadataPath) || !File.Exists(paths.ImagePath))
-                return false;
+                return TryReadRelocatedCache(identity, paths, out bitmap, out widthPt, out heightPt);
 
             CacheMetadata? metadata = JsonSerializer.Deserialize<CacheMetadata>(
                 File.ReadAllText(paths.MetadataPath),
@@ -52,7 +53,7 @@ public static class SheetOverlayRenderCache
             if (metadata == null || !metadata.Matches(identity))
             {
                 TryDelete(paths);
-                return false;
+                return TryReadRelocatedCache(identity, paths, out bitmap, out widthPt, out heightPt);
             }
 
             SKBitmap? decoded = SKBitmap.Decode(paths.ImagePath);
@@ -76,6 +77,85 @@ public static class SheetOverlayRenderCache
             bitmap?.Dispose();
             bitmap = null;
             return false;
+        }
+    }
+
+    private static bool TryReadRelocatedCache(
+        CacheIdentity identity,
+        CachePaths targetPaths,
+        out SKBitmap? bitmap,
+        out float widthPt,
+        out float heightPt)
+    {
+        bitmap = null;
+        widthPt = 0;
+        heightPt = 0;
+
+        try
+        {
+            string root = CacheRoot();
+            if (!Directory.Exists(root))
+                return false;
+
+            foreach (string metadataPath in Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories))
+            {
+                if (string.Equals(metadataPath, targetPaths.MetadataPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                CacheMetadata? metadata;
+                try
+                {
+                    metadata = JsonSerializer.Deserialize<CacheMetadata>(
+                        File.ReadAllText(metadataPath),
+                        JsonOptions);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (metadata == null || !metadata.Matches(identity))
+                    continue;
+
+                string imagePath = Path.ChangeExtension(metadataPath, ".png");
+                if (!File.Exists(imagePath))
+                    continue;
+
+                SKBitmap? decoded = SKBitmap.Decode(imagePath);
+                if (decoded == null)
+                    continue;
+
+                bitmap = decoded;
+                widthPt = metadata.WidthPt;
+                heightPt = metadata.HeightPt;
+                TryTouch(imagePath);
+                TryTouch(metadataPath);
+                PromoteRelocatedCache(metadataPath, imagePath, targetPaths);
+                return widthPt > 0 && heightPt > 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Sheet overlay relocated cache read failed for {identity.OverlayPdfPath} page {identity.OverlayPageIndex + 1}");
+            bitmap?.Dispose();
+            bitmap = null;
+        }
+
+        return false;
+    }
+
+    private static void PromoteRelocatedCache(string metadataPath, string imagePath, CachePaths targetPaths)
+    {
+        try
+        {
+            Directory.CreateDirectory(targetPaths.DirectoryPath);
+            if (!File.Exists(targetPaths.ImagePath))
+                File.Copy(imagePath, targetPaths.ImagePath, overwrite: false);
+            if (!File.Exists(targetPaths.MetadataPath))
+                File.Copy(metadataPath, targetPaths.MetadataPath, overwrite: false);
+        }
+        catch
+        {
         }
     }
 
@@ -108,6 +188,7 @@ public static class SheetOverlayRenderCache
             var metadata = new CacheMetadata
             {
                 OverlayPdfPath = identity.OverlayPdfPath,
+                OverlayPdfFingerprint = identity.OverlayPdfFingerprint,
                 OverlayPdfLastWriteUtcTicks = identity.OverlayPdfLastWriteUtcTicks,
                 OverlayPdfLength = identity.OverlayPdfLength,
                 OverlayPageIndex = identity.OverlayPageIndex,
@@ -141,7 +222,7 @@ public static class SheetOverlayRenderCache
         out CacheIdentity identity)
     {
         paths = new CachePaths("", "", "");
-        identity = new CacheIdentity("", 0, 0, 0, 0, "", 0, "");
+        identity = new CacheIdentity("", "", 0, 0, 0, 0, "", 0, "");
 
         if (string.IsNullOrWhiteSpace(overlayPage.PdfPath) || overlayPage.PdfPage < 0)
             return false;
@@ -150,8 +231,10 @@ public static class SheetOverlayRenderCache
         if (!info.Exists)
             return false;
 
+        string fingerprint = BuildPdfFingerprint(info);
         identity = new CacheIdentity(
             info.FullName,
+            fingerprint,
             info.LastWriteTimeUtc.Ticks,
             info.Length,
             overlayPage.PdfPage,
@@ -181,6 +264,44 @@ public static class SheetOverlayRenderCache
     private static bool IsBitmapCacheable(SKBitmap bitmap) =>
         bitmap.Width <= int.MaxValue / Math.Max(1, bitmap.Height) &&
         (long)bitmap.Width * bitmap.Height <= MaxPixels;
+
+    private static string BuildPdfFingerprint(FileInfo info)
+    {
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            AppendHashText(hash, info.Length.ToString(CultureInfo.InvariantCulture));
+            AppendHashText(hash, info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture));
+            AppendHashText(hash, info.Name.ToLowerInvariant());
+
+            byte[] buffer = new byte[PdfFingerprintChunkBytes];
+            using FileStream stream = info.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            int read = stream.Read(buffer, 0, buffer.Length);
+            if (read > 0)
+                hash.AppendData(buffer.AsSpan(0, read));
+
+            if (stream.Length > PdfFingerprintChunkBytes)
+            {
+                stream.Seek(Math.Max(0, stream.Length - PdfFingerprintChunkBytes), SeekOrigin.Begin);
+                read = stream.Read(buffer, 0, buffer.Length);
+                if (read > 0)
+                    hash.AppendData(buffer.AsSpan(0, read));
+            }
+
+            return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        }
+        catch
+        {
+            return string.Join(
+                "|",
+                info.Name.ToLowerInvariant(),
+                info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture),
+                info.Length.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    private static void AppendHashText(IncrementalHash hash, string value) =>
+        hash.AppendData(Encoding.UTF8.GetBytes(value));
 
     private static float NormalizeScale(double scale) => (float)Math.Round(scale, 3);
 
@@ -273,6 +394,7 @@ public static class SheetOverlayRenderCache
 
     private readonly record struct CacheIdentity(
         string OverlayPdfPath,
+        string OverlayPdfFingerprint,
         long OverlayPdfLastWriteUtcTicks,
         long OverlayPdfLength,
         int OverlayPageIndex,
@@ -283,7 +405,7 @@ public static class SheetOverlayRenderCache
     {
         public string Key =>
             string.Concat(
-                OverlayPdfPath.ToLowerInvariant(),
+                OverlayPdfFingerprint,
                 "|",
                 OverlayPdfLastWriteUtcTicks.ToString(CultureInfo.InvariantCulture),
                 "|",
@@ -305,6 +427,7 @@ public static class SheetOverlayRenderCache
     private sealed class CacheMetadata
     {
         public string OverlayPdfPath { get; set; } = "";
+        public string OverlayPdfFingerprint { get; set; } = "";
         public long OverlayPdfLastWriteUtcTicks { get; set; }
         public long OverlayPdfLength { get; set; }
         public int OverlayPageIndex { get; set; }
@@ -317,7 +440,7 @@ public static class SheetOverlayRenderCache
         public DateTime CreatedUtc { get; set; }
 
         public bool Matches(CacheIdentity identity) =>
-            string.Equals(OverlayPdfPath, identity.OverlayPdfPath, StringComparison.OrdinalIgnoreCase) &&
+            MatchesPdf(identity) &&
             OverlayPdfLastWriteUtcTicks == identity.OverlayPdfLastWriteUtcTicks &&
             OverlayPdfLength == identity.OverlayPdfLength &&
             OverlayPageIndex == identity.OverlayPageIndex &&
@@ -327,5 +450,19 @@ public static class SheetOverlayRenderCache
             string.Equals(LayerStateKey, identity.LayerStateKey, StringComparison.Ordinal) &&
             WidthPt > 0 &&
             HeightPt > 0;
+
+        private bool MatchesPdf(CacheIdentity identity)
+        {
+            if (!string.IsNullOrWhiteSpace(OverlayPdfFingerprint))
+                return string.Equals(OverlayPdfFingerprint, identity.OverlayPdfFingerprint, StringComparison.Ordinal);
+
+            if (string.Equals(OverlayPdfPath, identity.OverlayPdfPath, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return string.Equals(
+                Path.GetFileName(OverlayPdfPath),
+                Path.GetFileName(identity.OverlayPdfPath),
+                StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

@@ -350,7 +350,8 @@ public partial class MainWindow
             viewportPage.FolderPath,
             viewportPage.PdfLayersCached ? viewportPage.PdfLayers : null,
             restoreView,
-            viewportPage.RasterSheet);
+            viewportPage.RasterSheet,
+            viewportPage.OverlayVisible && !string.IsNullOrWhiteSpace(viewportPage.OverlayPageFolder));
         trace?.Mark("decode");
         QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView);
         trace?.Mark("overlay-queued");

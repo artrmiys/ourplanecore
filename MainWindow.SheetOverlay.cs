@@ -709,10 +709,30 @@ public partial class MainWindow
         widthPt = result.WidthPt;
         heightPt = result.HeightPt;
         overlayName = overlayPage.Name;
+        QueueSheetOverlayRenderCacheWrite(page, overlayPage, renderScale, overlayBitmap, widthPt, heightPt);
         AppLog.Info(
             $"Sheet overlay raster cache hit; base='{page.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
             $"scale={renderScale:0.###}; bitmapScale={result.BitmapScale:0.###}");
         return true;
+    }
+
+    private static void QueueSheetOverlayRenderCacheWrite(
+        PageInfo page,
+        PageInfo overlayPage,
+        float renderScale,
+        SKBitmap bitmap,
+        float widthPt,
+        float heightPt)
+    {
+        SKBitmap? snapshot = bitmap.Copy();
+        if (snapshot == null)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            using (snapshot)
+                SheetOverlayRenderCache.TryWrite(page, overlayPage, renderScale, snapshot, widthPt, heightPt);
+        });
     }
 
     private sealed record SheetOverlayBuildResult(
@@ -728,7 +748,7 @@ public partial class MainWindow
         var info = new FileInfo(overlayPage.PdfPath);
         return string.Join(
             '|',
-            overlayPage.FolderPath.ToLowerInvariant(),
+            Path.GetFileName(info.FullName).ToLowerInvariant(),
             info.Exists ? info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) : "0",
             info.Exists ? info.Length.ToString(CultureInfo.InvariantCulture) : "0",
             overlayPage.PdfPage.ToString(CultureInfo.InvariantCulture),

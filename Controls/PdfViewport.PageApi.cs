@@ -93,7 +93,8 @@ public sealed partial class PdfViewport
         string pageFolder = "",
         IReadOnlyList<PdfLayerInfo>? cachedLayers = null,
         ViewState? restoreView = null,
-        RasterSheetSource? rasterSheet = null)
+        RasterSheetSource? rasterSheet = null,
+        bool hasSheetOverlayConfigured = false)
     {
         CancelTransientNavigationRenderWork();
         BeginFastNavigation();
@@ -161,7 +162,8 @@ public sealed partial class PdfViewport
                 pdfPath,
                 pageIndex,
                 pageFolder,
-                rasterSheet);
+                rasterSheet,
+                allowLowZoomFullRasterApply: false);
         }
 
         if (responsiveRasterDpiForOpen &&
@@ -219,11 +221,12 @@ public sealed partial class PdfViewport
         }
         if (!shouldUseRasterSheetForOpen)
         {
-            QueueRasterSheetWorkZoomWarmupForPageOpen(
+            rasterBitmapWarmupQueuedForOpen = QueueRasterSheetWorkZoomWarmupForPageOpen(
                 pdfPath,
                 pageIndex,
                 pageFolder,
-                rasterSheet);
+                rasterSheet,
+                allowLowZoomFullRasterApply: hasSheetOverlayConfigured);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(

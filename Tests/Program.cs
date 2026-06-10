@@ -281,7 +281,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
     ("viewport raster page open uses preview at fit and hot cache at work zoom", ViewportRasterPageOpenAppliesHotBitmapCache),
-    ("viewport raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
+    ("viewport overlay raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
     ("viewport oversized raster page open queues responsive dpi with preview fallback", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallback),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
@@ -3882,6 +3882,23 @@ static void SheetOverlayRenderCacheRoundTrips()
         AssertClose(612, widthPt, "cached overlay width pt");
         AssertClose(792, heightPt, "cached overlay height pt");
 
+        string copiedPdf = Path.Combine(root, "Copied", "overlay.pdf");
+        Directory.CreateDirectory(Path.GetDirectoryName(copiedPdf)!);
+        File.Copy(pdf, copiedPdf);
+        File.SetLastWriteTimeUtc(copiedPdf, File.GetLastWriteTimeUtc(pdf));
+        var relocatedOverlayPage = new PageInfo
+        {
+            Name = "Overlay",
+            FolderPath = Path.Combine(root, "Copied", "Pages", "Overlay"),
+            PdfPath = copiedPdf,
+            PdfPage = overlayPage.PdfPage,
+            PdfLayers = overlayPage.PdfLayers,
+        };
+        AssertTrue(
+            SheetOverlayRenderCache.TryRead(page, relocatedOverlayPage, 1.25f, out SKBitmap? relocatedCached, out _, out _),
+            "relocated copied overlay PDF should reuse the persisted sheet overlay cache by PDF fingerprint");
+        relocatedCached?.Dispose();
+
         var changedPage = new PageInfo
         {
             Name = "Base",
@@ -4457,12 +4474,28 @@ static void ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback()
             viewport.LoadPage(page.PdfPath, page.PdfPage, page.FolderPath, rasterSheet: page.RasterSheet);
 
             bool usingRaster = GetPrivateField<bool>(viewport, "_usingRasterSheetRender");
+            AssertFalse(
+                usingRaster || HasRasterBitmapWarmupInFlight(viewport),
+                "ordinary cold raster-backed fit-open should stay on cheap preview/docnet fallback instead of full-raster low-zoom warmup");
+        });
+
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(
+                page.PdfPath,
+                page.PdfPage,
+                page.FolderPath,
+                rasterSheet: page.RasterSheet,
+                hasSheetOverlayConfigured: true);
+
+            bool usingRaster = GetPrivateField<bool>(viewport, "_usingRasterSheetRender");
             AssertTrue(
                 usingRaster || HasRasterBitmapWarmupInFlight(viewport),
-                "cold raster-backed page open should either apply raster immediately or queue bitmap warmup");
+                "overlay cold raster-backed page open should either apply raster immediately or queue bitmap warmup");
             AssertTrue(
                 GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
-                "cold raster-backed page open must not fall back to docnet while raster bitmap warmup is queued");
+                "overlay cold raster-backed page open must not fall back to docnet while raster bitmap warmup is queued");
         });
     });
 }

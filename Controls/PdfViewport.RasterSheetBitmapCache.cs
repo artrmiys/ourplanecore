@@ -12,7 +12,8 @@ public sealed partial class PdfViewport
         int pageIndex,
         string pageFolder,
         RasterSheetSource? rasterSheet,
-        bool preferOverview)
+        bool preferOverview,
+        bool allowLowZoomFullRaster = false)
     {
         if (rasterSheet?.Enabled != true ||
             string.IsNullOrWhiteSpace(pageFolder) ||
@@ -50,7 +51,12 @@ public sealed partial class PdfViewport
             RasterSheet = rasterSheet.Clone(),
         };
 
-        _ = WarmRasterSheetBitmapAndApplyAsync(warmKey, page, rasterSheet.Clone(), preferOverview);
+        _ = WarmRasterSheetBitmapAndApplyAsync(
+            warmKey,
+            page,
+            rasterSheet.Clone(),
+            preferOverview,
+            allowLowZoomFullRaster);
         return true;
     }
 
@@ -58,7 +64,8 @@ public sealed partial class PdfViewport
         string warmKey,
         PageInfo queuedPage,
         RasterSheetSource rasterSheet,
-        bool preferOverview)
+        bool preferOverview,
+        bool allowLowZoomFullRaster)
     {
         try
         {
@@ -76,7 +83,7 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                if (!ShouldApplyWarmedRasterSheetBitmap(rasterSheet, preferOverview))
+                if (!ShouldApplyWarmedRasterSheetBitmap(rasterSheet, preferOverview, allowLowZoomFullRaster))
                     return;
 
                 if (!preferOverview && ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet))
@@ -125,7 +132,10 @@ public sealed partial class PdfViewport
         }
     }
 
-    private bool ShouldApplyWarmedRasterSheetBitmap(RasterSheetSource rasterSheet, bool preferOverview)
+    private bool ShouldApplyWarmedRasterSheetBitmap(
+        RasterSheetSource rasterSheet,
+        bool preferOverview,
+        bool allowLowZoomFullRaster)
     {
         if (preferOverview)
             return !ShouldUseRasterSheetForCurrentZoom();
@@ -136,7 +146,9 @@ public sealed partial class PdfViewport
         if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
             return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
 
-        return false;
+        return allowLowZoomFullRaster &&
+               RasterSheetCacheService.RenderScaleToDpi(rasterSheet.RenderScale) <=
+               ViewportRenderPolicy.RasterSheetPageOpenImmediateWarmMaxDpi;
     }
 
     public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)

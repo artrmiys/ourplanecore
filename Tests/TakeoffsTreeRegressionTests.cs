@@ -1246,6 +1246,7 @@ internal static class TakeoffsTreeRegressionTests
             overlay.Contains("TryBuildSheetOverlayBitmapFromRasterSheet", StringComparison.Ordinal) &&
             overlay.Contains("RasterSheetCacheService.TryReadReady", StringComparison.Ordinal) &&
             overlay.Contains("Sheet overlay raster cache hit", StringComparison.Ordinal) &&
+            overlay.Contains("QueueSheetOverlayRenderCacheWrite", StringComparison.Ordinal) &&
             overlay.Contains("MinimumBrightSheetOverlayOpacity = 0.82", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayAlphaBoost = 1.85", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayTintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
@@ -1261,6 +1262,10 @@ internal static class TakeoffsTreeRegressionTests
             cache.Contains("OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT", StringComparison.Ordinal) &&
             cache.Contains("render-cache", StringComparison.Ordinal) &&
             cache.Contains("sheet-overlay", StringComparison.Ordinal) &&
+            cache.Contains("OverlayPdfFingerprint", StringComparison.Ordinal) &&
+            cache.Contains("BuildPdfFingerprint", StringComparison.Ordinal) &&
+            cache.Contains("TryReadRelocatedCache", StringComparison.Ordinal) &&
+            cache.Contains("PromoteRelocatedCache", StringComparison.Ordinal) &&
             cache.Contains("TintStyleVersion = \"bright-v2\"", StringComparison.Ordinal) &&
             cache.Contains("LayerStateKey", StringComparison.Ordinal),
             "sheet overlay cache must be portable and keyed by source PDF identity, render state, tint, opacity, and layers");
@@ -1477,6 +1482,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterSheetPageOpenDpi = ReadRepoFile("Controls/PdfViewport.RasterSheetPageOpenDpi.cs");
         string rasterSheetBitmapCache = ReadRepoFile("Controls/PdfViewport.RasterSheetBitmapCache.cs");
         string renderCache = ReadRepoFile("Controls/PdfViewport.RenderCache.cs");
+        string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
         string raster = ReadRepoFile("Models/RasterSheetCacheService.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
@@ -1565,6 +1571,16 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
             "raster sheet opens should apply decoded bitmaps from RAM, warm cold bitmaps off the UI thread, and prefetch nearby readable rasters for work zoom");
+        AssertTrue(
+            pageTabs.Contains("viewportPage.OverlayVisible && !string.IsNullOrWhiteSpace(viewportPage.OverlayPageFolder)", StringComparison.Ordinal) &&
+            pageApi.Contains("bool hasSheetOverlayConfigured = false", StringComparison.Ordinal) &&
+            pageApi.Contains("allowLowZoomFullRasterApply: hasSheetOverlayConfigured", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("bool allowLowZoomFullRasterApply", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldWarmRasterSheetSourceBitmapForPageOpen(source, allowLowZoomFullRasterApply)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("return allowLowZoomFullRasterApply &&", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("bool allowLowZoomFullRaster = false", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("RasterSheetPageOpenImmediateWarmMaxDpi", StringComparison.Ordinal),
+            "low-zoom page-open full-raster apply should be reserved for visible sheet-overlay pages so ordinary fit-view raster sheets stay on cheap previews");
         AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 0.45f", StringComparison.Ordinal) &&
