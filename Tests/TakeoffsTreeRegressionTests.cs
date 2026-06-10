@@ -2222,7 +2222,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewRenderScale = 0.35f", StringComparison.Ordinal) &&
-            policy.Contains("ColdPageSwitchPreviewRenderScale = 0.22f", StringComparison.Ordinal),
+            policy.Contains("ColdPageSwitchPreviewRenderScale = 0.20f", StringComparison.Ordinal),
             "cache-miss page switches should use a non-muddy lightweight preview and use an even cheaper cold fit preview when the view is fitted");
         AssertTrue(
             layers.Contains("private bool TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal) &&
