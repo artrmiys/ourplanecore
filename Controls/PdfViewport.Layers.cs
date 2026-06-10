@@ -389,6 +389,32 @@ public sealed partial class PdfViewport
             return true;
         }
 
+        if (DocnetRenderCache.TryGet(cacheKey, out CachedBitmapRender cachedPreviewRender))
+        {
+            ApplyPreviewBitmapRender(
+                cachedPreviewRender.Bitmap,
+                cachedPreviewRender.WidthPt,
+                cachedPreviewRender.HeightPt,
+                cachedPreviewRender.BitmapScale,
+                restoreView,
+                fitAfter);
+            AppLog.Info(
+                $"Viewport preview render memory cache hit; page='{_pageFolder}'; " +
+                $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
+            ReportViewportRenderProfile(
+                "preview-render-memory",
+                _pageFolder,
+                pdfPath,
+                pdfIndex,
+                renderScale,
+                elapsedMs: 0,
+                fromCache: true,
+                clipRect: null);
+            if (requestRepaint)
+                RequestRepaint();
+            return true;
+        }
+
         if (!allowDiskRead)
             return false;
 

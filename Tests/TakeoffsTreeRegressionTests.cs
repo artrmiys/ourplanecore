@@ -2118,6 +2118,8 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("TryApplyPersistedPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("PersistedPreviewBitmapCache.TryGet", StringComparison.Ordinal) &&
+            layers.Contains("DocnetRenderCache.TryGet(cacheKey", StringComparison.Ordinal) &&
+            layers.Contains("preview-render-memory", StringComparison.Ordinal) &&
             persistedPreview.Contains("PersistedPreviewBitmapCache.Put", StringComparison.Ordinal) &&
             layers.Contains("preview-memory", StringComparison.Ordinal) &&
             layers.Contains("ApplyInitialPreviewView", StringComparison.Ordinal) &&
