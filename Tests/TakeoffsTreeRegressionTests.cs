@@ -2501,10 +2501,10 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("!force && _isFastNavigating", StringComparison.Ordinal) &&
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 100", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderNavigationQuietMs = 450", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderNavigationQuietMs = 280", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewCoalesceMs = 45", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchSharpUpgradeDelayMs = 450", StringComparison.Ordinal) &&
-            policy.Contains("PageSwitchSharpUpgradeIdleMs = 1200", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeDelayMs = 180", StringComparison.Ordinal) &&
+            policy.Contains("PageSwitchSharpUpgradeIdleMs = 500", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("ShouldSkipFullPageSharpUpgradeAtLowZoom", StringComparison.Ordinal) &&

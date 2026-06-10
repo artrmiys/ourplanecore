@@ -27,14 +27,14 @@ public static class ViewportRenderPolicy
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
     public const int DetailRenderCoalesceDelayMs = 80;
-    public const int DetailRenderNavigationQuietMs = 450;
+    public const int DetailRenderNavigationQuietMs = 280;
     public const int DetailRenderMaxPaintTiles = 2;
     public const float DetailRenderStableTileScreenPx = 1536f;
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
     public const int PageSwitchDetailRenderDelayMs = 100;
     public const int FastPageSwitchPreviewCoalesceMs = 45;
-    public const int PageSwitchSharpUpgradeDelayMs = 450;
-    public const int PageSwitchSharpUpgradeIdleMs = 1200;
+    public const int PageSwitchSharpUpgradeDelayMs = 180;
+    public const int PageSwitchSharpUpgradeIdleMs = 500;
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
     public const float PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom;
     public const int PageOpenDeferredNavigationQuietMs = 1800;
@@ -65,7 +65,7 @@ public static class ViewportRenderPolicy
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
     public const int RasterSheetWorkZoomWarmupDelayMs = 2400;
     public const int RasterSheetCurrentWorkZoomBuildDelayMs = 80;
-    public const int RasterSheetMotionQualityRestoreQuietMs = 1200;
+    public const int RasterSheetMotionQualityRestoreQuietMs = 450;
     public const int RasterSheetPageOpenImmediateWarmMaxDpi = 144;
     public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
@@ -155,11 +155,11 @@ public static class ViewportRenderPolicy
     {
         float configured = CurrentQuality.DetailPaddingScreenPx;
         if (zoom < 2.0f)
-            return Math.Min(configured, 192f);
-        if (zoom < 4.0f)
             return Math.Min(configured, 256f);
+        if (zoom < 4.0f)
+            return Math.Min(configured, 384f);
 
-        return Math.Min(configured, 512f);
+        return Math.Min(configured, 640f);
     }
 
     public static string NormalizeQualityMode(string? mode)
@@ -179,9 +179,9 @@ public static class ViewportRenderPolicy
 
     private static RenderQuality CurrentQuality => _qualityMode switch
     {
-        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f, ResponsiveMaxRenderScale),
-        MaxQualityMode => new RenderQuality(4.0f, 240_000_000f, DetailRenderMaxScale, 160_000_000f, 768f, 6.0f),
-        _ => new RenderQuality(3.0f, 160_000_000f, 12.0f, 120_000_000f, 640f, 4.0f),
+        BalancedQualityMode => new RenderQuality(ResponsiveMaxRenderScale, 96_000_000f, 8.0f, 96_000_000f, 512f, 8.0f),
+        MaxQualityMode => new RenderQuality(4.0f, 240_000_000f, DetailRenderMaxScale, 160_000_000f, 768f, DetailRenderMaxScale),
+        _ => new RenderQuality(3.0f, 160_000_000f, 12.0f, 120_000_000f, 640f, 12.0f),
     };
 
     public static bool ShouldUseFastNavigationFrame(
