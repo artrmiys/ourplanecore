@@ -2245,7 +2245,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             renderCache.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             renderCache.Contains("ViewportRenderPolicy.PreviewPrefetchDelayMs", StringComparison.Ordinal) &&
-            policy.Contains("PreviewPrefetchDelayMs = 250", StringComparison.Ordinal) &&
+            policy.Contains("PreviewPrefetchDelayMs = 100", StringComparison.Ordinal) &&
             policy.Contains("PreviewPrefetchNavigationQuietMs = 1100", StringComparison.Ordinal) &&
             policy.Contains("PreviewPrefetchActiveRenderHoldMs = 3000", StringComparison.Ordinal) &&
             policy.Contains("PreviewPrefetchAfterActiveRenderHoldMs = 750", StringComparison.Ordinal) &&

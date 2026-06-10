@@ -38,7 +38,7 @@ public static class ViewportRenderPolicy
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
     public const float PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom;
     public const int PageOpenDeferredNavigationQuietMs = 1800;
-    public const int PreviewPrefetchDelayMs = 250;
+    public const int PreviewPrefetchDelayMs = 100;
     public const int PreviewPrefetchNavigationQuietMs = 1100;
     public const int PreviewPrefetchActiveRenderHoldMs = 3000;
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
