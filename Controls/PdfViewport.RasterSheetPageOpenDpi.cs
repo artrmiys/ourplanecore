@@ -109,6 +109,14 @@ public sealed partial class PdfViewport
                 _rasterSheetQualityRestoreVersion);
         }
 
+        if (ShouldDeferMissingResponsiveRasterSheetDpiForPageOpen(rasterSheet, restoreView, fitAfter))
+        {
+            AppLog.Info(
+                $"Viewport raster DPI page open build deferred; dpi={targetDpi}; currentDpi={currentDpi}; " +
+                $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
+            return false;
+        }
+
         return QueueRasterSheetDpiBuildForPageOpen(
             page,
             currentDpi,
@@ -116,6 +124,18 @@ public sealed partial class PdfViewport
             restoreView,
             fitAfter,
             _rasterSheetQualityRestoreVersion);
+    }
+
+    private bool ShouldDeferMissingResponsiveRasterSheetDpiForPageOpen(
+        RasterSheetSource? rasterSheet,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        if (rasterSheet?.Enabled != true)
+            return false;
+
+        return PageOpenZoomForRasterSheet(rasterSheet, restoreView, fitAfter) <
+               ViewportRenderPolicy.RasterSheetDisplayMinZoom;
     }
 
     private int SelectReadyRasterSheetDpiForPageOpen(PageInfo page, int targetDpi, int currentDpi)

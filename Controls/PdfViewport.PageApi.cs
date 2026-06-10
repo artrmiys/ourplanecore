@@ -163,7 +163,8 @@ public sealed partial class PdfViewport
                 pageIndex,
                 pageFolder,
                 rasterSheet,
-                allowLowZoomFullRasterApply: false);
+                allowLowZoomFullRasterApply: false,
+                buildMissingDpis: true);
         }
 
         if (responsiveRasterDpiForOpen &&
@@ -226,7 +227,8 @@ public sealed partial class PdfViewport
                 pageIndex,
                 pageFolder,
                 rasterSheet,
-                allowLowZoomFullRasterApply: hasSheetOverlayConfigured);
+                allowLowZoomFullRasterApply: hasSheetOverlayConfigured,
+                buildMissingDpis: hasSheetOverlayConfigured);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(

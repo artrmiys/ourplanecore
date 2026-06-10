@@ -301,35 +301,42 @@ public partial class MainWindow
         if (targetZoom > 0)
         {
             int panSteps = ReadEnvironmentInt(ViewportPageStressSmokePanStepsEnv, 4, 0, 20);
-            _viewport.RestoreViewState(new PdfViewport.ViewState(targetZoom, start.PanX, start.PanY));
-            steps.Add(await YieldViewportSmokeFrameAsync("target"));
+            steps.Add(await RunViewportSmokeStepAsync(
+                "target",
+                () => _viewport.RestoreViewState(new PdfViewport.ViewState(targetZoom, start.PanX, start.PanY))));
             for (int i = 0; i < panSteps; i++)
             {
                 var current = _viewport.CaptureViewState();
-                _viewport.RestoreViewState(new PdfViewport.ViewState(
-                    targetZoom,
-                    current.PanX + 36,
-                    current.PanY + 24));
-                steps.Add(await YieldViewportSmokeFrameAsync($"pan-{i + 1}"));
+                steps.Add(await RunViewportSmokeStepAsync(
+                    $"pan-{i + 1}",
+                    () => _viewport.RestoreViewState(new PdfViewport.ViewState(
+                        targetZoom,
+                        current.PanX + 36,
+                        current.PanY + 24))));
             }
 
-            _viewport.RestoreViewState(start);
-            steps.Add(await YieldViewportSmokeFrameAsync("restore"));
+            steps.Add(await RunViewportSmokeStepAsync("restore", () => _viewport.RestoreViewState(start)));
             return steps;
         }
 
-        _viewport.ZoomIn();
-        steps.Add(await YieldViewportSmokeFrameAsync("zoom-in-1"));
-        _viewport.ZoomIn();
-        steps.Add(await YieldViewportSmokeFrameAsync("zoom-in-2"));
+        steps.Add(await RunViewportSmokeStepAsync("zoom-in-1", _viewport.ZoomIn));
+        steps.Add(await RunViewportSmokeStepAsync("zoom-in-2", _viewport.ZoomIn));
         var zoomed = _viewport.CaptureViewState();
-        _viewport.RestoreViewState(new PdfViewport.ViewState(zoomed.Zoom, zoomed.PanX + 48, zoomed.PanY + 36));
-        steps.Add(await YieldViewportSmokeFrameAsync("pan"));
-        _viewport.ZoomOut();
-        steps.Add(await YieldViewportSmokeFrameAsync("zoom-out"));
-        _viewport.RestoreViewState(start);
-        steps.Add(await YieldViewportSmokeFrameAsync("restore"));
+        steps.Add(await RunViewportSmokeStepAsync(
+            "pan",
+            () => _viewport.RestoreViewState(new PdfViewport.ViewState(zoomed.Zoom, zoomed.PanX + 48, zoomed.PanY + 36))));
+        steps.Add(await RunViewportSmokeStepAsync("zoom-out", _viewport.ZoomOut));
+        steps.Add(await RunViewportSmokeStepAsync("restore", () => _viewport.RestoreViewState(start)));
         return steps;
+    }
+
+    private async Task<ZoomSmokeStep> RunViewportSmokeStepAsync(string name, Action action)
+    {
+        Stopwatch actionWatch = Stopwatch.StartNew();
+        action();
+        actionWatch.Stop();
+        ZoomSmokeStep frame = await YieldViewportSmokeFrameAsync(name);
+        return frame with { ActionMs = actionWatch.ElapsedMilliseconds };
     }
 
     private async Task<ZoomSmokeStep> YieldViewportSmokeFrameAsync(string name)
@@ -344,6 +351,7 @@ public partial class MainWindow
         watch.Stop();
         return new ZoomSmokeStep(
             name,
+            0,
             renderWatch.ElapsedMilliseconds,
             delayWatch.ElapsedMilliseconds,
             watch.ElapsedMilliseconds);
@@ -493,7 +501,7 @@ public partial class MainWindow
         public ViewportVisualProbe VisualProbe { get; set; } = ViewportVisualProbe.Empty;
     }
 
-    private sealed record ZoomSmokeStep(string Name, long RenderDispatchMs, long DelayMs, long ElapsedMs);
+    private sealed record ZoomSmokeStep(string Name, long ActionMs, long RenderDispatchMs, long DelayMs, long ElapsedMs);
 
     private sealed record ViewportVisualProbe(
         bool Passed,

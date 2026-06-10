@@ -4546,9 +4546,9 @@ static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallbac
                 page.FolderPath,
                 rasterSheet: page.RasterSheet);
 
-            AssertTrue(
-                HasRasterDpiBuildInFlight(viewport, 72) || HasReadyRasterDpi(page, 72),
-                "oversized 200dpi raster fit-open should queue or prepare 72dpi raster");
+            AssertFalse(
+                HasRasterDpiBuildInFlight(viewport, 72),
+                "oversized 200dpi raster fit-open should defer missing 72dpi raster instead of building during page browsing");
             AssertFalse(
                 GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
                 "oversized 200dpi raster fit-open should not paint the oversized bitmap while lower dpi is missing");

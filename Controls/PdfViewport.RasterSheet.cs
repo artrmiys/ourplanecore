@@ -272,7 +272,8 @@ public sealed partial class PdfViewport
         int pageIndex,
         string pageFolder,
         RasterSheetSource? rasterSheet,
-        bool allowLowZoomFullRasterApply)
+        bool allowLowZoomFullRasterApply,
+        bool buildMissingDpis)
     {
         if (!ShouldWarmRasterSheetForWorkZoomOnPageOpen(pageFolder, pdfPath, rasterSheet))
             return false;
@@ -301,7 +302,7 @@ public sealed partial class PdfViewport
                 PdfLayers = _cachedLayers ?? Array.Empty<PdfLayerInfo>(),
                 RasterSheet = source.Clone(),
             },
-            buildMissingDpis: true);
+            buildMissingDpis: buildMissingDpis);
         return queuedApply;
     }
 
