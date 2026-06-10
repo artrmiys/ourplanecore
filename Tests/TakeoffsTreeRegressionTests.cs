@@ -1527,14 +1527,16 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
             renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
-            renderCache.Contains("return true;", StringComparison.Ordinal) &&
+            renderCache.Contains("return false;", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("WarmRasterSheetBitmapAndApplyAsync", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("WarmRequestedRasterSheetBitmapCache", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("ShouldApplyWarmedRasterSheetBitmap", StringComparison.Ordinal) &&
-            rasterSheetBitmapCache.Contains("!RasterSheetCacheService.HasSourceImageOverview(rasterSheet)", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("if (ShouldUseRasterSheetForCurrentZoom())", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("return false;", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("RasterSheetBitmapCacheWarmingReason", StringComparison.Ordinal) &&
             pageApi.Contains("QueueRasterSheetWorkZoomWarmupForPageOpen", StringComparison.Ordinal) &&
@@ -1551,17 +1553,16 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("RasterSheetDisplayMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 0.45f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true;", StringComparison.Ordinal) &&
-            !rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("!IsLowZoomRasterSheetPageOpen(restoreView, fitAfter)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForNavigation", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("!RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource)", StringComparison.Ordinal) &&
             !rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should be used on page open and at 60-200% work zoom, including fit opens when no overview exists, while source-image rasters keep their overview path");
+            "ordinary readable raster sheets should be used at 60-200% work zoom but fit/far zoom should stay on cheap previews, while source-image rasters keep their overview path");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
@@ -1823,6 +1824,9 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("if (currentDpi >= targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyLowZoomRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom(requestRepaint: false, requireCachedBitmap: true) ||", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("allowDiskRead: !requireCachedBitmap", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("requestRepaint: requestRepaint", StringComparison.Ordinal) &&
+            layers.Contains("bool requestRepaint = true", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("readyDpi == desiredDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("readyDpi != targetDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("return TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi);", StringComparison.Ordinal) &&
@@ -1838,7 +1842,8 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("RasterSheetWorkZoomWarmupDpiSteps", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetWorkZoomBuildDpiSteps", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetCurrentWorkZoomBuildDelayMs", StringComparison.Ordinal) &&
-            renderCache.Contains("RenderScaleToDpi(source.RenderScale) <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
+            renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
+            renderCache.Contains("return false;", StringComparison.Ordinal) &&
             renderCache.Contains("if (!buildMissingDpis)", StringComparison.Ordinal) &&
             renderCache.Contains("BuildCachePreservingEnabled(currentPage, scale)", StringComparison.Ordinal) &&
             renderCache.Contains("work-zoom-{dpi}dpi warmed", StringComparison.Ordinal) &&

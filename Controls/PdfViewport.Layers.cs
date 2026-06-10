@@ -321,14 +321,15 @@ public sealed partial class PdfViewport
         float renderScale,
         ViewState? restoreView,
         bool fitAfter,
-        bool allowDiskRead = true)
+        bool allowDiskRead = true,
+        bool requestRepaint = true)
     {
-        if (TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, renderScale, restoreView, fitAfter, allowDiskRead))
+        if (TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, renderScale, restoreView, fitAfter, allowDiskRead, requestRepaint))
             return true;
 
         float fastScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
         if (Math.Abs(renderScale - fastScale) > 0.001f &&
-            TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter, allowDiskRead))
+            TryApplyPersistedPreviewRenderScale(pdfPath, pdfIndex, fastScale, restoreView, fitAfter, allowDiskRead, requestRepaint))
         {
             return true;
         }
@@ -337,10 +338,11 @@ public sealed partial class PdfViewport
                TryApplyPersistedPreviewRenderScale(
                    pdfPath,
                    pdfIndex,
-                   ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
-                   restoreView,
-                   fitAfter,
-                   allowDiskRead);
+                    ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
+                    restoreView,
+                    fitAfter,
+                    allowDiskRead,
+                    requestRepaint);
     }
 
     private static float PageSwitchLivePreviewScale(ViewState? restoreView, bool fitAfter) =>
@@ -362,7 +364,8 @@ public sealed partial class PdfViewport
         float renderScale,
         ViewState? restoreView,
         bool fitAfter,
-        bool allowDiskRead = true)
+        bool allowDiskRead = true,
+        bool requestRepaint = true)
     {
         string cacheKey = DocnetRenderCacheKey(pdfPath, pdfIndex, renderScale);
         if (PersistedPreviewBitmapCache.TryGet(cacheKey, out CachedBitmapRender cachedPreview))
@@ -380,7 +383,8 @@ public sealed partial class PdfViewport
                 elapsedMs: 0,
                 fromCache: true,
                 clipRect: null);
-            RequestRepaint();
+            if (requestRepaint)
+                RequestRepaint();
             return true;
         }
 
@@ -405,7 +409,8 @@ public sealed partial class PdfViewport
             elapsedMs: 0,
             fromCache: true,
             clipRect: null);
-        RequestRepaint();
+        if (requestRepaint)
+            RequestRepaint();
         return true;
     }
 

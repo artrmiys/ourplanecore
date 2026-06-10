@@ -136,7 +136,7 @@ public sealed partial class PdfViewport
         if (RasterSheetCacheService.IsSourceImageRaster(rasterSheet))
             return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);
 
-        return !RasterSheetCacheService.HasSourceImageOverview(rasterSheet);
+        return false;
     }
 
     public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)

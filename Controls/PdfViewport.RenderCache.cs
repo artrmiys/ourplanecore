@@ -628,7 +628,7 @@ public sealed partial class PdfViewport
             return RasterSheetCacheService.HasSourceImageOverview(source);
 
         if (!RasterSheetCacheService.IsSourceImageRaster(source))
-            return RasterSheetCacheService.RenderScaleToDpi(source.RenderScale) <= ViewportRenderPolicy.RasterSheetDisplayMaxDpi;
+            return false;
 
         return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source) ||
                !RasterSheetCacheService.HasSourceImageOverview(source);

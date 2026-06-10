@@ -280,7 +280,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf preview render cache round trips", PdfPreviewRenderCacheRoundTrips),
     ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
-    ("viewport raster page open applies hot bitmap cache", ViewportRasterPageOpenAppliesHotBitmapCache),
+    ("viewport raster page open uses preview at fit and hot cache at work zoom", ViewportRasterPageOpenAppliesHotBitmapCache),
     ("viewport raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
     ("viewport oversized raster page open queues responsive dpi without docnet", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithoutDocnetFallback),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
@@ -4410,18 +4410,33 @@ static void ViewportRasterPageOpenAppliesHotBitmapCache()
             var viewport = new PdfViewport();
             viewport.LoadPage(page.PdfPath, page.PdfPage, page.FolderPath, rasterSheet: page.RasterSheet);
 
+            AssertFalse(
+                GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                "fit raster-backed page open should use a cheap preview instead of painting a full raster bitmap");
+        });
+
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(
+                page.PdfPath,
+                page.PdfPage,
+                page.FolderPath,
+                restoreView: new PdfViewport.ViewState(0.75f, 0, 0),
+                rasterSheet: page.RasterSheet);
+
             AssertTrue(
                 GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
-                "hot raster-backed page open should apply raster bitmap synchronously");
+                "work-zoom hot raster-backed page open should apply raster bitmap synchronously");
             AssertFalse(
                 GetPrivateField<bool>(viewport, "_showingPreviousPageDuringSwitch"),
-                "hot raster-backed page open should not keep a previous sheet placeholder");
+                "work-zoom hot raster-backed page open should not keep a previous sheet placeholder");
             AssertTrue(
                 GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
-                "hot raster-backed page open must not queue docnet PDF render");
+                "work-zoom hot raster-backed page open must not queue docnet PDF render");
             AssertTrue(
                 GetPrivateFieldValue(viewport, "_pageBitmap") is SKBitmap { Width: > 0, Height: > 0 },
-                "hot raster-backed page open should load a visible bitmap");
+                "work-zoom hot raster-backed page open should load a visible bitmap");
         });
     });
 }

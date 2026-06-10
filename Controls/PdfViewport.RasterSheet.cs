@@ -240,7 +240,8 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        return rasterSheet?.Enabled == true;
+        return rasterSheet?.Enabled == true &&
+               !IsLowZoomRasterSheetPageOpen(restoreView, fitAfter);
     }
 
     private static bool ShouldUseRasterSheetOverviewForPageOpen(
@@ -412,21 +413,23 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (requireCachedBitmap)
-            return false;
-
         if (TryApplyPersistedPreviewRender(
                 _pdfPath,
                 _pdfIndex,
                 ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
                 currentView,
-                fitAfter: false))
+                fitAfter: false,
+                allowDiskRead: !requireCachedBitmap,
+                requestRepaint: requestRepaint))
         {
             PostStatus($"Fast preview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
             if (requestRepaint)
                 RequestRepaint();
             return true;
         }
+
+        if (requireCachedBitmap)
+            return false;
 
         QueueDocnetRender(
             ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
@@ -472,8 +475,7 @@ public sealed partial class PdfViewport
 
     private bool ShouldKeepRasterSheetAtLowZoom() =>
         _rasterSheetSource?.Enabled == true &&
-        (RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)
-            ? RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
-              _usingRasterSheetOverviewRender
-            : !RasterSheetCacheService.HasSourceImageOverview(_rasterSheetSource));
+        RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) &&
+        (RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(_rasterSheetSource) ||
+         _usingRasterSheetOverviewRender);
 }
