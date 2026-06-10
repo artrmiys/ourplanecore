@@ -361,6 +361,7 @@ public sealed partial class PdfViewport : SKElement
     private bool _docnetRenderInProgress;
     private int _docnetRenderVersion;
     private int _persistedPreviewRenderVersion;
+    private int _persistedPreviewRenderInFlightVersion;
 
     private sealed record LayerRenderRequest(
         int Version,

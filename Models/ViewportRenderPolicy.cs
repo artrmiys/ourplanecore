@@ -42,6 +42,7 @@ public static class ViewportRenderPolicy
     public const int PreviewPrefetchNavigationQuietMs = 1100;
     public const int PreviewPrefetchActiveRenderHoldMs = 3000;
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
+    public const int PersistedPreviewLiveFallbackGraceMs = 120;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
     public const bool JobOpenPreviewWarmupAllPages = false;

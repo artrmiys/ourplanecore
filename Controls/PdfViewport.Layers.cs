@@ -785,6 +785,13 @@ public sealed partial class PdfViewport
                 if (!IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version))
                     return;
 
+                await WaitForPersistedPreviewRenderBeforeLiveFallbackAsync(request);
+                if (!IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version) ||
+                    ShouldSkipLowerQualityDocnetPreview(request))
+                {
+                    return;
+                }
+
                 await LivePreviewRenderSemaphore.WaitAsync();
                 try
                 {

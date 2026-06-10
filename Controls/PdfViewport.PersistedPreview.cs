@@ -49,16 +49,19 @@ public sealed partial class PdfViewport
         CachedBitmapRender? render = null;
         try
         {
+            _persistedPreviewRenderInFlightVersion = version;
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             if (!IsCurrentPersistedPreviewRenderTarget(pdfPath, pdfIndex, pageFolder, version))
                 return;
 
-            render = await Task.Run(() =>
-            {
-                return TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, renderScale, out CachedBitmapRender loaded)
-                    ? loaded
-                    : null;
-            });
+            float appliedRenderScale = renderScale;
+            (render, appliedRenderScale) = await Task.Run(() =>
+                TryReadPersistedPreviewBitmapForPageOpen(
+                    pdfPath,
+                    pdfIndex,
+                    renderScale,
+                    restoreView,
+                    fitAfter));
             if (render == null)
                 return;
 
@@ -70,19 +73,19 @@ public sealed partial class PdfViewport
                 return;
             }
 
-            string cacheKey = DocnetRenderCacheKey(pdfPath, pdfIndex, renderScale);
+            string cacheKey = DocnetRenderCacheKey(pdfPath, pdfIndex, appliedRenderScale);
             ApplyPreviewBitmapRender(render.Bitmap, render.WidthPt, render.HeightPt, render.BitmapScale, restoreView, fitAfter);
             PersistedPreviewBitmapCache.Put(cacheKey, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
             DocnetRenderCache.Put(cacheKey, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
             AppLog.Info(
                 $"Viewport PyMuPDF preview async cache hit; page='{pageFolder}'; " +
-                $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={renderScale:0.###}");
+                $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={appliedRenderScale:0.###}");
             ReportViewportRenderProfile(
                 "preview-async",
                 pageFolder,
                 pdfPath,
                 pdfIndex,
-                renderScale,
+                appliedRenderScale,
                 elapsedMs: 0,
                 fromCache: true,
                 clipRect: null);
@@ -99,8 +102,55 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            if (_persistedPreviewRenderInFlightVersion == version)
+                _persistedPreviewRenderInFlightVersion = 0;
             render?.Bitmap.Dispose();
         }
+    }
+
+    private async Task WaitForPersistedPreviewRenderBeforeLiveFallbackAsync(DocnetRenderRequest request)
+    {
+        int maxDelayMs = ViewportRenderPolicy.PersistedPreviewLiveFallbackGraceMs;
+        if (maxDelayMs <= 0 || !IsFastPreviewRenderScale(request.RenderScale))
+            return;
+
+        int elapsedMs = 0;
+        while (elapsedMs < maxDelayMs &&
+               IsCurrentPageDocnetRenderTarget(request.PdfPath, request.PdfIndex, request.PageFolder, request.Version) &&
+               IsPersistedPreviewRenderInFlightForCurrentPage(request))
+        {
+            int delayMs = Math.Min(20, maxDelayMs - elapsedMs);
+            await Task.Delay(delayMs);
+            elapsedMs += delayMs;
+        }
+    }
+
+    private bool IsPersistedPreviewRenderInFlightForCurrentPage(DocnetRenderRequest request) =>
+        _persistedPreviewRenderInFlightVersion != 0 &&
+        _persistedPreviewRenderInFlightVersion == _persistedPreviewRenderVersion &&
+        string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) &&
+        request.PdfIndex == _pdfIndex &&
+        string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
+
+    private static (CachedBitmapRender? Render, float RenderScale) TryReadPersistedPreviewBitmapForPageOpen(
+        string pdfPath,
+        int pdfIndex,
+        float renderScale,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        if (TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, renderScale, out CachedBitmapRender loaded))
+            return (loaded, renderScale);
+
+        float coldScale = ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale;
+        if (ShouldUseColdPageSwitchPreview(restoreView, fitAfter) &&
+            Math.Abs(renderScale - coldScale) > 0.001f &&
+            TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, coldScale, out loaded))
+        {
+            return (loaded, coldScale);
+        }
+
+        return (null, renderScale);
     }
 
     private bool IsCurrentPersistedPreviewRenderTarget(

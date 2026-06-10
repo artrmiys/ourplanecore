@@ -2196,7 +2196,10 @@ internal static class TakeoffsTreeRegressionTests
             queuedPreviewMethod.Contains("Dispatcher.Yield", StringComparison.Ordinal) &&
             queuedPreviewMethod.Contains("Task.Run", StringComparison.Ordinal) &&
             queuedPreviewMethod.Contains("IsCurrentPersistedPreviewRenderTarget", StringComparison.Ordinal) &&
-            queuedPreviewMethod.Contains("ShouldSkipPersistedPreviewRender", StringComparison.Ordinal),
+            queuedPreviewMethod.Contains("ShouldSkipPersistedPreviewRender", StringComparison.Ordinal) &&
+            queuedPreviewMethod.Contains("TryReadPersistedPreviewBitmapForPageOpen", StringComparison.Ordinal) &&
+            queuedPreviewMethod.Contains("appliedRenderScale", StringComparison.Ordinal) &&
+            persistedPreview.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal),
             "page open should keep persisted preview disk reads and PNG decode off the immediate UI-thread path");
         AssertFalse(
             loadPageMethod.Contains("PdfPreviewRenderCache.TryReadCleanPreview", StringComparison.Ordinal) ||
@@ -2275,6 +2278,10 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs)", StringComparison.Ordinal) &&
             renderCache.Contains("PreviewPrefetchSemaphore", StringComparison.Ordinal) &&
             renderCache.Contains("LivePreviewRenderSemaphore", StringComparison.Ordinal) &&
+            persistedPreview.Contains("_persistedPreviewRenderInFlightVersion = version", StringComparison.Ordinal) &&
+            persistedPreview.Contains("WaitForPersistedPreviewRenderBeforeLiveFallbackAsync", StringComparison.Ordinal) &&
+            layers.Contains("WaitForPersistedPreviewRenderBeforeLiveFallbackAsync(request)", StringComparison.Ordinal) &&
+            policy.Contains("PersistedPreviewLiveFallbackGraceMs = 120", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)", StringComparison.Ordinal) &&
             renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             renderCache.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
