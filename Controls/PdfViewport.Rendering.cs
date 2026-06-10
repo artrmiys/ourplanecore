@@ -213,6 +213,9 @@ public sealed partial class PdfViewport
 
     private SKFilterQuality CurrentPageBitmapFilterQuality()
     {
+        if (_renderNavigationFastFrame)
+            return SKFilterQuality.None;
+
         if (_usingRasterSheetRender)
             return ShouldUseSharperSourceImageRasterSampling()
                 ? SKFilterQuality.Medium

@@ -294,6 +294,7 @@ var tests = new List<(string Name, Action Run)>
     ("viewport edge snap command is wired", TakeoffsTreeRegressionTests.ViewportEdgeSnapCommandIsWired),
     ("sheet overlay render cache round trips", SheetOverlayRenderCacheRoundTrips),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
+    ("viewport raster navigation chooses lighter dpi", ViewportRasterNavigationChoosesLighterDpi),
     ("viewport pan allows edge overscroll", ViewportPanAllowsEdgeOverscroll),
     ("viewport pan allows sheet past frame at work zooms", ViewportPanAllowsSheetPastFrameAtWorkZooms),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
@@ -4001,6 +4002,26 @@ static void ViewportRenderScaleChoosesNextQualityStep()
     {
         ViewportRenderPolicy.ApplyQualityMode(ViewportRenderPolicy.HighQualityMode);
     }
+}
+
+static void ViewportRasterNavigationChoosesLighterDpi()
+{
+    AssertEqual(
+        "100",
+        ViewportRenderPolicy.SelectRasterSheetNavigationDpi(1.25f, currentDpi: 200, targetDpi: 144).ToString(),
+        "ordinary work-zoom navigation should step below the idle 144dpi target");
+    AssertEqual(
+        "144",
+        ViewportRenderPolicy.SelectRasterSheetNavigationDpi(2.50f, currentDpi: 200, targetDpi: 200).ToString(),
+        "deep work-zoom navigation should cap motion painting at the prepared 144dpi tier");
+    AssertEqual(
+        "72",
+        ViewportRenderPolicy.SelectRasterSheetNavigationDpi(0.60f, currentDpi: 200, targetDpi: 72).ToString(),
+        "far zoom navigation should use the smallest readable raster tier");
+    AssertEqual(
+        "0",
+        ViewportRenderPolicy.SelectRasterSheetNavigationDpi(0.0f, currentDpi: 200, targetDpi: 144).ToString(),
+        "invalid zoom should not pick a navigation raster tier");
 }
 
 static void ViewportPanAllowsEdgeOverscroll()

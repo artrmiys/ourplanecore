@@ -434,10 +434,11 @@ public sealed partial class PdfViewport
         return true;
     }
 
-    private bool TrySwitchRasterSheetToFastPreviewForNavigation()
+    private bool TrySwitchRasterSheetToFastPreviewForNavigation(bool allowWorkZoom = false)
     {
         if (!_usingRasterSheetRender ||
             !_isFastNavigating ||
+            !allowWorkZoom &&
             _zoom >= ViewportRenderPolicy.FarZoomFastFrameThreshold)
         {
             return false;

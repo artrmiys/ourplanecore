@@ -155,6 +155,15 @@ public sealed partial class PdfViewport
             ShouldSkipOversizedRasterSheetForPageOpen(rasterSheet, restoreView);
         bool responsiveRasterDpiBuildQueuedForOpen = false;
         bool preferRasterOverviewForOpen = ShouldUseRasterSheetOverviewForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
+        if (shouldUseRasterSheetForOpen)
+        {
+            QueueRasterSheetWorkZoomWarmupForPageOpen(
+                pdfPath,
+                pageIndex,
+                pageFolder,
+                rasterSheet);
+        }
+
         if (responsiveRasterDpiForOpen &&
             TryApplyReadyResponsiveRasterSheetDpiForPageOpen(
                 rasterSheet,

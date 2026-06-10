@@ -70,6 +70,7 @@ public static class ViewportRenderPolicy
     public const float LowZoomBitmapDowngradeRatio = 1.38f;
     public const float RasterSheetDisplayMinZoom = ZoomRefreshMinZoom;
     public const float RasterSheetDisplayExitZoom = 0.45f;
+    public const int RasterSheetNavigationMaxDpi = 144;
     private static readonly int[] RasterSheetDisplayDpiSteps = [72, 100, 144, 200];
     public const float SheetOverlayViewportRenderScale = 2.0f;
     public const float SheetOverlayExportRenderScale = 2.0f;
@@ -86,8 +87,8 @@ public static class ViewportRenderPolicy
     public const float PanOverscrollScreenFraction = 1.00f;
     private static string _qualityMode = HighQualityMode;
     private static readonly float[] SheetOverlayRenderScaleSteps = [2.0f, 2.25f, 3.0f, 4.0f];
-    private static readonly int[] RasterSheetWorkZoomWarmupDpis = [144];
-    private static readonly int[] RasterSheetWorkZoomBuildDpis = [144];
+    private static readonly int[] RasterSheetWorkZoomWarmupDpis = [72, 100, 144];
+    private static readonly int[] RasterSheetWorkZoomBuildDpis = [72, 100, 144];
 
     public static string QualityMode => _qualityMode;
 
@@ -266,6 +267,24 @@ public static class ViewportRenderPolicy
         }
 
         return RasterSheetDisplayDpiSteps[^1];
+    }
+
+    public static int SelectRasterSheetNavigationDpi(float zoom, int currentDpi, int targetDpi)
+    {
+        if (zoom <= 0 || currentDpi <= 0 || targetDpi <= 0)
+            return 0;
+
+        int targetIndex = 0;
+        for (int i = 0; i < RasterSheetDisplayDpiSteps.Length; i++)
+        {
+            targetIndex = i;
+            if (targetDpi <= RasterSheetDisplayDpiSteps[i])
+                break;
+        }
+
+        int navigationIndex = Math.Max(0, targetIndex - 1);
+        int selected = RasterSheetDisplayDpiSteps[navigationIndex];
+        return Math.Min(selected, RasterSheetNavigationMaxDpi);
     }
 
     public static bool ShouldPreferLowerRasterSheetDpi(int currentDpi, int targetDpi)

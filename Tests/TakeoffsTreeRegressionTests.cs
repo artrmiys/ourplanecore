@@ -1485,6 +1485,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterOnBackgroundMethod = SliceMethod(workspaceManagers, "private async Task EnableMissingSheetManagerRasterOnInBackgroundAsync(");
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
         string rasterDpiUpgradeMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task BuildRasterSheetDpiUpgradeForCurrentPageAsync(");
+        string responsiveDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyResponsiveRasterSheetDpiForCurrentZoom()");
         string pageOpenReadyDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyReadyResponsiveRasterSheetDpiForPageOpen(");
         string pageOpenDpiQueueMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(");
         string readyDpiWarmApplyMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task ApplyReadyRasterSheetDpiAfterWarmupAsync(");
@@ -1515,9 +1516,10 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("ShouldUseSharperSourceImageRasterSampling()", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
-            !rendering.Contains("_zoom <= _bitmapScale * 1.05f", StringComparison.Ordinal) &&
-            !rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal),
-            "raster sheet mode should use smoothed still-frame bitmap sampling instead of switching back to blocky stretch sampling");
+            rendering.Contains("if (_renderNavigationFastFrame)", StringComparison.Ordinal) &&
+            rendering.Contains("return SKFilterQuality.None;", StringComparison.Ordinal) &&
+            !rendering.Contains("_zoom <= _bitmapScale * 1.05f", StringComparison.Ordinal),
+            "raster sheet mode should use smoothed still-frame bitmap sampling while allowing blocky fast-frame sampling only during navigation");
         AssertTrue(
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 24", StringComparison.Ordinal) &&
@@ -1819,6 +1821,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("if (currentDpi == targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("if (currentDpi < targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("if (currentDpi >= targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryApplyLowZoomRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom(requestRepaint: false, requireCachedBitmap: true) ||", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("readyDpi == desiredDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("readyDpi != targetDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("return TryApplyReadyRasterSheetDpiFromMemory(page, targetDpi);", StringComparison.Ordinal) &&
@@ -1837,8 +1841,22 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("BuildCachePreservingEnabled(currentPage, scale)", StringComparison.Ordinal) &&
             renderCache.Contains("work-zoom-{dpi}dpi warmed", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("buildMissingDpis: true", StringComparison.Ordinal) &&
-            policy.Contains("RasterSheetWorkZoomWarmupDpis = [144]", StringComparison.Ordinal) &&
-            policy.Contains("RasterSheetWorkZoomBuildDpis = [144]", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetWorkZoomWarmupDpis = [72, 100, 144]", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetWorkZoomBuildDpis = [72, 100, 144]", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetNavigationMaxDpi = 144", StringComparison.Ordinal) &&
+            policy.Contains("SelectRasterSheetNavigationDpi", StringComparison.Ordinal) &&
+            pageApi.Contains("if (shouldUseRasterSheetForOpen)", StringComparison.Ordinal) &&
+            viewTransform.Contains("QueueCurrentRasterSheetMotionWarmup()", StringComparison.Ordinal) &&
+            responsiveDpiMethod.IndexOf("TryApplyNavigationRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) <
+                responsiveDpiMethod.IndexOf("ShouldUseResponsiveRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
+            responsiveDpiMethod.Contains("navigationCurrentDpi <= navigationTargetDpi", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("QueueCurrentRasterSheetMotionWarmup", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryApplyNavigationRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForNavigation(allowWorkZoom: true)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("allowWorkZoom = false", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("RasterSheetWorkZoomWarmupDpiSteps", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("postStatus: false", StringComparison.Ordinal) &&
+            rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("ShouldUseResponsiveRasterSheetDpiForCurrentZoom(rasterSheet)", StringComparison.Ordinal) &&
             rasterDpiUpgradeMethod.Contains("RasterSheetRefreshPrefetchSemaphore.WaitAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
@@ -1846,7 +1864,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("RasterSheetCacheService.RenderScaleToDpi(_bitmapScale)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("Raster sheet {targetDpi} DPI", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("private PageInfo CurrentRasterSheetPageInfo(RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal),
-            "zoomed Raster On sheets should switch only to the exact prepared responsive DPI for the current zoom, avoid stale page-open zoom targets, avoid automatic 400 DPI display, and build only 144 DPI for the active working zoom path");
+            "zoomed Raster On sheets should switch only to prepared responsive DPI tiers, keep motion frames on lighter prewarmed raster tiers, avoid stale page-open zoom targets, and avoid automatic 400 DPI display");
         AssertTrue(
             viewport.Contains("private IReadOnlyList<PdfGeometrySnapSegment> _rasterSheetVisualSegments = []", StringComparison.Ordinal) &&
             pdfSnap.Contains("QueueRasterSheetVisualSegmentsLoad", StringComparison.Ordinal) &&
