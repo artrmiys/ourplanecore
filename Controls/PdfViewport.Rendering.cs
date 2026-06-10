@@ -217,15 +217,26 @@ public sealed partial class PdfViewport
             return SKFilterQuality.None;
 
         if (_usingRasterSheetRender)
+        {
+            if (ShouldUseFastFarZoomRasterSheetSampling())
+                return SKFilterQuality.None;
+
             return ShouldUseSharperSourceImageRasterSampling()
                 ? SKFilterQuality.Medium
                 : SKFilterQuality.Low;
+        }
 
         if (_renderNavigationFastFrame || _zoom > _bitmapScale * 1.05f)
             return SKFilterQuality.Low;
 
         return SKFilterQuality.Medium;
     }
+
+    private bool ShouldUseFastFarZoomRasterSheetSampling() =>
+        !ShouldUseSharperSourceImageRasterSampling() &&
+        _bitmapScale > 0 &&
+        _zoom <= ViewportRenderPolicy.RasterSheetFarZoomFastPaintMaxZoom &&
+        _zoom <= _bitmapScale * ViewportRenderPolicy.RasterSheetFarZoomFastPaintMaxScaleRatio;
 
     private bool ShouldUseSharperSourceImageRasterSampling() =>
         !_renderNavigationFastFrame &&

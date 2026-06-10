@@ -1515,12 +1515,17 @@ internal static class TakeoffsTreeRegressionTests
             rendering.Contains("FilterQuality = CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
             rendering.Contains("private SKFilterQuality CurrentPageBitmapFilterQuality()", StringComparison.Ordinal) &&
             rendering.Contains("ShouldUseSharperSourceImageRasterSampling()", StringComparison.Ordinal) &&
+            rendering.Contains("ShouldUseFastFarZoomRasterSheetSampling()", StringComparison.Ordinal) &&
+            rendering.Contains("RasterSheetFarZoomFastPaintMaxZoom", StringComparison.Ordinal) &&
+            rendering.Contains("RasterSheetFarZoomFastPaintMaxScaleRatio", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.Medium", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
             rendering.Contains("if (_renderNavigationFastFrame)", StringComparison.Ordinal) &&
             rendering.Contains("return SKFilterQuality.None;", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetFarZoomFastPaintMaxZoom = 0.30f", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetFarZoomFastPaintMaxScaleRatio = 0.30f", StringComparison.Ordinal) &&
             !rendering.Contains("_zoom <= _bitmapScale * 1.05f", StringComparison.Ordinal),
-            "raster sheet mode should use smoothed still-frame bitmap sampling while allowing blocky fast-frame sampling only during navigation");
+            "raster sheet mode should use smoothed still-frame bitmap sampling while allowing cheaper sampling during navigation and heavily downsampled far-zoom paint");
         AssertTrue(
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 24", StringComparison.Ordinal) &&

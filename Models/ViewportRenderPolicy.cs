@@ -71,6 +71,8 @@ public static class ViewportRenderPolicy
     public const float LowZoomBitmapDowngradeRatio = 1.38f;
     public const float RasterSheetDisplayMinZoom = ZoomRefreshMinZoom;
     public const float RasterSheetDisplayExitZoom = 0.45f;
+    public const float RasterSheetFarZoomFastPaintMaxZoom = 0.30f;
+    public const float RasterSheetFarZoomFastPaintMaxScaleRatio = 0.30f;
     public const int RasterSheetNavigationMaxDpi = 144;
     private static readonly int[] RasterSheetDisplayDpiSteps = [72, 100, 144, 200];
     public const float SheetOverlayViewportRenderScale = 2.0f;
