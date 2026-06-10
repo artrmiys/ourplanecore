@@ -32,6 +32,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PageOpenDefersHeavyUiWork()
     {
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
+        string pagePreviewWarmup = ReadRepoFile("MainWindow.PagePreviewWarmup.cs");
         string loadFromTabMethod = SliceMethod(pageTabs, "private void LoadPageFromTab(");
         string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
         string distinctBatchPagesMethod = SliceMethod(pageTabs, "private static IReadOnlyList<PageInfo> DistinctBatchPages(");
@@ -47,7 +48,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterWarmupQueueMethod = SliceMethod(pageTabs, "private static void QueueJobRasterSheetRefreshWarmup(IReadOnlyList<PageInfo> pages)");
         string nearbyPrefetchQueueMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)");
         string nearbyPrefetchMethod = SliceMethod(pageTabs, "private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder)");
-        string loadPagesForPrefetchMethod = SliceMethod(pageTabs, "private static IReadOnlyList<PageInfo> LoadPagesForPreviewPrefetch(");
+        string loadPagesForPrefetchMethod = SliceMethod(pagePreviewWarmup, "private static IReadOnlyList<PageInfo> LoadPagesForPreviewPrefetch(");
         string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
         string queueCleanRenderPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueCleanRenderPrefetchAt(");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
@@ -127,14 +128,21 @@ internal static class TakeoffsTreeRegressionTests
             warmupMethod.Contains("QueueJobPagePreviewWarmup(viewportPage)", StringComparison.Ordinal) &&
             pageTabs.Contains("Task.Run(() =>", StringComparison.Ordinal) &&
             pageTabs.Contains("LoadPagesForPreviewPrefetch(pagesRoot)", StringComparison.Ordinal) &&
-            warmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex, previewWarmupCount)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("ViewportRenderPolicy.SelectJobOpenPreviewWarmupCount(pages.Count)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("ViewportRenderPolicy.SelectJobOpenRasterSheetBitmapWarmupCount(pages.Count)", StringComparison.Ordinal) &&
-            warmupRunMethod.Contains("warmupOrdinal < rasterWarmupCount", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("HashSet<int> rasterWarmupIndexes", StringComparison.Ordinal) &&
+            warmupRunMethod.Contains("rasterWarmupIndexes.Contains(index)", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("includeRasterSheetWarmup: includeRasterSheetWarmup", StringComparison.Ordinal) &&
             warmupRunMethod.Contains("includeRasterSheetRefresh: false", StringComparison.Ordinal) &&
+            pagePreviewWarmup.Contains("BuildEvenlyDistributedWarmupIndexes", StringComparison.Ordinal) &&
+            pagePreviewWarmup.Contains("JobOpenPreviewWarmupPriorityLocalRadius", StringComparison.Ordinal) &&
+            pagePreviewWarmup.Contains("BuildLocalPageWarmupOrder(count, activeIndex)", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupAllPages = false", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupPriorityLocalRadius = 2", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupLocalRadius = 8", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupSpreadAnchorCount = 12", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupCount = 48", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupLargeJobCount = 64", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupHugeJobCount = 96", StringComparison.Ordinal) &&
@@ -146,7 +154,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterWarmupMethod.Contains("DispatcherPriority.ContextIdle", StringComparison.Ordinal) &&
             rasterWarmupMethod.Contains("_pageRasterRefreshWarmupJobRoot", StringComparison.Ordinal) &&
             rasterWarmupMethod.Contains("QueueJobRasterSheetRefreshWarmup(viewportPage)", StringComparison.Ordinal) &&
-            rasterWarmupRunMethod.Contains("BuildPreviewWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
+            rasterWarmupRunMethod.Contains("BuildLocalPageWarmupOrder(pages.Count, activeIndex)", StringComparison.Ordinal) &&
             rasterWarmupRunMethod.Contains("ViewportRenderPolicy.SelectJobOpenRasterSheetRefreshWarmupCount(pages.Count)", StringComparison.Ordinal) &&
             rasterWarmupRunMethod.Contains("QueueJobRasterSheetRefreshWarmup(queuedPages)", StringComparison.Ordinal) &&
             rasterWarmupQueueMethod.Contains("PdfViewport.PrefetchRasterSheetRefresh(page)", StringComparison.Ordinal) &&
@@ -159,7 +167,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             nearbyPrefetchQueueMethod.Contains("Task.Run", StringComparison.Ordinal) &&
             nearbyPrefetchQueueMethod.Contains("LoadPagesForPreviewPrefetch(pagesRoot)", StringComparison.Ordinal) &&
-            loadPagesForPrefetchMethod.Contains("Directory.EnumerateFiles(pagesRoot", StringComparison.Ordinal) &&
+            loadPagesForPrefetchMethod.Contains("LoadPagesForPreviewPrefetch(pagesRoot, pages)", StringComparison.Ordinal) &&
+            pagePreviewWarmup.Contains("OurPlaneCoreJobStore.GetOrderedChildDirectories(folderPath)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex + offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&

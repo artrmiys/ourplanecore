@@ -734,19 +734,21 @@ public partial class MainWindow
 
         int activeIndex = FindPreviewPrefetchPageIndex(pages, activePageFolder);
 
+        int previewWarmupCount = ViewportRenderPolicy.SelectJobOpenPreviewWarmupCount(pages.Count);
         int rasterWarmupCount = ViewportRenderPolicy.SelectJobOpenRasterSheetBitmapWarmupCount(pages.Count);
-        int warmupOrdinal = 0;
-        foreach (int index in BuildPreviewWarmupOrder(pages.Count, activeIndex)
-                     .Take(ViewportRenderPolicy.SelectJobOpenPreviewWarmupCount(pages.Count)))
+        HashSet<int> rasterWarmupIndexes = BuildLocalPageWarmupOrder(pages.Count, activeIndex)
+            .Take(rasterWarmupCount)
+            .ToHashSet();
+        foreach (int index in BuildPreviewWarmupOrder(pages.Count, activeIndex, previewWarmupCount)
+                     .Take(previewWarmupCount))
         {
-            bool includeRasterSheetWarmup = warmupOrdinal < rasterWarmupCount;
+            bool includeRasterSheetWarmup = rasterWarmupIndexes.Contains(index);
             QueuePreviewPrefetchAt(
                 pages,
                 index,
                 ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale,
                 includeRasterSheetWarmup: includeRasterSheetWarmup,
                 includeRasterSheetRefresh: false);
-            warmupOrdinal++;
         }
     }
 
@@ -778,7 +780,7 @@ public partial class MainWindow
 
         int activeIndex = FindPreviewPrefetchPageIndex(pages, activePageFolder);
 
-        IReadOnlyList<PageInfo> queuedPages = BuildPreviewWarmupOrder(pages.Count, activeIndex)
+        IReadOnlyList<PageInfo> queuedPages = BuildLocalPageWarmupOrder(pages.Count, activeIndex)
             .Take(ViewportRenderPolicy.SelectJobOpenRasterSheetRefreshWarmupCount(pages.Count))
             .Select(index => pages[index])
             .ToList();
@@ -794,42 +796,6 @@ public partial class MainWindow
             PdfViewport.PrefetchRasterSheetRefresh(page);
     }
 
-    private static IEnumerable<int> BuildPreviewWarmupOrder(int count, int activeIndex)
-    {
-        if (count <= 0)
-            yield break;
-
-        bool[] emitted = new bool[count];
-        if (activeIndex >= 0 && activeIndex < count)
-        {
-            emitted[activeIndex] = true;
-            yield return activeIndex;
-
-            for (int offset = 1; offset < count; offset++)
-            {
-                int next = activeIndex + offset;
-                if (next < count)
-                {
-                    emitted[next] = true;
-                    yield return next;
-                }
-
-                int previous = activeIndex - offset;
-                if (previous >= 0)
-                {
-                    emitted[previous] = true;
-                    yield return previous;
-                }
-            }
-        }
-
-        for (int i = 0; i < count; i++)
-        {
-            if (!emitted[i])
-                yield return i;
-        }
-    }
-
     private static int FindPreviewPrefetchPageIndex(IReadOnlyList<PageInfo> pages, string activePageFolder)
     {
         for (int i = 0; i < pages.Count; i++)
@@ -839,21 +805,6 @@ public partial class MainWindow
         }
 
         return -1;
-    }
-
-    private static IReadOnlyList<PageInfo> LoadPagesForPreviewPrefetch(string pagesRoot)
-    {
-        if (!Directory.Exists(pagesRoot))
-            return Array.Empty<PageInfo>();
-
-        return Directory.EnumerateFiles(pagesRoot, "source.json", SearchOption.AllDirectories)
-            .Select(Path.GetDirectoryName)
-            .Where(folder => !string.IsNullOrWhiteSpace(folder))
-            .Select(folder => OurPlaneCoreJobStore.TryReadPage(folder!))
-            .Where(page => page != null && File.Exists(page.PdfPath))
-            .Cast<PageInfo>()
-            .OrderBy(page => page.FolderPath, StringComparer.OrdinalIgnoreCase)
-            .ToList();
     }
 
     private static void QueuePreviewPrefetchAt(
