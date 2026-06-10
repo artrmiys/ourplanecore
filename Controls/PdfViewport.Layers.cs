@@ -1147,6 +1147,9 @@ public sealed partial class PdfViewport
                         return;
                     }
 
+                    if (TryQueueCachedReadablePreviewUpgradeForLowZoom(pdfPath, pdfIndex, pageFolder))
+                        return;
+
                     if (ShouldSkipSharpLayerUpgradeForLowZoom())
                         return;
 
@@ -1226,6 +1229,33 @@ public sealed partial class PdfViewport
                     AppLog.Warn(ex, "Viewport sharp base page upgrade failed.");
                 }
             }));
+    }
+
+    private bool TryQueueCachedReadablePreviewUpgradeForLowZoom(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder)
+    {
+        if (_zoom >= ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom)
+            return false;
+
+        float renderScale = CurrentPostPreviewBaseRenderScale();
+        if (renderScale > ViewportRenderPolicy.InitialPagePreviewRenderScale * 1.05f ||
+            _bitmapScale >= renderScale * 0.95f)
+        {
+            return false;
+        }
+
+        QueuePersistedPreviewRenderAfterFirstRepaint(
+            pdfPath,
+            pdfIndex,
+            pageFolder,
+            renderScale,
+            CaptureViewState(),
+            fitAfter: false,
+            queueSharpBaseAfterPreview: false,
+            statusAfter: null);
+        return true;
     }
 
     private bool ShouldDelaySharpLayerUpgrade(int deferralCount)

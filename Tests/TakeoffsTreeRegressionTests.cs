@@ -2179,6 +2179,8 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("CurrentPostPreviewBaseRenderScale()", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.ShouldPreferLowerScalePageBitmapForNavigation", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeMinZoom", StringComparison.Ordinal) &&
+            layers.Contains("TryQueueCachedReadablePreviewUpgradeForLowZoom", StringComparison.Ordinal) &&
+            layers.Contains("queueSharpBaseAfterPreview: false", StringComparison.Ordinal) &&
             layers.Contains("IsCurrentPageRenderTarget", StringComparison.Ordinal) &&
             layers.Contains("allowLiveRender: true", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipLowerQualityDocnetPreview", StringComparison.Ordinal) &&
@@ -2452,13 +2454,14 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("PageSwitchSharpUpgradeMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("ShouldSkipFullPageSharpUpgradeAtLowZoom", StringComparison.Ordinal) &&
             policy.Contains("targetBitmapScale > currentBitmapScale * 1.05f", StringComparison.Ordinal) &&
+            layers.Contains("TryQueueCachedReadablePreviewUpgradeForLowZoom(pdfPath, pdfIndex, pageFolder)", StringComparison.Ordinal) &&
+            layers.Contains("queueSharpBaseAfterPreview: false", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(scale)", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(renderScale)", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("private bool ShouldSkipQueuedNonFastPreviewForCurrentView(float renderScale)", StringComparison.Ordinal) &&
             layers.Contains("_usingRasterSheetRender || _usingRasterSheetOverviewRender", StringComparison.Ordinal) &&
-            layers.Contains("_zoom < ViewportRenderPolicy.FarZoomFastFrameThreshold", StringComparison.Ordinal) &&
-            layers.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f", StringComparison.Ordinal) &&
+            layers.Contains("_bitmapScale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f", StringComparison.Ordinal) &&
             layers.Contains("!IsFastPreviewRenderScale(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             layers.Contains("_bitmapScale <= 0", StringComparison.Ordinal) &&

@@ -3942,6 +3942,12 @@ static void ViewportRenderScaleChoosesNextQualityStep()
         AssertFalse(
             ViewportRenderPolicy.ShouldUseZoomRefreshRender(0.32f, 0.35f),
             "far zoom should keep the instant preview instead of repainting a heavy full-page bitmap");
+        AssertTrue(
+            ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(0.32f, 0.35f, 0.75f),
+            "far zoom should not live-render a readable preview upgrade when it would compete with interaction");
+        AssertTrue(
+            ViewportRenderPolicy.ShouldSkipFullPageSharpUpgradeAtLowZoom(0.32f, 0.35f, 1.0f),
+            "far zoom should still skip heavier full-page sharp upgrades after the readable preview");
         AssertFalse(
             ViewportRenderPolicy.ShouldUseDetailRender(0.32f, 0.35f),
             "ordinary zoom should use a refresh render, not an expensive clipped detail render");
