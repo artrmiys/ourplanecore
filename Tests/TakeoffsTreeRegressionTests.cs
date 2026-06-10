@@ -1832,7 +1832,9 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("requestRepaint: false, requireCachedBitmap: true", StringComparison.Ordinal) &&
             viewport.Contains("PrepareBitmapForImmediateRepaint()", StringComparison.Ordinal) &&
             raster.Contains("TryGetReadyReadableRasterSource", StringComparison.Ordinal) &&
-            renderCache.Contains("PrefetchRasterSheetWorkZoomBitmaps(PageInfo page, bool buildMissingDpis = false)", StringComparison.Ordinal) &&
+            renderCache.Contains("public static void PrefetchRasterSheetWorkZoomBitmaps", StringComparison.Ordinal) &&
+            renderCache.Contains("bool buildMissingDpis = false", StringComparison.Ordinal) &&
+            renderCache.Contains("bool allowDuringNavigation = false", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetWorkZoomWarmupDpiSteps", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetWorkZoomBuildDpiSteps", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetCurrentWorkZoomBuildDelayMs", StringComparison.Ordinal) &&
@@ -1840,17 +1842,27 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("if (!buildMissingDpis)", StringComparison.Ordinal) &&
             renderCache.Contains("BuildCachePreservingEnabled(currentPage, scale)", StringComparison.Ordinal) &&
             renderCache.Contains("work-zoom-{dpi}dpi warmed", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("buildMissingDpis: true", StringComparison.Ordinal) &&
+            renderCache.Contains("allowDuringNavigation", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("buildMissingDpis: false", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("allowDuringNavigation: true", StringComparison.Ordinal) &&
+            !rasterSheetDpiUpgrade.Contains("buildMissingDpis: true", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetWorkZoomWarmupDpis = [72, 100, 144]", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetWorkZoomBuildDpis = [72, 100, 144]", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetNavigationMaxDpi = 144", StringComparison.Ordinal) &&
+            policy.Contains("RasterSheetMotionQualityRestoreQuietMs", StringComparison.Ordinal) &&
+            policy.Contains("ShouldHoldRasterSheetQualityAfterNavigation", StringComparison.Ordinal) &&
             policy.Contains("SelectRasterSheetNavigationDpi", StringComparison.Ordinal) &&
             pageApi.Contains("if (shouldUseRasterSheetForOpen)", StringComparison.Ordinal) &&
             viewTransform.Contains("QueueCurrentRasterSheetMotionWarmup()", StringComparison.Ordinal) &&
+            viewTransform.Contains("QueueRasterSheetQualityRestoreAfterMotion", StringComparison.Ordinal) &&
             responsiveDpiMethod.IndexOf("TryApplyNavigationRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) <
                 responsiveDpiMethod.IndexOf("ShouldUseResponsiveRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
             responsiveDpiMethod.Contains("navigationCurrentDpi <= navigationTargetDpi", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("QueueCurrentRasterSheetMotionWarmup", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryHoldHeavyRasterSheetDpiForRecentMotion", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryApplyMotionHoldRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("!_usingRasterSheetRender || _usingRasterSheetOverviewRender", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("TryHoldHeavyRasterSheetDpiForRecentMotion(CurrentRasterSheetPageInfo(), currentDpi, targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyNavigationRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForNavigation(allowWorkZoom: true)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("allowWorkZoom = false", StringComparison.Ordinal) &&

@@ -346,6 +346,8 @@ public sealed partial class PdfViewport : SKElement
     private bool _renderNavigationFastFrame;
     private bool _showingPreviousPageDuringSwitch;
     private DateTime _lastFastNavigationAt = DateTime.MinValue;
+    private int _rasterSheetQualityRestoreVersion;
+    private int _rasterSheetQualityRestoreQueuedVersion;
     private DateTime _lastPointerStatusAt = DateTime.MinValue;
     private DateTime _lastPointerRepaintAt = DateTime.MinValue;
     private DateTime _lastSlowFrameLogAt = DateTime.MinValue;

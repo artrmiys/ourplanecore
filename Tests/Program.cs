@@ -295,6 +295,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay render cache round trips", SheetOverlayRenderCacheRoundTrips),
     ("viewport render scale chooses next quality step", ViewportRenderScaleChoosesNextQualityStep),
     ("viewport raster navigation chooses lighter dpi", ViewportRasterNavigationChoosesLighterDpi),
+    ("viewport raster quality restore waits for motion quiet", ViewportRasterQualityRestoreWaitsForMotionQuiet),
     ("viewport pan allows edge overscroll", ViewportPanAllowsEdgeOverscroll),
     ("viewport pan allows sheet past frame at work zooms", ViewportPanAllowsSheetPastFrameAtWorkZooms),
     ("viewport background defaults to opaque white", ViewportBackgroundDefaultsToOpaqueWhite),
@@ -4141,7 +4142,8 @@ static void ViewportHighZoomUsesResponsiveNavigationFrame()
         ViewportConstants.NavigationIdleMs > ViewportConstants.ZoomRerenderDelayMs &&
         ViewportRenderPolicy.DetailRenderNavigationQuietMs >= ViewportConstants.NavigationIdleMs &&
         ViewportRenderPolicy.DetailRenderNavigationQuietMs > ViewportRenderPolicy.DetailRenderCoalesceDelayMs &&
-        ViewportRenderPolicy.PageOpenDeferredNavigationQuietMs >= ViewportConstants.NavigationIdleMs,
+        ViewportRenderPolicy.PageOpenDeferredNavigationQuietMs >= ViewportConstants.NavigationIdleMs &&
+        ViewportRenderPolicy.RasterSheetMotionQualityRestoreQuietMs > ViewportConstants.NavigationIdleMs,
         "high-zoom pan bursts should stay idle-gated while detail render waits for a real navigation quiet window");
 
     AssertTrue(
@@ -4152,6 +4154,25 @@ static void ViewportHighZoomUsesResponsiveNavigationFrame()
             activePageMeasurementCount: 0,
             hasBlockingInteraction: false),
         "ordinary pan should also stay responsive instead of waiting for a full-quality frame");
+}
+
+static void ViewportRasterQualityRestoreWaitsForMotionQuiet()
+{
+    AssertTrue(
+        ViewportRenderPolicy.ShouldHoldRasterSheetQualityAfterNavigation(
+            TimeSpan.FromMilliseconds(ViewportConstants.NavigationIdleMs),
+            targetDpi: 200),
+        "200dpi raster sheet restore should wait beyond the first navigation idle tick");
+    AssertFalse(
+        ViewportRenderPolicy.ShouldHoldRasterSheetQualityAfterNavigation(
+            TimeSpan.FromMilliseconds(ViewportRenderPolicy.RasterSheetMotionQualityRestoreQuietMs + 1),
+            targetDpi: 200),
+        "200dpi raster sheet restore should resume after the motion quiet window");
+    AssertFalse(
+        ViewportRenderPolicy.ShouldHoldRasterSheetQualityAfterNavigation(
+            TimeSpan.Zero,
+            targetDpi: ViewportRenderPolicy.RasterSheetNavigationMaxDpi),
+        "navigation-tier raster sheet DPI should remain available during motion");
 }
 
 static void ViewportFarZoomUsesResponsiveNavigationFrame()

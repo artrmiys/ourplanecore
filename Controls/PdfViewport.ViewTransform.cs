@@ -39,6 +39,8 @@ public sealed partial class PdfViewport
     {
         _isFastNavigating = true;
         _lastFastNavigationAt = DateTime.UtcNow;
+        _rasterSheetQualityRestoreVersion++;
+        _rasterSheetQualityRestoreQueuedVersion = 0;
         PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchNavigationQuietMs);
         QueueCurrentRasterSheetMotionWarmup();
         _navigationIdleTimer.Stop();
@@ -68,6 +70,21 @@ public sealed partial class PdfViewport
         _navigationIdleTimer.Stop();
         _isFastNavigating = false;
         MaybeRequestSheetOverlayRenderScaleRefresh();
+        PageInfo rasterPage = CurrentRasterSheetPageInfo();
+        int targetDpi = TargetRasterSheetDpiForCurrentZoom();
+        if (ShouldHoldHeavyRasterSheetDpiAfterMotion(targetDpi))
+        {
+            QueueRasterSheetQualityRestoreAfterMotion(rasterPage);
+            if (TryHoldHeavyRasterSheetDpiForRecentMotion(
+                    rasterPage,
+                    RasterSheetCacheService.RenderScaleToDpi(_bitmapScale),
+                    targetDpi))
+            {
+                RequestRepaint();
+                return;
+            }
+        }
+
         if (TryApplyReadyRasterSheetForCurrentZoom())
         {
             RequestRepaint();

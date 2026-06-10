@@ -593,7 +593,10 @@ public sealed partial class PdfViewport
             QueueRasterSheetBitmapPrefetch(page, preferOverview: false);
     }
 
-    public static void PrefetchRasterSheetWorkZoomBitmaps(PageInfo page, bool buildMissingDpis = false)
+    public static void PrefetchRasterSheetWorkZoomBitmaps(
+        PageInfo page,
+        bool buildMissingDpis = false,
+        bool allowDuringNavigation = false)
     {
         if (page.RasterSheet?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(page.RasterSheet) ||
@@ -606,14 +609,14 @@ public sealed partial class PdfViewport
             return;
         }
 
-        string cacheKey = RasterSheetWorkZoomWarmupKey(page, buildMissingDpis);
+        string cacheKey = RasterSheetWorkZoomWarmupKey(page, buildMissingDpis, allowDuringNavigation);
         lock (RasterSheetWorkZoomWarmupGate)
         {
             if (!RasterSheetWorkZoomWarmupInFlight.Add(cacheKey))
                 return;
         }
 
-        _ = PrefetchRasterSheetWorkZoomBitmapsAsync(page, cacheKey, buildMissingDpis);
+        _ = PrefetchRasterSheetWorkZoomBitmapsAsync(page, cacheKey, buildMissingDpis, allowDuringNavigation);
     }
 
     private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)
@@ -740,15 +743,16 @@ public sealed partial class PdfViewport
     private static async Task PrefetchRasterSheetWorkZoomBitmapsAsync(
         PageInfo queuedPage,
         string cacheKey,
-        bool buildMissingDpis)
+        bool buildMissingDpis,
+        bool allowDuringNavigation)
     {
         try
         {
-            int delayMs = buildMissingDpis
+            int delayMs = buildMissingDpis || allowDuringNavigation
                 ? ViewportRenderPolicy.RasterSheetCurrentWorkZoomBuildDelayMs
                 : ViewportRenderPolicy.RasterSheetWorkZoomWarmupDelayMs;
             await Task.Delay(delayMs).ConfigureAwait(false);
-            if (!buildMissingDpis)
+            if (!buildMissingDpis && !allowDuringNavigation)
                 await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
             await RasterSheetWorkZoomWarmupSemaphore.WaitAsync().ConfigureAwait(false);
             try
@@ -1304,7 +1308,10 @@ public sealed partial class PdfViewport
             raster.OverviewRenderScale.ToString(CultureInfo.InvariantCulture));
     }
 
-    private static string RasterSheetWorkZoomWarmupKey(PageInfo page, bool buildMissingDpis)
+    private static string RasterSheetWorkZoomWarmupKey(
+        PageInfo page,
+        bool buildMissingDpis,
+        bool allowDuringNavigation)
     {
         RasterSheetSource raster = page.RasterSheet ?? new RasterSheetSource();
         IReadOnlyList<int> warmupDpis = buildMissingDpis
@@ -1317,6 +1324,7 @@ public sealed partial class PdfViewport
             Path.GetFullPath(page.PdfPath).ToLowerInvariant(),
             page.PdfPage.ToString(CultureInfo.InvariantCulture),
             buildMissingDpis ? "build" : "warm",
+            allowDuringNavigation ? "motion" : "quiet",
             raster.RenderProfile,
             raster.GeneratedAtUtc,
             string.Join(",", warmupDpis));

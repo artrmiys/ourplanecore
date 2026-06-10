@@ -61,6 +61,7 @@ public static class ViewportRenderPolicy
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
     public const int RasterSheetWorkZoomWarmupDelayMs = 2400;
     public const int RasterSheetCurrentWorkZoomBuildDelayMs = 80;
+    public const int RasterSheetMotionQualityRestoreQuietMs = 1200;
     public const int RasterSheetPageOpenImmediateWarmMaxDpi = 144;
     public const int PointerMoveRepaintMinIntervalMs = 33;
     public const float InstantPagePreviewRenderScale = 0.35f;
@@ -285,6 +286,26 @@ public static class ViewportRenderPolicy
         int navigationIndex = Math.Max(0, targetIndex - 1);
         int selected = RasterSheetDisplayDpiSteps[navigationIndex];
         return Math.Min(selected, RasterSheetNavigationMaxDpi);
+    }
+
+    public static bool ShouldHoldRasterSheetQualityAfterNavigation(TimeSpan navigationIdle, int targetDpi)
+    {
+        if (targetDpi <= RasterSheetNavigationMaxDpi)
+            return false;
+
+        if (navigationIdle < TimeSpan.Zero)
+            return true;
+
+        return navigationIdle.TotalMilliseconds < RasterSheetMotionQualityRestoreQuietMs;
+    }
+
+    public static TimeSpan RasterSheetQualityRestoreDelay(TimeSpan navigationIdle)
+    {
+        if (navigationIdle < TimeSpan.Zero)
+            navigationIdle = TimeSpan.Zero;
+
+        TimeSpan target = TimeSpan.FromMilliseconds(RasterSheetMotionQualityRestoreQuietMs);
+        return navigationIdle >= target ? TimeSpan.Zero : target - navigationIdle;
     }
 
     public static bool ShouldPreferLowerRasterSheetDpi(int currentDpi, int targetDpi)

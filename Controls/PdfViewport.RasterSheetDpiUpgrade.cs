@@ -27,6 +27,9 @@ public sealed partial class PdfViewport
         PageInfo page = CurrentRasterSheetPageInfo();
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
         int targetDpi = ReadyRasterSheetDpiForCurrentZoom(page, currentDpi);
+        if (TryHoldHeavyRasterSheetDpiForRecentMotion(page, currentDpi, targetDpi))
+            return true;
+
         if (targetDpi > currentDpi &&
             TryApplyReadyRasterSheetDpi(page, targetDpi))
         {
@@ -72,6 +75,9 @@ public sealed partial class PdfViewport
         PageInfo page = CurrentRasterSheetPageInfo();
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
         int targetDpi = TargetRasterSheetDpiForCurrentZoom();
+        if (TryHoldHeavyRasterSheetDpiForRecentMotion(page, currentDpi, targetDpi))
+            return true;
+
         if (_isFastNavigating &&
             _usingRasterSheetRender &&
             TryApplyNavigationRasterSheetDpiForCurrentZoom(page, currentDpi, targetDpi))
@@ -141,6 +147,9 @@ public sealed partial class PdfViewport
             return false;
 
         PageInfo page = CurrentRasterSheetPageInfo();
+        if (TryHoldHeavyRasterSheetDpiForRecentMotion(page, currentDpi, targetDpi))
+            return true;
+
         if (_isFastNavigating)
         {
             if (TryApplyNavigationRasterSheetDpiForCurrentZoom(page, currentDpi, targetDpi))
@@ -232,7 +241,141 @@ public sealed partial class PdfViewport
 
         PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(
             CurrentRasterSheetPageInfo(),
-            buildMissingDpis: true);
+            buildMissingDpis: false,
+            allowDuringNavigation: true);
+    }
+
+    private bool TryHoldHeavyRasterSheetDpiForRecentMotion(
+        PageInfo page,
+        int currentDpi,
+        int targetDpi)
+    {
+        if (!ShouldHoldHeavyRasterSheetDpiAfterMotion(targetDpi) ||
+            _rasterSheetSource?.Enabled != true ||
+            RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            _pdfLayersLoadedForPage ||
+            _usingLayerRenderer)
+        {
+            return false;
+        }
+
+        QueueRasterSheetQualityRestoreAfterMotion(page);
+
+        if (!_usingRasterSheetRender || _usingRasterSheetOverviewRender)
+            return true;
+
+        if (currentDpi > 0 && currentDpi <= ViewportRenderPolicy.RasterSheetNavigationMaxDpi)
+            return true;
+
+        if (TryApplyMotionHoldRasterSheetDpiFromMemory(page, currentDpi, targetDpi))
+            return true;
+
+        return TrySwitchRasterSheetToFastPreviewForNavigation(
+            allowWorkZoom: true,
+            allowAfterMotion: true);
+    }
+
+    private bool TryApplyMotionHoldRasterSheetDpiFromMemory(
+        PageInfo page,
+        int currentDpi,
+        int targetDpi)
+    {
+        int navigationDpi = ViewportRenderPolicy.SelectRasterSheetNavigationDpi(
+            _zoom,
+            Math.Max(currentDpi, targetDpi),
+            targetDpi);
+        if (navigationDpi > 0 &&
+            navigationDpi < currentDpi &&
+            TryApplyReadyRasterSheetDpiFromMemory(page, navigationDpi, postStatus: false))
+        {
+            return true;
+        }
+
+        IReadOnlyList<int> warmupDpis = ViewportRenderPolicy.RasterSheetWorkZoomWarmupDpiSteps;
+        for (int i = warmupDpis.Count - 1; i >= 0; i--)
+        {
+            int fallbackDpi = warmupDpis[i];
+            if (fallbackDpi <= 0 ||
+                fallbackDpi >= currentDpi ||
+                fallbackDpi > ViewportRenderPolicy.RasterSheetNavigationMaxDpi)
+            {
+                continue;
+            }
+
+            if (TryApplyReadyRasterSheetDpiFromMemory(page, fallbackDpi, postStatus: false))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool ShouldHoldHeavyRasterSheetDpiAfterMotion(int targetDpi)
+    {
+        if (_lastFastNavigationAt == DateTime.MinValue)
+            return false;
+
+        TimeSpan idle = _isFastNavigating
+            ? TimeSpan.Zero
+            : DateTime.UtcNow - _lastFastNavigationAt;
+        return ViewportRenderPolicy.ShouldHoldRasterSheetQualityAfterNavigation(idle, targetDpi);
+    }
+
+    private void QueueRasterSheetQualityRestoreAfterMotion(PageInfo page)
+    {
+        if (page.RasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath) ||
+            page.PdfPage < 0)
+        {
+            return;
+        }
+
+        int version = _rasterSheetQualityRestoreVersion;
+        if (_rasterSheetQualityRestoreQueuedVersion == version)
+            return;
+
+        TimeSpan idle = _lastFastNavigationAt == DateTime.MinValue
+            ? TimeSpan.Zero
+            : DateTime.UtcNow - _lastFastNavigationAt;
+        TimeSpan delay = ViewportRenderPolicy.RasterSheetQualityRestoreDelay(idle);
+        _rasterSheetQualityRestoreQueuedVersion = version;
+        _ = RestoreRasterSheetQualityAfterMotionAsync(version, page, delay);
+    }
+
+    private async Task RestoreRasterSheetQualityAfterMotionAsync(
+        int version,
+        PageInfo queuedPage,
+        TimeSpan delay)
+    {
+        try
+        {
+            if (delay > TimeSpan.Zero)
+                await Task.Delay(delay).ConfigureAwait(false);
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (version != _rasterSheetQualityRestoreVersion)
+                    return;
+
+                _rasterSheetQualityRestoreQueuedVersion = 0;
+                if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
+                    return;
+
+                int targetDpi = TargetRasterSheetDpiForCurrentZoom();
+                if (ShouldHoldHeavyRasterSheetDpiAfterMotion(targetDpi))
+                {
+                    QueueRasterSheetQualityRestoreAfterMotion(queuedPage);
+                    return;
+                }
+
+                RerenderForZoomIfNeeded(force: false);
+                RequestRepaint();
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport raster quality restore after motion failed for {queuedPage.Name}");
+        }
     }
 
     private bool TryApplyNavigationRasterSheetDpiForCurrentZoom(
