@@ -475,7 +475,7 @@ internal static class NodeStore
         string guid = Guid.NewGuid().ToString().ToUpperInvariant();
         root.SetAttributeValue("GUID", guid);
         SetProperty(root, "GUID", guid);
-        doc.Save(path);
+        StorageSupport.SaveDataXmlAtomic(folder, doc);
         // This path loads/saves Data.xml directly; drop the cached copy so the
         // next read picks up the regenerated GUID.
         OurPlaneCoreJobStore.InvalidateMetadataCache(folder);

@@ -456,9 +456,17 @@ public partial class MainWindow
         if (_currentJob == null)
             return;
 
+        // A deleted item can still sit in the pending-autosave set; recreating
+        // its folder here would resurrect it as a ghost next to the undo trash.
+        // Silent autosave only writes into folders that still exist.
+        if (string.IsNullOrWhiteSpace(item.FolderPath) || !System.IO.Directory.Exists(item.FolderPath))
+        {
+            AppLog.Info($"Autosave skipped for missing takeoff folder: {item.FolderPath}");
+            return;
+        }
+
         try
         {
-            EnsureTakeoffItemFolder(item);
             OurPlaneCoreJobStore.SaveTakeoffItem(item);
         }
         catch (Exception ex)

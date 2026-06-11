@@ -93,7 +93,7 @@ internal static class TakeoffStore
             JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsUserSet, measurementType, isJoistTakeoff),
             JoistShowLabelsUserSet = ParseBool(joistShowLabelsUserSet),
             JoistDetailedLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
-            MultiLineOffsets = ParseMultiLineOffsets(OurPlaneCoreJobStore.ReadProperty(folder, "MultiLineOffsets")),
+            MultiLineOffsets = ParseMultiLineOffsets(OurPlaneCoreJobStore.ReadProperty(folder, "MultiLineOffsets"), folder),
         };
         item.Measurements.AddRange(measurements);
         ApplyTakeoffPropertiesToMeasurements(item);
@@ -126,7 +126,7 @@ internal static class TakeoffStore
             new KeyValuePair<string, string>("JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistShowLabelsUserSet", item.JoistShowLabelsUserSet.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture)),
-            new KeyValuePair<string, string>("MultiLineOffsets", SerializeMultiLineOffsets(item.MultiLineOffsets)),
+            new KeyValuePair<string, string>("MultiLineOffsets", SerializeMultiLineOffsets(item.MultiLineOffsets, item.FolderPath)),
             new KeyValuePair<string, string>("MeasurementCount", item.Measurements.Count.ToString()),
             new KeyValuePair<string, string>("MeasuredPageCount", MeasuredPageCount(item).ToString()),
         });
@@ -187,7 +187,7 @@ internal static class TakeoffStore
     public static void SaveMeasurements(string takeoffFolder, IEnumerable<Measurement> measurements)
     {
         Directory.CreateDirectory(takeoffFolder);
-        var dtos = measurements.Select(ToDto).ToList();
+        var dtos = measurements.Select(measurement => ToDto(measurement, takeoffFolder)).ToList();
 
         try
         {
@@ -223,11 +223,73 @@ internal static class TakeoffStore
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count();
 
+    // measurements.json historically stored PageFolder as an absolute path,
+    // which breaks when a job folder is moved or synced to another machine.
+    // New saves store it relative to the job root; loads accept both forms.
+    private static string? JobRootFromTakeoffFolder(string takeoffFolder)
+    {
+        try
+        {
+            for (DirectoryInfo? dir = new(takeoffFolder); dir != null; dir = dir.Parent)
+                if (string.Equals(dir.Name, "Takeoffs", StringComparison.OrdinalIgnoreCase))
+                    return dir.Parent?.FullName;
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.Security.SecurityException or PathTooLongException)
+        {
+            // Fall through: callers keep the stored path as-is.
+        }
+        return null;
+    }
+
+    private static string ResolveJobRelativeFolder(string? stored, string takeoffFolder)
+    {
+        if (string.IsNullOrWhiteSpace(stored))
+            return "";
+        if (Path.IsPathRooted(stored))
+            return stored;
+
+        string? jobRoot = JobRootFromTakeoffFolder(takeoffFolder);
+        if (jobRoot == null)
+            return stored;
+
+        try
+        {
+            return Path.GetFullPath(Path.Combine(jobRoot, stored));
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+        {
+            return stored;
+        }
+    }
+
+    private static string ToJobRelativeFolder(string folder, string takeoffFolder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Path.IsPathRooted(folder))
+            return folder ?? "";
+
+        string? jobRoot = JobRootFromTakeoffFolder(takeoffFolder);
+        if (jobRoot == null)
+            return folder;
+
+        try
+        {
+            string relative = Path.GetRelativePath(jobRoot, folder);
+            return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative)
+                ? folder
+                : relative;
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+        {
+            return folder;
+        }
+    }
+
     private static Measurement ToMeasurement(MeasurementDto dto, string takeoffFolder)
     {
+        string pageFolder = ResolveJobRelativeFolder(dto.PageFolder, takeoffFolder);
         double scale = dto.ScaleMetersPerPt;
-        if (scale <= 0 && !string.IsNullOrWhiteSpace(dto.PageFolder))
-            scale = OurPlaneCoreJobStore.ReadSource(dto.PageFolder)?.ScaleMetersPerPt ?? 0;
+        if (scale <= 0 && !string.IsNullOrWhiteSpace(pageFolder))
+            scale = OurPlaneCoreJobStore.ReadSource(pageFolder)?.ScaleMetersPerPt ?? 0;
 
         return new Measurement
         {
@@ -239,7 +301,7 @@ internal static class TakeoffStore
             CountSymbol = string.IsNullOrWhiteSpace(dto.CountSymbol)
                 ? ""
                 : CountDisplaySymbol.Normalize(dto.CountSymbol),
-            PageFolder = dto.PageFolder,
+            PageFolder = pageFolder,
             TakeoffFolder = takeoffFolder,
             ScaleMetersPerPt = scale,
             JoistDirectionDegrees = dto.JoistDirectionDegrees,
@@ -254,7 +316,7 @@ internal static class TakeoffStore
         };
     }
 
-    private static MeasurementDto ToDto(Measurement measurement) =>
+    private static MeasurementDto ToDto(Measurement measurement, string takeoffFolder) =>
         new()
         {
             Id = measurement.Id,
@@ -263,7 +325,7 @@ internal static class TakeoffStore
             MType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
             Color = measurement.Color,
             CountSymbol = CountDisplaySymbol.Normalize(measurement.CountSymbol),
-            PageFolder = measurement.PageFolder,
+            PageFolder = ToJobRelativeFolder(measurement.PageFolder, takeoffFolder),
             ScaleMetersPerPt = measurement.ScaleMetersPerPt,
             JoistDirectionDegrees = measurement.JoistDirectionDegrees,
             JoistDirectionLocked = measurement.JoistDirectionLocked,
@@ -276,7 +338,7 @@ internal static class TakeoffStore
                 .ToList(),
         };
 
-    private static List<MultiLineOffsetConfig> ParseMultiLineOffsets(string? value)
+    private static List<MultiLineOffsetConfig> ParseMultiLineOffsets(string? value, string takeoffFolder)
     {
         if (string.IsNullOrWhiteSpace(value))
             return [];
@@ -284,9 +346,12 @@ internal static class TakeoffStore
         try
         {
             var parsed = JsonSerializer.Deserialize<List<MultiLineOffsetConfig>>(value) ?? [];
-            return parsed
+            var configs = parsed
                 .Where(config => config != null && config.Meters > 0)
                 .ToList();
+            foreach (MultiLineOffsetConfig config in configs)
+                config.CompanionFolder = ResolveJobRelativeFolder(config.CompanionFolder, takeoffFolder);
+            return configs;
         }
         catch (JsonException)
         {
@@ -294,8 +359,23 @@ internal static class TakeoffStore
         }
     }
 
-    private static string SerializeMultiLineOffsets(List<MultiLineOffsetConfig> offsets) =>
-        offsets.Count == 0 ? "" : JsonSerializer.Serialize(offsets);
+    private static string SerializeMultiLineOffsets(List<MultiLineOffsetConfig> offsets, string takeoffFolder)
+    {
+        if (offsets.Count == 0)
+            return "";
+
+        var portable = offsets
+            .Select(config => new MultiLineOffsetConfig
+            {
+                Name = config.Name,
+                Color = config.Color,
+                Meters = config.Meters,
+                RightSide = config.RightSide,
+                CompanionFolder = ToJobRelativeFolder(config.CompanionFolder, takeoffFolder),
+            })
+            .ToList();
+        return JsonSerializer.Serialize(portable);
+    }
 
     private static double ParseDouble(string? value)
     {

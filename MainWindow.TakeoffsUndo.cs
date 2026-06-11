@@ -16,6 +16,10 @@ public partial class MainWindow
         if (_currentJob == null)
             throw new InvalidOperationException("Open a job before deleting takeoffs.");
 
+        // Land pending edits first so the trash copy holds the latest data and
+        // no debounced autosave fires after the folders are gone.
+        FlushTakeoffAutosaves();
+
         var validEntries = entries
             .Where(entry => !string.IsNullOrWhiteSpace(entry.SourcePath))
             .Select(entry => entry with { SourcePath = NormalizePath(entry.SourcePath) })
@@ -70,6 +74,10 @@ public partial class MainWindow
             TxtStatus.Text = "Nothing to undo: no job is open.";
             return false;
         }
+
+        // The restore reloads the takeoffs tree and replaces item instances;
+        // flush pending edits now so they are not lost with the old objects.
+        FlushTakeoffAutosaves();
 
         while (_takeoffDeleteUndoStack.Count > 0)
         {

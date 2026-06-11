@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -187,8 +188,23 @@ internal static class StorageSupport
                 new XElement("Property", new XAttribute("Name", "GUID"), new XAttribute("Value", guid))));
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
-        doc.Save(Path.Combine(folder, "Data.xml"));
+        SaveDataXmlAtomic(folder, doc);
         StoreCachedDoc(folder, doc);
+    }
+
+    // Data.xml holds the whole node tree's metadata; a torn write here corrupts
+    // the job structure, so it must go through the same atomic temp+replace
+    // path as measurements.json.
+    internal static void SaveDataXmlAtomic(string folder, XDocument doc)
+    {
+        using var writer = new Utf8StringWriter();
+        doc.Save(writer);
+        IoUtil.WriteAllTextAtomic(Path.Combine(folder, "Data.xml"), writer.ToString());
+    }
+
+    private sealed class Utf8StringWriter : StringWriter
+    {
+        public override Encoding Encoding => Encoding.UTF8;
     }
 
     public static void UpdateItemName(string folder, string name)
@@ -211,7 +227,7 @@ internal static class StorageSupport
 
     private static void SaveCachedDoc(string folder, XDocument doc)
     {
-        doc.Save(Path.Combine(folder, "Data.xml"));
+        SaveDataXmlAtomic(folder, doc);
         StoreCachedDoc(folder, doc);
     }
 
