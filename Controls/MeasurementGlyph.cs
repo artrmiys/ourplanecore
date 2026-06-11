@@ -12,7 +12,7 @@ namespace OurPlaneCore.Controls;
 // Glyph is drawn filled in the takeoff color with a darker stroke around it,
 // so it works equally on any panel background — no separate colored swatch.
 // Identical layout in WPF (tree, toolbar, active-target bar) and Skia (on-canvas legend).
-public enum MeasurementGlyphKind { Point, Line, Area, Joist, Count, CountCross, CountSquare }
+public enum MeasurementGlyphKind { Point, Line, Area, Joist, Count, CountCross, CountSquare, CountStar, CountTriangle, CountDiamond, CountRing }
 
 public static class MeasurementGlyph
 {
@@ -36,6 +36,10 @@ public static class MeasurementGlyph
         {
             CountDisplaySymbol.Cross => MeasurementGlyphKind.CountCross,
             CountDisplaySymbol.Square => MeasurementGlyphKind.CountSquare,
+            CountDisplaySymbol.Star => MeasurementGlyphKind.CountStar,
+            CountDisplaySymbol.Triangle => MeasurementGlyphKind.CountTriangle,
+            CountDisplaySymbol.Diamond => MeasurementGlyphKind.CountDiamond,
+            CountDisplaySymbol.Ring => MeasurementGlyphKind.CountRing,
             _ => MeasurementGlyphKind.Point,
         };
 
@@ -118,6 +122,55 @@ public static class MeasurementGlyph
                 canvas.Children.Add(rect);
                 Canvas.SetLeft(rect, pad);
                 Canvas.SetTop(rect, pad);
+                break;
+            }
+
+            case MeasurementGlyphKind.CountStar:
+            case MeasurementGlyphKind.CountTriangle:
+            case MeasurementGlyphKind.CountDiamond:
+            {
+                double cx = s / 2.0;
+                double cy = s / 2.0;
+                double r = (s - pad * 2 - stroke) / 2.0;
+                if (r < 1.5) r = 1.5;
+                var polygon = new WpfShapes.Polygon
+                {
+                    Fill = fillBrush,
+                    Stroke = strokeBrush,
+                    StrokeThickness = stroke,
+                    StrokeLineJoin = PenLineJoin.Round,
+                };
+                foreach ((double x, double y) in PolygonVertices(kind, cx, cy, r))
+                    polygon.Points.Add(new Point(x, y));
+                canvas.Children.Add(polygon);
+                break;
+            }
+
+            case MeasurementGlyphKind.CountRing:
+            {
+                double diameter = s - pad * 2 - stroke;
+                if (diameter < 3) diameter = 3;
+                double ringWidth = Math.Max(2.0, diameter * 0.28);
+                var outline = new WpfShapes.Ellipse
+                {
+                    Width = diameter, Height = diameter,
+                    Stroke = strokeBrush,
+                    StrokeThickness = ringWidth + stroke,
+                    Fill = Brushes.Transparent,
+                };
+                var ring = new WpfShapes.Ellipse
+                {
+                    Width = diameter, Height = diameter,
+                    Stroke = fillBrush,
+                    StrokeThickness = ringWidth,
+                    Fill = Brushes.Transparent,
+                };
+                canvas.Children.Add(outline);
+                canvas.Children.Add(ring);
+                Canvas.SetLeft(outline, (s - diameter) / 2.0);
+                Canvas.SetTop(outline, (s - diameter) / 2.0);
+                Canvas.SetLeft(ring, (s - diameter) / 2.0);
+                Canvas.SetTop(ring, (s - diameter) / 2.0);
                 break;
             }
 
@@ -238,6 +291,47 @@ public static class MeasurementGlyph
         });
     }
 
+    // Shared vertex layout for star/triangle/diamond so WPF and Skia render
+    // the exact same silhouette.
+    private static IEnumerable<(double X, double Y)> PolygonVertices(
+        MeasurementGlyphKind kind, double cx, double cy, double r)
+    {
+        switch (kind)
+        {
+            case MeasurementGlyphKind.CountStar:
+            {
+                double inner = r * 0.45;
+                for (int i = 0; i < 10; i++)
+                {
+                    double radius = i % 2 == 0 ? r : inner;
+                    double angle = -Math.PI / 2.0 + i * Math.PI / 5.0;
+                    yield return (cx + radius * Math.Cos(angle), cy + radius * Math.Sin(angle));
+                }
+                break;
+            }
+
+            case MeasurementGlyphKind.CountTriangle:
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    double angle = -Math.PI / 2.0 + i * 2.0 * Math.PI / 3.0;
+                    yield return (cx + r * Math.Cos(angle), cy + r * Math.Sin(angle));
+                }
+                break;
+            }
+
+            case MeasurementGlyphKind.CountDiamond:
+            {
+                double half = r * 0.8;
+                yield return (cx, cy - r);
+                yield return (cx + half, cy);
+                yield return (cx, cy + r);
+                yield return (cx - half, cy);
+                break;
+            }
+        }
+    }
+
     private static Brush DarkerBrush(Brush source, int amount)
     {
         if (source is SolidColorBrush scb)
@@ -339,6 +433,51 @@ public static class MeasurementGlyph
             {
                 canvas.DrawRect(inner, fillPaint);
                 canvas.DrawRect(inner, strokePaint);
+                break;
+            }
+
+            case MeasurementGlyphKind.CountStar:
+            case MeasurementGlyphKind.CountTriangle:
+            case MeasurementGlyphKind.CountDiamond:
+            {
+                float r = (Math.Min(inner.Width, inner.Height) - stroke) / 2f;
+                if (r < 1.5f) r = 1.5f;
+                using var path = new SKPath();
+                bool first = true;
+                foreach ((double x, double y) in PolygonVertices(kind, cx, cy, r))
+                {
+                    if (first) { path.MoveTo((float)x, (float)y); first = false; }
+                    else path.LineTo((float)x, (float)y);
+                }
+                path.Close();
+                canvas.DrawPath(path, fillPaint);
+                canvas.DrawPath(path, strokePaint);
+                break;
+            }
+
+            case MeasurementGlyphKind.CountRing:
+            {
+                float r = (Math.Min(inner.Width, inner.Height) - stroke) / 2f;
+                if (r < 1.5f) r = 1.5f;
+                float ringWidth = Math.Max(1.6f, r * 0.55f);
+                float ringR = r - ringWidth / 2f;
+                if (ringR < 1f) ringR = 1f;
+                using var outline = new SKPaint
+                {
+                    Color = strokeColor,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = ringWidth + stroke,
+                    IsAntialias = true,
+                };
+                using var ring = new SKPaint
+                {
+                    Color = color,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = ringWidth,
+                    IsAntialias = true,
+                };
+                canvas.DrawCircle(cx, cy, ringR, outline);
+                canvas.DrawCircle(cx, cy, ringR, ring);
                 break;
             }
 

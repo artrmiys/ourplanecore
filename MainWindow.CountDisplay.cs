@@ -288,6 +288,10 @@ public partial class MainWindow
         {
             CountDisplaySymbol.Cross => "X",
             CountDisplaySymbol.Square => "[]",
+            CountDisplaySymbol.Star => "*",
+            CountDisplaySymbol.Triangle => "^",
+            CountDisplaySymbol.Diamond => "<>",
+            CountDisplaySymbol.Ring => "()",
             _ => "O",
         };
 }
