@@ -31,6 +31,7 @@ public sealed class AppSettings
     public bool ScaleSheetHeaderWithPage { get; set; } = false;
     public bool SimplifyViewportNavigation { get; set; } = false;
     public string ViewportRenderQuality { get; set; } = ViewportRenderPolicy.HighQualityMode;
+    public bool PdfLayersEnabled { get; set; } = false;
     public bool BuildRasterCacheOnPdfImport { get; set; } = false;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;

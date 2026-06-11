@@ -431,6 +431,9 @@
                                 <CheckBox x:Name="ChkDisplaySimplifyNavigation" Content="Fast pan/zoom" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           Margin="6,0,7,0"
                                           ToolTip="Simplify overlays while panning or zooming. Faster on heavy sheets, off by default for full visual quality."/>
+                                <CheckBox x:Name="ChkDisplayPdfLayers" Content="PDF layers" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
+                                          Margin="0,0,7,0"
+                                          ToolTip="Enable the PDF Layers panel and per-page layer scanning. Off by default: pages render faster without layer discovery."/>
                             </StackPanel>
                             </StackPanel>
                             <Border Style="{StaticResource RibbonGroupCap}">

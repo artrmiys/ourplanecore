@@ -277,6 +277,7 @@ public partial class MainWindow
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
         AppSettingsStore.NormalizeOutputSettings(_settings);
         ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
+        PdfLayerRenderService.PdfLayersEnabled = _settings.PdfLayersEnabled;
         _viewport.SheetLegendAnchor = _settings.SheetLegendAnchor;
         _viewport.SheetLegendScale = _settings.SheetLegendScale;
         _viewport.SheetHeaderScale = _settings.SheetHeaderScale;

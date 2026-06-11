@@ -100,6 +100,7 @@ public partial class MainWindow
         _settings.ScaleMeasurementLabelsWithPage = ChkDisplayLabelsScaleWithPage.IsChecked == true;
         _settings.ScaleSheetHeaderWithPage = ChkDisplayHeaderScaleWithPage.IsChecked == true;
         _settings.SimplifyViewportNavigation = ChkDisplaySimplifyNavigation.IsChecked == true;
+        _settings.PdfLayersEnabled = ChkDisplayPdfLayers.IsChecked == true;
         _settings.UnitMode = ChkDisplayImperial.IsChecked == true
             ? UnitMode.Imperial.ToString()
             : UnitMode.Metric.ToString();
@@ -115,6 +116,7 @@ public partial class MainWindow
     {
         AppSettingsStore.NormalizeOutputSettings(_settings);
         ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
+        PdfLayerRenderService.PdfLayersEnabled = _settings.PdfLayersEnabled;
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
         _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale);
         _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(_settings.ViewportRulerStrokeWidth);
@@ -161,6 +163,7 @@ public partial class MainWindow
             ChkDisplayHeaderScaleWithPage.IsChecked = _settings.ScaleSheetHeaderWithPage;
             ChkDisplayImperial.IsChecked = _viewport.UnitMode == UnitMode.Imperial;
             ChkDisplaySimplifyNavigation.IsChecked = _settings.SimplifyViewportNavigation;
+            ChkDisplayPdfLayers.IsChecked = _settings.PdfLayersEnabled;
             ComboViewportRenderQuality.SelectedIndex = ViewportRenderQualitySelectedIndex(_settings.ViewportRenderQuality);
             ComboDisplayViewportBackground.SelectedIndex = ViewportBackgroundSelectedIndex(_settings.ViewportBackground);
             ComboDisplayPageBackground.SelectedIndex = PageBackgroundSelectedIndex(_settings.PageBackground);

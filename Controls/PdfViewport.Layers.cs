@@ -1817,6 +1817,12 @@ public sealed partial class PdfViewport
 
     public void DiscoverPdfLayersOnDemand()
     {
+        if (!PdfLayerRenderService.PdfLayersEnabled)
+        {
+            PostStatus("PDF Layers are disabled — enable them in Display settings if needed.");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_pdfPath))
         {
             PostStatus("PDF Layers: open a page first.");
