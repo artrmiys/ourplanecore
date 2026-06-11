@@ -46,7 +46,9 @@ public partial class MainWindow
             includeMeasurements: includeMeasurements,
             includeAnnotations: _settings.PdfExportIncludeAnnotations,
             includeLegend: _settings.PdfExportShowSheetLegend,
-            measurementStrokeScale: _settings.PdfExportMeasurementStrokeScale)
+            measurementStrokeScale: _settings.PdfExportMeasurementStrokeScale,
+            pagesRoot: _currentJob.PagesRoot,
+            currentPageFolder: _currentPage?.FolderPath ?? "")
         {
             Owner = this,
         };
@@ -61,11 +63,91 @@ public partial class MainWindow
             return;
         }
 
+        var options = BuildPdfExportOptions(
+            dialog.IncludeMeasurements,
+            dialog.IncludeAnnotations,
+            dialog.IncludeLegend,
+            dialog.MeasurementStrokeScale);
+        await ExportPagesToPdfCoreAsync(
+            pages,
+            $"{SafeFileName(_currentJob.Name)}_sheets.pdf",
+            options,
+            sender as Button);
+    }
+
+    // Quick path used by the pages-tree context menu: no sheet-picker dialog,
+    // options come from the last saved export settings.
+    private async Task ExportSheetsFromPagesTreeAsync(TreeViewItem item)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open or create a job before PDF export.";
+            return;
+        }
+
+        IReadOnlyList<PageInfo> pages = SelectedPagesFromPagesTree(item);
+        if (pages.Count == 0 && item.Tag is PageInfo page)
+            pages = [page];
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "Select a sheet to export.";
+            return;
+        }
+
+        AppSettingsStore.NormalizeOutputSettings(_settings);
+        bool includeMeasurements;
+        using (UsePageMeasurementLookup())
+            includeMeasurements = _settings.PdfExportIncludeMeasurements || pages.Any(PageHasVisibleExportMeasurements);
+        var options = BuildPdfExportOptions(
+            includeMeasurements,
+            _settings.PdfExportIncludeAnnotations,
+            _settings.PdfExportShowSheetLegend,
+            _settings.PdfExportMeasurementStrokeScale);
+        string defaultFileName = pages.Count == 1
+            ? $"{SafeFileName(pages[0].Name)}.pdf"
+            : $"{SafeFileName(_currentJob.Name)}_sheets.pdf";
+        await ExportPagesToPdfCoreAsync(pages, defaultFileName, options, button: null);
+    }
+
+    private PdfExportOptions BuildPdfExportOptions(
+        bool includeMeasurements,
+        bool includeAnnotations,
+        bool includeLegend,
+        double measurementStrokeScale) =>
+        new(
+            includeMeasurements,
+            includeAnnotations,
+            includeLegend,
+            _viewport.UnitMode,
+            _settings.SheetLegendAnchor,
+            _settings.PdfExportSheetLegendScale,
+            _settings.PdfExportSheetHeaderScale,
+            _settings.PdfExportShowMeasurementLabels,
+            _settings.PdfExportShowLineLabels,
+            _settings.PdfExportShowAreaLabels,
+            _settings.PdfExportShowCountLabels,
+            measurementStrokeScale,
+            _settings.PdfExportPointSizeScale,
+            _settings.PdfExportMeasurementLabelScale,
+            _settings.PdfExportShowJoistLabels,
+            _settings.PdfExportAreaEdgeScale,
+            _settings.PdfExportAreaFillOpacity,
+            _settings.ViewportRulerStrokeWidth);
+
+    private async Task ExportPagesToPdfCoreAsync(
+        IReadOnlyList<PageInfo> pages,
+        string defaultFileName,
+        PdfExportOptions options,
+        Button? button)
+    {
+        if (_currentJob == null)
+            return;
+
         var save = new SaveFileDialog
         {
             Title = "Export PDF",
             Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
-            FileName = $"{SafeFileName(_currentJob.Name)}_sheets.pdf",
+            FileName = defaultFileName,
             InitialDirectory = _currentJob.RootPath,
             AddExtension = true,
             DefaultExt = ".pdf",
@@ -73,29 +155,9 @@ public partial class MainWindow
         if (save.ShowDialog(this) != true)
             return;
 
-        Button? button = sender as Button;
         try
         {
             if (button != null) button.IsEnabled = false;
-            var options = new PdfExportOptions(
-                dialog.IncludeMeasurements,
-                dialog.IncludeAnnotations,
-                dialog.IncludeLegend,
-                _viewport.UnitMode,
-                _settings.SheetLegendAnchor,
-                _settings.PdfExportSheetLegendScale,
-                _settings.PdfExportSheetHeaderScale,
-                _settings.PdfExportShowMeasurementLabels,
-                _settings.PdfExportShowLineLabels,
-                _settings.PdfExportShowAreaLabels,
-                _settings.PdfExportShowCountLabels,
-                dialog.MeasurementStrokeScale,
-                _settings.PdfExportPointSizeScale,
-                _settings.PdfExportMeasurementLabelScale,
-                _settings.PdfExportShowJoistLabels,
-                _settings.PdfExportAreaEdgeScale,
-                _settings.PdfExportAreaFillOpacity,
-                _settings.ViewportRulerStrokeWidth);
             string outputPath = save.FileName;
             (bool ok, string error) exportResult;
             using (ShowBusyOverlay($"Exporting {pages.Count} sheet(s) to PDF..."))
