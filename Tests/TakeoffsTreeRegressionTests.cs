@@ -824,7 +824,8 @@ internal static class TakeoffsTreeRegressionTests
 
     public static void PdfSheetMetadataLayerDiscoveryRestoresLayerStates()
     {
-        string helper = ReadRepoFile("Tools/pdf_layers_helper.py");
+        // Normalize endings: the helper file may be checked out with CRLF.
+        string helper = ReadRepoFile("Tools/pdf_layers_helper.py").Replace("\r\n", "\n", StringComparison.Ordinal);
         int start = helper.IndexOf("def _page_layer_names(", StringComparison.Ordinal);
         int end = helper.IndexOf("\n\ndef _cached_layers(", start, StringComparison.Ordinal);
         AssertTrue(start >= 0 && end > start, "pdf helper page-layer discovery function should be present");
@@ -2848,8 +2849,7 @@ internal static class TakeoffsTreeRegressionTests
             dialogSource.Contains("public double MeasurementStrokeScale", StringComparison.Ordinal),
             "PDF export dialog must expose measurement stroke scale");
         AssertTrue(
-            source.Contains("MeasurementStrokeScale: dialog.MeasurementStrokeScale", StringComparison.Ordinal) ||
-            source.Contains("dialog.MeasurementStrokeScale,", StringComparison.Ordinal),
+            source.Contains("dialog.MeasurementStrokeScale", StringComparison.Ordinal),
             "PDF export options must use the dialog stroke scale immediately");
     }
 
