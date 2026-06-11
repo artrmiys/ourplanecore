@@ -123,7 +123,10 @@ public static partial class PdfLayerRenderService
                 .ConfigureAwait(false);
             await input.FlushAsync().ConfigureAwait(false);
 
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            // Heavy sheets (large vector PDFs, high-DPI crops) can legitimately
+            // take minutes; a tight timeout kills the worker mid-render and the
+            // restart cascade is worse than waiting.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
             string? line = await output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(line))

@@ -139,29 +139,66 @@ public sealed partial class PdfViewport
         }
     }
 
+    // Runs once per paint frame, so it must not allocate LINQ chains or
+    // re-normalize folder paths per measurement. Rank lookups are memoized per
+    // raw folder string; an already-ordered input (the common case) returns
+    // as-is without any allocation.
     private IReadOnlyList<Measurement> LayerOrderedMeasurements(IReadOnlyList<Measurement> measurements)
     {
         if (measurements.Count <= 1)
             return measurements;
 
-        return measurements
-            .Select((measurement, index) => (Measurement: measurement, Index: index))
-            .OrderBy(entry => TakeoffLayerRank(entry.Measurement))
-            .ThenBy(entry => DefaultMeasurementLayerRank(entry.Measurement))
-            .ThenBy(entry => entry.Index)
-            .Select(entry => entry.Measurement)
-            .ToList();
+        bool sorted = true;
+        long previousKey = MeasurementLayerSortKey(measurements[0]);
+        for (int i = 1; i < measurements.Count; i++)
+        {
+            long key = MeasurementLayerSortKey(measurements[i]);
+            if (key < previousKey)
+            {
+                sorted = false;
+                break;
+            }
+            previousKey = key;
+        }
+        if (sorted)
+            return measurements;
+
+        var items = new Measurement[measurements.Count];
+        var keys = new long[measurements.Count];
+        for (int i = 0; i < measurements.Count; i++)
+        {
+            items[i] = measurements[i];
+            // Original index in the low bits keeps the sort stable.
+            keys[i] = (MeasurementLayerSortKey(items[i]) << 20) | (uint)(i & 0xFFFFF);
+        }
+        Array.Sort(keys, items);
+        return items;
     }
+
+    private long MeasurementLayerSortKey(Measurement measurement) =>
+        (long)TakeoffLayerRank(measurement) * 4 + DefaultMeasurementLayerRank(measurement);
+
+    // Memoizes normalized-folder rank lookups; cleared when the layer order
+    // changes (SetTakeoffLayerOrder).
+    private readonly Dictionary<string, int> _takeoffLayerRankByRawFolder = new(StringComparer.OrdinalIgnoreCase);
+
+    private void InvalidateTakeoffLayerRankCache() =>
+        _takeoffLayerRankByRawFolder.Clear();
 
     private int TakeoffLayerRank(Measurement measurement)
     {
-        if (!string.IsNullOrWhiteSpace(measurement.TakeoffFolder) &&
-            _takeoffLayerRanks.TryGetValue(NormalizePageFolderForCompare(measurement.TakeoffFolder), out int rank))
-        {
-            return rank;
-        }
+        string folder = measurement.TakeoffFolder;
+        if (string.IsNullOrWhiteSpace(folder))
+            return int.MaxValue / 2;
 
-        return int.MaxValue / 2;
+        if (_takeoffLayerRankByRawFolder.TryGetValue(folder, out int cached))
+            return cached;
+
+        int rank = _takeoffLayerRanks.TryGetValue(NormalizePageFolderForCompare(folder), out int found)
+            ? found
+            : int.MaxValue / 2;
+        _takeoffLayerRankByRawFolder[folder] = rank;
+        return rank;
     }
 
     private static int DefaultMeasurementLayerRank(Measurement measurement) =>

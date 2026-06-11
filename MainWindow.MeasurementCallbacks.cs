@@ -98,6 +98,17 @@ public partial class MainWindow
 
         if (!string.IsNullOrWhiteSpace(m.TakeoffFolder))
         {
+            // Fast path: nearly every drawn measurement targets the active item,
+            // so check it before scanning the full item list.
+            if (_activeItem != null &&
+                OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType &&
+                string.Equals(_activeItem.FolderPath, m.TakeoffFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                _activeItem.MeasurementType = measurementType;
+                item = _activeItem;
+                return true;
+            }
+
             var byFolder = _takeoffItems.FirstOrDefault(i =>
                 OurPlaneCoreJobStore.NormalizeMeasurementType(i.MeasurementType) == measurementType &&
                 string.Equals(i.FolderPath, m.TakeoffFolder, StringComparison.OrdinalIgnoreCase));

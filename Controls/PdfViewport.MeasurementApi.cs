@@ -51,6 +51,7 @@ public sealed partial class PdfViewport
                 _takeoffLayerRanks[key] = index++;
         }
 
+        InvalidateTakeoffLayerRankCache();
         RequestRepaint();
     }
 
