@@ -2233,8 +2233,28 @@ def _render_image_payload(
     inline_max_pixels: int,
     inline_raw_image: bool,
     inline_raw_max_pixels: int,
+    raw_image_file: bool = False,
 ) -> dict:
     pixel_count = int(base.width) * int(base.height)
+    if raw_image_file and image_path:
+        # Large renders skip PNG encode entirely: raw samples go to a temp
+        # file the caller reads back directly.
+        try:
+            Path(image_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(image_path, "wb") as raw_out:
+                raw_out.write(base.samples)
+            return {
+                "image": "",
+                "image_base64": "",
+                "image_raw_base64": "",
+                "image_raw_file": image_path,
+                "image_raw_width": int(base.width),
+                "image_raw_height": int(base.height),
+                "image_raw_channels": int(base.n),
+            }
+        except Exception:
+            pass
+
     if inline_raw_image and inline_raw_max_pixels > 0 and pixel_count <= inline_raw_max_pixels:
         try:
             return {
@@ -2289,6 +2309,7 @@ def render_data(req: dict) -> dict:
     inline_max_pixels = int(req.get("inline_image_max_pixels") or 0)
     inline_raw_image = bool(req.get("inline_raw_image", False))
     inline_raw_max_pixels = int(req.get("inline_raw_image_max_pixels") or 0)
+    raw_image_file = bool(req.get("raw_image_file", False))
     states = {str(k): bool(v) for k, v in (req.get("layers") or {}).items()}
     highlight_xrefs = {int(x) for x in req.get("highlight", [])}
     raw_clip = req.get("clip")
@@ -2343,6 +2364,7 @@ def render_data(req: dict) -> dict:
         inline_max_pixels,
         inline_raw_image,
         inline_raw_max_pixels,
+        raw_image_file,
     )
     if image_payload.get("ok") is False:
         return image_payload

@@ -67,6 +67,31 @@ namespace OurPlaneCore;
         SKRect? clipRect,
         bool allowRawFullPage,
         out PdfLayerRenderResult result,
+        out string error) =>
+        TryRender(
+            pdfPath,
+            pageIndex,
+            renderScale,
+            layerStates,
+            highlightedLayers,
+            cachedLayers,
+            clipRect,
+            allowRawFullPage,
+            preferRawFilePayload: false,
+            out result,
+            out error);
+
+    internal static bool TryRender(
+        string pdfPath,
+        int pageIndex,
+        double renderScale,
+        IReadOnlyDictionary<int, bool> layerStates,
+        IReadOnlyCollection<int> highlightedLayers,
+        IReadOnlyList<PdfLayerInfo>? cachedLayers,
+        SKRect? clipRect,
+        bool allowRawFullPage,
+        bool preferRawFilePayload,
+        out PdfLayerRenderResult result,
         out string error)
     {
         result = new PdfLayerRenderResult();
@@ -80,14 +105,14 @@ namespace OurPlaneCore;
             highlightedLayers,
             cachedLayers,
             hasClip ? clipRect : null,
-            allowRawFullPage);
-        if (TryGetCachedRender(cacheKey, out result))
+            allowRawFullPage || preferRawFilePayload);
+        if (!preferRawFilePayload && TryGetCachedRender(cacheKey, out result))
             return true;
 
         string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
         string outputPath = Path.Combine(tempDir, "output.json");
-        string imagePath = Path.Combine(tempDir, "page.png");
+        string imagePath = Path.Combine(tempDir, preferRawFilePayload ? "page.raw" : "page.png");
 
         try
         {
@@ -98,13 +123,14 @@ namespace OurPlaneCore;
                 Page = pageIndex,
                 Scale = renderScale,
                 Image = imagePath,
-                InlineImage = true,
+                InlineImage = !preferRawFilePayload,
                 InlineImageMaxPixels = InlineRenderImageMaxPixels,
                 InlineRawImage = hasClip || allowRawFullPage,
                 InlineRawImageMaxPixels = InlineRawRenderImageMaxPixels,
+                RawImageFile = preferRawFilePayload,
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
-                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+                VisibleLayers = PdfLayersEnabled ? cachedLayers?.Select(LayerDto.FromInfo).ToList() : [],
                 Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
@@ -147,13 +173,18 @@ namespace OurPlaneCore;
                     .ToList(),
                 LayersCaptured = true,
             };
-            AddCachedRender(cacheKey, result);
-            if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+            // Raw-file payloads are tens of MB and have their own caller-side
+            // caches (sheet overlay); keep them out of the shared render cache.
+            if (!preferRawFilePayload)
             {
-                if (result.ImageBytes.Length > 0)
-                    PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
-                else if (result.RawImageBytes.Length > 0)
-                    QueueCleanRenderPersistFromRaw(pdfPath, pageIndex, renderScale, result);
+                AddCachedRender(cacheKey, result);
+                if (!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest(pdfPath, pageIndex, renderScale, layerStates, highlightedLayers))
+                {
+                    if (result.ImageBytes.Length > 0)
+                        PdfPreviewRenderCache.TryWriteCleanRender(pdfPath, pageIndex, (float)renderScale, result);
+                    else if (result.RawImageBytes.Length > 0)
+                        QueueCleanRenderPersistFromRaw(pdfPath, pageIndex, renderScale, result);
+                }
             }
             return true;
         }
@@ -268,7 +299,7 @@ namespace OurPlaneCore;
                 InlineRawImageMaxPixels = InlineRawRenderImageMaxPixels,
                 Layers = layerStates.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
                 Highlight = highlightedLayers.ToList(),
-                VisibleLayers = cachedLayers?.Select(LayerDto.FromInfo).ToList(),
+                VisibleLayers = PdfLayersEnabled ? cachedLayers?.Select(LayerDto.FromInfo).ToList() : [],
                 Clip = hasClip ? RectDto.FromSKRect(clipRect!.Value) : null,
             };
 
@@ -377,7 +408,7 @@ namespace OurPlaneCore;
         });
     }
 
-    private static SKBitmap? CreateBitmapFromRawRender(PdfLayerRenderResult render)
+    internal static SKBitmap? CreateBitmapFromRawRender(PdfLayerRenderResult render)
     {
         int width = render.RawImageWidth;
         int height = render.RawImageHeight;
@@ -422,6 +453,25 @@ namespace OurPlaneCore;
         rawImageHeight = 0;
         rawImageChannels = 0;
         error = "";
+
+        if (!string.IsNullOrWhiteSpace(response.ImageRawFile) && File.Exists(response.ImageRawFile))
+        {
+            rawImageBytes = File.ReadAllBytes(response.ImageRawFile);
+            rawImageWidth = response.ImageRawWidth;
+            rawImageHeight = response.ImageRawHeight;
+            rawImageChannels = response.ImageRawChannels;
+            long expectedRawFile = (long)rawImageWidth * rawImageHeight * rawImageChannels;
+            if (rawImageWidth > 0 &&
+                rawImageHeight > 0 &&
+                rawImageChannels is 3 or 4 &&
+                rawImageBytes.LongLength == expectedRawFile)
+            {
+                return true;
+            }
+
+            error = "PyMuPDF returned an invalid raw render image file.";
+            return false;
+        }
 
         if (!string.IsNullOrWhiteSpace(response.ImageRawBase64))
         {

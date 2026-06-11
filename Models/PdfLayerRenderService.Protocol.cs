@@ -25,6 +25,7 @@ public static partial class PdfLayerRenderService
         public int InlineImageMaxPixels { get; set; }
         public bool InlineRawImage { get; set; }
         public int InlineRawImageMaxPixels { get; set; }
+        public bool RawImageFile { get; set; }
         public Dictionary<string, bool> Layers { get; set; } = [];
         public List<int> Highlight { get; set; } = [];
         public List<LayerDto>? VisibleLayers { get; set; }
@@ -70,6 +71,7 @@ public static partial class PdfLayerRenderService
         public string Image { get; set; } = "";
         public string ImageBase64 { get; set; } = "";
         public string ImageRawBase64 { get; set; } = "";
+        public string ImageRawFile { get; set; } = "";
         public int ImageRawWidth { get; set; }
         public int ImageRawHeight { get; set; }
         public int ImageRawChannels { get; set; }

@@ -50,6 +50,13 @@ public static partial class PdfLayerRenderService
         WriteIndented = false,
     };
 
+    /// <summary>
+    /// PDF layers are opt-in: when disabled (default) renders send an empty
+    /// visible-layer list so the python helper skips per-render OCG discovery,
+    /// and the viewport never starts layer scans.
+    /// </summary>
+    public static bool PdfLayersEnabled { get; set; }
+
     public static Task<(bool Ok, PdfLayerRenderResult Result, string Error)> TryRenderAsync(
         string pdfPath,
         int pageIndex,

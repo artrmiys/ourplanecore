@@ -638,6 +638,8 @@ public partial class MainWindow
             .ToDictionary(group => group.Key, group => group.First().IsOn);
 
         Stopwatch renderWatch = Stopwatch.StartNew();
+        // Raw-file payload skips the ~1-1.5s PNG encode/decode round-trip a
+        // full-sheet scale-2 render would otherwise pay.
         if (!PdfLayerRenderService.TryRender(
                 overlayPage.PdfPath,
                 overlayPage.PdfPage,
@@ -645,6 +647,9 @@ public partial class MainWindow
                 layerStates,
                 highlightedLayers: [],
                 overlayPage.PdfLayersCached ? overlayPage.PdfLayers : null,
+                clipRect: null,
+                allowRawFullPage: false,
+                preferRawFilePayload: true,
                 out PdfLayerRenderResult render,
                 out error))
         {
@@ -658,7 +663,9 @@ public partial class MainWindow
                 $"overlay='{overlayPage.FolderPath}'; scale={renderScale:0.###}");
         }
 
-        using SKBitmap? sourceBitmap = SKBitmap.Decode(render.ImageBytes);
+        using SKBitmap? sourceBitmap = render.HasRawImage
+            ? PdfLayerRenderService.CreateBitmapFromRawRender(render)
+            : SKBitmap.Decode(render.ImageBytes);
         if (sourceBitmap == null)
         {
             error = "overlay raster could not be decoded.";
@@ -925,6 +932,36 @@ public partial class MainWindow
         SKColor color = BuildBrightSheetOverlayColor(ParseOverlayColor(colorHex));
         double alphaScale = EffectiveSheetOverlayOpacity(opacity);
         var tinted = new SKBitmap(new SKImageInfo(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        if (source.ColorType == SKColorType.Bgra8888)
+        {
+            // Byte path: the SKColor[] route materializes two pixel arrays plus
+            // per-element conversion, which costs hundreds of ms on full-sheet
+            // scale-2 bitmaps.
+            ReadOnlySpan<byte> src = source.GetPixelSpan();
+            byte[] dst = new byte[src.Length];
+            for (int i = 0; i + 3 < src.Length; i += 4)
+            {
+                byte b = src[i];
+                byte g = src[i + 1];
+                byte r = src[i + 2];
+                byte a = src[i + 3];
+                int whiteDistance = Math.Max(Math.Max(255 - r, 255 - g), 255 - b);
+                int alpha = (int)Math.Round(whiteDistance * alphaScale * (a / 255.0) * SheetOverlayAlphaBoost);
+                alpha = Math.Clamp(alpha, 0, 255);
+                if (alpha < 3)
+                    continue;
+
+                // Destination is premultiplied BGRA.
+                dst[i] = (byte)(color.Blue * alpha / 255);
+                dst[i + 1] = (byte)(color.Green * alpha / 255);
+                dst[i + 2] = (byte)(color.Red * alpha / 255);
+                dst[i + 3] = (byte)alpha;
+            }
+
+            System.Runtime.InteropServices.Marshal.Copy(dst, 0, tinted.GetPixels(), dst.Length);
+            return tinted;
+        }
+
         SKColor[] sourcePixels = source.Pixels;
         SKColor[] tintedPixels = new SKColor[sourcePixels.Length];
 
