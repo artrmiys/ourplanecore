@@ -15,6 +15,8 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
         AppLog.Info("Application startup.");
+        AppLog.Info($"Version {AppVersion.Display}.");
+        Task.Run(() => AppLog.PruneOldLogs());
         _ = PdfLayerRenderService.PrewarmWorkersAsync();
     }
 

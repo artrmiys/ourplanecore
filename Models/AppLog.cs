@@ -71,6 +71,43 @@ public static class AppLog
         return Path.Combine(directory, $"app-{date}-{Guid.NewGuid():N}.log");
     }
 
+    // Daily 10 MB-capped files accumulate forever otherwise; trim on startup.
+    public static void PruneOldLogs(int keepDays = 90)
+    {
+        try
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string directory = Path.Combine(appData, "OurPlaneCore", "logs");
+            if (!Directory.Exists(directory))
+                return;
+
+            DateTime cutoff = DateTime.Now.AddDays(-Math.Max(1, keepDays));
+            int deleted = 0;
+            foreach (string file in Directory.EnumerateFiles(directory, "app-*.log"))
+            {
+                try
+                {
+                    if (File.GetLastWriteTime(file) < cutoff)
+                    {
+                        File.Delete(file);
+                        deleted++;
+                    }
+                }
+                catch
+                {
+                    // A locked or vanished file is fine to skip.
+                }
+            }
+
+            if (deleted > 0)
+                Info($"Pruned {deleted} log file(s) older than {keepDays} days.");
+        }
+        catch
+        {
+            // Log maintenance must never block startup.
+        }
+    }
+
     private static string Clean(string value) =>
         (value ?? "")
             .Replace('\t', ' ')

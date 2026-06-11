@@ -31,6 +31,47 @@ public static partial class SmartContextStore
 
     public static string GlobalRegistryPath => Path.Combine(GlobalRoot, "global_ai_index.jsonl");
 
+    // requests/ and responses/ gain a file per AI call and never shrink.
+    // Move entries untouched for keepDays into AI_Context/archive/ so the
+    // active queue stays small. Crops and actions are left alone: actions may
+    // hold drafts awaiting review, and crops can be referenced by either.
+    public static (int Archived, int Failed) ArchiveStaleRequestFiles(string jobRoot, int keepDays = 60)
+    {
+        string contextRoot = ContextRoot(jobRoot);
+        DateTime cutoff = DateTime.UtcNow.AddDays(-Math.Max(7, keepDays));
+        int archived = 0;
+        int failed = 0;
+        foreach (string subdir in new[] { "requests", "responses" })
+        {
+            string source = Path.Combine(contextRoot, subdir);
+            if (!Directory.Exists(source))
+                continue;
+
+            string target = Path.Combine(contextRoot, "archive", subdir);
+            foreach (string file in Directory.EnumerateFiles(source))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(file) >= cutoff)
+                        continue;
+
+                    Directory.CreateDirectory(target);
+                    string destination = Path.Combine(target, Path.GetFileName(file));
+                    if (File.Exists(destination))
+                        destination = StorageSupport.UniqueFilePath(destination);
+                    File.Move(file, destination);
+                    archived++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    failed++;
+                }
+            }
+        }
+
+        return (archived, failed);
+    }
+
     public static SmartProjectContext EnsureProjectContext(string jobRoot, string projectName)
     {
         string contextRoot = ContextRoot(jobRoot);

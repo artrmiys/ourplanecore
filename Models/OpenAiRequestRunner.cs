@@ -43,6 +43,68 @@ public static class OpenAiRequestRunner
         WriteIndented = true,
     };
 
+    private sealed record HttpResponseSnapshot(bool IsSuccess, int StatusCode, string Reason, string Body);
+
+    // One transient failure (network blip, 429, 5xx) used to be terminal for
+    // the whole AI request. Retry up to 3 times with growing backoff; user
+    // cancellation and 4xx errors are never retried.
+    private static async Task<(bool Sent, HttpResponseSnapshot Response, string Error)> SendWithRetriesAsync(
+        string requestJson,
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+        string lastError = "";
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+                {
+                    Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
+                };
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+
+                using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
+                string body = await response.Content.ReadAsStringAsync(cancellationToken);
+                int statusCode = (int)response.StatusCode;
+                bool transient = statusCode == 429 || statusCode >= 500;
+                if (!transient || attempt == maxAttempts)
+                {
+                    return (true,
+                        new HttpResponseSnapshot(
+                            response.IsSuccessStatusCode,
+                            statusCode,
+                            response.ReasonPhrase ?? response.StatusCode.ToString(),
+                            body),
+                        "");
+                }
+
+                lastError = $"HTTP {statusCode}";
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+            {
+                lastError = ex.Message;
+                if (attempt == maxAttempts)
+                {
+                    return (false,
+                        new HttpResponseSnapshot(false, 0, "", ""),
+                        $"OpenAI request failed after {maxAttempts} attempts: {lastError}");
+                }
+            }
+
+            int delaySeconds = attempt * attempt * 2;
+            AppLog.Warn($"OpenAI request attempt {attempt}/{maxAttempts} failed ({lastError}); retrying in {delaySeconds}s.");
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+        }
+
+        return (false, new HttpResponseSnapshot(false, 0, "", ""), lastError);
+    }
+
     public static async Task<SmartAiRunResult> RunAsync(
         OurPlaneCoreJob job,
         SmartAiRequest request,
@@ -105,23 +167,28 @@ public static class OpenAiRequestRunner
         AddReasoningOptions(payload, cleanModel);
 
         string requestJson = JsonSerializer.Serialize(payload, JsonOptions);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
-        {
-            Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
-        };
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
-
-        using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken);
-        string rawPath = SaveRawResponse(job, request, body);
-        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
-
-        if (!response.IsSuccessStatusCode)
+        (bool sent, HttpResponseSnapshot http, string sendError) =
+            await SendWithRetriesAsync(requestJson, apiKey, cancellationToken);
+        if (!sent)
         {
             return new SmartAiRunResult
             {
                 Success = false,
-                Error = OpenAiResponseParser.ExtractError(body, response.ReasonPhrase ?? response.StatusCode.ToString()),
+                Error = sendError,
+                Model = cleanModel,
+            };
+        }
+
+        string body = http.Body;
+        string rawPath = SaveRawResponse(job, request, body);
+        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
+
+        if (!http.IsSuccess)
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractError(body, http.Reason),
                 Model = cleanModel,
                 ProviderResponseId = providerResponseId,
                 RawResponsePath = rawPath,
@@ -224,23 +291,28 @@ public static class OpenAiRequestRunner
         AddReasoningOptions(payload, cleanModel);
 
         string requestJson = JsonSerializer.Serialize(payload, JsonOptions);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
-        {
-            Content = new StringContent(requestJson, Encoding.UTF8, "application/json"),
-        };
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
-
-        using HttpResponseMessage response = await _http.SendAsync(httpRequest, cancellationToken);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken);
-        string rawPath = SaveRawResponse(job, requestId, body);
-        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
-
-        if (!response.IsSuccessStatusCode)
+        (bool sent, HttpResponseSnapshot http, string sendError) =
+            await SendWithRetriesAsync(requestJson, apiKey, cancellationToken);
+        if (!sent)
         {
             return new SmartAiRunResult
             {
                 Success = false,
-                Error = OpenAiResponseParser.ExtractError(body, response.ReasonPhrase ?? response.StatusCode.ToString()),
+                Error = sendError,
+                Model = cleanModel,
+            };
+        }
+
+        string body = http.Body;
+        string rawPath = SaveRawResponse(job, requestId, body);
+        string providerResponseId = OpenAiResponseParser.ExtractString(body, "id");
+
+        if (!http.IsSuccess)
+        {
+            return new SmartAiRunResult
+            {
+                Success = false,
+                Error = OpenAiResponseParser.ExtractError(body, http.Reason),
                 Model = cleanModel,
                 ProviderResponseId = providerResponseId,
                 RawResponsePath = rawPath,

@@ -275,7 +275,7 @@ public partial class MainWindow
                     result.ProviderResponseId,
                     result.RawResponsePath);
                 SmartContextStore.SaveAiActionDraftFromResponse(_currentJob, request, response);
-                TxtStatus.Text = $"AI request failed: {result.Error}";
+                ReportAiRequestFailure(result.Error);
             }
         }
         catch (Exception ex)
@@ -291,13 +291,25 @@ public partial class MainWindow
                 "",
                 "");
             SmartContextStore.SaveAiActionDraftFromResponse(_currentJob, request, response);
-            TxtStatus.Text = $"AI request failed: {ex.Message}";
+            ReportAiRequestFailure(ex.Message);
         }
         finally
         {
             _isRunningAiRequest = false;
             LoadObservationsInbox();
         }
+    }
+
+    // A failed AI run used to surface only in the status bar, which is easy
+    // to miss minutes after pressing the button. Make it explicit.
+    private void ReportAiRequestFailure(string error)
+    {
+        TxtStatus.Text = $"AI request failed: {error}";
+        System.Windows.MessageBox.Show(
+            $"AI request failed:\n{error}",
+            "AI Request",
+            System.Windows.MessageBoxButton.OK,
+            System.Windows.MessageBoxImage.Warning);
     }
 
     private static string ReadOpenAiApiKey()

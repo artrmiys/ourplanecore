@@ -156,7 +156,7 @@ public partial class MainWindow
         _viewport.ClearPage();
         ApplyRulerVisibilityToViewport();
         RefreshJobHeaderLabels();
-        Title = $"OurPlaneCore — {_currentJob.Name}";
+        Title = $"OurPlaneCore {AppVersion.Display} — {_currentJob.Name}";
         ReloadPagesTree(_currentJob.PagesRoot);
         LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
@@ -180,6 +180,13 @@ public partial class MainWindow
         TxtStatus.Text = BuildMeasurementRepairStatus($"Loaded job: {_currentJob.Name}");
         LoadObservationsInbox();
         RefreshMassingDraftPanel();
+        string aiMaintenanceRoot = _currentJob.RootPath;
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            (int archived, int failed) = SmartContextStore.ArchiveStaleRequestFiles(aiMaintenanceRoot);
+            if (archived > 0 || failed > 0)
+                AppLog.Info($"AI context maintenance: archived {archived} stale request/response file(s), {failed} failed.");
+        });
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
             System.Windows.Threading.DispatcherPriority.ContextIdle);
