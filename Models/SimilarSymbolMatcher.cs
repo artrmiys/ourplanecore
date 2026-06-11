@@ -1,0 +1,489 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using System.Threading;
+using System.Threading.Tasks;
+using SkiaSharp;
+
+namespace OurPlaneCore;
+
+// Offline "count similar symbols": the user boxes one symbol on the rendered
+// sheet and the matcher finds every visually similar occurrence on the page.
+// No network, no ML runtime — plan drawings are thin dark linework on white,
+// so binarized bit-parallel matching is both fast and robust:
+//
+//   1. Binarize the page raster to 1bpp "ink" rows packed into ulongs.
+//   2. Dilate ink by one pixel so hairline strokes tolerate ±1 px offsets.
+//   3. Score each candidate window with a three-way agreement:
+//        score = min(|T ∧ dilate(P)| / |T|,          template coverage
+//                    |P ∧ dilate(T)| / |P|,          window precision
+//                    sqrt(min(|T|,|P|) / max(|T|,|P|)))  ink-amount ratio
+//      where T is template ink and P is window ink. Dilation makes the two
+//      overlap ratios saturate on small dense shapes (a solid blob covers
+//      any outline), so the ink-amount ratio keeps solid-vs-outline and
+//      thick-vs-thin pairs apart. 1.0 = pixel-perfect.
+//   4. A per-row band ink prefilter (word-granular sliding sums) rejects the
+//      overwhelmingly white sheet before any window is scored.
+//   5. Non-maximum suppression keeps the best hit per symbol location.
+//
+// Coordinates in/out are PIXELS of the bitmap handed to TryCreate; the caller
+// owns the pixel<->PDF mapping. The session reads the bitmap once in
+// TryCreate, so FindMatches can re-run on background threads with different
+// thresholds without touching the bitmap again.
+public sealed record SimilarSymbolMatch(int CenterX, int CenterY, float Score, int RotationDegrees);
+
+public sealed class SimilarSymbolMatchSession
+{
+    private const int MaxTemplateSide = 96;      // downsample until template fits
+    private const int InkLumaThreshold = 176;
+    private const int MinTemplateInk = 12;
+
+    private readonly int _width;
+    private readonly int _height;
+    private readonly int _wordsPerRow;           // includes one zero pad word
+    private readonly ulong[] _ink;
+    private readonly ulong[] _dilated;
+    private readonly int _factor;                // full-res px per matching px
+    private readonly TemplateVariant[] _variants; // 0/90/180/270 degrees
+
+    public int DownsampleFactor => _factor;
+    public int TemplateInkPixels => _variants[0].InkCount;
+
+    private SimilarSymbolMatchSession(
+        int width, int height, int wordsPerRow, ulong[] ink, ulong[] dilated, int factor, TemplateVariant[] variants)
+    {
+        _width = width;
+        _height = height;
+        _wordsPerRow = wordsPerRow;
+        _ink = ink;
+        _dilated = dilated;
+        _factor = factor;
+        _variants = variants;
+    }
+
+    public static SimilarSymbolMatchSession? TryCreate(SKBitmap page, SKRectI templateRect, out string error)
+    {
+        error = "";
+        if (page == null || page.Width <= 0 || page.Height <= 0)
+        {
+            error = "No rendered page raster is available.";
+            return null;
+        }
+
+        var rect = SKRectI.Intersect(templateRect, new SKRectI(0, 0, page.Width, page.Height));
+        if (rect.Width < 6 || rect.Height < 6)
+        {
+            error = "The selected box is too small.";
+            return null;
+        }
+
+        int factor = 1;
+        while (Math.Max(rect.Width, rect.Height) / factor > MaxTemplateSide)
+            factor *= 2;
+
+        bool[] inkPixels = BinarizeDownsampled(page, factor, out int width, out int height);
+
+        int wordsPerRow = (width + 63) / 64 + 1;
+        var ink = PackRows(inkPixels, width, height, wordsPerRow);
+        var dilated = DilateOnePixel(ink, height, wordsPerRow);
+
+        var scaledRect = new SKRectI(
+            rect.Left / factor,
+            rect.Top / factor,
+            Math.Min(width, (rect.Right + factor - 1) / factor),
+            Math.Min(height, (rect.Bottom + factor - 1) / factor));
+        bool[,] template = ExtractTemplate(inkPixels, width, scaledRect);
+        if (CountInk(template) < MinTemplateInk)
+        {
+            error = "The selected box contains no linework to match.";
+            return null;
+        }
+
+        var variants = new List<TemplateVariant> { TemplateVariant.Build(template, 0) };
+        bool[,] rotated = template;
+        for (int degrees = 90; degrees <= 270; degrees += 90)
+        {
+            rotated = RotateClockwise(rotated);
+            variants.Add(TemplateVariant.Build(rotated, degrees));
+        }
+
+        return new SimilarSymbolMatchSession(width, height, wordsPerRow, ink, dilated, factor, variants.ToArray());
+    }
+
+    public List<SimilarSymbolMatch> FindMatches(float minScore, bool includeRotations, CancellationToken cancellationToken)
+    {
+        minScore = Math.Clamp(minScore, 0.05f, 1f);
+        var all = new List<SimilarSymbolMatch>();
+        foreach (TemplateVariant variant in includeRotations ? _variants : _variants.Take(1))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            FindVariantMatches(variant, minScore, all, cancellationToken);
+        }
+
+        return SuppressNonMaxima(all);
+    }
+
+    private void FindVariantMatches(
+        TemplateVariant template, float minScore, List<SimilarSymbolMatch> sink, CancellationToken cancellationToken)
+    {
+        int tw = template.Width;
+        int th = template.Height;
+        if (tw > _width || th > _height)
+            return;
+
+        int[] bandInk = BuildBandInkSums(th);
+        int maxY = _height - th;
+        int maxX = _width - tw;
+        int templateInk = template.InkCount;
+        // The ink-ratio term needs sqrt(|P|/|T|-ish) >= minScore, i.e. window
+        // ink within [|T|*s^2, |T|/s^2]; widen with slack because the band
+        // prefilter over-counts at word granularity.
+        float ratioBound = minScore * minScore;
+        int minWindowInk = (int)(templateInk * ratioBound * 0.5f);
+        int maxWindowInk = (int)(templateInk / ratioBound * 1.5f);
+
+        var gate = new object();
+        Parallel.For(0, maxY + 1, () => new List<SimilarSymbolMatch>(),
+            (y, _, local) =>
+            {
+                if ((y & 31) == 0)
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                int bandRow = y * (_wordsPerRow - 1);
+                for (int x = 0; x <= maxX; x++)
+                {
+                    int w0 = x >> 6;
+                    int wLast = (x + tw - 1) >> 6;
+                    int approxInk = 0;
+                    for (int w = w0; w <= wLast; w++)
+                        approxInk += bandInk[bandRow + w];
+                    // approxInk over-counts (whole edge words), so only the
+                    // lower bound is safe to enforce strictly.
+                    if (approxInk < minWindowInk || approxInk - 128 > maxWindowInk)
+                        continue;
+
+                    float score = ScoreWindow(template, x, y, minScore);
+                    if (score >= minScore)
+                        local.Add(new SimilarSymbolMatch(
+                            (x + tw / 2) * _factor + _factor / 2,
+                            (y + th / 2) * _factor + _factor / 2,
+                            score,
+                            template.RotationDegrees));
+                }
+
+                return local;
+            },
+            local =>
+            {
+                if (local.Count == 0)
+                    return;
+                lock (gate)
+                    sink.AddRange(local);
+            });
+    }
+
+    private float ScoreWindow(TemplateVariant template, int x, int y, float minScore)
+    {
+        int shift = x & 63;
+        int w0 = x >> 6;
+        int words = template.ShiftWords[shift];
+        ulong[] tInk = template.ShiftedInk[shift];
+        ulong[] tDilated = template.ShiftedDilated[shift];
+        ulong[] masks = template.WindowMasks[shift];
+
+        int matchedTemplate = 0;
+        int matchedWindow = 0;
+        int windowInk = 0;
+        for (int row = 0; row < template.Height; row++)
+        {
+            int pageBase = (y + row) * _wordsPerRow + w0;
+            int templateBase = row * words;
+            for (int k = 0; k < words; k++)
+            {
+                ulong pageInkWord = _ink[pageBase + k];
+                matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & _dilated[pageBase + k]);
+                matchedWindow += BitOperations.PopCount(pageInkWord & tDilated[templateBase + k]);
+                windowInk += BitOperations.PopCount(pageInkWord & masks[k]);
+            }
+        }
+
+        if (windowInk <= 0 || template.InkCount <= 0)
+            return 0f;
+
+        float templateCoverage = matchedTemplate / (float)template.InkCount;
+        float windowPrecision = matchedWindow / (float)windowInk;
+        float inkRatio = MathF.Sqrt(
+            Math.Min(template.InkCount, windowInk) / (float)Math.Max(template.InkCount, windowInk));
+        return Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio);
+    }
+
+    // Sliding vertical sums of per-word ink popcounts: bandInk[y][w] = ink
+    // pixels in word column w across rows y..y+bandHeight-1. Coarse but O(1)
+    // per candidate and only ~2 MB for a large sheet.
+    private int[] BuildBandInkSums(int bandHeight)
+    {
+        int dataWords = _wordsPerRow - 1;
+        int bandRows = _height - bandHeight + 1;
+        var band = new int[bandRows * dataWords];
+        var column = new int[dataWords];
+
+        for (int y = 0; y < bandHeight; y++)
+        {
+            int rowBase = y * _wordsPerRow;
+            for (int w = 0; w < dataWords; w++)
+                column[w] += BitOperations.PopCount(_ink[rowBase + w]);
+        }
+        Array.Copy(column, 0, band, 0, dataWords);
+
+        for (int y = 1; y < bandRows; y++)
+        {
+            int removeBase = (y - 1) * _wordsPerRow;
+            int addBase = (y + bandHeight - 1) * _wordsPerRow;
+            int bandBase = y * dataWords;
+            for (int w = 0; w < dataWords; w++)
+            {
+                column[w] += BitOperations.PopCount(_ink[addBase + w]) -
+                             BitOperations.PopCount(_ink[removeBase + w]);
+                band[bandBase + w] = column[w];
+            }
+        }
+
+        return band;
+    }
+
+    private List<SimilarSymbolMatch> SuppressNonMaxima(List<SimilarSymbolMatch> matches)
+    {
+        if (matches.Count <= 1)
+            return matches;
+
+        int radius = Math.Max(4, (int)(Math.Max(_variants[0].Width, _variants[0].Height) * 0.6f)) * _factor;
+        long radiusSq = (long)radius * radius;
+        var accepted = new List<SimilarSymbolMatch>();
+        foreach (SimilarSymbolMatch candidate in matches.OrderByDescending(m => m.Score))
+        {
+            bool overlaps = false;
+            foreach (SimilarSymbolMatch kept in accepted)
+            {
+                long dx = candidate.CenterX - kept.CenterX;
+                long dy = candidate.CenterY - kept.CenterY;
+                if (dx * dx + dy * dy <= radiusSq)
+                {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (!overlaps)
+                accepted.Add(candidate);
+        }
+
+        return accepted;
+    }
+
+    // ── Raster preparation ───────────────────────────────────────────────────
+
+    private static bool[] BinarizeDownsampled(SKBitmap page, int factor, out int width, out int height)
+    {
+        SKBitmap source = page;
+        SKBitmap? converted = null;
+        if (page.ColorType != SKColorType.Bgra8888 && page.ColorType != SKColorType.Rgba8888)
+        {
+            converted = page.Copy(SKColorType.Bgra8888);
+            source = converted ?? page;
+        }
+
+        try
+        {
+            width = source.Width / factor;
+            height = source.Height / factor;
+            var ink = new bool[width * height];
+            unsafe
+            {
+                byte* basePtr = (byte*)source.GetPixels().ToPointer();
+                int rowBytes = source.RowBytes;
+                bool bgra = source.ColorType != SKColorType.Rgba8888;
+                for (int sy = 0; sy < height * factor; sy++)
+                {
+                    byte* row = basePtr + sy * rowBytes;
+                    int outRow = (sy / factor) * width;
+                    for (int sx = 0; sx < width * factor; sx++)
+                    {
+                        byte* px = row + sx * 4;
+                        int b = bgra ? px[0] : px[2];
+                        int g = px[1];
+                        int r = bgra ? px[2] : px[0];
+                        int luma = (r * 299 + g * 587 + b * 114) / 1000;
+                        if (luma < InkLumaThreshold)
+                            ink[outRow + sx / factor] = true;
+                    }
+                }
+            }
+
+            return ink;
+        }
+        finally
+        {
+            converted?.Dispose();
+        }
+    }
+
+    private static ulong[] PackRows(bool[] pixels, int width, int height, int wordsPerRow)
+    {
+        var packed = new ulong[height * wordsPerRow];
+        for (int y = 0; y < height; y++)
+        {
+            int rowBase = y * wordsPerRow;
+            int pixelBase = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                if (pixels[pixelBase + x])
+                    packed[rowBase + (x >> 6)] |= 1UL << (x & 63);
+            }
+        }
+
+        return packed;
+    }
+
+    private static ulong[] DilateOnePixel(ulong[] ink, int height, int wordsPerRow)
+    {
+        var dilated = new ulong[ink.Length];
+        for (int y = 0; y < height; y++)
+        {
+            int rowBase = y * wordsPerRow;
+            int above = y > 0 ? rowBase - wordsPerRow : rowBase;
+            int below = y < height - 1 ? rowBase + wordsPerRow : rowBase;
+            for (int w = 0; w < wordsPerRow - 1; w++)
+            {
+                ulong vertical = ink[rowBase + w] | ink[above + w] | ink[below + w];
+                ulong left = w > 0 ? ink[rowBase + w - 1] >> 63 : 0;
+                ulong right = ink[rowBase + w + 1] << 63;
+                dilated[rowBase + w] = vertical | (vertical << 1) | (vertical >> 1) | left | right;
+            }
+        }
+
+        return dilated;
+    }
+
+    private static bool[,] ExtractTemplate(bool[] pixels, int width, SKRectI rect)
+    {
+        var template = new bool[rect.Width, rect.Height];
+        for (int y = 0; y < rect.Height; y++)
+        {
+            int rowBase = (rect.Top + y) * width + rect.Left;
+            for (int x = 0; x < rect.Width; x++)
+                template[x, y] = pixels[rowBase + x];
+        }
+
+        return template;
+    }
+
+    private static bool[,] RotateClockwise(bool[,] source)
+    {
+        int w = source.GetLength(0);
+        int h = source.GetLength(1);
+        var rotated = new bool[h, w];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                rotated[h - 1 - y, x] = source[x, y];
+        return rotated;
+    }
+
+    private static int CountInk(bool[,] template)
+    {
+        int count = 0;
+        foreach (bool pixel in template)
+            if (pixel)
+                count++;
+        return count;
+    }
+
+    // Pre-shifted packed copies of one template rotation: ShiftedInk[s] holds
+    // the template rows shifted s bits right so candidate x with (x & 63) == s
+    // compares word-aligned against the page. WindowMasks[s] selects exactly
+    // the window's bits inside those words for exact window ink counts.
+    private sealed class TemplateVariant
+    {
+        public required int Width;
+        public required int Height;
+        public required int InkCount;
+        public required int RotationDegrees;
+        public required int[] ShiftWords;
+        public required ulong[][] ShiftedInk;
+        public required ulong[][] ShiftedDilated;
+        public required ulong[][] WindowMasks;
+
+        public static TemplateVariant Build(bool[,] template, int rotationDegrees)
+        {
+            int width = template.GetLength(0);
+            int height = template.GetLength(1);
+            int baseWords = (width + 63) / 64;
+
+            var inkRows = new ulong[height * (baseWords + 1)];
+            int inkCount = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (!template[x, y])
+                        continue;
+                    inkRows[y * (baseWords + 1) + (x >> 6)] |= 1UL << (x & 63);
+                    inkCount++;
+                }
+            }
+            ulong[] dilatedRows = DilateOnePixel(inkRows, height, baseWords + 1);
+
+            var shiftWords = new int[64];
+            var shiftedInk = new ulong[64][];
+            var shiftedDilated = new ulong[64][];
+            var windowMasks = new ulong[64][];
+            for (int s = 0; s < 64; s++)
+            {
+                int words = (s + width + 63) / 64;
+                shiftWords[s] = words;
+                shiftedInk[s] = ShiftRows(inkRows, height, baseWords + 1, words, s);
+                shiftedDilated[s] = ShiftRows(dilatedRows, height, baseWords + 1, words, s);
+                windowMasks[s] = BuildWindowMask(width, words, s);
+            }
+
+            return new TemplateVariant
+            {
+                Width = width,
+                Height = height,
+                InkCount = inkCount,
+                RotationDegrees = rotationDegrees,
+                ShiftWords = shiftWords,
+                ShiftedInk = shiftedInk,
+                ShiftedDilated = shiftedDilated,
+                WindowMasks = windowMasks,
+            };
+        }
+
+        private static ulong[] ShiftRows(ulong[] rows, int height, int sourceWordsPerRow, int targetWords, int shift)
+        {
+            var shifted = new ulong[height * targetWords];
+            for (int y = 0; y < height; y++)
+            {
+                int sourceBase = y * sourceWordsPerRow;
+                int targetBase = y * targetWords;
+                for (int k = 0; k < targetWords; k++)
+                {
+                    ulong value = k < sourceWordsPerRow ? rows[sourceBase + k] : 0;
+                    ulong result = shift == 0 ? value : value << shift;
+                    if (shift != 0 && k > 0 && k - 1 < sourceWordsPerRow)
+                        result |= rows[sourceBase + k - 1] >> (64 - shift);
+                    shifted[targetBase + k] = result;
+                }
+            }
+
+            return shifted;
+        }
+
+        private static ulong[] BuildWindowMask(int width, int words, int shift)
+        {
+            var mask = new ulong[words];
+            for (int x = shift; x < shift + width; x++)
+                mask[x >> 6] |= 1UL << (x & 63);
+            return mask;
+        }
+    }
+}

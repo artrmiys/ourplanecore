@@ -628,6 +628,13 @@
             <RadioButton x:Name="BtnPoint"  Content="Count"  Click="BtnTool_Click" Tag="point"
                          GroupName="DrawingTool" ToolTip="Create a new Count item and start recording (P). Use the active target Record button to continue an existing item"
                          Style="{StaticResource ToolRadio}"/>
+            <Button x:Name="BtnSimilarCount"
+                    Content="Similar"
+                    Click="BtnSimilarCount_Click"
+                    ToolTip="Count similar symbols: drag a box around one symbol and the app finds every look-alike on this sheet (offline)"
+                    Style="{StaticResource ToolBtn}"
+                    MinWidth="28"
+                    Padding="4,2"/>
             <Button x:Name="BtnCountSymbolDefault"
                     Content="O"
                     Click="BtnCountSymbolDefault_Click"

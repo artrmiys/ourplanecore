@@ -43,6 +43,8 @@ public sealed class AppSettings
     public double ViewportZoomWheelFactor { get; set; } = AppSettingsStore.ViewportZoomWheelFactorDefault;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
+    public double SimilarCountThreshold { get; set; } = 0.6;
+    public bool SimilarCountRotations { get; set; } = true;
     public bool PdfExportIncludeMeasurements { get; set; } = true;
     public bool PdfExportIncludeAnnotations { get; set; }
     public bool PdfExportShowSheetLegend { get; set; } = true;

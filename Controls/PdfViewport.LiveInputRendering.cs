@@ -209,6 +209,8 @@ public sealed partial class PdfViewport
         }
 
         DrawAiCropNoteSelectionOverlay(canvas);
+        DrawSimilarCountSelectionOverlay(canvas);
+        DrawSimilarCountPreviewOverlay(canvas);
     }
 
     private void DrawLiveRecordLengthLabels(SKCanvas canvas)

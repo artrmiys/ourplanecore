@@ -317,6 +317,7 @@ public partial class MainWindow : Window
         _viewport.PasteMeasurementsRequested += PasteMeasurementsFromClipboard;
         _viewport.ContextRequested   += OnViewportContextRequested;
         _viewport.AiCropNoteSelectionCompleted += OnAiCropNoteSelectionCompleted;
+        _viewport.SimilarCountSelectionCompleted += OnSimilarCountSelectionCompleted;
         _viewport.ThreeDRoofGuideAdded += OnThreeDRoofGuideAdded;
         _viewport.ThreeDRoofGuideSelectionRequested += OnThreeDRoofGuideSelectionRequested;
         _viewport.JoistDirectionCaptured += OnJoistDirectionCaptured;

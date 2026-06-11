@@ -77,6 +77,12 @@ public sealed partial class PdfViewport
                 return;
             }
 
+            if (HandleSimilarCountMouseDown(pdf))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (HandleSheetOverlayPointEditClick(pdf))
             {
                 e.Handled = true;
@@ -271,6 +277,12 @@ public sealed partial class PdfViewport
         }
 
         if (HandleAiCropNoteMouseMove(pos))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (HandleSimilarCountMouseMove(pos))
         {
             e.Handled = true;
             return;
@@ -541,6 +553,12 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (e.ChangedButton == MouseButton.Left && FinishSimilarCountSelection())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (_draggingTransformScale || _draggingTransformRotate)
         {
             FinishTransformDrag();
@@ -623,6 +641,8 @@ public sealed partial class PdfViewport
         FinishAnnotationDrag();
         if (_aiCropNoteSelecting && Mouse.LeftButton != MouseButtonState.Pressed)
             CancelAiCropNoteSelection(postStatus: false);
+        if (_similarCountSelecting && _similarCountDragging && Mouse.LeftButton != MouseButtonState.Pressed)
+            CancelSimilarCountSelection(postStatus: false);
         if (_boxSelecting && Mouse.LeftButton != MouseButtonState.Pressed)
             CancelBoxSelection();
         if (_dragStart.HasValue && Mouse.MiddleButton != MouseButtonState.Pressed &&
@@ -674,6 +694,12 @@ public sealed partial class PdfViewport
                 }
 
                 if (CancelAiCropNoteSelection())
+                {
+                    e.Handled = true;
+                    break;
+                }
+
+                if (CancelSimilarCountSelection())
                 {
                     e.Handled = true;
                     break;

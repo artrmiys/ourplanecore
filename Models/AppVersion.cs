@@ -14,7 +14,7 @@ public static class AppVersion
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion;
         if (string.IsNullOrWhiteSpace(informational))
-            return "2.0.0";
+            return "2.1.0";
 
         int plus = informational.IndexOf('+');
         return plus > 0 ? informational[..plus] : informational;
