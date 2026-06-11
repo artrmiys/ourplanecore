@@ -8,12 +8,17 @@ using OurPlaneCore;
 
 namespace OurPlaneCore.Controls;
 
+// Offset companion requested in the dialog: a parallel line item created
+// alongside the main line takeoff (multiline drawing).
+public sealed record NewItemOffsetSpec(string Name, string Color, double Meters, bool RightSide);
+
 public sealed class NewItemDialog : Window
 {
     public string ItemName  { get; private set; } = "New Item";
     public string ItemColor { get; private set; } = "#FF4444";
     public string ItemType  { get; private set; } = "line";
     public string ItemCountSymbol { get; private set; } = CountDisplaySymbol.Circle;
+    public IReadOnlyList<NewItemOffsetSpec> OffsetLines { get; private set; } = [];
 
     private static readonly (string Label, string Hex)[] Presets =
     [
@@ -57,7 +62,9 @@ public sealed class NewItemDialog : Window
         string defaultColor = "#FF4444",
         string defaultCountSymbol = CountDisplaySymbol.Circle,
         int? initialNameSelectionLength = null,
-        int? initialNameCaretIndex = null)
+        int? initialNameCaretIndex = null,
+        bool showOffsetLines = false,
+        UnitMode unitMode = UnitMode.Metric)
     {
         Title                 = "New Takeoff Item";
         Width                 = 320;
@@ -153,6 +160,114 @@ public sealed class NewItemDialog : Window
 
         panel.Children.Add(colorPanel);
 
+        // ── Multiline offsets (line items only, opt-in per call site) ────────
+        string unitSuffix = unitMode == UnitMode.Imperial ? "ft" : "m";
+        var offsetSection = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        offsetSection.Children.Add(new TextBlock
+        {
+            Text = "Offset lines:",
+            ToolTip = "Each line you draw also creates parallel lines at these distances,\n" +
+                      "stored as separate takeoff items with their own name and color.",
+        });
+
+        var offsetRows = new List<OffsetRow>();
+        OffsetRow AddOffsetRow(string defaultRowColor, bool defaultRight)
+        {
+            var rowPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            var enable = new CheckBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+            var rowName = new TextBox { Width = 96, Margin = new Thickness(0, 0, 6, 0), IsEnabled = false };
+            var dist = new TextBox { Width = 44, Text = "0.1", Margin = new Thickness(0, 0, 2, 0), IsEnabled = false };
+            var unitLabel = new TextBlock { Text = unitSuffix, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+            var side = new ComboBox
+            {
+                ItemsSource = new[] { "Left", "Right" },
+                SelectedIndex = defaultRight ? 1 : 0,
+                Width = 58,
+                Margin = new Thickness(0, 0, 6, 0),
+                IsEnabled = false,
+            };
+            var row = new OffsetRow(enable, rowName, dist, side) { ColorHex = defaultRowColor };
+            var swatch = new Border
+            {
+                Width = 24,
+                Height = 18,
+                CornerRadius = new CornerRadius(3),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(defaultRowColor)),
+                BorderBrush = Brushes.Gray,
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                ToolTip = "Offset line color",
+                VerticalAlignment = VerticalAlignment.Center,
+                IsEnabled = false,
+            };
+            swatch.MouseLeftButtonDown += (_, _) =>
+            {
+                var colorMenu = new ContextMenu();
+                foreach (var (label, hex) in Presets)
+                {
+                    var option = new MenuItem
+                    {
+                        Header = label,
+                        Icon = new Border
+                        {
+                            Width = 14,
+                            Height = 14,
+                            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                            CornerRadius = new CornerRadius(2),
+                        },
+                    };
+                    string chosen = hex;
+                    option.Click += (_, _) =>
+                    {
+                        row.ColorHex = chosen;
+                        swatch.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(chosen));
+                    };
+                    colorMenu.Items.Add(option);
+                }
+                colorMenu.PlacementTarget = swatch;
+                colorMenu.IsOpen = true;
+            };
+            enable.Checked += (_, _) =>
+            {
+                rowName.IsEnabled = dist.IsEnabled = side.IsEnabled = swatch.IsEnabled = true;
+                if (string.IsNullOrWhiteSpace(rowName.Text))
+                    rowName.Text = $"{nameBox.Text.Trim()} {(side.SelectedIndex == 1 ? "R" : "L")}";
+            };
+            enable.Unchecked += (_, _) =>
+                rowName.IsEnabled = dist.IsEnabled = side.IsEnabled = swatch.IsEnabled = false;
+
+            rowPanel.Children.Add(enable);
+            rowPanel.Children.Add(rowName);
+            rowPanel.Children.Add(dist);
+            rowPanel.Children.Add(unitLabel);
+            rowPanel.Children.Add(side);
+            rowPanel.Children.Add(swatch);
+            offsetSection.Children.Add(rowPanel);
+            offsetRows.Add(row);
+            return row;
+        }
+
+        if (showOffsetLines)
+        {
+            AddOffsetRow("#2196F3", defaultRight: false);
+            AddOffsetRow("#4CAF50", defaultRight: true);
+            panel.Children.Add(offsetSection);
+        }
+
+        void RefreshOffsetVisibility()
+        {
+            offsetSection.Visibility =
+                string.Equals(typeBox.SelectedValue?.ToString(), "line", System.StringComparison.OrdinalIgnoreCase)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
+        typeBox.SelectionChanged += (_, _) => RefreshOffsetVisibility();
+        RefreshOffsetVisibility();
+
         var buttons = new StackPanel
         {
             Orientation         = Orientation.Horizontal,
@@ -172,6 +287,39 @@ public sealed class NewItemDialog : Window
             ItemColor    = selectedHex;
             ItemType     = typeBox.SelectedValue?.ToString() ?? "line";
             ItemCountSymbol = CountDisplaySymbol.Normalize(countSymbolBox.SelectedValue?.ToString());
+
+            OffsetLines = [];
+            if (showOffsetLines && offsetSection.Visibility == Visibility.Visible)
+            {
+                var specs = new List<NewItemOffsetSpec>();
+                foreach (OffsetRow row in offsetRows)
+                {
+                    if (row.Enable.IsChecked != true)
+                        continue;
+
+                    string raw = row.Distance.Text.Trim().Replace(',', '.');
+                    if (!double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out double value) ||
+                        value <= 0)
+                    {
+                        MessageBox.Show(
+                            $"Offset distance must be a positive number ({unitSuffix}).",
+                            "New Takeoff Item", MessageBoxButton.OK, MessageBoxImage.Information);
+                        row.Distance.Focus();
+                        row.Distance.SelectAll();
+                        return;
+                    }
+
+                    bool right = row.Side.SelectedIndex == 1;
+                    double meters = unitMode == UnitMode.Imperial ? value * 0.3048 : value;
+                    string offsetName = string.IsNullOrWhiteSpace(row.Name.Text)
+                        ? $"{ItemName} {(right ? "R" : "L")}"
+                        : row.Name.Text.Trim();
+                    specs.Add(new NewItemOffsetSpec(offsetName, row.ColorHex, meters, right));
+                }
+                OffsetLines = specs;
+            }
+
             DialogResult = true;
         };
 
@@ -192,6 +340,15 @@ public sealed class NewItemDialog : Window
                 nameBox.SelectAll();
             }
         };
+    }
+
+    private sealed class OffsetRow(CheckBox enable, TextBox name, TextBox distance, ComboBox side)
+    {
+        public CheckBox Enable { get; } = enable;
+        public TextBox Name { get; } = name;
+        public TextBox Distance { get; } = distance;
+        public ComboBox Side { get; } = side;
+        public string ColorHex { get; set; } = "#2196F3";
     }
 
     private static string NormalizeType(string value) =>

@@ -93,6 +93,7 @@ internal static class TakeoffStore
             JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsUserSet, measurementType, isJoistTakeoff),
             JoistShowLabelsUserSet = ParseBool(joistShowLabelsUserSet),
             JoistDetailedLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
+            MultiLineOffsets = ParseMultiLineOffsets(OurPlaneCoreJobStore.ReadProperty(folder, "MultiLineOffsets")),
         };
         item.Measurements.AddRange(measurements);
         ApplyTakeoffPropertiesToMeasurements(item);
@@ -125,6 +126,7 @@ internal static class TakeoffStore
             new KeyValuePair<string, string>("JoistShowLabels", item.JoistShowLabels.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistShowLabelsUserSet", item.JoistShowLabelsUserSet.ToString(CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("JoistDetailedLabels", item.JoistDetailedLabels.ToString(CultureInfo.InvariantCulture)),
+            new KeyValuePair<string, string>("MultiLineOffsets", SerializeMultiLineOffsets(item.MultiLineOffsets)),
             new KeyValuePair<string, string>("MeasurementCount", item.Measurements.Count.ToString()),
             new KeyValuePair<string, string>("MeasuredPageCount", MeasuredPageCount(item).ToString()),
         });
@@ -273,6 +275,27 @@ internal static class TakeoffStore
                 .Select(hole => hole.Select(p => new PointDto(p.X, p.Y)).ToList())
                 .ToList(),
         };
+
+    private static List<MultiLineOffsetConfig> ParseMultiLineOffsets(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return [];
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<MultiLineOffsetConfig>>(value) ?? [];
+            return parsed
+                .Where(config => config != null && config.Meters > 0)
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string SerializeMultiLineOffsets(List<MultiLineOffsetConfig> offsets) =>
+        offsets.Count == 0 ? "" : JsonSerializer.Serialize(offsets);
 
     private static double ParseDouble(string? value)
     {

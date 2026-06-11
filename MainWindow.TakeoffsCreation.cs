@@ -30,7 +30,9 @@ public partial class MainWindow
             measurementType,
             DefaultTakeoffNameForFolder(measurementType, parentFolder),
             defaultColor: defaultColor,
-            defaultCountSymbol: _newCountSymbol)
+            defaultCountSymbol: _newCountSymbol,
+            showOffsetLines: true,
+            unitMode: _viewport.UnitMode)
         {
             Owner = this,
         };
@@ -51,6 +53,8 @@ public partial class MainWindow
         var item = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, dlg.ItemType, parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
         ApplyNewCountSymbolToItemIfNeeded(item, dlg.ItemType);
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(dlg.ItemType) == "line" && dlg.OffsetLines.Count > 0)
+            CreateMultiLineCompanions(item, dlg.OffsetLines);
         LoadTakeoffsForJob();
 
         TakeoffItem activeItem = _takeoffItems.FirstOrDefault(t =>

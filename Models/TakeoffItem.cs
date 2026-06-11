@@ -27,6 +27,10 @@ public sealed class TakeoffItem
 
     public List<Measurement> Measurements { get; } = [];
 
+    // Multiline: offset companions that auto-receive a parallel line each
+    // time a line is drawn on this item. Empty for ordinary items.
+    public List<MultiLineOffsetConfig> MultiLineOffsets { get; set; } = [];
+
     public bool IsJoistArea =>
         IsJoistTakeoff && OurPlaneCoreJobStore.NormalizeMeasurementType(MeasurementType) == "area";
 

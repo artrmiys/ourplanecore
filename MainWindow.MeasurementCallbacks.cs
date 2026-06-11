@@ -31,6 +31,7 @@ public partial class MainWindow
         }
         QueueTakeoffAutosave(item);
         UpdateTotalDisplay();
+        GenerateMultiLineOffsets(item, m);
         if (item.IsJoistArea && OurPlaneCoreJobStore.NormalizeMeasurementType(m.MType) == "area")
             BeginJoistDirectionCapture(item, m);
     }

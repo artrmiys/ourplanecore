@@ -170,6 +170,28 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    // Adds programmatically generated measurements (e.g. multiline offsets)
+    // without resetting viewport state; removable as one undo step.
+    public void AddGeneratedMeasurements(IReadOnlyList<Measurement> measurements)
+    {
+        var added = new List<Measurement>();
+        foreach (Measurement measurement in measurements)
+        {
+            if (measurement == null || !_measurementSet.Add(measurement))
+                continue;
+
+            _measurements.Add(measurement);
+            IndexMeasurementByPage(measurement);
+            added.Add(measurement);
+        }
+
+        if (added.Count == 0)
+            return;
+
+        PushAddedMeasurementsUndo(added, "remove generated offset lines");
+        RequestRepaint();
+    }
+
     public IReadOnlyList<PageAnnotation> GetPageAnnotations() =>
         _annotations
             .Where(annotation => IsAnnotationOnActivePage(annotation))
