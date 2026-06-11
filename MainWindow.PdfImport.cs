@@ -266,7 +266,12 @@ public partial class MainWindow
                 skippedText;
 
             if (createdPages.Count > 0)
+            {
                 await TryApplySheetMetadataAfterPdfImportAsync(createdPages);
+                // Re-arm the job warmup so freshly imported pages get preview +
+                // raster warmup without reopening the job.
+                InvalidatePagePreviewPrefetchCache();
+            }
         }
         catch (Exception ex)
         {
