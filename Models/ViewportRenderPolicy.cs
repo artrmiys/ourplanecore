@@ -46,8 +46,8 @@ public static class ViewportRenderPolicy
     public const int PersistedPreviewLiveFallbackGraceMs = 120;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
-    public const bool JobOpenPreviewWarmupAllPages = false;
-    public const bool JobOpenRasterSheetRefreshWarmupAllPages = false;
+    public const bool JobOpenPreviewWarmupAllPages = true;
+    public const bool JobOpenRasterSheetRefreshWarmupAllPages = true;
     public const int JobOpenPreviewWarmupPriorityLocalRadius = 2;
     public const int JobOpenPreviewWarmupLocalRadius = 8;
     public const int JobOpenPreviewWarmupSpreadAnchorCount = 12;

@@ -137,7 +137,7 @@ internal static class TakeoffsTreeRegressionTests
             pagePreviewWarmup.Contains("BuildEvenlyDistributedWarmupIndexes", StringComparison.Ordinal) &&
             pagePreviewWarmup.Contains("JobOpenPreviewWarmupPriorityLocalRadius", StringComparison.Ordinal) &&
             pagePreviewWarmup.Contains("BuildLocalPageWarmupOrder(count, activeIndex)", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenPreviewWarmupAllPages = false", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenPreviewWarmupAllPages = true", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupPriorityLocalRadius = 2", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupLocalRadius = 8", StringComparison.Ordinal) &&
             policy.Contains("JobOpenPreviewWarmupSpreadAnchorCount = 12", StringComparison.Ordinal) &&
@@ -156,7 +156,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterWarmupRunMethod.Contains("ViewportRenderPolicy.SelectJobOpenRasterSheetRefreshWarmupCount(pages.Count)", StringComparison.Ordinal) &&
             rasterWarmupRunMethod.Contains("QueueJobRasterSheetRefreshWarmup(queuedPages)", StringComparison.Ordinal) &&
             rasterWarmupQueueMethod.Contains("PdfViewport.PrefetchRasterSheetRefresh(page)", StringComparison.Ordinal) &&
-            policy.Contains("JobOpenRasterSheetRefreshWarmupAllPages = false", StringComparison.Ordinal) &&
+            policy.Contains("JobOpenRasterSheetRefreshWarmupAllPages = true", StringComparison.Ordinal) &&
             policy.Contains("JobOpenRasterSheetRefreshWarmupCount = 12", StringComparison.Ordinal) &&
             policy.Contains("JobOpenRasterSheetRefreshWarmupLargeJobCount = 16", StringComparison.Ordinal) &&
             policy.Contains("JobOpenRasterSheetRefreshWarmupHugeJobCount = 24", StringComparison.Ordinal) &&
