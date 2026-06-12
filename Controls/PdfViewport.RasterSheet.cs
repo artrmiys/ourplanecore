@@ -429,7 +429,7 @@ public sealed partial class PdfViewport
                 currentView,
                 fitAfter: false,
                 preferOverview: true,
-                requireCachedBitmap: requireCachedBitmap,
+                requireCachedBitmap: true,
                 out _))
         {
             PostStatus($"Raster overview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
@@ -444,8 +444,8 @@ public sealed partial class PdfViewport
                 ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
                 currentView,
                 fitAfter: false,
-                allowDiskRead: !requireCachedBitmap,
-                requestRepaint: requestRepaint))
+                allowDiskRead: false,
+                requestRepaint: false))
         {
             PostStatus($"Fast preview: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
             if (requestRepaint)

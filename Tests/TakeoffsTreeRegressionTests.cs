@@ -1507,6 +1507,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterDpiUpgradeMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task BuildRasterSheetDpiUpgradeForCurrentPageAsync(");
         string responsiveDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyResponsiveRasterSheetDpiForCurrentZoom()");
         string navigationFastPreviewMethod = SliceMethod(rasterSheetViewport, "private bool TrySwitchRasterSheetToFastPreviewForNavigation(");
+        string lowZoomFastPreviewMethod = SliceMethod(rasterSheetViewport, "private bool TrySwitchRasterSheetToFastPreviewForLowZoom(");
         string currentZoomDpiQueueMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool QueueRasterSheetDpiBuildForCurrentZoom(");
         string pageOpenReadyDpiMethod = SliceMethod(rasterSheetPageOpenDpi, "private bool TryApplyReadyResponsiveRasterSheetDpiForPageOpen(");
         string pageOpenDpiQueueMethod = SliceMethod(rasterSheetPageOpenDpi, "private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(");
@@ -1915,8 +1916,10 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("if (currentDpi >= targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyLowZoomRasterSheetDpiFromMemory", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom(requestRepaint: false, requireCachedBitmap: true) ||", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("allowDiskRead: !requireCachedBitmap", StringComparison.Ordinal) &&
-            rasterSheetViewport.Contains("requestRepaint: requestRepaint", StringComparison.Ordinal) &&
+            lowZoomFastPreviewMethod.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
+            lowZoomFastPreviewMethod.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
+            lowZoomFastPreviewMethod.Contains("requestRepaint: false", StringComparison.Ordinal) &&
+            !lowZoomFastPreviewMethod.Contains("allowDiskRead: !requireCachedBitmap", StringComparison.Ordinal) &&
             layers.Contains("bool requestRepaint = true", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryGetRememberedReadyRasterSheetSource(page, desiredDpi, out _)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryGetRememberedReadyRasterSheetSource(page, targetDpi, out _)", StringComparison.Ordinal) &&
