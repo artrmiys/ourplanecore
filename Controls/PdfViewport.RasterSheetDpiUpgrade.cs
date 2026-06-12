@@ -535,23 +535,69 @@ public sealed partial class PdfViewport
         bool fitAfter)
     {
         float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (!RasterSheetCacheService.TryEnableReadyReadableRaster(
-                page,
-                targetScale,
-                out RasterSheetBuildResult result) ||
-            result.Source == null)
-        {
-            if (!string.IsNullOrWhiteSpace(result.Error))
-            {
-                AppLog.Warn(
-                    $"Viewport ready raster DPI upgrade failed; dpi={targetDpi}; error='{result.Error}'; " +
-                    $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
-            }
-
+        if (!RasterSheetCacheService.HasReadyReadableRaster(page, targetScale))
             return false;
+
+        if (TryApplyReadyRasterSheetDpiFromMemory(
+                page,
+                targetDpi,
+                restoreView,
+                fitAfter))
+        {
+            QueueReadyRasterSheetDpiPersistAfterMemoryApply(page, targetDpi);
+            return true;
         }
 
-        return ApplyRasterSheetDpiUpgradeResult(result.Source, targetDpi, "ready", restoreView, fitAfter, out _);
+        return QueueReadyRasterSheetDpiApplyAfterWarmup(
+            page,
+            targetDpi,
+            restoreView,
+            fitAfter,
+            pageOpenNavigationVersion: 0);
+    }
+
+    private void QueueReadyRasterSheetDpiPersistAfterMemoryApply(PageInfo page, int targetDpi)
+    {
+        if (targetDpi <= 0 ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath))
+        {
+            return;
+        }
+
+        string persistKey = $"{RasterSheetDpiUpgradeKey(page.PdfPath, page.PdfPage, page.FolderPath, targetDpi)}|persist";
+        lock (_rasterSheetRebuildGate)
+        {
+            if (!_rasterSheetRebuildsInFlight.Add(persistKey))
+                return;
+        }
+
+        _ = PersistReadyRasterSheetDpiAfterMemoryApplyAsync(persistKey, page, targetDpi);
+    }
+
+    private async Task PersistReadyRasterSheetDpiAfterMemoryApplyAsync(
+        string persistKey,
+        PageInfo queuedPage,
+        int targetDpi)
+    {
+        try
+        {
+            float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
+            await Task.Run(() =>
+            {
+                PageInfo persistPage = OurPlaneCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                RasterSheetCacheService.TryEnableReadyReadableRaster(persistPage, targetScale, out _);
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport ready raster DPI persist failed for {queuedPage.Name}");
+        }
+        finally
+        {
+            lock (_rasterSheetRebuildGate)
+                _rasterSheetRebuildsInFlight.Remove(persistKey);
+        }
     }
 
     private bool QueueRasterSheetDpiBuildForCurrentZoom(
