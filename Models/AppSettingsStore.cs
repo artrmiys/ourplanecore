@@ -45,6 +45,10 @@ public sealed class AppSettings
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
     public double SimilarCountThreshold { get; set; } = 0.6;
     public bool SimilarCountRotations { get; set; } = true;
+    // Whole-job background warmup (previews + raster bitmaps for every page).
+    // Off by default: on big jobs the sweep competes with interactive
+    // sharpening for CPU/disk and the open sheet feels blurry longer.
+    public bool BackgroundJobWarmupEnabled { get; set; }
     public bool PdfExportIncludeMeasurements { get; set; } = true;
     public bool PdfExportIncludeAnnotations { get; set; }
     public bool PdfExportShowSheetLegend { get; set; } = true;

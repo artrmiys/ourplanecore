@@ -655,6 +655,26 @@ public partial class MainWindow
             (_, _) => { SetZoomWheelFactor(AppSettingsStore.ViewportZoomWheelFactorDefault); SyncDefaultsZoomControl(); }));
         root.Children.Add(zoomActions);
 
+        root.Children.Add(Header("Background performance"));
+        root.Children.Add(new TextBlock
+        {
+            Text = "Warm every page of the job in the background after opening it. "
+                 + "Pages open instantly once warmed, but on big jobs the sweep keeps the CPU and disk "
+                 + "busy for a while and the open sheet can feel blurry longer while you zoom and pan.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 0, 0, 6),
+            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
+        });
+        var warmupBox = new CheckBox
+        {
+            Content = "Warm all job pages in background",
+            IsChecked = _settings.BackgroundJobWarmupEnabled,
+            Margin = new Thickness(0, 0, 0, 10),
+            FontSize = 12,
+        };
+        warmupBox.Checked += (_, _) => { _settings.BackgroundJobWarmupEnabled = true; SaveAppSettings(); };
+        warmupBox.Unchecked += (_, _) => { _settings.BackgroundJobWarmupEnabled = false; SaveAppSettings(); };
+        root.Children.Add(warmupBox);
+
         root.Children.Add(Header("Display & export defaults"));
         root.Children.Add(new TextBlock
         {

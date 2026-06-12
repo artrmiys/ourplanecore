@@ -503,7 +503,9 @@ public partial class MainWindow
 
     private void QueueJobPagePreviewWarmupDeferred(int deferredVersion, PageInfo viewportPage)
     {
-        if (_currentJob == null)
+        // Whole-job sweep is opt-in: on big jobs it competes with interactive
+        // sharpening for CPU/disk for many minutes after a job opens.
+        if (_currentJob == null || !_settings.BackgroundJobWarmupEnabled)
             return;
 
         string jobRoot = _currentJob.RootPath;
@@ -535,7 +537,7 @@ public partial class MainWindow
 
     private void QueueJobRasterSheetRefreshWarmupDeferred(int deferredVersion, PageInfo viewportPage)
     {
-        if (_currentJob == null)
+        if (_currentJob == null || !_settings.BackgroundJobWarmupEnabled)
             return;
 
         string jobRoot = _currentJob.RootPath;

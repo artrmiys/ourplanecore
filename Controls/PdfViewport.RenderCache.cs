@@ -768,7 +768,13 @@ public sealed partial class PdfViewport
                     ? ViewportRenderPolicy.RasterSheetWorkZoomBuildDpiSteps
                     : ViewportRenderPolicy.RasterSheetWorkZoomWarmupDpiSteps;
                 foreach (int dpi in warmupDpis)
+                {
+                    // Each DPI step is seconds of render+encode; re-yield to
+                    // user interaction between steps, not just once up front.
+                    if (!buildMissingDpis && !allowDuringNavigation)
+                        await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
                     WarmRasterSheetWorkZoomDpi(page, dpi, buildMissingDpis);
+                }
             }
             finally
             {
