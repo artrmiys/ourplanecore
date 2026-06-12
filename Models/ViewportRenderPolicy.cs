@@ -33,7 +33,7 @@ public static class ViewportRenderPolicy
     public const float DetailRenderStableTileMaxExpansionFactor = 3.5f;
     public const int PageSwitchDetailRenderDelayMs = 100;
     public const int DetailRenderDocPrewarmDelayMs = 350;
-    public const int FastPageSwitchPreviewCoalesceMs = 45;
+    public const int FastPageSwitchPreviewCoalesceMs = 16;
     public const int PageSwitchSharpUpgradeDelayMs = 180;
     public const int PageSwitchSharpUpgradeIdleMs = 500;
     public const int PageSwitchSharpUpgradeMaxDeferrals = 5;
@@ -43,7 +43,7 @@ public static class ViewportRenderPolicy
     public const int PreviewPrefetchNavigationQuietMs = 1100;
     public const int PreviewPrefetchActiveRenderHoldMs = 3000;
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
-    public const int PersistedPreviewLiveFallbackGraceMs = 120;
+    public const int PersistedPreviewLiveFallbackGraceMs = 35;
     public const int NearbyPagePreviewPrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
     public const bool JobOpenPreviewWarmupAllPages = true;

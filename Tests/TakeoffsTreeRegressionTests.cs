@@ -2341,7 +2341,7 @@ internal static class TakeoffsTreeRegressionTests
             persistedPreview.Contains("_persistedPreviewRenderInFlightVersion = version", StringComparison.Ordinal) &&
             persistedPreview.Contains("WaitForPersistedPreviewRenderBeforeLiveFallbackAsync", StringComparison.Ordinal) &&
             layers.Contains("WaitForPersistedPreviewRenderBeforeLiveFallbackAsync(request)", StringComparison.Ordinal) &&
-            policy.Contains("PersistedPreviewLiveFallbackGraceMs = 120", StringComparison.Ordinal) &&
+            policy.Contains("PersistedPreviewLiveFallbackGraceMs = 35", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)", StringComparison.Ordinal) &&
             renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             renderCache.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
@@ -2575,7 +2575,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("CurrentViewStillMatchesDetailRequest", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchDetailRenderDelayMs = 100", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderNavigationQuietMs = 240", StringComparison.Ordinal) &&
-            policy.Contains("FastPageSwitchPreviewCoalesceMs = 45", StringComparison.Ordinal) &&
+            policy.Contains("FastPageSwitchPreviewCoalesceMs = 16", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeDelayMs = 180", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeIdleMs = 500", StringComparison.Ordinal) &&
             policy.Contains("PageSwitchSharpUpgradeMaxDeferrals = 5", StringComparison.Ordinal) &&
