@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 
@@ -22,9 +23,7 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (!RasterSheetCacheService.TryGetReadyReadableRasterSource(page, targetScale, out RasterSheetSource? readySource) ||
-            readySource == null)
+        if (!RasterSheetCacheService.ReadyReadableRasterDpis(page).Contains(targetDpi))
         {
             return false;
         }
@@ -39,7 +38,6 @@ public sealed partial class PdfViewport
         _ = ApplyPreparedReadyRasterSheetDpiFromMemoryAsync(
             applyKey,
             page,
-            readySource.Clone(),
             targetDpi,
             restoreView,
             fitAfter,
@@ -51,7 +49,6 @@ public sealed partial class PdfViewport
     private async Task ApplyPreparedReadyRasterSheetDpiFromMemoryAsync(
         string applyKey,
         PageInfo queuedPage,
-        RasterSheetSource readySource,
         int targetDpi,
         ViewState? restoreView,
         bool fitAfter,
@@ -63,20 +60,20 @@ public sealed partial class PdfViewport
         bool preparedBitmapApplied = false;
         try
         {
-            hasPreparedBitmap = await Task.Run(() => TryPrepareRasterSheetBitmapForUiApply(
-                    queuedPage,
-                    readySource,
-                    preferOverview: false,
-                    out preparedBitmap))
+            PreparedRasterSheetDpiApply prepared = await Task.Run(() =>
+                    PrepareReadyRasterSheetDpiForUiApply(queuedPage, targetDpi))
                 .ConfigureAwait(false);
-            if (!hasPreparedBitmap)
+            preparedBitmap = prepared.Bitmap;
+            if (!prepared.Ok || prepared.Source is not { } readySource)
             {
+                preparedBitmap.Bitmap.Dispose();
                 AppLog.Warn(
                     $"Viewport prepared raster DPI memory apply skipped; dpi={targetDpi}; reason='bitmap prepare failed'; " +
                     $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
                 return;
             }
 
+            hasPreparedBitmap = true;
             await Dispatcher.InvokeAsync(() =>
             {
                 if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath) ||
@@ -112,6 +109,31 @@ public sealed partial class PdfViewport
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(applyKey);
         }
+    }
+
+    private static PreparedRasterSheetDpiApply PrepareReadyRasterSheetDpiForUiApply(
+        PageInfo page,
+        int targetDpi)
+    {
+        RasterSheetBitmapResult empty = new(new SKBitmap(), 0, 0, 0, "");
+        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
+        if (!RasterSheetCacheService.TryGetReadyReadableRasterSource(page, targetScale, out RasterSheetSource? readySource) ||
+            readySource == null)
+        {
+            return new PreparedRasterSheetDpiApply(false, null, empty);
+        }
+
+        if (!TryPrepareRasterSheetBitmapForUiApply(
+                page,
+                readySource,
+                preferOverview: false,
+                out RasterSheetBitmapResult preparedBitmap))
+        {
+            return new PreparedRasterSheetDpiApply(false, null, empty);
+        }
+
+        empty.Bitmap.Dispose();
+        return new PreparedRasterSheetDpiApply(true, readySource.Clone(), preparedBitmap);
     }
 
     private bool ShouldApplyPreparedReadyRasterSheetDpi(int targetDpi)
@@ -164,4 +186,9 @@ public sealed partial class PdfViewport
         RequestRepaint();
         return true;
     }
+
+    private readonly record struct PreparedRasterSheetDpiApply(
+        bool Ok,
+        RasterSheetSource? Source,
+        RasterSheetBitmapResult Bitmap);
 }

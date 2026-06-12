@@ -1874,6 +1874,9 @@ internal static class TakeoffsTreeRegressionTests
             readyDpiWarmApplyMethod.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
             rasterSheetPreparedApply.Contains("QueuePreparedReadyRasterSheetDpiApplyFromMemory", StringComparison.Ordinal) &&
             rasterSheetPreparedApply.Contains("ApplyPreparedReadyRasterSheetDpiFromMemoryAsync", StringComparison.Ordinal) &&
+            rasterSheetPreparedApply.Contains("RasterSheetCacheService.ReadyReadableRasterDpis(page).Contains(targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetPreparedApply.Contains("PrepareReadyRasterSheetDpiForUiApply", StringComparison.Ordinal) &&
+            rasterSheetPreparedApply.Contains("RasterSheetCacheService.TryGetReadyReadableRasterSource(page, targetScale", StringComparison.Ordinal) &&
             rasterSheetPreparedApply.Contains("ShouldApplyPreparedReadyRasterSheetDpi", StringComparison.Ordinal) &&
             rasterSheetPreparedApply.Contains("preparedBitmap.Bitmap.Dispose()", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiFromMemory(", StringComparison.Ordinal) &&
