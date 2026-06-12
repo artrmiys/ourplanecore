@@ -350,6 +350,8 @@ public sealed partial class PdfViewport
         int targetDpi = ViewportRenderPolicy.SelectRasterSheetDisplayDpi(_zoom);
         if (TryHoldHeavyRasterSheetDpiForRecentMotion(CurrentRasterSheetPageInfo(), currentDpi, targetDpi))
             return true;
+        if (ShouldSkipStaleRasterSheetSourceApply(currentDpi, targetDpi))
+            return false;
 
         ViewState currentView = CaptureViewState();
         if (TryApplyRasterSheetRender(
@@ -386,6 +388,21 @@ public sealed partial class PdfViewport
             _rasterSheetSource,
             rasterSkipReason);
         return false;
+    }
+
+    private bool ShouldSkipStaleRasterSheetSourceApply(int currentDpi, int targetDpi)
+    {
+        if (!_usingRasterSheetRender ||
+            _usingRasterSheetOverviewRender ||
+            currentDpi <= 0 ||
+            targetDpi <= 0 ||
+            _rasterSheetSource?.Enabled != true)
+        {
+            return false;
+        }
+
+        int sourceDpi = RasterSheetCacheService.RenderScaleToDpi(_rasterSheetSource.RenderScale);
+        return currentDpi >= targetDpi || sourceDpi <= currentDpi;
     }
 
     private bool TrySwitchRasterSheetToFastPreviewForLowZoom(

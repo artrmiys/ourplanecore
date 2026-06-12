@@ -1905,6 +1905,9 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("if (shouldUseRasterSheetForOpen)", StringComparison.Ordinal) &&
             viewTransform.Contains("QueueCurrentRasterSheetMotionWarmup()", StringComparison.Ordinal) &&
             viewTransform.Contains("QueueRasterSheetQualityRestoreAfterMotion", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("ShouldSkipStaleRasterSheetSourceApply(currentDpi, targetDpi)", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("sourceDpi <= currentDpi", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("currentDpi >= targetDpi", StringComparison.Ordinal) &&
             responsiveDpiMethod.IndexOf("TryApplyNavigationRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) <
                 responsiveDpiMethod.IndexOf("ShouldUseResponsiveRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
             responsiveDpiMethod.Contains("navigationCurrentDpi <= navigationTargetDpi", StringComparison.Ordinal) &&
