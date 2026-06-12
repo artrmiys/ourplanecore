@@ -141,7 +141,7 @@ public partial class MainWindow
         group.Children.Add(new DirectionalLight(Color.FromRgb(130, 160, 190), new Vector3D(0.65, -0.35, 0.55)));
         AddThreeDWallGrid(group, centerX, centerZ);
 
-        ThreeDRoofSurface roofSurface = ThreeDRoofSurface.Build(RenderedThreeDRoofPlanes());
+        ThreeDRoofSurface roofSurface = ThreeDRoofSurface.Build(RenderedThreeDRoofPlanes(), RafterPlumbDropFor);
 
         foreach (ThreeDFloorSlab slab in _threeDFloorSlabs)
             AddThreeDFloorSlabMesh(group, slab, centerX, centerZ);
@@ -152,6 +152,7 @@ public partial class MainWindow
         ThreeDRoofRenderBoundaryEdges roofBoundaryEdges = ThreeDRoofRenderBoundaryEdges.Build(_threeDRoofPlanes);
         foreach (ThreeDRoofPlane plane in _threeDRoofPlanes)
             AddThreeDRoofPlaneMesh(group, plane, centerX, centerZ, roofBoundaryEdges);
+        AddThreeDRoofRafterMeshes(group, centerX, centerZ);
 
         // Once a roof group has built plane geometry, the editable base guides
         // (eave/rake bars) just clutter the surfaces. But the generated
@@ -539,13 +540,23 @@ public partial class MainWindow
         Color planeColor = ToVisibleRoofColor(
             ParseWallColor(string.IsNullOrWhiteSpace(takeoffColorHex) ? plane.Color : takeoffColorHex),
             selectedRoof);
+        bool rafterFace = IsRafterFace(plane);
+        if (rafterFace)
+        {
+            // Faces with rafters read warm so the picked set is obvious.
+            planeColor = Color.FromRgb(
+                (byte)Math.Min(255, planeColor.R + 45),
+                (byte)Math.Max(0, planeColor.G - 5),
+                (byte)Math.Max(0, planeColor.B - 35));
+        }
         var brush = new SolidColorBrush(planeColor)
         {
-            Opacity = selectedRoof ? 1.0 : 0.96,
+            Opacity = rafterFace ? 0.82 : selectedRoof ? 1.0 : 0.96,
         };
         Material material = CreateRoofFaceMaterial(brush);
         var model = new GeometryModel3D(mesh, material) { BackMaterial = material };
         RegisterThreeDRoofMeshHit(model, plane.RoofGroupId);
+        RegisterThreeDRoofFaceHit(model, plane);
         group.Children.Add(model);
 
         // Outline only the outer roof boundary. Interior plane intersections

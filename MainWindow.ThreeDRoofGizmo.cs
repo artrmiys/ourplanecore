@@ -29,6 +29,7 @@ public partial class MainWindow
     {
         _threeDRoofMeshHitMap.Clear();
         _threeDRoofGizmoHitMap.Clear();
+        ClearThreeDRoofFaceHitMap();
     }
 
     private void RegisterThreeDRoofMeshHit(GeometryModel3D model, string groupId)

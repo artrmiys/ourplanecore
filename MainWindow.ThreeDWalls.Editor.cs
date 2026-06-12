@@ -17,6 +17,10 @@ public partial class MainWindow
         if (_threeDWallHitMap.Count == 0 && _threeDFloorSlabHitMap.Count == 0 && _threeDRoofMeshHitMap.Count == 0)
             return;
 
+        // Rafter face-pick mode claims roof-face clicks before group selection.
+        if (TryToggleRafterFaceAt(viewport, point))
+            return;
+
         if (TrySelectThreeDRoofMeshAt(viewport, point))
             return;
 

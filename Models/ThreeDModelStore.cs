@@ -56,6 +56,7 @@ public sealed class ThreeDWallModel
     public List<ThreeDRoofPlane> RoofPlanes { get; set; } = [];
     public List<ThreeDRoofIssue> RoofIssues { get; set; } = [];
     public List<ThreeDRoofPlacement> RoofPlacements { get; set; } = [];
+    public List<ThreeDRoofRafterSettings> RoofRafters { get; set; } = [];
 
     // 3D placement nudge for the roof relative to the walls/slabs. Walls and
     // roof can come from different sheets and not sit on top of each other;

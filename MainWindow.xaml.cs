@@ -410,6 +410,7 @@ public partial class MainWindow : Window
         ObservationsListView.KeyDown += ObservationsListView_KeyDown;
         ObservationsListView.ContextMenu = BuildObservationsContextMenu();
         InitializeMarkerFilterControls();
+        InitializeRafterControls();
         _takeoffAutosaveTimer.Tick += (_, _) => FlushTakeoffAutosaves();
         _sheetLegendAutoSortTimer.Tick += (_, _) => RunSheetLegendAutoSortSweep();
         _sheetLegendAutoSortTimer.Start();

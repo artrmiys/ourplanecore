@@ -227,6 +227,7 @@ public partial class MainWindow
         _threeDRoofPlanes.Clear();
         _threeDRoofIssues.Clear();
         _threeDRoofPlacements.Clear();
+        _threeDRoofRafterSettings.Clear();
         _threeDWallHitMap.Clear();
         _threeDFloorSlabHitMap.Clear();
         ClearThreeDMeshIssueLogKeys();
@@ -249,6 +250,7 @@ public partial class MainWindow
         _threeDRoofPlanes.AddRange(model.RoofPlanes);
         _threeDRoofIssues.AddRange(model.RoofIssues);
         _threeDRoofPlacements.AddRange(model.RoofPlacements.Select(CloneThreeDRoofPlacement));
+        _threeDRoofRafterSettings.AddRange(model.RoofRafters);
         NormalizeThreeDRoofGroupsInMemory();
         _activeThreeDRoofGroupId = _threeDRoofPlacements.FirstOrDefault()?.RoofGroupId ?? "";
         RebuildPersistedGeneratedRoofIfNeeded();
@@ -304,6 +306,7 @@ public partial class MainWindow
             RoofPlanes = SnapshotThreeDRoofPlanes(),
             RoofIssues = SnapshotThreeDRoofIssues(),
             RoofPlacements = _threeDRoofPlacements.Select(CloneThreeDRoofPlacement).ToList(),
+            RoofRafters = _threeDRoofRafterSettings.ToList(),
             RoofOffsetXFeet = activePlacement?.OffsetXFeet ?? 0,
             RoofOffsetYFeet = activePlacement?.OffsetYFeet ?? 0,
             RoofOffsetZFeet = activePlacement?.OffsetZFeet ?? 0,

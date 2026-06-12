@@ -1938,6 +1938,12 @@
                         <Button Content="Roof Base" Click="Btn3dRfRoof_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Create a roof footprint from selected area takeoffs"/>
                         <Button Content="Select Edge" Click="Btn3dRoofEdges_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Select roof base edges on the sheet; save per-edge pitch from the side panel"/>
                         <Button Content="Generate Roof" Click="Btn3dBuildRoof_Click" Style="{StaticResource ManagerPrimaryButton}" Margin="0,0,12,4" ToolTip="Build ridge, hip, and valley geometry from the saved per-edge roof pitches"/>
+                        <TextBlock Text="Rafters" Style="{StaticResource ManagerGroupLabel}"/>
+                        <Button Content="Pick Faces" Click="Btn3dRafterFaces_Click" ToolTip="Click roof faces in the 3D view to toggle rafters on each face"/>
+                        <Button Content="Whole Roof" Click="Btn3dRafterAll_Click" ToolTip="Lay rafters on every face of every generated roof"/>
+                        <ComboBox x:Name="CmbRafterSpacing" Width="58" SelectionChanged="CmbRafter_Changed" VerticalAlignment="Center" Margin="0,0,4,4" ToolTip="Rafter spacing o.c. (measured horizontally along the eave)"/>
+                        <ComboBox x:Name="CmbRafterSize" Width="62" SelectionChanged="CmbRafter_Changed" VerticalAlignment="Center" Margin="0,0,4,4" ToolTip="Rafter member size; depth extrudes below the roof plane and walls trim to the rafter underside"/>
+                        <Button Content="Clear" Click="Btn3dRafterClear_Click" Margin="0,0,12,4" ToolTip="Remove rafters from all roofs"/>
                         <TextBlock Text="Viewer" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Fit" Click="Btn3dViewerFit_Click" ToolTip="Fit the clean 3D viewer scene"/>
                         <Button Content="Iso" Click="Btn3dViewerIso_Click" ToolTip="Show isometric view"/>

@@ -19,7 +19,12 @@ public sealed class ThreeDRoofSurface
     // which walls are top-of-structure walls that the roof should trim.
     public double BaseElevationFeet { get; private set; }
 
-    public static ThreeDRoofSurface Build(IEnumerable<ThreeDRoofPlane> planes)
+    // plumbDropFeet lowers individual faces vertically — used when rafters are
+    // enabled: the stored plane is the TOP of the rafters, so walls must trim
+    // to the rafter underside (plane minus the member's plumb depth).
+    public static ThreeDRoofSurface Build(
+        IEnumerable<ThreeDRoofPlane> planes,
+        Func<ThreeDRoofPlane, double>? plumbDropFeet = null)
     {
         var surface = new ThreeDRoofSurface();
         double minY = double.PositiveInfinity;
@@ -32,11 +37,12 @@ public sealed class ThreeDRoofSurface
 
             if (TryFitPlane(plane.Points, out double a, out double b, out double c))
             {
+                double drop = Math.Max(0, plumbDropFeet?.Invoke(plane) ?? 0);
                 surface._faces.Add(new Face(
                     plane.Points.Select(p => (p.XFeet, p.ZFeet)).ToList(),
-                    a, b, c));
+                    a, b, c - drop));
                 foreach (ThreeDRoofVertex v in plane.Points)
-                    minY = Math.Min(minY, v.YFeet);
+                    minY = Math.Min(minY, v.YFeet - drop);
             }
         }
 
