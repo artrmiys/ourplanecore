@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -224,10 +225,54 @@ public sealed partial class PdfViewport
             return;
         }
 
+        PageInfo page = CurrentRasterSheetPageInfo();
+        if (!ShouldQueueRasterSheetMotionWarmup(page))
+            return;
+
         PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(
-            CurrentRasterSheetPageInfo(),
+            page,
             buildMissingDpis: false,
             allowDuringNavigation: true);
+    }
+
+    private bool ShouldQueueRasterSheetMotionWarmup(PageInfo page)
+    {
+        string key = RasterSheetMotionWarmupKey(page);
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        DateTime now = DateTime.UtcNow;
+        if (string.Equals(key, _lastRasterSheetMotionWarmupKey, StringComparison.OrdinalIgnoreCase) &&
+            (now - _lastRasterSheetMotionWarmupAt).TotalMilliseconds <
+            ViewportRenderPolicy.RasterSheetMotionWarmupMinIntervalMs)
+        {
+            return false;
+        }
+
+        _lastRasterSheetMotionWarmupKey = key;
+        _lastRasterSheetMotionWarmupAt = now;
+        return true;
+    }
+
+    private static string RasterSheetMotionWarmupKey(PageInfo page)
+    {
+        RasterSheetSource? rasterSheet = page.RasterSheet;
+        if (rasterSheet?.Enabled != true ||
+            string.IsNullOrWhiteSpace(page.FolderPath) ||
+            string.IsNullOrWhiteSpace(page.PdfPath))
+        {
+            return "";
+        }
+
+        return string.Join(
+            '|',
+            page.FolderPath,
+            page.PdfPath,
+            page.PdfPage.ToString(CultureInfo.InvariantCulture),
+            rasterSheet.Image,
+            rasterSheet.RenderProfile,
+            rasterSheet.GeneratedAtUtc,
+            rasterSheet.RenderScale.ToString(CultureInfo.InvariantCulture));
     }
 
     private bool TryHoldHeavyRasterSheetDpiForRecentMotion(

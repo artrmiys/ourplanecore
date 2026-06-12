@@ -66,6 +66,7 @@ public static class ViewportRenderPolicy
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
     public const int RasterSheetWorkZoomWarmupDelayMs = 800;
     public const int RasterSheetCurrentWorkZoomBuildDelayMs = 80;
+    public const int RasterSheetMotionWarmupMinIntervalMs = 650;
     public const int RasterSheetMotionQualityRestoreQuietMs = 450;
     public const int RasterSheetPageOpenImmediateWarmMaxDpi = 144;
     public const int PointerMoveRepaintMinIntervalMs = 33;
