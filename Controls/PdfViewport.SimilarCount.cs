@@ -13,6 +13,9 @@ public sealed record ViewportSimilarCountRequest(SKRect PdfRect, string PageFold
 // while the threshold dialog is open.
 public sealed partial class PdfViewport
 {
+    private const float SimilarCountMinimumBitmapScale = 0.95f;
+    private const float SimilarCountRequestedBitmapScale = 1.0f;
+
     private bool _similarCountSelecting;
     private bool _similarCountDragging;
     private SKPoint _similarCountStartPdf;
@@ -23,9 +26,9 @@ public sealed partial class PdfViewport
 
     public void BeginSimilarCountSelection()
     {
-        if (_pageBitmap == null || _pdfW <= 0 || _pdfH <= 0)
+        if (!TryEnsureSimilarCountBitmapReady(out string status))
         {
-            PostStatus("Count similar: open a rendered sheet first.");
+            PostStatus(status);
             return;
         }
 
@@ -51,20 +54,93 @@ public sealed partial class PdfViewport
     {
         session = null;
         bitmapScale = 0f;
-        if (_pageBitmap == null || _bitmapScale <= 0)
+        if (!TryEnsureSimilarCountBitmapReady(out error))
         {
-            error = "No rendered page raster is available.";
             return false;
         }
 
+        SKBitmap pageBitmap = _pageBitmap!;
         bitmapScale = _bitmapScale;
         var pixelRect = new SKRectI(
             (int)Math.Floor(pdfRect.Left * _bitmapScale),
             (int)Math.Floor(pdfRect.Top * _bitmapScale),
             (int)Math.Ceiling(pdfRect.Right * _bitmapScale),
             (int)Math.Ceiling(pdfRect.Bottom * _bitmapScale));
-        session = SimilarSymbolMatchSession.TryCreate(_pageBitmap, pixelRect, out error);
+        session = SimilarSymbolMatchSession.TryCreate(pageBitmap, pixelRect, out error);
         return session != null;
+    }
+
+    private bool TryEnsureSimilarCountBitmapReady(out string status)
+    {
+        PrepareBitmapForImmediateRepaint();
+
+        if (_pageBitmap == null || _pdfW <= 0 || _pdfH <= 0 || _bitmapScale <= 0)
+        {
+            status = "Count similar: open a rendered sheet first.";
+            return false;
+        }
+
+        if (_bitmapScale >= SimilarCountMinimumBitmapScale)
+        {
+            status = "";
+            return true;
+        }
+
+        QueueSimilarCountReadableBitmap();
+        status = $"Count similar: sheet is still sharpening ({_bitmapScale:0.##}x). Try again in a moment.";
+        return false;
+    }
+
+    private void QueueSimilarCountReadableBitmap()
+    {
+        if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfIndex < 0)
+            return;
+
+        try
+        {
+            if (TryApplyReadyRasterSheetForCurrentZoom() ||
+                _bitmapScale >= SimilarCountMinimumBitmapScale)
+            {
+                RequestRepaint();
+                return;
+            }
+
+            if (_rasterSheetSource?.Enabled == true &&
+                !_pdfLayersLoadedForPage &&
+                !_usingLayerRenderer &&
+                !RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource))
+            {
+                QueueRasterSheetBitmapApplyAfterWarmup(
+                    _pdfPath,
+                    _pdfIndex,
+                    _pageFolder,
+                    _rasterSheetSource,
+                    preferOverview: false,
+                    allowLowZoomFullRaster: true);
+            }
+            else if (_usingLayerRenderer)
+            {
+                QueueLayerRender(
+                    resetLayerStates: false,
+                    renderScale: SimilarCountRequestedBitmapScale,
+                    statusAfter: "Count similar: sharper sheet ready. Drag a box around the pattern again.",
+                    allowImmediateCache: true,
+                    allowLiveRender: true,
+                    allowMemoryBitmap: true);
+            }
+            else
+            {
+                QueueDocnetRender(
+                    SimilarCountRequestedBitmapScale,
+                    statusAfter: "Count similar: sharper sheet ready. Drag a box around the pattern again.");
+            }
+
+            RequestRepaint();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, "Similar count readable bitmap request failed.");
+        }
     }
 
     private bool HandleSimilarCountMouseDown(SKPoint pdf)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using OurPlaneCore;
@@ -63,10 +64,68 @@ internal static class SimilarSymbolMatcherTests
             $"self-match score should be near 1.0, got {matches[0].Score:0.00}");
     }
 
-    private static SimilarSymbolMatchSession? CreateSession(SKBitmap page)
+    public static void FindsCopiesWithLooseEdgeSelection()
+    {
+        var placements = new[] { (40, 40), (200, 60), (120, 220) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        DrawLooseSelectionEdgeNoise(page, placements[0].Item1, placements[0].Item2);
+        SimilarSymbolMatchSession? session = CreateSession(page, leftPad: 8, topPad: 4, rightPad: 4, bottomPad: 4);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(0.6f, includeRotations: false, CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected {placements.Length} matches from loose edge selection, got {matches.Count}");
+        foreach ((int x, int y) in placements)
+        {
+            AssertTrue(
+                matches.Any(match => NearCenter(match, x, y)),
+                $"loose selection missed symbol at ({x},{y})");
+        }
+    }
+
+    public static void FindsMirroredCopyOnlyWhenEnabled()
+    {
+        var placements = new[] { (40, 40), (200, 60) };
+        using SKBitmap page = BuildMirrorSensitivePage(placements, mirroredAt: (300, 200));
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> plain = session!.FindMatches(0.6f, includeRotations: false, CancellationToken.None);
+        List<SimilarSymbolMatch> mirrored = session.FindMatches(0.6f, includeRotations: true, CancellationToken.None);
+
+        AssertTrue(plain.Count == placements.Length,
+            $"expected {placements.Length} unmirrored matches, got {plain.Count}");
+        AssertTrue(mirrored.Count == placements.Length + 1,
+            $"expected mirrored search to find {placements.Length + 1} matches, got {mirrored.Count}");
+        AssertTrue(mirrored.Any(match => match.Mirrored), "mirrored copy should be reported as mirrored");
+    }
+
+    public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
+    {
+        string source = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+
+        AssertTrue(
+            source.Contains("SimilarCountMinimumBitmapScale = 0.95f", StringComparison.Ordinal) &&
+            source.Contains("TryEnsureSimilarCountBitmapReady", StringComparison.Ordinal) &&
+            source.Contains("QueueSimilarCountReadableBitmap()", StringComparison.Ordinal),
+            "Similar count should guard against matching from a low-resolution preview bitmap");
+        AssertTrue(
+            source.Contains("if (!TryEnsureSimilarCountBitmapReady(out string status))", StringComparison.Ordinal),
+            "BeginSimilarCountSelection should check bitmap readiness before starting the crop interaction");
+    }
+
+    private static SimilarSymbolMatchSession? CreateSession(
+        SKBitmap page,
+        int leftPad = 3,
+        int topPad = 3,
+        int rightPad = 3,
+        int bottomPad = 3)
     {
         (int x, int y) = (TemplateOrigin.X, TemplateOrigin.Y);
-        var templateRect = new SKRectI(x - 3, y - 3, x + SymbolWidth + 3, y + SymbolHeight + 3);
+        var templateRect = new SKRectI(
+            x - leftPad,
+            y - topPad,
+            x + SymbolWidth + rightPad,
+            y + SymbolHeight + bottomPad);
         SimilarSymbolMatchSession? session = SimilarSymbolMatchSession.TryCreate(page, templateRect, out string error);
         AssertTrue(session != null, $"session creation failed: {error}");
         return session;
@@ -125,6 +184,52 @@ internal static class SimilarSymbolMatcherTests
         return bitmap;
     }
 
+    private static SKBitmap BuildMirrorSensitivePage((int X, int Y)[] placements, (int X, int Y) mirroredAt)
+    {
+        TemplateOrigin = placements[0];
+        var bitmap = new SKBitmap(420, 320, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        };
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        foreach ((int x, int y) in placements)
+            DrawMirrorSensitiveSymbol(canvas, stroke, fill, x, y);
+
+        canvas.Save();
+        canvas.Translate(mirroredAt.X + SymbolWidth, mirroredAt.Y);
+        canvas.Scale(-1, 1);
+        DrawMirrorSensitiveSymbol(canvas, stroke, fill, 0, 0);
+        canvas.Restore();
+
+        return bitmap;
+    }
+
+    private static void DrawLooseSelectionEdgeNoise(SKBitmap bitmap, int x, int y)
+    {
+        using var canvas = new SKCanvas(bitmap);
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        };
+        canvas.DrawLine(x - 7, y - 3, x - 7, y + SymbolHeight + 3, stroke);
+    }
+
     // Asymmetric glyph: box + one diagonal + a dot in the top-left corner so
     // rotated copies do not match the upright template by accident.
     private static void DrawSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y)
@@ -132,6 +237,15 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawRect(new SKRect(x, y, x + SymbolWidth, y + SymbolHeight), stroke);
         canvas.DrawLine(x, y + SymbolHeight, x + SymbolWidth, y, stroke);
         canvas.DrawCircle(x + 5, y + 5, 2.5f, fill);
+    }
+
+    private static void DrawMirrorSensitiveSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y)
+    {
+        canvas.DrawLine(x + 2, y, x + 2, y + SymbolHeight, stroke);
+        canvas.DrawLine(x + 2, y + 3, x + SymbolWidth - 8, y + 3, stroke);
+        canvas.DrawLine(x + 2, y + SymbolHeight - 4, x + 18, y + SymbolHeight - 4, stroke);
+        canvas.DrawLine(x + 14, y + 8, x + SymbolWidth - 5, y + SymbolHeight - 8, stroke);
+        canvas.DrawCircle(x + 9, y + 23, 3f, fill);
     }
 
     private static void AssertTrue(bool condition, string message)

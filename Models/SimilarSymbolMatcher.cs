@@ -31,13 +31,16 @@ namespace OurPlaneCore;
 // owns the pixel<->PDF mapping. The session reads the bitmap once in
 // TryCreate, so FindMatches can re-run on background threads with different
 // thresholds without touching the bitmap again.
-public sealed record SimilarSymbolMatch(int CenterX, int CenterY, float Score, int RotationDegrees);
+public sealed record SimilarSymbolMatch(int CenterX, int CenterY, float Score, int RotationDegrees, bool Mirrored = false);
 
 public sealed class SimilarSymbolMatchSession
 {
     private const int MaxTemplateSide = 96;      // downsample until template fits
     private const int InkLumaThreshold = 176;
     private const int MinTemplateInk = 12;
+    private const float EdgeRelaxedInsetRatio = 0.08f;
+    private const int EdgeRelaxedMaxInset = 8;
+    private const float EdgeRelaxedScoreMultiplier = 0.985f;
 
     private readonly int _width;
     private readonly int _height;
@@ -100,13 +103,9 @@ public sealed class SimilarSymbolMatchSession
             return null;
         }
 
-        var variants = new List<TemplateVariant> { TemplateVariant.Build(template, 0) };
-        bool[,] rotated = template;
-        for (int degrees = 90; degrees <= 270; degrees += 90)
-        {
-            rotated = RotateClockwise(rotated);
-            variants.Add(TemplateVariant.Build(rotated, degrees));
-        }
+        var variants = new List<TemplateVariant>();
+        AddRotatedVariants(variants, template, mirrored: false);
+        AddRotatedVariants(variants, MirrorHorizontal(template), mirrored: true);
 
         return new SimilarSymbolMatchSession(width, height, wordsPerRow, ink, dilated, factor, variants.ToArray());
     }
@@ -115,7 +114,10 @@ public sealed class SimilarSymbolMatchSession
     {
         minScore = Math.Clamp(minScore, 0.05f, 1f);
         var all = new List<SimilarSymbolMatch>();
-        foreach (TemplateVariant variant in includeRotations ? _variants : _variants.Take(1))
+        IEnumerable<TemplateVariant> variants = includeRotations
+            ? _variants
+            : _variants.Where(variant => variant.RotationDegrees == 0 && !variant.Mirrored).Take(1);
+        foreach (TemplateVariant variant in variants)
         {
             cancellationToken.ThrowIfCancellationRequested();
             FindVariantMatches(variant, minScore, all, cancellationToken);
@@ -136,15 +138,23 @@ public sealed class SimilarSymbolMatchSession
         int maxY = _height - th;
         int maxX = _width - tw;
         int templateInk = template.InkCount;
+        int relaxedInk = template.EdgeRelaxed?.InkCount ?? templateInk;
+        int lowerPrefilterInk = Math.Min(templateInk, relaxedInk);
+        int upperPrefilterInk = Math.Max(templateInk, relaxedInk);
         // The ink-ratio term needs sqrt(|P|/|T|-ish) >= minScore, i.e. window
         // ink within [|T|*s^2, |T|/s^2]; widen with slack because the band
         // prefilter over-counts at word granularity.
         float ratioBound = minScore * minScore;
-        int minWindowInk = (int)(templateInk * ratioBound * 0.5f);
-        int maxWindowInk = (int)(templateInk / ratioBound * 1.5f);
+        int minWindowInk = (int)(lowerPrefilterInk * ratioBound * 0.5f);
+        int maxWindowInk = (int)(upperPrefilterInk / ratioBound * 1.5f);
 
         var gate = new object();
-        Parallel.For(0, maxY + 1, () => new List<SimilarSymbolMatch>(),
+        var options = new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = MatcherMaxDegreeOfParallelism(),
+        };
+        Parallel.For(0, maxY + 1, options, () => new List<SimilarSymbolMatch>(),
             (y, _, local) =>
             {
                 if ((y & 31) == 0)
@@ -164,12 +174,25 @@ public sealed class SimilarSymbolMatchSession
                         continue;
 
                     float score = ScoreWindow(template, x, y, minScore);
+                    if (score < minScore && template.EdgeRelaxed != null)
+                    {
+                        TemplateVariant relaxed = template.EdgeRelaxed;
+                        float relaxedScore = ScoreWindow(
+                            relaxed,
+                            x + relaxed.OffsetX,
+                            y + relaxed.OffsetY,
+                            minScore);
+                        if (relaxedScore >= minScore)
+                            score = Math.Max(score, relaxedScore * EdgeRelaxedScoreMultiplier);
+                    }
+
                     if (score >= minScore)
                         local.Add(new SimilarSymbolMatch(
                             (x + tw / 2) * _factor + _factor / 2,
                             (y + th / 2) * _factor + _factor / 2,
                             score,
-                            template.RotationDegrees));
+                            template.RotationDegrees,
+                            template.Mirrored));
                 }
 
                 return local;
@@ -280,6 +303,12 @@ public sealed class SimilarSymbolMatchSession
         return accepted;
     }
 
+    private static int MatcherMaxDegreeOfParallelism()
+    {
+        int reserve = Environment.ProcessorCount <= 4 ? 1 : 2;
+        return Math.Max(1, Environment.ProcessorCount - reserve);
+    }
+
     // ── Raster preparation ───────────────────────────────────────────────────
 
     private static bool[] BinarizeDownsampled(SKBitmap page, int factor, out int width, out int height)
@@ -388,6 +417,69 @@ public sealed class SimilarSymbolMatchSession
         return rotated;
     }
 
+    private static bool[,] MirrorHorizontal(bool[,] source)
+    {
+        int w = source.GetLength(0);
+        int h = source.GetLength(1);
+        var mirrored = new bool[w, h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                mirrored[w - 1 - x, y] = source[x, y];
+        return mirrored;
+    }
+
+    private static void AddRotatedVariants(List<TemplateVariant> variants, bool[,] source, bool mirrored)
+    {
+        bool[,] current = source;
+        for (int degrees = 0; degrees <= 270; degrees += 90)
+        {
+            if (degrees > 0)
+                current = RotateClockwise(current);
+            variants.Add(TemplateVariant.Build(current, degrees, mirrored));
+        }
+    }
+
+    private static TemplateVariant? TryBuildEdgeRelaxedVariant(bool[,] template, int rotationDegrees, bool mirrored)
+    {
+        int width = template.GetLength(0);
+        int height = template.GetLength(1);
+        int insetX = EdgeRelaxedInset(width);
+        int insetY = EdgeRelaxedInset(height);
+        if (insetX <= 0 && insetY <= 0)
+            return null;
+
+        int innerWidth = width - insetX * 2;
+        int innerHeight = height - insetY * 2;
+        if (innerWidth < 6 || innerHeight < 6)
+            return null;
+
+        var inner = new bool[innerWidth, innerHeight];
+        for (int y = 0; y < innerHeight; y++)
+            for (int x = 0; x < innerWidth; x++)
+                inner[x, y] = template[x + insetX, y + insetY];
+
+        if (CountInk(inner) < MinTemplateInk)
+            return null;
+
+        return TemplateVariant.Build(
+            inner,
+            rotationDegrees,
+            mirrored,
+            insetX,
+            insetY,
+            buildEdgeRelaxed: false);
+    }
+
+    private static int EdgeRelaxedInset(int side)
+    {
+        int maximum = Math.Min(EdgeRelaxedMaxInset, (side - 6) / 2);
+        if (maximum < 2)
+            return 0;
+
+        int inset = (int)MathF.Round(side * EdgeRelaxedInsetRatio);
+        return Math.Clamp(inset, 2, maximum);
+    }
+
     private static int CountInk(bool[,] template)
     {
         int count = 0;
@@ -407,12 +499,22 @@ public sealed class SimilarSymbolMatchSession
         public required int Height;
         public required int InkCount;
         public required int RotationDegrees;
+        public required bool Mirrored;
+        public required int OffsetX;
+        public required int OffsetY;
         public required int[] ShiftWords;
         public required ulong[][] ShiftedInk;
         public required ulong[][] ShiftedDilated;
         public required ulong[][] WindowMasks;
+        public TemplateVariant? EdgeRelaxed { get; init; }
 
-        public static TemplateVariant Build(bool[,] template, int rotationDegrees)
+        public static TemplateVariant Build(
+            bool[,] template,
+            int rotationDegrees,
+            bool mirrored,
+            int offsetX = 0,
+            int offsetY = 0,
+            bool buildEdgeRelaxed = true)
         {
             int width = template.GetLength(0);
             int height = template.GetLength(1);
@@ -451,10 +553,16 @@ public sealed class SimilarSymbolMatchSession
                 Height = height,
                 InkCount = inkCount,
                 RotationDegrees = rotationDegrees,
+                Mirrored = mirrored,
+                OffsetX = offsetX,
+                OffsetY = offsetY,
                 ShiftWords = shiftWords,
                 ShiftedInk = shiftedInk,
                 ShiftedDilated = shiftedDilated,
                 WindowMasks = windowMasks,
+                EdgeRelaxed = buildEdgeRelaxed
+                    ? TryBuildEdgeRelaxedVariant(template, rotationDegrees, mirrored)
+                    : null,
             };
         }
 
