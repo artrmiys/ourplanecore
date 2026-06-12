@@ -734,6 +734,9 @@ public sealed partial class PdfViewport
         bool pageOpenFitAfter = false,
         int pageOpenNavigationVersion = 0)
     {
+        RasterSheetBitmapResult preparedBitmap = new(new SkiaSharp.SKBitmap(), 0, 0, 0, "");
+        bool hasPreparedBitmap = false;
+        bool preparedBitmapApplied = false;
         try
         {
             if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
@@ -750,7 +753,19 @@ public sealed partial class PdfViewport
             if (!result.Ok || result.Source == null)
                 return;
 
-            await Task.Run(() => WarmRasterSheetBitmapCache(queuedPage, result.Source)).ConfigureAwait(false);
+            hasPreparedBitmap = await Task.Run(() => TryPrepareRasterSheetBitmapForUiApply(
+                    queuedPage,
+                    result.Source,
+                    preferOverview: false,
+                    out preparedBitmap))
+                .ConfigureAwait(false);
+            if (!hasPreparedBitmap)
+            {
+                AppLog.Warn(
+                    $"Viewport ready raster DPI apply skipped; dpi={targetDpi}; reason='bitmap prepare failed'; " +
+                    $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
+                return;
+            }
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -762,7 +777,6 @@ public sealed partial class PdfViewport
                 }
 
                 string sourceKind = "ready-warmed";
-                string applyReason;
                 if (pageOpenNavigationVersion > 0)
                 {
                     if (!TryGetPageOpenRasterSheetDpiApplyView(
@@ -775,15 +789,15 @@ public sealed partial class PdfViewport
                         return;
                     }
 
-                    if (ApplyRasterSheetDpiUpgradeResult(
+                    if (ApplyPreparedRasterSheetDpiUpgradeResult(
                             result.Source,
+                            preparedBitmap,
                             targetDpi,
                             "ready-warmed-page-open",
                             applyView,
-                            applyFitAfter,
-                            out applyReason,
-                            requireCachedBitmap: true))
+                            applyFitAfter))
                     {
+                        preparedBitmapApplied = true;
                         return;
                     }
                 }
@@ -795,20 +809,18 @@ public sealed partial class PdfViewport
                         return;
                     }
 
-                    if (ApplyRasterSheetDpiUpgradeResult(
+                    if (ApplyPreparedRasterSheetDpiUpgradeResult(
                             result.Source,
+                            preparedBitmap,
                             targetDpi,
                             sourceKind,
-                            out applyReason,
-                            requireCachedBitmap: true))
+                            CaptureViewState(),
+                            fitAfter: false))
                     {
+                        preparedBitmapApplied = true;
                         return;
                     }
                 }
-
-                AppLog.Warn(
-                    $"Viewport ready raster DPI apply skipped; dpi={targetDpi}; reason='{applyReason}'; " +
-                    $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
             });
         }
         catch (Exception ex)
@@ -817,6 +829,9 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            if (hasPreparedBitmap && !preparedBitmapApplied)
+                preparedBitmap.Bitmap.Dispose();
+
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(rebuildKey);
         }
@@ -830,6 +845,9 @@ public sealed partial class PdfViewport
         bool pageOpenFitAfter = false,
         int pageOpenNavigationVersion = 0)
     {
+        RasterSheetBitmapResult preparedBitmap = new(new SkiaSharp.SKBitmap(), 0, 0, 0, "");
+        bool hasPreparedBitmap = false;
+        bool preparedBitmapApplied = false;
         try
         {
             if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
@@ -866,7 +884,18 @@ public sealed partial class PdfViewport
             AppLog.Info(
                 $"Viewport raster DPI upgrade built; dpi={targetDpi}; reused={result.Reused}; " +
                 $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
-            WarmRasterSheetBitmapCache(queuedPage, result.Source);
+            hasPreparedBitmap = TryPrepareRasterSheetBitmapForUiApply(
+                queuedPage,
+                result.Source,
+                preferOverview: false,
+                out preparedBitmap);
+            if (!hasPreparedBitmap)
+            {
+                AppLog.Warn(
+                    $"Viewport raster DPI upgrade apply skipped; dpi={targetDpi}; reason='bitmap prepare failed'; " +
+                    $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
+                return;
+            }
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -877,7 +906,6 @@ public sealed partial class PdfViewport
                     return;
                 }
 
-                string applyReason;
                 if (pageOpenNavigationVersion > 0)
                 {
                     if (!TryGetPageOpenRasterSheetDpiApplyView(
@@ -890,15 +918,15 @@ public sealed partial class PdfViewport
                         return;
                     }
 
-                    if (ApplyRasterSheetDpiUpgradeResult(
+                    if (ApplyPreparedRasterSheetDpiUpgradeResult(
                             result.Source,
+                            preparedBitmap,
                             targetDpi,
                             "built-page-open",
                             applyView,
-                            applyFitAfter,
-                            out applyReason,
-                            requireCachedBitmap: true))
+                            applyFitAfter))
                     {
+                        preparedBitmapApplied = true;
                         return;
                     }
                 }
@@ -910,13 +938,18 @@ public sealed partial class PdfViewport
                         return;
                     }
 
-                    if (ApplyRasterSheetDpiUpgradeResult(result.Source, targetDpi, "built", out applyReason))
+                    if (ApplyPreparedRasterSheetDpiUpgradeResult(
+                            result.Source,
+                            preparedBitmap,
+                            targetDpi,
+                            "built",
+                            CaptureViewState(),
+                            fitAfter: false))
+                    {
+                        preparedBitmapApplied = true;
                         return;
+                    }
                 }
-
-                AppLog.Warn(
-                    $"Viewport raster DPI upgrade apply skipped; dpi={targetDpi}; reason='{applyReason}'; " +
-                    $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
             });
         }
         catch (Exception ex)
@@ -925,9 +958,43 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            if (hasPreparedBitmap && !preparedBitmapApplied)
+                preparedBitmap.Bitmap.Dispose();
+
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(rebuildKey);
         }
+    }
+
+    private bool ApplyPreparedRasterSheetDpiUpgradeResult(
+        RasterSheetSource source,
+        RasterSheetBitmapResult preparedBitmap,
+        int targetDpi,
+        string sourceKind,
+        ViewState? restoreView,
+        bool fitAfter)
+    {
+        RasterSheetSource candidate = source.Clone();
+        if (!ApplyRasterSheetBitmapRender(
+                _pdfPath,
+                _pdfIndex,
+                _pageFolder,
+                candidate,
+                preparedBitmap,
+                restoreView,
+                fitAfter,
+                usingOverview: false))
+        {
+            return false;
+        }
+
+        _rasterSheetSource = candidate.Clone();
+        PostStatus($"Raster sheet {targetDpi} DPI: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
+        AppLog.Info(
+            $"Viewport raster DPI upgrade applied; source='{sourceKind}'; dpi={targetDpi}; " +
+            $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
+        RequestRepaint();
+        return true;
     }
 
     private bool ApplyRasterSheetDpiUpgradeResult(

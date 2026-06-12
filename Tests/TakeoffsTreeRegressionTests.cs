@@ -1556,11 +1556,14 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetBitmapCache.Contains("QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("WarmRasterSheetBitmapAndApplyAsync", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("WarmRequestedRasterSheetBitmapCache", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("TryPrepareRasterSheetBitmapForUiApply", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("ApplyPreparedRasterSheetBitmap", StringComparison.Ordinal) &&
+            rasterSheetBitmapCache.Contains("preparedBitmap.Bitmap.Dispose()", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("ShouldApplyWarmedRasterSheetBitmap", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("if (ShouldUseRasterSheetForCurrentZoom())", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("return RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(rasterSheet);", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("return false;", StringComparison.Ordinal) &&
-            rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
+            !rasterSheetBitmapCache.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             layers.Contains("RasterSheetBitmapCacheWarmingReason", StringComparison.Ordinal) &&
             pageApi.Contains("QueueRasterSheetWorkZoomWarmupForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldWarmRasterSheetForWorkZoomOnPageOpen", StringComparison.Ordinal) &&
@@ -1814,7 +1817,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("BuildRasterSheetDpiUpgradeForCurrentPageAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("BuildAndEnable(buildPage, targetScale)", StringComparison.Ordinal) &&
-            rasterSheetDpiUpgrade.Contains("WarmRasterSheetBitmapCache(queuedPage, result.Source)", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("TryPrepareRasterSheetBitmapForUiApply", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ApplyPreparedRasterSheetDpiUpgradeResult", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetDpiUpgradeKey", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("Dispatcher.InvokeAsync", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("if (_isFastNavigating)", StringComparison.Ordinal) &&
@@ -1858,9 +1862,12 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("QueueReadyRasterSheetDpiApplyAfterWarmup", StringComparison.Ordinal) &&
             readyDpiWarmApplyMethod.Contains("Task.Run", StringComparison.Ordinal) &&
             readyDpiWarmApplyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
-            readyDpiWarmApplyMethod.Contains("WarmRasterSheetBitmapCache(queuedPage, result.Source)", StringComparison.Ordinal) &&
-            readyDpiWarmApplyMethod.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("TryPrepareRasterSheetBitmapForUiApply", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("ApplyPreparedRasterSheetDpiUpgradeResult", StringComparison.Ordinal) &&
+            readyDpiWarmApplyMethod.Contains("!preparedBitmapApplied", StringComparison.Ordinal) &&
+            !readyDpiWarmApplyMethod.Contains("requireCachedBitmap: true", StringComparison.Ordinal) &&
             readyDpiWarmApplyMethod.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&
+            rasterSheetDpiUpgrade.Contains("ApplyPreparedRasterSheetDpiUpgradeResult", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TryApplyReadyRasterSheetDpiFromMemory(", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("QueueReadyRasterSheetDpiPersistAfterMemoryApply(page, targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("PersistReadyRasterSheetDpiAfterMemoryApplyAsync", StringComparison.Ordinal) &&

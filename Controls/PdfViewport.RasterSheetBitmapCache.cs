@@ -67,11 +67,18 @@ public sealed partial class PdfViewport
         bool preferOverview,
         bool allowLowZoomFullRaster)
     {
+        RasterSheetBitmapResult preparedBitmap = new(new SKBitmap(), 0, 0, 0, "");
+        bool hasPreparedBitmap = false;
+        bool preparedBitmapApplied = false;
         try
         {
-            bool warmed = await Task.Run(() => WarmRequestedRasterSheetBitmapCache(queuedPage, rasterSheet, preferOverview))
+            hasPreparedBitmap = await Task.Run(() => TryPrepareRasterSheetBitmapForUiApply(
+                    queuedPage,
+                    rasterSheet,
+                    preferOverview,
+                    out preparedBitmap))
                 .ConfigureAwait(false);
-            if (!warmed)
+            if (!hasPreparedBitmap)
                 return;
 
             await Dispatcher.InvokeAsync(() =>
@@ -93,31 +100,20 @@ public sealed partial class PdfViewport
                 }
 
                 ViewState applyView = CaptureViewState();
-                if (TryApplyRasterSheetRender(
+                if (ApplyPreparedRasterSheetBitmap(
                         queuedPage.PdfPath,
                         queuedPage.PdfPage,
                         queuedPage.FolderPath,
                         rasterSheet,
+                        preparedBitmap,
                         applyView,
                         fitAfter: false,
-                        preferOverview,
-                        requireCachedBitmap: true,
-                        out string applyReason))
+                        preferOverview))
                 {
+                    preparedBitmapApplied = true;
                     PostStatus($"{(preferOverview ? "Raster overview" : "Raster sheet")}: {Path.GetFileName(queuedPage.PdfPath)}  page {queuedPage.PdfPage + 1}");
                     RequestRepaint();
                     return;
-                }
-
-                if (!IsRasterSheetBitmapCacheWarmingReason(applyReason))
-                {
-                    QueueRasterSheetSelfHealIfNeeded(
-                        queuedPage.PdfPath,
-                        queuedPage.PdfPage,
-                        queuedPage.FolderPath,
-                        queuedPage.PdfLayers,
-                        rasterSheet,
-                        applyReason);
                 }
             });
         }
@@ -127,9 +123,33 @@ public sealed partial class PdfViewport
         }
         finally
         {
+            if (hasPreparedBitmap && !preparedBitmapApplied)
+                preparedBitmap.Bitmap.Dispose();
+
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(warmKey);
         }
+    }
+
+    private bool ApplyPreparedRasterSheetBitmap(
+        string pdfPath,
+        int pageIndex,
+        string pageFolder,
+        RasterSheetSource rasterSheet,
+        RasterSheetBitmapResult preparedBitmap,
+        ViewState applyView,
+        bool fitAfter,
+        bool preferOverview)
+    {
+        return ApplyRasterSheetBitmapRender(
+            pdfPath,
+            pageIndex,
+            pageFolder,
+            rasterSheet,
+            preparedBitmap,
+            applyView,
+            fitAfter,
+            usingOverview: preferOverview);
     }
 
     private bool ShouldApplyWarmedRasterSheetBitmap(
@@ -210,6 +230,24 @@ public sealed partial class PdfViewport
             preferOverview,
             action: "warmed",
             logFailure: true);
+    }
+
+    private static bool TryPrepareRasterSheetBitmapForUiApply(
+        PageInfo page,
+        RasterSheetSource rasterSheet,
+        bool preferOverview,
+        out RasterSheetBitmapResult preparedBitmap)
+    {
+        preparedBitmap = new RasterSheetBitmapResult(new SKBitmap(), 0, 0, 0, "");
+        if (!WarmRequestedRasterSheetBitmapCache(page, rasterSheet, preferOverview))
+            return false;
+
+        return TryGetRasterSheetBitmapCache(
+            page.FolderPath,
+            page.PdfPath,
+            rasterSheet,
+            preferOverview,
+            out preparedBitmap);
     }
 
     private static bool TryWarmRasterSheetBitmapCache(
