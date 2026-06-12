@@ -11,15 +11,17 @@ namespace OurPlaneCore;
 // so one pass of the mouse produces 2-3 ordinary, independently editable lines.
 public partial class MainWindow
 {
-    private void CreateMultiLineCompanions(TakeoffItem item, IReadOnlyList<NewItemOffsetSpec> specs)
+    private List<TakeoffItem> CreateMultiLineCompanions(TakeoffItem item, IReadOnlyList<NewItemOffsetSpec> specs)
     {
+        var companions = new List<TakeoffItem>();
         if (_currentJob == null || specs.Count == 0)
-            return;
+            return companions;
 
         string parent = Path.GetDirectoryName(item.FolderPath) ?? _currentJob.TakeoffsRoot;
         foreach (NewItemOffsetSpec spec in specs)
         {
             TakeoffItem companion = CreateUniqueTakeoffItem(spec.Name, spec.Color, "line", parent);
+            companions.Add(companion);
             item.MultiLineOffsets.Add(new MultiLineOffsetConfig
             {
                 Name = spec.Name,
@@ -31,6 +33,7 @@ public partial class MainWindow
         }
 
         OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        return companions;
     }
 
     private void GenerateMultiLineOffsets(TakeoffItem item, Measurement m)

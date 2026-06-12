@@ -500,7 +500,9 @@ public partial class MainWindow
             joistArea ? DefaultJoistAreaTakeoffNameForFolder(parentFolder) : DefaultTakeoffNameForFolder(mtype, parentFolder),
             lockType: true,
             defaultColor: defaultColor,
-            defaultCountSymbol: _newCountSymbol)
+            defaultCountSymbol: _newCountSymbol,
+            showOffsetLines: true,
+            unitMode: _viewport.UnitMode)
         {
             Owner = this,
         };
@@ -517,9 +519,18 @@ public partial class MainWindow
         ApplyNewCountSymbolToItemIfNeeded(newItem, mtype);
         if (joistArea)
             ApplyDefaultJoistAreaSettings(newItem);
+        List<TakeoffItem> offsetCompanions =
+            OurPlaneCoreJobStore.NormalizeMeasurementType(mtype) == "line" && dlg.OffsetLines.Count > 0
+                ? CreateMultiLineCompanions(newItem, dlg.OffsetLines)
+                : [];
         _takeoffItems.Add(newItem);
         var treeParent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
         var tvi = AddTakeoffTreeItem(newItem, treeParent);
+        foreach (TakeoffItem companion in offsetCompanions)
+        {
+            _takeoffItems.Add(companion);
+            AddTakeoffTreeItem(companion, treeParent);
+        }
         if (treeParent is TreeViewItem parentTvi)
             parentTvi.IsExpanded = true;
 
