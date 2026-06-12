@@ -498,6 +498,13 @@ public sealed partial class PdfViewport : SKElement
         };
         _navigationIdleTimer.Tick += (_, _) =>
         {
+            if (ShouldDeferFastNavigationEndForPointer())
+            {
+                _navigationIdleTimer.Stop();
+                _navigationIdleTimer.Start();
+                return;
+            }
+
             EndFastNavigation();
         };
         Unloaded += PdfViewport_Unloaded;
@@ -542,6 +549,9 @@ public sealed partial class PdfViewport : SKElement
         }
 
         ViewportPerformanceRecorder.RecordRepaintRequest(_pageFolder, _repaintQueued, crossThreadRequest);
+        if (_repaintQueued)
+            return;
+
         PrepareBitmapForImmediateRepaint();
         if (_repaintQueued)
             return;

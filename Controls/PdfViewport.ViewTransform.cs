@@ -67,6 +67,13 @@ public sealed partial class PdfViewport
         if (!_isFastNavigating)
             return;
 
+        if (ShouldDeferFastNavigationEndForPointer())
+        {
+            _navigationIdleTimer.Stop();
+            _navigationIdleTimer.Start();
+            return;
+        }
+
         _navigationIdleTimer.Stop();
         _isFastNavigating = false;
         MaybeRequestSheetOverlayRenderScaleRefresh();
@@ -94,6 +101,17 @@ public sealed partial class PdfViewport
         if (!TryUpgradeRasterSheetToReadyDpiForCurrentZoom())
             QueueDetailRenderIfNeeded(force: false);
         RequestRepaint();
+    }
+
+    private bool ShouldDeferFastNavigationEndForPointer()
+    {
+        if (!_dragStart.HasValue)
+            return false;
+
+        return Mouse.MiddleButton == MouseButtonState.Pressed ||
+               Mouse.RightButton == MouseButtonState.Pressed ||
+               _tool == ViewerTool.Pan &&
+               Mouse.LeftButton == MouseButtonState.Pressed;
     }
 
     private bool IsFastNavigationFrame(int activeMeasurementCount)

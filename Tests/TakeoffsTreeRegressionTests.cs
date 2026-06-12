@@ -2482,10 +2482,24 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
         string endFastNavigation = SliceMethod(transform, "private void EndFastNavigation()");
+        string requestRepaint = SliceMethod(viewport, "private void RequestRepaint(bool crossThreadRequest = false)");
         AssertTrue(
             endFastNavigation.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal) &&
             !endFastNavigation.Contains("immediate: true", StringComparison.Ordinal),
             "navigation idle should coalesce clipped detail renders instead of starting them during short pan/zoom bursts");
+        AssertTrue(
+            transform.Contains("private bool ShouldDeferFastNavigationEndForPointer()", StringComparison.Ordinal) &&
+            transform.Contains("Mouse.MiddleButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
+            transform.Contains("Mouse.RightButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
+            transform.Contains("Mouse.LeftButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
+            endFastNavigation.Contains("ShouldDeferFastNavigationEndForPointer()", StringComparison.Ordinal) &&
+            endFastNavigation.IndexOf("ShouldDeferFastNavigationEndForPointer()", StringComparison.Ordinal) <
+            endFastNavigation.IndexOf("_isFastNavigating = false", StringComparison.Ordinal),
+            "high-zoom pan should keep the lighter navigation bitmap until the pan pointer is released");
+        AssertTrue(
+            requestRepaint.IndexOf("if (_repaintQueued)", StringComparison.Ordinal) <
+            requestRepaint.IndexOf("PrepareBitmapForImmediateRepaint()", StringComparison.Ordinal),
+            "repaint coalescing should skip immediate raster bitmap preparation when a frame is already queued");
         AssertTrue(
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("FireLayersChanged();", StringComparison.Ordinal) &&
@@ -2527,8 +2541,9 @@ internal static class TakeoffsTreeRegressionTests
             "cached preview page opens should keep PDF layers lazy while explicit layer paths retain delayed sharp/detail safeguards and use the zoom-refresh clarity threshold");
         AssertTrue(
             viewport.Contains("_navigationIdleTimer.Tick", StringComparison.Ordinal) &&
+            viewport.Contains("ShouldDeferFastNavigationEndForPointer()", StringComparison.Ordinal) &&
             viewport.Contains("EndFastNavigation();", StringComparison.Ordinal),
-            "navigation idle should run the real idle path so clipped detail renders are scheduled after wheel zoom");
+            "navigation idle should run the real idle path after active pan pointers have been released");
         AssertTrue(
             transform.Contains("if (ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale))", StringComparison.Ordinal),
             "deep zoom should skip expensive full-sheet refresh once a normal 1x base bitmap exists");
