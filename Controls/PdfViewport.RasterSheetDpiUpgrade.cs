@@ -486,37 +486,14 @@ public sealed partial class PdfViewport
         int targetDpi,
         ViewState? restoreView,
         bool fitAfter,
-        bool postStatus = true)
-    {
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (!RasterSheetCacheService.TryGetReadyReadableRasterSource(page, targetScale, out RasterSheetSource? readySource) ||
-            readySource == null)
-        {
-            return false;
-        }
-
-        if (!TryApplyRasterSheetRender(
-                _pdfPath,
-                _pdfIndex,
-                _pageFolder,
-                readySource,
-                restoreView,
-                fitAfter,
-                preferOverview: false,
-                requireCachedBitmap: true,
-                out _))
-        {
-            return false;
-        }
-
-        _rasterSheetSource = readySource.Clone();
-        if (postStatus)
-            PostStatus($"Raster sheet {targetDpi} DPI: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
-        AppLog.Info(
-            $"Viewport raster DPI immediate repaint prepared; dpi={targetDpi}; " +
-            $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
-        return true;
-    }
+        bool postStatus = true) =>
+        QueuePreparedReadyRasterSheetDpiApplyFromMemory(
+            page,
+            targetDpi,
+            restoreView,
+            fitAfter,
+            postStatus,
+            sourceKind: "ready-memory");
 
     private bool TryApplyReadyRasterSheetDpiAtOrAbove(PageInfo page, int targetDpi, int currentDpi)
     {
@@ -964,37 +941,6 @@ public sealed partial class PdfViewport
             lock (_rasterSheetRebuildGate)
                 _rasterSheetRebuildsInFlight.Remove(rebuildKey);
         }
-    }
-
-    private bool ApplyPreparedRasterSheetDpiUpgradeResult(
-        RasterSheetSource source,
-        RasterSheetBitmapResult preparedBitmap,
-        int targetDpi,
-        string sourceKind,
-        ViewState? restoreView,
-        bool fitAfter)
-    {
-        RasterSheetSource candidate = source.Clone();
-        if (!ApplyRasterSheetBitmapRender(
-                _pdfPath,
-                _pdfIndex,
-                _pageFolder,
-                candidate,
-                preparedBitmap,
-                restoreView,
-                fitAfter,
-                usingOverview: false))
-        {
-            return false;
-        }
-
-        _rasterSheetSource = candidate.Clone();
-        PostStatus($"Raster sheet {targetDpi} DPI: {Path.GetFileName(_pdfPath)}  page {_pdfIndex + 1}");
-        AppLog.Info(
-            $"Viewport raster DPI upgrade applied; source='{sourceKind}'; dpi={targetDpi}; " +
-            $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
-        RequestRepaint();
-        return true;
     }
 
     private bool ApplyRasterSheetDpiUpgradeResult(

@@ -168,25 +168,23 @@ public sealed partial class PdfViewport
                 buildMissingDpis: true);
         }
 
-        if (responsiveRasterDpiForOpen &&
-            TryApplyReadyResponsiveRasterSheetDpiForPageOpen(
-                rasterSheet,
-                restoreView,
-                fitAfter: !restoreView.HasValue))
-        {
-            PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");
-            RequestRepaint();
-            return;
-        }
         if (responsiveRasterDpiForOpen)
         {
-            responsiveRasterDpiWorkQueuedForOpen = QueueResponsiveRasterSheetDpiBuildForPageOpen(
+            responsiveRasterDpiWorkQueuedForOpen = TryApplyReadyResponsiveRasterSheetDpiForPageOpen(
                 rasterSheet,
                 restoreView,
                 fitAfter: !restoreView.HasValue);
+            if (!responsiveRasterDpiWorkQueuedForOpen)
+            {
+                responsiveRasterDpiWorkQueuedForOpen = QueueResponsiveRasterSheetDpiBuildForPageOpen(
+                    rasterSheet,
+                    restoreView,
+                    fitAfter: !restoreView.HasValue);
+            }
         }
 
         if (shouldUseRasterSheetForOpen &&
+            !responsiveRasterDpiWorkQueuedForOpen &&
             !skipOversizedRasterSheetForOpen &&
             TryApplyRasterSheetRender(
                 pdfPath,

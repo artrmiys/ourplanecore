@@ -84,7 +84,13 @@ public sealed partial class PdfViewport
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(rasterSheet!.RenderScale);
         PageInfo page = CurrentRasterSheetPageInfo(rasterSheet);
         int readyDpi = SelectReadyRasterSheetDpiForPageOpen(page, targetDpi, currentDpi);
-        return readyDpi > 0 && TryApplyReadyRasterSheetDpiFromMemory(page, readyDpi, restoreView, fitAfter);
+        return readyDpi > 0 &&
+               QueueReadyRasterSheetDpiApplyAfterWarmupForPageOpen(
+                   page,
+                   readyDpi,
+                   restoreView,
+                   fitAfter,
+                   _rasterSheetQualityRestoreVersion);
     }
 
     private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(
