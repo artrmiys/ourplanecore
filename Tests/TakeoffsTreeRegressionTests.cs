@@ -1505,6 +1505,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterOffMethod = SliceMethod(workspaceManagers, "private async Task SetSheetManagerRasterOffFastAsync(");
         string rasterDpiUpgradeMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task BuildRasterSheetDpiUpgradeForCurrentPageAsync(");
         string responsiveDpiMethod = SliceMethod(rasterSheetDpiUpgrade, "private bool TryApplyResponsiveRasterSheetDpiForCurrentZoom()");
+        string navigationFastPreviewMethod = SliceMethod(rasterSheetViewport, "private bool TrySwitchRasterSheetToFastPreviewForNavigation(");
         string pageOpenReadyDpiMethod = SliceMethod(rasterSheetPageOpenDpi, "private bool TryApplyReadyResponsiveRasterSheetDpiForPageOpen(");
         string pageOpenDpiQueueMethod = SliceMethod(rasterSheetPageOpenDpi, "private bool QueueResponsiveRasterSheetDpiBuildForPageOpen(");
         string readyDpiWarmApplyMethod = SliceMethod(rasterSheetDpiUpgrade, "private async Task ApplyReadyRasterSheetDpiAfterWarmupAsync(");
@@ -1946,6 +1947,8 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("TryApplyNavigationRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("TrySwitchRasterSheetToFastPreviewForNavigation(allowWorkZoom: true)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("allowWorkZoom = false", StringComparison.Ordinal) &&
+            navigationFastPreviewMethod.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
+            navigationFastPreviewMethod.Contains("requestRepaint: false", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("RasterSheetWorkZoomWarmupDpiSteps", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("postStatus: false", StringComparison.Ordinal) &&
             rendering.Contains("SKFilterQuality.None", StringComparison.Ordinal) &&

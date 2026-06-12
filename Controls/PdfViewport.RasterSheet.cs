@@ -485,7 +485,9 @@ public sealed partial class PdfViewport
                 _pdfIndex,
                 ViewportRenderPolicy.FastPageSwitchPreviewRenderScale,
                 currentView,
-                fitAfter: false))
+                fitAfter: false,
+                allowDiskRead: false,
+                requestRepaint: false))
         {
             return false;
         }
