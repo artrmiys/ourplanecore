@@ -299,6 +299,8 @@ public sealed partial class PdfViewport
         _usingLayerRenderer = false;
         _usingRasterSheetRender = true;
         _usingRasterSheetOverviewRender = usingOverview;
+        if (!usingOverview)
+            RememberReadyRasterSheetSource(pageFolder, pdfPath, pdfIndex, rasterSheet);
         QueueRasterSheetVisualSegmentsLoad(pageFolder, pdfPath, pdfIndex, rasterSheet);
         _renderedScale = raster.BitmapScale;
         _showingPreviousPageDuringSwitch = false;

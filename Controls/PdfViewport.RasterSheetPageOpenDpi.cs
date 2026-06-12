@@ -37,8 +37,7 @@ public sealed partial class PdfViewport
             return false;
 
         PageInfo page = CurrentRasterSheetPageInfo(rasterSheet);
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        return !RasterSheetCacheService.HasReadyReadableRaster(page, targetScale);
+        return !TryGetRememberedReadyRasterSheetSource(page, targetDpi, out _);
     }
 
     private int TargetRasterSheetDpiForPageOpen(
@@ -149,21 +148,15 @@ public sealed partial class PdfViewport
         if (targetDpi <= 0 || currentDpi <= 0)
             return 0;
 
-        int selectedDpi = 0;
-        foreach (int readyDpi in RasterSheetCacheService.ReadyReadableRasterDpis(page))
+        if (!TryGetRememberedReadyRasterSheetSource(page, targetDpi, out _))
+            return 0;
+        if (targetDpi > ViewportRenderPolicy.RasterSheetPageOpenImmediateWarmMaxDpi ||
+            targetDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
         {
-            if (readyDpi != targetDpi ||
-                readyDpi > ViewportRenderPolicy.RasterSheetPageOpenImmediateWarmMaxDpi ||
-                readyDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
-            {
-                continue;
-            }
-
-            if (selectedDpi == 0 || readyDpi < selectedDpi)
-                selectedDpi = readyDpi;
+            return 0;
         }
 
-        return selectedDpi;
+        return targetDpi;
     }
 
     private bool QueueRasterSheetDpiBuildForPageOpen(
@@ -180,15 +173,12 @@ public sealed partial class PdfViewport
             currentDpi > targetDpi &&
             !ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi) ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
-            string.IsNullOrWhiteSpace(page.PdfPath) ||
-            !Directory.Exists(page.FolderPath) ||
-            !File.Exists(page.PdfPath))
+            string.IsNullOrWhiteSpace(page.PdfPath))
         {
             return false;
         }
 
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (RasterSheetCacheService.HasReadyReadableRaster(page, targetScale))
+        if (TryGetRememberedReadyRasterSheetSource(page, targetDpi, out _))
         {
             return QueueReadyRasterSheetDpiApplyAfterWarmupForPageOpen(
                 page,

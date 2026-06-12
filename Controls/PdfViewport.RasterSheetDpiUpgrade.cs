@@ -27,7 +27,7 @@ public sealed partial class PdfViewport
 
         PageInfo page = CurrentRasterSheetPageInfo();
         int currentDpi = RasterSheetCacheService.RenderScaleToDpi(_bitmapScale);
-        int targetDpi = ReadyRasterSheetDpiForCurrentZoom(page, currentDpi);
+        int targetDpi = DesiredRasterSheetDpiForCurrentZoom(currentDpi);
         if (TryHoldHeavyRasterSheetDpiForRecentMotion(page, currentDpi, targetDpi))
             return true;
 
@@ -456,14 +456,9 @@ public sealed partial class PdfViewport
         if (desiredDpi <= currentDpi)
             return 0;
 
-        IReadOnlyList<int> readyDpis = RasterSheetCacheService.ReadyReadableRasterDpis(page);
-        foreach (int readyDpi in readyDpis)
-        {
-            if (readyDpi == desiredDpi)
-                return readyDpi;
-        }
-
-        return 0;
+        return TryGetRememberedReadyRasterSheetSource(page, desiredDpi, out _)
+            ? desiredDpi
+            : 0;
     }
 
     private int DesiredRasterSheetDpiForCurrentZoom(int currentDpi)
@@ -534,20 +529,14 @@ public sealed partial class PdfViewport
         if (currentDpi >= targetDpi)
             return 0;
 
-        int selectedDpi = 0;
-        foreach (int readyDpi in RasterSheetCacheService.ReadyReadableRasterDpis(page))
-        {
-            if (readyDpi != targetDpi)
-                continue;
-            if (readyDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
-                continue;
-            if (_usingRasterSheetRender && readyDpi == currentDpi)
-                continue;
-            if (selectedDpi == 0 || readyDpi < selectedDpi)
-                selectedDpi = readyDpi;
-        }
+        if (!TryGetRememberedReadyRasterSheetSource(page, targetDpi, out _))
+            return 0;
+        if (targetDpi > ViewportRenderPolicy.RasterSheetDisplayMaxDpi)
+            return 0;
+        if (_usingRasterSheetRender && targetDpi == currentDpi)
+            return 0;
 
-        return selectedDpi;
+        return targetDpi;
     }
 
     private bool TryApplyReadyRasterSheetDpi(
@@ -556,10 +545,6 @@ public sealed partial class PdfViewport
         ViewState? restoreView,
         bool fitAfter)
     {
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (!RasterSheetCacheService.HasReadyReadableRaster(page, targetScale))
-            return false;
-
         if (TryApplyReadyRasterSheetDpiFromMemory(
                 page,
                 targetDpi,
@@ -570,12 +555,7 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        return QueueReadyRasterSheetDpiApplyAfterWarmup(
-            page,
-            targetDpi,
-            restoreView,
-            fitAfter,
-            pageOpenNavigationVersion: 0);
+        return false;
     }
 
     private void QueueReadyRasterSheetDpiPersistAfterMemoryApply(PageInfo page, int targetDpi)
@@ -634,19 +614,20 @@ public sealed partial class PdfViewport
             currentDpi > targetDpi &&
             !ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi) ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
-            string.IsNullOrWhiteSpace(page.PdfPath) ||
-            !Directory.Exists(page.FolderPath) ||
-            !File.Exists(page.PdfPath))
+            string.IsNullOrWhiteSpace(page.PdfPath))
         {
             return false;
         }
 
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (RasterSheetCacheService.HasReadyReadableRaster(page, targetScale))
+        if (allowImmediateReadyApply && TryApplyReadyRasterSheetDpi(page, targetDpi))
         {
-            return allowImmediateReadyApply
-                ? TryApplyReadyRasterSheetDpi(page, targetDpi)
-                : QueueReadyRasterSheetDpiApplyAfterWarmup(page, targetDpi);
+            return true;
+        }
+
+        if (!allowImmediateReadyApply &&
+            TryGetRememberedReadyRasterSheetSource(page, targetDpi, out _))
+        {
+            return QueueReadyRasterSheetDpiApplyAfterWarmup(page, targetDpi);
         }
 
         string rebuildKey = RasterSheetDpiUpgradeKey(_pdfPath, _pdfIndex, _pageFolder, targetDpi);
@@ -729,6 +710,7 @@ public sealed partial class PdfViewport
             }).ConfigureAwait(false);
             if (!result.Ok || result.Source == null)
                 return;
+            RememberReadyRasterSheetSource(queuedPage, targetDpi, result.Source);
 
             hasPreparedBitmap = await Task.Run(() => TryPrepareRasterSheetBitmapForUiApply(
                     queuedPage,
@@ -857,6 +839,7 @@ public sealed partial class PdfViewport
                     $"page='{queuedPage.FolderPath}'; pdf='{Path.GetFileName(queuedPage.PdfPath)}'; pdfPage={queuedPage.PdfPage + 1}");
                 return;
             }
+            RememberReadyRasterSheetSource(queuedPage, targetDpi, result.Source);
 
             AppLog.Info(
                 $"Viewport raster DPI upgrade built; dpi={targetDpi}; reused={result.Reused}; " +

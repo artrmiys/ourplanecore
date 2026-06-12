@@ -823,6 +823,7 @@ public sealed partial class PdfViewport
         {
             return;
         }
+        RememberReadyRasterSheetSource(currentPage, dpi, source);
 
         TryWarmRasterSheetBitmapCache(
             currentPage.FolderPath,

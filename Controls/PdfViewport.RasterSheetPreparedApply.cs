@@ -23,7 +23,8 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (!RasterSheetCacheService.ReadyReadableRasterDpis(page).Contains(targetDpi))
+        if (!TryGetRememberedReadyRasterSheetSource(page, targetDpi, out RasterSheetSource? readySource) ||
+            readySource == null)
         {
             return false;
         }
@@ -38,6 +39,7 @@ public sealed partial class PdfViewport
         _ = ApplyPreparedReadyRasterSheetDpiFromMemoryAsync(
             applyKey,
             page,
+            readySource,
             targetDpi,
             restoreView,
             fitAfter,
@@ -49,6 +51,7 @@ public sealed partial class PdfViewport
     private async Task ApplyPreparedReadyRasterSheetDpiFromMemoryAsync(
         string applyKey,
         PageInfo queuedPage,
+        RasterSheetSource readySource,
         int targetDpi,
         ViewState? restoreView,
         bool fitAfter,
@@ -61,10 +64,10 @@ public sealed partial class PdfViewport
         try
         {
             PreparedRasterSheetDpiApply prepared = await Task.Run(() =>
-                    PrepareReadyRasterSheetDpiForUiApply(queuedPage, targetDpi))
+                    PrepareReadyRasterSheetDpiForUiApply(queuedPage, readySource, targetDpi))
                 .ConfigureAwait(false);
             preparedBitmap = prepared.Bitmap;
-            if (!prepared.Ok || prepared.Source is not { } readySource)
+            if (!prepared.Ok || prepared.Source is not { } preparedSource)
             {
                 preparedBitmap.Bitmap.Dispose();
                 AppLog.Warn(
@@ -85,7 +88,7 @@ public sealed partial class PdfViewport
                 }
 
                 if (ApplyPreparedRasterSheetDpiUpgradeResult(
-                        readySource,
+                        preparedSource,
                         preparedBitmap,
                         targetDpi,
                         sourceKind,
@@ -113,12 +116,11 @@ public sealed partial class PdfViewport
 
     private static PreparedRasterSheetDpiApply PrepareReadyRasterSheetDpiForUiApply(
         PageInfo page,
+        RasterSheetSource readySource,
         int targetDpi)
     {
         RasterSheetBitmapResult empty = new(new SKBitmap(), 0, 0, 0, "");
-        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
-        if (!RasterSheetCacheService.TryGetReadyReadableRasterSource(page, targetScale, out RasterSheetSource? readySource) ||
-            readySource == null)
+        if (RasterSheetCacheService.RenderScaleToDpi(readySource.RenderScale) != targetDpi)
         {
             return new PreparedRasterSheetDpiApply(false, null, empty);
         }
