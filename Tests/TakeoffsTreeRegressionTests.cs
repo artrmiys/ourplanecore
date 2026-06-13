@@ -90,8 +90,9 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             queueMethod.Contains("Dispatcher.BeginInvoke", StringComparison.Ordinal) &&
             queueMethod.Contains("DispatcherPriority.Background", StringComparison.Ordinal) &&
+            queueMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             queueMethod.Contains("RunDeferredPageOpenWorkWhenQuiet", StringComparison.Ordinal),
-            "slow page-open follow-up work should be scheduled at background dispatcher priority");
+            "nearby prefetch should be scheduled before slow page-open follow-up work waits for background quiet");
         AssertTrue(
             deferredQuietMethod.Contains("WaitForDeferredPageOpenQuietAsync", StringComparison.Ordinal) &&
             deferredQuietMethod.Contains("RunDeferredPageOpenWork(deferredVersion, viewportPage, trace, restoreView)", StringComparison.Ordinal) &&
@@ -103,7 +104,6 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             deferredMethod.Contains("IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal) &&
@@ -112,6 +112,9 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
             "deferred page-open work should keep the previous follow-up operations behind a stale-page guard");
+        AssertFalse(
+            deferredMethod.Contains("QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal),
+            "nearby page prefetch should not wait behind the long deferred page-open quiet window");
         AssertFalse(
             deferredMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal),
             "deferred page-open work should not restart sheet overlay loading after the immediate async overlay queue");
@@ -186,9 +189,10 @@ internal static class TakeoffsTreeRegressionTests
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetRefresh", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("ViewportRenderPolicy.ResponsiveMinRenderScale", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
+            queueReadableBasePrefetchAtMethod.Contains("preferCachedRenderImmediately: true", StringComparison.Ordinal) &&
             policy.Contains("NearbyPageReadableBasePrefetchRadius = 1", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews, readable base bitmaps, raster bitmaps, work-zoom rasters, and stale raster refreshes through separated background switches");
+            "nearby page prefetch should warm cheap previews, cached-first readable base bitmaps, raster bitmaps, work-zoom rasters, and stale raster refreshes through separated background switches");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()
@@ -2359,6 +2363,9 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("WaitForPersistedPreviewRenderBeforeLiveFallbackAsync(request)", StringComparison.Ordinal) &&
             policy.Contains("PersistedPreviewLiveFallbackGraceMs = 35", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)", StringComparison.Ordinal) &&
+            renderCache.Contains("preferCachedRenderImmediately", StringComparison.Ordinal) &&
+            renderCache.Contains("TryPrefetchPagePreviewFromPersistedCacheAsync", StringComparison.Ordinal) &&
+            renderCache.Contains("source='persisted-urgent'", StringComparison.Ordinal) &&
             renderCache.Contains("PdfLayerRenderService.TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             renderCache.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
             renderCache.Contains("TryWritePrefetchedPreviewCache(pdfPath, pageIndex, renderScale, preview)", StringComparison.Ordinal) &&

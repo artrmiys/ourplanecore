@@ -369,6 +369,8 @@ public partial class MainWindow
     {
         try
         {
+            QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
+            trace?.Mark("nearby-prefetch-queued");
             Dispatcher.BeginInvoke(
                 new Action(() =>
                 {
@@ -443,8 +445,6 @@ public partial class MainWindow
             if (!IsCurrentPageOpen(deferredVersion, viewportPage.FolderPath))
                 return;
 
-            QueueNearbyPagePreviewPrefetchDeferred(deferredVersion, viewportPage);
-            trace?.Mark("prefetch-queued");
             QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
             QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage);
             ApplyViewportPageTakeoffVisibility(viewportPage);
@@ -844,7 +844,8 @@ public partial class MainWindow
         PdfViewport.PrefetchPagePreview(
             page.PdfPath,
             page.PdfPage,
-            ViewportRenderPolicy.ResponsiveMinRenderScale);
+            ViewportRenderPolicy.ResponsiveMinRenderScale,
+            preferCachedRenderImmediately: true);
     }
 
     private static void QueueCleanRenderPrefetchAt(IReadOnlyList<PageInfo> pages, int index)

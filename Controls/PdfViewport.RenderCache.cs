@@ -501,7 +501,14 @@ public sealed partial class PdfViewport
     public static void PrefetchPagePreview(string pdfPath, int pageIndex) =>
         PrefetchPagePreview(pdfPath, pageIndex, ViewportRenderPolicy.FastPageSwitchPreviewRenderScale);
 
-    public static void PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale)
+    public static void PrefetchPagePreview(string pdfPath, int pageIndex, float renderScale) =>
+        PrefetchPagePreview(pdfPath, pageIndex, renderScale, preferCachedRenderImmediately: false);
+
+    public static void PrefetchPagePreview(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
+        bool preferCachedRenderImmediately)
     {
         if (string.IsNullOrWhiteSpace(pdfPath) || pageIndex < 0)
             return;
@@ -527,7 +534,7 @@ public sealed partial class PdfViewport
                 return;
         }
 
-        _ = PrefetchPagePreviewAsync(pdfPath, pageIndex, renderScale, cacheKey);
+        _ = PrefetchPagePreviewAsync(pdfPath, pageIndex, renderScale, cacheKey, preferCachedRenderImmediately);
     }
 
     public static void PrefetchCleanLayerRender(
@@ -953,12 +960,23 @@ public sealed partial class PdfViewport
         string pdfPath,
         int pageIndex,
         float renderScale,
-        string cacheKey)
+        string cacheKey,
+        bool preferCachedRenderImmediately)
     {
         DocnetRenderResult? render = null;
         SKBitmap? decodedBitmap = null;
         try
         {
+            if (preferCachedRenderImmediately &&
+                await TryPrefetchPagePreviewFromPersistedCacheAsync(
+                    pdfPath,
+                    pageIndex,
+                    renderScale,
+                    cacheKey).ConfigureAwait(false))
+            {
+                return;
+            }
+
             await Task.Delay(ViewportRenderPolicy.PreviewPrefetchDelayMs).ConfigureAwait(false);
             await WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false);
             await PreviewPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
@@ -1038,6 +1056,62 @@ public sealed partial class PdfViewport
             render?.Bitmap.Dispose();
             lock (DocnetPreviewPrefetchGate)
                 DocnetPreviewPrefetchInFlight.Remove(cacheKey);
+        }
+    }
+
+    private static async Task<bool> TryPrefetchPagePreviewFromPersistedCacheAsync(
+        string pdfPath,
+        int pageIndex,
+        float renderScale,
+        string cacheKey)
+    {
+        SKBitmap? decodedBitmap = null;
+        try
+        {
+            await PreviewPrefetchSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (DocnetRenderCache.Contains(cacheKey))
+                    return true;
+
+                if (!PdfPreviewRenderCache.TryReadCleanPreview(pdfPath, pageIndex, renderScale, out PdfLayerRenderResult preview) ||
+                    preview.ImageBytes.Length <= 0 ||
+                    preview.WidthPt <= 0 ||
+                    preview.HeightPt <= 0)
+                {
+                    return false;
+                }
+
+                decodedBitmap = await Task.Run(() => DecodePdfLayerRenderBitmapWithMetrics(
+                    "preview-prefetch",
+                    "",
+                    pdfPath,
+                    pageIndex,
+                    preview)).ConfigureAwait(false);
+                if (decodedBitmap == null)
+                    return false;
+
+                float bitmapScale = decodedBitmap.Width / preview.WidthPt;
+                DocnetRenderCache.Put(cacheKey, preview.WidthPt, preview.HeightPt, bitmapScale, decodedBitmap);
+                AppLog.Info(
+                    $"Viewport preview prefetched; source='persisted-urgent'; " +
+                    $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pageIndex + 1}; " +
+                    $"scale={renderScale:0.###}; bitmapScale={bitmapScale:0.###}");
+                return true;
+            }
+            finally
+            {
+                PreviewPrefetchSemaphore.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Viewport urgent preview cache prefetch failed for {Path.GetFileName(pdfPath)} page {pageIndex + 1}");
+            return false;
+        }
+        finally
+        {
+            decodedBitmap?.Dispose();
         }
     }
 
