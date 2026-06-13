@@ -45,6 +45,7 @@ public static class ViewportRenderPolicy
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
     public const int PersistedPreviewLiveFallbackGraceMs = 35;
     public const int NearbyPagePreviewPrefetchRadius = 1;
+    public const int NearbyPageReadableBasePrefetchRadius = 1;
     public const int NearbyPageCleanRenderPrefetchRadius = 0;
     public const bool JobOpenPreviewWarmupAllPages = true;
     public const bool JobOpenRasterSheetRefreshWarmupAllPages = true;

@@ -50,6 +50,7 @@ internal static class TakeoffsTreeRegressionTests
         string nearbyPrefetchMethod = SliceMethod(pageTabs, "private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder)");
         string loadPagesForPrefetchMethod = SliceMethod(pagePreviewWarmup, "private static IReadOnlyList<PageInfo> LoadPagesForPreviewPrefetch(");
         string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
+        string queueReadableBasePrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueReadableBasePrefetchAt(");
         string queueCleanRenderPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueCleanRenderPrefetchAt(");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
 
@@ -170,6 +171,9 @@ internal static class TakeoffsTreeRegressionTests
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex + offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageReadableBasePrefetchRadius", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("QueueReadableBasePrefetchAt(pages, activeIndex + offset)", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("QueueReadableBasePrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("float renderScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("bool includeRasterSheetWarmup = true", StringComparison.Ordinal) &&
@@ -180,8 +184,11 @@ internal static class TakeoffsTreeRegressionTests
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetWorkZoomBitmaps", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("if (includeRasterSheetRefresh)", StringComparison.Ordinal) &&
             queuePreviewPrefetchAtMethod.Contains("PrefetchRasterSheetRefresh", StringComparison.Ordinal) &&
+            queueReadableBasePrefetchAtMethod.Contains("ViewportRenderPolicy.ResponsiveMinRenderScale", StringComparison.Ordinal) &&
+            queueReadableBasePrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageReadableBasePrefetchRadius = 1", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews, raster bitmaps, work-zoom rasters, and stale raster refreshes through separated background switches");
+            "nearby page prefetch should warm cheap previews, readable base bitmaps, raster bitmaps, work-zoom rasters, and stale raster refreshes through separated background switches");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()

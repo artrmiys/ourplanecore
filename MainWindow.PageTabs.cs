@@ -698,6 +698,12 @@ public partial class MainWindow
             QueuePreviewPrefetchAt(pages, activeIndex + offset);
             QueuePreviewPrefetchAt(pages, activeIndex - offset);
 
+            if (offset <= ViewportRenderPolicy.NearbyPageReadableBasePrefetchRadius)
+            {
+                QueueReadableBasePrefetchAt(pages, activeIndex + offset);
+                QueueReadableBasePrefetchAt(pages, activeIndex - offset);
+            }
+
             if (offset <= ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius)
             {
                 QueueCleanRenderPrefetchAt(pages, activeIndex + offset);
@@ -827,6 +833,18 @@ public partial class MainWindow
 
         if (includeRasterSheetRefresh)
             PdfViewport.PrefetchRasterSheetRefresh(page);
+    }
+
+    private static void QueueReadableBasePrefetchAt(IReadOnlyList<PageInfo> pages, int index)
+    {
+        if (index < 0 || index >= pages.Count)
+            return;
+
+        PageInfo page = pages[index];
+        PdfViewport.PrefetchPagePreview(
+            page.PdfPath,
+            page.PdfPage,
+            ViewportRenderPolicy.ResponsiveMinRenderScale);
     }
 
     private static void QueueCleanRenderPrefetchAt(IReadOnlyList<PageInfo> pages, int index)
