@@ -47,7 +47,7 @@ internal static class TakeoffsTreeRegressionTests
         string rasterWarmupRunMethod = SliceMethod(pageTabs, "private static void QueueJobRasterSheetRefreshWarmup(IReadOnlyList<PageInfo> pages, string activePageFolder)");
         string rasterWarmupQueueMethod = SliceMethod(pageTabs, "private static void QueueJobRasterSheetRefreshWarmup(IReadOnlyList<PageInfo> pages)");
         string nearbyPrefetchQueueMethod = SliceMethod(pageTabs, "private void QueueNearbyPagePreviewPrefetch(PageInfo activePage)");
-        string nearbyPrefetchMethod = SliceMethod(pageTabs, "private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder)");
+        string nearbyPrefetchMethod = SliceMethod(pageTabs, "private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder, string previousPageFolder)");
         string loadPagesForPrefetchMethod = SliceMethod(pagePreviewWarmup, "private static IReadOnlyList<PageInfo> LoadPagesForPreviewPrefetch(");
         string queuePreviewPrefetchAtMethod = SliceMethod(pageTabs, "private static void QueuePreviewPrefetchAt(");
         string queueReadableBasePrefetchAtMethod = SliceMethod(pageTabs, "private static void QueueReadableBasePrefetchAt(");
@@ -168,10 +168,16 @@ internal static class TakeoffsTreeRegressionTests
             "job-open raster warmup should queue stale raster refreshes separately from preview rendering while keeping the heavy refresh queue bounded");
         AssertTrue(
             nearbyPrefetchQueueMethod.Contains("Task.Run", StringComparison.Ordinal) &&
+            nearbyPrefetchQueueMethod.Contains("string previousPageFolder = _lastNearbyPagePreviewPrefetchFolder", StringComparison.Ordinal) &&
+            nearbyPrefetchQueueMethod.Contains("_lastNearbyPagePreviewPrefetchFolder = activePage.FolderPath", StringComparison.Ordinal) &&
             nearbyPrefetchQueueMethod.Contains("LoadPagesForPreviewPrefetch(pagesRoot)", StringComparison.Ordinal) &&
             loadPagesForPrefetchMethod.Contains("LoadPagesForPreviewPrefetch(pagesRoot, pages)", StringComparison.Ordinal) &&
             pagePreviewWarmup.Contains("OurPlaneCoreJobStore.GetOrderedChildDirectories(folderPath)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("FindPreviewPrefetchDirection(pages, activeIndex, previousPageFolder)", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("DirectionalPrefetchRadius", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageDirectionalPreviewPrefetchRadius", StringComparison.Ordinal) &&
+            nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageDirectionalReadableBasePrefetchRadius", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex + offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("QueuePreviewPrefetchAt(pages, activeIndex - offset)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPageReadableBasePrefetchRadius", StringComparison.Ordinal) &&
@@ -191,8 +197,10 @@ internal static class TakeoffsTreeRegressionTests
             queueReadableBasePrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("preferCachedRenderImmediately: true", StringComparison.Ordinal) &&
             policy.Contains("NearbyPageReadableBasePrefetchRadius = 1", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageDirectionalPreviewPrefetchRadius = 3", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageDirectionalReadableBasePrefetchRadius = 3", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews, cached-first readable base bitmaps, raster bitmaps, work-zoom rasters, and stale raster refreshes through separated background switches");
+            "nearby page prefetch should warm cheap previews, cached-first readable base bitmaps, and extra sheets in the user's paging direction without raising render concurrency");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()

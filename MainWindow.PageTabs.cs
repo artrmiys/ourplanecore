@@ -17,6 +17,7 @@ public partial class MainWindow
     private const int MaxBatchSheetOpenCount = 64;
     private string _pagePreviewWarmupJobRoot = "";
     private string _pageRasterRefreshWarmupJobRoot = "";
+    private string _lastNearbyPagePreviewPrefetchFolder = "";
     private int _pageOpenDeferredVersion;
     private PageTabState? _pendingPageTabDrag;
     private Point _pendingPageTabDragStart;
@@ -25,6 +26,7 @@ public partial class MainWindow
     {
         _pagePreviewWarmupJobRoot = "";
         _pageRasterRefreshWarmupJobRoot = "";
+        _lastNearbyPagePreviewPrefetchFolder = "";
     }
 
     private void PageTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -671,13 +673,16 @@ public partial class MainWindow
             return;
 
         string pagesRoot = _currentJob.PagesRoot;
+        string previousPageFolder = _lastNearbyPagePreviewPrefetchFolder;
+        _lastNearbyPagePreviewPrefetchFolder = activePage.FolderPath;
         _ = Task.Run(() =>
         {
             try
             {
                 QueueNearbyPagePreviewPrefetch(
                     LoadPagesForPreviewPrefetch(pagesRoot),
-                    activePage.FolderPath);
+                    activePage.FolderPath,
+                    previousPageFolder);
             }
             catch (Exception ex)
             {
@@ -686,23 +691,51 @@ public partial class MainWindow
         });
     }
 
-    private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder)
+    private static void QueueNearbyPagePreviewPrefetch(IReadOnlyList<PageInfo> pages, string activePageFolder, string previousPageFolder)
     {
         int activeIndex = FindPreviewPrefetchPageIndex(pages, activePageFolder);
 
         if (activeIndex < 0)
             return;
 
-        for (int offset = 1; offset <= ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius; offset++)
-        {
-            QueuePreviewPrefetchAt(pages, activeIndex + offset);
-            QueuePreviewPrefetchAt(pages, activeIndex - offset);
+        int direction = FindPreviewPrefetchDirection(pages, activeIndex, previousPageFolder);
+        int forwardPreviewRadius = DirectionalPrefetchRadius(
+            direction,
+            side: 1,
+            ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius,
+            ViewportRenderPolicy.NearbyPageDirectionalPreviewPrefetchRadius);
+        int backwardPreviewRadius = DirectionalPrefetchRadius(
+            direction,
+            side: -1,
+            ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius,
+            ViewportRenderPolicy.NearbyPageDirectionalPreviewPrefetchRadius);
+        int forwardReadableRadius = DirectionalPrefetchRadius(
+            direction,
+            side: 1,
+            ViewportRenderPolicy.NearbyPageReadableBasePrefetchRadius,
+            ViewportRenderPolicy.NearbyPageDirectionalReadableBasePrefetchRadius);
+        int backwardReadableRadius = DirectionalPrefetchRadius(
+            direction,
+            side: -1,
+            ViewportRenderPolicy.NearbyPageReadableBasePrefetchRadius,
+            ViewportRenderPolicy.NearbyPageDirectionalReadableBasePrefetchRadius);
+        int maxOffset = Math.Max(
+            Math.Max(forwardPreviewRadius, backwardPreviewRadius),
+            Math.Max(
+                Math.Max(forwardReadableRadius, backwardReadableRadius),
+                ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius));
 
-            if (offset <= ViewportRenderPolicy.NearbyPageReadableBasePrefetchRadius)
-            {
+        for (int offset = 1; offset <= maxOffset; offset++)
+        {
+            if (offset <= forwardPreviewRadius)
+                QueuePreviewPrefetchAt(pages, activeIndex + offset);
+            if (offset <= backwardPreviewRadius)
+                QueuePreviewPrefetchAt(pages, activeIndex - offset);
+
+            if (offset <= forwardReadableRadius)
                 QueueReadableBasePrefetchAt(pages, activeIndex + offset);
+            if (offset <= backwardReadableRadius)
                 QueueReadableBasePrefetchAt(pages, activeIndex - offset);
-            }
 
             if (offset <= ViewportRenderPolicy.NearbyPageCleanRenderPrefetchRadius)
             {
@@ -711,6 +744,25 @@ public partial class MainWindow
             }
         }
     }
+
+    private static int FindPreviewPrefetchDirection(
+        IReadOnlyList<PageInfo> pages,
+        int activeIndex,
+        string previousPageFolder)
+    {
+        int previousIndex = FindPreviewPrefetchPageIndex(pages, previousPageFolder);
+        if (previousIndex < 0 || previousIndex == activeIndex)
+            return 0;
+
+        return activeIndex > previousIndex ? 1 : -1;
+    }
+
+    private static int DirectionalPrefetchRadius(
+        int direction,
+        int side,
+        int defaultRadius,
+        int directionalRadius) =>
+        direction == side ? Math.Max(defaultRadius, directionalRadius) : defaultRadius;
 
     private void QueueJobPagePreviewWarmup(PageInfo activePage)
     {
