@@ -2229,7 +2229,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
             pageApi.Contains("fireLayersAfter: false", StringComparison.Ordinal) &&
-            pageApi.Contains("float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            pageApi.Contains("float previewScale = PageSwitchPreviewRenderScale(restoreView, fitAfter: !restoreView.HasValue)", StringComparison.Ordinal) &&
             pageApi.Contains("PageSwitchLivePreviewScale(restoreView, fitAfter: !restoreView.HasValue)", StringComparison.Ordinal) &&
             pageApi.Contains("bool rasterBitmapWarmupQueuedForOpen = false;", StringComparison.Ordinal) &&
             pageApi.Contains("bool responsiveRasterDpiWorkQueuedForOpen = false;", StringComparison.Ordinal) &&
@@ -2259,6 +2259,8 @@ internal static class TakeoffsTreeRegressionTests
             queuedPreviewMethod.Contains("ShouldSkipPersistedPreviewRender", StringComparison.Ordinal) &&
             queuedPreviewMethod.Contains("TryReadPersistedPreviewBitmapForPageOpen", StringComparison.Ordinal) &&
             queuedPreviewMethod.Contains("appliedRenderScale", StringComparison.Ordinal) &&
+            persistedPreview.Contains("ShouldPreferReadablePreviewFirst", StringComparison.Ordinal) &&
+            persistedPreview.Contains("ViewportRenderPolicy.InitialPagePreviewRenderScale", StringComparison.Ordinal) &&
             persistedPreview.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal),
             "page open should keep persisted preview disk reads and PNG decode off the immediate UI-thread path");
         AssertFalse(
@@ -2277,12 +2279,18 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             layers.Contains("QueueSharpLayerRenderAfterPreview(", StringComparison.Ordinal) &&
             layers.Contains("QueueSharpBaseRenderAfterPreview(", StringComparison.Ordinal) &&
+            layers.Contains("PageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("ShouldUseReadablePageSwitchBase", StringComparison.Ordinal) &&
+            layers.Contains("ViewportRenderPolicy.ResponsiveMinRenderScale", StringComparison.Ordinal) &&
             layers.Contains("IsCurrentPageDocnetRenderTarget", StringComparison.Ordinal) &&
             layers.Contains("QueueDocnetRender(renderScale)", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeDelayMs", StringComparison.Ordinal) &&
             layers.Contains("ShouldDelaySharpLayerUpgrade(deferralCount)", StringComparison.Ordinal) &&
             layers.Contains("PageSwitchSharpUpgradeIdleMs", StringComparison.Ordinal) &&
             layers.Contains("ShouldUseDetailRenderForSharpUpgrade()", StringComparison.Ordinal) &&
+            layers.Contains("TryUseDetailRenderOnlyForSharpUpgrade()", StringComparison.Ordinal) &&
+            layers.Contains("ShouldUpgradeUnreadablePageSwitchBaseImmediately()", StringComparison.Ordinal) &&
+            layers.Contains("HasReadableBaseBitmapForSharpUpgrade()", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipSharpLayerUpgradeForLowZoom()", StringComparison.Ordinal) &&
             layers.Contains("ShouldSkipQueuedNonFastPreviewForCurrentView(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("CurrentPostPreviewBaseRenderScale()", StringComparison.Ordinal) &&
@@ -2295,7 +2303,7 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("ShouldSkipLowerQualityDocnetPreview", StringComparison.Ordinal) &&
             layers.Contains("IsPageBitmapFor(request.PdfPath, request.PdfIndex, request.PageFolder)", StringComparison.Ordinal) &&
             layers.Contains("Viewport skipped lower-quality Docnet preview", StringComparison.Ordinal),
-            "explicit layer continuation paths should keep delayed sharp live render safeguards for stale low-scale previews");
+            "explicit layer continuation paths should keep delayed sharp live render safeguards for stale low-scale previews while forcing a readable base behind detail tiles");
         AssertTrue(
             layers.Contains("bool allowImmediateCache = true", StringComparison.Ordinal) &&
             layers.Contains("bool allowLiveRender = true", StringComparison.Ordinal) &&
@@ -2313,11 +2321,12 @@ internal static class TakeoffsTreeRegressionTests
             "automatic viewport layer refresh should be able to collapse to cache-only while explicit layer paths keep the full render fallback");
         AssertTrue(
             pageApi.Contains("ClearPreviousPageBitmapDuringSwitch();", StringComparison.Ordinal) &&
-            pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            pageApi.Contains("PageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
             layers.Contains("ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            layers.Contains("PageSwitchFastPreviewScale", StringComparison.Ordinal) &&
             policy.Contains("FastPageSwitchPreviewRenderScale = 0.35f", StringComparison.Ordinal) &&
             policy.Contains("ColdPageSwitchPreviewRenderScale = 0.20f", StringComparison.Ordinal),
-            "cache-miss page switches should use a non-muddy lightweight preview and use an even cheaper cold fit preview when the view is fitted");
+            "cache-miss page switches should use a readable base at restored work zoom and an even cheaper cold preview when the view is fitted");
         AssertTrue(
             layers.Contains("private bool TryApplyPersistedDefaultCleanRender", StringComparison.Ordinal) &&
             layers.Contains("TryApplyPersistedCleanLayerRender(request)", StringComparison.Ordinal),
@@ -2506,7 +2515,9 @@ internal static class TakeoffsTreeRegressionTests
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
-            pageApi.Contains("ViewportRenderPolicy.FastPageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            pageApi.Contains("PageSwitchPreviewRenderScale", StringComparison.Ordinal) &&
+            pageApi.Contains("_bitmapScale >= previewScale * 0.95f", StringComparison.Ordinal) &&
+            layers.Contains("ShouldUseReadablePageSwitchBase", StringComparison.Ordinal) &&
             pageApi.Contains("BeginFastNavigation();", StringComparison.Ordinal) &&
             pageApi.Contains("queueLayerAfter: false", StringComparison.Ordinal) &&
             pageApi.Contains("resetLayerStates: false", StringComparison.Ordinal) &&
@@ -2515,7 +2526,7 @@ internal static class TakeoffsTreeRegressionTests
             pageApi.Contains("BeginPageSwitchDetailRenderHold();", StringComparison.Ordinal) &&
             layers.Contains("QueueSharpBaseRenderAfterPreview(") &&
             layers.Contains("CurrentRenderScale()", StringComparison.Ordinal),
-            "interactive page opens should show a cheap preview first, keep PDF layers lazy, then use clipped detail instead of launching an immediate full-sheet layer render");
+            "interactive page opens should keep PDF layers lazy, use readable base renders at restored work zoom, then use clipped detail instead of launching an immediate full-sheet layer render");
         AssertTrue(
             rendering.Contains("SKFilterQuality.Low", StringComparison.Ordinal) &&
             rendering.Contains("DetailRenderCoversVisibleViewForPaint()", StringComparison.Ordinal) &&

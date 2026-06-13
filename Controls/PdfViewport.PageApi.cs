@@ -239,7 +239,7 @@ public sealed partial class PdfViewport
             rasterSkipReason = deferredRebuildReason;
         }
 
-        float previewScale = ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
+        float previewScale = PageSwitchPreviewRenderScale(restoreView, fitAfter: !restoreView.HasValue);
         bool previewCacheHit = TryApplyPersistedPreviewRender(
             pdfPath,
             pageIndex,
@@ -273,7 +273,7 @@ public sealed partial class PdfViewport
         }
         else
         {
-            if (hadCurrentPageBitmap && _bitmapScale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f)
+            if (hadCurrentPageBitmap && _bitmapScale >= previewScale * 0.95f)
                 _showingPreviousPageDuringSwitch = false;
             else
                 ClearPreviousPageBitmapDuringSwitch();

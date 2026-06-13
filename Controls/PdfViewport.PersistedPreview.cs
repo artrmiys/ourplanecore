@@ -139,6 +139,16 @@ public sealed partial class PdfViewport
         ViewState? restoreView,
         bool fitAfter)
     {
+        if (ShouldPreferReadablePreviewFirst(restoreView, fitAfter, renderScale))
+        {
+            float readableScale = ViewportRenderPolicy.InitialPagePreviewRenderScale;
+            if (Math.Abs(renderScale - readableScale) > 0.001f &&
+                TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, readableScale, out CachedBitmapRender readable))
+            {
+                return (readable, readableScale);
+            }
+        }
+
         if (TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, renderScale, out CachedBitmapRender loaded))
             return (loaded, renderScale);
 

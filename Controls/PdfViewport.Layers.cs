@@ -374,10 +374,25 @@ public sealed partial class PdfViewport
         restoreView.Value.Zoom >= ViewportRenderPolicy.ZoomRefreshMinZoom &&
         renderScale < ViewportRenderPolicy.InitialPagePreviewRenderScale * 0.95f;
 
+    private static float PageSwitchPreviewRenderScale(ViewState? restoreView, bool fitAfter) =>
+        ShouldUseReadablePageSwitchBase(restoreView, fitAfter)
+            ? ViewportRenderPolicy.ResponsiveMinRenderScale
+            : ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
+
     private static float PageSwitchLivePreviewScale(ViewState? restoreView, bool fitAfter) =>
+        ShouldUseReadablePageSwitchBase(restoreView, fitAfter)
+            ? ViewportRenderPolicy.ResponsiveMinRenderScale
+            : PageSwitchFastPreviewScale(restoreView, fitAfter);
+
+    private static float PageSwitchFastPreviewScale(ViewState? restoreView, bool fitAfter) =>
         ShouldUseColdPageSwitchPreview(restoreView, fitAfter)
             ? ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale
             : ViewportRenderPolicy.FastPageSwitchPreviewRenderScale;
+
+    private static bool ShouldUseReadablePageSwitchBase(ViewState? restoreView, bool fitAfter) =>
+        !fitAfter &&
+        restoreView.HasValue &&
+        restoreView.Value.Zoom >= ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom;
 
     private static bool ShouldUseColdPageSwitchPreview(ViewState? restoreView, bool fitAfter)
     {
@@ -1235,11 +1250,8 @@ public sealed partial class PdfViewport
                         return;
                     }
 
-                    if (ShouldUseDetailRenderForSharpUpgrade())
-                    {
-                        QueueDetailRenderIfNeeded(force: false, immediate: true);
+                    if (TryUseDetailRenderOnlyForSharpUpgrade())
                         return;
-                    }
 
                     if (TryQueueCachedReadablePreviewUpgradeForLowZoom(pdfPath, pdfIndex, pageFolder))
                         return;
@@ -1300,11 +1312,8 @@ public sealed partial class PdfViewport
                         return;
                     }
 
-                    if (ShouldUseDetailRenderForSharpUpgrade())
-                    {
-                        QueueDetailRenderIfNeeded(force: false, immediate: true);
+                    if (TryUseDetailRenderOnlyForSharpUpgrade())
                         return;
-                    }
 
                     if (ShouldSkipSharpLayerUpgradeForLowZoom())
                         return;
@@ -1357,6 +1366,9 @@ public sealed partial class PdfViewport
         if (deferralCount >= ViewportRenderPolicy.PageSwitchSharpUpgradeMaxDeferrals)
             return false;
 
+        if (ShouldUpgradeUnreadablePageSwitchBaseImmediately())
+            return false;
+
         if (_isFastNavigating)
             return true;
 
@@ -1364,8 +1376,27 @@ public sealed partial class PdfViewport
         return idleMs >= 0 && idleMs < ViewportRenderPolicy.PageSwitchSharpUpgradeIdleMs;
     }
 
+    private bool TryUseDetailRenderOnlyForSharpUpgrade()
+    {
+        if (!ShouldUseDetailRenderForSharpUpgrade())
+            return false;
+
+        QueueDetailRenderIfNeeded(force: false, immediate: true);
+        return HasReadableBaseBitmapForSharpUpgrade();
+    }
+
     private bool ShouldUseDetailRenderForSharpUpgrade() =>
         ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale);
+
+    private bool HasReadableBaseBitmapForSharpUpgrade() =>
+        _bitmapScale >= ViewportRenderPolicy.ResponsiveMinRenderScale * 0.95f;
+
+    private bool ShouldUpgradeUnreadablePageSwitchBaseImmediately() =>
+        _pageBitmap != null &&
+        !_showingPreviousPageDuringSwitch &&
+        _zoom >= ViewportRenderPolicy.PageSwitchSharpUpgradeMinZoom &&
+        _bitmapScale > 0 &&
+        !HasReadableBaseBitmapForSharpUpgrade();
 
     private float CurrentPostPreviewBaseRenderScale()
     {
