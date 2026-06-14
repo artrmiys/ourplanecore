@@ -46,6 +46,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
     ("similar symbol matcher rejects core-only relaxed near miss", SimilarSymbolMatcherTests.RejectsCoreOnlyRelaxedNearMissAtPrecisionThreshold),
     ("similar symbol matcher rejects extra interior marks", SimilarSymbolMatcherTests.RejectsSymbolWithExtraInteriorMark),
+    ("similar symbol matcher rejects dense surrounding ink", SimilarSymbolMatcherTests.RejectsSymbolEmbeddedInDenseSurroundingInk),
     ("similar count defaults favor precision", SimilarSymbolMatcherTests.DefaultSettingsFavorPrecision),
     ("similar matcher uses fine symbol profile", SimilarSymbolMatcherTests.SimilarMatcherUsesFineSymbolProfile),
     ("similar matcher keeps hits near adjacent plan ink", SimilarSymbolMatcherTests.KeepsHitsNearAdjacentPlanInk),

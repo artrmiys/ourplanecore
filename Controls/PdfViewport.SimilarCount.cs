@@ -27,8 +27,10 @@ public sealed record ViewportSimilarCountPreviewMarker(
 // while the threshold dialog is open.
 public sealed partial class PdfViewport
 {
-    private const float SimilarCountMinimumBitmapScale = 1.75f;
-    private const float SimilarCountRequestedBitmapScale = 2.0f;
+    private const float SimilarCountFallbackMinimumBitmapScale = 1.75f;
+    private const float SimilarCountMinimumBitmapScale = 2.0f;
+    private const float SimilarCountRequestedBitmapScale = 3.0f;
+    private const float SimilarCountMaxRenderPixels = 96_000_000f;
 
     private bool _similarCountSelecting;
     private bool _similarCountDragging;
@@ -75,7 +77,7 @@ public sealed partial class PdfViewport
          _pdfW <= 0 ||
          _pdfH <= 0 ||
          _bitmapScale <= 0 ||
-         _bitmapScale < SimilarCountMinimumBitmapScale);
+         _bitmapScale < SimilarCountMinimumBitmapScaleForCurrentPage());
 
     private void StartWaitingForSimilarCountReadableBitmap()
     {
@@ -102,7 +104,7 @@ public sealed partial class PdfViewport
         }
 
         if (_pageBitmap == null ||
-            _bitmapScale < SimilarCountMinimumBitmapScale ||
+            _bitmapScale < SimilarCountMinimumBitmapScaleForCurrentPage() ||
             !HasCurrentSimilarCountBitmap())
         {
             return;
@@ -175,14 +177,16 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (_bitmapScale >= SimilarCountMinimumBitmapScale)
+        float minimumScale = SimilarCountMinimumBitmapScaleForCurrentPage();
+        if (_bitmapScale >= minimumScale)
         {
+            QueueSimilarCountReadableBitmap(forceSharper: true);
             status = "";
             return true;
         }
 
         QueueSimilarCountReadableBitmap();
-        if (_bitmapScale >= SimilarCountMinimumBitmapScale)
+        if (_bitmapScale >= minimumScale)
         {
             status = "";
             return true;
@@ -200,15 +204,34 @@ public sealed partial class PdfViewport
     private bool HasCurrentSimilarCountBitmap() =>
         IsPageBitmapFor(_pdfPath, _pdfIndex, _pageFolder);
 
-    private void QueueSimilarCountReadableBitmap()
+    private float SimilarCountMinimumBitmapScaleForCurrentPage() =>
+        Math.Min(SimilarCountMinimumBitmapScale, SimilarCountRequestedBitmapScaleForCurrentPage());
+
+    private float SimilarCountRequestedBitmapScaleForCurrentPage()
+    {
+        float budgetScale = SimilarCountRequestedBitmapScale;
+        float pageArea = _pdfW * _pdfH;
+        if (pageArea > 0)
+            budgetScale = MathF.Sqrt(SimilarCountMaxRenderPixels / pageArea);
+
+        return Math.Clamp(
+            Math.Min(SimilarCountRequestedBitmapScale, budgetScale),
+            SimilarCountFallbackMinimumBitmapScale,
+            SimilarCountRequestedBitmapScale);
+    }
+
+    private void QueueSimilarCountReadableBitmap(bool forceSharper = false)
     {
         if (string.IsNullOrWhiteSpace(_pdfPath) || _pdfIndex < 0)
             return;
 
         try
         {
-            if (TryApplyReadyRasterSheetForCurrentZoom() ||
-                _bitmapScale >= SimilarCountMinimumBitmapScale)
+            float minimumScale = SimilarCountMinimumBitmapScaleForCurrentPage();
+            float requestedScale = SimilarCountRequestedBitmapScaleForCurrentPage();
+            bool appliedReadyBitmap = TryApplyReadyRasterSheetForCurrentZoom();
+            if ((!forceSharper && (appliedReadyBitmap || _bitmapScale >= minimumScale)) ||
+                (forceSharper && _bitmapScale >= requestedScale * 0.95f))
             {
                 RequestRepaint();
                 return;
@@ -231,7 +254,7 @@ public sealed partial class PdfViewport
             {
                 QueueLayerRender(
                     resetLayerStates: false,
-                    renderScale: SimilarCountRequestedBitmapScale,
+                    renderScale: requestedScale,
                     statusAfter: "Count similar: sharper sheet ready.",
                     allowImmediateCache: true,
                     allowLiveRender: true,
@@ -240,7 +263,7 @@ public sealed partial class PdfViewport
             else
             {
                 QueueDocnetRender(
-                    SimilarCountRequestedBitmapScale,
+                    requestedScale,
                     statusAfter: "Count similar: sharper sheet ready.");
             }
 

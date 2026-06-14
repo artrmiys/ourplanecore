@@ -382,6 +382,43 @@ internal static class SimilarSymbolMatcherTests
             "symbol with an extra interior mark should not pass as the clean template");
     }
 
+    public static void RejectsSymbolEmbeddedInDenseSurroundingInk()
+    {
+        var placements = new[] { (40, 40) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        using (var canvas = new SKCanvas(page))
+        using (var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        })
+        using (var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        })
+        {
+            DrawSymbol(canvas, stroke, fill, 200, 60);
+            DrawHeavySurroundingInk(canvas, fill, 200, 60);
+        }
+
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected only {placements.Length} clean-symbol match, got {matches.Count}: " +
+            string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}/focused={match.UsedFocusedScore}")));
+        AssertTrue(!matches.Any(match => NearCenter(match, 200, 60)),
+            "a symbol embedded in dense surrounding ink should stay below the default precision threshold");
+    }
+
     public static void DefaultSettingsFavorPrecision()
     {
         var settings = new AppSettings();
@@ -477,11 +514,15 @@ internal static class SimilarSymbolMatcherTests
         string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.cs"));
 
         AssertTrue(
-            source.Contains("SimilarCountMinimumBitmapScale = 1.75f", StringComparison.Ordinal) &&
-            source.Contains("SimilarCountRequestedBitmapScale = 2.0f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountFallbackMinimumBitmapScale = 1.75f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountMinimumBitmapScale = 2.0f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountRequestedBitmapScale = 3.0f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountMaxRenderPixels = 96_000_000f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountRequestedBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
+            source.Contains("QueueSimilarCountReadableBitmap(forceSharper: true)", StringComparison.Ordinal) &&
             source.Contains("TryEnsureSimilarCountBitmapReady", StringComparison.Ordinal) &&
             source.Contains("QueueSimilarCountReadableBitmap()", StringComparison.Ordinal),
-            "Similar count should guard against matching from a low-resolution preview bitmap and request a high-resolution search raster");
+            "Similar count should guard against matching from a low-resolution preview bitmap and request a high-resolution, pixel-budgeted search raster");
         AssertTrue(
             source.Contains("if (!TryEnsureSimilarCountBitmapReady(out string status))", StringComparison.Ordinal),
             "BeginSimilarCountSelection should check bitmap readiness before starting the crop interaction");
@@ -1030,6 +1071,14 @@ internal static class SimilarSymbolMatcherTests
     private static void DrawInteriorExtraMark(SKCanvas canvas, SKPaint fill, int x, int y)
     {
         canvas.DrawCircle(x + SymbolWidth - 12, y + SymbolHeight - 8, 3f, fill);
+    }
+
+    private static void DrawHeavySurroundingInk(SKCanvas canvas, SKPaint fill, int x, int y)
+    {
+        canvas.DrawRect(new SKRect(x - 2, y - 3, x + SymbolWidth + 2, y - 1), fill);
+        canvas.DrawRect(new SKRect(x - 2, y + SymbolHeight + 1, x + SymbolWidth + 2, y + SymbolHeight + 3), fill);
+        canvas.DrawRect(new SKRect(x - 3, y + 2, x - 1, y + SymbolHeight - 2), fill);
+        canvas.DrawRect(new SKRect(x + SymbolWidth + 1, y + 2, x + SymbolWidth + 3, y + SymbolHeight - 2), fill);
     }
 
     private static void DrawLargeSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y, int width, int height)
