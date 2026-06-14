@@ -47,6 +47,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher keeps hits with disconnected window ink", SimilarSymbolMatcherTests.KeepsHitsWithDisconnectedWindowInk),
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
+    ("similar count review choices survive rescan", SimilarSymbolMatcherTests.SimilarCountReviewChoicesSurviveRescan),
     ("similar count preview shows confidence", SimilarSymbolMatcherTests.SimilarCountPreviewShowsConfidence),
     ("similar count review summary explains candidates", SimilarSymbolMatcherTests.SimilarCountReviewSummaryExplainsCandidates),
     ("similar count threshold presets are available", SimilarSymbolMatcherTests.SimilarCountThresholdPresetsAreAvailable),

@@ -56,6 +56,7 @@ public partial class MainWindow
         var lastMatches = new List<SimilarSymbolMatch>();
         var excludedIndexes = new HashSet<int>();
         var alreadyCountedIndexes = new HashSet<int>();
+        var manualReviewStatesByCenter = new Dictionary<string, bool>(StringComparer.Ordinal);
         TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
         string destinationName = SimilarCountDestinationName(destinationItem);
         OurPlaneCoreJob reviewJob = _currentJob;
@@ -71,6 +72,10 @@ public partial class MainWindow
 
         SKPoint MatchCenterPdf(SimilarSymbolMatch match) =>
             new(match.CenterX / bitmapScale, match.CenterY / bitmapScale);
+
+        static string MatchReviewKey(SimilarSymbolMatch match) =>
+            match.CenterX.ToString(CultureInfo.InvariantCulture) + ":" +
+            match.CenterY.ToString(CultureInfo.InvariantCulture);
 
         IReadOnlyList<ViewportSimilarCountPreviewMarker> BuildPreviewMarkers() =>
             lastMatches
@@ -160,11 +165,43 @@ public partial class MainWindow
             }
         }
 
+        void ApplyManualSimilarReviewChoices()
+        {
+            for (int i = 0; i < lastMatches.Count; i++)
+            {
+                if (alreadyCountedIndexes.Contains(i))
+                    continue;
+                if (!manualReviewStatesByCenter.TryGetValue(MatchReviewKey(lastMatches[i]), out bool include))
+                    continue;
+
+                if (include)
+                    excludedIndexes.Remove(i);
+                else
+                    excludedIndexes.Add(i);
+            }
+        }
+
+        void RememberCurrentSimilarReviewChoices(bool include)
+        {
+            for (int i = 0; i < lastMatches.Count; i++)
+            {
+                if (!alreadyCountedIndexes.Contains(i))
+                    manualReviewStatesByCenter[MatchReviewKey(lastMatches[i])] = include;
+            }
+        }
+
+        void ClearManualSimilarReviewChoicesForCurrentMatches()
+        {
+            foreach (SimilarSymbolMatch match in lastMatches)
+                manualReviewStatesByCenter.Remove(MatchReviewKey(match));
+        }
+
         void ApplyDefaultSimilarReviewExclusions()
         {
             excludedIndexes.Clear();
             ExcludeWeakSimilarMatches();
             ExcludeAlreadyCountedSimilarMatches();
+            ApplyManualSimilarReviewChoices();
         }
 
         void RefreshPreviewReview()
@@ -190,8 +227,12 @@ public partial class MainWindow
                 return;
             }
 
-            if (!excludedIndexes.Add(index))
+            bool include = excludedIndexes.Contains(index);
+            manualReviewStatesByCenter[MatchReviewKey(lastMatches[index])] = include;
+            if (include)
                 excludedIndexes.Remove(index);
+            else
+                excludedIndexes.Add(index);
 
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
@@ -200,8 +241,8 @@ public partial class MainWindow
 
         void IncludeAllPreviewMarkers(object? sender, EventArgs e)
         {
-            excludedIndexes.Clear();
-            ExcludeAlreadyCountedSimilarMatches();
+            RememberCurrentSimilarReviewChoices(include: true);
+            ApplyDefaultSimilarReviewExclusions();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
             TxtStatus.Text = SimilarReviewStatus(result);
@@ -209,6 +250,7 @@ public partial class MainWindow
 
         void KeepOnlyStrongPreviewMarkers(object? sender, EventArgs e)
         {
+            ClearManualSimilarReviewChoicesForCurrentMatches();
             ApplyDefaultSimilarReviewExclusions();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();

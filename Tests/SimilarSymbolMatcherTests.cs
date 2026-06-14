@@ -402,6 +402,31 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count dialog should be modeless so the sheet preview remains clickable during review");
     }
 
+    public static void SimilarCountReviewChoicesSurviveRescan()
+    {
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        AssertTrue(
+            mainWindow.Contains("manualReviewStatesByCenter", StringComparison.Ordinal) &&
+            mainWindow.Contains("MatchReviewKey", StringComparison.Ordinal) &&
+            mainWindow.Contains("ApplyManualSimilarReviewChoices", StringComparison.Ordinal),
+            "Similar Count review should store manual include/exclude choices by stable match center");
+        AssertTrue(
+            normalizedMainWindow.Contains(
+                "lastMatches.Clear();\n            lastMatches.AddRange(matches);\n            ApplyDefaultSimilarReviewExclusions();",
+                StringComparison.Ordinal) &&
+            normalizedMainWindow.Contains(
+                "ExcludeWeakSimilarMatches();\n            ExcludeAlreadyCountedSimilarMatches();\n            ApplyManualSimilarReviewChoices();",
+                StringComparison.Ordinal),
+            "Similar Count rescans should rebuild default weak/duplicate state and then reapply manual choices");
+        AssertTrue(
+            mainWindow.Contains("manualReviewStatesByCenter[MatchReviewKey(lastMatches[index])] = include", StringComparison.Ordinal) &&
+            mainWindow.Contains("RememberCurrentSimilarReviewChoices(include: true)", StringComparison.Ordinal) &&
+            mainWindow.Contains("ClearManualSimilarReviewChoicesForCurrentMatches", StringComparison.Ordinal),
+            "Similar Count marker toggles and review quick actions should update stable manual choices");
+    }
+
     public static void SimilarCountPreviewShowsConfidence()
     {
         string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
