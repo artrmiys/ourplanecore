@@ -196,11 +196,12 @@ internal static class TakeoffsTreeRegressionTests
             queueReadableBasePrefetchAtMethod.Contains("ViewportRenderPolicy.ResponsiveMinRenderScale", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("PrefetchPagePreview", StringComparison.Ordinal) &&
             queueReadableBasePrefetchAtMethod.Contains("preferCachedRenderImmediately: true", StringComparison.Ordinal) &&
-            policy.Contains("NearbyPageReadableBasePrefetchRadius = 1", StringComparison.Ordinal) &&
-            policy.Contains("NearbyPageDirectionalPreviewPrefetchRadius = 3", StringComparison.Ordinal) &&
-            policy.Contains("NearbyPageDirectionalReadableBasePrefetchRadius = 3", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageReadableBasePrefetchRadius = HasSpareRenderCapacity ? 2 : 1", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageDirectionalPreviewPrefetchRadius = HasSpareRenderCapacity ? 6 : 3", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageDirectionalReadableBasePrefetchRadius = HasSpareRenderCapacity ? 5 : 3", StringComparison.Ordinal) &&
+            policy.Contains("NearbyPageCleanRenderPrefetchRadius = HasSpareRenderCapacity ? 1 : 0", StringComparison.Ordinal) &&
             queueCleanRenderPrefetchAtMethod.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal),
-            "nearby page prefetch should warm cheap previews, cached-first readable base bitmaps, and extra sheets in the user's paging direction without raising render concurrency");
+            "nearby page prefetch should warm cheap previews, cached-first readable base bitmaps, and extra sheets in the user's paging direction; capable machines also pre-render the immediate neighbour sharp via the prefetch pool");
     }
 
     public static void PageTabsSupportDragReorderAndDetach()

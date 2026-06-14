@@ -47,11 +47,21 @@ public static class ViewportRenderPolicy
     public const int PreviewPrefetchActiveRenderHoldMs = 3000;
     public const int PreviewPrefetchAfterActiveRenderHoldMs = 750;
     public const int PersistedPreviewLiveFallbackGraceMs = 35;
-    public const int NearbyPagePreviewPrefetchRadius = 1;
-    public const int NearbyPageReadableBasePrefetchRadius = 1;
-    public const int NearbyPageDirectionalPreviewPrefetchRadius = 3;
-    public const int NearbyPageDirectionalReadableBasePrefetchRadius = 3;
-    public const int NearbyPageCleanRenderPrefetchRadius = 0;
+    // True on workstations with spare cores + RAM. There the parallel prefetch worker pool
+    // absorbs wider page prefetch (more neighbours kept warm, immediate neighbour pre-rendered
+    // sharp) without starving the interactive render worker, so sequential page paging lands
+    // on the warm ~6ms path instead of a cold re-render. Small machines keep the old values.
+    public static readonly bool HasSpareRenderCapacity =
+        Environment.ProcessorCount >= 8 &&
+        GC.GetGCMemoryInfo().TotalAvailableMemoryBytes >= 24L * 1024 * 1024 * 1024;
+
+    public static readonly int NearbyPagePreviewPrefetchRadius = HasSpareRenderCapacity ? 2 : 1;
+    public static readonly int NearbyPageReadableBasePrefetchRadius = HasSpareRenderCapacity ? 2 : 1;
+    public static readonly int NearbyPageDirectionalPreviewPrefetchRadius = HasSpareRenderCapacity ? 6 : 3;
+    public static readonly int NearbyPageDirectionalReadableBasePrefetchRadius = HasSpareRenderCapacity ? 5 : 3;
+    // 0 keeps sharp-render prefetch off on small boxes; capable machines pre-render the
+    // immediate neighbour sharp (via the prefetch pool) so the next page shows crisp instantly.
+    public static readonly int NearbyPageCleanRenderPrefetchRadius = HasSpareRenderCapacity ? 1 : 0;
     public const bool JobOpenPreviewWarmupAllPages = true;
     public const bool JobOpenRasterSheetRefreshWarmupAllPages = true;
     public const int JobOpenPreviewWarmupPriorityLocalRadius = 2;

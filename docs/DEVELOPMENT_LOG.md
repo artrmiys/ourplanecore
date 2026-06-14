@@ -1,5 +1,24 @@
 ﻿# Development Log
 
+## 2026-06-14 Perf: machine-adaptive page prefetch (kill the page-switch tail)
+
+- Profiled real page switching with the viewport page-stress smoke against the live 389-page
+  job. Median open/return ~54-65 ms (fine) but a long tail: first-open up to 659 ms, re-open
+  up to 597 ms — those stalls are what reads as "not instant". An already-warm tab paints in
+  ~6 ms (the target).
+- Existing nearby-page prefetch was deliberately conservative ("without raising render
+  concurrency"): radius 1, directional 3, and `NearbyPageCleanRenderPrefetchRadius = 0` (no
+  sharp prefetch). That ceiling predates the parallel prefetch worker pool, which now runs
+  prefetch on its own processes, separate from the interactive render worker.
+- Made the radii machine-adaptive via `HasSpareRenderCapacity` (cores>=8 && RAM>=24 GB):
+  preview/readable radius 1->2, directional 3->6/5, and clean-render 0->1 so the immediate
+  neighbour is pre-rendered **sharp** (crisp instantly, no blur->sharp flash). Small machines
+  unchanged.
+- Measured before/after on the same spread smoke (the harder case — wasted prefetch for
+  far-apart samples): re-open tail 597->63 ms, first-open tail 659->338 ms, new-tab 351->58 ms,
+  tab-activate 363->40 ms. Opens got faster, not slower (pool absorbs it). 0 failures.
+- Verified: build 0/0, tests 340/340 (guards updated for the adaptive values).
+
 ## 2026-06-14 GPU viewport (SKGLElement) investigated and rejected
 
 - Tried migrating `PdfViewport : SKElement` → `SKGLElement` (GPU/VRAM) on an isolated
