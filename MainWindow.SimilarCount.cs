@@ -90,6 +90,18 @@ public partial class MainWindow
             return new SimilarCountScanResult(included, total, scores.Min(), scores.Max());
         }
 
+        static bool IsWeakSimilarMatch(SimilarSymbolMatch match) =>
+            match.Score > 0f && match.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
+
+        void ExcludeWeakSimilarMatches()
+        {
+            for (int i = 0; i < lastMatches.Count; i++)
+            {
+                if (IsWeakSimilarMatch(lastMatches[i]))
+                    excludedIndexes.Add(i);
+            }
+        }
+
         void RefreshPreviewReview()
         {
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
@@ -110,6 +122,23 @@ public partial class MainWindow
             TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} marker(s) included.";
         }
 
+        void IncludeAllPreviewMarkers(object? sender, EventArgs e)
+        {
+            excludedIndexes.Clear();
+            RefreshPreviewReview();
+            SimilarCountScanResult result = BuildReviewResult();
+            TxtStatus.Text = $"Count similar review: all {result.Total} marker(s) included.";
+        }
+
+        void KeepOnlyStrongPreviewMarkers(object? sender, EventArgs e)
+        {
+            excludedIndexes.Clear();
+            ExcludeWeakSimilarMatches();
+            RefreshPreviewReview();
+            SimilarCountScanResult result = BuildReviewResult();
+            TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} strong marker(s) included.";
+        }
+
         async Task<SimilarCountScanResult> ScanAsync(
             float threshold,
             bool rotations,
@@ -122,6 +151,7 @@ public partial class MainWindow
             lastMatches.Clear();
             lastMatches.AddRange(matches);
             excludedIndexes.Clear();
+            ExcludeWeakSimilarMatches();
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
             return BuildReviewResult();
         }
@@ -140,6 +170,11 @@ public partial class MainWindow
         void CleanupSimilarDialog()
         {
             _viewport.SimilarCountPreviewMarkerToggled -= ToggleSimilarPreviewMarker;
+            if (dialog != null)
+            {
+                dialog.IncludeAllRequested -= IncludeAllPreviewMarkers;
+                dialog.StrongOnlyRequested -= KeepOnlyStrongPreviewMarkers;
+            }
             _viewport.SetSimilarCountPreviewMarkers(null);
             if (ReferenceEquals(_similarCountDialog, dialog))
                 _similarCountDialog = null;
@@ -170,6 +205,8 @@ public partial class MainWindow
         dialog.Closed += (_, _) => CleanupSimilarDialog();
 
         _viewport.SimilarCountPreviewMarkerToggled += ToggleSimilarPreviewMarker;
+        dialog.IncludeAllRequested += IncludeAllPreviewMarkers;
+        dialog.StrongOnlyRequested += KeepOnlyStrongPreviewMarkers;
         _similarCountDialog = dialog;
         dialog.Show();
         dialog.Activate();

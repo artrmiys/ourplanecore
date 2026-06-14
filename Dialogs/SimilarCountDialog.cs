@@ -20,6 +20,8 @@ public sealed class SimilarCountDialog : Window
     public bool QueueAiDoubleCheck { get; private set; }
     public event EventHandler? Accepted;
     public event EventHandler? Cancelled;
+    public event EventHandler? IncludeAllRequested;
+    public event EventHandler? StrongOnlyRequested;
 
     private readonly Func<float, bool, bool, CancellationToken, Task<SimilarCountScanResult>> _scan;
     private readonly Slider _thresholdSlider;
@@ -28,6 +30,8 @@ public sealed class SimilarCountDialog : Window
     private readonly CheckBox _aiBox;
     private readonly TextBlock _foundLabel;
     private readonly TextBlock _thresholdLabel;
+    private readonly Button _includeAllButton;
+    private readonly Button _strongOnlyButton;
     private readonly Button _addButton;
     private readonly string _destinationName;
     private readonly DispatcherTimer _debounce;
@@ -119,6 +123,31 @@ public sealed class SimilarCountDialog : Window
         };
         panel.Children.Add(hint);
 
+        var reviewButtons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+        _includeAllButton = new Button
+        {
+            Content = "Include all",
+            MinWidth = 86,
+            IsEnabled = false,
+            Margin = new Thickness(0, 0, 6, 0),
+        };
+        _strongOnlyButton = new Button
+        {
+            Content = "Strong only",
+            MinWidth = 86,
+            IsEnabled = false,
+        };
+        _includeAllButton.Click += (_, _) => IncludeAllRequested?.Invoke(this, EventArgs.Empty);
+        _strongOnlyButton.Click += (_, _) => StrongOnlyRequested?.Invoke(this, EventArgs.Empty);
+        reviewButtons.Children.Add(_includeAllButton);
+        reviewButtons.Children.Add(_strongOnlyButton);
+        panel.Children.Add(reviewButtons);
+
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -205,6 +234,8 @@ public sealed class SimilarCountDialog : Window
             _foundLabel.Text = "Found 0 symbols.";
             _addButton.Content = AddButtonText(0);
             _addButton.IsEnabled = false;
+            _includeAllButton.IsEnabled = false;
+            _strongOnlyButton.IsEnabled = false;
             return;
         }
 
@@ -222,6 +253,8 @@ public sealed class SimilarCountDialog : Window
         }
 
         _addButton.IsEnabled = _lastFound > 0;
+        _includeAllButton.IsEnabled = _lastFound < _lastTotal;
+        _strongOnlyButton.IsEnabled = true;
     }
 
     private string ScoreSuffix()
@@ -259,6 +292,8 @@ public sealed class SimilarCountDialog : Window
         _scanCts = cts;
         _foundLabel.Text = "Scanning...";
         _addButton.IsEnabled = false;
+        _includeAllButton.IsEnabled = false;
+        _strongOnlyButton.IsEnabled = false;
         try
         {
             SimilarCountScanResult result = await _scan(

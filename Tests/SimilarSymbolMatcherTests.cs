@@ -272,6 +272,29 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count dialog should show score range for the current review set");
     }
 
+    public static void SimilarCountWeakMatchesStartReviewOnly()
+    {
+        string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+        string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        AssertTrue(
+            mainWindow.Contains("IsWeakSimilarMatch", StringComparison.Ordinal) &&
+            mainWindow.Contains("ExcludeWeakSimilarMatches()", StringComparison.Ordinal) &&
+            normalizedMainWindow.Contains("excludedIndexes.Clear();\n            ExcludeWeakSimilarMatches();", StringComparison.Ordinal),
+            "Similar Count should make below-default confidence matches review-only after each scan");
+        AssertTrue(
+            dialog.Contains("IncludeAllRequested", StringComparison.Ordinal) &&
+            dialog.Contains("StrongOnlyRequested", StringComparison.Ordinal) &&
+            dialog.Contains("Include all", StringComparison.Ordinal) &&
+            dialog.Contains("Strong only", StringComparison.Ordinal),
+            "Similar Count review should expose quick actions to include candidates or return to strong matches only");
+        AssertTrue(
+            viewport.Contains("canvas.DrawCircle(center, radius, weakerMatch ? weakStroke : excludedStroke)", StringComparison.Ordinal),
+            "Excluded weak Similar candidates should keep a distinct low-confidence ring");
+    }
+
     public static void SimilarCountLocksDestinationTakeoff()
     {
         string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");

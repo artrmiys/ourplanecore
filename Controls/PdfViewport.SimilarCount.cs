@@ -334,10 +334,10 @@ public sealed partial class PdfViewport
         foreach (ViewportSimilarCountPreviewMarker marker in preview)
         {
             SKPoint center = marker.CenterPdf;
+            bool weakerMatch = marker.Score > 0f &&
+                                marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
             if (marker.Included)
             {
-                bool weakerMatch = marker.Score > 0f &&
-                                    marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
                 canvas.DrawCircle(center, radius, weakerMatch ? weakFill : includedFill);
                 canvas.DrawCircle(center, radius, weakerMatch ? weakStroke : includedStroke);
                 if (marker.RotationDegrees != 0 || marker.Mirrored)
@@ -345,7 +345,7 @@ public sealed partial class PdfViewport
                 continue;
             }
 
-            canvas.DrawCircle(center, radius, excludedStroke);
+            canvas.DrawCircle(center, radius, weakerMatch ? weakStroke : excludedStroke);
             float slash = radius * 0.72f;
             canvas.DrawLine(
                 new SKPoint(center.X - slash, center.Y - slash),
