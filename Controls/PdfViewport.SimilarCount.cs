@@ -13,7 +13,8 @@ public sealed record ViewportSimilarCountPreviewMarker(
     bool Included,
     float Score = 1f,
     int RotationDegrees = 0,
-    bool Mirrored = false);
+    bool Mirrored = false,
+    bool AlreadyCounted = false);
 
 // "Count similar symbols": rubber-band template selection (mirrors the AI
 // crop note interaction) plus a ghost-marker preview layer for the matches
@@ -324,6 +325,13 @@ public sealed partial class PdfViewport
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
+        using var countedStroke = new SKPaint
+        {
+            Color = new SKColor(0x54, 0x6E, 0x7A),
+            StrokeWidth = 1.8f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
         using var excludedStroke = new SKPaint
         {
             Color = new SKColor(0xC6, 0x28, 0x28),
@@ -336,6 +344,21 @@ public sealed partial class PdfViewport
             SKPoint center = marker.CenterPdf;
             bool weakerMatch = marker.Score > 0f &&
                                 marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
+            if (marker.AlreadyCounted)
+            {
+                canvas.DrawCircle(center, radius, countedStroke);
+                float check = radius * 0.7f;
+                canvas.DrawLine(
+                    new SKPoint(center.X - check, center.Y),
+                    new SKPoint(center.X - check * 0.15f, center.Y + check * 0.65f),
+                    countedStroke);
+                canvas.DrawLine(
+                    new SKPoint(center.X - check * 0.15f, center.Y + check * 0.65f),
+                    new SKPoint(center.X + check, center.Y - check * 0.55f),
+                    countedStroke);
+                continue;
+            }
+
             if (marker.Included)
             {
                 canvas.DrawCircle(center, radius, weakerMatch ? weakFill : includedFill);

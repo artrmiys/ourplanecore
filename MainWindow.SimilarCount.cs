@@ -16,6 +16,8 @@ namespace OurPlaneCore;
 // through the regular AI Inbox pipeline.
 public partial class MainWindow
 {
+    private const float SimilarCountDuplicateTolerancePdf = 4f;
+
     private SimilarCountDialog? _similarCountDialog;
 
     private void BtnSimilarCount_Click(object sender, RoutedEventArgs e)
@@ -53,6 +55,7 @@ public partial class MainWindow
 
         var lastMatches = new List<SimilarSymbolMatch>();
         var excludedIndexes = new HashSet<int>();
+        var alreadyCountedIndexes = new HashSet<int>();
         TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
         string destinationName = SimilarCountDestinationName(destinationItem);
         SimilarCountDialog? dialog = null;
@@ -64,27 +67,34 @@ public partial class MainWindow
             lastMatches
                 .Select((match, index) => new ViewportSimilarCountPreviewMarker(
                     MatchCenterPdf(match),
-                    Included: !excludedIndexes.Contains(index),
+                    Included: !excludedIndexes.Contains(index) && !alreadyCountedIndexes.Contains(index),
                     match.Score,
                     match.RotationDegrees,
-                    match.Mirrored))
+                    match.Mirrored,
+                    AlreadyCounted: alreadyCountedIndexes.Contains(index)))
                 .ToList();
 
         IReadOnlyList<SKPoint> IncludedCenters() =>
             lastMatches
-                .Where((_, index) => !excludedIndexes.Contains(index))
+                .Where((_, index) => !excludedIndexes.Contains(index) && !alreadyCountedIndexes.Contains(index))
                 .Select(MatchCenterPdf)
                 .ToList();
 
         SimilarCountScanResult BuildReviewResult()
         {
             int total = lastMatches.Count;
-            int included = Math.Max(0, total - excludedIndexes.Count);
+            int included = lastMatches
+                .Where((_, index) =>
+                    !excludedIndexes.Contains(index) &&
+                    !alreadyCountedIndexes.Contains(index))
+                .Count();
             if (included == 0)
                 return new SimilarCountScanResult(0, total, 0f, 0f);
 
             var scores = lastMatches
-                .Where((_, index) => !excludedIndexes.Contains(index))
+                .Where((_, index) =>
+                    !excludedIndexes.Contains(index) &&
+                    !alreadyCountedIndexes.Contains(index))
                 .Select(match => match.Score)
                 .ToList();
             return new SimilarCountScanResult(included, total, scores.Min(), scores.Max());
@@ -102,6 +112,27 @@ public partial class MainWindow
             }
         }
 
+        void ExcludeAlreadyCountedSimilarMatches()
+        {
+            alreadyCountedIndexes.Clear();
+            for (int i = 0; i < lastMatches.Count; i++)
+            {
+                if (destinationItem != null &&
+                    IsSimilarCountDuplicateCenter(destinationItem, request.PageFolder, MatchCenterPdf(lastMatches[i])))
+                {
+                    alreadyCountedIndexes.Add(i);
+                    excludedIndexes.Add(i);
+                }
+            }
+        }
+
+        void ApplyDefaultSimilarReviewExclusions()
+        {
+            excludedIndexes.Clear();
+            ExcludeWeakSimilarMatches();
+            ExcludeAlreadyCountedSimilarMatches();
+        }
+
         void RefreshPreviewReview()
         {
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
@@ -113,6 +144,11 @@ public partial class MainWindow
         {
             if (index < 0 || index >= lastMatches.Count)
                 return;
+            if (alreadyCountedIndexes.Contains(index))
+            {
+                TxtStatus.Text = "Count similar review: this marker is already counted in the destination takeoff.";
+                return;
+            }
 
             if (!excludedIndexes.Add(index))
                 excludedIndexes.Remove(index);
@@ -125,15 +161,15 @@ public partial class MainWindow
         void IncludeAllPreviewMarkers(object? sender, EventArgs e)
         {
             excludedIndexes.Clear();
+            ExcludeAlreadyCountedSimilarMatches();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
-            TxtStatus.Text = $"Count similar review: all {result.Total} marker(s) included.";
+            TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} new marker(s) included.";
         }
 
         void KeepOnlyStrongPreviewMarkers(object? sender, EventArgs e)
         {
-            excludedIndexes.Clear();
-            ExcludeWeakSimilarMatches();
+            ApplyDefaultSimilarReviewExclusions();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
             TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} strong marker(s) included.";
@@ -150,8 +186,7 @@ public partial class MainWindow
                 cancellationToken);
             lastMatches.Clear();
             lastMatches.AddRange(matches);
-            excludedIndexes.Clear();
-            ExcludeWeakSimilarMatches();
+            ApplyDefaultSimilarReviewExclusions();
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
             return BuildReviewResult();
         }
@@ -194,9 +229,9 @@ public partial class MainWindow
                 return;
             }
 
-            AddSimilarCountMeasurements(request, included, destinationItem);
-            if (dialog.QueueAiDoubleCheck)
-                QueueSimilarCountAiRequest(request, included.Count, destinationName);
+            int added = AddSimilarCountMeasurements(request, included, destinationItem);
+            if (added > 0 && dialog.QueueAiDoubleCheck)
+                QueueSimilarCountAiRequest(request, added, destinationName);
         };
         dialog.Cancelled += (_, _) =>
         {
@@ -213,7 +248,7 @@ public partial class MainWindow
         TxtStatus.Text = $"Count similar review for {destinationName}: click preview markers on the sheet to exclude or include them.";
     }
 
-    private void AddSimilarCountMeasurements(
+    private int AddSimilarCountMeasurements(
         ViewportSimilarCountRequest request,
         IReadOnlyList<SKPoint> centers,
         TakeoffItem? destinationItem)
@@ -238,8 +273,17 @@ public partial class MainWindow
             SelectTakeoffNodeByFolder(item.FolderPath);
         }
 
-        var generated = new List<Measurement>(centers.Count);
-        foreach (SKPoint center in centers)
+        var newCenters = centers
+            .Where(center => !IsSimilarCountDuplicateCenter(item, request.PageFolder, center))
+            .ToList();
+        if (newCenters.Count == 0)
+        {
+            TxtStatus.Text = $"Count similar: all reviewed marker(s) are already counted in {item.Name}.";
+            return 0;
+        }
+
+        var generated = new List<Measurement>(newCenters.Count);
+        foreach (SKPoint center in newCenters)
         {
             generated.Add(new Measurement
             {
@@ -267,7 +311,11 @@ public partial class MainWindow
             RefreshSheetLegend();
         }
         UpdateTotalDisplay();
-        TxtStatus.Text = $"Count similar: added {generated.Count} marker(s) to {item.Name}. They stay selected for review.";
+        int skipped = centers.Count - generated.Count;
+        TxtStatus.Text = skipped > 0
+            ? $"Count similar: added {generated.Count} new marker(s) to {item.Name}; skipped {skipped} already counted."
+            : $"Count similar: added {generated.Count} marker(s) to {item.Name}. They stay selected for review.";
+        return generated.Count;
     }
 
     private TakeoffItem? CurrentSimilarCountDestinationItem()
@@ -298,6 +346,28 @@ public partial class MainWindow
     {
         string name = destinationItem?.Name?.Trim() ?? "";
         return string.IsNullOrWhiteSpace(name) ? "Similar Count" : name;
+    }
+
+    private static bool IsSimilarCountDuplicateCenter(TakeoffItem item, string pageFolder, SKPoint center)
+    {
+        float toleranceSq = SimilarCountDuplicateTolerancePdf * SimilarCountDuplicateTolerancePdf;
+        foreach (Measurement measurement in item.Measurements)
+        {
+            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "point" ||
+                measurement.Points.Count == 0 ||
+                !string.Equals(measurement.PageFolder ?? "", pageFolder ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            SKPoint existing = measurement.Points[0];
+            float dx = existing.X - center.X;
+            float dy = existing.Y - center.Y;
+            if (dx * dx + dy * dy <= toleranceSq)
+                return true;
+        }
+
+        return false;
     }
 
     private void QueueSimilarCountAiRequest(ViewportSimilarCountRequest request, int offlineCount, string destinationName)

@@ -295,6 +295,28 @@ internal static class SimilarSymbolMatcherTests
             "Excluded weak Similar candidates should keep a distinct low-confidence ring");
     }
 
+    public static void SimilarCountSkipsAlreadyCountedMarkers()
+    {
+        string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+
+        AssertTrue(
+            viewport.Contains("bool AlreadyCounted = false", StringComparison.Ordinal) &&
+            viewport.Contains("marker.AlreadyCounted", StringComparison.Ordinal) &&
+            viewport.Contains("countedStroke", StringComparison.Ordinal),
+            "Similar preview markers should visibly distinguish already-counted destination points");
+        AssertTrue(
+            mainWindow.Contains("alreadyCountedIndexes", StringComparison.Ordinal) &&
+            mainWindow.Contains("ExcludeAlreadyCountedSimilarMatches()", StringComparison.Ordinal) &&
+            mainWindow.Contains("this marker is already counted", StringComparison.Ordinal),
+            "Similar Count review should exclude and lock already-counted matches");
+        AssertTrue(
+            mainWindow.Contains("private int AddSimilarCountMeasurements", StringComparison.Ordinal) &&
+            mainWindow.Contains("IsSimilarCountDuplicateCenter", StringComparison.Ordinal) &&
+            mainWindow.Contains("skipped {skipped} already counted", StringComparison.Ordinal),
+            "Similar Count Add should defensively skip duplicate centers in the destination takeoff");
+    }
+
     public static void SimilarCountLocksDestinationTakeoff()
     {
         string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
