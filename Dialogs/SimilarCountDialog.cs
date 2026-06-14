@@ -14,11 +14,13 @@ public sealed class SimilarCountDialog : Window
 {
     public float Threshold { get; private set; }
     public bool IncludeRotations { get; private set; }
+    public bool IncludeMirrored { get; private set; }
     public bool QueueAiDoubleCheck { get; private set; }
 
-    private readonly Func<float, bool, CancellationToken, Task<int>> _scan;
+    private readonly Func<float, bool, bool, CancellationToken, Task<int>> _scan;
     private readonly Slider _thresholdSlider;
     private readonly CheckBox _rotationsBox;
+    private readonly CheckBox _mirroredBox;
     private readonly CheckBox _aiBox;
     private readonly TextBlock _foundLabel;
     private readonly TextBlock _thresholdLabel;
@@ -28,9 +30,10 @@ public sealed class SimilarCountDialog : Window
     private int _lastFound;
 
     public SimilarCountDialog(
-        Func<float, bool, CancellationToken, Task<int>> scan,
+        Func<float, bool, bool, CancellationToken, Task<int>> scan,
         float initialThreshold,
         bool initialRotations,
+        bool initialMirrored,
         bool aiAvailable)
     {
         _scan = scan;
@@ -56,9 +59,12 @@ public sealed class SimilarCountDialog : Window
         panel.Children.Add(_thresholdLabel);
         _thresholdSlider = new Slider
         {
-            Minimum = 0.30,
-            Maximum = 0.95,
-            Value = Math.Clamp(initialThreshold, 0.30f, 0.95f),
+            Minimum = AppSettingsStore.SimilarCountThresholdMin,
+            Maximum = AppSettingsStore.SimilarCountThresholdMax,
+            Value = Math.Clamp(
+                initialThreshold,
+                (float)AppSettingsStore.SimilarCountThresholdMin,
+                (float)AppSettingsStore.SimilarCountThresholdMax),
             TickFrequency = 0.05,
             IsSnapToTickEnabled = false,
             Margin = new Thickness(0, 0, 0, 8),
@@ -72,6 +78,14 @@ public sealed class SimilarCountDialog : Window
             Margin = new Thickness(0, 0, 0, 8),
         };
         panel.Children.Add(_rotationsBox);
+
+        _mirroredBox = new CheckBox
+        {
+            Content = "Match mirrored copies",
+            IsChecked = initialMirrored,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        panel.Children.Add(_mirroredBox);
 
         _aiBox = new CheckBox
         {
@@ -129,11 +143,14 @@ public sealed class SimilarCountDialog : Window
         };
         _rotationsBox.Checked += (_, _) => _ = RunScanAsync();
         _rotationsBox.Unchecked += (_, _) => _ = RunScanAsync();
+        _mirroredBox.Checked += (_, _) => _ = RunScanAsync();
+        _mirroredBox.Unchecked += (_, _) => _ = RunScanAsync();
 
         _addButton.Click += (_, _) =>
         {
             Threshold = (float)_thresholdSlider.Value;
             IncludeRotations = _rotationsBox.IsChecked == true;
+            IncludeMirrored = _mirroredBox.IsChecked == true;
             QueueAiDoubleCheck = _aiBox.IsChecked == true;
             DialogResult = true;
         };
@@ -158,7 +175,7 @@ public sealed class SimilarCountDialog : Window
     }
 
     private void UpdateThresholdLabel() =>
-        _thresholdLabel.Text = $"Similarity threshold: {_thresholdSlider.Value:0.00}";
+        _thresholdLabel.Text = $"Similarity threshold: {_thresholdSlider.Value:0.00} (precision default {AppSettingsStore.SimilarCountThresholdDefault:0.00})";
 
     private async Task RunScanAsync()
     {
@@ -169,7 +186,11 @@ public sealed class SimilarCountDialog : Window
         _addButton.IsEnabled = false;
         try
         {
-            int found = await _scan((float)_thresholdSlider.Value, _rotationsBox.IsChecked == true, cts.Token);
+            int found = await _scan(
+                (float)_thresholdSlider.Value,
+                _rotationsBox.IsChecked == true,
+                _mirroredBox.IsChecked == true,
+                cts.Token);
             if (cts.IsCancellationRequested)
                 return;
 

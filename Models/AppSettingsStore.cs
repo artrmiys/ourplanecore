@@ -43,8 +43,10 @@ public sealed class AppSettings
     public double ViewportZoomWheelFactor { get; set; } = AppSettingsStore.ViewportZoomWheelFactorDefault;
     public double ViewportAreaEdgeScale { get; set; } = 0.25;
     public double ViewportAreaFillOpacity { get; set; } = 0.2826086956521738;
-    public double SimilarCountThreshold { get; set; } = 0.6;
-    public bool SimilarCountRotations { get; set; } = true;
+    public int SimilarCountSettingsVersion { get; set; }
+    public double SimilarCountThreshold { get; set; } = AppSettingsStore.SimilarCountThresholdDefault;
+    public bool SimilarCountRotations { get; set; }
+    public bool SimilarCountMirrored { get; set; }
     // Whole-job background warmup (previews + raster bitmaps for every page).
     // Off by default: on big jobs the sweep competes with interactive
     // sharpening for CPU/disk and the open sheet feels blurry longer.
@@ -107,6 +109,10 @@ public static class AppSettingsStore
     public const double ViewportZoomWheelFactorDefault = 2.0;
     public const double ViewportZoomWheelFactorMin = 1.05;
     public const double ViewportZoomWheelFactorMax = 2.5;
+    public const int SimilarCountSettingsCurrentVersion = 2;
+    public const double SimilarCountThresholdDefault = 0.88;
+    public const double SimilarCountThresholdMin = 0.55;
+    public const double SimilarCountThresholdMax = 0.98;
 
     public static readonly string[] SuggestedOpenAiModels =
     [
@@ -151,6 +157,7 @@ public static class AppSettingsStore
             NormalizeRecentJobs(settings);
             NormalizeOutputSettings(settings);
             NormalizeTakeoffDefaults(settings);
+            NormalizeSimilarCountSettings(settings);
             return settings;
         }
         catch (Exception ex)
@@ -165,6 +172,7 @@ public static class AppSettingsStore
         NormalizeJobsRoots(settings);
         NormalizeOutputSettings(settings);
         NormalizeTakeoffDefaults(settings);
+        NormalizeSimilarCountSettings(settings);
         string? dir = Path.GetDirectoryName(SettingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
@@ -432,6 +440,30 @@ public static class AppSettingsStore
     public static void NormalizeTakeoffDefaults(AppSettings settings)
     {
         settings.DefaultCountSymbol = CountDisplaySymbol.Normalize(settings.DefaultCountSymbol);
+    }
+
+    public static void NormalizeSimilarCountSettings(AppSettings settings)
+    {
+        double threshold = NormalizeScale(
+            settings.SimilarCountThreshold,
+            fallback: SimilarCountThresholdDefault,
+            min: SimilarCountThresholdMin,
+            max: SimilarCountThresholdMax);
+
+        if (settings.SimilarCountSettingsVersion < SimilarCountSettingsCurrentVersion)
+        {
+            bool oldLowPrecisionThreshold = threshold <= 0.6001;
+            if (oldLowPrecisionThreshold)
+                threshold = SimilarCountThresholdDefault;
+
+            if (oldLowPrecisionThreshold && settings.SimilarCountRotations && !settings.SimilarCountMirrored)
+                settings.SimilarCountRotations = false;
+
+            settings.SimilarCountMirrored = false;
+            settings.SimilarCountSettingsVersion = SimilarCountSettingsCurrentVersion;
+        }
+
+        settings.SimilarCountThreshold = threshold;
     }
 
     public static void NormalizeJobsRoots(AppSettings settings)

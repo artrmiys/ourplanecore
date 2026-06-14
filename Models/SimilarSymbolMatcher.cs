@@ -110,13 +110,20 @@ public sealed class SimilarSymbolMatchSession
         return new SimilarSymbolMatchSession(width, height, wordsPerRow, ink, dilated, factor, variants.ToArray());
     }
 
-    public List<SimilarSymbolMatch> FindMatches(float minScore, bool includeRotations, CancellationToken cancellationToken)
+    public List<SimilarSymbolMatch> FindMatches(float minScore, bool includeRotations, CancellationToken cancellationToken) =>
+        FindMatches(minScore, includeRotations, includeMirrored: false, cancellationToken);
+
+    public List<SimilarSymbolMatch> FindMatches(
+        float minScore,
+        bool includeRotations,
+        bool includeMirrored,
+        CancellationToken cancellationToken)
     {
         minScore = Math.Clamp(minScore, 0.05f, 1f);
         var all = new List<SimilarSymbolMatch>();
-        IEnumerable<TemplateVariant> variants = includeRotations
-            ? _variants
-            : _variants.Where(variant => variant.RotationDegrees == 0 && !variant.Mirrored).Take(1);
+        IEnumerable<TemplateVariant> variants = _variants.Where(variant =>
+            (includeRotations || variant.RotationDegrees == 0) &&
+            (includeMirrored || !variant.Mirrored));
         foreach (TemplateVariant variant in variants)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -214,6 +221,8 @@ public sealed class SimilarSymbolMatchSession
         ulong[] tInk = template.ShiftedInk[shift];
         ulong[] tDilated = template.ShiftedDilated[shift];
         ulong[] masks = template.WindowMasks[shift];
+        ulong[] gridColumnMasks = template.GridColumnMasks[shift];
+        Span<int> windowGrid = stackalloc int[TemplateVariant.GridCellCount];
 
         int matchedTemplate = 0;
         int matchedWindow = 0;
@@ -222,12 +231,17 @@ public sealed class SimilarSymbolMatchSession
         {
             int pageBase = (y + row) * _wordsPerRow + w0;
             int templateBase = row * words;
+            int gridRow = Math.Min(TemplateVariant.GridSide - 1, row * TemplateVariant.GridSide / template.Height);
+            int gridBase = gridRow * TemplateVariant.GridSide;
             for (int k = 0; k < words; k++)
             {
                 ulong pageInkWord = _ink[pageBase + k];
                 matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & _dilated[pageBase + k]);
                 matchedWindow += BitOperations.PopCount(pageInkWord & tDilated[templateBase + k]);
                 windowInk += BitOperations.PopCount(pageInkWord & masks[k]);
+                for (int col = 0; col < TemplateVariant.GridSide; col++)
+                    windowGrid[gridBase + col] += BitOperations.PopCount(
+                        pageInkWord & gridColumnMasks[col * words + k]);
             }
         }
 
@@ -238,7 +252,28 @@ public sealed class SimilarSymbolMatchSession
         float windowPrecision = matchedWindow / (float)windowInk;
         float inkRatio = MathF.Sqrt(
             Math.Min(template.InkCount, windowInk) / (float)Math.Max(template.InkCount, windowInk));
-        return Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio);
+        float profileScore = GridProfileScore(template.GridInkCounts, windowGrid, template.InkCount, windowInk);
+        return Math.Min(Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio), profileScore);
+    }
+
+    private static float GridProfileScore(
+        ReadOnlySpan<int> templateGrid,
+        ReadOnlySpan<int> windowGrid,
+        int templateInk,
+        int windowInk)
+    {
+        if (templateInk <= 0 || windowInk <= 0)
+            return 0f;
+
+        float diff = 0f;
+        for (int i = 0; i < templateGrid.Length; i++)
+        {
+            float templateShare = templateGrid[i] / (float)templateInk;
+            float windowShare = windowGrid[i] / (float)windowInk;
+            diff += MathF.Abs(templateShare - windowShare);
+        }
+
+        return Math.Clamp(1f - diff * 0.5f, 0f, 1f);
     }
 
     // Sliding vertical sums of per-word ink popcounts: bandInk[y][w] = ink
@@ -495,9 +530,13 @@ public sealed class SimilarSymbolMatchSession
     // the window's bits inside those words for exact window ink counts.
     private sealed class TemplateVariant
     {
+        public const int GridSide = 3;
+        public const int GridCellCount = GridSide * GridSide;
+
         public required int Width;
         public required int Height;
         public required int InkCount;
+        public required int[] GridInkCounts;
         public required int RotationDegrees;
         public required bool Mirrored;
         public required int OffsetX;
@@ -506,6 +545,7 @@ public sealed class SimilarSymbolMatchSession
         public required ulong[][] ShiftedInk;
         public required ulong[][] ShiftedDilated;
         public required ulong[][] WindowMasks;
+        public required ulong[][] GridColumnMasks;
         public TemplateVariant? EdgeRelaxed { get; init; }
 
         public static TemplateVariant Build(
@@ -521,15 +561,19 @@ public sealed class SimilarSymbolMatchSession
             int baseWords = (width + 63) / 64;
 
             var inkRows = new ulong[height * (baseWords + 1)];
+            var gridInkCounts = new int[GridCellCount];
             int inkCount = 0;
             for (int y = 0; y < height; y++)
             {
+                int gridRow = Math.Min(GridSide - 1, y * GridSide / height);
                 for (int x = 0; x < width; x++)
                 {
                     if (!template[x, y])
                         continue;
                     inkRows[y * (baseWords + 1) + (x >> 6)] |= 1UL << (x & 63);
                     inkCount++;
+                    int gridCol = Math.Min(GridSide - 1, x * GridSide / width);
+                    gridInkCounts[gridRow * GridSide + gridCol]++;
                 }
             }
             ulong[] dilatedRows = DilateOnePixel(inkRows, height, baseWords + 1);
@@ -538,6 +582,7 @@ public sealed class SimilarSymbolMatchSession
             var shiftedInk = new ulong[64][];
             var shiftedDilated = new ulong[64][];
             var windowMasks = new ulong[64][];
+            var gridColumnMasks = new ulong[64][];
             for (int s = 0; s < 64; s++)
             {
                 int words = (s + width + 63) / 64;
@@ -545,6 +590,7 @@ public sealed class SimilarSymbolMatchSession
                 shiftedInk[s] = ShiftRows(inkRows, height, baseWords + 1, words, s);
                 shiftedDilated[s] = ShiftRows(dilatedRows, height, baseWords + 1, words, s);
                 windowMasks[s] = BuildWindowMask(width, words, s);
+                gridColumnMasks[s] = BuildGridColumnMasks(width, words, s);
             }
 
             return new TemplateVariant
@@ -552,6 +598,7 @@ public sealed class SimilarSymbolMatchSession
                 Width = width,
                 Height = height,
                 InkCount = inkCount,
+                GridInkCounts = gridInkCounts,
                 RotationDegrees = rotationDegrees,
                 Mirrored = mirrored,
                 OffsetX = offsetX,
@@ -560,6 +607,7 @@ public sealed class SimilarSymbolMatchSession
                 ShiftedInk = shiftedInk,
                 ShiftedDilated = shiftedDilated,
                 WindowMasks = windowMasks,
+                GridColumnMasks = gridColumnMasks,
                 EdgeRelaxed = buildEdgeRelaxed
                     ? TryBuildEdgeRelaxedVariant(template, rotationDegrees, mirrored)
                     : null,
@@ -592,6 +640,19 @@ public sealed class SimilarSymbolMatchSession
             for (int x = shift; x < shift + width; x++)
                 mask[x >> 6] |= 1UL << (x & 63);
             return mask;
+        }
+
+        private static ulong[] BuildGridColumnMasks(int width, int words, int shift)
+        {
+            var masks = new ulong[GridSide * words];
+            for (int x = 0; x < width; x++)
+            {
+                int col = Math.Min(GridSide - 1, x * GridSide / width);
+                int shiftedX = shift + x;
+                masks[col * words + (shiftedX >> 6)] |= 1UL << (shiftedX & 63);
+            }
+
+            return masks;
         }
     }
 }

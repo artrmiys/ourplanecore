@@ -37,6 +37,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar symbol matcher rejects distractors", SimilarSymbolMatcherTests.RejectsDistractorsAndDedupes),
     ("similar symbol matcher tolerates loose edge selection", SimilarSymbolMatcherTests.FindsCopiesWithLooseEdgeSelection),
     ("similar symbol matcher can include mirrored copies", SimilarSymbolMatcherTests.FindsMirroredCopyOnlyWhenEnabled),
+    ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
+    ("similar count defaults favor precision", SimilarSymbolMatcherTests.DefaultSettingsFavorPrecision),
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),

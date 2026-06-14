@@ -43,10 +43,10 @@ public partial class MainWindow
         }
 
         var lastCenters = new List<SKPoint>();
-        async Task<int> ScanAsync(float threshold, bool rotations, CancellationToken cancellationToken)
+        async Task<int> ScanAsync(float threshold, bool rotations, bool mirrored, CancellationToken cancellationToken)
         {
             List<SimilarSymbolMatch> matches = await Task.Run(
-                () => session.FindMatches(threshold, rotations, cancellationToken),
+                () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
                 cancellationToken);
             var centers = matches
                 .Select(match => new SKPoint(match.CenterX / bitmapScale, match.CenterY / bitmapScale))
@@ -61,6 +61,7 @@ public partial class MainWindow
             ScanAsync,
             (float)_settings.SimilarCountThreshold,
             _settings.SimilarCountRotations,
+            _settings.SimilarCountMirrored,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()))
         {
             Owner = this,
@@ -75,6 +76,7 @@ public partial class MainWindow
 
         _settings.SimilarCountThreshold = dialog.Threshold;
         _settings.SimilarCountRotations = dialog.IncludeRotations;
+        _settings.SimilarCountMirrored = dialog.IncludeMirrored;
         SaveAppSettings();
 
         if (lastCenters.Count == 0)

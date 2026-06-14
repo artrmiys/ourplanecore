@@ -20,7 +20,7 @@ internal static class SimilarSymbolMatcherTests
         using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: true);
         SimilarSymbolMatchSession? session = CreateSession(page);
 
-        List<SimilarSymbolMatch> matches = session!.FindMatches(0.6f, includeRotations: false, CancellationToken.None);
+        List<SimilarSymbolMatch> matches = session!.FindMatches(DefaultThreshold(), includeRotations: false, CancellationToken.None);
 
         AssertTrue(matches.Count == placements.Length,
             $"expected {placements.Length} matches, got {matches.Count}");
@@ -38,8 +38,8 @@ internal static class SimilarSymbolMatcherTests
         using SKBitmap page = BuildPage(placements, rotatedAt: (300, 200), withDistractors: false);
         SimilarSymbolMatchSession? session = CreateSession(page);
 
-        List<SimilarSymbolMatch> plain = session!.FindMatches(0.6f, includeRotations: false, CancellationToken.None);
-        List<SimilarSymbolMatch> rotated = session.FindMatches(0.6f, includeRotations: true, CancellationToken.None);
+        List<SimilarSymbolMatch> plain = session!.FindMatches(DefaultThreshold(), includeRotations: false, CancellationToken.None);
+        List<SimilarSymbolMatch> rotated = session.FindMatches(DefaultThreshold(), includeRotations: true, CancellationToken.None);
 
         AssertTrue(plain.Count == placements.Length,
             $"expected {placements.Length} unrotated matches, got {plain.Count}");
@@ -56,7 +56,7 @@ internal static class SimilarSymbolMatcherTests
         using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: true);
         SimilarSymbolMatchSession? session = CreateSession(page);
 
-        List<SimilarSymbolMatch> matches = session!.FindMatches(0.6f, includeRotations: true, CancellationToken.None);
+        List<SimilarSymbolMatch> matches = session!.FindMatches(DefaultThreshold(), includeRotations: true, CancellationToken.None);
 
         AssertTrue(matches.Count == 1, $"expected only the template instance, got {matches.Count}");
         AssertTrue(NearCenter(matches[0], 60, 50), "the single match must sit on the template instance");
@@ -71,7 +71,7 @@ internal static class SimilarSymbolMatcherTests
         DrawLooseSelectionEdgeNoise(page, placements[0].Item1, placements[0].Item2);
         SimilarSymbolMatchSession? session = CreateSession(page, leftPad: 8, topPad: 4, rightPad: 4, bottomPad: 4);
 
-        List<SimilarSymbolMatch> matches = session!.FindMatches(0.6f, includeRotations: false, CancellationToken.None);
+        List<SimilarSymbolMatch> matches = session!.FindMatches(DefaultThreshold(), includeRotations: false, CancellationToken.None);
 
         AssertTrue(matches.Count == placements.Length,
             $"expected {placements.Length} matches from loose edge selection, got {matches.Count}");
@@ -89,14 +89,78 @@ internal static class SimilarSymbolMatcherTests
         using SKBitmap page = BuildMirrorSensitivePage(placements, mirroredAt: (300, 200));
         SimilarSymbolMatchSession? session = CreateSession(page);
 
-        List<SimilarSymbolMatch> plain = session!.FindMatches(0.6f, includeRotations: false, CancellationToken.None);
-        List<SimilarSymbolMatch> mirrored = session.FindMatches(0.6f, includeRotations: true, CancellationToken.None);
+        List<SimilarSymbolMatch> plain = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+        List<SimilarSymbolMatch> rotatedOnly = session.FindMatches(
+            DefaultThreshold(),
+            includeRotations: true,
+            includeMirrored: false,
+            CancellationToken.None);
+        List<SimilarSymbolMatch> mirrored = session.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: true,
+            CancellationToken.None);
 
         AssertTrue(plain.Count == placements.Length,
             $"expected {placements.Length} unmirrored matches, got {plain.Count}");
+        AssertTrue(rotatedOnly.Count == placements.Length,
+            $"rotated-only search should not include mirrored copies, got {rotatedOnly.Count}");
         AssertTrue(mirrored.Count == placements.Length + 1,
             $"expected mirrored search to find {placements.Length + 1} matches, got {mirrored.Count}");
         AssertTrue(mirrored.Any(match => match.Mirrored), "mirrored copy should be reported as mirrored");
+    }
+
+    public static void RejectsNearMissAtPrecisionThreshold()
+    {
+        var placements = new[] { (40, 40), (200, 60) };
+        using SKBitmap page = BuildNearMissPage(placements, nearMissAt: (300, 200));
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(DefaultThreshold(), includeRotations: false, CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected only {placements.Length} exact-shape matches, got {matches.Count}");
+        AssertTrue(!matches.Any(match => NearCenter(match, 300, 200)),
+            "near-miss symbol with similar ink and box should not pass the precision threshold");
+    }
+
+    public static void DefaultSettingsFavorPrecision()
+    {
+        var settings = new AppSettings();
+        AssertTrue(
+            Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
+            "new Similar Count settings should start at the precision threshold");
+        AssertTrue(!settings.SimilarCountRotations, "rotations should be opt-in for precise Similar Count");
+        AssertTrue(!settings.SimilarCountMirrored, "mirrored search should be opt-in for precise Similar Count");
+
+        settings.SimilarCountThreshold = 0.6;
+        settings.SimilarCountRotations = true;
+        settings.SimilarCountMirrored = false;
+        settings.SimilarCountSettingsVersion = 0;
+        AppSettingsStore.NormalizeSimilarCountSettings(settings);
+
+        AssertTrue(
+            Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
+            "legacy noisy Similar Count threshold should migrate to the precision default");
+        AssertTrue(!settings.SimilarCountRotations, "legacy rotation-on default should migrate to opt-in");
+        AssertTrue(!settings.SimilarCountMirrored, "mirrored matching should stay opt-in after migration");
+        AssertTrue(
+            settings.SimilarCountSettingsVersion == AppSettingsStore.SimilarCountSettingsCurrentVersion,
+            "Similar Count settings version should be current after normalization");
+
+        settings.SimilarCountThreshold = 0.6;
+        settings.SimilarCountRotations = false;
+        settings.SimilarCountMirrored = false;
+        settings.SimilarCountSettingsVersion = 0;
+        AppSettingsStore.NormalizeSimilarCountSettings(settings);
+
+        AssertTrue(
+            Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
+            "legacy low Similar Count threshold should migrate even when rotations were already disabled");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
@@ -132,6 +196,8 @@ internal static class SimilarSymbolMatcherTests
     }
 
     private static (int X, int Y) TemplateOrigin;
+
+    private static float DefaultThreshold() => (float)AppSettingsStore.SimilarCountThresholdDefault;
 
     private static bool NearCenter(SimilarSymbolMatch match, int symbolX, int symbolY)
     {
@@ -217,6 +283,34 @@ internal static class SimilarSymbolMatcherTests
         return bitmap;
     }
 
+    private static SKBitmap BuildNearMissPage((int X, int Y)[] placements, (int X, int Y) nearMissAt)
+    {
+        TemplateOrigin = placements[0];
+        var bitmap = new SKBitmap(420, 320, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        };
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        foreach ((int x, int y) in placements)
+            DrawSymbol(canvas, stroke, fill, x, y);
+
+        DrawNearMissSymbol(canvas, stroke, fill, nearMissAt.X, nearMissAt.Y);
+        return bitmap;
+    }
+
     private static void DrawLooseSelectionEdgeNoise(SKBitmap bitmap, int x, int y)
     {
         using var canvas = new SKCanvas(bitmap);
@@ -246,6 +340,13 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawLine(x + 2, y + SymbolHeight - 4, x + 18, y + SymbolHeight - 4, stroke);
         canvas.DrawLine(x + 14, y + 8, x + SymbolWidth - 5, y + SymbolHeight - 8, stroke);
         canvas.DrawCircle(x + 9, y + 23, 3f, fill);
+    }
+
+    private static void DrawNearMissSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y)
+    {
+        canvas.DrawRect(new SKRect(x, y, x + SymbolWidth, y + SymbolHeight), stroke);
+        canvas.DrawLine(x, y, x + SymbolWidth, y + SymbolHeight, stroke);
+        canvas.DrawCircle(x + SymbolWidth - 5, y + SymbolHeight - 5, 2.5f, fill);
     }
 
     private static void AssertTrue(bool condition, string message)
