@@ -27,8 +27,8 @@ public sealed record ViewportSimilarCountPreviewMarker(
 // while the threshold dialog is open.
 public sealed partial class PdfViewport
 {
-    private const float SimilarCountMinimumBitmapScale = 1.25f;
-    private const float SimilarCountRequestedBitmapScale = 1.5f;
+    private const float SimilarCountMinimumBitmapScale = 1.75f;
+    private const float SimilarCountRequestedBitmapScale = 2.0f;
 
     private bool _similarCountSelecting;
     private bool _similarCountDragging;

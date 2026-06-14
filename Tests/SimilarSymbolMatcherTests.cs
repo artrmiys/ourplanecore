@@ -452,11 +452,11 @@ internal static class SimilarSymbolMatcherTests
         string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.cs"));
 
         AssertTrue(
-            source.Contains("SimilarCountMinimumBitmapScale = 1.25f", StringComparison.Ordinal) &&
-            source.Contains("SimilarCountRequestedBitmapScale = 1.5f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountMinimumBitmapScale = 1.75f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountRequestedBitmapScale = 2.0f", StringComparison.Ordinal) &&
             source.Contains("TryEnsureSimilarCountBitmapReady", StringComparison.Ordinal) &&
             source.Contains("QueueSimilarCountReadableBitmap()", StringComparison.Ordinal),
-            "Similar count should guard against matching from a low-resolution preview bitmap and request a sharper search raster");
+            "Similar count should guard against matching from a low-resolution preview bitmap and request a high-resolution search raster");
         AssertTrue(
             source.Contains("if (!TryEnsureSimilarCountBitmapReady(out string status))", StringComparison.Ordinal),
             "BeginSimilarCountSelection should check bitmap readiness before starting the crop interaction");
