@@ -1,5 +1,26 @@
 ﻿# Development Log
 
+## 2026-06-11/12 v2.0.0–v2.2.1: Features, Hardening, Rafters, Warmup Opt-In
+
+Full detail: `docs/SESSION_2026_06_11_V2_SUMMARY.md`. Highlights:
+
+- Multiline line takeoffs (up to 2 auto-offset companion lines), 4 new count
+  marker shapes, Export PDF folder tree with current-sheet highlight, per-sheet
+  export from the pages tree context menu.
+- v2.0.0 hardening after a 5-dimension audit: atomic Data.xml writes, job-relative
+  paths in measurements.json, autosave/undo ordering fixes, render hot-path
+  de-LINQing, OpenAI retries, log pruning, AI_Context archiving, real versioning
+  (csproj + title + startup log).
+- v2.1.0: offline "Count Similar" symbol matcher (bit-parallel, threshold dialog
+  with live ghost preview, optional online AI double-check).
+- v2.2.0: rafters on 3D roof faces — per-face pick or whole roof, slope-corrected
+  lumber-rounded lengths, walls trim to the rafter underside.
+- v2.2.1: perf regression triage — the June-10 whole-job warmup had shipped for
+  the first time with these deploys and competed with interactive sharpening;
+  it is now opt-in (Settings -> Defaults, default OFF), worker timeout restored
+  to 30s, work-zoom warmup yields between DPI steps.
+- Tests 303 -> 309/309; two brittle source-scan tests fixed.
+
 ## 2026-06-06 Low-Zoom Raster Paint Lag Pass
 
 - Fixed a remaining sheet-open lag where fit/low-zoom page opens could apply a
