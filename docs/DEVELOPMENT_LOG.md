@@ -1,5 +1,32 @@
 ﻿# Development Log
 
+## 2026-06-14 Perf: parallel detail-prefetch worker pool (instant deep-zoom fill)
+
+- Profiled the *non-zero* render frames in the live log: ~all frames are 0-8 ms, but a
+  tail of `kind=detail-prefetch` tiles ran 445-744 ms each **back-to-back** (one `detail`
+  then 3-4 `detail-prefetch` over ~2 s) at zoom 1.6-4.0. That serial tile-fill is the
+  "not instant" feeling when drawing/panning at deep zoom.
+- Root cause: the 4 prefetch clip tiles fan out concurrently in C# but then queue on two
+  size-1 gates — `ViewportRenderPolicy.DetailRenderPrefetchConcurrency = 1` and a single
+  persistent PyMuPDF *prefetch* worker process.
+- Fix (both widened, machine-adaptive `clamp(cores/3, 1, 4)`; =1 on small boxes, 4 on this
+  12-thread box):
+  - `ViewportRenderPolicy.DetailRenderPrefetchConcurrency` is now adaptive (sizes the C#
+    `DetailTilePrefetchSemaphore`).
+  - `PdfLayerRenderService` prefetch worker → a **pool** of persistent processes
+    (`PrefetchPoolSlots`/`PrefetchFreeSlots` + per-slot process arrays, `EnsurePrefetchSlot`/
+    `ResetPrefetchSlot`, pooled `TryInvokePrefetchWorkerAsync`). Primary/Detail workers are
+    left exactly as-is. Pool is prewarmed in parallel and drained on `StopWorker`.
+  - Extracted the shared line protocol into `ExchangeWithWorkerAsync` and the spawn into
+    `StartWorkerProcess` so the single-worker and pooled paths can't drift.
+  - Net: the deep-zoom tile fan-out renders in parallel on idle cores — ~540 ms to fill a
+    screen instead of ~2 s, no extra UI-thread work.
+- Verified: build 0/0; Tests harness 340/340 (added a guard for the pool; also fixed three
+  guards that pinned literals from the prior decode + adaptive-budget commits, which hadn't
+  been Tests-validated yet). Debug-only; not deployed (user working in the deployed build).
+- Still-open biggest lever: viewport is `SKElement` (CPU Skia) — RTX 3060 / 12 GB VRAM idle;
+  GPU backend (SKGLElement) needs a live visual pass, deferred until the machine is free.
+
 ## 2026-06-14 Perf: RAM-adaptive cache budgets (use the big machine)
 
 - User has 64 GB RAM + RTX 3060 12 GB; earlier "0.1 GB free" was my misread of

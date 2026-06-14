@@ -23,7 +23,10 @@ public static class ViewportRenderPolicy
     public const bool DetailRenderPrefetchEnabled = true;
     public const float DetailRenderPrefetchMinZoom = 2.5f;
     public const int DetailRenderPrefetchTileCount = 4;
-    public const int DetailRenderPrefetchConcurrency = 1;
+    // Machine-adaptive: how many detail-prefetch tiles render at once. Matches the python
+    // prefetch worker pool size so the fan-out at deep zoom fills in parallel instead of one
+    // tile at a time. 1 on small boxes (unchanged), up to 4 on a many-core workstation.
+    public static readonly int DetailRenderPrefetchConcurrency = Math.Clamp(Environment.ProcessorCount / 3, 1, 4);
     public const float DetailRenderPrefetchShiftFactor = 0.80f;
     public const int DetailRenderPrefetchDelayMs = 300;
     public const int DetailRenderCoalesceDelayMs = 80;

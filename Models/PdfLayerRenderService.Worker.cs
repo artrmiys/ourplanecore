@@ -88,7 +88,7 @@ public static partial class PdfLayerRenderService
         out TResponse? response,
         out string error)
     {
-        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Prefetch).GetAwaiter().GetResult();
+        var result = TryInvokePrefetchWorkerAsync<TRequest, TResponse>(action, request).GetAwaiter().GetResult();
         response = result.Response;
         error = result.Error;
         return result.Ok;
@@ -107,42 +107,11 @@ public static partial class PdfLayerRenderService
             if (!EnsureWorker(role, out string error))
                 return (false, default, error);
 
-            string id = Guid.NewGuid().ToString("N");
-            var envelope = new WorkerRequest<TRequest>
-            {
-                Id = id,
-                Action = action,
-                Request = request,
-            };
-
-            StreamWriter input = WorkerInputFor(role)!;
-            StreamReader output = WorkerOutputFor(role)!;
-
-            await input
-                .WriteLineAsync(JsonSerializer.Serialize(envelope, WorkerJsonOptions))
-                .ConfigureAwait(false);
-            await input.FlushAsync().ConfigureAwait(false);
-
-            // 30s bounds how long one stuck render can hold a worker; raising
-            // it (tried 120s) lets a single heavy request starve every queued
-            // interactive render behind it, which reads as long-lasting blur.
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            string? line = await output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
-
-            if (string.IsNullOrWhiteSpace(line))
-            {
+            var exchange = await ExchangeWithWorkerAsync<TRequest, TResponse>(
+                WorkerInputFor(role)!, WorkerOutputFor(role)!, action, request).ConfigureAwait(false);
+            if (exchange.Reset)
                 ResetWorker(role);
-                return (false, default, "PyMuPDF worker stopped unexpectedly.");
-            }
-
-            var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, WorkerJsonOptions);
-            if (workerResponse == null || workerResponse.Id != id)
-            {
-                ResetWorker(role);
-                return (false, default, "PyMuPDF worker returned an invalid response.");
-            }
-
-            return (true, workerResponse.Response, "");
+            return (exchange.Ok, exchange.Response, exchange.Error);
         }
         catch (OperationCanceledException ex)
         {
@@ -163,16 +132,137 @@ public static partial class PdfLayerRenderService
         }
     }
 
+    // Pooled variant of the prefetch worker: one of PrefetchWorkerPoolSize persistent
+    // processes serves each call, so the fan-out of detail-prefetch tiles renders in
+    // parallel instead of queuing behind a single worker. Shares the line-based protocol
+    // (ExchangeWithWorkerAsync) with the single-worker path above.
+    private static async Task<(bool Ok, TResponse? Response, string Error)> TryInvokePrefetchWorkerAsync<TRequest, TResponse>(
+        string action,
+        TRequest request)
+    {
+        await PrefetchPoolSlots.WaitAsync().ConfigureAwait(false);
+        int slot = PrefetchFreeSlots.TryPop(out int popped) ? popped : 0;
+
+        try
+        {
+            if (!EnsurePrefetchSlot(slot, out string error))
+                return (false, default, error);
+
+            var exchange = await ExchangeWithWorkerAsync<TRequest, TResponse>(
+                PrefetchWorkerInputs[slot]!, PrefetchWorkerOutputs[slot]!, action, request).ConfigureAwait(false);
+            if (exchange.Reset)
+                ResetPrefetchSlot(slot);
+            return (exchange.Ok, exchange.Response, exchange.Error);
+        }
+        catch (OperationCanceledException ex)
+        {
+            ResetPrefetchSlot(slot);
+            string error = $"PyMuPDF prefetch worker {action} timed out.";
+            AppLog.Warn(ex, error);
+            return (false, default, error);
+        }
+        catch (Exception ex)
+        {
+            ResetPrefetchSlot(slot);
+            AppLog.Warn(ex, $"PyMuPDF prefetch worker {action} failed");
+            return (false, default, ex.Message);
+        }
+        finally
+        {
+            PrefetchFreeSlots.Push(slot);
+            PrefetchPoolSlots.Release();
+        }
+    }
+
+    // One request/response round-trip over a worker's stdio. Returns Reset=true when the
+    // worker looks broken (no/garbled reply) so the caller can recycle that specific worker.
+    private static async Task<(bool Ok, TResponse? Response, string Error, bool Reset)> ExchangeWithWorkerAsync<TRequest, TResponse>(
+        StreamWriter input,
+        StreamReader output,
+        string action,
+        TRequest request)
+    {
+        string id = Guid.NewGuid().ToString("N");
+        var envelope = new WorkerRequest<TRequest>
+        {
+            Id = id,
+            Action = action,
+            Request = request,
+        };
+
+        await input
+            .WriteLineAsync(JsonSerializer.Serialize(envelope, WorkerJsonOptions))
+            .ConfigureAwait(false);
+        await input.FlushAsync().ConfigureAwait(false);
+
+        // 30s bounds how long one stuck render can hold a worker; raising
+        // it (tried 120s) lets a single heavy request starve every queued
+        // interactive render behind it, which reads as long-lasting blur.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        string? line = await output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(line))
+            return (false, default, "PyMuPDF worker stopped unexpectedly.", true);
+
+        var workerResponse = JsonSerializer.Deserialize<WorkerResponse<TResponse>>(line, WorkerJsonOptions);
+        if (workerResponse == null || workerResponse.Id != id)
+            return (false, default, "PyMuPDF worker returned an invalid response.", true);
+
+        return (true, workerResponse.Response, "", false);
+    }
+
     private static bool EnsureWorker(WorkerRole role, out string error)
     {
-        error = "";
         Process? workerProcess = WorkerProcessFor(role);
         StreamWriter? workerInput = WorkerInputFor(role);
         StreamReader? workerOutput = WorkerOutputFor(role);
         if (workerProcess is { HasExited: false } && workerInput != null && workerOutput != null)
+        {
+            error = "";
             return true;
+        }
 
         ResetWorker(role);
+        if (!StartWorkerProcess(WorkerLogPrefix(role), out Process? started, out StreamWriter? input, out StreamReader? output, out error))
+            return false;
+
+        SetWorker(role, started, input, output);
+        return true;
+    }
+
+    private static bool EnsurePrefetchSlot(int slot, out string error)
+    {
+        if (PrefetchWorkerProcesses[slot] is { HasExited: false } &&
+            PrefetchWorkerInputs[slot] != null &&
+            PrefetchWorkerOutputs[slot] != null)
+        {
+            error = "";
+            return true;
+        }
+
+        ResetPrefetchSlot(slot);
+        if (!StartWorkerProcess($"pyhelper-prefetch{slot}", out Process? started, out StreamWriter? input, out StreamReader? output, out error))
+            return false;
+
+        PrefetchWorkerProcesses[slot] = started;
+        PrefetchWorkerInputs[slot] = input;
+        PrefetchWorkerOutputs[slot] = output;
+        return true;
+    }
+
+    // Spawns one persistent `worker`-mode python helper and wires up its stdio. Shared by
+    // the single-worker roles and every prefetch pool slot.
+    private static bool StartWorkerProcess(
+        string logPrefix,
+        out Process? process,
+        out StreamWriter? input,
+        out StreamReader? output,
+        out string error)
+    {
+        process = null;
+        input = null;
+        output = null;
+        error = "";
 
         string helperPath = ResolveHelperPath();
         if (helperPath.Length == 0)
@@ -209,20 +299,32 @@ public static partial class PdfLayerRenderService
         started.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
-                AppLog.Warn($"[{WorkerLogPrefix(role)}] {e.Data}");
+                AppLog.Warn($"[{logPrefix}] {e.Data}");
         };
         started.BeginErrorReadLine();
-        SetWorker(role, started, started.StandardInput, started.StandardOutput);
 
+        process = started;
+        input = started.StandardInput;
+        output = started.StandardOutput;
         return true;
     }
 
     private static void ResetWorker(WorkerRole role = WorkerRole.Primary)
     {
-        Process? process = WorkerProcessFor(role);
-        StreamWriter? input = WorkerInputFor(role);
-        StreamReader? output = WorkerOutputFor(role);
+        KillWorkerProcess(WorkerProcessFor(role), WorkerInputFor(role), WorkerOutputFor(role));
+        SetWorker(role, null, null, null);
+    }
 
+    private static void ResetPrefetchSlot(int slot)
+    {
+        KillWorkerProcess(PrefetchWorkerProcesses[slot], PrefetchWorkerInputs[slot], PrefetchWorkerOutputs[slot]);
+        PrefetchWorkerProcesses[slot] = null;
+        PrefetchWorkerInputs[slot] = null;
+        PrefetchWorkerOutputs[slot] = null;
+    }
+
+    private static void KillWorkerProcess(Process? process, StreamWriter? input, StreamReader? output)
+    {
         try { input?.Dispose(); } catch { }
         try { output?.Dispose(); } catch { }
         try
@@ -232,8 +334,6 @@ public static partial class PdfLayerRenderService
         }
         catch { }
         try { process?.Dispose(); } catch { }
-
-        SetWorker(role, null, null, null);
     }
 
     public static void StopWorker()
@@ -258,14 +358,19 @@ public static partial class PdfLayerRenderService
             DetailWorkerSemaphore.Release();
         }
 
-        PrefetchWorkerSemaphore.Wait();
+        // Drain the whole prefetch pool: take every permit so no render is mid-flight,
+        // then recycle each slot's process.
+        for (int i = 0; i < PrefetchWorkerPoolSize; i++)
+            PrefetchPoolSlots.Wait();
         try
         {
-            ResetWorker(WorkerRole.Prefetch);
+            for (int slot = 0; slot < PrefetchWorkerPoolSize; slot++)
+                ResetPrefetchSlot(slot);
         }
         finally
         {
-            PrefetchWorkerSemaphore.Release();
+            for (int i = 0; i < PrefetchWorkerPoolSize; i++)
+                PrefetchPoolSlots.Release();
         }
     }
 
@@ -282,7 +387,7 @@ public static partial class PdfLayerRenderService
     public static Task PrewarmWorkersAsync() =>
         Task.Run(() =>
         {
-            foreach (WorkerRole role in new[] { WorkerRole.Primary, WorkerRole.Detail, WorkerRole.Prefetch })
+            foreach (WorkerRole role in new[] { WorkerRole.Primary, WorkerRole.Detail })
             {
                 SemaphoreSlim semaphore = WorkerSemaphoreFor(role);
                 semaphore.Wait();
@@ -301,41 +406,60 @@ public static partial class PdfLayerRenderService
                 }
             }
 
+            // Spin up every prefetch pool slot in parallel so their python startup
+            // overlaps each other and the rest of app launch.
+            Parallel.For(0, PrefetchWorkerPoolSize, _ =>
+            {
+                PrefetchPoolSlots.Wait();
+                int slot = PrefetchFreeSlots.TryPop(out int popped) ? popped : 0;
+                try
+                {
+                    if (!EnsurePrefetchSlot(slot, out string error) && !string.IsNullOrWhiteSpace(error))
+                        AppLog.Warn($"PyMuPDF pyhelper-prefetch{slot} prewarm failed: {error}");
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Warn(ex, $"PyMuPDF pyhelper-prefetch{slot} prewarm failed");
+                }
+                finally
+                {
+                    PrefetchFreeSlots.Push(slot);
+                    PrefetchPoolSlots.Release();
+                }
+            });
+
             AppLog.Info("PyMuPDF workers prewarmed.");
         });
 
+    // Primary/Detail are single persistent workers; Prefetch is a pool handled separately
+    // (PrefetchWorkerProcesses/Inputs/Outputs + EnsurePrefetchSlot/ResetPrefetchSlot).
     private static SemaphoreSlim WorkerSemaphoreFor(WorkerRole role) => role switch
     {
         WorkerRole.Detail => DetailWorkerSemaphore,
-        WorkerRole.Prefetch => PrefetchWorkerSemaphore,
         _ => WorkerSemaphore,
     };
 
     private static Process? WorkerProcessFor(WorkerRole role) => role switch
     {
         WorkerRole.Detail => DetailWorkerProcess,
-        WorkerRole.Prefetch => PrefetchWorkerProcess,
         _ => WorkerProcess,
     };
 
     private static StreamWriter? WorkerInputFor(WorkerRole role) => role switch
     {
         WorkerRole.Detail => DetailWorkerInput,
-        WorkerRole.Prefetch => PrefetchWorkerInput,
         _ => WorkerInput,
     };
 
     private static StreamReader? WorkerOutputFor(WorkerRole role) => role switch
     {
         WorkerRole.Detail => DetailWorkerOutput,
-        WorkerRole.Prefetch => PrefetchWorkerOutput,
         _ => WorkerOutput,
     };
 
     private static string WorkerLogPrefix(WorkerRole role) => role switch
     {
         WorkerRole.Detail => "pyhelper-detail",
-        WorkerRole.Prefetch => "pyhelper-prefetch",
         _ => "pyhelper",
     };
 
@@ -347,11 +471,6 @@ public static partial class PdfLayerRenderService
                 DetailWorkerProcess = process;
                 DetailWorkerInput = input;
                 DetailWorkerOutput = output;
-                break;
-            case WorkerRole.Prefetch:
-                PrefetchWorkerProcess = process;
-                PrefetchWorkerInput = input;
-                PrefetchWorkerOutput = output;
                 break;
             default:
                 WorkerProcess = process;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -23,10 +24,22 @@ public static partial class PdfLayerRenderService
     private static Process? DetailWorkerProcess;
     private static StreamWriter? DetailWorkerInput;
     private static StreamReader? DetailWorkerOutput;
-    private static readonly SemaphoreSlim PrefetchWorkerSemaphore = new(1, 1);
-    private static Process? PrefetchWorkerProcess;
-    private static StreamWriter? PrefetchWorkerInput;
-    private static StreamReader? PrefetchWorkerOutput;
+    // Detail-prefetch fans out up to DetailRenderPrefetchTileCount clip tiles when a deep
+    // zoom settles. A single persistent prefetch worker forced those tiles to render one
+    // after another (measured ~2 s to fill a screen at 600%+); a small pool of persistent
+    // workers renders them in parallel on the otherwise-idle cores. Sized to the machine:
+    // 1 on small boxes (unchanged behaviour), up to 4 on a many-core workstation. Each slot
+    // is owned by exactly one in-flight call (popped from PrefetchFreeSlots under the
+    // PrefetchPoolSlots permit), so per-slot fields need no extra locking.
+    private static readonly int PrefetchWorkerPoolSize = ResolvePrefetchWorkerPoolSize();
+    private static readonly SemaphoreSlim PrefetchPoolSlots = new(PrefetchWorkerPoolSize, PrefetchWorkerPoolSize);
+    private static readonly ConcurrentStack<int> PrefetchFreeSlots = new(Enumerable.Range(0, PrefetchWorkerPoolSize));
+    private static readonly Process?[] PrefetchWorkerProcesses = new Process?[PrefetchWorkerPoolSize];
+    private static readonly StreamWriter?[] PrefetchWorkerInputs = new StreamWriter?[PrefetchWorkerPoolSize];
+    private static readonly StreamReader?[] PrefetchWorkerOutputs = new StreamReader?[PrefetchWorkerPoolSize];
+
+    private static int ResolvePrefetchWorkerPoolSize() => Math.Clamp(Environment.ProcessorCount / 3, 1, 4);
+
     private static readonly object RenderCacheLock = new();
     private static readonly Dictionary<string, PdfLayerRenderResult> RenderCache = [];
     private static readonly Queue<string> RenderCacheOrder = [];

@@ -1570,7 +1570,7 @@ internal static class TakeoffsTreeRegressionTests
             "raster sheet mode should use smoothed still-frame bitmap sampling while allowing cheaper sampling during navigation and heavily downsampled far-zoom paint");
         AssertTrue(
             renderCache.Contains("RasterSheetBitmapCache", StringComparison.Ordinal) &&
-            renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 32", StringComparison.Ordinal) &&
+            renderCache.Contains("RasterSheetBitmapCache = new(maxEntries: 128", StringComparison.Ordinal) &&
             renderCache.Contains("ResolveRasterSheetBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
@@ -2460,7 +2460,7 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("InlineRenderImageMaxPixels", StringComparison.Ordinal) &&
             service.Contains("InlineRenderImageMaxPixels = 24_000_000", StringComparison.Ordinal) &&
             service.Contains("MaxRenderCacheEntries = 96", StringComparison.Ordinal) &&
-            service.Contains("MaxRenderCacheBytes = 768_000_000", StringComparison.Ordinal) &&
+            service.Contains("ResolveRenderCacheRamBudget(768_000_000L, 2_560_000_000L, 0.025)", StringComparison.Ordinal) &&
             service.Contains("ImageBase64", StringComparison.Ordinal) &&
             service.Contains("InlineRawImage = hasClip || allowRawFullPage", StringComparison.Ordinal) &&
             service.Contains("QueueCleanRenderPersistFromRaw", StringComparison.Ordinal) &&
@@ -2534,7 +2534,7 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderMaxPixels", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchEnabled = true", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderPrefetchMinZoom = 2.5f", StringComparison.Ordinal) &&
-            policy.Contains("DetailRenderPrefetchConcurrency = 1", StringComparison.Ordinal) &&
+            policy.Contains("DetailRenderPrefetchConcurrency = Math.Clamp(Environment.ProcessorCount / 3, 1, 4)", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderCoalesceDelayMs = 80", StringComparison.Ordinal) &&
             policy.Contains("DetailInteractiveMaxScale", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderMaxPaintTiles = 4", StringComparison.Ordinal) &&
@@ -2670,7 +2670,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("PdfLayerRenderService.TryRenderAsync", StringComparison.Ordinal) &&
             detail.Contains("PdfLayerRenderService.CancelDetailRenderWorker()", StringComparison.Ordinal) &&
             detail.Contains("DecodePdfLayerRenderBitmapWithMetrics(", StringComparison.Ordinal) &&
-            detail.Contains("Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length)", StringComparison.Ordinal) &&
+            detail.Contains("PdfLayerRenderService.CreateBitmapFromRawRender(render)", StringComparison.Ordinal) &&
             detail.Contains("ReportViewportRenderProfile", StringComparison.Ordinal) &&
             service.Contains("public static void CancelDetailRenderWorker()", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderPaddingScreenPxForZoom(_zoom)", StringComparison.Ordinal) &&
@@ -2725,7 +2725,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("ResolveLayerBitmapCacheBudgetBytes", StringComparison.Ordinal) &&
             renderCache.Contains("PrefetchCleanLayerRender", StringComparison.Ordinal) &&
             renderCache.Contains("CleanRenderPrefetchSemaphore", StringComparison.Ordinal) &&
-            renderCache.Contains("512_000_000L", StringComparison.Ordinal),
+            renderCache.Contains("1_792_000_000L", StringComparison.Ordinal),
             "decoded full-sheet PyMuPDF bitmaps should be reused from a bounded RAM cache before rerendering, including best-scale fallback, clean prefetch, and completed stale high-zoom renders");
         AssertTrue(
             service.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal),
@@ -2744,6 +2744,14 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("JsonSerializer.Serialize(envelope, WorkerJsonOptions)", StringComparison.Ordinal) &&
             service.Contains("!hasClip && PdfPreviewRenderCache.IsCleanRenderRequest", StringComparison.Ordinal),
             "layer render protocol should pass clip rectangles through a dedicated persistent worker without polluting the persisted whole-sheet cache or sending multiline JSON to the line-based worker");
+        AssertTrue(
+            service.Contains("ResolvePrefetchWorkerPoolSize() => Math.Clamp(Environment.ProcessorCount / 3, 1, 4)", StringComparison.Ordinal) &&
+            service.Contains("PrefetchPoolSlots", StringComparison.Ordinal) &&
+            service.Contains("PrefetchFreeSlots", StringComparison.Ordinal) &&
+            service.Contains("TryInvokePrefetchWorkerAsync", StringComparison.Ordinal) &&
+            service.Contains("EnsurePrefetchSlot", StringComparison.Ordinal) &&
+            service.Contains("ExchangeWithWorkerAsync", StringComparison.Ordinal),
+            "detail-prefetch tiles should fan out across a machine-sized pool of persistent prefetch workers so deep-zoom tiles render in parallel instead of one at a time");
         AssertTrue(
             helper.Contains("raw_clip = req.get(\"clip\")", StringComparison.Ordinal) &&
             helper.Contains("page.get_pixmap(matrix=matrix, clip=clip, alpha=False)", StringComparison.Ordinal) &&
