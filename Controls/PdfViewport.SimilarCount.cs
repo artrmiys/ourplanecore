@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using SkiaSharp;
@@ -7,6 +8,7 @@ using SkiaSharp;
 namespace OurPlaneCore.Controls;
 
 public sealed record ViewportSimilarCountRequest(SKRect PdfRect, string PageFolder);
+public sealed record ViewportSimilarCountPreviewMarker(SKPoint CenterPdf, bool Included);
 
 // "Count similar symbols": rubber-band template selection (mirrors the AI
 // crop note interaction) plus a ghost-marker preview layer for the matches
@@ -20,9 +22,10 @@ public sealed partial class PdfViewport
     private bool _similarCountDragging;
     private SKPoint _similarCountStartPdf;
     private SKPoint _similarCountEndPdf;
-    private IReadOnlyList<SKPoint>? _similarCountPreview;
+    private IReadOnlyList<ViewportSimilarCountPreviewMarker>? _similarCountPreview;
 
     public event Action<ViewportSimilarCountRequest>? SimilarCountSelectionCompleted;
+    public event Action<int>? SimilarCountPreviewMarkerToggled;
 
     public void BeginSimilarCountSelection()
     {
@@ -42,7 +45,15 @@ public sealed partial class PdfViewport
 
     public void SetSimilarCountPreview(IReadOnlyList<SKPoint>? centersPdf)
     {
-        _similarCountPreview = centersPdf;
+        _similarCountPreview = centersPdf?
+            .Select(center => new ViewportSimilarCountPreviewMarker(center, Included: true))
+            .ToList();
+        RequestRepaint();
+    }
+
+    public void SetSimilarCountPreviewMarkers(IReadOnlyList<ViewportSimilarCountPreviewMarker>? markers)
+    {
+        _similarCountPreview = markers;
         RequestRepaint();
     }
 
@@ -145,6 +156,9 @@ public sealed partial class PdfViewport
 
     private bool HandleSimilarCountMouseDown(SKPoint pdf)
     {
+        if (TryToggleSimilarCountPreviewMarker(pdf))
+            return true;
+
         if (!_similarCountSelecting)
             return false;
 
@@ -153,6 +167,35 @@ public sealed partial class PdfViewport
         _similarCountDragging = true;
         CaptureMouse();
         RequestRepaint();
+        return true;
+    }
+
+    private bool TryToggleSimilarCountPreviewMarker(SKPoint pdf)
+    {
+        IReadOnlyList<ViewportSimilarCountPreviewMarker>? preview = _similarCountPreview;
+        if (_similarCountSelecting || preview == null || preview.Count == 0)
+            return false;
+
+        float tolerance = ScreenToPdfDistance(13f);
+        float bestDistanceSq = tolerance * tolerance;
+        int bestIndex = -1;
+        for (int i = 0; i < preview.Count; i++)
+        {
+            SKPoint center = preview[i].CenterPdf;
+            float dx = center.X - pdf.X;
+            float dy = center.Y - pdf.Y;
+            float distanceSq = dx * dx + dy * dy;
+            if (distanceSq >= bestDistanceSq)
+                continue;
+
+            bestDistanceSq = distanceSq;
+            bestIndex = i;
+        }
+
+        if (bestIndex < 0)
+            return false;
+
+        SimilarCountPreviewMarkerToggled?.Invoke(bestIndex);
         return true;
     }
 
@@ -237,29 +280,52 @@ public sealed partial class PdfViewport
 
     private void DrawSimilarCountPreviewOverlay(SKCanvas canvas)
     {
-        IReadOnlyList<SKPoint>? preview = _similarCountPreview;
+        IReadOnlyList<ViewportSimilarCountPreviewMarker>? preview = _similarCountPreview;
         if (preview == null || preview.Count == 0)
             return;
 
         float safeZoom = Math.Max(_zoom, 0.001f);
         float radius = 7f / safeZoom;
-        using var fill = new SKPaint
+        using var includedFill = new SKPaint
         {
             Color = new SKColor(0x21, 0x96, 0xF3, 110),
             IsAntialias = true,
             Style = SKPaintStyle.Fill,
         };
-        using var stroke = new SKPaint
+        using var includedStroke = new SKPaint
         {
             Color = new SKColor(0x0D, 0x47, 0xA1),
             StrokeWidth = 1.6f / safeZoom,
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
-        foreach (SKPoint center in preview)
+        using var excludedStroke = new SKPaint
         {
-            canvas.DrawCircle(center, radius, fill);
-            canvas.DrawCircle(center, radius, stroke);
+            Color = new SKColor(0xC6, 0x28, 0x28),
+            StrokeWidth = 1.8f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+        foreach (ViewportSimilarCountPreviewMarker marker in preview)
+        {
+            SKPoint center = marker.CenterPdf;
+            if (marker.Included)
+            {
+                canvas.DrawCircle(center, radius, includedFill);
+                canvas.DrawCircle(center, radius, includedStroke);
+                continue;
+            }
+
+            canvas.DrawCircle(center, radius, excludedStroke);
+            float slash = radius * 0.72f;
+            canvas.DrawLine(
+                new SKPoint(center.X - slash, center.Y - slash),
+                new SKPoint(center.X + slash, center.Y + slash),
+                excludedStroke);
+            canvas.DrawLine(
+                new SKPoint(center.X - slash, center.Y + slash),
+                new SKPoint(center.X + slash, center.Y - slash),
+                excludedStroke);
         }
     }
 }

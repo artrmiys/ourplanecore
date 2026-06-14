@@ -16,11 +16,20 @@ namespace OurPlaneCore;
 // through the regular AI Inbox pipeline.
 public partial class MainWindow
 {
+    private SimilarCountDialog? _similarCountDialog;
+
     private void BtnSimilarCount_Click(object sender, RoutedEventArgs e)
     {
         if (_currentJob == null || _currentPage == null)
         {
             TxtStatus.Text = "Count similar: open a job and a sheet first.";
+            return;
+        }
+
+        if (_similarCountDialog != null)
+        {
+            _similarCountDialog.Activate();
+            TxtStatus.Text = "Count similar review is already open.";
             return;
         }
 
@@ -43,6 +52,39 @@ public partial class MainWindow
         }
 
         var lastCenters = new List<SKPoint>();
+        var excludedIndexes = new HashSet<int>();
+        SimilarCountDialog? dialog = null;
+
+        IReadOnlyList<ViewportSimilarCountPreviewMarker> BuildPreviewMarkers() =>
+            lastCenters
+                .Select((center, index) => new ViewportSimilarCountPreviewMarker(
+                    center,
+                    Included: !excludedIndexes.Contains(index)))
+                .ToList();
+
+        IReadOnlyList<SKPoint> IncludedCenters() =>
+            lastCenters
+                .Where((_, index) => !excludedIndexes.Contains(index))
+                .ToList();
+
+        void RefreshPreviewReview()
+        {
+            _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
+            dialog?.SetReviewCounts(lastCenters.Count - excludedIndexes.Count, lastCenters.Count);
+        }
+
+        void ToggleSimilarPreviewMarker(int index)
+        {
+            if (index < 0 || index >= lastCenters.Count)
+                return;
+
+            if (!excludedIndexes.Add(index))
+                excludedIndexes.Remove(index);
+
+            RefreshPreviewReview();
+            TxtStatus.Text = $"Count similar review: {lastCenters.Count - excludedIndexes.Count}/{lastCenters.Count} marker(s) included.";
+        }
+
         async Task<int> ScanAsync(float threshold, bool rotations, bool mirrored, CancellationToken cancellationToken)
         {
             List<SimilarSymbolMatch> matches = await Task.Run(
@@ -53,11 +95,12 @@ public partial class MainWindow
                 .ToList();
             lastCenters.Clear();
             lastCenters.AddRange(centers);
-            _viewport.SetSimilarCountPreview(centers);
+            excludedIndexes.Clear();
+            _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
             return centers.Count;
         }
 
-        var dialog = new SimilarCountDialog(
+        dialog = new SimilarCountDialog(
             ScanAsync,
             (float)_settings.SimilarCountThreshold,
             _settings.SimilarCountRotations,
@@ -66,28 +109,44 @@ public partial class MainWindow
         {
             Owner = this,
         };
-        bool accepted = dialog.ShowDialog() == true;
-        _viewport.SetSimilarCountPreview(null);
-        if (!accepted)
+
+        void CleanupSimilarDialog()
+        {
+            _viewport.SimilarCountPreviewMarkerToggled -= ToggleSimilarPreviewMarker;
+            _viewport.SetSimilarCountPreviewMarkers(null);
+            if (ReferenceEquals(_similarCountDialog, dialog))
+                _similarCountDialog = null;
+        }
+
+        dialog.Accepted += (_, _) =>
+        {
+            _settings.SimilarCountThreshold = dialog.Threshold;
+            _settings.SimilarCountRotations = dialog.IncludeRotations;
+            _settings.SimilarCountMirrored = dialog.IncludeMirrored;
+            SaveAppSettings();
+
+            IReadOnlyList<SKPoint> included = IncludedCenters();
+            if (included.Count == 0)
+            {
+                TxtStatus.Text = "Count similar: nothing to add.";
+                return;
+            }
+
+            AddSimilarCountMeasurements(request, included);
+            if (dialog.QueueAiDoubleCheck)
+                QueueSimilarCountAiRequest(request, included.Count);
+        };
+        dialog.Cancelled += (_, _) =>
         {
             TxtStatus.Text = "Count similar cancelled.";
-            return;
-        }
+        };
+        dialog.Closed += (_, _) => CleanupSimilarDialog();
 
-        _settings.SimilarCountThreshold = dialog.Threshold;
-        _settings.SimilarCountRotations = dialog.IncludeRotations;
-        _settings.SimilarCountMirrored = dialog.IncludeMirrored;
-        SaveAppSettings();
-
-        if (lastCenters.Count == 0)
-        {
-            TxtStatus.Text = "Count similar: nothing to add.";
-            return;
-        }
-
-        AddSimilarCountMeasurements(request, lastCenters);
-        if (dialog.QueueAiDoubleCheck)
-            QueueSimilarCountAiRequest(request, lastCenters.Count);
+        _viewport.SimilarCountPreviewMarkerToggled += ToggleSimilarPreviewMarker;
+        _similarCountDialog = dialog;
+        dialog.Show();
+        dialog.Activate();
+        TxtStatus.Text = "Count similar review: click preview markers on the sheet to exclude or include them.";
     }
 
     private void AddSimilarCountMeasurements(ViewportSimilarCountRequest request, IReadOnlyList<SKPoint> centers)

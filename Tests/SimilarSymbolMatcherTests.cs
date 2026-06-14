@@ -177,6 +177,30 @@ internal static class SimilarSymbolMatcherTests
             "BeginSimilarCountSelection should check bitmap readiness before starting the crop interaction");
     }
 
+    public static void SimilarCountPreviewSupportsReviewBeforeAdd()
+    {
+        string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+
+        AssertTrue(
+            viewport.Contains("ViewportSimilarCountPreviewMarker", StringComparison.Ordinal) &&
+            viewport.Contains("SimilarCountPreviewMarkerToggled", StringComparison.Ordinal) &&
+            viewport.Contains("TryToggleSimilarCountPreviewMarker", StringComparison.Ordinal),
+            "viewport should expose clickable Similar Count preview markers for review");
+        AssertTrue(
+            mainWindow.Contains("excludedIndexes", StringComparison.Ordinal) &&
+            mainWindow.Contains("IncludedCenters()", StringComparison.Ordinal) &&
+            mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers())", StringComparison.Ordinal),
+            "Similar Count should keep include/exclude review state and add only included centers");
+        AssertTrue(
+            dialog.Contains("public event EventHandler? Accepted", StringComparison.Ordinal) &&
+            dialog.Contains("public event EventHandler? Cancelled", StringComparison.Ordinal) &&
+            mainWindow.Contains("dialog.Show();", StringComparison.Ordinal) &&
+            !mainWindow.Contains("ShowDialog() == true", StringComparison.Ordinal),
+            "Similar Count dialog should be modeless so the sheet preview remains clickable during review");
+    }
+
     private static SimilarSymbolMatchSession? CreateSession(
         SKBitmap page,
         int leftPad = 3,

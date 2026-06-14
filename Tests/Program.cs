@@ -40,6 +40,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
     ("similar count defaults favor precision", SimilarSymbolMatcherTests.DefaultSettingsFavorPrecision),
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
+    ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),

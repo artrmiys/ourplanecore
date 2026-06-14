@@ -16,6 +16,8 @@ public sealed class SimilarCountDialog : Window
     public bool IncludeRotations { get; private set; }
     public bool IncludeMirrored { get; private set; }
     public bool QueueAiDoubleCheck { get; private set; }
+    public event EventHandler? Accepted;
+    public event EventHandler? Cancelled;
 
     private readonly Func<float, bool, bool, CancellationToken, Task<int>> _scan;
     private readonly Slider _thresholdSlider;
@@ -28,6 +30,8 @@ public sealed class SimilarCountDialog : Window
     private readonly DispatcherTimer _debounce;
     private CancellationTokenSource? _scanCts;
     private int _lastFound;
+    private int _lastTotal;
+    private bool _accepted;
 
     public SimilarCountDialog(
         Func<float, bool, bool, CancellationToken, Task<int>> scan,
@@ -122,6 +126,7 @@ public sealed class SimilarCountDialog : Window
             Margin = new Thickness(0, 0, 6, 0),
         };
         var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
+        cancel.Click += (_, _) => Close();
         buttons.Children.Add(_addButton);
         buttons.Children.Add(cancel);
         panel.Children.Add(buttons);
@@ -152,7 +157,9 @@ public sealed class SimilarCountDialog : Window
             IncludeRotations = _rotationsBox.IsChecked == true;
             IncludeMirrored = _mirroredBox.IsChecked == true;
             QueueAiDoubleCheck = _aiBox.IsChecked == true;
-            DialogResult = true;
+            _accepted = true;
+            Accepted?.Invoke(this, EventArgs.Empty);
+            Close();
         };
 
         Loaded += (_, _) =>
@@ -171,11 +178,40 @@ public sealed class SimilarCountDialog : Window
         {
             _debounce.Stop();
             _scanCts?.Cancel();
+            if (!_accepted)
+                Cancelled?.Invoke(this, EventArgs.Empty);
         };
     }
 
     private void UpdateThresholdLabel() =>
         _thresholdLabel.Text = $"Similarity threshold: {_thresholdSlider.Value:0.00} (precision default {AppSettingsStore.SimilarCountThresholdDefault:0.00})";
+
+    public void SetReviewCounts(int included, int total)
+    {
+        _lastFound = Math.Max(0, included);
+        _lastTotal = Math.Max(0, total);
+
+        if (_lastTotal == 0)
+        {
+            _foundLabel.Text = "Found 0 symbols.";
+            _addButton.Content = "Add Markers";
+            _addButton.IsEnabled = false;
+            return;
+        }
+
+        if (_lastFound == _lastTotal)
+        {
+            _foundLabel.Text = _lastFound == 1 ? "Found 1 symbol." : $"Found {_lastFound} symbols.";
+            _addButton.Content = "Add Markers";
+        }
+        else
+        {
+            _foundLabel.Text = $"Included {_lastFound} of {_lastTotal} symbols.";
+            _addButton.Content = $"Add {_lastFound}";
+        }
+
+        _addButton.IsEnabled = _lastFound > 0;
+    }
 
     private async Task RunScanAsync()
     {
@@ -194,9 +230,7 @@ public sealed class SimilarCountDialog : Window
             if (cts.IsCancellationRequested)
                 return;
 
-            _lastFound = found;
-            _foundLabel.Text = found == 1 ? "Found 1 symbol." : $"Found {found} symbols.";
-            _addButton.IsEnabled = found > 0;
+            SetReviewCounts(found, found);
         }
         catch (OperationCanceledException)
         {
