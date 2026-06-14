@@ -11,10 +11,12 @@ namespace OurPlaneCore.Controls;
 
 public sealed partial class PdfViewport
 {
-    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 32, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
-    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 256, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
-    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 32, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
-    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 24, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
+    // Entry counts raised in step with the byte budgets above so the byte budget
+    // (which is RAM-adaptive) is the real limit; small machines stay byte-bound.
+    private static readonly ViewportBitmapCache DocnetRenderCache = new(maxEntries: 128, maxBytes: ResolveDocnetRenderCacheBudgetBytes());
+    private static readonly ViewportBitmapCache PersistedPreviewBitmapCache = new(maxEntries: 768, maxBytes: ResolvePersistedPreviewBitmapCacheBudgetBytes());
+    private static readonly ViewportBitmapCache RasterSheetBitmapCache = new(maxEntries: 128, maxBytes: ResolveRasterSheetBitmapCacheBudgetBytes());
+    private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 96, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
     private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
@@ -38,17 +40,20 @@ public sealed partial class PdfViewport
     private static readonly HashSet<string> RasterSheetWorkZoomWarmupInFlight = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim RasterSheetWorkZoomWarmupSemaphore = new(1, 1);
 
+    // Upper caps are intentionally generous: budgets stay ratio-bound to available
+    // RAM (so 8-16 GB machines are unaffected), but a big-RAM workstation can keep
+    // far more sheets/tiles hot instead of re-rendering them. Ratios unchanged.
     private static long ResolveDocnetRenderCacheBudgetBytes() =>
-        ResolveViewportRamBudget(192_000_000L, 640_000_000L, 0.020);
+        ResolveViewportRamBudget(192_000_000L, 2_560_000_000L, 0.020);
 
     private static long ResolvePersistedPreviewBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(192_000_000L, 512_000_000L, 0.018);
+        ResolveViewportRamBudget(192_000_000L, 1_792_000_000L, 0.018);
 
     private static long ResolveRasterSheetBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(256_000_000L, 640_000_000L, 0.025);
+        ResolveViewportRamBudget(256_000_000L, 2_560_000_000L, 0.025);
 
     private static long ResolveLayerBitmapCacheBudgetBytes() =>
-        ResolveViewportRamBudget(256_000_000L, 768_000_000L, 0.030);
+        ResolveViewportRamBudget(256_000_000L, 2_560_000_000L, 0.030);
 
     private static long ResolveViewportRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
     {
