@@ -77,7 +77,7 @@ public sealed partial class PdfViewport
          _pdfW <= 0 ||
          _pdfH <= 0 ||
          _bitmapScale <= 0 ||
-         _bitmapScale < SimilarCountMinimumBitmapScaleForCurrentPage());
+         !IsSimilarCountBitmapScaleReady(_bitmapScale, SimilarCountRequiredBitmapScaleForCurrentPage()));
 
     private void StartWaitingForSimilarCountReadableBitmap()
     {
@@ -104,7 +104,7 @@ public sealed partial class PdfViewport
         }
 
         if (_pageBitmap == null ||
-            _bitmapScale < SimilarCountMinimumBitmapScaleForCurrentPage() ||
+            !IsSimilarCountBitmapScaleReady(_bitmapScale, SimilarCountRequiredBitmapScaleForCurrentPage()) ||
             !HasCurrentSimilarCountBitmap())
         {
             return;
@@ -177,22 +177,21 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        float minimumScale = SimilarCountMinimumBitmapScaleForCurrentPage();
-        if (_bitmapScale >= minimumScale)
-        {
-            QueueSimilarCountReadableBitmap(forceSharper: true);
-            status = "";
-            return true;
-        }
-
-        QueueSimilarCountReadableBitmap();
-        if (_bitmapScale >= minimumScale)
+        float requiredScale = SimilarCountRequiredBitmapScaleForCurrentPage();
+        if (IsSimilarCountBitmapScaleReady(_bitmapScale, requiredScale))
         {
             status = "";
             return true;
         }
 
-        status = $"Count similar: sheet is sharpening ({_bitmapScale:0.##}x). Selection will start automatically.";
+        QueueSimilarCountReadableBitmap(forceSharper: true);
+        if (IsSimilarCountBitmapScaleReady(_bitmapScale, requiredScale))
+        {
+            status = "";
+            return true;
+        }
+
+        status = $"Count similar: sheet is sharpening ({_bitmapScale:0.##}x/{requiredScale:0.##}x). Selection will start automatically.";
         return false;
     }
 
@@ -206,6 +205,12 @@ public sealed partial class PdfViewport
 
     private float SimilarCountMinimumBitmapScaleForCurrentPage() =>
         Math.Min(SimilarCountMinimumBitmapScale, SimilarCountRequestedBitmapScaleForCurrentPage());
+
+    private float SimilarCountRequiredBitmapScaleForCurrentPage() =>
+        SimilarCountRequestedBitmapScaleForCurrentPage();
+
+    private static bool IsSimilarCountBitmapScaleReady(float bitmapScale, float requiredScale) =>
+        bitmapScale >= requiredScale * 0.95f;
 
     private float SimilarCountRequestedBitmapScaleForCurrentPage()
     {

@@ -563,6 +563,8 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("SimilarCountRequestedBitmapScale = 3.0f", StringComparison.Ordinal) &&
             source.Contains("SimilarCountMaxRenderPixels = 96_000_000f", StringComparison.Ordinal) &&
             source.Contains("SimilarCountRequestedBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountRequiredBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
+            source.Contains("IsSimilarCountBitmapScaleReady", StringComparison.Ordinal) &&
             source.Contains("QueueSimilarCountReadableBitmap(forceSharper: true)", StringComparison.Ordinal) &&
             source.Contains("TryEnsureSimilarCountBitmapReady", StringComparison.Ordinal) &&
             source.Contains("QueueSimilarCountReadableBitmap()", StringComparison.Ordinal),
@@ -574,6 +576,8 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("_similarCountWaitingForReadableBitmap", StringComparison.Ordinal) &&
             source.Contains("StartWaitingForSimilarCountReadableBitmap", StringComparison.Ordinal) &&
             source.Contains("TryStartPendingSimilarCountSelection", StringComparison.Ordinal) &&
+            source.Contains("!IsSimilarCountBitmapScaleReady(_bitmapScale, SimilarCountRequiredBitmapScaleForCurrentPage())", StringComparison.Ordinal) &&
+            source.Contains("_bitmapScale:0.##}x/{requiredScale:0.##}x", StringComparison.Ordinal) &&
             source.Contains("Selection will start automatically", StringComparison.Ordinal) &&
             source.Contains("_similarCountWaitingPageFolder", StringComparison.Ordinal) &&
             viewport.Contains("TryStartPendingSimilarCountSelection();", StringComparison.Ordinal),
