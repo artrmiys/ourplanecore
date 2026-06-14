@@ -328,7 +328,7 @@ public partial class MainWindow
                 CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol),
                 PageFolder = request.PageFolder,
                 TakeoffFolder = item.FolderPath,
-                ScaleMetersPerPt = _viewport.ScaleMetersPerPt,
+                ScaleMetersPerPt = request.ScaleMetersPerPt,
             });
         }
 

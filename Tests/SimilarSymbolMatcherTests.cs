@@ -320,6 +320,11 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("TryStartPendingSimilarCountSelection();", StringComparison.Ordinal),
             "Similar count should auto-enter selection after sharpening without requiring a second toolbar click");
         AssertTrue(
+            source.Contains("ViewportSimilarCountRequest(SKRect PdfRect, string PageFolder, double ScaleMetersPerPt)", StringComparison.Ordinal) &&
+            source.Contains("double scaleMetersPerPt = ScaleMetersPerPt;", StringComparison.Ordinal) &&
+            source.Contains("new ViewportSimilarCountRequest(rect, pageFolder, scaleMetersPerPt)", StringComparison.Ordinal),
+            "Similar count should capture the scanned sheet scale with the selection request");
+        AssertTrue(
             source.Contains("HasCurrentSimilarCountBitmap", StringComparison.Ordinal) &&
             source.Contains("IsPageBitmapFor(_pdfPath, _pdfIndex, _pageFolder)", StringComparison.Ordinal) &&
             source.Contains("_pdfIndex != _similarCountWaitingPdfIndex", StringComparison.Ordinal),
@@ -492,6 +497,9 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("AddSimilarCountMeasurements(request, included, destinationItem)", StringComparison.Ordinal) &&
             mainWindow.Contains("ResolveSimilarCountDestinationItem(destinationItem)", StringComparison.Ordinal),
             "Similar Count should add reviewed markers to the captured destination takeoff, not a later active item");
+        AssertTrue(
+            mainWindow.Contains("ScaleMetersPerPt = request.ScaleMetersPerPt", StringComparison.Ordinal),
+            "Similar Count measurements should keep the scanned sheet scale even if the user switches sheets while reviewing");
         AssertTrue(
             dialog.Contains("Title = $\"Count Similar: {_destinationName}\"", StringComparison.Ordinal) &&
             dialog.Contains("AddButtonText", StringComparison.Ordinal),
