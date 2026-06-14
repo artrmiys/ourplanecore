@@ -422,6 +422,43 @@ internal static class SimilarSymbolMatcherTests
             "a symbol embedded in dense surrounding ink should stay below the default precision threshold");
     }
 
+    public static void RejectsSymbolWithHeavyDisconnectedWindowInk()
+    {
+        var placements = new[] { (40, 40) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        using (var canvas = new SKCanvas(page))
+        using (var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        })
+        using (var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        })
+        {
+            DrawSymbol(canvas, stroke, fill, 200, 60);
+            DrawHeavyDisconnectedWindowInk(canvas, fill, 200, 60);
+        }
+
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected only {placements.Length} clean-symbol match, got {matches.Count}: " +
+            string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}/focused={match.UsedFocusedScore}")));
+        AssertTrue(!matches.Any(match => NearCenter(match, 200, 60)),
+            "heavy disconnected ink inside the candidate window should not be ignored as a focused-score match");
+    }
+
     public static void DefaultSettingsFavorPrecision()
     {
         var settings = new AppSettings();
@@ -500,12 +537,15 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("FocusedWindowScoreMultiplier", StringComparison.Ordinal) &&
             source.Contains("FocusedWindowMinTemplateCoverage", StringComparison.Ordinal) &&
             source.Contains("FocusedWindowMaxCoreExtraShare", StringComparison.Ordinal) &&
+            source.Contains("FocusedWindowMaxTotalExtraShare", StringComparison.Ordinal) &&
             source.Contains("CoreWindowMasks", StringComparison.Ordinal) &&
             source.Contains("SimilarWindowScore", StringComparison.Ordinal) &&
             source.Contains("TemplateCoverage", StringComparison.Ordinal) &&
             source.Contains("WindowPrecision", StringComparison.Ordinal) &&
             source.Contains("focusedWindowInk", StringComparison.Ordinal) &&
             source.Contains("focusedExtraCoreInk", StringComparison.Ordinal) &&
+            source.Contains("focusedExtraInk", StringComparison.Ordinal) &&
+            source.Contains("FocusedWindowTotalExtraLimit", StringComparison.Ordinal) &&
             source.Contains("focusedProjectionScore", StringComparison.Ordinal) &&
             source.Contains("UsedFocusedScore", StringComparison.Ordinal) &&
             source.Contains("CountFocusedWindowInk", StringComparison.Ordinal),
@@ -1083,6 +1123,14 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawRect(new SKRect(x - 2, y + SymbolHeight + 1, x + SymbolWidth + 2, y + SymbolHeight + 3), fill);
         canvas.DrawRect(new SKRect(x - 3, y + 2, x - 1, y + SymbolHeight - 2), fill);
         canvas.DrawRect(new SKRect(x + SymbolWidth + 1, y + 2, x + SymbolWidth + 3, y + SymbolHeight - 2), fill);
+    }
+
+    private static void DrawHeavyDisconnectedWindowInk(SKCanvas canvas, SKPaint fill, int x, int y)
+    {
+        canvas.DrawRect(new SKRect(x + 3, y + 5, x + 4, y + SymbolHeight - 5), fill);
+        canvas.DrawRect(new SKRect(x + 5, y + 7, x + 6, y + SymbolHeight - 7), fill);
+        canvas.DrawRect(new SKRect(x + SymbolWidth - 4, y + 5, x + SymbolWidth - 3, y + SymbolHeight - 5), fill);
+        canvas.DrawRect(new SKRect(x + SymbolWidth - 6, y + 7, x + SymbolWidth - 5, y + SymbolHeight - 7), fill);
     }
 
     private static void DrawLargeSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y, int width, int height)

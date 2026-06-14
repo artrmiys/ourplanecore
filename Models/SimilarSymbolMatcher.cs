@@ -69,6 +69,8 @@ public sealed class SimilarSymbolMatchSession
     private const int FocusedWindowCoreMaxInset = 8;
     private const int FocusedWindowMaxCoreExtraInk = 8;
     private const float FocusedWindowMaxCoreExtraShare = 0.04f;
+    private const int FocusedWindowMaxTotalExtraInk = 48;
+    private const float FocusedWindowMaxTotalExtraShare = 0.22f;
 
     private readonly int _width;
     private readonly int _height;
@@ -385,6 +387,7 @@ public sealed class SimilarSymbolMatchSession
         float strictScore = Math.Min(
             Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio),
             Math.Min(profileScore, projectionScore));
+        int focusedExtraInk = windowInk - focusedWindowInk;
         var strict = new SimilarWindowScore(
             strictScore,
             templateCoverage,
@@ -397,7 +400,8 @@ public sealed class SimilarSymbolMatchSession
             templateCoverage < FocusedWindowMinTemplateCoverage ||
             focusedWindowInk <= 0 ||
             focusedWindowInk >= windowInk ||
-            focusedExtraCoreInk > FocusedWindowCoreExtraLimit(template.InkCount))
+            focusedExtraCoreInk > FocusedWindowCoreExtraLimit(template.InkCount) ||
+            focusedExtraInk > FocusedWindowTotalExtraLimit(template.InkCount))
         {
             return strict;
         }
@@ -1088,6 +1092,11 @@ public sealed class SimilarSymbolMatchSession
         Math.Max(
             FocusedWindowMaxCoreExtraInk,
             (int)MathF.Ceiling(templateInk * FocusedWindowMaxCoreExtraShare));
+
+    private static int FocusedWindowTotalExtraLimit(int templateInk) =>
+        Math.Max(
+            FocusedWindowMaxTotalExtraInk,
+            (int)MathF.Ceiling(templateInk * FocusedWindowMaxTotalExtraShare));
 
     private static int CountInk(bool[,] template)
     {
