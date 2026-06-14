@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using SkiaSharp;
 
@@ -645,29 +644,8 @@ public sealed partial class PdfViewport
         if (!render.HasRawImage)
             return SKBitmap.Decode(render.ImageBytes);
 
-        int width = render.RawImageWidth;
-        int height = render.RawImageHeight;
-        int channels = render.RawImageChannels;
-        byte[] source = render.RawImageBytes;
-        long pixelCount = (long)width * height;
-        if (pixelCount <= 0 ||
-            pixelCount > int.MaxValue / 4 ||
-            source.LongLength != pixelCount * channels)
-            return null;
-
-        var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
-        byte[] bgra = new byte[(int)(pixelCount * 4)];
-        int dst = 0;
-        for (int src = 0; src < source.Length; src += channels)
-        {
-            bgra[dst++] = source[src + 2];
-            bgra[dst++] = source[src + 1];
-            bgra[dst++] = source[src];
-            bgra[dst++] = channels == 4 ? source[src + 3] : (byte)255;
-        }
-
-        Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length);
-        return bitmap;
+        // Shared parallel, allocation-light raw->BGRA decoder (PdfLayerRenderService).
+        return PdfLayerRenderService.CreateBitmapFromRawRender(render);
     }
 
     private static SKBitmap? DecodePdfLayerRenderBitmapWithMetrics(

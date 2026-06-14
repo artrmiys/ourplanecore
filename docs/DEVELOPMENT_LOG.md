@@ -1,5 +1,21 @@
 ﻿# Development Log
 
+## 2026-06-14 Perf: parallel, allocation-light raw-render decode
+
+- Raw PyMuPDF renders (BGR/BGRA bytes) were converted to SKBitmap by a
+  single-threaded per-pixel loop into a full-image intermediate `byte[]` before
+  one Marshal.Copy. Two identical copies existed (detail tiles + main raster).
+- Now `PdfLayerRenderService.CreateBitmapFromRawRender` writes straight into the
+  bitmap's pixel buffer (no intermediate buffer -> lower peak RAM + less GC) and,
+  for rasters >= 256 rows, spreads the per-row copy across all cores via
+  Parallel.For. Output is byte-identical. `PdfViewport.DecodePdfLayerRenderBitmap`
+  now delegates to it (one implementation).
+- Debug-only verification this pass (user actively working); not deployed.
+- Bigger levers identified for later (need a profiling pass while idle): the
+  viewport is `SKElement` (CPU Skia, UI thread) — the RTX 3060 / VRAM is unused;
+  GPU backend (SKGLElement) is the largest win. Cache RAM budgets are clamped
+  conservatively but free RAM was near zero, so deferred.
+
 ## 2026-06-14 Hotfix: deep-zoom measurement freeze (raster quality-restore spin)
 
 - Symptom: app froze (UI thread pegged ~100% of one core, logging stopped) when

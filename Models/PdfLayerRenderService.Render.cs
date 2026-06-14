@@ -408,7 +408,11 @@ namespace OurPlaneCore;
         });
     }
 
-    internal static SKBitmap? CreateBitmapFromRawRender(PdfLayerRenderResult render)
+    // Rows below this count don't repay Parallel.For's scheduling overhead, so
+    // tiny previews/prewarms decode on the calling thread.
+    private const int RawRenderParallelMinRows = 256;
+
+    internal static unsafe SKBitmap? CreateBitmapFromRawRender(PdfLayerRenderResult render)
     {
         int width = render.RawImageWidth;
         int height = render.RawImageHeight;
@@ -424,18 +428,55 @@ namespace OurPlaneCore;
         }
 
         var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
-        byte[] bgra = new byte[(int)(pixelCount * 4)];
-        int dst = 0;
-        for (int src = 0; src < source.Length; src += channels)
+        IntPtr destPtr = bitmap.GetPixels();
+        if (destPtr == IntPtr.Zero)
         {
-            bgra[dst++] = source[src + 2];
-            bgra[dst++] = source[src + 1];
-            bgra[dst++] = source[src];
-            bgra[dst++] = channels == 4 ? source[src + 3] : (byte)255;
+            bitmap.Dispose();
+            return null;
         }
 
-        System.Runtime.InteropServices.Marshal.Copy(bgra, 0, bitmap.GetPixels(), bgra.Length);
+        // Convert BGR(A) -> BGRA straight into the bitmap's pixel buffer: this
+        // drops the full-image intermediate byte[] (lower peak RAM + less GC
+        // churn) and, for large rasters, spreads the per-row copy across all
+        // cores instead of one thread. Output is byte-identical to the old loop.
+        byte* dest = (byte*)destPtr;
+        int rowChannels = width * channels;
+        if (height >= RawRenderParallelMinRows)
+        {
+            System.Threading.Tasks.Parallel.For(0, height, y =>
+                ConvertRawRenderRow(source, dest, y, width, channels, rowChannels));
+        }
+        else
+        {
+            for (int y = 0; y < height; y++)
+                ConvertRawRenderRow(source, dest, y, width, channels, rowChannels);
+        }
+
         return bitmap;
+    }
+
+    private static unsafe void ConvertRawRenderRow(
+        byte[] source,
+        byte* dest,
+        int y,
+        int width,
+        int channels,
+        int rowChannels)
+    {
+        fixed (byte* srcRow = &source[y * rowChannels])
+        {
+            byte* s = srcRow;
+            byte* d = dest + (long)y * width * 4;
+            for (int x = 0; x < width; x++)
+            {
+                d[0] = s[2];
+                d[1] = s[1];
+                d[2] = s[0];
+                d[3] = channels == 4 ? s[3] : (byte)255;
+                s += channels;
+                d += 4;
+            }
+        }
     }
 
     private static bool TryReadRenderImagePayload(
