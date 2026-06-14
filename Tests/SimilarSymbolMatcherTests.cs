@@ -129,6 +129,24 @@ internal static class SimilarSymbolMatcherTests
         }
     }
 
+    public static void KeepsHitsNearAdjacentPlanInk()
+    {
+        var placements = new[] { (40, 40), (200, 60), (120, 220) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        DrawAdjacentWordNoise(page, placements[1].Item1, placements[1].Item2);
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(
+            matches.Any(match => NearCenter(match, placements[1].Item1, placements[1].Item2)),
+            "adjacent plan ink outside the exact symbol window should not make Similar miss a real copy; " +
+            $"matches: {string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}"))}");
+    }
+
     public static void FindsMirroredCopyOnlyWhenEnabled()
     {
         var placements = new[] { (40, 40), (200, 60) };
@@ -639,6 +657,20 @@ internal static class SimilarSymbolMatcherTests
             IsAntialias = false,
         };
         canvas.DrawLine(x - 7, y - 3, x - 7, y + SymbolHeight + 3, stroke);
+    }
+
+    private static void DrawAdjacentWordNoise(SKBitmap bitmap, int x, int y)
+    {
+        using var canvas = new SKCanvas(bitmap);
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        canvas.DrawRect(new SKRect(x - 8, y - 8, x - 5, y + SymbolHeight + 12), fill);
+        canvas.DrawRect(new SKRect(x + SymbolWidth + 6, y - 8, x + SymbolWidth + 13, y + SymbolHeight + 12), fill);
     }
 
     // Asymmetric glyph: box + one diagonal + a dot in the top-left corner so

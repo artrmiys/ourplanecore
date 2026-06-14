@@ -179,10 +179,16 @@ public sealed class SimilarSymbolMatchSession
                     int approxInk = 0;
                     for (int w = w0; w <= wLast; w++)
                         approxInk += bandInk[bandRow + w];
-                    // approxInk over-counts (whole edge words), so only the
-                    // lower bound is safe to enforce strictly.
-                    if (approxInk < minWindowInk || approxInk - 128 > maxWindowInk)
+                    if (approxInk < minWindowInk)
                         continue;
+                    // approxInk over-counts whole edge words. A dense plan line
+                    // near the symbol can look too dark at word granularity, so
+                    // confirm upper-bound rejects with the exact window ink.
+                    if (approxInk - 128 > maxWindowInk &&
+                        CountWindowInk(template, x, y) > maxWindowInk)
+                    {
+                        continue;
+                    }
 
                     float score = ScoreWindow(template, x, y, minScore);
                     if (score < minScore && template.EdgeRelaxed != null)
@@ -284,6 +290,24 @@ public sealed class SimilarSymbolMatchSession
         return Math.Min(
             Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio),
             Math.Min(profileScore, projectionScore));
+    }
+
+    private int CountWindowInk(TemplateVariant template, int x, int y)
+    {
+        int shift = x & 63;
+        int w0 = x >> 6;
+        int words = template.ShiftWords[shift];
+        ulong[] masks = template.WindowMasks[shift];
+        int windowInk = 0;
+
+        for (int row = 0; row < template.Height; row++)
+        {
+            int pageBase = (y + row) * _wordsPerRow + w0;
+            for (int k = 0; k < words; k++)
+                windowInk += BitOperations.PopCount(_ink[pageBase + k] & masks[k]);
+        }
+
+        return windowInk;
     }
 
     private static float GridProfileScore(
