@@ -1,5 +1,18 @@
 ﻿# Development Log
 
+## 2026-06-14 GPU viewport (SKGLElement) investigated and rejected
+
+- Tried migrating `PdfViewport : SKElement` → `SKGLElement` (GPU/VRAM) on an isolated
+  worktree. Build failed: SkiaSharp.Views.WPF 2.88.8 ships **no** GPU element
+  (`SKGLElement`/`SKPaintGLSurfaceEventArgs` absent from the assembly — verified by
+  inspecting the nuget DLL). WPF composes via DirectX, so SkiaSharp has no first-party
+  WPF GPU control; the only route is a hand-rolled GL host + D3DImage interop (large,
+  driver-fragile). Worktree/branch discarded.
+- More importantly it would target the wrong layer: the live-log slow frames (445-744 ms)
+  are `cache=False` **PyMuPDF** renders, while Skia paint frames are already 0-8 ms. The
+  bottleneck is PDF render + its serialization (addressed by the prefetch pool below), not
+  CPU rasterization. GPU would accelerate an already-instant layer. Not pursued.
+
 ## 2026-06-14 Perf: parallel detail-prefetch worker pool (instant deep-zoom fill)
 
 - Profiled the *non-zero* render frames in the live log: ~all frames are 0-8 ms, but a
