@@ -83,6 +83,32 @@ internal static class SimilarSymbolMatcherTests
         }
     }
 
+    public static void LooseWhitespaceSelectionKeepsCentersPrecise()
+    {
+        var placements = new[] { (40, 40), (200, 60), (120, 220) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? session = CreateSession(
+            page,
+            leftPad: 38,
+            topPad: 28,
+            rightPad: 4,
+            bottomPad: 4);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected {placements.Length} matches from loose whitespace selection, got {matches.Count}");
+        foreach ((int x, int y) in placements)
+        {
+            AssertTrue(
+                matches.Any(match => NearCenter(match, x, y)),
+                $"loose whitespace selection shifted marker away from symbol at ({x},{y})");
+        }
+    }
+
     public static void FindsMirroredCopyOnlyWhenEnabled()
     {
         var placements = new[] { (40, 40), (200, 60) };
@@ -182,8 +208,9 @@ internal static class SimilarSymbolMatcherTests
 
         AssertTrue(
             source.Contains("public const int GridSide = 5", StringComparison.Ordinal) &&
-            source.Contains("fine 5x5 ink-profile match", StringComparison.Ordinal),
-            "Similar matcher should use a fine symbol layout profile instead of coarse 3x3 matching");
+            source.Contains("fine 5x5 ink-profile match", StringComparison.Ordinal) &&
+            source.Contains("AutoTightenTemplate(ExtractTemplate", StringComparison.Ordinal),
+            "Similar matcher should use a fine symbol layout profile and auto-tighten loose selections");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()

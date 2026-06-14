@@ -36,6 +36,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar symbol matcher honors rotation toggle", SimilarSymbolMatcherTests.FindsRotatedCopyOnlyWhenEnabled),
     ("similar symbol matcher rejects distractors", SimilarSymbolMatcherTests.RejectsDistractorsAndDedupes),
     ("similar symbol matcher tolerates loose edge selection", SimilarSymbolMatcherTests.FindsCopiesWithLooseEdgeSelection),
+    ("similar symbol matcher tightens loose whitespace selection", SimilarSymbolMatcherTests.LooseWhitespaceSelectionKeepsCentersPrecise),
     ("similar symbol matcher can include mirrored copies", SimilarSymbolMatcherTests.FindsMirroredCopyOnlyWhenEnabled),
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
     ("similar count defaults favor precision", SimilarSymbolMatcherTests.DefaultSettingsFavorPrecision),

@@ -39,6 +39,7 @@ public sealed class SimilarSymbolMatchSession
     private const int MaxTemplateSide = 96;      // downsample until template fits
     private const int InkLumaThreshold = 176;
     private const int MinTemplateInk = 12;
+    private const int TemplateAutoTightenPadding = 2;
     private const float EdgeRelaxedInsetRatio = 0.08f;
     private const int EdgeRelaxedMaxInset = 8;
     private const float EdgeRelaxedScoreMultiplier = 0.985f;
@@ -97,7 +98,7 @@ public sealed class SimilarSymbolMatchSession
             rect.Top / factor,
             Math.Min(width, (rect.Right + factor - 1) / factor),
             Math.Min(height, (rect.Bottom + factor - 1) / factor));
-        bool[,] template = ExtractTemplate(inkPixels, width, scaledRect);
+        bool[,] template = AutoTightenTemplate(ExtractTemplate(inkPixels, width, scaledRect));
         if (CountInk(template) < MinTemplateInk)
         {
             error = "The selected box contains no linework to match.";
@@ -440,6 +441,47 @@ public sealed class SimilarSymbolMatchSession
         }
 
         return template;
+    }
+
+    private static bool[,] AutoTightenTemplate(bool[,] source)
+    {
+        int width = source.GetLength(0);
+        int height = source.GetLength(1);
+        int minX = width;
+        int minY = height;
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (!source[x, y])
+                    continue;
+
+                minX = Math.Min(minX, x);
+                minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x);
+                maxY = Math.Max(maxY, y);
+            }
+        }
+
+        if (maxX < minX || maxY < minY)
+            return source;
+
+        minX = Math.Max(0, minX - TemplateAutoTightenPadding);
+        minY = Math.Max(0, minY - TemplateAutoTightenPadding);
+        maxX = Math.Min(width - 1, maxX + TemplateAutoTightenPadding);
+        maxY = Math.Min(height - 1, maxY + TemplateAutoTightenPadding);
+        if (minX == 0 && minY == 0 && maxX == width - 1 && maxY == height - 1)
+            return source;
+
+        int tightWidth = maxX - minX + 1;
+        int tightHeight = maxY - minY + 1;
+        var tight = new bool[tightWidth, tightHeight];
+        for (int y = 0; y < tightHeight; y++)
+            for (int x = 0; x < tightWidth; x++)
+                tight[x, y] = source[x + minX, y + minY];
+        return tight;
     }
 
     private static bool[,] RotateClockwise(bool[,] source)
