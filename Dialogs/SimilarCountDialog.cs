@@ -27,6 +27,7 @@ public sealed class SimilarCountDialog : Window
     private readonly TextBlock _foundLabel;
     private readonly TextBlock _thresholdLabel;
     private readonly Button _addButton;
+    private readonly string _destinationName;
     private readonly DispatcherTimer _debounce;
     private CancellationTokenSource? _scanCts;
     private int _lastFound;
@@ -38,10 +39,12 @@ public sealed class SimilarCountDialog : Window
         float initialThreshold,
         bool initialRotations,
         bool initialMirrored,
+        string destinationName,
         bool aiAvailable)
     {
         _scan = scan;
-        Title = "Count Similar Symbols";
+        _destinationName = CleanDestinationName(destinationName);
+        Title = $"Count Similar: {_destinationName}";
         Width = 360;
         SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -119,7 +122,7 @@ public sealed class SimilarCountDialog : Window
         };
         _addButton = new Button
         {
-            Content = "Add Markers",
+            Content = AddButtonText(0),
             MinWidth = 96,
             IsDefault = true,
             IsEnabled = false,
@@ -194,7 +197,7 @@ public sealed class SimilarCountDialog : Window
         if (_lastTotal == 0)
         {
             _foundLabel.Text = "Found 0 symbols.";
-            _addButton.Content = "Add Markers";
+            _addButton.Content = AddButtonText(0);
             _addButton.IsEnabled = false;
             return;
         }
@@ -202,15 +205,33 @@ public sealed class SimilarCountDialog : Window
         if (_lastFound == _lastTotal)
         {
             _foundLabel.Text = _lastFound == 1 ? "Found 1 symbol." : $"Found {_lastFound} symbols.";
-            _addButton.Content = "Add Markers";
+            _addButton.Content = AddButtonText(_lastFound);
         }
         else
         {
             _foundLabel.Text = $"Included {_lastFound} of {_lastTotal} symbols.";
-            _addButton.Content = $"Add {_lastFound}";
+            _addButton.Content = AddButtonText(_lastFound);
         }
 
         _addButton.IsEnabled = _lastFound > 0;
+    }
+
+    private string AddButtonText(int count)
+    {
+        string name = _destinationName.Length <= 22
+            ? _destinationName
+            : _destinationName[..21] + "...";
+        return count <= 0
+            ? $"Add to {name}"
+            : $"Add {count} to {name}";
+    }
+
+    private static string CleanDestinationName(string destinationName)
+    {
+        string clean = string.IsNullOrWhiteSpace(destinationName)
+            ? "Similar Count"
+            : destinationName.Trim();
+        return clean.Length <= 48 ? clean : clean[..47] + "...";
     }
 
     private async Task RunScanAsync()

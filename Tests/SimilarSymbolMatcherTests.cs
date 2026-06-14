@@ -201,6 +201,25 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count dialog should be modeless so the sheet preview remains clickable during review");
     }
 
+    public static void SimilarCountLocksDestinationTakeoff()
+    {
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+
+        AssertTrue(
+            mainWindow.Contains("TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem()", StringComparison.Ordinal) &&
+            mainWindow.Contains("string destinationName = SimilarCountDestinationName(destinationItem)", StringComparison.Ordinal),
+            "Similar Count should capture the active point takeoff before the modeless review starts");
+        AssertTrue(
+            mainWindow.Contains("AddSimilarCountMeasurements(request, included, destinationItem)", StringComparison.Ordinal) &&
+            mainWindow.Contains("ResolveSimilarCountDestinationItem(destinationItem)", StringComparison.Ordinal),
+            "Similar Count should add reviewed markers to the captured destination takeoff, not a later active item");
+        AssertTrue(
+            dialog.Contains("Title = $\"Count Similar: {_destinationName}\"", StringComparison.Ordinal) &&
+            dialog.Contains("AddButtonText", StringComparison.Ordinal),
+            "Similar Count review should show the destination takeoff in the dialog title and add button");
+    }
+
     private static SimilarSymbolMatchSession? CreateSession(
         SKBitmap page,
         int leftPad = 3,

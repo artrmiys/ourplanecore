@@ -53,6 +53,8 @@ public partial class MainWindow
 
         var lastCenters = new List<SKPoint>();
         var excludedIndexes = new HashSet<int>();
+        TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
+        string destinationName = SimilarCountDestinationName(destinationItem);
         SimilarCountDialog? dialog = null;
 
         IReadOnlyList<ViewportSimilarCountPreviewMarker> BuildPreviewMarkers() =>
@@ -105,6 +107,7 @@ public partial class MainWindow
             (float)_settings.SimilarCountThreshold,
             _settings.SimilarCountRotations,
             _settings.SimilarCountMirrored,
+            destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()))
         {
             Owner = this,
@@ -132,9 +135,9 @@ public partial class MainWindow
                 return;
             }
 
-            AddSimilarCountMeasurements(request, included);
+            AddSimilarCountMeasurements(request, included, destinationItem);
             if (dialog.QueueAiDoubleCheck)
-                QueueSimilarCountAiRequest(request, included.Count);
+                QueueSimilarCountAiRequest(request, included.Count, destinationName);
         };
         dialog.Cancelled += (_, _) =>
         {
@@ -146,16 +149,15 @@ public partial class MainWindow
         _similarCountDialog = dialog;
         dialog.Show();
         dialog.Activate();
-        TxtStatus.Text = "Count similar review: click preview markers on the sheet to exclude or include them.";
+        TxtStatus.Text = $"Count similar review for {destinationName}: click preview markers on the sheet to exclude or include them.";
     }
 
-    private void AddSimilarCountMeasurements(ViewportSimilarCountRequest request, IReadOnlyList<SKPoint> centers)
+    private void AddSimilarCountMeasurements(
+        ViewportSimilarCountRequest request,
+        IReadOnlyList<SKPoint> centers,
+        TakeoffItem? destinationItem)
     {
-        TakeoffItem? item =
-            _activeItem != null &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == "point"
-                ? _activeItem
-                : null;
+        TakeoffItem? item = ResolveSimilarCountDestinationItem(destinationItem);
         if (item == null)
         {
             string parent = NewTakeoffItemParentFolderForUserCreate();
@@ -207,7 +209,37 @@ public partial class MainWindow
         TxtStatus.Text = $"Count similar: added {generated.Count} marker(s) to {item.Name}. They stay selected for review.";
     }
 
-    private void QueueSimilarCountAiRequest(ViewportSimilarCountRequest request, int offlineCount)
+    private TakeoffItem? CurrentSimilarCountDestinationItem()
+    {
+        if (_activeItem == null ||
+            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != "point")
+        {
+            return null;
+        }
+
+        return _activeItem;
+    }
+
+    private TakeoffItem? ResolveSimilarCountDestinationItem(TakeoffItem? destinationItem)
+    {
+        if (destinationItem == null ||
+            OurPlaneCoreJobStore.NormalizeMeasurementType(destinationItem.MeasurementType) != "point")
+        {
+            return null;
+        }
+
+        return _takeoffItems.FirstOrDefault(item =>
+            string.Equals(item.FolderPath, destinationItem.FolderPath, StringComparison.OrdinalIgnoreCase)) ??
+            destinationItem;
+    }
+
+    private static string SimilarCountDestinationName(TakeoffItem? destinationItem)
+    {
+        string name = destinationItem?.Name?.Trim() ?? "";
+        return string.IsNullOrWhiteSpace(name) ? "Similar Count" : name;
+    }
+
+    private void QueueSimilarCountAiRequest(ViewportSimilarCountRequest request, int offlineCount, string destinationName)
     {
         if (_currentJob == null || _currentPage == null)
             return;
@@ -238,6 +270,7 @@ public partial class MainWindow
                 "Similar-count AI double-check requested." + Environment.NewLine + Environment.NewLine +
                 "Context:" + Environment.NewLine +
                 $"- Page: {_currentPage.Name}" + Environment.NewLine +
+                $"- Destination takeoff: {destinationName}" + Environment.NewLine +
                 $"- Offline match count: {offlineCount}" + Environment.NewLine +
                 $"- AI crop: {cropPath}" + Environment.NewLine +
                 $"- PDF crop: {FormatPdfRect(cropRect)}" + Environment.NewLine;
