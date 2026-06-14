@@ -423,7 +423,8 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             mainWindow.Contains("manualReviewStatesByCenter[MatchReviewKey(lastMatches[index])] = include", StringComparison.Ordinal) &&
             mainWindow.Contains("RememberCurrentSimilarReviewChoices(include: true)", StringComparison.Ordinal) &&
-            mainWindow.Contains("ClearManualSimilarReviewChoicesForCurrentMatches", StringComparison.Ordinal),
+            mainWindow.Contains("void ClearManualSimilarReviewChoices() => manualReviewStatesByCenter.Clear();", StringComparison.Ordinal) &&
+            mainWindow.Contains("ClearManualSimilarReviewChoices();", StringComparison.Ordinal),
             "Similar Count marker toggles and review quick actions should update stable manual choices");
     }
 

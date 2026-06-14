@@ -190,11 +190,7 @@ public partial class MainWindow
             }
         }
 
-        void ClearManualSimilarReviewChoicesForCurrentMatches()
-        {
-            foreach (SimilarSymbolMatch match in lastMatches)
-                manualReviewStatesByCenter.Remove(MatchReviewKey(match));
-        }
+        void ClearManualSimilarReviewChoices() => manualReviewStatesByCenter.Clear();
 
         void ApplyDefaultSimilarReviewExclusions()
         {
@@ -250,7 +246,7 @@ public partial class MainWindow
 
         void KeepOnlyStrongPreviewMarkers(object? sender, EventArgs e)
         {
-            ClearManualSimilarReviewChoicesForCurrentMatches();
+            ClearManualSimilarReviewChoices();
             ApplyDefaultSimilarReviewExclusions();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
