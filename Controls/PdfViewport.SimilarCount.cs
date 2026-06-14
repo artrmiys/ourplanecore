@@ -377,7 +377,8 @@ public sealed partial class PdfViewport
             $" | coverage {SimilarCountScorePercent(marker.TemplateCoverage)}%, " +
             $"precision {SimilarCountScorePercent(marker.WindowPrecision)}%, " +
             $"ink {SimilarCountScorePercent(marker.InkRatio)}%, " +
-            $"layout {SimilarCountScorePercent(layoutScore)}%";
+            $"layout {SimilarCountScorePercent(layoutScore)}%, " +
+            $"limit {SimilarCountLimitLabel(marker, layoutScore)}";
         string focused = marker.UsedFocusedScore ? " | extra ink ignored" : "";
 
         return $"Count similar marker: {confidence} {marker.Score:0.00}, {state}; {action}{variant}{scoreParts}{focused}.";
@@ -385,6 +386,18 @@ public sealed partial class PdfViewport
 
     private static int SimilarCountScorePercent(float score) =>
         (int)MathF.Round(Math.Clamp(score, 0f, 1f) * 100f);
+
+    private static string SimilarCountLimitLabel(ViewportSimilarCountPreviewMarker marker, float layoutScore)
+    {
+        (string Label, float Score) limit = ("coverage", marker.TemplateCoverage);
+        if (marker.WindowPrecision < limit.Score)
+            limit = ("precision", marker.WindowPrecision);
+        if (marker.InkRatio < limit.Score)
+            limit = ("ink", marker.InkRatio);
+        if (layoutScore < limit.Score)
+            limit = ("layout", layoutScore);
+        return limit.Label;
+    }
 
     private bool IsSimilarCountPreviewForCurrentPage() =>
         !string.IsNullOrWhiteSpace(_similarCountPreviewPageFolder) &&

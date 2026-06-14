@@ -498,6 +498,8 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("precision", StringComparison.Ordinal) &&
             viewport.Contains("ink", StringComparison.Ordinal) &&
             viewport.Contains("layout", StringComparison.Ordinal) &&
+            viewport.Contains("SimilarCountLimitLabel", StringComparison.Ordinal) &&
+            viewport.Contains("limit", StringComparison.Ordinal) &&
             viewport.Contains("extra ink ignored", StringComparison.Ordinal),
             "Similar preview markers should explain hover status, confidence, review state, click action, and match diagnostics");
         AssertTrue(
