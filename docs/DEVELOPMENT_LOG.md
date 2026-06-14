@@ -1,5 +1,25 @@
 ﻿# Development Log
 
+## 2026-06-14 Perf: RAM-adaptive cache budgets (use the big machine)
+
+- User has 64 GB RAM + RTX 3060 12 GB; earlier "0.1 GB free" was my misread of
+  FreePhysicalMemory (standby cache) — Task-Manager Available was 53.8 GB. Plenty
+  of RAM. Goal: let big machines keep more sheets/tiles hot, small machines unchanged.
+- `PdfViewport.RenderCache.cs`: raised the upper caps on the four ratio-bound bitmap
+  cache budgets (Docnet / persisted-preview / raster-sheet / layer) to 1.79-2.56 GB and
+  the entry counts (128/768/128/96) so the RAM-adaptive byte budget is the real limit.
+  Ratios and minimums unchanged → 8-16 GB machines still land on the old small budgets.
+- `PdfLayerRenderService.cs`: the Python render cache used fixed consts. Made
+  `MaxRenderCacheBytes` and `MaxRenderCacheEntryBytes` RAM-adaptive via
+  `ResolveRenderCacheRamBudget`. The per-entry cap (was a hard 96 MB) now scales to
+  384 MB on big-RAM boxes: a full-page large-sheet raster at high dpi (~150 MB raw)
+  used to exceed 96 MB and be rejected from cache → re-rendered on every view; it now
+  caches. Min stays 96 MB / 768 MB so small machines are unaffected.
+- Debug-only this pass (user actively working in the deployed exe); not deployed, no
+  live launch (would double-write the live job). Build 0/0.
+- Still-open biggest lever: viewport is `SKElement` (CPU Skia) — RTX 3060 / 12 GB VRAM
+  idle; GPU backend (SKGLElement) deferred to an idle profiling pass.
+
 ## 2026-06-14 Perf: parallel, allocation-light raw-render decode
 
 - Raw PyMuPDF renders (BGR/BGRA bytes) were converted to SKBitmap by a

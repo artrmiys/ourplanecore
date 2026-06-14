@@ -32,8 +32,31 @@ public static partial class PdfLayerRenderService
     private static readonly Queue<string> RenderCacheOrder = [];
     private static long RenderCacheBytes;
     private const int MaxRenderCacheEntries = 96;
-    private const long MaxRenderCacheBytes = 768_000_000;
-    private const long MaxRenderCacheEntryBytes = 96_000_000;
+
+    // RAM-adaptive: budgets scale with installed memory and clamp to [min, max].
+    // Small machines (8-16 GB) keep the old conservative size; a big-RAM box keeps
+    // far more full-page renders hot. The per-entry cap is the important one here:
+    // at 96 MB a full-page large-sheet raster at high dpi (~150 MB raw) was rejected
+    // outright and re-rendered every view; raising it lets those renders actually cache.
+    private static readonly long MaxRenderCacheBytes =
+        ResolveRenderCacheRamBudget(768_000_000L, 2_560_000_000L, 0.025);
+    private static readonly long MaxRenderCacheEntryBytes =
+        ResolveRenderCacheRamBudget(96_000_000L, 384_000_000L, 0.006);
+
+    private static long ResolveRenderCacheRamBudget(long minimumBytes, long maximumBytes, double targetRatio)
+    {
+        long availableBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (availableBytes <= 0)
+            return minimumBytes;
+
+        double desiredBytes = availableBytes * targetRatio;
+        if (double.IsNaN(desiredBytes) || desiredBytes <= 0)
+            return minimumBytes;
+
+        long budgetBytes = desiredBytes >= long.MaxValue ? maximumBytes : (long)desiredBytes;
+        return Math.Clamp(budgetBytes, minimumBytes, maximumBytes);
+    }
+
     private const int InlineRenderImageMaxPixels = 24_000_000;
     private const int InlineRawRenderImageMaxPixels = 4_000_000;
     private static readonly object InFlightRenderLock = new();
