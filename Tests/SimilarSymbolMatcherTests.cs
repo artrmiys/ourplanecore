@@ -153,7 +153,7 @@ internal static class SimilarSymbolMatcherTests
             $"multi-symbol template should warn, got '{multiSession.TemplateWarning}'");
     }
 
-    public static void WarnsOnDownsampledLooseTemplate()
+    public static void KeepsLooseWhitespaceTemplateFullResolution()
     {
         var placements = new[] { (140, 120) };
         using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
@@ -172,11 +172,30 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(string.IsNullOrWhiteSpace(normalSession!.TemplateWarning),
             $"normal one-symbol template should not warn, got '{normalSession.TemplateWarning}'");
         AssertTrue(looseSession != null, $"loose template session creation failed: {error}");
-        AssertTrue(looseSession!.DownsampleFactor > 1,
-            $"loose template should be downsampled, got factor {looseSession.DownsampleFactor}");
+        AssertTrue(looseSession!.DownsampleFactor == 1,
+            $"loose whitespace around a small symbol should stay full-resolution, got factor {looseSession.DownsampleFactor}");
         AssertTrue(
-            looseSession.TemplateWarning.Contains("downsampled", StringComparison.Ordinal),
-            $"downsampled loose template should warn, got '{looseSession.TemplateWarning}'");
+            !looseSession.TemplateWarning.Contains("downsampled", StringComparison.Ordinal),
+            $"loose whitespace should not warn as downsampled, got '{looseSession.TemplateWarning}'");
+        AssertTrue(
+            Math.Abs(looseSession.TemplateInkPixels - normalSession.TemplateInkPixels) <= 8,
+            $"loose whitespace should not change template detail; normal ink {normalSession.TemplateInkPixels}, loose ink {looseSession.TemplateInkPixels}");
+    }
+
+    public static void WarnsOnDownsampledLargeTemplate()
+    {
+        using SKBitmap page = BuildLargeTemplatePage(80, 60, 180, 120);
+        SimilarSymbolMatchSession? session = SimilarSymbolMatchSession.TryCreate(
+            page,
+            new SKRectI(76, 56, 264, 184),
+            out string error);
+
+        AssertTrue(session != null, $"large template session creation failed: {error}");
+        AssertTrue(session!.DownsampleFactor > 1,
+            $"large template should be downsampled, got factor {session.DownsampleFactor}");
+        AssertTrue(
+            session.TemplateWarning.Contains("downsampled", StringComparison.Ordinal),
+            $"downsampled large template should warn, got '{session.TemplateWarning}'");
     }
 
     public static void KeepsHitsNearAdjacentPlanInk()
@@ -361,8 +380,10 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("PrepareTemplate(ExtractTemplate", StringComparison.Ordinal) &&
             source.Contains("RemovePeripheralTemplateNoise", StringComparison.Ordinal) &&
             source.Contains("BuildTemplateQualityWarning", StringComparison.Ordinal) &&
+            source.Contains("TryFindTemplateInkBounds", StringComparison.Ordinal) &&
+            source.Contains("TemplateDownsampleFactor", StringComparison.Ordinal) &&
             source.Contains("TemplateWarning", StringComparison.Ordinal),
-            "Similar matcher should use a fine symbol layout profile, clean loose selections, and warn on suspicious templates");
+            "Similar matcher should use a fine symbol layout profile, clean loose selections, preserve resolution from ink bounds, and warn on suspicious templates");
         AssertTrue(
             source.Contains("EdgeRelaxedScoreMultiplier = 0.93f", StringComparison.Ordinal),
             "Similar matcher should keep edge-relaxed matches below the default precision threshold");
@@ -773,6 +794,30 @@ internal static class SimilarSymbolMatcherTests
         return bitmap;
     }
 
+    private static SKBitmap BuildLargeTemplatePage(int x, int y, int width, int height)
+    {
+        var bitmap = new SKBitmap(420, 320, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        };
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        DrawLargeSymbol(canvas, stroke, fill, x, y, width, height);
+        return bitmap;
+    }
+
     private static SKBitmap BuildMirrorSensitivePage((int X, int Y)[] placements, (int X, int Y) mirroredAt)
     {
         TemplateOrigin = placements[0];
@@ -897,6 +942,14 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawRect(new SKRect(x, y, x + SymbolWidth, y + SymbolHeight), stroke);
         canvas.DrawLine(x, y, x + SymbolWidth, y + SymbolHeight, stroke);
         canvas.DrawCircle(x + SymbolWidth - 5, y + SymbolHeight - 5, 2.5f, fill);
+    }
+
+    private static void DrawLargeSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y, int width, int height)
+    {
+        canvas.DrawRect(new SKRect(x, y, x + width, y + height), stroke);
+        canvas.DrawLine(x, y + height, x + width, y, stroke);
+        canvas.DrawLine(x + width / 4f, y, x + width / 4f, y + height, stroke);
+        canvas.DrawCircle(x + 16, y + 16, 5f, fill);
     }
 
     private static void DrawCoreOnlySymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y)

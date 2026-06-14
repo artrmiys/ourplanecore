@@ -124,9 +124,13 @@ public sealed class SimilarSymbolMatchSession
             return null;
         }
 
-        int factor = 1;
-        while (Math.Max(rect.Width, rect.Height) / factor > MaxTemplateSide)
-            factor *= 2;
+        if (!TryFindTemplateInkBounds(page, rect, out SKRectI templateInkBounds))
+        {
+            error = "The selected box contains no linework to match.";
+            return null;
+        }
+
+        int factor = TemplateDownsampleFactor(templateInkBounds);
 
         bool[] inkPixels = BinarizeDownsampled(page, factor, out int width, out int height);
 
@@ -550,6 +554,66 @@ public sealed class SimilarSymbolMatchSession
 
     // ── Raster preparation ───────────────────────────────────────────────────
 
+    private static int TemplateDownsampleFactor(SKRectI templateInkBounds)
+    {
+        int inkWidth = Math.Max(0, templateInkBounds.Width) + TemplateAutoTightenPadding * 2;
+        int inkHeight = Math.Max(0, templateInkBounds.Height) + TemplateAutoTightenPadding * 2;
+        int factor = 1;
+        while (Math.Max(inkWidth, inkHeight) / factor > MaxTemplateSide)
+            factor *= 2;
+        return factor;
+    }
+
+    private static bool TryFindTemplateInkBounds(SKBitmap page, SKRectI rect, out SKRectI inkBounds)
+    {
+        inkBounds = default;
+        SKBitmap source = page;
+        SKBitmap? converted = null;
+        if (page.ColorType != SKColorType.Bgra8888 && page.ColorType != SKColorType.Rgba8888)
+        {
+            converted = page.Copy(SKColorType.Bgra8888);
+            source = converted ?? page;
+        }
+
+        try
+        {
+            int minX = rect.Right;
+            int minY = rect.Bottom;
+            int maxX = rect.Left - 1;
+            int maxY = rect.Top - 1;
+            unsafe
+            {
+                byte* basePtr = (byte*)source.GetPixels().ToPointer();
+                int rowBytes = source.RowBytes;
+                bool bgra = source.ColorType != SKColorType.Rgba8888;
+                for (int y = rect.Top; y < rect.Bottom; y++)
+                {
+                    byte* row = basePtr + y * rowBytes;
+                    for (int x = rect.Left; x < rect.Right; x++)
+                    {
+                        if (!IsInkPixel(row + x * 4, bgra))
+                            continue;
+
+                        minX = Math.Min(minX, x);
+                        minY = Math.Min(minY, y);
+                        maxX = Math.Max(maxX, x);
+                        maxY = Math.Max(maxY, y);
+                    }
+                }
+            }
+
+            if (maxX < minX || maxY < minY)
+                return false;
+
+            inkBounds = new SKRectI(minX, minY, maxX + 1, maxY + 1);
+            return true;
+        }
+        finally
+        {
+            converted?.Dispose();
+        }
+    }
+
     private static bool[] BinarizeDownsampled(SKBitmap page, int factor, out int width, out int height)
     {
         SKBitmap source = page;
@@ -577,11 +641,7 @@ public sealed class SimilarSymbolMatchSession
                     for (int sx = 0; sx < width * factor; sx++)
                     {
                         byte* px = row + sx * 4;
-                        int b = bgra ? px[0] : px[2];
-                        int g = px[1];
-                        int r = bgra ? px[2] : px[0];
-                        int luma = (r * 299 + g * 587 + b * 114) / 1000;
-                        if (luma < InkLumaThreshold)
+                        if (IsInkPixel(px, bgra))
                             ink[outRow + sx / factor] = true;
                     }
                 }
@@ -593,6 +653,15 @@ public sealed class SimilarSymbolMatchSession
         {
             converted?.Dispose();
         }
+    }
+
+    private static unsafe bool IsInkPixel(byte* px, bool bgra)
+    {
+        int b = bgra ? px[0] : px[2];
+        int g = px[1];
+        int r = bgra ? px[2] : px[0];
+        int luma = (r * 299 + g * 587 + b * 114) / 1000;
+        return luma < InkLumaThreshold;
     }
 
     private static ulong[] PackRows(bool[] pixels, int width, int height, int wordsPerRow)
