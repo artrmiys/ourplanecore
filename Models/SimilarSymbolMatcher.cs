@@ -61,6 +61,8 @@ public sealed class SimilarSymbolMatchSession
     private const float PeripheralNoiseMaxCoreRatio = 0.85f;
     private const float TemplateMajorComponentMinShare = 0.28f;
     private const float TemplateSecondMajorMinLargestRatio = 0.55f;
+    private const float LooseTemplateSelectionAreaRatio = 6.0f;
+    private const float LooseTemplateSelectionSideRatio = 2.5f;
     private const float FocusedWindowScoreMultiplier = 0.98f;
     private const float FocusedWindowMinTemplateCoverage = 0.90f;
     private const float FocusedWindowCoreInsetRatio = 0.12f;
@@ -158,7 +160,11 @@ public sealed class SimilarSymbolMatchSession
         AddRotatedVariants(variants, template, mirrored: false);
         AddRotatedVariants(variants, MirrorHorizontal(template), mirrored: true);
 
-        string templateWarning = BuildTemplateQualityWarning(template, factor);
+        string templateWarning = BuildTemplateQualityWarning(
+            template,
+            factor,
+            scaledRect.Width,
+            scaledRect.Height);
         return new SimilarSymbolMatchSession(
             width,
             height,
@@ -858,12 +864,19 @@ public sealed class SimilarSymbolMatchSession
         return new SKRectI(offsetX + minX, offsetY + minY, offsetX + maxX + 1, offsetY + maxY + 1);
     }
 
-    private static string BuildTemplateQualityWarning(bool[,] template, int downsampleFactor)
+    private static string BuildTemplateQualityWarning(
+        bool[,] template,
+        int downsampleFactor,
+        int selectionWidth,
+        int selectionHeight)
     {
         var warnings = new List<string>();
         string clusterWarning = BuildTemplateClusterWarning(template);
         if (!string.IsNullOrWhiteSpace(clusterWarning))
             warnings.Add(clusterWarning);
+        string looseWarning = BuildLooseTemplateSelectionWarning(template, selectionWidth, selectionHeight);
+        if (!string.IsNullOrWhiteSpace(looseWarning))
+            warnings.Add(looseWarning);
         if (downsampleFactor > 1)
         {
             warnings.Add(
@@ -871,6 +884,28 @@ public sealed class SimilarSymbolMatchSession
         }
 
         return string.Join(Environment.NewLine, warnings);
+    }
+
+    private static string BuildLooseTemplateSelectionWarning(bool[,] template, int selectionWidth, int selectionHeight)
+    {
+        int templateWidth = template.GetLength(0);
+        int templateHeight = template.GetLength(1);
+        if (templateWidth <= 0 ||
+            templateHeight <= 0 ||
+            selectionWidth <= templateWidth ||
+            selectionHeight <= templateHeight)
+        {
+            return "";
+        }
+
+        float areaRatio = selectionWidth * selectionHeight / (float)(templateWidth * templateHeight);
+        float sideRatio = Math.Max(
+            selectionWidth / (float)templateWidth,
+            selectionHeight / (float)templateHeight);
+        if (areaRatio < LooseTemplateSelectionAreaRatio && sideRatio < LooseTemplateSelectionSideRatio)
+            return "";
+
+        return "Template note: selected box has large whitespace; matcher tightened to the detected symbol before scanning.";
     }
 
     private static string BuildTemplateClusterWarning(bool[,] template)

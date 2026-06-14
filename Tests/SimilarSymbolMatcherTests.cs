@@ -178,6 +178,9 @@ internal static class SimilarSymbolMatcherTests
             !looseSession.TemplateWarning.Contains("downsampled", StringComparison.Ordinal),
             $"loose whitespace should not warn as downsampled, got '{looseSession.TemplateWarning}'");
         AssertTrue(
+            looseSession.TemplateWarning.Contains("tightened", StringComparison.Ordinal),
+            $"loose whitespace should warn that the template was tightened, got '{looseSession.TemplateWarning}'");
+        AssertTrue(
             Math.Abs(looseSession.TemplateInkPixels - normalSession.TemplateInkPixels) <= 8,
             $"loose whitespace should not change template detail; normal ink {normalSession.TemplateInkPixels}, loose ink {looseSession.TemplateInkPixels}");
     }
@@ -478,6 +481,7 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("RemovePeripheralTemplateNoise", StringComparison.Ordinal) &&
             source.Contains("FindPeripheralTemplateNoiseComponents", StringComparison.Ordinal) &&
             source.Contains("BuildTemplateQualityWarning", StringComparison.Ordinal) &&
+            source.Contains("BuildLooseTemplateSelectionWarning", StringComparison.Ordinal) &&
             source.Contains("TryFindTemplateInkBounds", StringComparison.Ordinal) &&
             source.Contains("TemplateDownsampleFactor", StringComparison.Ordinal) &&
             source.Contains("TemplateWarning", StringComparison.Ordinal),
