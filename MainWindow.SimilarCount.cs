@@ -82,6 +82,7 @@ public partial class MainWindow
                     match.Score,
                     match.RotationDegrees,
                     match.Mirrored,
+                    match.ScalePercent,
                     AlreadyCounted: alreadyCountedIndexes.Contains(index),
                     TemplateCoverage: match.TemplateCoverage,
                     WindowPrecision: match.WindowPrecision,

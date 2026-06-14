@@ -41,6 +41,7 @@ public sealed record SimilarSymbolMatch(
     float Score,
     int RotationDegrees,
     bool Mirrored = false,
+    int ScalePercent = 100,
     float TemplateCoverage = 1f,
     float WindowPrecision = 1f,
     float InkRatio = 1f,
@@ -75,6 +76,7 @@ public sealed class SimilarSymbolMatchSession
     private const int StrokeProfileBucketCount = 4;
     private const int MinStrokeProfilePairs = 6;
     private const float StrokeProfileMismatchWeight = 0.75f;
+    private const float ScaledVariantScoreMultiplier = 0.985f;
 
     private readonly int _width;
     private readonly int _height;
@@ -164,8 +166,8 @@ public sealed class SimilarSymbolMatchSession
         }
 
         var variants = new List<TemplateVariant>();
-        AddRotatedVariants(variants, template, mirrored: false);
-        AddRotatedVariants(variants, MirrorHorizontal(template), mirrored: true);
+        AddScaledRotatedVariants(variants, template, mirrored: false);
+        AddScaledRotatedVariants(variants, MirrorHorizontal(template), mirrored: true);
 
         string templateWarning = BuildTemplateQualityWarning(
             template,
@@ -274,13 +276,15 @@ public sealed class SimilarSymbolMatchSession
                             score = relaxedScore with { Score = adjustedScore };
                     }
 
-                    if (score.Score >= minScore)
+                    float finalScore = score.Score * template.ScoreMultiplier;
+                    if (finalScore >= minScore)
                         local.Add(new SimilarSymbolMatch(
                             (x + tw / 2) * _factor + _factor / 2,
                             (y + th / 2) * _factor + _factor / 2,
-                            score.Score,
+                            finalScore,
                             template.RotationDegrees,
                             template.Mirrored,
+                            template.ScalePercent,
                             score.TemplateCoverage,
                             score.WindowPrecision,
                             score.InkRatio,
@@ -1147,18 +1151,89 @@ public sealed class SimilarSymbolMatchSession
         return mirrored;
     }
 
-    private static void AddRotatedVariants(List<TemplateVariant> variants, bool[,] source, bool mirrored)
+    private static bool[,] ScaleTemplate(bool[,] source, float scale)
+    {
+        int sourceWidth = source.GetLength(0);
+        int sourceHeight = source.GetLength(1);
+        int targetWidth = Math.Max(6, (int)MathF.Round(sourceWidth * scale));
+        int targetHeight = Math.Max(6, (int)MathF.Round(sourceHeight * scale));
+        var scaled = new bool[targetWidth, targetHeight];
+
+        for (int y = 0; y < targetHeight; y++)
+        {
+            int sourceY = Math.Clamp((int)MathF.Floor((y + 0.5f) / scale), 0, sourceHeight - 1);
+            for (int x = 0; x < targetWidth; x++)
+            {
+                int sourceX = Math.Clamp((int)MathF.Floor((x + 0.5f) / scale), 0, sourceWidth - 1);
+                scaled[x, y] = source[sourceX, sourceY];
+            }
+        }
+
+        return AutoTightenTemplate(scaled);
+    }
+
+    private static void AddScaledRotatedVariants(List<TemplateVariant> variants, bool[,] source, bool mirrored)
+    {
+        AddRotatedVariants(variants, source, mirrored, scalePercent: 100, scoreMultiplier: 1f);
+
+        foreach (float scale in ScaleVariantFactors(source))
+        {
+            bool[,] scaled = ScaleTemplate(source, scale);
+            if (scaled.GetLength(0) == source.GetLength(0) &&
+                scaled.GetLength(1) == source.GetLength(1))
+            {
+                continue;
+            }
+
+            if (CountInk(scaled) < MinTemplateInk)
+                continue;
+
+            AddRotatedVariants(
+                variants,
+                scaled,
+                mirrored,
+                scalePercent: (int)MathF.Round(scale * 100f),
+                scoreMultiplier: ScaledVariantScoreMultiplier);
+        }
+    }
+
+    private static IEnumerable<float> ScaleVariantFactors(bool[,] source)
+    {
+        int side = Math.Max(source.GetLength(0), source.GetLength(1));
+        if (side < 12)
+            yield break;
+
+        yield return 0.96f;
+        yield return 1.04f;
+    }
+
+    private static void AddRotatedVariants(
+        List<TemplateVariant> variants,
+        bool[,] source,
+        bool mirrored,
+        int scalePercent,
+        float scoreMultiplier)
     {
         bool[,] current = source;
         for (int degrees = 0; degrees <= 270; degrees += 90)
         {
             if (degrees > 0)
                 current = RotateClockwise(current);
-            variants.Add(TemplateVariant.Build(current, degrees, mirrored));
+            variants.Add(TemplateVariant.Build(
+                current,
+                degrees,
+                mirrored,
+                scalePercent: scalePercent,
+                scoreMultiplier: scoreMultiplier));
         }
     }
 
-    private static TemplateVariant? TryBuildEdgeRelaxedVariant(bool[,] template, int rotationDegrees, bool mirrored)
+    private static TemplateVariant? TryBuildEdgeRelaxedVariant(
+        bool[,] template,
+        int rotationDegrees,
+        bool mirrored,
+        int scalePercent,
+        float scoreMultiplier)
     {
         int width = template.GetLength(0);
         int height = template.GetLength(1);
@@ -1184,6 +1259,8 @@ public sealed class SimilarSymbolMatchSession
             inner,
             rotationDegrees,
             mirrored,
+            scalePercent,
+            scoreMultiplier,
             insetX,
             insetY,
             buildEdgeRelaxed: false);
@@ -1254,6 +1331,8 @@ public sealed class SimilarSymbolMatchSession
         public required int StrokeProfileTotal;
         public required int RotationDegrees;
         public required bool Mirrored;
+        public required int ScalePercent;
+        public required float ScoreMultiplier;
         public required int OffsetX;
         public required int OffsetY;
         public required int[] ShiftWords;
@@ -1271,6 +1350,8 @@ public sealed class SimilarSymbolMatchSession
             bool[,] template,
             int rotationDegrees,
             bool mirrored,
+            int scalePercent = 100,
+            float scoreMultiplier = 1f,
             int offsetX = 0,
             int offsetY = 0,
             bool buildEdgeRelaxed = true)
@@ -1338,6 +1419,8 @@ public sealed class SimilarSymbolMatchSession
                 StrokeProfileTotal = strokeProfileTotal,
                 RotationDegrees = rotationDegrees,
                 Mirrored = mirrored,
+                ScalePercent = scalePercent,
+                ScoreMultiplier = scoreMultiplier,
                 OffsetX = offsetX,
                 OffsetY = offsetY,
                 ShiftWords = shiftWords,
@@ -1350,7 +1433,12 @@ public sealed class SimilarSymbolMatchSession
                 CoreTop = coreInsetY,
                 CoreBottom = height - coreInsetY,
                 EdgeRelaxed = buildEdgeRelaxed
-                    ? TryBuildEdgeRelaxedVariant(template, rotationDegrees, mirrored)
+                    ? TryBuildEdgeRelaxedVariant(
+                        template,
+                        rotationDegrees,
+                        mirrored,
+                        scalePercent,
+                        scoreMultiplier)
                     : null,
             };
         }

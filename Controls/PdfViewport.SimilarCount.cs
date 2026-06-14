@@ -14,6 +14,7 @@ public sealed record ViewportSimilarCountPreviewMarker(
     float Score = 1f,
     int RotationDegrees = 0,
     bool Mirrored = false,
+    int ScalePercent = 100,
     bool AlreadyCounted = false,
     float TemplateCoverage = 1f,
     float WindowPrecision = 1f,
@@ -398,8 +399,8 @@ public sealed partial class PdfViewport
         string action = marker.AlreadyCounted
             ? "locked"
             : marker.Included ? "click to exclude" : "click to include";
-        string variant = marker.RotationDegrees != 0 || marker.Mirrored
-            ? $" | {(marker.Mirrored ? "mirrored" : "normal")}, rotated {marker.RotationDegrees}°"
+        string variant = marker.RotationDegrees != 0 || marker.Mirrored || marker.ScalePercent != 100
+            ? $" | {(marker.Mirrored ? "mirrored" : "normal")}, rotated {marker.RotationDegrees}°, scale {marker.ScalePercent}%"
             : "";
         float layoutScore = Math.Min(Math.Min(marker.ProfileScore, marker.ProjectionScore), marker.StrokeScore);
         string scoreParts =

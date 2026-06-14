@@ -34,6 +34,7 @@ var tests = new List<(string Name, Action Run)>
     ("roof rafter face anchors survive rebuilds", ThreeDRoofRafterServiceTests.FaceAnchorsResolveAcrossRebuilds),
     ("similar symbol matcher finds all plain copies", SimilarSymbolMatcherTests.FindsAllPlainCopies),
     ("similar symbol matcher honors rotation toggle", SimilarSymbolMatcherTests.FindsRotatedCopyOnlyWhenEnabled),
+    ("similar symbol matcher finds slightly scaled copy", SimilarSymbolMatcherTests.FindsSlightlyScaledCopy),
     ("similar symbol matcher rejects distractors", SimilarSymbolMatcherTests.RejectsDistractorsAndDedupes),
     ("similar symbol matcher tolerates loose edge selection", SimilarSymbolMatcherTests.FindsCopiesWithLooseEdgeSelection),
     ("similar symbol matcher trims peripheral selection noise", SimilarSymbolMatcherTests.TrimsPeripheralSelectionNoiseBeforeMatching),

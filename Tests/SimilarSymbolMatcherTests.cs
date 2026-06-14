@@ -50,6 +50,44 @@ internal static class SimilarSymbolMatcherTests
             "the rotated copy should be reported with a non-zero rotation");
     }
 
+    public static void FindsSlightlyScaledCopy()
+    {
+        var placements = new[] { (40, 40), (200, 60) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        using (var canvas = new SKCanvas(page))
+        using (var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        })
+        using (var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        })
+        {
+            DrawScaledSymbol(canvas, stroke, fill, 300, 200, 1.04f);
+        }
+
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        SimilarSymbolMatch? scaled = matches.FirstOrDefault(match => NearCenter(match, 300, 200));
+        AssertTrue(matches.Count == placements.Length + 1,
+            $"expected scaled copy plus {placements.Length} exact matches, got {matches.Count}: " +
+            string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}/scale={match.ScalePercent}")));
+        AssertTrue(scaled != null, "slightly scaled copy should be found at the default precision threshold");
+        AssertTrue(scaled!.ScalePercent != 100,
+            $"scaled copy should be reported from a scaled template variant, got scale {scaled.ScalePercent}");
+    }
+
     public static void RejectsDistractorsAndDedupes()
     {
         var placements = new[] { (60, 50) };
@@ -557,8 +595,12 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("BuildStrokeProfile", StringComparison.Ordinal) &&
             source.Contains("AddStrokeProfile", StringComparison.Ordinal) &&
             source.Contains("StrokeProfileScore", StringComparison.Ordinal) &&
+            source.Contains("ScaleVariantFactors", StringComparison.Ordinal) &&
+            source.Contains("ScaleTemplate", StringComparison.Ordinal) &&
+            source.Contains("ScaledVariantScoreMultiplier", StringComparison.Ordinal) &&
+            source.Contains("ScalePercent", StringComparison.Ordinal) &&
             source.Contains("StrokeScore", StringComparison.Ordinal),
-            "Similar matcher should score row/column projection profiles and stroke orientation for sharper silhouette matching");
+            "Similar matcher should score row/column projection profiles, stroke orientation, and small scale variants for sharper silhouette matching");
         AssertTrue(
             source.Contains("FocusedWindowScoreMultiplier", StringComparison.Ordinal) &&
             source.Contains("FocusedWindowMinTemplateCoverage", StringComparison.Ordinal) &&
@@ -711,6 +753,7 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("float Score = 1f", StringComparison.Ordinal) &&
             viewport.Contains("float TemplateCoverage = 1f", StringComparison.Ordinal) &&
             viewport.Contains("float WindowPrecision = 1f", StringComparison.Ordinal) &&
+            viewport.Contains("int ScalePercent = 100", StringComparison.Ordinal) &&
             viewport.Contains("float StrokeScore = 1f", StringComparison.Ordinal) &&
             viewport.Contains("bool UsedFocusedScore = false", StringComparison.Ordinal) &&
             viewport.Contains("marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal),
@@ -721,6 +764,7 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("SimilarCountPreviewMarkerStatus", StringComparison.Ordinal) &&
             viewport.Contains("click to exclude", StringComparison.Ordinal) &&
             viewport.Contains("already counted", StringComparison.Ordinal) &&
+            viewport.Contains("scale {marker.ScalePercent}%", StringComparison.Ordinal) &&
             viewport.Contains("SimilarCountScorePercent", StringComparison.Ordinal) &&
             viewport.Contains("coverage", StringComparison.Ordinal) &&
             viewport.Contains("precision", StringComparison.Ordinal) &&
@@ -736,6 +780,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("match.Score", StringComparison.Ordinal) &&
             mainWindow.Contains("TemplateCoverage: match.TemplateCoverage", StringComparison.Ordinal) &&
             mainWindow.Contains("WindowPrecision: match.WindowPrecision", StringComparison.Ordinal) &&
+            mainWindow.Contains("match.ScalePercent", StringComparison.Ordinal) &&
             mainWindow.Contains("StrokeScore: match.StrokeScore", StringComparison.Ordinal) &&
             mainWindow.Contains("UsedFocusedScore: match.UsedFocusedScore", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountScanResult", StringComparison.Ordinal),
@@ -1127,6 +1172,15 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawRect(new SKRect(x, y, x + SymbolWidth, y + SymbolHeight), stroke);
         canvas.DrawLine(x, y + SymbolHeight, x + SymbolWidth, y, stroke);
         canvas.DrawCircle(x + 5, y + 5, 2.5f, fill);
+    }
+
+    private static void DrawScaledSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y, float scale)
+    {
+        canvas.Save();
+        canvas.Translate(x, y);
+        canvas.Scale(scale);
+        DrawSymbol(canvas, stroke, fill, 0, 0);
+        canvas.Restore();
     }
 
     private static void DrawMirrorSensitiveSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y)
