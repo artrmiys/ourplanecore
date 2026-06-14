@@ -44,6 +44,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count defaults favor precision", SimilarSymbolMatcherTests.DefaultSettingsFavorPrecision),
     ("similar matcher uses fine symbol profile", SimilarSymbolMatcherTests.SimilarMatcherUsesFineSymbolProfile),
     ("similar matcher keeps hits near adjacent plan ink", SimilarSymbolMatcherTests.KeepsHitsNearAdjacentPlanInk),
+    ("similar matcher keeps hits with disconnected window ink", SimilarSymbolMatcherTests.KeepsHitsWithDisconnectedWindowInk),
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("similar count preview shows confidence", SimilarSymbolMatcherTests.SimilarCountPreviewShowsConfidence),

@@ -147,6 +147,24 @@ internal static class SimilarSymbolMatcherTests
             $"matches: {string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}"))}");
     }
 
+    public static void KeepsHitsWithDisconnectedWindowInk()
+    {
+        var placements = new[] { (40, 40), (200, 60), (120, 220) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        DrawDisconnectedWindowNoise(page, placements[1].Item1, placements[1].Item2);
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(
+            matches.Any(match => NearCenter(match, placements[1].Item1, placements[1].Item2)),
+            "disconnected plan ink inside the candidate window should not make Similar miss a real copy; " +
+            $"matches: {string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}"))}");
+    }
+
     public static void FindsMirroredCopyOnlyWhenEnabled()
     {
         var placements = new[] { (40, 40), (200, 60) };
@@ -295,6 +313,13 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("ProjectionColumnMasks", StringComparison.Ordinal) &&
             source.Contains("projectionScore", StringComparison.Ordinal),
             "Similar matcher should score row and column projection profiles for sharper silhouette matching");
+        AssertTrue(
+            source.Contains("FocusedWindowScoreMultiplier", StringComparison.Ordinal) &&
+            source.Contains("FocusedWindowMinTemplateCoverage", StringComparison.Ordinal) &&
+            source.Contains("focusedWindowInk", StringComparison.Ordinal) &&
+            source.Contains("focusedProjectionScore", StringComparison.Ordinal) &&
+            source.Contains("CountFocusedWindowInk", StringComparison.Ordinal),
+            "Similar matcher should recover true symbols from unrelated disconnected ink inside the candidate window");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
@@ -691,6 +716,19 @@ internal static class SimilarSymbolMatcherTests
 
         canvas.DrawRect(new SKRect(x - 8, y - 8, x - 5, y + SymbolHeight + 12), fill);
         canvas.DrawRect(new SKRect(x + SymbolWidth + 6, y - 8, x + SymbolWidth + 13, y + SymbolHeight + 12), fill);
+    }
+
+    private static void DrawDisconnectedWindowNoise(SKBitmap bitmap, int x, int y)
+    {
+        using var canvas = new SKCanvas(bitmap);
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        canvas.DrawRect(new SKRect(x + 7, y - 3, x + SymbolWidth - 7, y - 2), fill);
     }
 
     // Asymmetric glyph: box + one diagonal + a dot in the top-left corner so

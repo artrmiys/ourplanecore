@@ -20,6 +20,9 @@ namespace OurPlaneCore;
 //                    |P ∧ dilate(T)| / |P|,          window precision
 //                    sqrt(min(|T|,|P|) / max(|T|,|P|)),   ink-amount ratio
 //                    fine 7x7 ink-profile match)         symbol layout
+//      If unrelated plan ink lands inside the candidate window, a focused
+//      score can ignore ink outside dilate(T), but only when template coverage
+//      is already strong and with a small penalty.
 //      where T is template ink and P is window ink. Dilation makes the two
 //      overlap ratios saturate on small dense shapes (a solid blob covers
 //      any outline), so the ink-amount ratio keeps solid-vs-outline and
@@ -45,6 +48,8 @@ public sealed class SimilarSymbolMatchSession
     private const float EdgeRelaxedScoreMultiplier = 0.93f;
     private const float PeripheralNoiseMaxTotalShare = 0.35f;
     private const float PeripheralNoiseMaxCoreRatio = 0.85f;
+    private const float FocusedWindowScoreMultiplier = 0.98f;
+    private const float FocusedWindowMinTemplateCoverage = 0.90f;
 
     private readonly int _width;
     private readonly int _height;
@@ -185,7 +190,8 @@ public sealed class SimilarSymbolMatchSession
                     // near the symbol can look too dark at word granularity, so
                     // confirm upper-bound rejects with the exact window ink.
                     if (approxInk - 128 > maxWindowInk &&
-                        CountWindowInk(template, x, y) > maxWindowInk)
+                        CountWindowInk(template, x, y) > maxWindowInk &&
+                        CountFocusedWindowInk(template, x, y) > maxWindowInk)
                     {
                         continue;
                     }
@@ -236,10 +242,14 @@ public sealed class SimilarSymbolMatchSession
         Span<int> windowGrid = stackalloc int[TemplateVariant.GridCellCount];
         Span<int> windowRowProjection = stackalloc int[TemplateVariant.ProjectionBandCount];
         Span<int> windowColumnProjection = stackalloc int[TemplateVariant.ProjectionBandCount];
+        Span<int> focusedWindowGrid = stackalloc int[TemplateVariant.GridCellCount];
+        Span<int> focusedWindowRowProjection = stackalloc int[TemplateVariant.ProjectionBandCount];
+        Span<int> focusedWindowColumnProjection = stackalloc int[TemplateVariant.ProjectionBandCount];
 
         int matchedTemplate = 0;
         int matchedWindow = 0;
         int windowInk = 0;
+        int focusedWindowInk = 0;
         for (int row = 0; row < template.Height; row++)
         {
             int pageBase = (y + row) * _wordsPerRow + w0;
@@ -250,22 +260,36 @@ public sealed class SimilarSymbolMatchSession
                 TemplateVariant.ProjectionBandCount - 1,
                 row * TemplateVariant.ProjectionBandCount / template.Height);
             int rowInk = 0;
+            int focusedRowInk = 0;
             for (int k = 0; k < words; k++)
             {
                 ulong pageInkWord = _ink[pageBase + k];
+                ulong focusedInkWord = pageInkWord & tDilated[templateBase + k] & masks[k];
                 matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & _dilated[pageBase + k]);
                 matchedWindow += BitOperations.PopCount(pageInkWord & tDilated[templateBase + k]);
                 int maskedInk = BitOperations.PopCount(pageInkWord & masks[k]);
+                int focusedInk = BitOperations.PopCount(focusedInkWord);
                 windowInk += maskedInk;
                 rowInk += maskedInk;
+                focusedWindowInk += focusedInk;
+                focusedRowInk += focusedInk;
                 for (int col = 0; col < TemplateVariant.GridSide; col++)
+                {
                     windowGrid[gridBase + col] += BitOperations.PopCount(
                         pageInkWord & gridColumnMasks[col * words + k]);
+                    focusedWindowGrid[gridBase + col] += BitOperations.PopCount(
+                        focusedInkWord & gridColumnMasks[col * words + k]);
+                }
                 for (int col = 0; col < TemplateVariant.ProjectionBandCount; col++)
+                {
                     windowColumnProjection[col] += BitOperations.PopCount(
                         pageInkWord & projectionColumnMasks[col * words + k]);
+                    focusedWindowColumnProjection[col] += BitOperations.PopCount(
+                        focusedInkWord & projectionColumnMasks[col * words + k]);
+                }
             }
             windowRowProjection[projectionRow] += rowInk;
+            focusedWindowRowProjection[projectionRow] += focusedRowInk;
         }
 
         if (windowInk <= 0 || template.InkCount <= 0)
@@ -287,9 +311,39 @@ public sealed class SimilarSymbolMatchSession
             template.InkCount,
             windowInk);
         float projectionScore = Math.Min(rowProjectionScore, columnProjectionScore);
-        return Math.Min(
+        float strictScore = Math.Min(
             Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio),
             Math.Min(profileScore, projectionScore));
+        if (strictScore >= minScore ||
+            templateCoverage < FocusedWindowMinTemplateCoverage ||
+            focusedWindowInk <= 0 ||
+            focusedWindowInk >= windowInk)
+        {
+            return strictScore;
+        }
+
+        float focusedInkRatio = MathF.Sqrt(
+            Math.Min(template.InkCount, focusedWindowInk) / (float)Math.Max(template.InkCount, focusedWindowInk));
+        float focusedProfileScore = GridProfileScore(
+            template.GridInkCounts,
+            focusedWindowGrid,
+            template.InkCount,
+            focusedWindowInk);
+        float focusedRowProjectionScore = ProfileScore(
+            template.RowProjectionInkCounts,
+            focusedWindowRowProjection,
+            template.InkCount,
+            focusedWindowInk);
+        float focusedColumnProjectionScore = ProfileScore(
+            template.ColumnProjectionInkCounts,
+            focusedWindowColumnProjection,
+            template.InkCount,
+            focusedWindowInk);
+        float focusedProjectionScore = Math.Min(focusedRowProjectionScore, focusedColumnProjectionScore);
+        float focusedScore = Math.Min(
+            Math.Min(templateCoverage, focusedInkRatio),
+            Math.Min(focusedProfileScore, focusedProjectionScore));
+        return Math.Max(strictScore, focusedScore * FocusedWindowScoreMultiplier);
     }
 
     private int CountWindowInk(TemplateVariant template, int x, int y)
@@ -308,6 +362,26 @@ public sealed class SimilarSymbolMatchSession
         }
 
         return windowInk;
+    }
+
+    private int CountFocusedWindowInk(TemplateVariant template, int x, int y)
+    {
+        int shift = x & 63;
+        int w0 = x >> 6;
+        int words = template.ShiftWords[shift];
+        ulong[] tDilated = template.ShiftedDilated[shift];
+        ulong[] masks = template.WindowMasks[shift];
+        int focusedInk = 0;
+
+        for (int row = 0; row < template.Height; row++)
+        {
+            int pageBase = (y + row) * _wordsPerRow + w0;
+            int templateBase = row * words;
+            for (int k = 0; k < words; k++)
+                focusedInk += BitOperations.PopCount(_ink[pageBase + k] & tDilated[templateBase + k] & masks[k]);
+        }
+
+        return focusedInk;
     }
 
     private static float GridProfileScore(
