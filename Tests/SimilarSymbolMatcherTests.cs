@@ -427,6 +427,23 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count marker toggles and review quick actions should update stable manual choices");
     }
 
+    public static void SimilarCountIgnoresCancelledStaleScans()
+    {
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+        string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        AssertTrue(
+            normalizedMainWindow.Contains(
+                "cancellationToken);\n            cancellationToken.ThrowIfCancellationRequested();\n            lastMatches.Clear();",
+                StringComparison.Ordinal),
+            "Similar Count should check cancellation before a completed stale scan can replace review candidates");
+        AssertTrue(
+            dialog.Contains("_scanCts?.Cancel();", StringComparison.Ordinal) &&
+            dialog.Contains("catch (OperationCanceledException)", StringComparison.Ordinal),
+            "Similar Count dialog should cancel superseded scans and ignore stale cancellation results");
+    }
+
     public static void SimilarCountPreviewShowsConfidence()
     {
         string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));

@@ -48,6 +48,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("similar count review choices survive rescan", SimilarSymbolMatcherTests.SimilarCountReviewChoicesSurviveRescan),
+    ("similar count ignores cancelled stale scans", SimilarSymbolMatcherTests.SimilarCountIgnoresCancelledStaleScans),
     ("similar count preview shows confidence", SimilarSymbolMatcherTests.SimilarCountPreviewShowsConfidence),
     ("similar count review summary explains candidates", SimilarSymbolMatcherTests.SimilarCountReviewSummaryExplainsCandidates),
     ("similar count threshold presets are available", SimilarSymbolMatcherTests.SimilarCountThresholdPresetsAreAvailable),

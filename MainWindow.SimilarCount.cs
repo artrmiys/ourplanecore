@@ -266,6 +266,7 @@ public partial class MainWindow
             List<SimilarSymbolMatch> matches = await Task.Run(
                 () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
                 cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             lastMatches.Clear();
             lastMatches.AddRange(matches);
             ApplyDefaultSimilarReviewExclusions();
