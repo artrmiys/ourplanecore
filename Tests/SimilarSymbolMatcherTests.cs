@@ -322,6 +322,42 @@ internal static class SimilarSymbolMatcherTests
             "core-only near miss should stay below the precision threshold");
     }
 
+    public static void RejectsSymbolWithExtraInteriorMark()
+    {
+        var placements = new[] { (40, 40) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        using (var canvas = new SKCanvas(page))
+        using (var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        })
+        using (var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        })
+        {
+            DrawSymbol(canvas, stroke, fill, 200, 60);
+            DrawInteriorExtraMark(canvas, fill, 200, 60);
+        }
+
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected only {placements.Length} clean-symbol match, got {matches.Count}");
+        AssertTrue(!matches.Any(match => NearCenter(match, 200, 60)),
+            "symbol with an extra interior mark should not pass as the clean template");
+    }
+
     public static void DefaultSettingsFavorPrecision()
     {
         var settings = new AppSettings();
@@ -397,14 +433,17 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             source.Contains("FocusedWindowScoreMultiplier", StringComparison.Ordinal) &&
             source.Contains("FocusedWindowMinTemplateCoverage", StringComparison.Ordinal) &&
+            source.Contains("FocusedWindowMaxCoreExtraShare", StringComparison.Ordinal) &&
+            source.Contains("CoreWindowMasks", StringComparison.Ordinal) &&
             source.Contains("SimilarWindowScore", StringComparison.Ordinal) &&
             source.Contains("TemplateCoverage", StringComparison.Ordinal) &&
             source.Contains("WindowPrecision", StringComparison.Ordinal) &&
             source.Contains("focusedWindowInk", StringComparison.Ordinal) &&
+            source.Contains("focusedExtraCoreInk", StringComparison.Ordinal) &&
             source.Contains("focusedProjectionScore", StringComparison.Ordinal) &&
             source.Contains("UsedFocusedScore", StringComparison.Ordinal) &&
             source.Contains("CountFocusedWindowInk", StringComparison.Ordinal),
-            "Similar matcher should recover true symbols from unrelated disconnected ink inside the candidate window");
+            "Similar matcher should recover true symbols from unrelated disconnected edge ink without ignoring extra interior symbol marks");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
@@ -948,6 +987,11 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawRect(new SKRect(x, y, x + SymbolWidth, y + SymbolHeight), stroke);
         canvas.DrawLine(x, y, x + SymbolWidth, y + SymbolHeight, stroke);
         canvas.DrawCircle(x + SymbolWidth - 5, y + SymbolHeight - 5, 2.5f, fill);
+    }
+
+    private static void DrawInteriorExtraMark(SKCanvas canvas, SKPaint fill, int x, int y)
+    {
+        canvas.DrawCircle(x + SymbolWidth - 12, y + SymbolHeight - 8, 3f, fill);
     }
 
     private static void DrawLargeSymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y, int width, int height)

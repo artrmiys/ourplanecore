@@ -63,6 +63,10 @@ public sealed class SimilarSymbolMatchSession
     private const float TemplateSecondMajorMinLargestRatio = 0.55f;
     private const float FocusedWindowScoreMultiplier = 0.98f;
     private const float FocusedWindowMinTemplateCoverage = 0.90f;
+    private const float FocusedWindowCoreInsetRatio = 0.12f;
+    private const int FocusedWindowCoreMaxInset = 8;
+    private const int FocusedWindowMaxCoreExtraInk = 8;
+    private const float FocusedWindowMaxCoreExtraShare = 0.04f;
 
     private readonly int _width;
     private readonly int _height;
@@ -291,6 +295,7 @@ public sealed class SimilarSymbolMatchSession
         ulong[] tInk = template.ShiftedInk[shift];
         ulong[] tDilated = template.ShiftedDilated[shift];
         ulong[] masks = template.WindowMasks[shift];
+        ulong[] coreMasks = template.CoreWindowMasks[shift];
         ulong[] gridColumnMasks = template.GridColumnMasks[shift];
         ulong[] projectionColumnMasks = template.ProjectionColumnMasks[shift];
         Span<int> windowGrid = stackalloc int[TemplateVariant.GridCellCount];
@@ -304,6 +309,7 @@ public sealed class SimilarSymbolMatchSession
         int matchedWindow = 0;
         int windowInk = 0;
         int focusedWindowInk = 0;
+        int focusedExtraCoreInk = 0;
         for (int row = 0; row < template.Height; row++)
         {
             int pageBase = (y + row) * _wordsPerRow + w0;
@@ -315,12 +321,17 @@ public sealed class SimilarSymbolMatchSession
                 row * TemplateVariant.ProjectionBandCount / template.Height);
             int rowInk = 0;
             int focusedRowInk = 0;
+            bool coreRow = row >= template.CoreTop && row < template.CoreBottom;
             for (int k = 0; k < words; k++)
             {
                 ulong pageInkWord = _ink[pageBase + k];
-                ulong focusedInkWord = pageInkWord & tDilated[templateBase + k] & masks[k];
+                ulong templateDilatedWord = tDilated[templateBase + k];
+                ulong focusedInkWord = pageInkWord & templateDilatedWord & masks[k];
+                if (coreRow)
+                    focusedExtraCoreInk += BitOperations.PopCount(
+                        pageInkWord & ~templateDilatedWord & masks[k] & coreMasks[k]);
                 matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & _dilated[pageBase + k]);
-                matchedWindow += BitOperations.PopCount(pageInkWord & tDilated[templateBase + k]);
+                matchedWindow += BitOperations.PopCount(pageInkWord & templateDilatedWord);
                 int maskedInk = BitOperations.PopCount(pageInkWord & masks[k]);
                 int focusedInk = BitOperations.PopCount(focusedInkWord);
                 windowInk += maskedInk;
@@ -379,7 +390,8 @@ public sealed class SimilarSymbolMatchSession
         if (strictScore >= minScore ||
             templateCoverage < FocusedWindowMinTemplateCoverage ||
             focusedWindowInk <= 0 ||
-            focusedWindowInk >= windowInk)
+            focusedWindowInk >= windowInk ||
+            focusedExtraCoreInk > FocusedWindowCoreExtraLimit(template.InkCount))
         {
             return strict;
         }
@@ -987,6 +999,21 @@ public sealed class SimilarSymbolMatchSession
         return Math.Clamp(inset, 2, maximum);
     }
 
+    private static int FocusedWindowCoreInset(int side)
+    {
+        int maximum = Math.Min(FocusedWindowCoreMaxInset, (side - 6) / 2);
+        if (maximum < 2)
+            return 0;
+
+        int inset = (int)MathF.Round(side * FocusedWindowCoreInsetRatio);
+        return Math.Clamp(inset, 2, maximum);
+    }
+
+    private static int FocusedWindowCoreExtraLimit(int templateInk) =>
+        Math.Max(
+            FocusedWindowMaxCoreExtraInk,
+            (int)MathF.Ceiling(templateInk * FocusedWindowMaxCoreExtraShare));
+
     private static int CountInk(bool[,] template)
     {
         int count = 0;
@@ -1026,8 +1053,11 @@ public sealed class SimilarSymbolMatchSession
         public required ulong[][] ShiftedInk;
         public required ulong[][] ShiftedDilated;
         public required ulong[][] WindowMasks;
+        public required ulong[][] CoreWindowMasks;
         public required ulong[][] GridColumnMasks;
         public required ulong[][] ProjectionColumnMasks;
+        public required int CoreTop;
+        public required int CoreBottom;
         public TemplateVariant? EdgeRelaxed { get; init; }
 
         public static TemplateVariant Build(
@@ -1070,8 +1100,11 @@ public sealed class SimilarSymbolMatchSession
             var shiftedInk = new ulong[64][];
             var shiftedDilated = new ulong[64][];
             var windowMasks = new ulong[64][];
+            var coreWindowMasks = new ulong[64][];
             var gridColumnMasks = new ulong[64][];
             var projectionColumnMasks = new ulong[64][];
+            int coreInsetX = FocusedWindowCoreInset(width);
+            int coreInsetY = FocusedWindowCoreInset(height);
             for (int s = 0; s < 64; s++)
             {
                 int words = (s + width + 63) / 64;
@@ -1079,6 +1112,7 @@ public sealed class SimilarSymbolMatchSession
                 shiftedInk[s] = ShiftRows(inkRows, height, baseWords + 1, words, s);
                 shiftedDilated[s] = ShiftRows(dilatedRows, height, baseWords + 1, words, s);
                 windowMasks[s] = BuildWindowMask(width, words, s);
+                coreWindowMasks[s] = BuildWindowMask(width, words, s, coreInsetX, width - coreInsetX);
                 gridColumnMasks[s] = BuildGridColumnMasks(width, words, s);
                 projectionColumnMasks[s] = BuildProjectionColumnMasks(width, words, s);
             }
@@ -1099,8 +1133,11 @@ public sealed class SimilarSymbolMatchSession
                 ShiftedInk = shiftedInk,
                 ShiftedDilated = shiftedDilated,
                 WindowMasks = windowMasks,
+                CoreWindowMasks = coreWindowMasks,
                 GridColumnMasks = gridColumnMasks,
                 ProjectionColumnMasks = projectionColumnMasks,
+                CoreTop = coreInsetY,
+                CoreBottom = height - coreInsetY,
                 EdgeRelaxed = buildEdgeRelaxed
                     ? TryBuildEdgeRelaxedVariant(template, rotationDegrees, mirrored)
                     : null,
@@ -1127,10 +1164,13 @@ public sealed class SimilarSymbolMatchSession
             return shifted;
         }
 
-        private static ulong[] BuildWindowMask(int width, int words, int shift)
+        private static ulong[] BuildWindowMask(int width, int words, int shift, int startX = 0, int endX = -1)
         {
             var mask = new ulong[words];
-            for (int x = shift; x < shift + width; x++)
+            endX = endX < 0 ? width : endX;
+            startX = Math.Clamp(startX, 0, width);
+            endX = Math.Clamp(endX, startX, width);
+            for (int x = shift + startX; x < shift + endX; x++)
                 mask[x >> 6] |= 1UL << (x & 63);
             return mask;
         }
