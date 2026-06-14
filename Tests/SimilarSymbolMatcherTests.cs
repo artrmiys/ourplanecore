@@ -301,6 +301,11 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("_similarCountWaitingPageFolder", StringComparison.Ordinal) &&
             viewport.Contains("TryStartPendingSimilarCountSelection();", StringComparison.Ordinal),
             "Similar count should auto-enter selection after sharpening without requiring a second toolbar click");
+        AssertTrue(
+            source.Contains("HasCurrentSimilarCountBitmap", StringComparison.Ordinal) &&
+            source.Contains("IsPageBitmapFor(_pdfPath, _pdfIndex, _pageFolder)", StringComparison.Ordinal) &&
+            source.Contains("_pdfIndex != _similarCountWaitingPdfIndex", StringComparison.Ordinal),
+            "Similar count should only start and scan against the current page bitmap");
     }
 
     public static void SimilarCountPreviewSupportsReviewBeforeAdd()

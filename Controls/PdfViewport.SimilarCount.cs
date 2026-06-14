@@ -62,13 +62,12 @@ public sealed partial class PdfViewport
     }
 
     private bool CanWaitForSimilarCountReadableBitmap() =>
-        _pageBitmap != null &&
-        _pdfW > 0 &&
-        _pdfH > 0 &&
-        _bitmapScale > 0 &&
-        _bitmapScale < SimilarCountMinimumBitmapScale &&
-        !string.IsNullOrWhiteSpace(_pdfPath) &&
-        _pdfIndex >= 0;
+        HasSimilarCountRenderTarget() &&
+        (!HasCurrentSimilarCountBitmap() ||
+         _pdfW <= 0 ||
+         _pdfH <= 0 ||
+         _bitmapScale <= 0 ||
+         _bitmapScale < SimilarCountMinimumBitmapScale);
 
     private void StartWaitingForSimilarCountReadableBitmap()
     {
@@ -80,14 +79,23 @@ public sealed partial class PdfViewport
 
     private void TryStartPendingSimilarCountSelection()
     {
-        if (!_similarCountWaitingForReadableBitmap ||
-            _similarCountSelecting ||
-            _similarCountDragging ||
-            _pageBitmap == null ||
-            _bitmapScale < SimilarCountMinimumBitmapScale ||
-            _pdfIndex != _similarCountWaitingPdfIndex ||
+        if (!_similarCountWaitingForReadableBitmap)
+            return;
+
+        if (_similarCountSelecting || _similarCountDragging)
+            return;
+
+        if (_pdfIndex != _similarCountWaitingPdfIndex ||
             !string.Equals(_pdfPath, _similarCountWaitingPdfPath, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(_pageFolder, _similarCountWaitingPageFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            ResetSimilarCountSelection();
+            return;
+        }
+
+        if (_pageBitmap == null ||
+            _bitmapScale < SimilarCountMinimumBitmapScale ||
+            !HasCurrentSimilarCountBitmap())
         {
             return;
         }
@@ -137,9 +145,19 @@ public sealed partial class PdfViewport
     {
         PrepareBitmapForImmediateRepaint();
 
-        if (_pageBitmap == null || _pdfW <= 0 || _pdfH <= 0 || _bitmapScale <= 0)
+        if (!HasSimilarCountRenderTarget())
         {
-            status = "Count similar: open a rendered sheet first.";
+            status = "Count similar: open a sheet first.";
+            return false;
+        }
+
+        if (!HasCurrentSimilarCountBitmap() ||
+            _pdfW <= 0 ||
+            _pdfH <= 0 ||
+            _bitmapScale <= 0)
+        {
+            QueueSimilarCountReadableBitmap();
+            status = "Count similar: sheet is rendering. Selection will start automatically.";
             return false;
         }
 
@@ -159,6 +177,14 @@ public sealed partial class PdfViewport
         status = $"Count similar: sheet is sharpening ({_bitmapScale:0.##}x). Selection will start automatically.";
         return false;
     }
+
+    private bool HasSimilarCountRenderTarget() =>
+        !string.IsNullOrWhiteSpace(_pdfPath) &&
+        _pdfIndex >= 0 &&
+        !string.IsNullOrWhiteSpace(_pageFolder);
+
+    private bool HasCurrentSimilarCountBitmap() =>
+        IsPageBitmapFor(_pdfPath, _pdfIndex, _pageFolder);
 
     private void QueueSimilarCountReadableBitmap()
     {
