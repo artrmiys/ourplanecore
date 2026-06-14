@@ -343,6 +343,13 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal),
             "Similar preview markers should carry and visualize match confidence");
         AssertTrue(
+            viewport.Contains("SimilarCountPreviewMarkerHitIndex", StringComparison.Ordinal) &&
+            viewport.Contains("TryPostSimilarCountPreviewMarkerStatus", StringComparison.Ordinal) &&
+            viewport.Contains("SimilarCountPreviewMarkerStatus", StringComparison.Ordinal) &&
+            viewport.Contains("click to exclude", StringComparison.Ordinal) &&
+            viewport.Contains("already counted", StringComparison.Ordinal),
+            "Similar preview markers should explain hover status, confidence, review state, and click action");
+        AssertTrue(
             mainWindow.Contains("lastMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("match.Score", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountScanResult", StringComparison.Ordinal),

@@ -33,6 +33,7 @@ public sealed partial class PdfViewport
     private SKPoint _similarCountStartPdf;
     private SKPoint _similarCountEndPdf;
     private IReadOnlyList<ViewportSimilarCountPreviewMarker>? _similarCountPreview;
+    private int _similarCountHoverMarkerIndex = -1;
 
     public event Action<ViewportSimilarCountRequest>? SimilarCountSelectionCompleted;
     public event Action<int>? SimilarCountPreviewMarkerToggled;
@@ -256,9 +257,42 @@ public sealed partial class PdfViewport
 
     private bool TryToggleSimilarCountPreviewMarker(SKPoint pdf)
     {
-        IReadOnlyList<ViewportSimilarCountPreviewMarker>? preview = _similarCountPreview;
-        if (_similarCountSelecting || preview == null || preview.Count == 0)
+        if (_similarCountSelecting)
             return false;
+
+        int bestIndex = SimilarCountPreviewMarkerHitIndex(pdf);
+        if (bestIndex < 0)
+            return false;
+
+        SimilarCountPreviewMarkerToggled?.Invoke(bestIndex);
+        return true;
+    }
+
+    private bool HandleSimilarCountMouseMove(Point screen)
+    {
+        if (!_similarCountSelecting || !_similarCountDragging)
+        {
+            if (Mouse.LeftButton == MouseButtonState.Released &&
+                Mouse.MiddleButton == MouseButtonState.Released &&
+                Mouse.RightButton == MouseButtonState.Released)
+            {
+                return TryPostSimilarCountPreviewMarkerStatus(ScreenToPdf((float)screen.X, (float)screen.Y));
+            }
+
+            return false;
+        }
+
+        _similarCountEndPdf = ClampAiCropPoint(ScreenToPdf((float)screen.X, (float)screen.Y));
+        _lastPointerPdf = _similarCountEndPdf;
+        RequestRepaint();
+        return true;
+    }
+
+    private int SimilarCountPreviewMarkerHitIndex(SKPoint pdf)
+    {
+        IReadOnlyList<ViewportSimilarCountPreviewMarker>? preview = _similarCountPreview;
+        if (preview == null || preview.Count == 0)
+            return -1;
 
         float tolerance = ScreenToPdfDistance(13f);
         float bestDistanceSq = tolerance * tolerance;
@@ -276,22 +310,44 @@ public sealed partial class PdfViewport
             bestIndex = i;
         }
 
-        if (bestIndex < 0)
-            return false;
+        return bestIndex;
+    }
 
-        SimilarCountPreviewMarkerToggled?.Invoke(bestIndex);
+    private bool TryPostSimilarCountPreviewMarkerStatus(SKPoint pdf)
+    {
+        int index = SimilarCountPreviewMarkerHitIndex(pdf);
+        if (index < 0)
+        {
+            _similarCountHoverMarkerIndex = -1;
+            return false;
+        }
+
+        if (_similarCountHoverMarkerIndex == index)
+            return true;
+
+        _similarCountHoverMarkerIndex = index;
+        ViewportSimilarCountPreviewMarker marker = _similarCountPreview![index];
+        PostStatus(SimilarCountPreviewMarkerStatus(marker));
         return true;
     }
 
-    private bool HandleSimilarCountMouseMove(Point screen)
+    private static string SimilarCountPreviewMarkerStatus(ViewportSimilarCountPreviewMarker marker)
     {
-        if (!_similarCountSelecting || !_similarCountDragging)
-            return false;
+        string confidence = marker.Score > 0f &&
+                            marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault
+            ? "weak"
+            : "strong";
+        string state = marker.AlreadyCounted
+            ? "already counted"
+            : marker.Included ? "included" : "excluded";
+        string action = marker.AlreadyCounted
+            ? "locked"
+            : marker.Included ? "click to exclude" : "click to include";
+        string variant = marker.RotationDegrees != 0 || marker.Mirrored
+            ? $" | {(marker.Mirrored ? "mirrored" : "normal")}, rotated {marker.RotationDegrees}°"
+            : "";
 
-        _similarCountEndPdf = ClampAiCropPoint(ScreenToPdf((float)screen.X, (float)screen.Y));
-        _lastPointerPdf = _similarCountEndPdf;
-        RequestRepaint();
-        return true;
+        return $"Count similar marker: {confidence} {marker.Score:0.00}, {state}; {action}{variant}.";
     }
 
     private bool FinishSimilarCountSelection()
@@ -337,6 +393,7 @@ public sealed partial class PdfViewport
         _similarCountWaitingPageFolder = "";
         _similarCountSelecting = false;
         _similarCountDragging = false;
+        _similarCountHoverMarkerIndex = -1;
         if (IsMouseCaptured)
             ReleaseMouseCapture();
     }
