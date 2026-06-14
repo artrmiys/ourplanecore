@@ -589,10 +589,10 @@ public sealed class SimilarSymbolMatchSession
 
         try
         {
-            int minX = rect.Right;
-            int minY = rect.Bottom;
-            int maxX = rect.Left - 1;
-            int maxY = rect.Top - 1;
+            int width = rect.Width;
+            int height = rect.Height;
+            var selectionInk = new bool[width, height];
+            bool hasInk = false;
             unsafe
             {
                 byte* basePtr = (byte*)source.GetPixels().ToPointer();
@@ -606,18 +606,24 @@ public sealed class SimilarSymbolMatchSession
                         if (!IsInkPixel(row + x * 4, bgra))
                             continue;
 
-                        minX = Math.Min(minX, x);
-                        minY = Math.Min(minY, y);
-                        maxX = Math.Max(maxX, x);
-                        maxY = Math.Max(maxY, y);
+                        selectionInk[x - rect.Left, y - rect.Top] = true;
+                        hasInk = true;
                     }
                 }
             }
 
-            if (maxX < minX || maxY < minY)
+            if (!hasInk)
                 return false;
 
-            inkBounds = new SKRectI(minX, minY, maxX + 1, maxY + 1);
+            List<TemplateComponent> components = ReadTemplateComponents(selectionInk);
+            List<TemplateComponent> noise = FindPeripheralTemplateNoiseComponents(components);
+            List<TemplateComponent> boundsComponents = noise.Count == 0
+                ? components
+                : components.Where(component => !noise.Contains(component)).ToList();
+            if (boundsComponents.Sum(component => component.Pixels.Count) < MinTemplateInk)
+                boundsComponents = components;
+
+            inkBounds = TemplateComponentBounds(boundsComponents, width, rect.Left, rect.Top);
             return true;
         }
         finally
@@ -782,24 +788,7 @@ public sealed class SimilarSymbolMatchSession
         int height = source.GetLength(1);
         List<TemplateComponent> components = ReadTemplateComponents(source);
 
-        if (components.Count <= 1)
-            return source;
-
-        int totalInk = components.Sum(component => component.Pixels.Count);
-        int largestCore = components
-            .Where(component => !component.TouchesBorder)
-            .Select(component => component.Pixels.Count)
-            .DefaultIfEmpty(0)
-            .Max();
-        if (largestCore < MinTemplateInk)
-            return source;
-
-        var remove = components
-            .Where(component =>
-                component.TouchesBorder &&
-                (component.Pixels.Count <= totalInk * PeripheralNoiseMaxTotalShare ||
-                 component.Pixels.Count <= largestCore * PeripheralNoiseMaxCoreRatio))
-            .ToList();
+        List<TemplateComponent> remove = FindPeripheralTemplateNoiseComponents(components);
         if (remove.Count == 0)
             return source;
 
@@ -816,6 +805,57 @@ public sealed class SimilarSymbolMatchSession
         }
 
         return CountInk(cleaned) >= MinTemplateInk ? cleaned : source;
+    }
+
+    private static List<TemplateComponent> FindPeripheralTemplateNoiseComponents(List<TemplateComponent> components)
+    {
+        if (components.Count <= 1)
+            return new List<TemplateComponent>();
+
+        int totalInk = components.Sum(component => component.Pixels.Count);
+        int largestCore = components
+            .Where(component => !component.TouchesBorder)
+            .Select(component => component.Pixels.Count)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (largestCore < MinTemplateInk)
+            return new List<TemplateComponent>();
+
+        return components
+            .Where(component =>
+                component.TouchesBorder &&
+                (component.Pixels.Count <= totalInk * PeripheralNoiseMaxTotalShare ||
+                 component.Pixels.Count <= largestCore * PeripheralNoiseMaxCoreRatio))
+            .ToList();
+    }
+
+    private static SKRectI TemplateComponentBounds(
+        IReadOnlyList<TemplateComponent> components,
+        int componentWidth,
+        int offsetX,
+        int offsetY)
+    {
+        if (components.Count == 0)
+            return new SKRectI(offsetX, offsetY, offsetX, offsetY);
+
+        int minX = int.MaxValue;
+        int minY = int.MaxValue;
+        int maxX = int.MinValue;
+        int maxY = int.MinValue;
+        foreach (TemplateComponent component in components)
+        {
+            foreach (int pixel in component.Pixels)
+            {
+                int x = pixel % componentWidth;
+                int y = pixel / componentWidth;
+                minX = Math.Min(minX, x);
+                minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x);
+                maxY = Math.Max(maxY, y);
+            }
+        }
+
+        return new SKRectI(offsetX + minX, offsetY + minY, offsetX + maxX + 1, offsetY + maxY + 1);
     }
 
     private static string BuildTemplateQualityWarning(bool[,] template, int downsampleFactor)

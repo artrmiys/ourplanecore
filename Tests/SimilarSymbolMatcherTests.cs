@@ -182,6 +182,30 @@ internal static class SimilarSymbolMatcherTests
             $"loose whitespace should not change template detail; normal ink {normalSession.TemplateInkPixels}, loose ink {looseSession.TemplateInkPixels}");
     }
 
+    public static void KeepsPeripheralNoiseFromDownsamplingTemplate()
+    {
+        var placements = new[] { (140, 120) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        DrawPeripheralTemplateNoise(page, left: 20, top: 30, width: 140);
+        var looseRect = new SKRectI(
+            20,
+            30,
+            placements[0].Item1 + SymbolWidth + 120,
+            placements[0].Item2 + SymbolHeight + 90);
+
+        SimilarSymbolMatchSession? session = SimilarSymbolMatchSession.TryCreate(
+            page,
+            looseRect,
+            out string error);
+
+        AssertTrue(session != null, $"noisy loose template session creation failed: {error}");
+        AssertTrue(session!.DownsampleFactor == 1,
+            $"border-touching peripheral noise should not downsample a small template, got factor {session.DownsampleFactor}");
+        AssertTrue(
+            !session.TemplateWarning.Contains("downsampled", StringComparison.Ordinal),
+            $"cleaned peripheral noise should not warn as downsampled, got '{session.TemplateWarning}'");
+    }
+
     public static void WarnsOnDownsampledLargeTemplate()
     {
         using SKBitmap page = BuildLargeTemplatePage(80, 60, 180, 120);
@@ -415,6 +439,7 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("fine 7x7 ink-profile match", StringComparison.Ordinal) &&
             source.Contains("PrepareTemplate(ExtractTemplate", StringComparison.Ordinal) &&
             source.Contains("RemovePeripheralTemplateNoise", StringComparison.Ordinal) &&
+            source.Contains("FindPeripheralTemplateNoiseComponents", StringComparison.Ordinal) &&
             source.Contains("BuildTemplateQualityWarning", StringComparison.Ordinal) &&
             source.Contains("TryFindTemplateInkBounds", StringComparison.Ordinal) &&
             source.Contains("TemplateDownsampleFactor", StringComparison.Ordinal) &&
@@ -962,6 +987,19 @@ internal static class SimilarSymbolMatcherTests
         };
 
         canvas.DrawRect(new SKRect(x + 7, y - 3, x + SymbolWidth - 7, y - 2), fill);
+    }
+
+    private static void DrawPeripheralTemplateNoise(SKBitmap bitmap, int left, int top, int width)
+    {
+        using var canvas = new SKCanvas(bitmap);
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        canvas.DrawRect(new SKRect(left, top, left + width, top + 1), fill);
     }
 
     // Asymmetric glyph: box + one diagonal + a dot in the top-left corner so
