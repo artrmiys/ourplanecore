@@ -17,6 +17,7 @@ namespace OurPlaneCore;
 public partial class MainWindow
 {
     private const float SimilarCountDuplicateTolerancePdf = 4f;
+    private const int SimilarCountReviewKeyQuantumPx = 4;
 
     private SimilarCountDialog? _similarCountDialog;
 
@@ -72,10 +73,6 @@ public partial class MainWindow
 
         SKPoint MatchCenterPdf(SimilarSymbolMatch match) =>
             new(match.CenterX / bitmapScale, match.CenterY / bitmapScale);
-
-        static string MatchReviewKey(SimilarSymbolMatch match) =>
-            match.CenterX.ToString(CultureInfo.InvariantCulture) + ":" +
-            match.CenterY.ToString(CultureInfo.InvariantCulture);
 
         IReadOnlyList<ViewportSimilarCountPreviewMarker> BuildPreviewMarkers() =>
             lastMatches
@@ -171,7 +168,7 @@ public partial class MainWindow
             {
                 if (alreadyCountedIndexes.Contains(i))
                     continue;
-                if (!manualReviewStatesByCenter.TryGetValue(MatchReviewKey(lastMatches[i]), out bool include))
+                if (!manualReviewStatesByCenter.TryGetValue(SimilarReviewKey(lastMatches[i]), out bool include))
                     continue;
 
                 if (include)
@@ -186,7 +183,7 @@ public partial class MainWindow
             for (int i = 0; i < lastMatches.Count; i++)
             {
                 if (!alreadyCountedIndexes.Contains(i))
-                    manualReviewStatesByCenter[MatchReviewKey(lastMatches[i])] = include;
+                    manualReviewStatesByCenter[SimilarReviewKey(lastMatches[i])] = include;
             }
         }
 
@@ -224,7 +221,7 @@ public partial class MainWindow
             }
 
             bool include = excludedIndexes.Contains(index);
-            manualReviewStatesByCenter[MatchReviewKey(lastMatches[index])] = include;
+            manualReviewStatesByCenter[SimilarReviewKey(lastMatches[index])] = include;
             if (include)
                 excludedIndexes.Remove(index);
             else
@@ -342,6 +339,16 @@ public partial class MainWindow
         if (result.AlreadyCountedCount > 0)
             status += $", {result.AlreadyCountedCount} already counted";
         return status + ".";
+    }
+
+    private static string SimilarReviewKey(SimilarSymbolMatch match) =>
+        SimilarReviewKeyPart(match.CenterX) + ":" + SimilarReviewKeyPart(match.CenterY);
+
+    private static string SimilarReviewKeyPart(int coordinate)
+    {
+        int quantized = (int)MathF.Round(coordinate / (float)SimilarCountReviewKeyQuantumPx) *
+            SimilarCountReviewKeyQuantumPx;
+        return quantized.ToString(CultureInfo.InvariantCulture);
     }
 
     private int AddSimilarCountMeasurements(

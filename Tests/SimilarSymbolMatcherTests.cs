@@ -438,9 +438,10 @@ internal static class SimilarSymbolMatcherTests
 
         AssertTrue(
             mainWindow.Contains("manualReviewStatesByCenter", StringComparison.Ordinal) &&
-            mainWindow.Contains("MatchReviewKey", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarReviewKey", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountReviewKeyQuantumPx = 4", StringComparison.Ordinal) &&
             mainWindow.Contains("ApplyManualSimilarReviewChoices", StringComparison.Ordinal),
-            "Similar Count review should store manual include/exclude choices by stable match center");
+            "Similar Count review should store manual include/exclude choices by stable quantized match center");
         AssertTrue(
             normalizedMainWindow.Contains(
                 "lastMatches.Clear();\n            lastMatches.AddRange(matches);\n            ApplyDefaultSimilarReviewExclusions();",
@@ -450,7 +451,7 @@ internal static class SimilarSymbolMatcherTests
                 StringComparison.Ordinal),
             "Similar Count rescans should rebuild default weak/duplicate state and then reapply manual choices");
         AssertTrue(
-            mainWindow.Contains("manualReviewStatesByCenter[MatchReviewKey(lastMatches[index])] = include", StringComparison.Ordinal) &&
+            mainWindow.Contains("manualReviewStatesByCenter[SimilarReviewKey(lastMatches[index])] = include", StringComparison.Ordinal) &&
             mainWindow.Contains("RememberCurrentSimilarReviewChoices(include: true)", StringComparison.Ordinal) &&
             mainWindow.Contains("void ClearManualSimilarReviewChoices() => manualReviewStatesByCenter.Clear();", StringComparison.Ordinal) &&
             mainWindow.Contains("ClearManualSimilarReviewChoices();", StringComparison.Ordinal),
