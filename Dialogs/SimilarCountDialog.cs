@@ -7,6 +7,8 @@ using System.Windows.Threading;
 
 namespace OurPlaneCore.Controls;
 
+public readonly record struct SimilarCountScanResult(int Included, int Total, float MinScore, float MaxScore);
+
 // Threshold tuner for offline "count similar symbols". The scan callback
 // re-runs the matcher and refreshes the viewport ghost preview; the dialog
 // only owns the controls, debouncing and cancellation of stale scans.
@@ -19,7 +21,7 @@ public sealed class SimilarCountDialog : Window
     public event EventHandler? Accepted;
     public event EventHandler? Cancelled;
 
-    private readonly Func<float, bool, bool, CancellationToken, Task<int>> _scan;
+    private readonly Func<float, bool, bool, CancellationToken, Task<SimilarCountScanResult>> _scan;
     private readonly Slider _thresholdSlider;
     private readonly CheckBox _rotationsBox;
     private readonly CheckBox _mirroredBox;
@@ -32,10 +34,12 @@ public sealed class SimilarCountDialog : Window
     private CancellationTokenSource? _scanCts;
     private int _lastFound;
     private int _lastTotal;
+    private float _lastMinScore;
+    private float _lastMaxScore;
     private bool _accepted;
 
     public SimilarCountDialog(
-        Func<float, bool, bool, CancellationToken, Task<int>> scan,
+        Func<float, bool, bool, CancellationToken, Task<SimilarCountScanResult>> scan,
         float initialThreshold,
         bool initialRotations,
         bool initialMirrored,
@@ -189,10 +193,12 @@ public sealed class SimilarCountDialog : Window
     private void UpdateThresholdLabel() =>
         _thresholdLabel.Text = $"Similarity threshold: {_thresholdSlider.Value:0.00} (precision default {AppSettingsStore.SimilarCountThresholdDefault:0.00})";
 
-    public void SetReviewCounts(int included, int total)
+    public void SetReviewCounts(int included, int total, float minScore = 0f, float maxScore = 0f)
     {
         _lastFound = Math.Max(0, included);
         _lastTotal = Math.Max(0, total);
+        _lastMinScore = Math.Clamp(minScore, 0f, 1f);
+        _lastMaxScore = Math.Clamp(maxScore, 0f, 1f);
 
         if (_lastTotal == 0)
         {
@@ -204,16 +210,28 @@ public sealed class SimilarCountDialog : Window
 
         if (_lastFound == _lastTotal)
         {
-            _foundLabel.Text = _lastFound == 1 ? "Found 1 symbol." : $"Found {_lastFound} symbols.";
+            _foundLabel.Text = _lastFound == 1
+                ? $"Found 1 symbol{ScoreSuffix()}."
+                : $"Found {_lastFound} symbols{ScoreSuffix()}.";
             _addButton.Content = AddButtonText(_lastFound);
         }
         else
         {
-            _foundLabel.Text = $"Included {_lastFound} of {_lastTotal} symbols.";
+            _foundLabel.Text = $"Included {_lastFound} of {_lastTotal} symbols{ScoreSuffix()}.";
             _addButton.Content = AddButtonText(_lastFound);
         }
 
         _addButton.IsEnabled = _lastFound > 0;
+    }
+
+    private string ScoreSuffix()
+    {
+        if (_lastFound <= 0 || _lastMaxScore <= 0f)
+            return "";
+
+        return Math.Abs(_lastMaxScore - _lastMinScore) < 0.005f
+            ? $" (score {_lastMaxScore:0.00})"
+            : $" (score {_lastMinScore:0.00}-{_lastMaxScore:0.00})";
     }
 
     private string AddButtonText(int count)
@@ -243,7 +261,7 @@ public sealed class SimilarCountDialog : Window
         _addButton.IsEnabled = false;
         try
         {
-            int found = await _scan(
+            SimilarCountScanResult result = await _scan(
                 (float)_thresholdSlider.Value,
                 _rotationsBox.IsChecked == true,
                 _mirroredBox.IsChecked == true,
@@ -251,7 +269,7 @@ public sealed class SimilarCountDialog : Window
             if (cts.IsCancellationRequested)
                 return;
 
-            SetReviewCounts(found, found);
+            SetReviewCounts(result.Included, result.Total, result.MinScore, result.MaxScore);
         }
         catch (OperationCanceledException)
         {

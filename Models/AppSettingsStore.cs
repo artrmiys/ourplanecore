@@ -109,8 +109,8 @@ public static class AppSettingsStore
     public const double ViewportZoomWheelFactorDefault = 2.0;
     public const double ViewportZoomWheelFactorMin = 1.05;
     public const double ViewportZoomWheelFactorMax = 2.5;
-    public const int SimilarCountSettingsCurrentVersion = 2;
-    public const double SimilarCountThresholdDefault = 0.88;
+    public const int SimilarCountSettingsCurrentVersion = 3;
+    public const double SimilarCountThresholdDefault = 0.94;
     public const double SimilarCountThresholdMin = 0.55;
     public const double SimilarCountThresholdMax = 0.98;
 
@@ -453,10 +453,13 @@ public static class AppSettingsStore
         if (settings.SimilarCountSettingsVersion < SimilarCountSettingsCurrentVersion)
         {
             bool oldLowPrecisionThreshold = threshold <= 0.6001;
-            if (oldLowPrecisionThreshold)
+            bool oldPrecisionDefault = threshold <= 0.8801;
+            if (oldLowPrecisionThreshold || oldPrecisionDefault)
                 threshold = SimilarCountThresholdDefault;
 
-            if (oldLowPrecisionThreshold && settings.SimilarCountRotations && !settings.SimilarCountMirrored)
+            if ((oldLowPrecisionThreshold || oldPrecisionDefault) &&
+                settings.SimilarCountRotations &&
+                !settings.SimilarCountMirrored)
                 settings.SimilarCountRotations = false;
 
             settings.SimilarCountMirrored = false;

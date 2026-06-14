@@ -15,10 +15,11 @@ namespace OurPlaneCore;
 //
 //   1. Binarize the page raster to 1bpp "ink" rows packed into ulongs.
 //   2. Dilate ink by one pixel so hairline strokes tolerate ±1 px offsets.
-//   3. Score each candidate window with a three-way agreement:
+//   3. Score each candidate window with a strict agreement:
 //        score = min(|T ∧ dilate(P)| / |T|,          template coverage
 //                    |P ∧ dilate(T)| / |P|,          window precision
-//                    sqrt(min(|T|,|P|) / max(|T|,|P|)))  ink-amount ratio
+//                    sqrt(min(|T|,|P|) / max(|T|,|P|)),   ink-amount ratio
+//                    fine 5x5 ink-profile match)         symbol layout
 //      where T is template ink and P is window ink. Dilation makes the two
 //      overlap ratios saturate on small dense shapes (a solid blob covers
 //      any outline), so the ink-amount ratio keeps solid-vs-outline and
@@ -530,7 +531,7 @@ public sealed class SimilarSymbolMatchSession
     // the window's bits inside those words for exact window ink counts.
     private sealed class TemplateVariant
     {
-        public const int GridSide = 3;
+        public const int GridSide = 5;
         public const int GridCellCount = GridSide * GridSide;
 
         public required int Width;

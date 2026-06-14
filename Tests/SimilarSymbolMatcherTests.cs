@@ -134,6 +134,9 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
             "new Similar Count settings should start at the precision threshold");
+        AssertTrue(
+            AppSettingsStore.SimilarCountThresholdDefault >= 0.94,
+            "Similar Count precision default should be strict enough to avoid near-symbol false hits");
         AssertTrue(!settings.SimilarCountRotations, "rotations should be opt-in for precise Similar Count");
         AssertTrue(!settings.SimilarCountMirrored, "mirrored search should be opt-in for precise Similar Count");
 
@@ -161,6 +164,26 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
             "legacy low Similar Count threshold should migrate even when rotations were already disabled");
+
+        settings.SimilarCountThreshold = 0.88;
+        settings.SimilarCountRotations = false;
+        settings.SimilarCountMirrored = false;
+        settings.SimilarCountSettingsVersion = 2;
+        AppSettingsStore.NormalizeSimilarCountSettings(settings);
+
+        AssertTrue(
+            Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
+            "older precision default should migrate to the stricter Similar Count default");
+    }
+
+    public static void SimilarMatcherUsesFineSymbolProfile()
+    {
+        string source = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
+
+        AssertTrue(
+            source.Contains("public const int GridSide = 5", StringComparison.Ordinal) &&
+            source.Contains("fine 5x5 ink-profile match", StringComparison.Ordinal),
+            "Similar matcher should use a fine symbol layout profile instead of coarse 3x3 matching");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
@@ -199,6 +222,27 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("dialog.Show();", StringComparison.Ordinal) &&
             !mainWindow.Contains("ShowDialog() == true", StringComparison.Ordinal),
             "Similar Count dialog should be modeless so the sheet preview remains clickable during review");
+    }
+
+    public static void SimilarCountPreviewShowsConfidence()
+    {
+        string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+
+        AssertTrue(
+            viewport.Contains("float Score = 1f", StringComparison.Ordinal) &&
+            viewport.Contains("marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal),
+            "Similar preview markers should carry and visualize match confidence");
+        AssertTrue(
+            mainWindow.Contains("lastMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("match.Score", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountScanResult", StringComparison.Ordinal),
+            "Similar Count should preserve matcher scores through the review flow");
+        AssertTrue(
+            dialog.Contains("ScoreSuffix()", StringComparison.Ordinal) &&
+            dialog.Contains("SetReviewCounts(result.Included, result.Total, result.MinScore, result.MaxScore)", StringComparison.Ordinal),
+            "Similar Count dialog should show score range for the current review set");
     }
 
     public static void SimilarCountLocksDestinationTakeoff()

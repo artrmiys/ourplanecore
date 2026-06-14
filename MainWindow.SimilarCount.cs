@@ -51,55 +51,79 @@ public partial class MainWindow
             return;
         }
 
-        var lastCenters = new List<SKPoint>();
+        var lastMatches = new List<SimilarSymbolMatch>();
         var excludedIndexes = new HashSet<int>();
         TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
         string destinationName = SimilarCountDestinationName(destinationItem);
         SimilarCountDialog? dialog = null;
 
+        SKPoint MatchCenterPdf(SimilarSymbolMatch match) =>
+            new(match.CenterX / bitmapScale, match.CenterY / bitmapScale);
+
         IReadOnlyList<ViewportSimilarCountPreviewMarker> BuildPreviewMarkers() =>
-            lastCenters
-                .Select((center, index) => new ViewportSimilarCountPreviewMarker(
-                    center,
-                    Included: !excludedIndexes.Contains(index)))
+            lastMatches
+                .Select((match, index) => new ViewportSimilarCountPreviewMarker(
+                    MatchCenterPdf(match),
+                    Included: !excludedIndexes.Contains(index),
+                    match.Score,
+                    match.RotationDegrees,
+                    match.Mirrored))
                 .ToList();
 
         IReadOnlyList<SKPoint> IncludedCenters() =>
-            lastCenters
+            lastMatches
                 .Where((_, index) => !excludedIndexes.Contains(index))
+                .Select(MatchCenterPdf)
                 .ToList();
+
+        SimilarCountScanResult BuildReviewResult()
+        {
+            int total = lastMatches.Count;
+            int included = Math.Max(0, total - excludedIndexes.Count);
+            if (included == 0)
+                return new SimilarCountScanResult(0, total, 0f, 0f);
+
+            var scores = lastMatches
+                .Where((_, index) => !excludedIndexes.Contains(index))
+                .Select(match => match.Score)
+                .ToList();
+            return new SimilarCountScanResult(included, total, scores.Min(), scores.Max());
+        }
 
         void RefreshPreviewReview()
         {
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
-            dialog?.SetReviewCounts(lastCenters.Count - excludedIndexes.Count, lastCenters.Count);
+            SimilarCountScanResult result = BuildReviewResult();
+            dialog?.SetReviewCounts(result.Included, result.Total, result.MinScore, result.MaxScore);
         }
 
         void ToggleSimilarPreviewMarker(int index)
         {
-            if (index < 0 || index >= lastCenters.Count)
+            if (index < 0 || index >= lastMatches.Count)
                 return;
 
             if (!excludedIndexes.Add(index))
                 excludedIndexes.Remove(index);
 
             RefreshPreviewReview();
-            TxtStatus.Text = $"Count similar review: {lastCenters.Count - excludedIndexes.Count}/{lastCenters.Count} marker(s) included.";
+            SimilarCountScanResult result = BuildReviewResult();
+            TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} marker(s) included.";
         }
 
-        async Task<int> ScanAsync(float threshold, bool rotations, bool mirrored, CancellationToken cancellationToken)
+        async Task<SimilarCountScanResult> ScanAsync(
+            float threshold,
+            bool rotations,
+            bool mirrored,
+            CancellationToken cancellationToken)
         {
             List<SimilarSymbolMatch> matches = await Task.Run(
                 () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
                 cancellationToken);
-            var centers = matches
-                .Select(match => new SKPoint(match.CenterX / bitmapScale, match.CenterY / bitmapScale))
-                .ToList();
-            lastCenters.Clear();
-            lastCenters.AddRange(centers);
+            lastMatches.Clear();
+            lastMatches.AddRange(matches);
             excludedIndexes.Clear();
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
-            return centers.Count;
+            return BuildReviewResult();
         }
 
         dialog = new SimilarCountDialog(

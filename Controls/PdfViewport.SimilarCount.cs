@@ -8,7 +8,12 @@ using SkiaSharp;
 namespace OurPlaneCore.Controls;
 
 public sealed record ViewportSimilarCountRequest(SKRect PdfRect, string PageFolder);
-public sealed record ViewportSimilarCountPreviewMarker(SKPoint CenterPdf, bool Included);
+public sealed record ViewportSimilarCountPreviewMarker(
+    SKPoint CenterPdf,
+    bool Included,
+    float Score = 1f,
+    int RotationDegrees = 0,
+    bool Mirrored = false);
 
 // "Count similar symbols": rubber-band template selection (mirrors the AI
 // crop note interaction) plus a ghost-marker preview layer for the matches
@@ -299,6 +304,26 @@ public sealed partial class PdfViewport
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
         };
+        using var weakFill = new SKPaint
+        {
+            Color = new SKColor(0xFB, 0x8C, 0x00, 120),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+        };
+        using var weakStroke = new SKPaint
+        {
+            Color = new SKColor(0xE6, 0x51, 0x00),
+            StrokeWidth = 1.8f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
+        using var variantStroke = new SKPaint
+        {
+            Color = new SKColor(0x6A, 0x1B, 0x9A),
+            StrokeWidth = 1.2f / safeZoom,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+        };
         using var excludedStroke = new SKPaint
         {
             Color = new SKColor(0xC6, 0x28, 0x28),
@@ -311,8 +336,12 @@ public sealed partial class PdfViewport
             SKPoint center = marker.CenterPdf;
             if (marker.Included)
             {
-                canvas.DrawCircle(center, radius, includedFill);
-                canvas.DrawCircle(center, radius, includedStroke);
+                bool weakerMatch = marker.Score > 0f &&
+                                    marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
+                canvas.DrawCircle(center, radius, weakerMatch ? weakFill : includedFill);
+                canvas.DrawCircle(center, radius, weakerMatch ? weakStroke : includedStroke);
+                if (marker.RotationDegrees != 0 || marker.Mirrored)
+                    canvas.DrawCircle(center, radius * 1.45f, variantStroke);
                 continue;
             }
 
