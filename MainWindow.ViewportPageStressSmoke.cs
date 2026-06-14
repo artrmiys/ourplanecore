@@ -142,7 +142,7 @@ public partial class MainWindow
             result.PaintReadyMs = watch.ElapsedMilliseconds;
             await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
-            result.ZoomSteps = await ExerciseViewportZoomAsync();
+            result.ZoomSteps = await ExerciseViewportZoomAsync(page, timeoutMs, result);
             phaseWatch.Stop();
             result.ZoomExerciseMs = phaseWatch.ElapsedMilliseconds;
             phaseWatch.Restart();
@@ -183,7 +183,7 @@ public partial class MainWindow
             result.PaintReadyMs = watch.ElapsedMilliseconds;
             await WaitForViewportSheetOverlayAsync(page, timeoutMs, result);
             Stopwatch phaseWatch = Stopwatch.StartNew();
-            result.ZoomSteps = await ExerciseViewportZoomAsync();
+            result.ZoomSteps = await ExerciseViewportZoomAsync(page, timeoutMs, result);
             phaseWatch.Stop();
             result.ZoomExerciseMs = phaseWatch.ElapsedMilliseconds;
             phaseWatch.Restart();
@@ -293,7 +293,10 @@ public partial class MainWindow
         throw new TimeoutException($"Viewport did not apply sheet overlay for '{page.Name}' within {timeoutMs} ms.");
     }
 
-    private async Task<List<ZoomSmokeStep>> ExerciseViewportZoomAsync()
+    private async Task<List<ZoomSmokeStep>> ExerciseViewportZoomAsync(
+        PageInfo page,
+        int timeoutMs,
+        PageSmokeResult result)
     {
         var steps = new List<ZoomSmokeStep>();
         var start = _viewport.CaptureViewState();
@@ -315,6 +318,9 @@ public partial class MainWindow
                         current.PanY + 24))));
             }
 
+            ZoomSmokeStep detail = await WaitForViewportDetailSmokeStepAsync(page, timeoutMs);
+            result.ZoomDetailReadyMs = detail.ElapsedMs;
+            steps.Add(detail);
             steps.Add(await RunViewportSmokeStepAsync("restore", () => _viewport.RestoreViewState(start)));
             return steps;
         }
@@ -328,6 +334,29 @@ public partial class MainWindow
         steps.Add(await RunViewportSmokeStepAsync("zoom-out", _viewport.ZoomOut));
         steps.Add(await RunViewportSmokeStepAsync("restore", () => _viewport.RestoreViewState(start)));
         return steps;
+    }
+
+    private async Task<ZoomSmokeStep> WaitForViewportDetailSmokeStepAsync(PageInfo page, int timeoutMs)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        await WaitForViewportDetailRenderAsync(page, timeoutMs);
+        watch.Stop();
+        return new ZoomSmokeStep("detail-ready", 0, 0, 0, watch.ElapsedMilliseconds);
+    }
+
+    private async Task WaitForViewportDetailRenderAsync(PageInfo page, int timeoutMs)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < timeoutMs)
+        {
+            if (_viewport.IsPageDetailRenderReady(page.FolderPath))
+                return;
+
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException($"Viewport did not sharpen detail for '{page.Name}' within {timeoutMs} ms.");
     }
 
     private async Task<ZoomSmokeStep> RunViewportSmokeStepAsync(string name, Action action)
@@ -492,6 +521,7 @@ public partial class MainWindow
         public bool HasOverlayConfigured { get; set; }
         public long OverlayReadyMs { get; set; }
         public long ZoomExerciseMs { get; set; }
+        public long ZoomDetailReadyMs { get; set; }
         public List<ZoomSmokeStep> ZoomSteps { get; set; } = [];
         public long PostZoomRenderReadyMs { get; set; }
         public long VisualProbeMs { get; set; }

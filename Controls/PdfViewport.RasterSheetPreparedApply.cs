@@ -185,6 +185,7 @@ public sealed partial class PdfViewport
         AppLog.Info(
             $"Viewport raster DPI upgrade applied; source='{sourceKind}'; dpi={targetDpi}; " +
             $"page='{_pageFolder}'; pdf='{Path.GetFileName(_pdfPath)}'; pdfPage={_pdfIndex + 1}");
+        QueueDetailRenderOverRasterSheetIfNeeded(force: false);
         RequestRepaint();
         return true;
     }

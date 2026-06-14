@@ -95,6 +95,7 @@ function Get-SmokeMetrics {
         MaxStepMs = Max-Property -Items $steps -Name "ElapsedMs"
         MaxReadyMs = Max-Property -Items $steps -Name "RenderReadyMs"
         MaxZoomMs = Max-Property -Items $steps -Name "ZoomExerciseMs"
+        MaxZoomDetailReadyMs = Max-Property -Items $steps -Name "ZoomDetailReadyMs"
         MaxPostZoomReadyMs = Max-Property -Items $steps -Name "PostZoomRenderReadyMs"
         InitialPageSettleMs = Number-OrZero $Report.InitialPageSettleMs
     }
@@ -177,6 +178,7 @@ $rows += New-ComparisonRow "ManagedMemoryMb" $baseMetrics.ManagedMemoryMb $curre
 $rows += New-ComparisonRow "MaxStepMs" $baseMetrics.MaxStepMs $currentMetrics.MaxStepMs $false $MaxStepRegressionMs $MaxRegressionRatio
 $rows += New-ComparisonRow "MaxReadyMs" $baseMetrics.MaxReadyMs $currentMetrics.MaxReadyMs $false $MaxReadyRegressionMs $MaxRegressionRatio
 $rows += New-ComparisonRow "MaxZoomMs" $baseMetrics.MaxZoomMs $currentMetrics.MaxZoomMs $false $MaxStepRegressionMs $MaxRegressionRatio
+$rows += New-ComparisonRow "MaxZoomDetailReadyMs" $baseMetrics.MaxZoomDetailReadyMs $currentMetrics.MaxZoomDetailReadyMs $false $MaxReadyRegressionMs $MaxRegressionRatio
 $rows += New-ComparisonRow "MaxPostZoomReadyMs" $baseMetrics.MaxPostZoomReadyMs $currentMetrics.MaxPostZoomReadyMs $false $MaxReadyRegressionMs $MaxRegressionRatio
 $rows += New-ComparisonRow "InitialPageSettleMs" $baseMetrics.InitialPageSettleMs $currentMetrics.InitialPageSettleMs $false $MaxReadyRegressionMs $MaxRegressionRatio
 

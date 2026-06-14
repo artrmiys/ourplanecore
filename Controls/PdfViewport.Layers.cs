@@ -299,6 +299,7 @@ public sealed partial class PdfViewport
         _usingLayerRenderer = false;
         _usingRasterSheetRender = true;
         _usingRasterSheetOverviewRender = usingOverview;
+        _rasterSheetSource = rasterSheet?.Clone();
         if (!usingOverview)
             RememberReadyRasterSheetSource(pageFolder, pdfPath, pdfIndex, rasterSheet);
         QueueRasterSheetVisualSegmentsLoad(pageFolder, pdfPath, pdfIndex, rasterSheet);
@@ -307,6 +308,7 @@ public sealed partial class PdfViewport
         ClearDetailRenderBitmap();
         CancelPendingDocnetRenderForAppliedBitmap();
         ApplyInitialPreviewView(restoreView, fitAfter);
+        QueueDetailRenderOverRasterSheetIfNeeded(force: false);
         AppLog.Info(
             $"Viewport raster sheet {(usingOverview ? "overview " : "")}cache hit; page='{pageFolder}'; " +
             $"pdf='{Path.GetFileName(pdfPath)}'; pdfPage={pdfIndex + 1}; scale={raster.BitmapScale:0.###}; " +
@@ -414,6 +416,12 @@ public sealed partial class PdfViewport
         string cacheKey = DocnetRenderCacheKey(pdfPath, pdfIndex, renderScale);
         if (PersistedPreviewBitmapCache.TryGet(cacheKey, out CachedBitmapRender cachedPreview))
         {
+            if (ShouldSkipLowerQualityPreviewApply(pdfPath, pdfIndex, cachedPreview.BitmapScale))
+            {
+                cachedPreview.Bitmap.Dispose();
+                return false;
+            }
+
             ApplyPreviewBitmapRender(cachedPreview.Bitmap, cachedPreview.WidthPt, cachedPreview.HeightPt, cachedPreview.BitmapScale, restoreView, fitAfter);
             AppLog.Info(
                 $"Viewport PyMuPDF preview memory cache hit; page='{_pageFolder}'; " +
@@ -434,6 +442,12 @@ public sealed partial class PdfViewport
 
         if (DocnetRenderCache.TryGet(cacheKey, out CachedBitmapRender cachedPreviewRender))
         {
+            if (ShouldSkipLowerQualityPreviewApply(pdfPath, pdfIndex, cachedPreviewRender.BitmapScale))
+            {
+                cachedPreviewRender.Bitmap.Dispose();
+                return false;
+            }
+
             ApplyPreviewBitmapRender(
                 cachedPreviewRender.Bitmap,
                 cachedPreviewRender.WidthPt,
@@ -464,6 +478,12 @@ public sealed partial class PdfViewport
         if (!TryReadPersistedPreviewBitmap(pdfPath, pdfIndex, renderScale, out CachedBitmapRender render))
             return false;
 
+        if (ShouldSkipLowerQualityPreviewApply(pdfPath, pdfIndex, render.BitmapScale))
+        {
+            render.Bitmap.Dispose();
+            return false;
+        }
+
         ApplyPreviewBitmapRender(render.Bitmap, render.WidthPt, render.HeightPt, render.BitmapScale, restoreView, fitAfter);
         PersistedPreviewBitmapCache.Put(cacheKey, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
         DocnetRenderCache.Put(cacheKey, render.WidthPt, render.HeightPt, render.BitmapScale, render.Bitmap);
@@ -482,6 +502,22 @@ public sealed partial class PdfViewport
         if (requestRepaint)
             RequestRepaint();
         return true;
+    }
+
+    private bool ShouldSkipLowerQualityPreviewApply(string pdfPath, int pdfIndex, float previewBitmapScale)
+    {
+        if (_pageBitmap == null ||
+            previewBitmapScale <= 0 ||
+            _bitmapScale <= 0 ||
+            previewBitmapScale >= _bitmapScale * 0.95f)
+        {
+            return false;
+        }
+
+        return string.Equals(_pdfPath, pdfPath, StringComparison.OrdinalIgnoreCase) &&
+               _pdfIndex == pdfIndex &&
+               IsPageBitmapFor(_pdfPath, _pdfIndex, _pageFolder) &&
+               (_usingRasterSheetRender || _bitmapScale >= ViewportRenderPolicy.ResponsiveMinRenderScale * 0.95f);
     }
 
     private void ApplyPreviewBitmapRender(

@@ -94,6 +94,7 @@ public sealed partial class PdfViewport
 
         if (TryApplyReadyRasterSheetForCurrentZoom())
         {
+            QueueDetailRenderOverRasterSheetIfNeeded(force: false);
             RequestRepaint();
             return;
         }
@@ -174,6 +175,7 @@ public sealed partial class PdfViewport
                 ShouldUseRasterSheetForCurrentZoom() &&
                 TryApplyReadyRasterSheetForCurrentZoom())
             {
+                QueueDetailRenderOverRasterSheetIfNeeded(force);
                 return;
             }
 
@@ -181,17 +183,26 @@ public sealed partial class PdfViewport
                 return;
 
             if (TryApplyResponsiveRasterSheetDpiForCurrentZoom())
+            {
+                QueueDetailRenderOverRasterSheetIfNeeded(force);
                 return;
+            }
 
             if (TryUpgradeRasterSheetToReadyDpiForCurrentZoom())
+            {
+                QueueDetailRenderOverRasterSheetIfNeeded(force);
                 return;
+            }
 
             QueueDetailRenderIfNeeded(force);
             return;
         }
 
         if (TryApplyReadyRasterSheetForCurrentZoom())
+        {
+            QueueDetailRenderOverRasterSheetIfNeeded(force);
             return;
+        }
 
         if (_zoom < ViewportRenderPolicy.ZoomRefreshMinZoom)
         {
@@ -239,6 +250,22 @@ public sealed partial class PdfViewport
         {
             PostStatus($"Render error: {ex.Message}");
         }
+    }
+
+    private void QueueDetailRenderOverRasterSheetIfNeeded(bool force)
+    {
+        if (!_usingRasterSheetRender ||
+            _usingRasterSheetOverviewRender ||
+            _rasterSheetSource == null ||
+            RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+            _pdfLayersLoadedForPage ||
+            _usingLayerRenderer ||
+            !ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale))
+        {
+            return;
+        }
+
+        QueueDetailRenderIfNeeded(force);
     }
 
     private void ScheduleRerenderForZoom(bool force)

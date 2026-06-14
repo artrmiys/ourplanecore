@@ -2507,6 +2507,8 @@ internal static class TakeoffsTreeRegressionTests
         string viewport = ReadRepoFile("Controls/PdfViewport.cs");
         string pageApi = ReadRepoFile("Controls/PdfViewport.PageApi.cs");
         string layers = ReadRepoFile("Controls/PdfViewport.Layers.cs");
+        string rasterDpi = ReadRepoFile("Controls/PdfViewport.RasterSheetDpiUpgrade.cs");
+        string rasterPrepared = ReadRepoFile("Controls/PdfViewport.RasterSheetPreparedApply.cs");
         string policy = ReadRepoFile("Models/ViewportRenderPolicy.cs");
         string service = ReadPdfLayerRenderServiceSources();
         string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
@@ -2569,6 +2571,8 @@ internal static class TakeoffsTreeRegressionTests
             transform.Contains("ViewportRenderPolicy.ShouldUseZoomRefreshRender(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldPreferDetailRenderOverFullRefresh(_zoom, _bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force)", StringComparison.Ordinal) &&
+            transform.Contains("QueueDetailRenderOverRasterSheetIfNeeded(force)", StringComparison.Ordinal) &&
+            transform.Contains("private void QueueDetailRenderOverRasterSheetIfNeeded(bool force)", StringComparison.Ordinal) &&
             transform.Contains("ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale)", StringComparison.Ordinal) &&
             transform.Contains("QueueDetailRenderIfNeeded(force: false)", StringComparison.Ordinal),
             "zoom and pan idle should refresh blurry previews before scheduling detail renders for deep zoom");
@@ -2623,7 +2627,11 @@ internal static class TakeoffsTreeRegressionTests
             layers.Contains("ShouldSkipQueuedFullPageSharpUpgradeAtLowZoom(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("private bool ShouldSkipQueuedNonFastPreviewForCurrentView(float renderScale)", StringComparison.Ordinal) &&
             layers.Contains("_usingRasterSheetRender || _usingRasterSheetOverviewRender", StringComparison.Ordinal) &&
+            layers.Contains("_rasterSheetSource = rasterSheet?.Clone();", StringComparison.Ordinal) &&
+            layers.Contains("QueueDetailRenderOverRasterSheetIfNeeded(force: false)", StringComparison.Ordinal) &&
             layers.Contains("_bitmapScale >= ViewportRenderPolicy.FastPageSwitchPreviewRenderScale * 0.95f", StringComparison.Ordinal) &&
+            layers.Contains("ShouldSkipLowerQualityPreviewApply", StringComparison.Ordinal) &&
+            layers.Contains("previewBitmapScale >= _bitmapScale * 0.95f", StringComparison.Ordinal) &&
             layers.Contains("!IsFastPreviewRenderScale(request.RenderScale)", StringComparison.Ordinal) &&
             layers.Contains("WaitForPreviewPrefetchQuietWindowAsync().ConfigureAwait(false)", StringComparison.Ordinal) &&
             layers.Contains("_bitmapScale <= 0", StringComparison.Ordinal) &&
@@ -2638,6 +2646,10 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             transform.Contains("if (ViewportRenderPolicy.ShouldSkipFullRefreshDuringDetail(_bitmapScale))", StringComparison.Ordinal),
             "deep zoom should skip expensive full-sheet refresh once a normal 1x base bitmap exists");
+        AssertTrue(
+            rasterDpi.Contains("QueueDetailRenderOverRasterSheetIfNeeded(force: false)", StringComparison.Ordinal) &&
+            rasterPrepared.Contains("QueueDetailRenderOverRasterSheetIfNeeded(force: false)", StringComparison.Ordinal),
+            "raster DPI applies should still request clipped detail when the current zoom is sharper than the raster bitmap");
         AssertTrue(
             detail.Contains("private sealed record DetailRenderRequest", StringComparison.Ordinal) &&
             detail.Contains("_activeDetailRender", StringComparison.Ordinal) &&
@@ -2800,10 +2812,17 @@ internal static class TakeoffsTreeRegressionTests
             source.Contains("WaitForViewportSheetOverlayAsync", StringComparison.Ordinal) &&
             source.Contains("Directory.Exists(page.OverlayPageFolder)", StringComparison.Ordinal) &&
             source.Contains("OverlayReadyMs", StringComparison.Ordinal) &&
+            source.Contains("IsPageDetailRenderReady", StringComparison.Ordinal) &&
+            source.Contains("WaitForViewportDetailRenderAsync", StringComparison.Ordinal) &&
+            source.Contains("ZoomDetailReadyMs", StringComparison.Ordinal) &&
+            source.Contains("detail-ready", StringComparison.Ordinal) &&
             source.Contains("PostZoomRenderReadyMs", StringComparison.Ordinal) &&
             source.Contains("VisualProbeMs", StringComparison.Ordinal) &&
+            script.Contains("max zoom detail", StringComparison.Ordinal) &&
+            script.Contains("[switch]$UseVerifyBuild", StringComparison.Ordinal) &&
+            script.Contains("if ($UseVerifyBuild -and (Test-Path", StringComparison.Ordinal) &&
             script.Contains("overlay checks", StringComparison.Ordinal),
-            "viewport stress smoke must support hidden sampled page opens plus absolute zoom, pan, sheet overlay waits, and phase timing checks for 350% regressions");
+            "viewport stress smoke must support hidden sampled page opens plus absolute zoom, pan, detail sharpness, sheet overlay waits, and phase timing checks for 350% regressions");
         AssertTrue(
             source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS", StringComparison.Ordinal) &&
             source.Contains("RunViewportTreeOpsSmoke(report)", StringComparison.Ordinal) &&

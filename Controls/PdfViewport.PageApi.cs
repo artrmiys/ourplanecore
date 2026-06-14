@@ -34,6 +34,12 @@ public sealed partial class PdfViewport
         _pagePaintGeneration == _pageBitmapGeneration &&
         string.Equals(_pagePaintedPageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
 
+    public bool IsPageDetailRenderReady(string pageFolder) =>
+        IsPageRenderReady(pageFolder) &&
+        (!ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale) ||
+         DetailRenderCoversVisibleViewForPaint()) &&
+        string.Equals(_pageFolder, pageFolder, StringComparison.OrdinalIgnoreCase);
+
     public bool IsPdfLayerTraceEnabled => _pdfLayerTraceEnabled;
     public bool ArePdfLayersLoaded => _pdfLayersLoadedForPage;
     public bool CanApplyPdfLayerTrace => _pdfLayerTraceEnabled && _pdfLayerTraceReadyToApply;

@@ -11,6 +11,7 @@ param(
     [int]$PanSteps = 4,
     [string]$ReportPath = "",
     [switch]$IncludeTreeOps,
+    [switch]$UseVerifyBuild,
     [switch]$KeepAppOpen
 )
 
@@ -111,6 +112,13 @@ function Summarize-Results {
         $max = ($all | Measure-Object -Property ElapsedMs -Maximum).Maximum
         $maxReady = ($all | Measure-Object -Property RenderReadyMs -Maximum).Maximum
     }
+    $maxDetail = 0
+    if ($all.Count -gt 0) {
+        $detailReady = @($all | Where-Object { $null -ne $_.ZoomDetailReadyMs } | Select-Object -ExpandProperty ZoomDetailReadyMs)
+        if ($detailReady.Count -gt 0) {
+            $maxDetail = ($detailReady | Measure-Object -Maximum).Maximum
+        }
+    }
 
     Write-Host "Viewport page stress smoke report:" -ForegroundColor Cyan
     Write-Host "  pages opened: $($Report.PageCount)"
@@ -121,11 +129,12 @@ function Summarize-Results {
     Write-Host "  new tab checks: $(@($Report.TabResults).Count)"
     Write-Host "  tab return checks: $(@($Report.TabReturnResults).Count)"
     Write-Host "  max render ready: $maxReady ms"
+    Write-Host "  max zoom detail: $maxDetail ms"
     Write-Host "  max step: $max ms"
     $overlayCount = @($all | Where-Object { $_.HasOverlayConfigured }).Count
     Write-Host "  overlay checks: $overlayCount"
     foreach ($item in $slowest) {
-        Write-Host ("  slow: {0} {1} ready {2} ms overlay {3} ms zoom {4} ms post {5} ms probe {6} ms total {7} ms" -f $item.Stage, $item.PageName, $item.RenderReadyMs, $item.OverlayReadyMs, $item.ZoomExerciseMs, $item.PostZoomRenderReadyMs, $item.VisualProbeMs, $item.ElapsedMs)
+        Write-Host ("  slow: {0} {1} ready {2} ms overlay {3} ms zoom {4} ms detail {5} ms post {6} ms probe {7} ms total {8} ms" -f $item.Stage, $item.PageName, $item.RenderReadyMs, $item.OverlayReadyMs, $item.ZoomExerciseMs, $item.ZoomDetailReadyMs, $item.PostZoomRenderReadyMs, $item.VisualProbeMs, $item.ElapsedMs)
     }
     if ($null -ne $Report.Performance) {
         $summary = $Report.Performance.Summary
@@ -197,7 +206,7 @@ try {
     }
 
     $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
-    if (Test-Path -LiteralPath $appDll) {
+    if ($UseVerifyBuild -and (Test-Path -LiteralPath $appDll)) {
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     } else {
         $projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
