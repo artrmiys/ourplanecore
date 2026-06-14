@@ -1,5 +1,22 @@
 ﻿# Development Log
 
+## 2026-06-14 Hotfix: deep-zoom measurement freeze (raster quality-restore spin)
+
+- Symptom: app froze (UI thread pegged ~100% of one core, logging stopped) when
+  zooming to ~600%+ on a raster-sheet page and drawing measurements. Captured
+  live from the hung process via dotnet-trace; the hot stack was a self-re-posting
+  dispatcher loop `RestoreRasterSheetQualityAfterMotionAsync` ->
+  `QueueRasterSheetQualityRestoreAfterMotion` -> ... with zero delay.
+- Root cause: the restore delay was computed from raw wall-clock idle
+  (`now - _lastFastNavigationAt`) while the "should hold heavy DPI" check used a
+  fast-nav-aware idle (zero while `_isFastNavigating`). With a held pointer the
+  raw idle grows past the 450ms quiet window (delay -> 0) while the hold check
+  still says "hold" (target DPI > 144 at deep zoom), so the restore re-queued
+  itself every dispatcher tick -> busy spin.
+- Fix: single shared `RasterSheetMotionIdle()` feeds both the hold check and the
+  restore delay, so a held/active fast-nav state yields a 450ms re-poll instead
+  of a 0ms spin. `PdfViewport.RasterSheetDpiUpgrade.cs`.
+
 ## 2026-06-11/12 v2.0.0–v2.2.1: Features, Hardening, Rafters, Warmup Opt-In
 
 Full detail: `docs/SESSION_2026_06_11_V2_SUMMARY.md`. Highlights:

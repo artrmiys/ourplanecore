@@ -344,10 +344,22 @@ public sealed partial class PdfViewport
         if (_lastFastNavigationAt == DateTime.MinValue)
             return false;
 
-        TimeSpan idle = _isFastNavigating
-            ? TimeSpan.Zero
-            : DateTime.UtcNow - _lastFastNavigationAt;
-        return ViewportRenderPolicy.ShouldHoldRasterSheetQualityAfterNavigation(idle, targetDpi);
+        return ViewportRenderPolicy.ShouldHoldRasterSheetQualityAfterNavigation(
+            RasterSheetMotionIdle(), targetDpi);
+    }
+
+    // While fast navigation is active the effective idle is zero, exactly as the
+    // hold decision sees it. Both the "should hold" check and the restore delay
+    // below MUST share this value: if the delay were computed from raw wall-clock
+    // idle while the hold check used zero, a held pointer (idle grows past the
+    // quiet window, yet _isFastNavigating stays true) would yield delay=0 while
+    // the restore keeps re-queuing itself, busy-spinning the dispatcher at 100%.
+    private TimeSpan RasterSheetMotionIdle()
+    {
+        if (_isFastNavigating || _lastFastNavigationAt == DateTime.MinValue)
+            return TimeSpan.Zero;
+
+        return DateTime.UtcNow - _lastFastNavigationAt;
     }
 
     private void QueueRasterSheetQualityRestoreAfterMotion(PageInfo page)
@@ -364,10 +376,7 @@ public sealed partial class PdfViewport
         if (_rasterSheetQualityRestoreQueuedVersion == version)
             return;
 
-        TimeSpan idle = _lastFastNavigationAt == DateTime.MinValue
-            ? TimeSpan.Zero
-            : DateTime.UtcNow - _lastFastNavigationAt;
-        TimeSpan delay = ViewportRenderPolicy.RasterSheetQualityRestoreDelay(idle);
+        TimeSpan delay = ViewportRenderPolicy.RasterSheetQualityRestoreDelay(RasterSheetMotionIdle());
         _rasterSheetQualityRestoreQueuedVersion = version;
         _ = RestoreRasterSheetQualityAfterMotionAsync(version, page, delay);
     }
