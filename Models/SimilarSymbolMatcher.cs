@@ -150,7 +150,7 @@ public sealed class SimilarSymbolMatchSession
         AddRotatedVariants(variants, template, mirrored: false);
         AddRotatedVariants(variants, MirrorHorizontal(template), mirrored: true);
 
-        string templateWarning = BuildTemplateQualityWarning(template);
+        string templateWarning = BuildTemplateQualityWarning(template, factor);
         return new SimilarSymbolMatchSession(
             width,
             height,
@@ -737,7 +737,22 @@ public sealed class SimilarSymbolMatchSession
         return CountInk(cleaned) >= MinTemplateInk ? cleaned : source;
     }
 
-    private static string BuildTemplateQualityWarning(bool[,] template)
+    private static string BuildTemplateQualityWarning(bool[,] template, int downsampleFactor)
+    {
+        var warnings = new List<string>();
+        string clusterWarning = BuildTemplateClusterWarning(template);
+        if (!string.IsNullOrWhiteSpace(clusterWarning))
+            warnings.Add(clusterWarning);
+        if (downsampleFactor > 1)
+        {
+            warnings.Add(
+                $"Template note: selected box was downsampled {downsampleFactor}x before matching; tighter selection gives sharper results.");
+        }
+
+        return string.Join(Environment.NewLine, warnings);
+    }
+
+    private static string BuildTemplateClusterWarning(bool[,] template)
     {
         List<TemplateComponent> components = ReadTemplateComponents(template)
             .OrderByDescending(component => component.Pixels.Count)

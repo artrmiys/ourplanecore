@@ -39,6 +39,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar symbol matcher trims peripheral selection noise", SimilarSymbolMatcherTests.TrimsPeripheralSelectionNoiseBeforeMatching),
     ("similar symbol matcher tightens loose whitespace selection", SimilarSymbolMatcherTests.LooseWhitespaceSelectionKeepsCentersPrecise),
     ("similar matcher warns on multi-symbol template", SimilarSymbolMatcherTests.WarnsOnMultiSymbolTemplate),
+    ("similar matcher warns on downsampled loose template", SimilarSymbolMatcherTests.WarnsOnDownsampledLooseTemplate),
     ("similar symbol matcher can include mirrored copies", SimilarSymbolMatcherTests.FindsMirroredCopyOnlyWhenEnabled),
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
     ("similar symbol matcher rejects core-only relaxed near miss", SimilarSymbolMatcherTests.RejectsCoreOnlyRelaxedNearMissAtPrecisionThreshold),

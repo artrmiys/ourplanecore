@@ -153,6 +153,32 @@ internal static class SimilarSymbolMatcherTests
             $"multi-symbol template should warn, got '{multiSession.TemplateWarning}'");
     }
 
+    public static void WarnsOnDownsampledLooseTemplate()
+    {
+        var placements = new[] { (140, 120) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? normalSession = CreateSession(page);
+        var looseRect = new SKRectI(
+            placements[0].Item1 - 120,
+            placements[0].Item2 - 90,
+            placements[0].Item1 + SymbolWidth + 120,
+            placements[0].Item2 + SymbolHeight + 90);
+
+        SimilarSymbolMatchSession? looseSession = SimilarSymbolMatchSession.TryCreate(
+            page,
+            looseRect,
+            out string error);
+
+        AssertTrue(string.IsNullOrWhiteSpace(normalSession!.TemplateWarning),
+            $"normal one-symbol template should not warn, got '{normalSession.TemplateWarning}'");
+        AssertTrue(looseSession != null, $"loose template session creation failed: {error}");
+        AssertTrue(looseSession!.DownsampleFactor > 1,
+            $"loose template should be downsampled, got factor {looseSession.DownsampleFactor}");
+        AssertTrue(
+            looseSession.TemplateWarning.Contains("downsampled", StringComparison.Ordinal),
+            $"downsampled loose template should warn, got '{looseSession.TemplateWarning}'");
+    }
+
     public static void KeepsHitsNearAdjacentPlanInk()
     {
         var placements = new[] { (40, 40), (200, 60), (120, 220) };
