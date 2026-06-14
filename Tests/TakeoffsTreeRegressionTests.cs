@@ -2533,7 +2533,8 @@ internal static class TakeoffsTreeRegressionTests
             policy.Contains("DetailRenderMaxPaintTiles = 4", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderStableTileScreenPx", StringComparison.Ordinal) &&
             policy.Contains("DetailRenderStableTileMaxExpansionFactor", StringComparison.Ordinal) &&
-            policy.Contains("ShouldUseDetailRenderPrefetch", StringComparison.Ordinal),
+            policy.Contains("ShouldUseDetailRenderPrefetch", StringComparison.Ordinal) &&
+            policy.Contains("allowDuringNavigationPrefetch", StringComparison.Ordinal),
             "viewport policy should cap full-sheet renders separately from viewport-sized detail renders");
         AssertTrue(
             pageApi.Contains("TryApplyPersistedPreviewRender", StringComparison.Ordinal) &&
@@ -2659,9 +2660,12 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("BuildStableDetailRenderClip", StringComparison.Ordinal) &&
             detail.Contains("stableScale >= targetScale * 0.92f", StringComparison.Ordinal) &&
             detail.Contains("QueueAdjacentDetailRenderPrefetch", StringComparison.Ordinal) &&
+            detail.Contains("request with { AllowDuringNavigationPrefetch = true }", StringComparison.Ordinal) &&
             detail.Contains("DetailTilePrefetchSemaphore", StringComparison.Ordinal) &&
             detailPrefetch.Contains("QueueAdjacentDetailRenderPrefetchFromTile", StringComparison.Ordinal) &&
-            detailPrefetch.Contains("ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating)", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("AllowDuringNavigationPrefetch: true", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("source.AllowDuringNavigationPrefetch", StringComparison.Ordinal) &&
+            detailPrefetch.Contains("request.AllowDuringNavigationPrefetch", StringComparison.Ordinal) &&
             detailPrefetch.Contains("PrefetchDetailRenderTileAsync", StringComparison.Ordinal) &&
             detailPrefetch.Contains("TryRenderDedicatedProcessAsync", StringComparison.Ordinal) &&
             detailPrefetch.Contains("IsCurrentDetailPrefetchRequest", StringComparison.Ordinal) &&
@@ -2674,7 +2678,7 @@ internal static class TakeoffsTreeRegressionTests
             detail.Contains("IntersectionArea", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderMaxPaintTiles", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
-            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, draw near-1:1 detail tiles without smoothing during pan, and decode them off the UI path");
+            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips without cancelling already queued neighbors during pan, draw near-1:1 detail tiles without smoothing during pan, and decode them off the UI path");
         string startDetailRender = SliceMethod(detail, "private async Task StartNextDetailRenderAsync()");
         AssertTrue(
             startDetailRender.IndexOf("if (!IsCurrentDetailRequest(request))", StringComparison.Ordinal) <

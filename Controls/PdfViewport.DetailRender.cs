@@ -45,7 +45,8 @@ public sealed partial class PdfViewport
         float RenderScale,
         Dictionary<int, bool> LayerStates,
         HashSet<int> HighlightedLayers,
-        IReadOnlyList<PdfLayerInfo>? CachedLayers);
+        IReadOnlyList<PdfLayerInfo>? CachedLayers,
+        bool AllowDuringNavigationPrefetch = false);
 
     private sealed class DetailRenderTile
     {
@@ -512,7 +513,9 @@ public sealed partial class PdfViewport
         _detailBitmapScale = clip.Width > 0 ? bitmap.Width / clip.Width : request.RenderScale;
         _detailPageKey = DetailPageKey(request.PdfPath, request.PdfIndex, request.PageFolder);
         AddDetailRenderTile(bitmap, clip, _detailBitmapScale, _detailPageKey);
-        QueueAdjacentDetailRenderPrefetch(request, clip);
+        QueueAdjacentDetailRenderPrefetch(
+            request with { AllowDuringNavigationPrefetch = true },
+            clip);
         RequestRepaint();
     }
 

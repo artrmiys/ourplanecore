@@ -13,7 +13,7 @@ public sealed partial class PdfViewport
 {
     private void QueueAdjacentDetailRenderPrefetchFromTile(DetailRenderTile tile, float targetScale)
     {
-        if (!ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating) ||
+        if (!ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating, allowDuringNavigationPrefetch: true) ||
             string.IsNullOrWhiteSpace(_pdfPath) ||
             _pdfIndex < 0 ||
             tile.PdfRect.Width <= 0 ||
@@ -32,13 +32,17 @@ public sealed partial class PdfViewport
             Math.Max(targetScale, tile.BitmapScale),
             EffectiveLayerStates(),
             EffectiveHighlightedLayers(),
-            LayerRenderCachedLayers());
+            LayerRenderCachedLayers(),
+            AllowDuringNavigationPrefetch: true);
         QueueAdjacentDetailRenderPrefetch(request, tile.PdfRect);
     }
 
     private void QueueAdjacentDetailRenderPrefetch(DetailRenderRequest source, SKRect sourceClip)
     {
-        if (!ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating) ||
+        if (!ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(
+                _zoom,
+                _isFastNavigating,
+                source.AllowDuringNavigationPrefetch) ||
             !IsCurrentDetailRequest(source) ||
             source.RenderScale <= 0 ||
             sourceClip.Width <= 0 ||
@@ -107,7 +111,10 @@ public sealed partial class PdfViewport
             try
             {
                 if (!IsCurrentDetailPrefetchRequest(request) ||
-                    !ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(_zoom, _isFastNavigating) ||
+                    !ViewportRenderPolicy.ShouldUseDetailRenderPrefetch(
+                        _zoom,
+                        _isFastNavigating,
+                        request.AllowDuringNavigationPrefetch) ||
                     DetailRenderTileCoversRect(request.ClipRect, request.RenderScale))
                 {
                     return;

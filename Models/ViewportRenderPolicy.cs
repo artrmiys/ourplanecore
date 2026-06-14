@@ -397,9 +397,15 @@ public static class ViewportRenderPolicy
     }
 
     public static bool ShouldUseDetailRenderPrefetch(float zoom, bool isFastNavigating) =>
+        ShouldUseDetailRenderPrefetch(zoom, isFastNavigating, allowDuringNavigationPrefetch: false);
+
+    public static bool ShouldUseDetailRenderPrefetch(
+        float zoom,
+        bool isFastNavigating,
+        bool allowDuringNavigationPrefetch) =>
         DetailRenderPrefetchEnabled &&
         !string.Equals(QualityMode, BalancedQualityMode, StringComparison.Ordinal) &&
-        !isFastNavigating &&
+        (!isFastNavigating || allowDuringNavigationPrefetch) &&
         zoom >= DetailRenderPrefetchMinZoom;
 
     private static float PixelBudgetMaxRenderScale(float pageWidthPt, float pageHeightPt)
