@@ -276,7 +276,8 @@ public partial class MainWindow
             _settings.SimilarCountRotations,
             _settings.SimilarCountMirrored,
             destinationName,
-            aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()))
+            aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
+            templateWarning: session.TemplateWarning)
         {
             Owner = this,
         };

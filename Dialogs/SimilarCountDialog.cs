@@ -69,7 +69,8 @@ public sealed class SimilarCountDialog : Window
         bool initialRotations,
         bool initialMirrored,
         string destinationName,
-        bool aiAvailable)
+        bool aiAvailable,
+        string templateWarning = "")
     {
         _scan = scan;
         _destinationName = CleanDestinationName(destinationName);
@@ -90,6 +91,17 @@ public sealed class SimilarCountDialog : Window
             Margin = new Thickness(0, 0, 0, 10),
         };
         panel.Children.Add(_foundLabel);
+
+        if (!string.IsNullOrWhiteSpace(templateWarning))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = templateWarning.Trim(),
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.78,
+                Margin = new Thickness(0, -6, 0, 10),
+            });
+        }
 
         _reviewDetailsLabel = new TextBlock
         {

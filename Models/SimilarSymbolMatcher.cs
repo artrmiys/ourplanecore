@@ -59,6 +59,8 @@ public sealed class SimilarSymbolMatchSession
     private const float EdgeRelaxedScoreMultiplier = 0.93f;
     private const float PeripheralNoiseMaxTotalShare = 0.35f;
     private const float PeripheralNoiseMaxCoreRatio = 0.85f;
+    private const float TemplateMajorComponentMinShare = 0.28f;
+    private const float TemplateSecondMajorMinLargestRatio = 0.55f;
     private const float FocusedWindowScoreMultiplier = 0.98f;
     private const float FocusedWindowMinTemplateCoverage = 0.90f;
 
@@ -72,6 +74,7 @@ public sealed class SimilarSymbolMatchSession
 
     public int DownsampleFactor => _factor;
     public int TemplateInkPixels => _variants[0].InkCount;
+    public string TemplateWarning { get; }
 
     private readonly record struct SimilarWindowScore(
         float Score,
@@ -86,7 +89,14 @@ public sealed class SimilarSymbolMatchSession
     }
 
     private SimilarSymbolMatchSession(
-        int width, int height, int wordsPerRow, ulong[] ink, ulong[] dilated, int factor, TemplateVariant[] variants)
+        int width,
+        int height,
+        int wordsPerRow,
+        ulong[] ink,
+        ulong[] dilated,
+        int factor,
+        TemplateVariant[] variants,
+        string templateWarning)
     {
         _width = width;
         _height = height;
@@ -95,6 +105,7 @@ public sealed class SimilarSymbolMatchSession
         _dilated = dilated;
         _factor = factor;
         _variants = variants;
+        TemplateWarning = templateWarning;
     }
 
     public static SimilarSymbolMatchSession? TryCreate(SKBitmap page, SKRectI templateRect, out string error)
@@ -139,7 +150,16 @@ public sealed class SimilarSymbolMatchSession
         AddRotatedVariants(variants, template, mirrored: false);
         AddRotatedVariants(variants, MirrorHorizontal(template), mirrored: true);
 
-        return new SimilarSymbolMatchSession(width, height, wordsPerRow, ink, dilated, factor, variants.ToArray());
+        string templateWarning = BuildTemplateQualityWarning(template);
+        return new SimilarSymbolMatchSession(
+            width,
+            height,
+            wordsPerRow,
+            ink,
+            dilated,
+            factor,
+            variants.ToArray(),
+            templateWarning);
     }
 
     public List<SimilarSymbolMatch> FindMatches(float minScore, bool includeRotations, CancellationToken cancellationToken) =>
@@ -679,20 +699,7 @@ public sealed class SimilarSymbolMatchSession
     {
         int width = source.GetLength(0);
         int height = source.GetLength(1);
-        var visited = new bool[width * height];
-        var components = new List<TemplateComponent>();
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int index = y * width + x;
-                if (!source[x, y] || visited[index])
-                    continue;
-
-                components.Add(ReadTemplateComponent(source, visited, x, y));
-            }
-        }
+        List<TemplateComponent> components = ReadTemplateComponents(source);
 
         if (components.Count <= 1)
             return source;
@@ -728,6 +735,50 @@ public sealed class SimilarSymbolMatchSession
         }
 
         return CountInk(cleaned) >= MinTemplateInk ? cleaned : source;
+    }
+
+    private static string BuildTemplateQualityWarning(bool[,] template)
+    {
+        List<TemplateComponent> components = ReadTemplateComponents(template)
+            .OrderByDescending(component => component.Pixels.Count)
+            .ToList();
+        if (components.Count <= 1)
+            return "";
+
+        int totalInk = components.Sum(component => component.Pixels.Count);
+        int majorMinInk = Math.Max(MinTemplateInk, (int)MathF.Ceiling(totalInk * TemplateMajorComponentMinShare));
+        List<TemplateComponent> major = components
+            .Where(component => component.Pixels.Count >= majorMinInk)
+            .ToList();
+        if (major.Count <= 1)
+            return "";
+
+        if (major[1].Pixels.Count < major[0].Pixels.Count * TemplateSecondMajorMinLargestRatio)
+            return "";
+
+        return "Template note: multiple separate ink clusters detected; review candidates carefully.";
+    }
+
+    private static List<TemplateComponent> ReadTemplateComponents(bool[,] source)
+    {
+        int width = source.GetLength(0);
+        int height = source.GetLength(1);
+        var visited = new bool[width * height];
+        var components = new List<TemplateComponent>();
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * width + x;
+                if (!source[x, y] || visited[index])
+                    continue;
+
+                components.Add(ReadTemplateComponent(source, visited, x, y));
+            }
+        }
+
+        return components;
     }
 
     private static TemplateComponent ReadTemplateComponent(bool[,] source, bool[] visited, int startX, int startY)

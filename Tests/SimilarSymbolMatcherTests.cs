@@ -129,6 +129,30 @@ internal static class SimilarSymbolMatcherTests
         }
     }
 
+    public static void WarnsOnMultiSymbolTemplate()
+    {
+        var placements = new[] { (40, 40), (94, 40), (200, 180) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? normalSession = CreateSession(page);
+        var multiSymbolRect = new SKRectI(
+            placements[0].Item1 - 3,
+            placements[0].Item2 - 3,
+            placements[1].Item1 + SymbolWidth + 3,
+            placements[1].Item2 + SymbolHeight + 3);
+
+        SimilarSymbolMatchSession? multiSession = SimilarSymbolMatchSession.TryCreate(
+            page,
+            multiSymbolRect,
+            out string error);
+
+        AssertTrue(string.IsNullOrWhiteSpace(normalSession!.TemplateWarning),
+            $"normal one-symbol template should not warn, got '{normalSession.TemplateWarning}'");
+        AssertTrue(multiSession != null, $"multi-symbol session creation failed: {error}");
+        AssertTrue(
+            multiSession!.TemplateWarning.Contains("multiple separate ink clusters", StringComparison.Ordinal),
+            $"multi-symbol template should warn, got '{multiSession.TemplateWarning}'");
+    }
+
     public static void KeepsHitsNearAdjacentPlanInk()
     {
         var placements = new[] { (40, 40), (200, 60), (120, 220) };
@@ -309,8 +333,10 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("public const int GridSide = 7", StringComparison.Ordinal) &&
             source.Contains("fine 7x7 ink-profile match", StringComparison.Ordinal) &&
             source.Contains("PrepareTemplate(ExtractTemplate", StringComparison.Ordinal) &&
-            source.Contains("RemovePeripheralTemplateNoise", StringComparison.Ordinal),
-            "Similar matcher should use a fine symbol layout profile and clean loose selections");
+            source.Contains("RemovePeripheralTemplateNoise", StringComparison.Ordinal) &&
+            source.Contains("BuildTemplateQualityWarning", StringComparison.Ordinal) &&
+            source.Contains("TemplateWarning", StringComparison.Ordinal),
+            "Similar matcher should use a fine symbol layout profile, clean loose selections, and warn on suspicious templates");
         AssertTrue(
             source.Contains("EdgeRelaxedScoreMultiplier = 0.93f", StringComparison.Ordinal),
             "Similar matcher should keep edge-relaxed matches below the default precision threshold");
@@ -387,8 +413,9 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             mainWindow.Contains("excludedIndexes", StringComparison.Ordinal) &&
             mainWindow.Contains("IncludedCenters()", StringComparison.Ordinal) &&
-            mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder)", StringComparison.Ordinal),
-            "Similar Count should keep include/exclude review state and add only included centers");
+            mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder)", StringComparison.Ordinal) &&
+            mainWindow.Contains("templateWarning: session.TemplateWarning", StringComparison.Ordinal),
+            "Similar Count should keep include/exclude review state, add only included centers, and pass template warnings into review");
         AssertTrue(
             viewport.Contains("_similarCountPreviewPageFolder", StringComparison.Ordinal) &&
             viewport.Contains("IsSimilarCountPreviewForCurrentPage", StringComparison.Ordinal) &&
@@ -397,9 +424,11 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             dialog.Contains("public event EventHandler? Accepted", StringComparison.Ordinal) &&
             dialog.Contains("public event EventHandler? Cancelled", StringComparison.Ordinal) &&
+            dialog.Contains("string templateWarning = \"\"", StringComparison.Ordinal) &&
+            dialog.Contains("templateWarning.Trim()", StringComparison.Ordinal) &&
             mainWindow.Contains("dialog.Show();", StringComparison.Ordinal) &&
             !mainWindow.Contains("ShowDialog() == true", StringComparison.Ordinal),
-            "Similar Count dialog should be modeless so the sheet preview remains clickable during review");
+            "Similar Count dialog should be modeless and keep template warnings visible while the sheet preview remains clickable");
     }
 
     public static void SimilarCountReviewChoicesSurviveRescan()
