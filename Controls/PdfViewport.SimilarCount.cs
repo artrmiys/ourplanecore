@@ -14,7 +14,13 @@ public sealed record ViewportSimilarCountPreviewMarker(
     float Score = 1f,
     int RotationDegrees = 0,
     bool Mirrored = false,
-    bool AlreadyCounted = false);
+    bool AlreadyCounted = false,
+    float TemplateCoverage = 1f,
+    float WindowPrecision = 1f,
+    float InkRatio = 1f,
+    float ProfileScore = 1f,
+    float ProjectionScore = 1f,
+    bool UsedFocusedScore = false);
 
 // "Count similar symbols": rubber-band template selection (mirrors the AI
 // crop note interaction) plus a ghost-marker preview layer for the matches
@@ -366,9 +372,19 @@ public sealed partial class PdfViewport
         string variant = marker.RotationDegrees != 0 || marker.Mirrored
             ? $" | {(marker.Mirrored ? "mirrored" : "normal")}, rotated {marker.RotationDegrees}°"
             : "";
+        float layoutScore = Math.Min(marker.ProfileScore, marker.ProjectionScore);
+        string scoreParts =
+            $" | coverage {SimilarCountScorePercent(marker.TemplateCoverage)}%, " +
+            $"precision {SimilarCountScorePercent(marker.WindowPrecision)}%, " +
+            $"ink {SimilarCountScorePercent(marker.InkRatio)}%, " +
+            $"layout {SimilarCountScorePercent(layoutScore)}%";
+        string focused = marker.UsedFocusedScore ? " | extra ink ignored" : "";
 
-        return $"Count similar marker: {confidence} {marker.Score:0.00}, {state}; {action}{variant}.";
+        return $"Count similar marker: {confidence} {marker.Score:0.00}, {state}; {action}{variant}{scoreParts}{focused}.";
     }
+
+    private static int SimilarCountScorePercent(float score) =>
+        (int)MathF.Round(Math.Clamp(score, 0f, 1f) * 100f);
 
     private bool IsSimilarCountPreviewForCurrentPage() =>
         !string.IsNullOrWhiteSpace(_similarCountPreviewPageFolder) &&

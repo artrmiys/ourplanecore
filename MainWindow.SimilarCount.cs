@@ -80,7 +80,13 @@ public partial class MainWindow
                     match.Score,
                     match.RotationDegrees,
                     match.Mirrored,
-                    AlreadyCounted: alreadyCountedIndexes.Contains(index)))
+                    AlreadyCounted: alreadyCountedIndexes.Contains(index),
+                    TemplateCoverage: match.TemplateCoverage,
+                    WindowPrecision: match.WindowPrecision,
+                    InkRatio: match.InkRatio,
+                    ProfileScore: match.ProfileScore,
+                    ProjectionScore: match.ProjectionScore,
+                    UsedFocusedScore: match.UsedFocusedScore))
                 .ToList();
 
         IReadOnlyList<SKPoint> IncludedCenters() =>

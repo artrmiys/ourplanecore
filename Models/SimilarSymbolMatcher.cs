@@ -35,7 +35,18 @@ namespace OurPlaneCore;
 // owns the pixel<->PDF mapping. The session reads the bitmap once in
 // TryCreate, so FindMatches can re-run on background threads with different
 // thresholds without touching the bitmap again.
-public sealed record SimilarSymbolMatch(int CenterX, int CenterY, float Score, int RotationDegrees, bool Mirrored = false);
+public sealed record SimilarSymbolMatch(
+    int CenterX,
+    int CenterY,
+    float Score,
+    int RotationDegrees,
+    bool Mirrored = false,
+    float TemplateCoverage = 1f,
+    float WindowPrecision = 1f,
+    float InkRatio = 1f,
+    float ProfileScore = 1f,
+    float ProjectionScore = 1f,
+    bool UsedFocusedScore = false);
 
 public sealed class SimilarSymbolMatchSession
 {
@@ -61,6 +72,18 @@ public sealed class SimilarSymbolMatchSession
 
     public int DownsampleFactor => _factor;
     public int TemplateInkPixels => _variants[0].InkCount;
+
+    private readonly record struct SimilarWindowScore(
+        float Score,
+        float TemplateCoverage,
+        float WindowPrecision,
+        float InkRatio,
+        float ProfileScore,
+        float ProjectionScore,
+        bool UsedFocusedScore)
+    {
+        public static SimilarWindowScore Zero { get; } = new(0f, 0f, 0f, 0f, 0f, 0f, false);
+    }
 
     private SimilarSymbolMatchSession(
         int width, int height, int wordsPerRow, ulong[] ink, ulong[] dilated, int factor, TemplateVariant[] variants)
@@ -196,26 +219,33 @@ public sealed class SimilarSymbolMatchSession
                         continue;
                     }
 
-                    float score = ScoreWindow(template, x, y, minScore);
-                    if (score < minScore && template.EdgeRelaxed != null)
+                    SimilarWindowScore score = ScoreWindow(template, x, y, minScore);
+                    if (score.Score < minScore && template.EdgeRelaxed != null)
                     {
                         TemplateVariant relaxed = template.EdgeRelaxed;
-                        float relaxedScore = ScoreWindow(
+                        SimilarWindowScore relaxedScore = ScoreWindow(
                             relaxed,
                             x + relaxed.OffsetX,
                             y + relaxed.OffsetY,
                             minScore);
-                        if (relaxedScore >= minScore)
-                            score = Math.Max(score, relaxedScore * EdgeRelaxedScoreMultiplier);
+                        float adjustedScore = relaxedScore.Score * EdgeRelaxedScoreMultiplier;
+                        if (relaxedScore.Score >= minScore && adjustedScore > score.Score)
+                            score = relaxedScore with { Score = adjustedScore };
                     }
 
-                    if (score >= minScore)
+                    if (score.Score >= minScore)
                         local.Add(new SimilarSymbolMatch(
                             (x + tw / 2) * _factor + _factor / 2,
                             (y + th / 2) * _factor + _factor / 2,
-                            score,
+                            score.Score,
                             template.RotationDegrees,
-                            template.Mirrored));
+                            template.Mirrored,
+                            score.TemplateCoverage,
+                            score.WindowPrecision,
+                            score.InkRatio,
+                            score.ProfileScore,
+                            score.ProjectionScore,
+                            score.UsedFocusedScore));
                 }
 
                 return local;
@@ -229,7 +259,7 @@ public sealed class SimilarSymbolMatchSession
             });
     }
 
-    private float ScoreWindow(TemplateVariant template, int x, int y, float minScore)
+    private SimilarWindowScore ScoreWindow(TemplateVariant template, int x, int y, float minScore)
     {
         int shift = x & 63;
         int w0 = x >> 6;
@@ -293,7 +323,7 @@ public sealed class SimilarSymbolMatchSession
         }
 
         if (windowInk <= 0 || template.InkCount <= 0)
-            return 0f;
+            return SimilarWindowScore.Zero;
 
         float templateCoverage = matchedTemplate / (float)template.InkCount;
         float windowPrecision = matchedWindow / (float)windowInk;
@@ -314,12 +344,20 @@ public sealed class SimilarSymbolMatchSession
         float strictScore = Math.Min(
             Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio),
             Math.Min(profileScore, projectionScore));
+        var strict = new SimilarWindowScore(
+            strictScore,
+            templateCoverage,
+            windowPrecision,
+            inkRatio,
+            profileScore,
+            projectionScore,
+            UsedFocusedScore: false);
         if (strictScore >= minScore ||
             templateCoverage < FocusedWindowMinTemplateCoverage ||
             focusedWindowInk <= 0 ||
             focusedWindowInk >= windowInk)
         {
-            return strictScore;
+            return strict;
         }
 
         float focusedInkRatio = MathF.Sqrt(
@@ -343,7 +381,18 @@ public sealed class SimilarSymbolMatchSession
         float focusedScore = Math.Min(
             Math.Min(templateCoverage, focusedInkRatio),
             Math.Min(focusedProfileScore, focusedProjectionScore));
-        return Math.Max(strictScore, focusedScore * FocusedWindowScoreMultiplier);
+        float adjustedFocusedScore = focusedScore * FocusedWindowScoreMultiplier;
+        if (adjustedFocusedScore <= strictScore)
+            return strict;
+
+        return new SimilarWindowScore(
+            adjustedFocusedScore,
+            templateCoverage,
+            windowPrecision,
+            focusedInkRatio,
+            focusedProfileScore,
+            focusedProjectionScore,
+            UsedFocusedScore: true);
     }
 
     private int CountWindowInk(TemplateVariant template, int x, int y)

@@ -159,10 +159,18 @@ internal static class SimilarSymbolMatcherTests
             includeRotations: false,
             CancellationToken.None);
 
+        SimilarSymbolMatch? recovered = matches.FirstOrDefault(match => NearCenter(match, placements[1].Item1, placements[1].Item2));
         AssertTrue(
-            matches.Any(match => NearCenter(match, placements[1].Item1, placements[1].Item2)),
+            recovered != null,
             "disconnected plan ink inside the candidate window should not make Similar miss a real copy; " +
             $"matches: {string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}"))}");
+        SimilarSymbolMatch found = recovered!;
+        AssertTrue(
+            found.UsedFocusedScore &&
+            found.TemplateCoverage >= 0.9f &&
+            found.ProfileScore > 0f &&
+            found.ProjectionScore > 0f,
+            "recovered disconnected-ink matches should carry focused-score diagnostics for review hover text");
     }
 
     public static void FindsMirroredCopyOnlyWhenEnabled()
@@ -316,8 +324,12 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             source.Contains("FocusedWindowScoreMultiplier", StringComparison.Ordinal) &&
             source.Contains("FocusedWindowMinTemplateCoverage", StringComparison.Ordinal) &&
+            source.Contains("SimilarWindowScore", StringComparison.Ordinal) &&
+            source.Contains("TemplateCoverage", StringComparison.Ordinal) &&
+            source.Contains("WindowPrecision", StringComparison.Ordinal) &&
             source.Contains("focusedWindowInk", StringComparison.Ordinal) &&
             source.Contains("focusedProjectionScore", StringComparison.Ordinal) &&
+            source.Contains("UsedFocusedScore", StringComparison.Ordinal) &&
             source.Contains("CountFocusedWindowInk", StringComparison.Ordinal),
             "Similar matcher should recover true symbols from unrelated disconnected ink inside the candidate window");
     }
@@ -398,20 +410,32 @@ internal static class SimilarSymbolMatcherTests
 
         AssertTrue(
             viewport.Contains("float Score = 1f", StringComparison.Ordinal) &&
+            viewport.Contains("float TemplateCoverage = 1f", StringComparison.Ordinal) &&
+            viewport.Contains("float WindowPrecision = 1f", StringComparison.Ordinal) &&
+            viewport.Contains("bool UsedFocusedScore = false", StringComparison.Ordinal) &&
             viewport.Contains("marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal),
-            "Similar preview markers should carry and visualize match confidence");
+            "Similar preview markers should carry and visualize match confidence and score diagnostics");
         AssertTrue(
             viewport.Contains("SimilarCountPreviewMarkerHitIndex", StringComparison.Ordinal) &&
             viewport.Contains("TryPostSimilarCountPreviewMarkerStatus", StringComparison.Ordinal) &&
             viewport.Contains("SimilarCountPreviewMarkerStatus", StringComparison.Ordinal) &&
             viewport.Contains("click to exclude", StringComparison.Ordinal) &&
-            viewport.Contains("already counted", StringComparison.Ordinal),
-            "Similar preview markers should explain hover status, confidence, review state, and click action");
+            viewport.Contains("already counted", StringComparison.Ordinal) &&
+            viewport.Contains("SimilarCountScorePercent", StringComparison.Ordinal) &&
+            viewport.Contains("coverage", StringComparison.Ordinal) &&
+            viewport.Contains("precision", StringComparison.Ordinal) &&
+            viewport.Contains("ink", StringComparison.Ordinal) &&
+            viewport.Contains("layout", StringComparison.Ordinal) &&
+            viewport.Contains("extra ink ignored", StringComparison.Ordinal),
+            "Similar preview markers should explain hover status, confidence, review state, click action, and match diagnostics");
         AssertTrue(
             mainWindow.Contains("lastMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("match.Score", StringComparison.Ordinal) &&
+            mainWindow.Contains("TemplateCoverage: match.TemplateCoverage", StringComparison.Ordinal) &&
+            mainWindow.Contains("WindowPrecision: match.WindowPrecision", StringComparison.Ordinal) &&
+            mainWindow.Contains("UsedFocusedScore: match.UsedFocusedScore", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountScanResult", StringComparison.Ordinal),
-            "Similar Count should preserve matcher scores through the review flow");
+            "Similar Count should preserve matcher scores and diagnostics through the review flow");
         AssertTrue(
             dialog.Contains("ScoreSuffix()", StringComparison.Ordinal) &&
             dialog.Contains("result.MinScore", StringComparison.Ordinal) &&
