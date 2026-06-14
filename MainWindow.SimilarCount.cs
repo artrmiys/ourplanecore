@@ -58,7 +58,16 @@ public partial class MainWindow
         var alreadyCountedIndexes = new HashSet<int>();
         TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
         string destinationName = SimilarCountDestinationName(destinationItem);
+        OurPlaneCoreJob reviewJob = _currentJob;
+        PageInfo reviewPage = _currentPage;
         SimilarCountDialog? dialog = null;
+
+        bool IsReviewJobCurrent() =>
+            _currentJob != null &&
+            string.Equals(
+                NormalizePathForCompare(_currentJob.RootPath),
+                NormalizePathForCompare(reviewJob.RootPath),
+                StringComparison.OrdinalIgnoreCase);
 
         SKPoint MatchCenterPdf(SimilarSymbolMatch match) =>
             new(match.CenterX / bitmapScale, match.CenterY / bitmapScale);
@@ -247,6 +256,12 @@ public partial class MainWindow
             _settings.SimilarCountMirrored = dialog.IncludeMirrored;
             SaveAppSettings();
 
+            if (!IsReviewJobCurrent())
+            {
+                TxtStatus.Text = "Count similar: original job changed; review was not added.";
+                return;
+            }
+
             IReadOnlyList<SKPoint> included = IncludedCenters();
             if (included.Count == 0)
             {
@@ -256,7 +271,7 @@ public partial class MainWindow
 
             int added = AddSimilarCountMeasurements(request, included, destinationItem);
             if (added > 0 && dialog.QueueAiDoubleCheck)
-                QueueSimilarCountAiRequest(request, added, destinationName);
+                QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, destinationName);
         };
         dialog.Cancelled += (_, _) =>
         {
@@ -405,13 +420,32 @@ public partial class MainWindow
         return false;
     }
 
-    private void QueueSimilarCountAiRequest(ViewportSimilarCountRequest request, int offlineCount, string destinationName)
+    private void QueueSimilarCountAiRequest(
+        OurPlaneCoreJob reviewJob,
+        PageInfo reviewPage,
+        ViewportSimilarCountRequest request,
+        int offlineCount,
+        string destinationName)
     {
-        if (_currentJob == null || _currentPage == null)
+        if (_currentJob == null ||
+            _currentPage == null ||
+            !string.Equals(
+                NormalizePathForCompare(_currentJob.RootPath),
+                NormalizePathForCompare(reviewJob.RootPath),
+                StringComparison.OrdinalIgnoreCase))
+        {
             return;
+        }
+
+        if (!IsSamePageFolder(_currentPage.FolderPath, request.PageFolder))
+        {
+            TxtStatus.Text = $"Count similar: {offlineCount} marker(s) added; AI double-check skipped because the scanned sheet is not open.";
+            return;
+        }
 
         try
         {
+            PageInfo page = OurPlaneCoreJobStore.TryReadPage(request.PageFolder) ?? reviewPage;
             var contextRequest = new ViewportContextRequest(
                 0,
                 0,
@@ -429,22 +463,22 @@ public partial class MainWindow
             string prompt =
                 "The attached crop shows ONE instance of a plan symbol. The app's offline matcher counted " +
                 offlineCount.ToString(CultureInfo.InvariantCulture) +
-                $" occurrences of this symbol on sheet '{_currentPage.Name}'. " +
+                $" occurrences of this symbol on sheet '{page.Name}'. " +
                 "Describe what the symbol most likely is and note anything that could make this count unreliable " +
                 "(similar-looking symbols, rotated/mirrored variants, legend entries that should be excluded).";
             string details =
                 "Similar-count AI double-check requested." + Environment.NewLine + Environment.NewLine +
                 "Context:" + Environment.NewLine +
-                $"- Page: {_currentPage.Name}" + Environment.NewLine +
+                $"- Page: {page.Name}" + Environment.NewLine +
                 $"- Destination takeoff: {destinationName}" + Environment.NewLine +
                 $"- Offline match count: {offlineCount}" + Environment.NewLine +
                 $"- AI crop: {cropPath}" + Environment.NewLine +
                 $"- PDF crop: {FormatPdfRect(cropRect)}" + Environment.NewLine;
 
             SmartObservation observation = SmartContextStore.AddObservation(
-                _currentJob, _currentPage, "similar_count_request", details);
+                reviewJob, page, "similar_count_request", details);
             SmartContextStore.AddAiRequest(
-                _currentJob, _currentPage, observation, "similar_count_request", prompt, cropPath, "");
+                reviewJob, page, observation, "similar_count_request", prompt, cropPath, "");
             LoadObservationsInbox();
             TxtStatus.Text = $"Count similar: {offlineCount} marker(s) added; AI double-check queued in the AI Inbox.";
         }

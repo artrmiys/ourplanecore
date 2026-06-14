@@ -491,12 +491,19 @@ internal static class SimilarSymbolMatcherTests
 
         AssertTrue(
             mainWindow.Contains("TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem()", StringComparison.Ordinal) &&
-            mainWindow.Contains("string destinationName = SimilarCountDestinationName(destinationItem)", StringComparison.Ordinal),
+            mainWindow.Contains("string destinationName = SimilarCountDestinationName(destinationItem)", StringComparison.Ordinal) &&
+            mainWindow.Contains("OurPlaneCoreJob reviewJob = _currentJob;", StringComparison.Ordinal) &&
+            mainWindow.Contains("PageInfo reviewPage = _currentPage;", StringComparison.Ordinal),
             "Similar Count should capture the active point takeoff before the modeless review starts");
         AssertTrue(
             mainWindow.Contains("AddSimilarCountMeasurements(request, included, destinationItem)", StringComparison.Ordinal) &&
             mainWindow.Contains("ResolveSimilarCountDestinationItem(destinationItem)", StringComparison.Ordinal),
             "Similar Count should add reviewed markers to the captured destination takeoff, not a later active item");
+        AssertTrue(
+            mainWindow.Contains("original job changed; review was not added", StringComparison.Ordinal) &&
+            mainWindow.Contains("QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, destinationName)", StringComparison.Ordinal) &&
+            mainWindow.Contains("AI double-check skipped because the scanned sheet is not open", StringComparison.Ordinal),
+            "Similar Count review should not write into a changed job or queue AI context for the wrong sheet");
         AssertTrue(
             mainWindow.Contains("ScaleMetersPerPt = request.ScaleMetersPerPt", StringComparison.Ordinal),
             "Similar Count measurements should keep the scanned sheet scale even if the user switches sheets while reviewing");
