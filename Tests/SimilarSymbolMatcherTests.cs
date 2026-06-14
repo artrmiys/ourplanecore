@@ -270,6 +270,13 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             source.Contains("EdgeRelaxedScoreMultiplier = 0.93f", StringComparison.Ordinal),
             "Similar matcher should keep edge-relaxed matches below the default precision threshold");
+        AssertTrue(
+            source.Contains("ProjectionBandCount = 12", StringComparison.Ordinal) &&
+            source.Contains("RowProjectionInkCounts", StringComparison.Ordinal) &&
+            source.Contains("ColumnProjectionInkCounts", StringComparison.Ordinal) &&
+            source.Contains("ProjectionColumnMasks", StringComparison.Ordinal) &&
+            source.Contains("projectionScore", StringComparison.Ordinal),
+            "Similar matcher should score row and column projection profiles for sharper silhouette matching");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
