@@ -555,6 +555,7 @@ public sealed partial class PdfViewport : SKElement
             return;
 
         PrepareBitmapForImmediateRepaint();
+        TryStartPendingSimilarCountSelection();
         if (_repaintQueued)
             return;
 

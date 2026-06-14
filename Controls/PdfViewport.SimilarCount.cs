@@ -26,6 +26,10 @@ public sealed partial class PdfViewport
 
     private bool _similarCountSelecting;
     private bool _similarCountDragging;
+    private bool _similarCountWaitingForReadableBitmap;
+    private string _similarCountWaitingPdfPath = "";
+    private int _similarCountWaitingPdfIndex = -1;
+    private string _similarCountWaitingPageFolder = "";
     private SKPoint _similarCountStartPdf;
     private SKPoint _similarCountEndPdf;
     private IReadOnlyList<ViewportSimilarCountPreviewMarker>? _similarCountPreview;
@@ -37,16 +41,58 @@ public sealed partial class PdfViewport
     {
         if (!TryEnsureSimilarCountBitmapReady(out string status))
         {
+            if (CanWaitForSimilarCountReadableBitmap())
+                StartWaitingForSimilarCountReadableBitmap();
             PostStatus(status);
             return;
         }
 
+        StartSimilarCountSelection();
+    }
+
+    private void StartSimilarCountSelection()
+    {
+        _similarCountWaitingForReadableBitmap = false;
         CancelDrawing(clearSelection: false);
         _similarCountSelecting = true;
         _similarCountDragging = false;
         Focus();
         RequestRepaint();
         PostStatus("Count similar: left-drag a tight box around ONE symbol. Esc cancels.");
+    }
+
+    private bool CanWaitForSimilarCountReadableBitmap() =>
+        _pageBitmap != null &&
+        _pdfW > 0 &&
+        _pdfH > 0 &&
+        _bitmapScale > 0 &&
+        _bitmapScale < SimilarCountMinimumBitmapScale &&
+        !string.IsNullOrWhiteSpace(_pdfPath) &&
+        _pdfIndex >= 0;
+
+    private void StartWaitingForSimilarCountReadableBitmap()
+    {
+        _similarCountWaitingForReadableBitmap = true;
+        _similarCountWaitingPdfPath = _pdfPath;
+        _similarCountWaitingPdfIndex = _pdfIndex;
+        _similarCountWaitingPageFolder = _pageFolder;
+    }
+
+    private void TryStartPendingSimilarCountSelection()
+    {
+        if (!_similarCountWaitingForReadableBitmap ||
+            _similarCountSelecting ||
+            _similarCountDragging ||
+            _pageBitmap == null ||
+            _bitmapScale < SimilarCountMinimumBitmapScale ||
+            _pdfIndex != _similarCountWaitingPdfIndex ||
+            !string.Equals(_pdfPath, _similarCountWaitingPdfPath, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(_pageFolder, _similarCountWaitingPageFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        StartSimilarCountSelection();
     }
 
     public void SetSimilarCountPreview(IReadOnlyList<SKPoint>? centersPdf)
@@ -104,7 +150,13 @@ public sealed partial class PdfViewport
         }
 
         QueueSimilarCountReadableBitmap();
-        status = $"Count similar: sheet is still sharpening ({_bitmapScale:0.##}x). Try again in a moment.";
+        if (_bitmapScale >= SimilarCountMinimumBitmapScale)
+        {
+            status = "";
+            return true;
+        }
+
+        status = $"Count similar: sheet is sharpening ({_bitmapScale:0.##}x). Selection will start automatically.";
         return false;
     }
 
@@ -140,7 +192,7 @@ public sealed partial class PdfViewport
                 QueueLayerRender(
                     resetLayerStates: false,
                     renderScale: SimilarCountRequestedBitmapScale,
-                    statusAfter: "Count similar: sharper sheet ready. Drag a box around the pattern again.",
+                    statusAfter: "Count similar: sharper sheet ready.",
                     allowImmediateCache: true,
                     allowLiveRender: true,
                     allowMemoryBitmap: true);
@@ -149,7 +201,7 @@ public sealed partial class PdfViewport
             {
                 QueueDocnetRender(
                     SimilarCountRequestedBitmapScale,
-                    statusAfter: "Count similar: sharper sheet ready. Drag a box around the pattern again.");
+                    statusAfter: "Count similar: sharper sheet ready.");
             }
 
             RequestRepaint();
@@ -241,7 +293,7 @@ public sealed partial class PdfViewport
 
     private bool CancelSimilarCountSelection(bool postStatus = true)
     {
-        if (!_similarCountSelecting)
+        if (!_similarCountSelecting && !_similarCountWaitingForReadableBitmap)
             return false;
 
         ResetSimilarCountSelection();
@@ -253,6 +305,10 @@ public sealed partial class PdfViewport
 
     private void ResetSimilarCountSelection()
     {
+        _similarCountWaitingForReadableBitmap = false;
+        _similarCountWaitingPdfPath = "";
+        _similarCountWaitingPdfIndex = -1;
+        _similarCountWaitingPageFolder = "";
         _similarCountSelecting = false;
         _similarCountDragging = false;
         if (IsMouseCaptured)

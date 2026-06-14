@@ -282,6 +282,7 @@ internal static class SimilarSymbolMatcherTests
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
     {
         string source = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+        string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.cs"));
 
         AssertTrue(
             source.Contains("SimilarCountMinimumBitmapScale = 1.25f", StringComparison.Ordinal) &&
@@ -292,6 +293,14 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             source.Contains("if (!TryEnsureSimilarCountBitmapReady(out string status))", StringComparison.Ordinal),
             "BeginSimilarCountSelection should check bitmap readiness before starting the crop interaction");
+        AssertTrue(
+            source.Contains("_similarCountWaitingForReadableBitmap", StringComparison.Ordinal) &&
+            source.Contains("StartWaitingForSimilarCountReadableBitmap", StringComparison.Ordinal) &&
+            source.Contains("TryStartPendingSimilarCountSelection", StringComparison.Ordinal) &&
+            source.Contains("Selection will start automatically", StringComparison.Ordinal) &&
+            source.Contains("_similarCountWaitingPageFolder", StringComparison.Ordinal) &&
+            viewport.Contains("TryStartPendingSimilarCountSelection();", StringComparison.Ordinal),
+            "Similar count should auto-enter selection after sharpening without requiring a second toolbar click");
     }
 
     public static void SimilarCountPreviewSupportsReviewBeforeAdd()
