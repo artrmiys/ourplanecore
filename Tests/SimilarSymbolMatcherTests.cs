@@ -320,6 +320,11 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("TryToggleSimilarCountPreviewMarker", StringComparison.Ordinal),
             "viewport should expose clickable Similar Count preview markers for review");
         AssertTrue(
+            viewport.Contains("PostSimilarCountSelectionStatus", StringComparison.Ordinal) &&
+            viewport.Contains("keep it tight around one symbol", StringComparison.Ordinal) &&
+            viewport.Contains("drag a larger box", StringComparison.Ordinal),
+            "Similar Count selection should guide the user toward a tight one-symbol template while dragging");
+        AssertTrue(
             mainWindow.Contains("excludedIndexes", StringComparison.Ordinal) &&
             mainWindow.Contains("IncludedCenters()", StringComparison.Ordinal) &&
             mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers())", StringComparison.Ordinal),

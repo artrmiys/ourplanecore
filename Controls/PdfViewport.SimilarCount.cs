@@ -284,8 +284,21 @@ public sealed partial class PdfViewport
 
         _similarCountEndPdf = ClampAiCropPoint(ScreenToPdf((float)screen.X, (float)screen.Y));
         _lastPointerPdf = _similarCountEndPdf;
+        PostSimilarCountSelectionStatus();
         RequestRepaint();
         return true;
+    }
+
+    private void PostSimilarCountSelectionStatus()
+    {
+        SKRect rect = NormalizeRect(_similarCountStartPdf, _similarCountEndPdf);
+        float widthPx = PdfToScreenDistance(rect.Width);
+        float heightPx = PdfToScreenDistance(rect.Height);
+        string size = $"{widthPx:0} x {heightPx:0}px";
+        string hint = widthPx < 8f || heightPx < 8f
+            ? "drag a larger box"
+            : "keep it tight around one symbol";
+        PostStatus($"Count similar: selecting {size}; {hint}.");
     }
 
     private int SimilarCountPreviewMarkerHitIndex(SKPoint pdf)
