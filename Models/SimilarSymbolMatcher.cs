@@ -19,7 +19,7 @@ namespace OurPlaneCore;
 //        score = min(|T ∧ dilate(P)| / |T|,          template coverage
 //                    |P ∧ dilate(T)| / |P|,          window precision
 //                    sqrt(min(|T|,|P|) / max(|T|,|P|)),   ink-amount ratio
-//                    fine 5x5 ink-profile match)         symbol layout
+//                    fine 7x7 ink-profile match)         symbol layout
 //      where T is template ink and P is window ink. Dilation makes the two
 //      overlap ratios saturate on small dense shapes (a solid blob covers
 //      any outline), so the ink-amount ratio keeps solid-vs-outline and
@@ -42,7 +42,9 @@ public sealed class SimilarSymbolMatchSession
     private const int TemplateAutoTightenPadding = 2;
     private const float EdgeRelaxedInsetRatio = 0.08f;
     private const int EdgeRelaxedMaxInset = 8;
-    private const float EdgeRelaxedScoreMultiplier = 0.985f;
+    private const float EdgeRelaxedScoreMultiplier = 0.93f;
+    private const float PeripheralNoiseMaxTotalShare = 0.35f;
+    private const float PeripheralNoiseMaxCoreRatio = 0.85f;
 
     private readonly int _width;
     private readonly int _height;
@@ -98,7 +100,7 @@ public sealed class SimilarSymbolMatchSession
             rect.Top / factor,
             Math.Min(width, (rect.Right + factor - 1) / factor),
             Math.Min(height, (rect.Bottom + factor - 1) / factor));
-        bool[,] template = AutoTightenTemplate(ExtractTemplate(inkPixels, width, scaledRect));
+        bool[,] template = PrepareTemplate(ExtractTemplate(inkPixels, width, scaledRect));
         if (CountInk(template) < MinTemplateInk)
         {
             error = "The selected box contains no linework to match.";
@@ -484,6 +486,118 @@ public sealed class SimilarSymbolMatchSession
         return tight;
     }
 
+    private static bool[,] PrepareTemplate(bool[,] source)
+    {
+        bool[,] tight = AutoTightenTemplate(source);
+        bool[,] cleaned = RemovePeripheralTemplateNoise(tight);
+        return ReferenceEquals(cleaned, tight)
+            ? tight
+            : AutoTightenTemplate(cleaned);
+    }
+
+    private static bool[,] RemovePeripheralTemplateNoise(bool[,] source)
+    {
+        int width = source.GetLength(0);
+        int height = source.GetLength(1);
+        var visited = new bool[width * height];
+        var components = new List<TemplateComponent>();
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * width + x;
+                if (!source[x, y] || visited[index])
+                    continue;
+
+                components.Add(ReadTemplateComponent(source, visited, x, y));
+            }
+        }
+
+        if (components.Count <= 1)
+            return source;
+
+        int totalInk = components.Sum(component => component.Pixels.Count);
+        int largestCore = components
+            .Where(component => !component.TouchesBorder)
+            .Select(component => component.Pixels.Count)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (largestCore < MinTemplateInk)
+            return source;
+
+        var remove = components
+            .Where(component =>
+                component.TouchesBorder &&
+                (component.Pixels.Count <= totalInk * PeripheralNoiseMaxTotalShare ||
+                 component.Pixels.Count <= largestCore * PeripheralNoiseMaxCoreRatio))
+            .ToList();
+        if (remove.Count == 0)
+            return source;
+
+        var cleaned = new bool[width, height];
+        Array.Copy(source, cleaned, source.Length);
+        foreach (TemplateComponent component in remove)
+        {
+            foreach (int pixel in component.Pixels)
+            {
+                int x = pixel % width;
+                int y = pixel / width;
+                cleaned[x, y] = false;
+            }
+        }
+
+        return CountInk(cleaned) >= MinTemplateInk ? cleaned : source;
+    }
+
+    private static TemplateComponent ReadTemplateComponent(bool[,] source, bool[] visited, int startX, int startY)
+    {
+        int width = source.GetLength(0);
+        int height = source.GetLength(1);
+        var component = new TemplateComponent();
+        var stack = new Stack<int>();
+        stack.Push(startY * width + startX);
+
+        while (stack.Count > 0)
+        {
+            int pixel = stack.Pop();
+            if (visited[pixel])
+                continue;
+
+            int x = pixel % width;
+            int y = pixel / width;
+            if (!source[x, y])
+                continue;
+
+            visited[pixel] = true;
+            component.Pixels.Add(pixel);
+            component.TouchesBorder |= x == 0 || y == 0 || x == width - 1 || y == height - 1;
+
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                int ny = y + dy;
+                if (ny < 0 || ny >= height)
+                    continue;
+
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0)
+                        continue;
+
+                    int nx = x + dx;
+                    if (nx < 0 || nx >= width)
+                        continue;
+
+                    int next = ny * width + nx;
+                    if (!visited[next] && source[nx, ny])
+                        stack.Push(next);
+                }
+            }
+        }
+
+        return component;
+    }
+
     private static bool[,] RotateClockwise(bool[,] source)
     {
         int w = source.GetLength(0);
@@ -567,13 +681,19 @@ public sealed class SimilarSymbolMatchSession
         return count;
     }
 
+    private sealed class TemplateComponent
+    {
+        public List<int> Pixels { get; } = new();
+        public bool TouchesBorder { get; set; }
+    }
+
     // Pre-shifted packed copies of one template rotation: ShiftedInk[s] holds
     // the template rows shifted s bits right so candidate x with (x & 63) == s
     // compares word-aligned against the page. WindowMasks[s] selects exactly
     // the window's bits inside those words for exact window ink counts.
     private sealed class TemplateVariant
     {
-        public const int GridSide = 5;
+        public const int GridSide = 7;
         public const int GridCellCount = GridSide * GridSide;
 
         public required int Width;

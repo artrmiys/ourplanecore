@@ -83,6 +83,26 @@ internal static class SimilarSymbolMatcherTests
         }
     }
 
+    public static void TrimsPeripheralSelectionNoiseBeforeMatching()
+    {
+        var placements = new[] { (40, 40), (200, 60), (120, 220) };
+        using SKBitmap cleanPage = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? cleanSession = CreateSession(cleanPage);
+
+        using SKBitmap noisyPage = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        DrawLooseSelectionEdgeNoise(noisyPage, placements[0].Item1, placements[0].Item2);
+        SimilarSymbolMatchSession? noisySession = CreateSession(
+            noisyPage,
+            leftPad: 8,
+            topPad: 4,
+            rightPad: 4,
+            bottomPad: 4);
+
+        AssertTrue(
+            Math.Abs(noisySession!.TemplateInkPixels - cleanSession!.TemplateInkPixels) <= 8,
+            $"edge selection noise should be trimmed before matching; clean ink {cleanSession.TemplateInkPixels}, noisy ink {noisySession.TemplateInkPixels}");
+    }
+
     public static void LooseWhitespaceSelectionKeepsCentersPrecise()
     {
         var placements = new[] { (40, 40), (200, 60), (120, 220) };
@@ -154,6 +174,41 @@ internal static class SimilarSymbolMatcherTests
             "near-miss symbol with similar ink and box should not pass the precision threshold");
     }
 
+    public static void RejectsCoreOnlyRelaxedNearMissAtPrecisionThreshold()
+    {
+        var placements = new[] { (40, 40) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        using (var canvas = new SKCanvas(page))
+        using (var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        })
+        using (var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        })
+        {
+            DrawCoreOnlySymbol(canvas, stroke, fill, 200, 60);
+        }
+
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected only {placements.Length} full-symbol match, got {matches.Count}");
+        AssertTrue(!matches.Any(match => NearCenter(match, 200, 60)),
+            "core-only near miss should stay below the precision threshold");
+    }
+
     public static void DefaultSettingsFavorPrecision()
     {
         var settings = new AppSettings();
@@ -207,10 +262,14 @@ internal static class SimilarSymbolMatcherTests
         string source = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
 
         AssertTrue(
-            source.Contains("public const int GridSide = 5", StringComparison.Ordinal) &&
-            source.Contains("fine 5x5 ink-profile match", StringComparison.Ordinal) &&
-            source.Contains("AutoTightenTemplate(ExtractTemplate", StringComparison.Ordinal),
-            "Similar matcher should use a fine symbol layout profile and auto-tighten loose selections");
+            source.Contains("public const int GridSide = 7", StringComparison.Ordinal) &&
+            source.Contains("fine 7x7 ink-profile match", StringComparison.Ordinal) &&
+            source.Contains("PrepareTemplate(ExtractTemplate", StringComparison.Ordinal) &&
+            source.Contains("RemovePeripheralTemplateNoise", StringComparison.Ordinal),
+            "Similar matcher should use a fine symbol layout profile and clean loose selections");
+        AssertTrue(
+            source.Contains("EdgeRelaxedScoreMultiplier = 0.93f", StringComparison.Ordinal),
+            "Similar matcher should keep edge-relaxed matches below the default precision threshold");
     }
 
     public static void ViewportRequiresReadableBitmapBeforeSimilarCount()
@@ -295,6 +354,27 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarReviewStatus", StringComparison.Ordinal) &&
             mainWindow.Contains("result.AlreadyCountedCount", StringComparison.Ordinal),
             "Similar Count status text should report weak and already-counted candidates");
+    }
+
+    public static void SimilarCountThresholdPresetsAreAvailable()
+    {
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+
+        AssertTrue(
+            dialog.Contains("StrictThresholdPreset = 0.98", StringComparison.Ordinal) &&
+            dialog.Contains("LooseThresholdPreset = 0.82", StringComparison.Ordinal) &&
+            dialog.Contains("Content = \"Strict\"", StringComparison.Ordinal) &&
+            dialog.Contains("Content = \"Default\"", StringComparison.Ordinal) &&
+            dialog.Contains("Content = \"Loose\"", StringComparison.Ordinal),
+            "Similar Count dialog should expose Strict, Default, and Loose threshold presets");
+        AssertTrue(
+            dialog.Contains("ApplyThresholdPreset", StringComparison.Ordinal) &&
+            dialog.Contains("AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
+            dialog.Contains("_ = RunScanAsync();", StringComparison.Ordinal),
+            "Similar Count threshold presets should update the slider and rescan the current review");
+        AssertTrue(
+            dialog.Contains("_suppressThresholdScan", StringComparison.Ordinal),
+            "Similar Count threshold presets should avoid duplicate slider debounce scans");
     }
 
     public static void SimilarCountWeakMatchesStartReviewOnly()
@@ -550,6 +630,12 @@ internal static class SimilarSymbolMatcherTests
         canvas.DrawRect(new SKRect(x, y, x + SymbolWidth, y + SymbolHeight), stroke);
         canvas.DrawLine(x, y, x + SymbolWidth, y + SymbolHeight, stroke);
         canvas.DrawCircle(x + SymbolWidth - 5, y + SymbolHeight - 5, 2.5f, fill);
+    }
+
+    private static void DrawCoreOnlySymbol(SKCanvas canvas, SKPaint stroke, SKPaint fill, int x, int y)
+    {
+        canvas.DrawLine(x, y + SymbolHeight, x + SymbolWidth, y, stroke);
+        canvas.DrawCircle(x + 5, y + 5, 2.5f, fill);
     }
 
     private static void AssertTrue(bool condition, string message)

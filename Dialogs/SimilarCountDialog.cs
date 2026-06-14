@@ -25,6 +25,9 @@ public readonly record struct SimilarCountScanResult(
 // only owns the controls, debouncing and cancellation of stale scans.
 public sealed class SimilarCountDialog : Window
 {
+    private const double StrictThresholdPreset = 0.98;
+    private const double LooseThresholdPreset = 0.82;
+
     public float Threshold { get; private set; }
     public bool IncludeRotations { get; private set; }
     public bool IncludeMirrored { get; private set; }
@@ -42,6 +45,9 @@ public sealed class SimilarCountDialog : Window
     private readonly TextBlock _foundLabel;
     private readonly TextBlock _reviewDetailsLabel;
     private readonly TextBlock _thresholdLabel;
+    private readonly Button _strictButton;
+    private readonly Button _defaultButton;
+    private readonly Button _looseButton;
     private readonly Button _includeAllButton;
     private readonly Button _strongOnlyButton;
     private readonly Button _addButton;
@@ -54,6 +60,7 @@ public sealed class SimilarCountDialog : Window
     private float _lastMaxScore;
     private int _lastWeakCount;
     private int _lastAlreadyCountedCount;
+    private bool _suppressThresholdScan;
     private bool _accepted;
 
     public SimilarCountDialog(
@@ -108,6 +115,40 @@ public sealed class SimilarCountDialog : Window
             Margin = new Thickness(0, 0, 0, 8),
         };
         panel.Children.Add(_thresholdSlider);
+
+        var thresholdPresets = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, -2, 0, 8),
+        };
+        _strictButton = new Button
+        {
+            Content = "Strict",
+            MinWidth = 66,
+            Margin = new Thickness(0, 0, 6, 0),
+            ToolTip = "Use the highest precision threshold.",
+        };
+        _defaultButton = new Button
+        {
+            Content = "Default",
+            MinWidth = 66,
+            Margin = new Thickness(0, 0, 6, 0),
+            ToolTip = "Return to the precision default threshold.",
+        };
+        _looseButton = new Button
+        {
+            Content = "Loose",
+            MinWidth = 66,
+            ToolTip = "Find more candidates; weak ones stay review-only.",
+        };
+        _strictButton.Click += (_, _) => ApplyThresholdPreset(StrictThresholdPreset);
+        _defaultButton.Click += (_, _) => ApplyThresholdPreset(AppSettingsStore.SimilarCountThresholdDefault);
+        _looseButton.Click += (_, _) => ApplyThresholdPreset(LooseThresholdPreset);
+        thresholdPresets.Children.Add(_strictButton);
+        thresholdPresets.Children.Add(_defaultButton);
+        thresholdPresets.Children.Add(_looseButton);
+        panel.Children.Add(thresholdPresets);
 
         _rotationsBox = new CheckBox
         {
@@ -202,6 +243,9 @@ public sealed class SimilarCountDialog : Window
             if (!IsInitialized)
                 return;
             UpdateThresholdLabel();
+            if (_suppressThresholdScan)
+                return;
+
             _debounce.Stop();
             _debounce.Start();
         };
@@ -244,6 +288,26 @@ public sealed class SimilarCountDialog : Window
 
     private void UpdateThresholdLabel() =>
         _thresholdLabel.Text = $"Similarity threshold: {_thresholdSlider.Value:0.00} (precision default {AppSettingsStore.SimilarCountThresholdDefault:0.00})";
+
+    private void ApplyThresholdPreset(double threshold)
+    {
+        _suppressThresholdScan = true;
+        try
+        {
+            _thresholdSlider.Value = Math.Clamp(
+                threshold,
+                AppSettingsStore.SimilarCountThresholdMin,
+                AppSettingsStore.SimilarCountThresholdMax);
+            UpdateThresholdLabel();
+        }
+        finally
+        {
+            _suppressThresholdScan = false;
+        }
+
+        _debounce.Stop();
+        _ = RunScanAsync();
+    }
 
     public void SetReviewCounts(
         int included,
