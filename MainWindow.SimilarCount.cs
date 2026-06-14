@@ -399,8 +399,10 @@ public partial class MainWindow
         foreach (Measurement measurement in generated)
             item.Measurements.Add(measurement);
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        bool scannedSheetIsOpen = IsSamePageFolder(_currentPage?.FolderPath, request.PageFolder);
         _viewport.AddGeneratedMeasurements(generated);
-        _viewport.SelectMeasurements(generated);
+        if (scannedSheetIsOpen)
+            _viewport.SelectMeasurements(generated);
         RefreshTreeItem(item);
         QueueTakeoffAutosave(item);
         using (UsePageMeasurementLookup())
@@ -411,10 +413,19 @@ public partial class MainWindow
         }
         UpdateTotalDisplay();
         int skipped = centers.Count - generated.Count;
-        TxtStatus.Text = skipped > 0
-            ? $"Count similar: added {generated.Count} new marker(s) to {item.Name}; skipped {skipped} already counted."
-            : $"Count similar: added {generated.Count} marker(s) to {item.Name}. They stay selected for review.";
+        TxtStatus.Text = SimilarCountAddedStatus(generated.Count, skipped, item.Name, scannedSheetIsOpen);
         return generated.Count;
+    }
+
+    private static string SimilarCountAddedStatus(int added, int skipped, string itemName, bool scannedSheetIsOpen)
+    {
+        string review = scannedSheetIsOpen
+            ? " They stay selected for review."
+            : " Open the scanned sheet to review them.";
+        string count = skipped > 0
+            ? $"added {added} new marker(s) to {itemName}; skipped {skipped} already counted."
+            : $"added {added} marker(s) to {itemName}.";
+        return "Count similar: " + count + review;
     }
 
     private TakeoffItem? CurrentSimilarCountDestinationItem()

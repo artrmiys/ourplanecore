@@ -55,6 +55,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count weak matches start review only", SimilarSymbolMatcherTests.SimilarCountWeakMatchesStartReviewOnly),
     ("similar count skips already counted markers", SimilarSymbolMatcherTests.SimilarCountSkipsAlreadyCountedMarkers),
     ("similar count locks destination takeoff", SimilarSymbolMatcherTests.SimilarCountLocksDestinationTakeoff),
+    ("similar count handles switched sheet add status", SimilarSymbolMatcherTests.SimilarCountHandlesSwitchedSheetAddStatus),
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),

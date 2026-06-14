@@ -604,6 +604,24 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count review should show the destination takeoff in the dialog title and add button");
     }
 
+    public static void SimilarCountHandlesSwitchedSheetAddStatus()
+    {
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        AssertTrue(
+            mainWindow.Contains("bool scannedSheetIsOpen = IsSamePageFolder(_currentPage?.FolderPath, request.PageFolder)", StringComparison.Ordinal) &&
+            normalizedMainWindow.Contains(
+                "_viewport.AddGeneratedMeasurements(generated);\n        if (scannedSheetIsOpen)\n            _viewport.SelectMeasurements(generated);",
+                StringComparison.Ordinal),
+            "Similar Count should only select generated markers when the scanned sheet is still open");
+        AssertTrue(
+            mainWindow.Contains("SimilarCountAddedStatus", StringComparison.Ordinal) &&
+            mainWindow.Contains("Open the scanned sheet to review them", StringComparison.Ordinal) &&
+            mainWindow.Contains("They stay selected for review", StringComparison.Ordinal),
+            "Similar Count add status should distinguish open-sheet review from switched-sheet saves");
+    }
+
     public static void SimilarCountIsExposedAsContextTool()
     {
         string commandPalette = File.ReadAllText("MainWindow.CommandPalette.cs");
