@@ -563,9 +563,7 @@ public sealed partial class PdfViewport
         using var paint = new SKPaint
         {
             IsAntialias = false,
-            FilterQuality = _renderNavigationFastFrame || _zoom > tile.BitmapScale * 1.05f
-                ? SKFilterQuality.Low
-                : SKFilterQuality.Medium,
+            FilterQuality = CurrentDetailTileFilterQuality(tile),
         };
         var src = new SKRect(0, 0, tile.Bitmap.Width, tile.Bitmap.Height);
         var dst = new SKRect(
@@ -574,6 +572,25 @@ public sealed partial class PdfViewport
             (tile.PdfRect.Right - _panX) * _zoom,
             (tile.PdfRect.Bottom - _panY) * _zoom);
         canvas.DrawBitmap(tile.Bitmap, src, dst, paint);
+    }
+
+    private SKFilterQuality CurrentDetailTileFilterQuality(DetailRenderTile tile)
+    {
+        if (_zoom <= 0 || tile.BitmapScale <= 0)
+            return SKFilterQuality.Low;
+
+        if (_renderNavigationFastFrame)
+        {
+            float scaleRatio = _zoom / tile.BitmapScale;
+            if (Math.Abs(scaleRatio - 1f) <= 0.08f)
+                return SKFilterQuality.None;
+
+            return SKFilterQuality.Low;
+        }
+
+        return _zoom > tile.BitmapScale * 1.05f
+            ? SKFilterQuality.Low
+            : SKFilterQuality.Medium;
     }
 
     private void AddDetailRenderTile(SKBitmap bitmap, SKRect clip, float bitmapScale, string pageKey)

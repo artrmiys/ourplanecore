@@ -2668,10 +2668,13 @@ internal static class TakeoffsTreeRegressionTests
             detailPrefetch.Contains("DetailRenderTileCoversRect", StringComparison.Ordinal) &&
             detailPrefetch.Contains("detail-prefetch", StringComparison.Ordinal) &&
             detail.Contains("DrawDetailRenderTileBitmap", StringComparison.Ordinal) &&
+            detail.Contains("CurrentDetailTileFilterQuality", StringComparison.Ordinal) &&
+            detail.Contains("Math.Abs(scaleRatio - 1f) <= 0.08f", StringComparison.Ordinal) &&
+            detail.Contains("return SKFilterQuality.None", StringComparison.Ordinal) &&
             detail.Contains("IntersectionArea", StringComparison.Ordinal) &&
             detail.Contains("ViewportRenderPolicy.DetailRenderMaxPaintTiles", StringComparison.Ordinal) &&
             detail.Contains("ClearDetailRender()", StringComparison.Ordinal),
-            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, and decode them off the UI path");
+            "viewport should own versioned clipped detail render requests, cache multiple decoded tiles in RAM, prefetch adjacent work-zoom clips, draw near-1:1 detail tiles without smoothing during pan, and decode them off the UI path");
         string startDetailRender = SliceMethod(detail, "private async Task StartNextDetailRenderAsync()");
         AssertTrue(
             startDetailRender.IndexOf("if (!IsCurrentDetailRequest(request))", StringComparison.Ordinal) <
