@@ -314,6 +314,27 @@ internal static class SimilarSymbolMatcherTests
             "near-miss symbol with similar ink and box should not pass the precision threshold");
     }
 
+    public static void ScoresStrokeOrientationForNearMiss()
+    {
+        var placements = new[] { (40, 40), (200, 60) };
+        using SKBitmap page = BuildNearMissPage(placements, nearMissAt: (300, 200));
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> looseMatches = session!.FindMatches(
+            0.55f,
+            includeRotations: false,
+            CancellationToken.None);
+
+        SimilarSymbolMatch? clean = looseMatches.FirstOrDefault(match => NearCenter(match, 200, 60));
+        SimilarSymbolMatch? nearMiss = looseMatches.FirstOrDefault(match => NearCenter(match, 300, 200));
+        AssertTrue(clean != null, "loose scan should keep the clean comparison symbol");
+        AssertTrue(nearMiss != null, "loose scan should expose the near miss for stroke diagnostics");
+        AssertTrue(clean!.StrokeScore >= 0.98f,
+            $"clean symbol stroke orientation should stay near perfect, got {clean.StrokeScore:0.00}");
+        AssertTrue(nearMiss!.StrokeScore < clean.StrokeScore - 0.05f,
+            $"near miss should lose stroke-orientation confidence; clean {clean.StrokeScore:0.00}, near {nearMiss.StrokeScore:0.00}");
+    }
+
     public static void RejectsCoreOnlyRelaxedNearMissAtPrecisionThreshold()
     {
         var placements = new[] { (40, 40) };
@@ -531,8 +552,13 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("RowProjectionInkCounts", StringComparison.Ordinal) &&
             source.Contains("ColumnProjectionInkCounts", StringComparison.Ordinal) &&
             source.Contains("ProjectionColumnMasks", StringComparison.Ordinal) &&
-            source.Contains("projectionScore", StringComparison.Ordinal),
-            "Similar matcher should score row and column projection profiles for sharper silhouette matching");
+            source.Contains("projectionScore", StringComparison.Ordinal) &&
+            source.Contains("StrokeProfileCounts", StringComparison.Ordinal) &&
+            source.Contains("BuildStrokeProfile", StringComparison.Ordinal) &&
+            source.Contains("AddStrokeProfile", StringComparison.Ordinal) &&
+            source.Contains("StrokeProfileScore", StringComparison.Ordinal) &&
+            source.Contains("StrokeScore", StringComparison.Ordinal),
+            "Similar matcher should score row/column projection profiles and stroke orientation for sharper silhouette matching");
         AssertTrue(
             source.Contains("FocusedWindowScoreMultiplier", StringComparison.Ordinal) &&
             source.Contains("FocusedWindowMinTemplateCoverage", StringComparison.Ordinal) &&
@@ -685,6 +711,7 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("float Score = 1f", StringComparison.Ordinal) &&
             viewport.Contains("float TemplateCoverage = 1f", StringComparison.Ordinal) &&
             viewport.Contains("float WindowPrecision = 1f", StringComparison.Ordinal) &&
+            viewport.Contains("float StrokeScore = 1f", StringComparison.Ordinal) &&
             viewport.Contains("bool UsedFocusedScore = false", StringComparison.Ordinal) &&
             viewport.Contains("marker.Score < (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal),
             "Similar preview markers should carry and visualize match confidence and score diagnostics");
@@ -699,6 +726,7 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("precision", StringComparison.Ordinal) &&
             viewport.Contains("ink", StringComparison.Ordinal) &&
             viewport.Contains("layout", StringComparison.Ordinal) &&
+            viewport.Contains("stroke", StringComparison.Ordinal) &&
             viewport.Contains("SimilarCountLimitLabel", StringComparison.Ordinal) &&
             viewport.Contains("limit", StringComparison.Ordinal) &&
             viewport.Contains("extra ink ignored", StringComparison.Ordinal),
@@ -708,6 +736,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("match.Score", StringComparison.Ordinal) &&
             mainWindow.Contains("TemplateCoverage: match.TemplateCoverage", StringComparison.Ordinal) &&
             mainWindow.Contains("WindowPrecision: match.WindowPrecision", StringComparison.Ordinal) &&
+            mainWindow.Contains("StrokeScore: match.StrokeScore", StringComparison.Ordinal) &&
             mainWindow.Contains("UsedFocusedScore: match.UsedFocusedScore", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountScanResult", StringComparison.Ordinal),
             "Similar Count should preserve matcher scores and diagnostics through the review flow");

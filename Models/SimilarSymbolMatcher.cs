@@ -46,6 +46,7 @@ public sealed record SimilarSymbolMatch(
     float InkRatio = 1f,
     float ProfileScore = 1f,
     float ProjectionScore = 1f,
+    float StrokeScore = 1f,
     bool UsedFocusedScore = false);
 
 public sealed class SimilarSymbolMatchSession
@@ -71,6 +72,9 @@ public sealed class SimilarSymbolMatchSession
     private const float FocusedWindowMaxCoreExtraShare = 0.04f;
     private const int FocusedWindowMaxTotalExtraInk = 48;
     private const float FocusedWindowMaxTotalExtraShare = 0.22f;
+    private const int StrokeProfileBucketCount = 4;
+    private const int MinStrokeProfilePairs = 6;
+    private const float StrokeProfileMismatchWeight = 0.75f;
 
     private readonly int _width;
     private readonly int _height;
@@ -91,9 +95,10 @@ public sealed class SimilarSymbolMatchSession
         float InkRatio,
         float ProfileScore,
         float ProjectionScore,
+        float StrokeScore,
         bool UsedFocusedScore)
     {
-        public static SimilarWindowScore Zero { get; } = new(0f, 0f, 0f, 0f, 0f, 0f, false);
+        public static SimilarWindowScore Zero { get; } = new(0f, 0f, 0f, 0f, 0f, 0f, 0f, false);
     }
 
     private SimilarSymbolMatchSession(
@@ -281,6 +286,7 @@ public sealed class SimilarSymbolMatchSession
                             score.InkRatio,
                             score.ProfileScore,
                             score.ProjectionScore,
+                            score.StrokeScore,
                             score.UsedFocusedScore));
                 }
 
@@ -312,6 +318,12 @@ public sealed class SimilarSymbolMatchSession
         Span<int> focusedWindowGrid = stackalloc int[TemplateVariant.GridCellCount];
         Span<int> focusedWindowRowProjection = stackalloc int[TemplateVariant.ProjectionBandCount];
         Span<int> focusedWindowColumnProjection = stackalloc int[TemplateVariant.ProjectionBandCount];
+        Span<int> windowStrokeProfile = stackalloc int[StrokeProfileBucketCount];
+        Span<int> focusedWindowStrokeProfile = stackalloc int[StrokeProfileBucketCount];
+        Span<ulong> previousWindowRow = stackalloc ulong[words];
+        Span<ulong> previousFocusedWindowRow = stackalloc ulong[words];
+        Span<ulong> currentWindowRow = stackalloc ulong[words];
+        Span<ulong> currentFocusedWindowRow = stackalloc ulong[words];
 
         int matchedTemplate = 0;
         int matchedWindow = 0;
@@ -330,17 +342,22 @@ public sealed class SimilarSymbolMatchSession
             int rowInk = 0;
             int focusedRowInk = 0;
             bool coreRow = row >= template.CoreTop && row < template.CoreBottom;
+            currentWindowRow.Clear();
+            currentFocusedWindowRow.Clear();
             for (int k = 0; k < words; k++)
             {
                 ulong pageInkWord = _ink[pageBase + k];
                 ulong templateDilatedWord = tDilated[templateBase + k];
                 ulong focusedInkWord = pageInkWord & templateDilatedWord & masks[k];
+                ulong maskedInkWord = pageInkWord & masks[k];
+                currentWindowRow[k] = maskedInkWord;
+                currentFocusedWindowRow[k] = focusedInkWord;
                 if (coreRow)
                     focusedExtraCoreInk += BitOperations.PopCount(
                         pageInkWord & ~templateDilatedWord & masks[k] & coreMasks[k]);
                 matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & _dilated[pageBase + k]);
                 matchedWindow += BitOperations.PopCount(pageInkWord & templateDilatedWord);
-                int maskedInk = BitOperations.PopCount(pageInkWord & masks[k]);
+                int maskedInk = BitOperations.PopCount(maskedInkWord);
                 int focusedInk = BitOperations.PopCount(focusedInkWord);
                 windowInk += maskedInk;
                 rowInk += maskedInk;
@@ -363,6 +380,10 @@ public sealed class SimilarSymbolMatchSession
             }
             windowRowProjection[projectionRow] += rowInk;
             focusedWindowRowProjection[projectionRow] += focusedRowInk;
+            AddStrokeProfile(currentWindowRow, previousWindowRow, windowStrokeProfile);
+            AddStrokeProfile(currentFocusedWindowRow, previousFocusedWindowRow, focusedWindowStrokeProfile);
+            currentWindowRow.CopyTo(previousWindowRow);
+            currentFocusedWindowRow.CopyTo(previousFocusedWindowRow);
         }
 
         if (windowInk <= 0 || template.InkCount <= 0)
@@ -384,9 +405,14 @@ public sealed class SimilarSymbolMatchSession
             template.InkCount,
             windowInk);
         float projectionScore = Math.Min(rowProjectionScore, columnProjectionScore);
+        float strokeScore = StrokeProfileScore(
+            template.StrokeProfileCounts,
+            template.StrokeProfileTotal,
+            windowStrokeProfile,
+            SumProfile(windowStrokeProfile));
         float strictScore = Math.Min(
             Math.Min(Math.Min(templateCoverage, windowPrecision), inkRatio),
-            Math.Min(profileScore, projectionScore));
+            Math.Min(Math.Min(profileScore, projectionScore), strokeScore));
         int focusedExtraInk = windowInk - focusedWindowInk;
         var strict = new SimilarWindowScore(
             strictScore,
@@ -395,6 +421,7 @@ public sealed class SimilarSymbolMatchSession
             inkRatio,
             profileScore,
             projectionScore,
+            strokeScore,
             UsedFocusedScore: false);
         if (strictScore >= minScore ||
             templateCoverage < FocusedWindowMinTemplateCoverage ||
@@ -424,9 +451,14 @@ public sealed class SimilarSymbolMatchSession
             template.InkCount,
             focusedWindowInk);
         float focusedProjectionScore = Math.Min(focusedRowProjectionScore, focusedColumnProjectionScore);
+        float focusedStrokeScore = StrokeProfileScore(
+            template.StrokeProfileCounts,
+            template.StrokeProfileTotal,
+            focusedWindowStrokeProfile,
+            SumProfile(focusedWindowStrokeProfile));
         float focusedScore = Math.Min(
             Math.Min(templateCoverage, focusedInkRatio),
-            Math.Min(focusedProfileScore, focusedProjectionScore));
+            Math.Min(Math.Min(focusedProfileScore, focusedProjectionScore), focusedStrokeScore));
         float adjustedFocusedScore = focusedScore * FocusedWindowScoreMultiplier;
         if (adjustedFocusedScore <= strictScore)
             return strict;
@@ -438,6 +470,7 @@ public sealed class SimilarSymbolMatchSession
             focusedInkRatio,
             focusedProfileScore,
             focusedProjectionScore,
+            focusedStrokeScore,
             UsedFocusedScore: true);
     }
 
@@ -504,6 +537,94 @@ public sealed class SimilarSymbolMatchSession
         }
 
         return Math.Clamp(1f - diff * 0.5f, 0f, 1f);
+    }
+
+    private static float StrokeProfileScore(
+        ReadOnlySpan<int> templateProfile,
+        int templatePairs,
+        ReadOnlySpan<int> windowProfile,
+        int windowPairs)
+    {
+        if (templatePairs < MinStrokeProfilePairs)
+            return 1f;
+        if (windowPairs <= 0)
+            return 0f;
+
+        float diff = 0f;
+        for (int i = 0; i < templateProfile.Length; i++)
+        {
+            float templateShare = templateProfile[i] / (float)templatePairs;
+            float windowShare = windowProfile[i] / (float)windowPairs;
+            diff += MathF.Abs(templateShare - windowShare);
+        }
+
+        return Math.Clamp(1f - diff * StrokeProfileMismatchWeight, 0f, 1f);
+    }
+
+    private static void AddStrokeProfile(
+        ReadOnlySpan<ulong> row,
+        ReadOnlySpan<ulong> previousRow,
+        Span<int> profile)
+    {
+        for (int k = 0; k < row.Length; k++)
+        {
+            ulong current = row[k];
+            if (current == 0)
+                continue;
+
+            profile[0] += BitOperations.PopCount(current & (current << 1));
+            if (k > 0 &&
+                (current & 1UL) != 0 &&
+                (row[k - 1] & (1UL << 63)) != 0)
+            {
+                profile[0]++;
+            }
+
+            ulong previous = previousRow[k];
+            profile[1] += BitOperations.PopCount(current & previous);
+
+            ulong previousShiftedLeft = (previous << 1) |
+                                        (k > 0 ? previousRow[k - 1] >> 63 : 0UL);
+            ulong previousShiftedRight = (previous >> 1) |
+                                         (k + 1 < previousRow.Length ? previousRow[k + 1] << 63 : 0UL);
+            profile[2] += BitOperations.PopCount(current & previousShiftedLeft);
+            profile[3] += BitOperations.PopCount(current & previousShiftedRight);
+        }
+    }
+
+    private static int SumProfile(ReadOnlySpan<int> profile)
+    {
+        int total = 0;
+        for (int i = 0; i < profile.Length; i++)
+            total += profile[i];
+        return total;
+    }
+
+    private static int[] BuildStrokeProfile(bool[,] template)
+    {
+        int width = template.GetLength(0);
+        int height = template.GetLength(1);
+        var profile = new int[StrokeProfileBucketCount];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (!template[x, y])
+                    continue;
+
+                if (x + 1 < width && template[x + 1, y])
+                    profile[0]++;
+                if (y + 1 < height && template[x, y + 1])
+                    profile[1]++;
+                if (x + 1 < width && y + 1 < height && template[x + 1, y + 1])
+                    profile[2]++;
+                if (x > 0 && y + 1 < height && template[x - 1, y + 1])
+                    profile[3]++;
+            }
+        }
+
+        return profile;
     }
 
     // Sliding vertical sums of per-word ink popcounts: bandInk[y][w] = ink
@@ -1129,6 +1250,8 @@ public sealed class SimilarSymbolMatchSession
         public required int[] GridInkCounts;
         public required int[] RowProjectionInkCounts;
         public required int[] ColumnProjectionInkCounts;
+        public required int[] StrokeProfileCounts;
+        public required int StrokeProfileTotal;
         public required int RotationDegrees;
         public required bool Mirrored;
         public required int OffsetX;
@@ -1160,6 +1283,8 @@ public sealed class SimilarSymbolMatchSession
             var gridInkCounts = new int[GridCellCount];
             var rowProjectionInkCounts = new int[ProjectionBandCount];
             var columnProjectionInkCounts = new int[ProjectionBandCount];
+            var strokeProfileCounts = BuildStrokeProfile(template);
+            int strokeProfileTotal = SumProfile(strokeProfileCounts);
             int inkCount = 0;
             for (int y = 0; y < height; y++)
             {
@@ -1209,6 +1334,8 @@ public sealed class SimilarSymbolMatchSession
                 GridInkCounts = gridInkCounts,
                 RowProjectionInkCounts = rowProjectionInkCounts,
                 ColumnProjectionInkCounts = columnProjectionInkCounts,
+                StrokeProfileCounts = strokeProfileCounts,
+                StrokeProfileTotal = strokeProfileTotal,
                 RotationDegrees = rotationDegrees,
                 Mirrored = mirrored,
                 OffsetX = offsetX,

@@ -20,6 +20,7 @@ public sealed record ViewportSimilarCountPreviewMarker(
     float InkRatio = 1f,
     float ProfileScore = 1f,
     float ProjectionScore = 1f,
+    float StrokeScore = 1f,
     bool UsedFocusedScore = false);
 
 // "Count similar symbols": rubber-band template selection (mirrors the AI
@@ -400,12 +401,13 @@ public sealed partial class PdfViewport
         string variant = marker.RotationDegrees != 0 || marker.Mirrored
             ? $" | {(marker.Mirrored ? "mirrored" : "normal")}, rotated {marker.RotationDegrees}°"
             : "";
-        float layoutScore = Math.Min(marker.ProfileScore, marker.ProjectionScore);
+        float layoutScore = Math.Min(Math.Min(marker.ProfileScore, marker.ProjectionScore), marker.StrokeScore);
         string scoreParts =
             $" | coverage {SimilarCountScorePercent(marker.TemplateCoverage)}%, " +
             $"precision {SimilarCountScorePercent(marker.WindowPrecision)}%, " +
             $"ink {SimilarCountScorePercent(marker.InkRatio)}%, " +
             $"layout {SimilarCountScorePercent(layoutScore)}%, " +
+            $"stroke {SimilarCountScorePercent(marker.StrokeScore)}%, " +
             $"limit {SimilarCountLimitLabel(marker, layoutScore)}";
         string focused = marker.UsedFocusedScore ? " | extra ink ignored" : "";
 
@@ -422,6 +424,8 @@ public sealed partial class PdfViewport
             limit = ("precision", marker.WindowPrecision);
         if (marker.InkRatio < limit.Score)
             limit = ("ink", marker.InkRatio);
+        if (marker.StrokeScore < limit.Score)
+            limit = ("stroke", marker.StrokeScore);
         if (layoutScore < limit.Score)
             limit = ("layout", layoutScore);
         return limit.Label;

@@ -44,6 +44,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher warns on downsampled large template", SimilarSymbolMatcherTests.WarnsOnDownsampledLargeTemplate),
     ("similar symbol matcher can include mirrored copies", SimilarSymbolMatcherTests.FindsMirroredCopyOnlyWhenEnabled),
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
+    ("similar symbol matcher scores stroke orientation", SimilarSymbolMatcherTests.ScoresStrokeOrientationForNearMiss),
     ("similar symbol matcher rejects core-only relaxed near miss", SimilarSymbolMatcherTests.RejectsCoreOnlyRelaxedNearMissAtPrecisionThreshold),
     ("similar symbol matcher rejects extra interior marks", SimilarSymbolMatcherTests.RejectsSymbolWithExtraInteriorMark),
     ("similar symbol matcher rejects dense surrounding ink", SimilarSymbolMatcherTests.RejectsSymbolEmbeddedInDenseSurroundingInk),

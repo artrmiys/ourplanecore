@@ -88,6 +88,7 @@ public partial class MainWindow
                     InkRatio: match.InkRatio,
                     ProfileScore: match.ProfileScore,
                     ProjectionScore: match.ProjectionScore,
+                    StrokeScore: match.StrokeScore,
                     UsedFocusedScore: match.UsedFocusedScore))
                 .ToList();
 
@@ -157,12 +158,14 @@ public partial class MainWindow
 
         static string SimilarCountLimitLabel(SimilarSymbolMatch match)
         {
-            float layoutScore = Math.Min(match.ProfileScore, match.ProjectionScore);
+            float layoutScore = Math.Min(Math.Min(match.ProfileScore, match.ProjectionScore), match.StrokeScore);
             (string Label, float Score) limit = ("coverage", match.TemplateCoverage);
             if (match.WindowPrecision < limit.Score)
                 limit = ("precision", match.WindowPrecision);
             if (match.InkRatio < limit.Score)
                 limit = ("ink", match.InkRatio);
+            if (match.StrokeScore < limit.Score)
+                limit = ("stroke", match.StrokeScore);
             if (layoutScore < limit.Score)
                 limit = ("layout", layoutScore);
             return limit.Label;
