@@ -268,8 +268,33 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count should preserve matcher scores through the review flow");
         AssertTrue(
             dialog.Contains("ScoreSuffix()", StringComparison.Ordinal) &&
-            dialog.Contains("SetReviewCounts(result.Included, result.Total, result.MinScore, result.MaxScore)", StringComparison.Ordinal),
+            dialog.Contains("result.MinScore", StringComparison.Ordinal) &&
+            dialog.Contains("result.MaxScore", StringComparison.Ordinal),
             "Similar Count dialog should show score range for the current review set");
+    }
+
+    public static void SimilarCountReviewSummaryExplainsCandidates()
+    {
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+
+        AssertTrue(
+            dialog.Contains("WeakCount = 0", StringComparison.Ordinal) &&
+            dialog.Contains("AlreadyCountedCount = 0", StringComparison.Ordinal) &&
+            dialog.Contains("NewCandidateCount", StringComparison.Ordinal) &&
+            dialog.Contains("ExcludedNewCount", StringComparison.Ordinal),
+            "Similar Count scan result should carry new, weak, already-counted, and excluded candidate counts");
+        AssertTrue(
+            dialog.Contains("_reviewDetailsLabel", StringComparison.Ordinal) &&
+            dialog.Contains("ReviewDetails", StringComparison.Ordinal) &&
+            dialog.Contains("Already counted", StringComparison.Ordinal) &&
+            dialog.Contains("Excluded", StringComparison.Ordinal),
+            "Similar Count dialog should explain the review state in a compact details line");
+        AssertTrue(
+            mainWindow.Contains("WeakSimilarMatchCount()", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarReviewStatus", StringComparison.Ordinal) &&
+            mainWindow.Contains("result.AlreadyCountedCount", StringComparison.Ordinal),
+            "Similar Count status text should report weak and already-counted candidates");
     }
 
     public static void SimilarCountWeakMatchesStartReviewOnly()

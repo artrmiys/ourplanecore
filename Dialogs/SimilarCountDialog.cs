@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -7,7 +8,17 @@ using System.Windows.Threading;
 
 namespace OurPlaneCore.Controls;
 
-public readonly record struct SimilarCountScanResult(int Included, int Total, float MinScore, float MaxScore);
+public readonly record struct SimilarCountScanResult(
+    int Included,
+    int Total,
+    float MinScore,
+    float MaxScore,
+    int WeakCount = 0,
+    int AlreadyCountedCount = 0)
+{
+    public int NewCandidateCount => Math.Max(0, Total - AlreadyCountedCount);
+    public int ExcludedNewCount => Math.Max(0, NewCandidateCount - Included);
+}
 
 // Threshold tuner for offline "count similar symbols". The scan callback
 // re-runs the matcher and refreshes the viewport ghost preview; the dialog
@@ -29,6 +40,7 @@ public sealed class SimilarCountDialog : Window
     private readonly CheckBox _mirroredBox;
     private readonly CheckBox _aiBox;
     private readonly TextBlock _foundLabel;
+    private readonly TextBlock _reviewDetailsLabel;
     private readonly TextBlock _thresholdLabel;
     private readonly Button _includeAllButton;
     private readonly Button _strongOnlyButton;
@@ -40,6 +52,8 @@ public sealed class SimilarCountDialog : Window
     private int _lastTotal;
     private float _lastMinScore;
     private float _lastMaxScore;
+    private int _lastWeakCount;
+    private int _lastAlreadyCountedCount;
     private bool _accepted;
 
     public SimilarCountDialog(
@@ -69,6 +83,15 @@ public sealed class SimilarCountDialog : Window
             Margin = new Thickness(0, 0, 0, 10),
         };
         panel.Children.Add(_foundLabel);
+
+        _reviewDetailsLabel = new TextBlock
+        {
+            Text = "",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.72,
+            Margin = new Thickness(0, -6, 0, 10),
+        };
+        panel.Children.Add(_reviewDetailsLabel);
 
         _thresholdLabel = new TextBlock { Margin = new Thickness(0, 0, 0, 2) };
         panel.Children.Add(_thresholdLabel);
@@ -116,7 +139,7 @@ public sealed class SimilarCountDialog : Window
 
         var hint = new TextBlock
         {
-            Text = "Matches preview as blue ghosts on the sheet. Lower the threshold to find more, raise it to drop false hits.",
+            Text = "Blue markers add now, orange markers are weak candidates, gray check markers are already counted.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.7,
             Margin = new Thickness(0, 0, 0, 10),
@@ -222,16 +245,32 @@ public sealed class SimilarCountDialog : Window
     private void UpdateThresholdLabel() =>
         _thresholdLabel.Text = $"Similarity threshold: {_thresholdSlider.Value:0.00} (precision default {AppSettingsStore.SimilarCountThresholdDefault:0.00})";
 
-    public void SetReviewCounts(int included, int total, float minScore = 0f, float maxScore = 0f)
+    public void SetReviewCounts(
+        int included,
+        int total,
+        float minScore = 0f,
+        float maxScore = 0f,
+        int weakCount = 0,
+        int alreadyCountedCount = 0)
     {
         _lastFound = Math.Max(0, included);
         _lastTotal = Math.Max(0, total);
         _lastMinScore = Math.Clamp(minScore, 0f, 1f);
         _lastMaxScore = Math.Clamp(maxScore, 0f, 1f);
+        _lastWeakCount = Math.Max(0, weakCount);
+        _lastAlreadyCountedCount = Math.Max(0, alreadyCountedCount);
+        var result = new SimilarCountScanResult(
+            _lastFound,
+            _lastTotal,
+            _lastMinScore,
+            _lastMaxScore,
+            _lastWeakCount,
+            _lastAlreadyCountedCount);
 
         if (_lastTotal == 0)
         {
             _foundLabel.Text = "Found 0 symbols.";
+            _reviewDetailsLabel.Text = "";
             _addButton.Content = AddButtonText(0);
             _addButton.IsEnabled = false;
             _includeAllButton.IsEnabled = false;
@@ -239,7 +278,7 @@ public sealed class SimilarCountDialog : Window
             return;
         }
 
-        if (_lastFound == _lastTotal)
+        if (_lastFound == _lastTotal && _lastAlreadyCountedCount == 0)
         {
             _foundLabel.Text = _lastFound == 1
                 ? $"Found 1 symbol{ScoreSuffix()}."
@@ -248,13 +287,32 @@ public sealed class SimilarCountDialog : Window
         }
         else
         {
-            _foundLabel.Text = $"Included {_lastFound} of {_lastTotal} symbols{ScoreSuffix()}.";
+            _foundLabel.Text = $"Ready to add {_lastFound} of {_lastTotal} found{ScoreSuffix()}.";
             _addButton.Content = AddButtonText(_lastFound);
         }
 
+        _reviewDetailsLabel.Text = ReviewDetails(result);
         _addButton.IsEnabled = _lastFound > 0;
-        _includeAllButton.IsEnabled = _lastFound < _lastTotal;
-        _strongOnlyButton.IsEnabled = true;
+        _includeAllButton.IsEnabled = _lastFound < result.NewCandidateCount;
+        _strongOnlyButton.IsEnabled = result.NewCandidateCount > 0;
+    }
+
+    private static string ReviewDetails(SimilarCountScanResult result)
+    {
+        if (result.Total <= 0)
+            return "";
+
+        var parts = new List<string>
+        {
+            $"New {result.NewCandidateCount}",
+        };
+        if (result.WeakCount > 0)
+            parts.Add($"Weak {result.WeakCount}");
+        if (result.AlreadyCountedCount > 0)
+            parts.Add($"Already counted {result.AlreadyCountedCount}");
+        if (result.ExcludedNewCount > 0)
+            parts.Add($"Excluded {result.ExcludedNewCount}");
+        return string.Join(" | ", parts);
     }
 
     private string ScoreSuffix()
@@ -291,6 +349,7 @@ public sealed class SimilarCountDialog : Window
         var cts = new CancellationTokenSource();
         _scanCts = cts;
         _foundLabel.Text = "Scanning...";
+        _reviewDetailsLabel.Text = "";
         _addButton.IsEnabled = false;
         _includeAllButton.IsEnabled = false;
         _strongOnlyButton.IsEnabled = false;
@@ -304,7 +363,13 @@ public sealed class SimilarCountDialog : Window
             if (cts.IsCancellationRequested)
                 return;
 
-            SetReviewCounts(result.Included, result.Total, result.MinScore, result.MaxScore);
+            SetReviewCounts(
+                result.Included,
+                result.Total,
+                result.MinScore,
+                result.MaxScore,
+                result.WeakCount,
+                result.AlreadyCountedCount);
         }
         catch (OperationCanceledException)
         {

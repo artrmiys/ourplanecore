@@ -89,7 +89,15 @@ public partial class MainWindow
                     !alreadyCountedIndexes.Contains(index))
                 .Count();
             if (included == 0)
-                return new SimilarCountScanResult(0, total, 0f, 0f);
+            {
+                return new SimilarCountScanResult(
+                    0,
+                    total,
+                    0f,
+                    0f,
+                    WeakSimilarMatchCount(),
+                    alreadyCountedIndexes.Count);
+            }
 
             var scores = lastMatches
                 .Where((_, index) =>
@@ -97,11 +105,22 @@ public partial class MainWindow
                     !alreadyCountedIndexes.Contains(index))
                 .Select(match => match.Score)
                 .ToList();
-            return new SimilarCountScanResult(included, total, scores.Min(), scores.Max());
+            return new SimilarCountScanResult(
+                included,
+                total,
+                scores.Min(),
+                scores.Max(),
+                WeakSimilarMatchCount(),
+                alreadyCountedIndexes.Count);
         }
 
         static bool IsWeakSimilarMatch(SimilarSymbolMatch match) =>
             match.Score > 0f && match.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
+
+        int WeakSimilarMatchCount() =>
+            lastMatches
+                .Where((match, index) => !alreadyCountedIndexes.Contains(index) && IsWeakSimilarMatch(match))
+                .Count();
 
         void ExcludeWeakSimilarMatches()
         {
@@ -137,7 +156,13 @@ public partial class MainWindow
         {
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
             SimilarCountScanResult result = BuildReviewResult();
-            dialog?.SetReviewCounts(result.Included, result.Total, result.MinScore, result.MaxScore);
+            dialog?.SetReviewCounts(
+                result.Included,
+                result.Total,
+                result.MinScore,
+                result.MaxScore,
+                result.WeakCount,
+                result.AlreadyCountedCount);
         }
 
         void ToggleSimilarPreviewMarker(int index)
@@ -155,7 +180,7 @@ public partial class MainWindow
 
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
-            TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} marker(s) included.";
+            TxtStatus.Text = SimilarReviewStatus(result);
         }
 
         void IncludeAllPreviewMarkers(object? sender, EventArgs e)
@@ -164,7 +189,7 @@ public partial class MainWindow
             ExcludeAlreadyCountedSimilarMatches();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
-            TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} new marker(s) included.";
+            TxtStatus.Text = SimilarReviewStatus(result);
         }
 
         void KeepOnlyStrongPreviewMarkers(object? sender, EventArgs e)
@@ -172,7 +197,7 @@ public partial class MainWindow
             ApplyDefaultSimilarReviewExclusions();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
-            TxtStatus.Text = $"Count similar review: {result.Included}/{result.Total} strong marker(s) included.";
+            TxtStatus.Text = SimilarReviewStatus(result);
         }
 
         async Task<SimilarCountScanResult> ScanAsync(
@@ -246,6 +271,16 @@ public partial class MainWindow
         dialog.Show();
         dialog.Activate();
         TxtStatus.Text = $"Count similar review for {destinationName}: click preview markers on the sheet to exclude or include them.";
+    }
+
+    private static string SimilarReviewStatus(SimilarCountScanResult result)
+    {
+        string status = $"Count similar review: {result.Included}/{result.NewCandidateCount} new marker(s) ready";
+        if (result.WeakCount > 0)
+            status += $", {result.WeakCount} weak";
+        if (result.AlreadyCountedCount > 0)
+            status += $", {result.AlreadyCountedCount} already counted";
+        return status + ".";
     }
 
     private int AddSimilarCountMeasurements(
