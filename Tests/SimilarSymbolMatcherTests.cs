@@ -573,20 +573,26 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             dialog.Contains("WeakCount = 0", StringComparison.Ordinal) &&
             dialog.Contains("AlreadyCountedCount = 0", StringComparison.Ordinal) &&
+            dialog.Contains("LimitSummary = \"\"", StringComparison.Ordinal) &&
             dialog.Contains("NewCandidateCount", StringComparison.Ordinal) &&
             dialog.Contains("ExcludedNewCount", StringComparison.Ordinal),
-            "Similar Count scan result should carry new, weak, already-counted, and excluded candidate counts");
+            "Similar Count scan result should carry new, weak, already-counted, excluded, and limit-summary diagnostics");
         AssertTrue(
             dialog.Contains("_reviewDetailsLabel", StringComparison.Ordinal) &&
             dialog.Contains("ReviewDetails", StringComparison.Ordinal) &&
             dialog.Contains("Already counted", StringComparison.Ordinal) &&
-            dialog.Contains("Excluded", StringComparison.Ordinal),
-            "Similar Count dialog should explain the review state in a compact details line");
+            dialog.Contains("Excluded", StringComparison.Ordinal) &&
+            dialog.Contains("result.LimitSummary", StringComparison.Ordinal),
+            "Similar Count dialog should explain the review state and weak-match limit summary in a compact details line");
         AssertTrue(
             mainWindow.Contains("WeakSimilarMatchCount()", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountLimitSummary()", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountLimitLabel", StringComparison.Ordinal) &&
+            mainWindow.Contains("Weak limit:", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarReviewStatus", StringComparison.Ordinal) &&
+            mainWindow.Contains("result.LimitSummary", StringComparison.Ordinal) &&
             mainWindow.Contains("result.AlreadyCountedCount", StringComparison.Ordinal),
-            "Similar Count status text should report weak and already-counted candidates");
+            "Similar Count status text should report weak candidates, already-counted candidates, and the dominant weak-match limiter");
     }
 
     public static void SimilarCountThresholdPresetsAreAvailable()

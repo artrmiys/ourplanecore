@@ -113,7 +113,8 @@ public partial class MainWindow
                     0f,
                     0f,
                     WeakSimilarMatchCount(),
-                    alreadyCountedIndexes.Count);
+                    alreadyCountedIndexes.Count,
+                    SimilarCountLimitSummary());
             }
 
             var scores = lastMatches
@@ -128,11 +129,44 @@ public partial class MainWindow
                 scores.Min(),
                 scores.Max(),
                 WeakSimilarMatchCount(),
-                alreadyCountedIndexes.Count);
+                alreadyCountedIndexes.Count,
+                SimilarCountLimitSummary());
         }
 
         static bool IsWeakSimilarMatch(SimilarSymbolMatch match) =>
             match.Score > 0f && match.Score < (float)AppSettingsStore.SimilarCountThresholdDefault;
+
+        string SimilarCountLimitSummary()
+        {
+            var limits = lastMatches
+                .Select((match, index) => new { Match = match, Index = index })
+                .Where(item => !alreadyCountedIndexes.Contains(item.Index) && IsWeakSimilarMatch(item.Match))
+                .Select(item => SimilarCountLimitLabel(item.Match))
+                .GroupBy(label => label, StringComparer.Ordinal)
+                .Select(group => new { Label = group.Key, Count = group.Count() })
+                .OrderByDescending(item => item.Count)
+                .ThenBy(item => item.Label, StringComparer.Ordinal)
+                .ToList();
+            if (limits.Count == 0)
+                return "";
+
+            int weakTotal = limits.Sum(item => item.Count);
+            var top = limits[0];
+            return $"Weak limit: {top.Label} {top.Count}/{weakTotal}";
+        }
+
+        static string SimilarCountLimitLabel(SimilarSymbolMatch match)
+        {
+            float layoutScore = Math.Min(match.ProfileScore, match.ProjectionScore);
+            (string Label, float Score) limit = ("coverage", match.TemplateCoverage);
+            if (match.WindowPrecision < limit.Score)
+                limit = ("precision", match.WindowPrecision);
+            if (match.InkRatio < limit.Score)
+                limit = ("ink", match.InkRatio);
+            if (layoutScore < limit.Score)
+                limit = ("layout", layoutScore);
+            return limit.Label;
+        }
 
         int WeakSimilarMatchCount() =>
             lastMatches
@@ -207,7 +241,8 @@ public partial class MainWindow
                 result.MinScore,
                 result.MaxScore,
                 result.WeakCount,
-                result.AlreadyCountedCount);
+                result.AlreadyCountedCount,
+                result.LimitSummary);
         }
 
         void ToggleSimilarPreviewMarker(int index)
@@ -338,6 +373,8 @@ public partial class MainWindow
             status += $", {result.WeakCount} weak";
         if (result.AlreadyCountedCount > 0)
             status += $", {result.AlreadyCountedCount} already counted";
+        if (!string.IsNullOrWhiteSpace(result.LimitSummary))
+            status += $", {result.LimitSummary}";
         return status + ".";
     }
 

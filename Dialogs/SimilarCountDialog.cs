@@ -14,7 +14,8 @@ public readonly record struct SimilarCountScanResult(
     float MinScore,
     float MaxScore,
     int WeakCount = 0,
-    int AlreadyCountedCount = 0)
+    int AlreadyCountedCount = 0,
+    string LimitSummary = "")
 {
     public int NewCandidateCount => Math.Max(0, Total - AlreadyCountedCount);
     public int ExcludedNewCount => Math.Max(0, NewCandidateCount - Included);
@@ -60,6 +61,7 @@ public sealed class SimilarCountDialog : Window
     private float _lastMaxScore;
     private int _lastWeakCount;
     private int _lastAlreadyCountedCount;
+    private string _lastLimitSummary = "";
     private bool _suppressThresholdScan;
     private bool _accepted;
 
@@ -327,7 +329,8 @@ public sealed class SimilarCountDialog : Window
         float minScore = 0f,
         float maxScore = 0f,
         int weakCount = 0,
-        int alreadyCountedCount = 0)
+        int alreadyCountedCount = 0,
+        string limitSummary = "")
     {
         _lastFound = Math.Max(0, included);
         _lastTotal = Math.Max(0, total);
@@ -335,13 +338,15 @@ public sealed class SimilarCountDialog : Window
         _lastMaxScore = Math.Clamp(maxScore, 0f, 1f);
         _lastWeakCount = Math.Max(0, weakCount);
         _lastAlreadyCountedCount = Math.Max(0, alreadyCountedCount);
+        _lastLimitSummary = limitSummary.Trim();
         var result = new SimilarCountScanResult(
             _lastFound,
             _lastTotal,
             _lastMinScore,
             _lastMaxScore,
             _lastWeakCount,
-            _lastAlreadyCountedCount);
+            _lastAlreadyCountedCount,
+            _lastLimitSummary);
 
         if (_lastTotal == 0)
         {
@@ -388,6 +393,8 @@ public sealed class SimilarCountDialog : Window
             parts.Add($"Already counted {result.AlreadyCountedCount}");
         if (result.ExcludedNewCount > 0)
             parts.Add($"Excluded {result.ExcludedNewCount}");
+        if (!string.IsNullOrWhiteSpace(result.LimitSummary))
+            parts.Add(result.LimitSummary);
         return string.Join(" | ", parts);
     }
 
@@ -445,7 +452,8 @@ public sealed class SimilarCountDialog : Window
                 result.MinScore,
                 result.MaxScore,
                 result.WeakCount,
-                result.AlreadyCountedCount);
+                result.AlreadyCountedCount,
+                result.LimitSummary);
         }
         catch (OperationCanceledException)
         {
