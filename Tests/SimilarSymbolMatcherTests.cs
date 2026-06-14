@@ -220,6 +220,25 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count review should show the destination takeoff in the dialog title and add button");
     }
 
+    public static void SimilarCountIsExposedAsContextTool()
+    {
+        string commandPalette = File.ReadAllText("MainWindow.CommandPalette.cs");
+        string beamTool = File.ReadAllText("MainWindow.BeamTool.cs");
+        string xaml = File.ReadAllText("MainWindow.xaml");
+
+        AssertTrue(
+            commandPalette.Contains("tool.similar", StringComparison.Ordinal) &&
+            commandPalette.Contains("BtnSimilarCount_Click(this, new RoutedEventArgs())", StringComparison.Ordinal),
+            "Similar Count should be exposed in the command palette as a first-class tool");
+        AssertTrue(
+            xaml.Contains("active Count/Beam/Openings takeoff", StringComparison.Ordinal),
+            "Similar toolbar tooltip should explain the active destination takeoff behavior");
+        AssertTrue(
+            beamTool.Contains("Use Similar to add reviewed matches to this Beam item", StringComparison.Ordinal) &&
+            beamTool.Contains("Use Similar to add reviewed matches to this Opening item", StringComparison.Ordinal),
+            "Beam and Openings completion should direct the user to continue that item with Similar");
+    }
+
     private static SimilarSymbolMatchSession? CreateSession(
         SKBitmap page,
         int leftPad = 3,

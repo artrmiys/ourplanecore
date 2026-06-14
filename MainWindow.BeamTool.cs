@@ -69,7 +69,7 @@ public partial class MainWindow
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
-        TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}.";
+        TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}. Use Similar to add reviewed matches to this Beam item.";
     }
 
     private void OnOpeningMeasurementCompleted(OpeningMeasurementRequest request)
@@ -131,6 +131,6 @@ public partial class MainWindow
         UpdateToolStatus();
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
-        TxtStatus.Text = $"Opening Count created: {item.Name}. Dimensions {request.SizeText}.";
+        TxtStatus.Text = $"Opening Count created: {item.Name}. Dimensions {request.SizeText}. Use Similar to add reviewed matches to this Opening item.";
     }
 }

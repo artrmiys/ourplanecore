@@ -42,6 +42,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("similar count locks destination takeoff", SimilarSymbolMatcherTests.SimilarCountLocksDestinationTakeoff),
+    ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
