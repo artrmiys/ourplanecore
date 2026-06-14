@@ -273,8 +273,10 @@ public sealed partial class PdfViewport
         string pageFolder,
         RasterSheetSource? rasterSheet,
         bool allowLowZoomFullRasterApply,
-        bool buildMissingDpis)
+        bool buildMissingDpis,
+        out bool workZoomWarmupQueued)
     {
+        workZoomWarmupQueued = false;
         if (!ShouldWarmRasterSheetForWorkZoomOnPageOpen(pageFolder, pdfPath, rasterSheet))
             return false;
         RasterSheetSource source = rasterSheet!;
@@ -291,6 +293,7 @@ public sealed partial class PdfViewport
                 allowLowZoomFullRaster: true);
         }
 
+        workZoomWarmupQueued = true;
         PdfViewport.PrefetchRasterSheetWorkZoomBitmaps(
             new PageInfo
             {

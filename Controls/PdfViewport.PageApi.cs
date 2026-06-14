@@ -153,6 +153,7 @@ public sealed partial class PdfViewport
         string loadedStatus = $"Loaded: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}";
         string rasterSkipReason = "";
         bool rasterBitmapWarmupQueuedForOpen = false;
+        bool rasterWorkZoomWarmupQueuedForOpen = false;
         bool responsiveRasterDpiWorkQueuedForOpen = false;
         bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         bool responsiveRasterDpiForOpen = ShouldUseResponsiveRasterSheetDpiForPageOpen(
@@ -171,7 +172,8 @@ public sealed partial class PdfViewport
                 pageFolder,
                 rasterSheet,
                 allowLowZoomFullRasterApply: false,
-                buildMissingDpis: true);
+                buildMissingDpis: true,
+                out rasterWorkZoomWarmupQueuedForOpen);
         }
 
         if (responsiveRasterDpiForOpen)
@@ -233,7 +235,8 @@ public sealed partial class PdfViewport
                 pageFolder,
                 rasterSheet,
                 allowLowZoomFullRasterApply: hasSheetOverlayConfigured,
-                buildMissingDpis: hasSheetOverlayConfigured);
+                buildMissingDpis: hasSheetOverlayConfigured,
+                out rasterWorkZoomWarmupQueuedForOpen);
         }
         if (!shouldUseRasterSheetForOpen &&
             RasterSheetCacheService.ShouldRebuildForReadableDisplay(
@@ -262,15 +265,21 @@ public sealed partial class PdfViewport
                 previewScale,
                 restoreView,
                 fitAfter: !restoreView.HasValue,
-                queueSharpBaseAfterPreview: !rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiWorkQueuedForOpen,
+                queueSharpBaseAfterPreview: !rasterBitmapWarmupQueuedForOpen &&
+                                            !responsiveRasterDpiWorkQueuedForOpen &&
+                                            !rasterWorkZoomWarmupQueuedForOpen,
                 statusAfter: loadedStatus);
         }
 
         if (previewCacheHit)
         {
             PostStatus(loadedStatus);
-            if (!rasterBitmapWarmupQueuedForOpen && !responsiveRasterDpiWorkQueuedForOpen)
+            if (!rasterBitmapWarmupQueuedForOpen &&
+                !responsiveRasterDpiWorkQueuedForOpen &&
+                !rasterWorkZoomWarmupQueuedForOpen)
+            {
                 QueueSharpBaseRenderAfterPreview(pdfPath, pageIndex, pageFolder);
+            }
         }
         else if (rasterBitmapWarmupQueuedForOpen)
         {
