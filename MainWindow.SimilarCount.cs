@@ -154,7 +154,7 @@ public partial class MainWindow
 
         void RefreshPreviewReview()
         {
-            _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
+            _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder);
             SimilarCountScanResult result = BuildReviewResult();
             dialog?.SetReviewCounts(
                 result.Included,
@@ -212,7 +212,7 @@ public partial class MainWindow
             lastMatches.Clear();
             lastMatches.AddRange(matches);
             ApplyDefaultSimilarReviewExclusions();
-            _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers());
+            _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder);
             return BuildReviewResult();
         }
 

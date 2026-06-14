@@ -33,6 +33,7 @@ public sealed partial class PdfViewport
     private SKPoint _similarCountStartPdf;
     private SKPoint _similarCountEndPdf;
     private IReadOnlyList<ViewportSimilarCountPreviewMarker>? _similarCountPreview;
+    private string _similarCountPreviewPageFolder = "";
     private int _similarCountHoverMarkerIndex = -1;
 
     public event Action<ViewportSimilarCountRequest>? SimilarCountSelectionCompleted;
@@ -109,12 +110,18 @@ public sealed partial class PdfViewport
         _similarCountPreview = centersPdf?
             .Select(center => new ViewportSimilarCountPreviewMarker(center, Included: true))
             .ToList();
+        _similarCountPreviewPageFolder = _similarCountPreview is { Count: > 0 } ? _pageFolder : "";
+        _similarCountHoverMarkerIndex = -1;
         RequestRepaint();
     }
 
-    public void SetSimilarCountPreviewMarkers(IReadOnlyList<ViewportSimilarCountPreviewMarker>? markers)
+    public void SetSimilarCountPreviewMarkers(
+        IReadOnlyList<ViewportSimilarCountPreviewMarker>? markers,
+        string? pageFolder = null)
     {
         _similarCountPreview = markers;
+        _similarCountPreviewPageFolder = markers is { Count: > 0 } ? pageFolder ?? _pageFolder : "";
+        _similarCountHoverMarkerIndex = -1;
         RequestRepaint();
     }
 
@@ -304,7 +311,7 @@ public sealed partial class PdfViewport
     private int SimilarCountPreviewMarkerHitIndex(SKPoint pdf)
     {
         IReadOnlyList<ViewportSimilarCountPreviewMarker>? preview = _similarCountPreview;
-        if (preview == null || preview.Count == 0)
+        if (preview == null || preview.Count == 0 || !IsSimilarCountPreviewForCurrentPage())
             return -1;
 
         float tolerance = ScreenToPdfDistance(13f);
@@ -362,6 +369,10 @@ public sealed partial class PdfViewport
 
         return $"Count similar marker: {confidence} {marker.Score:0.00}, {state}; {action}{variant}.";
     }
+
+    private bool IsSimilarCountPreviewForCurrentPage() =>
+        !string.IsNullOrWhiteSpace(_similarCountPreviewPageFolder) &&
+        string.Equals(_similarCountPreviewPageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase);
 
     private bool FinishSimilarCountSelection()
     {
@@ -439,7 +450,7 @@ public sealed partial class PdfViewport
     private void DrawSimilarCountPreviewOverlay(SKCanvas canvas)
     {
         IReadOnlyList<ViewportSimilarCountPreviewMarker>? preview = _similarCountPreview;
-        if (preview == null || preview.Count == 0)
+        if (preview == null || preview.Count == 0 || !IsSimilarCountPreviewForCurrentPage())
             return;
 
         float safeZoom = Math.Max(_zoom, 0.001f);

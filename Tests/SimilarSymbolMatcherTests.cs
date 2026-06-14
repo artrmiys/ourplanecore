@@ -345,8 +345,13 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             mainWindow.Contains("excludedIndexes", StringComparison.Ordinal) &&
             mainWindow.Contains("IncludedCenters()", StringComparison.Ordinal) &&
-            mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers())", StringComparison.Ordinal),
+            mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder)", StringComparison.Ordinal),
             "Similar Count should keep include/exclude review state and add only included centers");
+        AssertTrue(
+            viewport.Contains("_similarCountPreviewPageFolder", StringComparison.Ordinal) &&
+            viewport.Contains("IsSimilarCountPreviewForCurrentPage", StringComparison.Ordinal) &&
+            viewport.Contains("pageFolder ?? _pageFolder", StringComparison.Ordinal),
+            "Similar Count preview markers should stay bound to the scanned sheet while the modeless review is open");
         AssertTrue(
             dialog.Contains("public event EventHandler? Accepted", StringComparison.Ordinal) &&
             dialog.Contains("public event EventHandler? Cancelled", StringComparison.Ordinal) &&
