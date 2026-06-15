@@ -18,6 +18,7 @@ public partial class MainWindow
 {
     private const float SimilarCountDuplicateTolerancePdf = 4f;
     private const int SimilarCountReviewKeyQuantumPx = 4;
+    private const int SimilarCountMaxSweepSheets = 80;
 
     private SimilarCountDialog? _similarCountDialog;
 
@@ -58,6 +59,11 @@ public partial class MainWindow
         var excludedIndexes = new HashSet<int>();
         var alreadyCountedIndexes = new HashSet<int>();
         var manualReviewStatesByCenter = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var otherSheetSweeps = new List<SimilarSheetSweep>();
+        string otherSheetSweepKey = "";       // "rotations|mirrored" the sweep cache was built for
+        bool otherSheetEnabled = false;       // whether the last scan included other sheets
+        int otherSheetSkippedOverLimit = 0;
+        float currentThreshold = (float)_settings.SimilarCountThreshold;
         TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
         string destinationName = SimilarCountDestinationName(destinationItem);
         OurPlaneCoreJob reviewJob = _currentJob;
@@ -99,9 +105,55 @@ public partial class MainWindow
                 .Select(MatchCenterPdf)
                 .ToList();
 
+        // Above-threshold, not-already-counted hits on other sheets, grouped by
+        // sheet. Sweeps are cached at the loose floor; this re-filters them to
+        // the current threshold so the slider stays instant.
+        List<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> OtherSheetAdditions(float threshold)
+        {
+            var additions = new List<(SimilarSheetSweep, List<SKPoint>)>();
+            if (!otherSheetEnabled)
+                return additions;
+
+            foreach (SimilarSheetSweep sweep in otherSheetSweeps)
+            {
+                var centers = new List<SKPoint>();
+                foreach ((SKPoint center, float score) in sweep.Hits)
+                {
+                    if (score < threshold)
+                        continue;
+                    if (destinationItem != null &&
+                        IsSimilarCountDuplicateCenter(destinationItem, sweep.PageFolder, center))
+                        continue;
+                    centers.Add(center);
+                }
+                if (centers.Count > 0)
+                    additions.Add((sweep, centers));
+            }
+
+            return additions;
+        }
+
+        string OtherSheetSummary()
+        {
+            if (!otherSheetEnabled || otherSheetSweepKey.Length == 0)
+                return "";
+
+            List<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> additions = OtherSheetAdditions(currentThreshold);
+            int markers = additions.Sum(addition => addition.Centers.Count);
+            string skipped = otherSheetSkippedOverLimit > 0
+                ? $" {otherSheetSkippedOverLimit} sheet(s) skipped over scan limit."
+                : "";
+            return markers == 0
+                ? $"Other sheets: no new matches.{skipped}"
+                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{skipped}";
+        }
+
         SimilarCountScanResult BuildReviewResult()
         {
             int total = lastMatches.Count;
+            List<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> otherAdditions = OtherSheetAdditions(currentThreshold);
+            int otherNew = otherAdditions.Sum(addition => addition.Centers.Count);
+            string otherSummary = OtherSheetSummary();
             int included = lastMatches
                 .Where((_, index) =>
                     !excludedIndexes.Contains(index) &&
@@ -116,7 +168,10 @@ public partial class MainWindow
                     0f,
                     WeakSimilarMatchCount(),
                     alreadyCountedIndexes.Count,
-                    SimilarCountLimitSummary());
+                    SimilarCountLimitSummary(),
+                    otherNew,
+                    otherAdditions.Count,
+                    otherSummary);
             }
 
             var scores = lastMatches
@@ -132,7 +187,10 @@ public partial class MainWindow
                 scores.Max(),
                 WeakSimilarMatchCount(),
                 alreadyCountedIndexes.Count,
-                SimilarCountLimitSummary());
+                SimilarCountLimitSummary(),
+                otherNew,
+                otherAdditions.Count,
+                otherSummary);
         }
 
         static bool IsWeakSimilarMatch(SimilarSymbolMatch match) =>
@@ -246,7 +304,10 @@ public partial class MainWindow
                 result.MaxScore,
                 result.WeakCount,
                 result.AlreadyCountedCount,
-                result.LimitSummary);
+                result.LimitSummary,
+                result.OtherSheetNewCount,
+                result.OtherSheetCount,
+                result.OtherSheetSummary);
         }
 
         void ToggleSimilarPreviewMarker(int index)
@@ -289,10 +350,33 @@ public partial class MainWindow
             TxtStatus.Text = SimilarReviewStatus(result);
         }
 
+        async Task EnsureOtherSheetSweepAsync(bool rotations, bool mirrored, CancellationToken cancellationToken)
+        {
+            string key = $"{rotations}|{mirrored}";
+            if (string.Equals(otherSheetSweepKey, key, StringComparison.Ordinal))
+                return;
+
+            TxtStatus.Text = "Count similar: scanning other sheets...";
+            (List<SimilarSheetSweep> sweeps, int skipped) = await SweepOtherSimilarSheetsAsync(
+                reviewJob,
+                request.PageFolder,
+                session,
+                bitmapScale,
+                rotations,
+                mirrored,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            otherSheetSweeps.Clear();
+            otherSheetSweeps.AddRange(sweeps);
+            otherSheetSkippedOverLimit = skipped;
+            otherSheetSweepKey = key;
+        }
+
         async Task<SimilarCountScanResult> ScanAsync(
             float threshold,
             bool rotations,
             bool mirrored,
+            bool allSheets,
             CancellationToken cancellationToken)
         {
             List<SimilarSymbolMatch> matches = await Task.Run(
@@ -303,6 +387,12 @@ public partial class MainWindow
             lastMatches.AddRange(matches);
             ApplyDefaultSimilarReviewExclusions();
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder);
+
+            currentThreshold = threshold;
+            otherSheetEnabled = allSheets;
+            if (allSheets)
+                await EnsureOtherSheetSweepAsync(rotations, mirrored, cancellationToken);
+
             return BuildReviewResult();
         }
 
@@ -311,6 +401,7 @@ public partial class MainWindow
             (float)_settings.SimilarCountThreshold,
             _settings.SimilarCountRotations,
             _settings.SimilarCountMirrored,
+            _settings.SimilarCountAllSheets,
             destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
             templateWarning: session.TemplateWarning)
@@ -336,6 +427,7 @@ public partial class MainWindow
             _settings.SimilarCountThreshold = dialog.Threshold;
             _settings.SimilarCountRotations = dialog.IncludeRotations;
             _settings.SimilarCountMirrored = dialog.IncludeMirrored;
+            _settings.SimilarCountAllSheets = dialog.IncludeAllSheets;
             SaveAppSettings();
 
             if (!IsReviewJobCurrent())
@@ -345,15 +437,33 @@ public partial class MainWindow
             }
 
             IReadOnlyList<SKPoint> included = IncludedCenters();
-            if (included.Count == 0)
+            List<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> offSheet = dialog.IncludeAllSheets
+                ? OtherSheetAdditions(dialog.Threshold)
+                : [];
+            if (included.Count == 0 && offSheet.Count == 0)
             {
                 TxtStatus.Text = "Count similar: nothing to add.";
                 return;
             }
 
-            int added = AddSimilarCountMeasurements(request, included, destinationItem);
-            if (added > 0 && dialog.QueueAiDoubleCheck)
-                QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, destinationName);
+            int added = 0;
+            if (included.Count > 0)
+            {
+                added = AddSimilarCountMeasurements(request, included, destinationItem);
+                if (added > 0 && dialog.QueueAiDoubleCheck)
+                    QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, destinationName);
+            }
+
+            if (offSheet.Count > 0)
+            {
+                TakeoffItem offItem = ResolveOrCreateSimilarCountItem(
+                    included.Count > 0
+                        ? (ResolveSimilarCountDestinationItem(destinationItem) ?? _activeItem)
+                        : destinationItem);
+                (int offSheets, int offMarkers) = AddOtherSheetSimilarCounts(offItem, offSheet);
+                if (offMarkers > 0)
+                    TxtStatus.Text = $"{TxtStatus.Text} Plus {offMarkers} marker(s) on {offSheets} other sheet(s).".Trim();
+            }
         };
         dialog.Cancelled += (_, _) =>
         {
@@ -397,25 +507,7 @@ public partial class MainWindow
         IReadOnlyList<SKPoint> centers,
         TakeoffItem? destinationItem)
     {
-        TakeoffItem? item = ResolveSimilarCountDestinationItem(destinationItem);
-        if (item == null)
-        {
-            string parent = NewTakeoffItemParentFolderForUserCreate();
-            TakeoffItem created = CreateUniqueTakeoffItem(
-                "Similar Count",
-                RandomTakeoffColor(_viewport.ActiveColor),
-                "point",
-                parent);
-            ApplyNewCountSymbolToItemIfNeeded(created, "point");
-            LoadTakeoffsForJob();
-            item = _takeoffItems.FirstOrDefault(t =>
-                string.Equals(t.FolderPath, created.FolderPath, StringComparison.OrdinalIgnoreCase)) ?? created;
-            _activeItem = item;
-            _viewport.ActiveColor = item.Color;
-            _viewport.ActiveTakeoffFolder = item.FolderPath;
-            _viewport.ActiveCountSymbol = item.CountSymbol;
-            SelectTakeoffNodeByFolder(item.FolderPath);
-        }
+        TakeoffItem item = ResolveOrCreateSimilarCountItem(destinationItem);
 
         var newCenters = centers
             .Where(center => !IsSimilarCountDuplicateCenter(item, request.PageFolder, center))
@@ -473,6 +565,33 @@ public partial class MainWindow
         return "Count similar: " + count + review;
     }
 
+    // Resolve the live destination point takeoff, or create a fresh
+    // "Similar Count" item when there is no suitable active one. Shared by the
+    // current-sheet add and the all-sheets add so both target the same item.
+    private TakeoffItem ResolveOrCreateSimilarCountItem(TakeoffItem? destinationItem)
+    {
+        TakeoffItem? item = ResolveSimilarCountDestinationItem(destinationItem);
+        if (item != null)
+            return item;
+
+        string parent = NewTakeoffItemParentFolderForUserCreate();
+        TakeoffItem created = CreateUniqueTakeoffItem(
+            "Similar Count",
+            RandomTakeoffColor(_viewport.ActiveColor),
+            "point",
+            parent);
+        ApplyNewCountSymbolToItemIfNeeded(created, "point");
+        LoadTakeoffsForJob();
+        item = _takeoffItems.FirstOrDefault(t =>
+            string.Equals(t.FolderPath, created.FolderPath, StringComparison.OrdinalIgnoreCase)) ?? created;
+        _activeItem = item;
+        _viewport.ActiveColor = item.Color;
+        _viewport.ActiveTakeoffFolder = item.FolderPath;
+        _viewport.ActiveCountSymbol = item.CountSymbol;
+        SelectTakeoffNodeByFolder(item.FolderPath);
+        return item;
+    }
+
     private TakeoffItem? CurrentSimilarCountDestinationItem()
     {
         if (_activeItem == null ||
@@ -523,6 +642,147 @@ public partial class MainWindow
         }
 
         return false;
+    }
+
+    // One other sheet's matches for the boxed template, captured at the loose
+    // floor so threshold changes re-filter instantly without re-rendering.
+    private sealed class SimilarSheetSweep
+    {
+        public required string PageFolder { get; init; }
+        public required string PageName { get; init; }
+        public required double ScaleMetersPerPt { get; init; }
+        public required List<(SKPoint CenterPdf, float Score)> Hits { get; init; }
+    }
+
+    // Render every other sheet at the same pixel-per-point scale the template
+    // was boxed at, then run the template against each. Renders go through the
+    // shared render cache; matching uses the same offline matcher. Bounded by
+    // SimilarCountMaxSweepSheets so a huge job cannot stall the review.
+    private async Task<(List<SimilarSheetSweep> Sweeps, int SkippedOverLimit)> SweepOtherSimilarSheetsAsync(
+        OurPlaneCoreJob job,
+        string scannedPageFolder,
+        SimilarSymbolMatchSession session,
+        float bitmapScale,
+        bool rotations,
+        bool mirrored,
+        CancellationToken cancellationToken)
+    {
+        var sweeps = new List<SimilarSheetSweep>();
+        if (bitmapScale <= 0)
+            return (sweeps, 0);
+
+        List<PageInfo> pages = CollectPagesUnder(job.PagesRoot)
+            .Where(page => !IsSamePageFolder(page.FolderPath, scannedPageFolder))
+            .ToList();
+
+        int skipped = 0;
+        if (pages.Count > SimilarCountMaxSweepSheets)
+        {
+            skipped = pages.Count - SimilarCountMaxSweepSheets;
+            pages = pages.Take(SimilarCountMaxSweepSheets).ToList();
+        }
+
+        float floor = (float)AppSettingsStore.SimilarCountThresholdMin;
+        foreach (PageInfo page in pages)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(page.PdfPath))
+                continue;
+
+            (bool ok, PdfLayerRenderResult render, _) = await PdfLayerRenderService.TryRenderAsync(
+                page.PdfPath,
+                page.PdfPage,
+                bitmapScale,
+                new Dictionary<int, bool>(),
+                [],
+                page.PdfLayersCached ? page.PdfLayers : null);
+            if (!ok || render.ImageBytes.Length == 0 || render.WidthPt <= 0)
+                continue;
+
+            using SKBitmap? bitmap = SKBitmap.Decode(render.ImageBytes);
+            if (bitmap == null || bitmap.Width <= 0)
+                continue;
+
+            double pxPerPt = bitmap.Width / render.WidthPt;
+            if (pxPerPt <= 0)
+                continue;
+
+            List<SimilarSymbolMatch> matches = await Task.Run(
+                () => session.FindMatchesOnBitmap(bitmap, floor, rotations, mirrored, cancellationToken),
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (matches.Count == 0)
+                continue;
+
+            var hits = matches
+                .Select(match => (
+                    new SKPoint((float)(match.CenterX / pxPerPt), (float)(match.CenterY / pxPerPt)),
+                    match.Score))
+                .ToList();
+            sweeps.Add(new SimilarSheetSweep
+            {
+                PageFolder = page.FolderPath,
+                PageName = page.Name,
+                ScaleMetersPerPt = page.ScaleMetersPerPt,
+                Hits = hits,
+            });
+        }
+
+        return (sweeps, skipped);
+    }
+
+    // Add the resolved off-sheet matches to the destination item. These sheets
+    // are not open, so there is no per-marker review and no viewport call; the
+    // markers persist with each sheet's own page folder and scale.
+    private (int Sheets, int Markers) AddOtherSheetSimilarCounts(
+        TakeoffItem item,
+        IReadOnlyList<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> additions)
+    {
+        int sheets = 0;
+        int markers = 0;
+        var touchedFolders = new List<string>();
+        foreach ((SimilarSheetSweep sweep, List<SKPoint> centers) in additions)
+        {
+            var fresh = centers
+                .Where(center => !IsSimilarCountDuplicateCenter(item, sweep.PageFolder, center))
+                .ToList();
+            if (fresh.Count == 0)
+                continue;
+
+            foreach (SKPoint center in fresh)
+            {
+                item.Measurements.Add(new Measurement
+                {
+                    MType = "point",
+                    Points = [center],
+                    Color = item.Color,
+                    CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol),
+                    PageFolder = sweep.PageFolder,
+                    TakeoffFolder = item.FolderPath,
+                    ScaleMetersPerPt = sweep.ScaleMetersPerPt,
+                });
+            }
+
+            sheets++;
+            markers += fresh.Count;
+            touchedFolders.Add(sweep.PageFolder);
+        }
+
+        if (markers == 0)
+            return (0, 0);
+
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        RefreshTreeItem(item);
+        QueueTakeoffAutosave(item);
+        using (UsePageMeasurementLookup())
+        {
+            RefreshTakeoffRowVisualsForItems(new[] { item });
+            foreach (string folder in touchedFolders)
+                RefreshPageTakeoffIndicatorsForFolder(folder);
+            RefreshSheetLegend();
+        }
+        UpdateTotalDisplay();
+        return (sheets, markers);
     }
 
     private void QueueSimilarCountAiRequest(

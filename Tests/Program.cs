@@ -46,6 +46,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher ignores peripheral noise for template resolution", SimilarSymbolMatcherTests.KeepsPeripheralNoiseFromDownsamplingTemplate),
     ("similar matcher warns on downsampled large template", SimilarSymbolMatcherTests.WarnsOnDownsampledLargeTemplate),
     ("similar symbol matcher can include mirrored copies", SimilarSymbolMatcherTests.FindsMirroredCopyOnlyWhenEnabled),
+    ("similar symbol matcher matches another sheet bitmap", SimilarSymbolMatcherTests.FindsMatchesOnAnotherSheetBitmap),
+    ("similar count searches all sheets", SimilarSymbolMatcherTests.SimilarCountSearchesAllSheets),
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
     ("similar symbol matcher scores stroke orientation", SimilarSymbolMatcherTests.ScoresStrokeOrientationForNearMiss),
     ("similar symbol matcher rejects core-only relaxed near miss", SimilarSymbolMatcherTests.RejectsCoreOnlyRelaxedNearMissAtPrecisionThreshold),

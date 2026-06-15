@@ -15,7 +15,10 @@ public readonly record struct SimilarCountScanResult(
     float MaxScore,
     int WeakCount = 0,
     int AlreadyCountedCount = 0,
-    string LimitSummary = "")
+    string LimitSummary = "",
+    int OtherSheetNewCount = 0,
+    int OtherSheetCount = 0,
+    string OtherSheetSummary = "")
 {
     public int NewCandidateCount => Math.Max(0, Total - AlreadyCountedCount);
     public int ExcludedNewCount => Math.Max(0, NewCandidateCount - Included);
@@ -32,19 +35,22 @@ public sealed class SimilarCountDialog : Window
     public float Threshold { get; private set; }
     public bool IncludeRotations { get; private set; }
     public bool IncludeMirrored { get; private set; }
+    public bool IncludeAllSheets { get; private set; }
     public bool QueueAiDoubleCheck { get; private set; }
     public event EventHandler? Accepted;
     public event EventHandler? Cancelled;
     public event EventHandler? IncludeAllRequested;
     public event EventHandler? StrongOnlyRequested;
 
-    private readonly Func<float, bool, bool, CancellationToken, Task<SimilarCountScanResult>> _scan;
+    private readonly Func<float, bool, bool, bool, CancellationToken, Task<SimilarCountScanResult>> _scan;
     private readonly Slider _thresholdSlider;
     private readonly CheckBox _rotationsBox;
     private readonly CheckBox _mirroredBox;
+    private readonly CheckBox _allSheetsBox;
     private readonly CheckBox _aiBox;
     private readonly TextBlock _foundLabel;
     private readonly TextBlock _reviewDetailsLabel;
+    private readonly TextBlock _otherSheetsLabel;
     private readonly TextBlock _thresholdLabel;
     private readonly Button _strictButton;
     private readonly Button _defaultButton;
@@ -61,15 +67,17 @@ public sealed class SimilarCountDialog : Window
     private float _lastMaxScore;
     private int _lastWeakCount;
     private int _lastAlreadyCountedCount;
+    private int _lastOtherSheetNewCount;
     private string _lastLimitSummary = "";
     private bool _suppressThresholdScan;
     private bool _accepted;
 
     public SimilarCountDialog(
-        Func<float, bool, bool, CancellationToken, Task<SimilarCountScanResult>> scan,
+        Func<float, bool, bool, bool, CancellationToken, Task<SimilarCountScanResult>> scan,
         float initialThreshold,
         bool initialRotations,
         bool initialMirrored,
+        bool initialAllSheets,
         string destinationName,
         bool aiAvailable,
         string templateWarning = "")
@@ -180,6 +188,24 @@ public sealed class SimilarCountDialog : Window
         };
         panel.Children.Add(_mirroredBox);
 
+        _allSheetsBox = new CheckBox
+        {
+            Content = "Search all sheets in this job",
+            IsChecked = initialAllSheets,
+            ToolTip = "Also scan every other sheet for this symbol; strong matches are added there automatically.",
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        panel.Children.Add(_allSheetsBox);
+
+        _otherSheetsLabel = new TextBlock
+        {
+            Text = "",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.78,
+            Margin = new Thickness(0, -2, 0, 8),
+        };
+        panel.Children.Add(_otherSheetsLabel);
+
         _aiBox = new CheckBox
         {
             Content = "Also ask AI to double-check (online)",
@@ -267,12 +293,15 @@ public sealed class SimilarCountDialog : Window
         _rotationsBox.Unchecked += (_, _) => _ = RunScanAsync();
         _mirroredBox.Checked += (_, _) => _ = RunScanAsync();
         _mirroredBox.Unchecked += (_, _) => _ = RunScanAsync();
+        _allSheetsBox.Checked += (_, _) => _ = RunScanAsync();
+        _allSheetsBox.Unchecked += (_, _) => _ = RunScanAsync();
 
         _addButton.Click += (_, _) =>
         {
             Threshold = (float)_thresholdSlider.Value;
             IncludeRotations = _rotationsBox.IsChecked == true;
             IncludeMirrored = _mirroredBox.IsChecked == true;
+            IncludeAllSheets = _allSheetsBox.IsChecked == true;
             QueueAiDoubleCheck = _aiBox.IsChecked == true;
             _accepted = true;
             Accepted?.Invoke(this, EventArgs.Empty);
@@ -330,7 +359,10 @@ public sealed class SimilarCountDialog : Window
         float maxScore = 0f,
         int weakCount = 0,
         int alreadyCountedCount = 0,
-        string limitSummary = "")
+        string limitSummary = "",
+        int otherSheetNewCount = 0,
+        int otherSheetCount = 0,
+        string otherSheetSummary = "")
     {
         _lastFound = Math.Max(0, included);
         _lastTotal = Math.Max(0, total);
@@ -339,6 +371,8 @@ public sealed class SimilarCountDialog : Window
         _lastWeakCount = Math.Max(0, weakCount);
         _lastAlreadyCountedCount = Math.Max(0, alreadyCountedCount);
         _lastLimitSummary = limitSummary.Trim();
+        _lastOtherSheetNewCount = Math.Max(0, otherSheetNewCount);
+        _otherSheetsLabel.Text = otherSheetSummary.Trim();
         var result = new SimilarCountScanResult(
             _lastFound,
             _lastTotal,
@@ -346,9 +380,12 @@ public sealed class SimilarCountDialog : Window
             _lastMaxScore,
             _lastWeakCount,
             _lastAlreadyCountedCount,
-            _lastLimitSummary);
+            _lastLimitSummary,
+            _lastOtherSheetNewCount,
+            Math.Max(0, otherSheetCount),
+            otherSheetSummary.Trim());
 
-        if (_lastTotal == 0)
+        if (_lastTotal == 0 && _lastOtherSheetNewCount == 0)
         {
             _foundLabel.Text = "Found 0 symbols.";
             _reviewDetailsLabel.Text = "";
@@ -373,7 +410,7 @@ public sealed class SimilarCountDialog : Window
         }
 
         _reviewDetailsLabel.Text = ReviewDetails(result);
-        _addButton.IsEnabled = _lastFound > 0;
+        _addButton.IsEnabled = _lastFound > 0 || _lastOtherSheetNewCount > 0;
         _includeAllButton.IsEnabled = _lastFound < result.NewCandidateCount;
         _strongOnlyButton.IsEnabled = result.NewCandidateCount > 0;
     }
@@ -442,6 +479,7 @@ public sealed class SimilarCountDialog : Window
                 (float)_thresholdSlider.Value,
                 _rotationsBox.IsChecked == true,
                 _mirroredBox.IsChecked == true,
+                _allSheetsBox.IsChecked == true,
                 cts.Token);
             if (cts.IsCancellationRequested)
                 return;
@@ -453,7 +491,10 @@ public sealed class SimilarCountDialog : Window
                 result.MaxScore,
                 result.WeakCount,
                 result.AlreadyCountedCount,
-                result.LimitSummary);
+                result.LimitSummary,
+                result.OtherSheetNewCount,
+                result.OtherSheetCount,
+                result.OtherSheetSummary);
         }
         catch (OperationCanceledException)
         {

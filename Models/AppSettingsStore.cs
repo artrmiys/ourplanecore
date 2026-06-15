@@ -47,6 +47,7 @@ public sealed class AppSettings
     public double SimilarCountThreshold { get; set; } = AppSettingsStore.SimilarCountThresholdDefault;
     public bool SimilarCountRotations { get; set; }
     public bool SimilarCountMirrored { get; set; }
+    public bool SimilarCountAllSheets { get; set; }
     // Whole-job background warmup (previews + raster bitmaps for every page).
     // Off by default: on big jobs the sweep competes with interactive
     // sharpening for CPU/disk and the open sheet feels blurry longer.

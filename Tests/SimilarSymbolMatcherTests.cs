@@ -375,6 +375,58 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(mirrored.Any(match => match.Mirrored), "mirrored copy should be reported as mirrored");
     }
 
+    public static void FindsMatchesOnAnotherSheetBitmap()
+    {
+        var templatePlacements = new[] { (40, 40) };
+        using SKBitmap templatePage = BuildPage(templatePlacements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? session = CreateSession(templatePage);
+
+        var otherPlacements = new[] { (60, 50), (220, 120), (130, 230) };
+        using SKBitmap otherPage = BuildPage(otherPlacements, rotatedAt: null, withDistractors: true);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatchesOnBitmap(
+            otherPage,
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == otherPlacements.Length,
+            $"the boxed template should match copies on another sheet raster, expected {otherPlacements.Length}, got {matches.Count}");
+        foreach ((int x, int y) in otherPlacements)
+        {
+            AssertTrue(
+                matches.Any(match => NearCenter(match, x, y)),
+                $"other-sheet symbol at ({x},{y}) was missed by FindMatchesOnBitmap");
+        }
+    }
+
+    public static void SimilarCountSearchesAllSheets()
+    {
+        string matcher = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+
+        AssertTrue(
+            matcher.Contains("public List<SimilarSymbolMatch> FindMatchesOnBitmap", StringComparison.Ordinal) &&
+            matcher.Contains("private sealed class PageRaster", StringComparison.Ordinal) &&
+            matcher.Contains("FindMatchesOn(", StringComparison.Ordinal),
+            "matcher should expose a reusable template that can scan any sheet bitmap");
+        AssertTrue(
+            dialog.Contains("Search all sheets in this job", StringComparison.Ordinal) &&
+            dialog.Contains("IncludeAllSheets", StringComparison.Ordinal) &&
+            dialog.Contains("OtherSheetSummary", StringComparison.Ordinal) &&
+            dialog.Contains("_allSheetsBox", StringComparison.Ordinal),
+            "dialog should offer the all-sheets option and surface the other-sheet summary");
+        AssertTrue(
+            mainWindow.Contains("SweepOtherSimilarSheetsAsync", StringComparison.Ordinal) &&
+            mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
+            mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
+            mainWindow.Contains("_settings.SimilarCountAllSheets = dialog.IncludeAllSheets", StringComparison.Ordinal),
+            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and persist the option");
+    }
+
     public static void RejectsNearMissAtPrecisionThreshold()
     {
         var placements = new[] { (40, 40), (200, 60) };
