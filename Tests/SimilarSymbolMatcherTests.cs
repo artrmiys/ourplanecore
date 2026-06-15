@@ -717,8 +717,8 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             source.Contains("SimilarCountFallbackMinimumBitmapScale = 1.75f", StringComparison.Ordinal) &&
             source.Contains("SimilarCountMinimumBitmapScale = 2.0f", StringComparison.Ordinal) &&
-            source.Contains("SimilarCountRequestedBitmapScale = 3.0f", StringComparison.Ordinal) &&
-            source.Contains("SimilarCountMaxRenderPixels = 96_000_000f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountRequestedBitmapScale = 3.5f", StringComparison.Ordinal) &&
+            source.Contains("SimilarCountMaxRenderPixels = 120_000_000f", StringComparison.Ordinal) &&
             source.Contains("SimilarCountRequestedBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
             source.Contains("SimilarCountRequiredBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
             source.Contains("IsSimilarCountBitmapScaleReady", StringComparison.Ordinal) &&

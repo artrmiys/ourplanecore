@@ -31,8 +31,8 @@ public sealed partial class PdfViewport
 {
     private const float SimilarCountFallbackMinimumBitmapScale = 1.75f;
     private const float SimilarCountMinimumBitmapScale = 2.0f;
-    private const float SimilarCountRequestedBitmapScale = 3.0f;
-    private const float SimilarCountMaxRenderPixels = 96_000_000f;
+    private const float SimilarCountRequestedBitmapScale = 3.5f;
+    private const float SimilarCountMaxRenderPixels = 120_000_000f;
 
     private bool _similarCountSelecting;
     private bool _similarCountDragging;
