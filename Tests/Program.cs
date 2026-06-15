@@ -35,6 +35,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar symbol matcher finds all plain copies", SimilarSymbolMatcherTests.FindsAllPlainCopies),
     ("similar symbol matcher honors rotation toggle", SimilarSymbolMatcherTests.FindsRotatedCopyOnlyWhenEnabled),
     ("similar symbol matcher finds slightly scaled copy", SimilarSymbolMatcherTests.FindsSlightlyScaledCopy),
+    ("similar matcher adaptive ink model separates faint and colored ink", SimilarSymbolMatcherTests.AdaptiveInkModelSeparatesFaintAndColoredInk),
+    ("similar symbol matcher finds faint gray copies", SimilarSymbolMatcherTests.FindsFaintGraySymbolCopies),
     ("similar symbol matcher rejects distractors", SimilarSymbolMatcherTests.RejectsDistractorsAndDedupes),
     ("similar symbol matcher tolerates loose edge selection", SimilarSymbolMatcherTests.FindsCopiesWithLooseEdgeSelection),
     ("similar symbol matcher trims peripheral selection noise", SimilarSymbolMatcherTests.TrimsPeripheralSelectionNoiseBeforeMatching),

@@ -35,6 +35,32 @@ namespace OurPlaneCore;
 // owns the pixel<->PDF mapping. The session reads the bitmap once in
 // TryCreate, so FindMatches can re-run on background threads with different
 // thresholds without touching the bitmap again.
+// Ink test for one symbol scan. The default keeps the historical fixed
+// luma<176 rule (black linework on white). DeriveFromTemplate inspects the
+// boxed symbol and, when it is faint/gray, raises the luma cut so the pale
+// strokes still register; when it is colored, it adds a chroma cut so a
+// saturated symbol counts as ink even where its luma stays light. Plain
+// dark-on-white templates fall straight through to the default so existing
+// behaviour is unchanged.
+public readonly record struct SimilarInkModel(int LumaThreshold, int ChromaThreshold)
+{
+    public const int DefaultLumaThreshold = 176;
+    public const int DisabledChromaThreshold = 1000;
+
+    public static SimilarInkModel Default => new(DefaultLumaThreshold, DisabledChromaThreshold);
+
+    public bool IsInk(int r, int g, int b)
+    {
+        int luma = (r * 299 + g * 587 + b * 114) / 1000;
+        if (luma < LumaThreshold)
+            return true;
+        if (ChromaThreshold >= DisabledChromaThreshold)
+            return false;
+        int chroma = Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b));
+        return chroma >= ChromaThreshold;
+    }
+}
+
 public sealed record SimilarSymbolMatch(
     int CenterX,
     int CenterY,
@@ -53,7 +79,6 @@ public sealed record SimilarSymbolMatch(
 public sealed class SimilarSymbolMatchSession
 {
     private const int MaxTemplateSide = 96;      // downsample until template fits
-    private const int InkLumaThreshold = 176;
     private const int MinTemplateInk = 12;
     private const int TemplateAutoTightenPadding = 2;
     private const float EdgeRelaxedInsetRatio = 0.08f;
@@ -78,12 +103,9 @@ public sealed class SimilarSymbolMatchSession
     private const float StrokeProfileMismatchWeight = 0.75f;
     private const float ScaledVariantScoreMultiplier = 0.985f;
 
-    private readonly int _width;
-    private readonly int _height;
-    private readonly int _wordsPerRow;           // includes one zero pad word
-    private readonly ulong[] _ink;
-    private readonly ulong[] _dilated;
-    private readonly int _factor;                // full-res px per matching px
+    private readonly PageRaster _page;            // the sheet the template was boxed on
+    private readonly SimilarInkModel _inkModel;   // ink test reused on every sheet
+    private readonly int _factor;                 // full-res px per matching px
     private readonly TemplateVariant[] _variants; // 0/90/180/270 degrees
 
     public int DownsampleFactor => _factor;
@@ -104,20 +126,14 @@ public sealed class SimilarSymbolMatchSession
     }
 
     private SimilarSymbolMatchSession(
-        int width,
-        int height,
-        int wordsPerRow,
-        ulong[] ink,
-        ulong[] dilated,
+        PageRaster page,
+        SimilarInkModel inkModel,
         int factor,
         TemplateVariant[] variants,
         string templateWarning)
     {
-        _width = width;
-        _height = height;
-        _wordsPerRow = wordsPerRow;
-        _ink = ink;
-        _dilated = dilated;
+        _page = page;
+        _inkModel = inkModel;
         _factor = factor;
         _variants = variants;
         TemplateWarning = templateWarning;
@@ -139,7 +155,9 @@ public sealed class SimilarSymbolMatchSession
             return null;
         }
 
-        if (!TryFindTemplateInkBounds(page, rect, out SKRectI templateInkBounds))
+        SimilarInkModel inkModel = DeriveInkModel(page, rect);
+
+        if (!TryFindTemplateInkBounds(page, rect, inkModel, out SKRectI templateInkBounds))
         {
             error = "The selected box contains no linework to match.";
             return null;
@@ -147,11 +165,9 @@ public sealed class SimilarSymbolMatchSession
 
         int factor = TemplateDownsampleFactor(templateInkBounds);
 
-        bool[] inkPixels = BinarizeDownsampled(page, factor, out int width, out int height);
+        bool[] inkPixels = BinarizeDownsampled(page, factor, inkModel, out int width, out int height);
 
-        int wordsPerRow = (width + 63) / 64 + 1;
-        var ink = PackRows(inkPixels, width, height, wordsPerRow);
-        var dilated = DilateOnePixel(ink, height, wordsPerRow);
+        PageRaster pageRaster = PackPageRaster(inkPixels, width, height);
 
         var scaledRect = new SKRectI(
             rect.Left / factor,
@@ -175,11 +191,8 @@ public sealed class SimilarSymbolMatchSession
             scaledRect.Width,
             scaledRect.Height);
         return new SimilarSymbolMatchSession(
-            width,
-            height,
-            wordsPerRow,
-            ink,
-            dilated,
+            pageRaster,
+            inkModel,
             factor,
             variants.ToArray(),
             templateWarning);
@@ -189,6 +202,34 @@ public sealed class SimilarSymbolMatchSession
         FindMatches(minScore, includeRotations, includeMirrored: false, cancellationToken);
 
     public List<SimilarSymbolMatch> FindMatches(
+        float minScore,
+        bool includeRotations,
+        bool includeMirrored,
+        CancellationToken cancellationToken) =>
+        FindMatchesOn(_page, minScore, includeRotations, includeMirrored, cancellationToken);
+
+    // Run the same template against a different sheet's raster. The bitmap is
+    // binarized with the template's own downsample factor and ink model so the
+    // symbol stays exactly the size and tone the template was built from; the
+    // caller renders that bitmap at the SAME pixel-per-point scale as the
+    // boxed sheet. Returned centers are pixels of the supplied bitmap.
+    public List<SimilarSymbolMatch> FindMatchesOnBitmap(
+        SKBitmap page,
+        float minScore,
+        bool includeRotations,
+        bool includeMirrored,
+        CancellationToken cancellationToken)
+    {
+        if (page == null || page.Width <= 0 || page.Height <= 0)
+            return [];
+
+        bool[] inkPixels = BinarizeDownsampled(page, _factor, _inkModel, out int width, out int height);
+        PageRaster raster = PackPageRaster(inkPixels, width, height);
+        return FindMatchesOn(raster, minScore, includeRotations, includeMirrored, cancellationToken);
+    }
+
+    private List<SimilarSymbolMatch> FindMatchesOn(
+        PageRaster page,
         float minScore,
         bool includeRotations,
         bool includeMirrored,
@@ -202,23 +243,27 @@ public sealed class SimilarSymbolMatchSession
         foreach (TemplateVariant variant in variants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            FindVariantMatches(variant, minScore, all, cancellationToken);
+            FindVariantMatches(page, variant, minScore, all, cancellationToken);
         }
 
         return SuppressNonMaxima(all);
     }
 
     private void FindVariantMatches(
-        TemplateVariant template, float minScore, List<SimilarSymbolMatch> sink, CancellationToken cancellationToken)
+        PageRaster page,
+        TemplateVariant template,
+        float minScore,
+        List<SimilarSymbolMatch> sink,
+        CancellationToken cancellationToken)
     {
         int tw = template.Width;
         int th = template.Height;
-        if (tw > _width || th > _height)
+        if (tw > page.Width || th > page.Height)
             return;
 
-        int[] bandInk = BuildBandInkSums(th);
-        int maxY = _height - th;
-        int maxX = _width - tw;
+        int[] bandInk = BuildBandInkSums(page, th);
+        int maxY = page.Height - th;
+        int maxX = page.Width - tw;
         int templateInk = template.InkCount;
         int relaxedInk = template.EdgeRelaxed?.InkCount ?? templateInk;
         int lowerPrefilterInk = Math.Min(templateInk, relaxedInk);
@@ -242,7 +287,7 @@ public sealed class SimilarSymbolMatchSession
                 if ((y & 31) == 0)
                     cancellationToken.ThrowIfCancellationRequested();
 
-                int bandRow = y * (_wordsPerRow - 1);
+                int bandRow = y * (page.WordsPerRow - 1);
                 for (int x = 0; x <= maxX; x++)
                 {
                     int w0 = x >> 6;
@@ -256,17 +301,18 @@ public sealed class SimilarSymbolMatchSession
                     // near the symbol can look too dark at word granularity, so
                     // confirm upper-bound rejects with the exact window ink.
                     if (approxInk - 128 > maxWindowInk &&
-                        CountWindowInk(template, x, y) > maxWindowInk &&
-                        CountFocusedWindowInk(template, x, y) > maxWindowInk)
+                        CountWindowInk(page, template, x, y) > maxWindowInk &&
+                        CountFocusedWindowInk(page, template, x, y) > maxWindowInk)
                     {
                         continue;
                     }
 
-                    SimilarWindowScore score = ScoreWindow(template, x, y, minScore);
+                    SimilarWindowScore score = ScoreWindow(page, template, x, y, minScore);
                     if (score.Score < minScore && template.EdgeRelaxed != null)
                     {
                         TemplateVariant relaxed = template.EdgeRelaxed;
                         SimilarWindowScore relaxedScore = ScoreWindow(
+                            page,
                             relaxed,
                             x + relaxed.OffsetX,
                             y + relaxed.OffsetY,
@@ -305,7 +351,7 @@ public sealed class SimilarSymbolMatchSession
             });
     }
 
-    private SimilarWindowScore ScoreWindow(TemplateVariant template, int x, int y, float minScore)
+    private SimilarWindowScore ScoreWindow(PageRaster page, TemplateVariant template, int x, int y, float minScore)
     {
         int shift = x & 63;
         int w0 = x >> 6;
@@ -336,7 +382,7 @@ public sealed class SimilarSymbolMatchSession
         int focusedExtraCoreInk = 0;
         for (int row = 0; row < template.Height; row++)
         {
-            int pageBase = (y + row) * _wordsPerRow + w0;
+            int pageBase = (y + row) * page.WordsPerRow + w0;
             int templateBase = row * words;
             int gridRow = Math.Min(TemplateVariant.GridSide - 1, row * TemplateVariant.GridSide / template.Height);
             int gridBase = gridRow * TemplateVariant.GridSide;
@@ -350,7 +396,7 @@ public sealed class SimilarSymbolMatchSession
             currentFocusedWindowRow.Clear();
             for (int k = 0; k < words; k++)
             {
-                ulong pageInkWord = _ink[pageBase + k];
+                ulong pageInkWord = page.Ink[pageBase + k];
                 ulong templateDilatedWord = tDilated[templateBase + k];
                 ulong focusedInkWord = pageInkWord & templateDilatedWord & masks[k];
                 ulong maskedInkWord = pageInkWord & masks[k];
@@ -359,7 +405,7 @@ public sealed class SimilarSymbolMatchSession
                 if (coreRow)
                     focusedExtraCoreInk += BitOperations.PopCount(
                         pageInkWord & ~templateDilatedWord & masks[k] & coreMasks[k]);
-                matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & _dilated[pageBase + k]);
+                matchedTemplate += BitOperations.PopCount(tInk[templateBase + k] & page.Dilated[pageBase + k]);
                 matchedWindow += BitOperations.PopCount(pageInkWord & templateDilatedWord);
                 int maskedInk = BitOperations.PopCount(maskedInkWord);
                 int focusedInk = BitOperations.PopCount(focusedInkWord);
@@ -478,7 +524,7 @@ public sealed class SimilarSymbolMatchSession
             UsedFocusedScore: true);
     }
 
-    private int CountWindowInk(TemplateVariant template, int x, int y)
+    private int CountWindowInk(PageRaster page, TemplateVariant template, int x, int y)
     {
         int shift = x & 63;
         int w0 = x >> 6;
@@ -488,15 +534,15 @@ public sealed class SimilarSymbolMatchSession
 
         for (int row = 0; row < template.Height; row++)
         {
-            int pageBase = (y + row) * _wordsPerRow + w0;
+            int pageBase = (y + row) * page.WordsPerRow + w0;
             for (int k = 0; k < words; k++)
-                windowInk += BitOperations.PopCount(_ink[pageBase + k] & masks[k]);
+                windowInk += BitOperations.PopCount(page.Ink[pageBase + k] & masks[k]);
         }
 
         return windowInk;
     }
 
-    private int CountFocusedWindowInk(TemplateVariant template, int x, int y)
+    private int CountFocusedWindowInk(PageRaster page, TemplateVariant template, int x, int y)
     {
         int shift = x & 63;
         int w0 = x >> 6;
@@ -507,10 +553,10 @@ public sealed class SimilarSymbolMatchSession
 
         for (int row = 0; row < template.Height; row++)
         {
-            int pageBase = (y + row) * _wordsPerRow + w0;
+            int pageBase = (y + row) * page.WordsPerRow + w0;
             int templateBase = row * words;
             for (int k = 0; k < words; k++)
-                focusedInk += BitOperations.PopCount(_ink[pageBase + k] & tDilated[templateBase + k] & masks[k]);
+                focusedInk += BitOperations.PopCount(page.Ink[pageBase + k] & tDilated[templateBase + k] & masks[k]);
         }
 
         return focusedInk;
@@ -634,30 +680,30 @@ public sealed class SimilarSymbolMatchSession
     // Sliding vertical sums of per-word ink popcounts: bandInk[y][w] = ink
     // pixels in word column w across rows y..y+bandHeight-1. Coarse but O(1)
     // per candidate and only ~2 MB for a large sheet.
-    private int[] BuildBandInkSums(int bandHeight)
+    private static int[] BuildBandInkSums(PageRaster page, int bandHeight)
     {
-        int dataWords = _wordsPerRow - 1;
-        int bandRows = _height - bandHeight + 1;
+        int dataWords = page.WordsPerRow - 1;
+        int bandRows = page.Height - bandHeight + 1;
         var band = new int[bandRows * dataWords];
         var column = new int[dataWords];
 
         for (int y = 0; y < bandHeight; y++)
         {
-            int rowBase = y * _wordsPerRow;
+            int rowBase = y * page.WordsPerRow;
             for (int w = 0; w < dataWords; w++)
-                column[w] += BitOperations.PopCount(_ink[rowBase + w]);
+                column[w] += BitOperations.PopCount(page.Ink[rowBase + w]);
         }
         Array.Copy(column, 0, band, 0, dataWords);
 
         for (int y = 1; y < bandRows; y++)
         {
-            int removeBase = (y - 1) * _wordsPerRow;
-            int addBase = (y + bandHeight - 1) * _wordsPerRow;
+            int removeBase = (y - 1) * page.WordsPerRow;
+            int addBase = (y + bandHeight - 1) * page.WordsPerRow;
             int bandBase = y * dataWords;
             for (int w = 0; w < dataWords; w++)
             {
-                column[w] += BitOperations.PopCount(_ink[addBase + w]) -
-                             BitOperations.PopCount(_ink[removeBase + w]);
+                column[w] += BitOperations.PopCount(page.Ink[addBase + w]) -
+                             BitOperations.PopCount(page.Ink[removeBase + w]);
                 band[bandBase + w] = column[w];
             }
         }
@@ -711,7 +757,7 @@ public sealed class SimilarSymbolMatchSession
         return factor;
     }
 
-    private static bool TryFindTemplateInkBounds(SKBitmap page, SKRectI rect, out SKRectI inkBounds)
+    private static bool TryFindTemplateInkBounds(SKBitmap page, SKRectI rect, SimilarInkModel inkModel, out SKRectI inkBounds)
     {
         inkBounds = default;
         SKBitmap source = page;
@@ -738,7 +784,7 @@ public sealed class SimilarSymbolMatchSession
                     byte* row = basePtr + y * rowBytes;
                     for (int x = rect.Left; x < rect.Right; x++)
                     {
-                        if (!IsInkPixel(row + x * 4, bgra))
+                        if (!IsInkPixel(row + x * 4, bgra, inkModel))
                             continue;
 
                         selectionInk[x - rect.Left, y - rect.Top] = true;
@@ -767,7 +813,7 @@ public sealed class SimilarSymbolMatchSession
         }
     }
 
-    private static bool[] BinarizeDownsampled(SKBitmap page, int factor, out int width, out int height)
+    private static bool[] BinarizeDownsampled(SKBitmap page, int factor, SimilarInkModel inkModel, out int width, out int height)
     {
         SKBitmap source = page;
         SKBitmap? converted = null;
@@ -794,7 +840,7 @@ public sealed class SimilarSymbolMatchSession
                     for (int sx = 0; sx < width * factor; sx++)
                     {
                         byte* px = row + sx * 4;
-                        if (IsInkPixel(px, bgra))
+                        if (IsInkPixel(px, bgra, inkModel))
                             ink[outRow + sx / factor] = true;
                     }
                 }
@@ -808,13 +854,189 @@ public sealed class SimilarSymbolMatchSession
         }
     }
 
-    private static unsafe bool IsInkPixel(byte* px, bool bgra)
+    private static unsafe bool IsInkPixel(byte* px, bool bgra, SimilarInkModel inkModel)
     {
         int b = bgra ? px[0] : px[2];
         int g = px[1];
         int r = bgra ? px[2] : px[0];
-        int luma = (r * 299 + g * 587 + b * 114) / 1000;
-        return luma < InkLumaThreshold;
+        return inkModel.IsInk(r, g, b);
+    }
+
+    // Look at the boxed symbol and choose how dark/colored a pixel must be to
+    // count as ink. Plain dark-on-white templates keep the default luma cut so
+    // nothing changes; a faint/gray symbol raises the luma cut to its own tone,
+    // and a colored symbol adds a chroma cut so its hue registers even where the
+    // strokes stay light. Derived from the full-resolution box before any
+    // downsample so pale antialiased edges are measured honestly.
+    private static SimilarInkModel DeriveInkModel(SKBitmap page, SKRectI rect)
+    {
+        SKBitmap source = page;
+        SKBitmap? converted = null;
+        if (page.ColorType != SKColorType.Bgra8888 && page.ColorType != SKColorType.Rgba8888)
+        {
+            converted = page.Copy(SKColorType.Bgra8888);
+            source = converted ?? page;
+        }
+
+        try
+        {
+            var lumaHistogram = new int[256];
+            int total = 0;
+            unsafe
+            {
+                byte* basePtr = (byte*)source.GetPixels().ToPointer();
+                int rowBytes = source.RowBytes;
+                bool bgra = source.ColorType != SKColorType.Rgba8888;
+                for (int y = rect.Top; y < rect.Bottom; y++)
+                {
+                    byte* row = basePtr + y * rowBytes;
+                    for (int x = rect.Left; x < rect.Right; x++)
+                    {
+                        byte* px = row + x * 4;
+                        int b = bgra ? px[0] : px[2];
+                        int g = px[1];
+                        int r = bgra ? px[2] : px[0];
+                        int luma = (r * 299 + g * 587 + b * 114) / 1000;
+                        lumaHistogram[luma]++;
+                        total++;
+                    }
+                }
+            }
+
+            if (total < 16 || !TryOtsuThreshold(lumaHistogram, total, out int otsu))
+                return SimilarInkModel.Default;
+
+            // Class means split at the Otsu cut: darker class = the symbol ink.
+            (double inkMean, int inkCount) = ClassMean(lumaHistogram, 0, otsu);
+            (double bgMean, int bgCount) = ClassMean(lumaHistogram, otsu + 1, 255);
+            if (inkCount == 0 || bgCount == 0)
+                return SimilarInkModel.Default;
+
+            int lumaThreshold = SimilarInkModel.DefaultLumaThreshold;
+            // A faint symbol is one whose ink class is light yet still clearly
+            // separated from the page background. Raise the cut to sit between
+            // the two tones so the pale strokes register without swallowing the
+            // bright background. Dark-on-white symbols keep the default.
+            bool faint = inkMean > 150 && inkMean < 236 && bgMean - inkMean > 24;
+            if (faint)
+            {
+                int midpoint = (int)Math.Round((inkMean + bgMean) / 2.0) + 8;
+                lumaThreshold = Math.Clamp(Math.Max(midpoint, SimilarInkModel.DefaultLumaThreshold), SimilarInkModel.DefaultLumaThreshold, 236);
+            }
+
+            int chromaThreshold = SimilarInkModel.DisabledChromaThreshold;
+            int medianChroma = MedianInkChroma(source, rect, lumaThreshold);
+            // A colored symbol: the ink-class pixels carry real hue. Add a chroma
+            // cut (half the symbol's own chroma) so its pixels count even when a
+            // light tint keeps their luma above the cut.
+            if (medianChroma >= 36)
+                chromaThreshold = Math.Clamp(medianChroma / 2, 24, 200);
+
+            return new SimilarInkModel(lumaThreshold, chromaThreshold);
+        }
+        finally
+        {
+            converted?.Dispose();
+        }
+    }
+
+    private static bool TryOtsuThreshold(int[] histogram, int total, out int threshold)
+    {
+        threshold = 0;
+        double sum = 0;
+        for (int i = 0; i < 256; i++)
+            sum += i * (double)histogram[i];
+
+        double sumBackground = 0;
+        int weightBackground = 0;
+        double maxBetween = -1;
+        for (int i = 0; i < 256; i++)
+        {
+            weightBackground += histogram[i];
+            if (weightBackground == 0)
+                continue;
+            int weightForeground = total - weightBackground;
+            if (weightForeground == 0)
+                break;
+
+            sumBackground += i * (double)histogram[i];
+            double meanBackground = sumBackground / weightBackground;
+            double meanForeground = (sum - sumBackground) / weightForeground;
+            double between = (double)weightBackground * weightForeground *
+                             (meanBackground - meanForeground) * (meanBackground - meanForeground);
+            if (between > maxBetween)
+            {
+                maxBetween = between;
+                threshold = i;
+            }
+        }
+
+        return maxBetween > 0;
+    }
+
+    private static (double Mean, int Count) ClassMean(int[] histogram, int from, int to)
+    {
+        long weighted = 0;
+        int count = 0;
+        for (int i = from; i <= to; i++)
+        {
+            weighted += (long)i * histogram[i];
+            count += histogram[i];
+        }
+
+        return count == 0 ? (0, 0) : (weighted / (double)count, count);
+    }
+
+    private static int MedianInkChroma(SKBitmap source, SKRectI rect, int lumaThreshold)
+    {
+        var chromaHistogram = new int[256];
+        int count = 0;
+        unsafe
+        {
+            byte* basePtr = (byte*)source.GetPixels().ToPointer();
+            int rowBytes = source.RowBytes;
+            bool bgra = source.ColorType != SKColorType.Rgba8888;
+            for (int y = rect.Top; y < rect.Bottom; y++)
+            {
+                byte* row = basePtr + y * rowBytes;
+                for (int x = rect.Left; x < rect.Right; x++)
+                {
+                    byte* px = row + x * 4;
+                    int b = bgra ? px[0] : px[2];
+                    int g = px[1];
+                    int r = bgra ? px[2] : px[0];
+                    int luma = (r * 299 + g * 587 + b * 114) / 1000;
+                    if (luma >= lumaThreshold)
+                        continue;
+
+                    int chroma = Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b));
+                    chromaHistogram[chroma]++;
+                    count++;
+                }
+            }
+        }
+
+        if (count == 0)
+            return 0;
+
+        int half = count / 2;
+        int seen = 0;
+        for (int i = 0; i < 256; i++)
+        {
+            seen += chromaHistogram[i];
+            if (seen > half)
+                return i;
+        }
+
+        return 255;
+    }
+
+    private static PageRaster PackPageRaster(bool[] inkPixels, int width, int height)
+    {
+        int wordsPerRow = (width + 63) / 64 + 1;   // includes one zero pad word
+        ulong[] ink = PackRows(inkPixels, width, height, wordsPerRow);
+        ulong[] dilated = DilateOnePixel(ink, height, wordsPerRow);
+        return new PageRaster(width, height, wordsPerRow, ink, dilated);
     }
 
     private static ulong[] PackRows(bool[] pixels, int width, int height, int wordsPerRow)
@@ -1309,6 +1531,27 @@ public sealed class SimilarSymbolMatchSession
     {
         public List<int> Pixels { get; } = new();
         public bool TouchesBorder { get; set; }
+    }
+
+    // One sheet's binarized ink, packed 1bpp per row (plus a zero pad word) with
+    // a 1px dilation. The template scoring reads these instead of session fields
+    // so the same template can score the boxed sheet or any other rendered sheet.
+    private sealed class PageRaster
+    {
+        public PageRaster(int width, int height, int wordsPerRow, ulong[] ink, ulong[] dilated)
+        {
+            Width = width;
+            Height = height;
+            WordsPerRow = wordsPerRow;
+            Ink = ink;
+            Dilated = dilated;
+        }
+
+        public int Width { get; }
+        public int Height { get; }
+        public int WordsPerRow { get; }
+        public ulong[] Ink { get; }
+        public ulong[] Dilated { get; }
     }
 
     // Pre-shifted packed copies of one template rotation: ShiftedInk[s] holds

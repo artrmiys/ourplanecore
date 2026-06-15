@@ -88,6 +88,43 @@ internal static class SimilarSymbolMatcherTests
             $"scaled copy should be reported from a scaled template variant, got scale {scaled.ScalePercent}");
     }
 
+    public static void AdaptiveInkModelSeparatesFaintAndColoredInk()
+    {
+        SimilarInkModel def = SimilarInkModel.Default;
+        AssertTrue(!def.IsInk(255, 255, 255), "white is not ink");
+        AssertTrue(def.IsInk(0, 0, 0), "black is ink");
+        AssertTrue(!def.IsInk(190, 190, 190), "faint gray is not ink under the default cut");
+
+        var faint = new SimilarInkModel(230, SimilarInkModel.DisabledChromaThreshold);
+        AssertTrue(faint.IsInk(190, 190, 190), "faint gray is ink once the luma cut is raised");
+        AssertTrue(!faint.IsInk(245, 245, 245), "near-white stays background even with a raised cut");
+
+        var colored = new SimilarInkModel(176, 40);
+        AssertTrue(colored.IsInk(255, 200, 200), "a light but saturated tint counts as colored ink");
+        AssertTrue(!colored.IsInk(250, 248, 249), "a near-white pixel with no real hue stays background");
+    }
+
+    public static void FindsFaintGraySymbolCopies()
+    {
+        var placements = new[] { (40, 40), (200, 60), (120, 220) };
+        using SKBitmap page = BuildColoredPage(placements, new SKColor(190, 190, 190));
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        List<SimilarSymbolMatch> matches = session!.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"faint gray symbols should be found via the adaptive ink model, expected {placements.Length}, got {matches.Count}");
+        foreach ((int x, int y) in placements)
+        {
+            AssertTrue(
+                matches.Any(match => NearCenter(match, x, y)),
+                $"faint gray symbol at ({x},{y}) was missed; the default luma cut alone would skip it");
+        }
+    }
+
     public static void RejectsDistractorsAndDedupes()
     {
         var placements = new[] { (60, 50) };
@@ -1023,6 +1060,33 @@ internal static class SimilarSymbolMatcherTests
             canvas.DrawCircle(70, 160, 18, stroke);
             canvas.DrawLine(52, 160, 88, 160, stroke);
         }
+
+        return bitmap;
+    }
+
+    private static SKBitmap BuildColoredPage((int X, int Y)[] placements, SKColor color)
+    {
+        TemplateOrigin = placements[0];
+        var bitmap = new SKBitmap(420, 320, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+
+        using var stroke = new SKPaint
+        {
+            Color = color,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        };
+        using var fill = new SKPaint
+        {
+            Color = color,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        foreach ((int x, int y) in placements)
+            DrawSymbol(canvas, stroke, fill, x, y);
 
         return bitmap;
     }
