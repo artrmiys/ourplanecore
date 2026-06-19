@@ -64,7 +64,7 @@ public partial class MainWindow
         string otherSheetSweepKey = "";       // "rotations|mirrored" the sweep cache was built for
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
-        float currentThreshold = (float)_settings.SimilarCountThreshold;
+        float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
         TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
         string destinationName = SimilarCountDestinationName(destinationItem);
         OurPlaneCoreJob reviewJob = _currentJob;
@@ -381,17 +381,27 @@ public partial class MainWindow
             CancellationToken cancellationToken)
         {
             var scanWatch = Stopwatch.StartNew();
-            AppLog.Info(
-                $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
-            List<SimilarSymbolMatch> matches = await Task.Run(
-                () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
-                cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            scanWatch.Stop();
-            AppLog.Info(
-                $"Similar count scan completed; elapsedMs={scanWatch.ElapsedMilliseconds}; matches={matches.Count}; downsample={session.DownsampleFactor}; searchPixels={session.SearchPixels}; page='{request.PageFolder}'");
-            lastMatches.Clear();
-            lastMatches.AddRange(matches);
+            try
+            {
+                AppLog.Info(
+                    $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
+                List<SimilarSymbolMatch> matches = await Task.Run(
+                    () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
+                    cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                scanWatch.Stop();
+                AppLog.Info(
+                    $"Similar count scan completed; elapsedMs={scanWatch.ElapsedMilliseconds}; matches={matches.Count}; downsample={session.DownsampleFactor}; searchPixels={session.SearchPixels}; page='{request.PageFolder}'");
+                lastMatches.Clear();
+                lastMatches.AddRange(matches);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                scanWatch.Stop();
+                AppLog.Info(
+                    $"Similar count scan cancelled; elapsedMs={scanWatch.ElapsedMilliseconds}; downsample={session.DownsampleFactor}; searchPixels={session.SearchPixels}; page='{request.PageFolder}'");
+                throw;
+            }
             ApplyDefaultSimilarReviewExclusions();
             _viewport.SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder);
 
@@ -405,9 +415,9 @@ public partial class MainWindow
 
         dialog = new SimilarCountDialog(
             scan: ScanAsync,
-            initialThreshold: (float)_settings.SimilarCountThreshold,
-            initialRotations: _settings.SimilarCountRotations,
-            initialMirrored: _settings.SimilarCountMirrored,
+            initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault,
+            initialRotations: false,
+            initialMirrored: false,
             initialAllSheets: false,
             destinationName: destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
@@ -431,11 +441,12 @@ public partial class MainWindow
 
         dialog.Accepted += (_, _) =>
         {
-            _settings.SimilarCountThreshold = dialog.Threshold;
-            _settings.SimilarCountRotations = dialog.IncludeRotations;
-            _settings.SimilarCountMirrored = dialog.IncludeMirrored;
-            // All-sheets is intentionally session-only; restoring it makes the
-            // next Similar review open straight into a whole-job scan.
+            // Similar tuning is intentionally session-only; restoring loose,
+            // rotated, mirrored, or all-sheets scans makes the next review open
+            // straight into a slow/high-noise scan.
+            _settings.SimilarCountThreshold = AppSettingsStore.SimilarCountThresholdDefault;
+            _settings.SimilarCountRotations = false;
+            _settings.SimilarCountMirrored = false;
             _settings.SimilarCountAllSheets = false;
             SaveAppSettings();
 

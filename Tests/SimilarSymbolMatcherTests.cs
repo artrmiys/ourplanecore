@@ -426,10 +426,19 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
+            mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
+            mainWindow.Contains("initialRotations: false", StringComparison.Ordinal) &&
+            mainWindow.Contains("initialMirrored: false", StringComparison.Ordinal) &&
             mainWindow.Contains("initialAllSheets: false", StringComparison.Ordinal) &&
+            mainWindow.Contains("_settings.SimilarCountThreshold = AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
+            mainWindow.Contains("_settings.SimilarCountRotations = false", StringComparison.Ordinal) &&
+            mainWindow.Contains("_settings.SimilarCountMirrored = false", StringComparison.Ordinal) &&
             mainWindow.Contains("_settings.SimilarCountAllSheets = false", StringComparison.Ordinal) &&
+            settings.Contains("settings.SimilarCountThreshold = SimilarCountThresholdDefault", StringComparison.Ordinal) &&
+            settings.Contains("settings.SimilarCountRotations = false", StringComparison.Ordinal) &&
+            settings.Contains("settings.SimilarCountMirrored = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountAllSheets = false", StringComparison.Ordinal),
-            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and stay an explicit per-dialog action");
+            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and every heavy Similar option should stay an explicit per-dialog action");
     }
 
     public static void RejectsNearMissAtPrecisionThreshold()
@@ -661,6 +670,20 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001,
             "older precision default should migrate to the stricter Similar Count default");
+
+        settings.SimilarCountThreshold = 0.55;
+        settings.SimilarCountRotations = true;
+        settings.SimilarCountMirrored = true;
+        settings.SimilarCountAllSheets = true;
+        settings.SimilarCountSettingsVersion = AppSettingsStore.SimilarCountSettingsCurrentVersion;
+        AppSettingsStore.NormalizeSimilarCountSettings(settings);
+
+        AssertTrue(
+            Math.Abs(settings.SimilarCountThreshold - AppSettingsStore.SimilarCountThresholdDefault) < 0.0001 &&
+            !settings.SimilarCountRotations &&
+            !settings.SimilarCountMirrored &&
+            !settings.SimilarCountAllSheets,
+            "current Similar Count settings should not persist loose, rotated, mirrored, or all-sheets scans as the next dialog default");
     }
 
     public static void SimilarMatcherUsesFineSymbolProfile()
@@ -811,8 +834,9 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             matcher.Contains("MaxSearchRasterPixels", StringComparison.Ordinal) &&
             matcher.Contains("SearchDownsampleFactor(page.Width, page.Height)", StringComparison.Ordinal) &&
+            matcher.Contains("(x & 255) == 0", StringComparison.Ordinal) &&
             matcher.Contains("public int SearchPixels", StringComparison.Ordinal),
-            "Similar matcher should cap the search raster independently of template size and expose the active budget");
+            "Similar matcher should cap the search raster independently of template size, expose the active budget, and cancel inside long rows");
         AssertTrue(
             mainWindow.Contains("Similar count scan started", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count scan completed", StringComparison.Ordinal) &&
@@ -873,6 +897,18 @@ internal static class SimilarSymbolMatcherTests
     {
         string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
         string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
+        int scanIndex = normalizedMainWindow.IndexOf(
+            "async Task<SimilarCountScanResult> ScanAsync",
+            StringComparison.Ordinal);
+        int clearIndex = scanIndex >= 0
+            ? normalizedMainWindow.IndexOf("lastMatches.Clear();", scanIndex, StringComparison.Ordinal)
+            : -1;
+        int addIndex = scanIndex >= 0
+            ? normalizedMainWindow.IndexOf("lastMatches.AddRange(matches);", scanIndex, StringComparison.Ordinal)
+            : -1;
+        int applyIndex = scanIndex >= 0
+            ? normalizedMainWindow.IndexOf("ApplyDefaultSimilarReviewExclusions();", scanIndex, StringComparison.Ordinal)
+            : -1;
 
         AssertTrue(
             mainWindow.Contains("manualReviewStatesByCenter", StringComparison.Ordinal) &&
@@ -881,9 +917,10 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("ApplyManualSimilarReviewChoices", StringComparison.Ordinal),
             "Similar Count review should store manual include/exclude choices by stable quantized match center");
         AssertTrue(
-            normalizedMainWindow.Contains(
-                "lastMatches.Clear();\n            lastMatches.AddRange(matches);\n            ApplyDefaultSimilarReviewExclusions();",
-                StringComparison.Ordinal) &&
+            scanIndex >= 0 &&
+            clearIndex > scanIndex &&
+            addIndex > clearIndex &&
+            applyIndex > addIndex &&
             normalizedMainWindow.Contains(
                 "ExcludeWeakSimilarMatches();\n            ExcludeAlreadyCountedSimilarMatches();\n            ApplyManualSimilarReviewChoices();",
                 StringComparison.Ordinal),
@@ -909,8 +946,11 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count should check cancellation before a completed stale scan can replace review candidates");
         AssertTrue(
             dialog.Contains("_scanCts?.Cancel();", StringComparison.Ordinal) &&
+            dialog.Contains("_scanRequestedWhileRunning", StringComparison.Ordinal) &&
+            dialog.Contains("RunLatestScanAsync", StringComparison.Ordinal) &&
+            dialog.Contains("ReferenceEquals(_scanCts, cts)", StringComparison.Ordinal) &&
             dialog.Contains("catch (OperationCanceledException)", StringComparison.Ordinal),
-            "Similar Count dialog should cancel superseded scans and ignore stale cancellation results");
+            "Similar Count dialog should cancel superseded scans, run only the latest queued scan, and ignore stale cancellation results");
     }
 
     public static void SimilarCountPreviewShowsConfidence()
@@ -1006,8 +1046,9 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             dialog.Contains("ApplyThresholdPreset", StringComparison.Ordinal) &&
             dialog.Contains("AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
+            dialog.Contains("TimeSpan.FromMilliseconds(650)", StringComparison.Ordinal) &&
             dialog.Contains("_ = RunScanAsync();", StringComparison.Ordinal),
-            "Similar Count threshold presets should update the slider and rescan the current review");
+            "Similar Count threshold presets should update the slider and rescan the current review without flooding scans while dragging");
         AssertTrue(
             dialog.Contains("_suppressThresholdScan", StringComparison.Ordinal),
             "Similar Count threshold presets should avoid duplicate slider debounce scans");

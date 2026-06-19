@@ -71,6 +71,14 @@ public sealed class SimilarCountDialog : Window
     private string _lastLimitSummary = "";
     private bool _suppressThresholdScan;
     private bool _accepted;
+    private bool _scanRunning;
+    private bool _scanRequestedWhileRunning;
+
+    private readonly record struct SimilarCountScanRequest(
+        float Threshold,
+        bool Rotations,
+        bool Mirrored,
+        bool AllSheets);
 
     public SimilarCountDialog(
         Func<float, bool, bool, bool, CancellationToken, Task<SimilarCountScanResult>> scan,
@@ -271,7 +279,7 @@ public sealed class SimilarCountDialog : Window
         buttons.Children.Add(cancel);
         panel.Children.Add(buttons);
 
-        _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(650) };
         _debounce.Tick += (_, _) =>
         {
             _debounce.Stop();
@@ -466,8 +474,38 @@ public sealed class SimilarCountDialog : Window
     private async Task RunScanAsync()
     {
         _scanCts?.Cancel();
+        _scanRequestedWhileRunning = true;
+        if (_scanRunning)
+            return;
+
+        _scanRunning = true;
+        try
+        {
+            while (_scanRequestedWhileRunning)
+            {
+                _scanRequestedWhileRunning = false;
+                await RunLatestScanAsync();
+            }
+        }
+        finally
+        {
+            _scanRunning = false;
+            if (_scanRequestedWhileRunning && !_accepted)
+                _ = RunScanAsync();
+        }
+    }
+
+    private SimilarCountScanRequest CurrentScanRequest() => new(
+        (float)_thresholdSlider.Value,
+        _rotationsBox.IsChecked == true,
+        _mirroredBox.IsChecked == true,
+        _allSheetsBox.IsChecked == true);
+
+    private async Task RunLatestScanAsync()
+    {
         var cts = new CancellationTokenSource();
         _scanCts = cts;
+        SimilarCountScanRequest request = CurrentScanRequest();
         _foundLabel.Text = "Scanning...";
         _reviewDetailsLabel.Text = "";
         _addButton.IsEnabled = false;
@@ -476,12 +514,12 @@ public sealed class SimilarCountDialog : Window
         try
         {
             SimilarCountScanResult result = await _scan(
-                (float)_thresholdSlider.Value,
-                _rotationsBox.IsChecked == true,
-                _mirroredBox.IsChecked == true,
-                _allSheetsBox.IsChecked == true,
+                request.Threshold,
+                request.Rotations,
+                request.Mirrored,
+                request.AllSheets,
                 cts.Token);
-            if (cts.IsCancellationRequested)
+            if (cts.IsCancellationRequested || !ReferenceEquals(_scanCts, cts))
                 return;
 
             SetReviewCounts(
@@ -502,8 +540,16 @@ public sealed class SimilarCountDialog : Window
         }
         catch (Exception ex)
         {
+            if (!ReferenceEquals(_scanCts, cts))
+                return;
+
             _foundLabel.Text = $"Scan failed: {ex.Message}";
             AppLog.Warn(ex, "Similar count scan failed.");
+        }
+        finally
+        {
+            if (ReferenceEquals(_scanCts, cts))
+                _scanCts = null;
         }
     }
 }

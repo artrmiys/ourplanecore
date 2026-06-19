@@ -467,8 +467,10 @@ public static class AppSettingsStore
             settings.SimilarCountSettingsVersion = SimilarCountSettingsCurrentVersion;
         }
 
-        settings.SimilarCountThreshold = threshold;
-        // Keep the expensive whole-job scan as an explicit per-dialog action.
+        // Keep expensive or loose Similar options as explicit per-dialog actions.
+        settings.SimilarCountThreshold = SimilarCountThresholdDefault;
+        settings.SimilarCountRotations = false;
+        settings.SimilarCountMirrored = false;
         settings.SimilarCountAllSheets = false;
     }
 

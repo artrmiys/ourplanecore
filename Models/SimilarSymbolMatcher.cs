@@ -296,6 +296,9 @@ public sealed class SimilarSymbolMatchSession
                 int bandRow = y * (page.WordsPerRow - 1);
                 for (int x = 0; x <= maxX; x++)
                 {
+                    if ((x & 255) == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+
                     int w0 = x >> 6;
                     int wLast = (x + tw - 1) >> 6;
                     int approxInk = 0;
