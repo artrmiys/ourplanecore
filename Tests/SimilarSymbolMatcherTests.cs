@@ -793,6 +793,33 @@ internal static class SimilarSymbolMatcherTests
             $"low-zoom raster-sheet Similar Count should still require the readable minimum 2.0x, got {lowZoomScale:0.###}x");
     }
 
+    public static void SimilarMatcherCapsLargeSearchRaster()
+    {
+        string matcher = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        MethodInfo? method = typeof(SimilarSymbolMatchSession).GetMethod(
+            "SearchDownsampleFactor",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(method != null, "Similar matcher search downsample helper should exist");
+
+        int mediumFactor = (int)(method!.Invoke(null, new object[] { 9000, 6000 }) ?? 0);
+        int hugeFactor = (int)(method.Invoke(null, new object[] { 12000, 8000 }) ?? 0);
+
+        AssertTrue(
+            mediumFactor == 2 && hugeFactor == 4,
+            $"large Similar scans should downsample full-page rasters before sliding-window search, got medium={mediumFactor}, huge={hugeFactor}");
+        AssertTrue(
+            matcher.Contains("MaxSearchRasterPixels", StringComparison.Ordinal) &&
+            matcher.Contains("SearchDownsampleFactor(page.Width, page.Height)", StringComparison.Ordinal) &&
+            matcher.Contains("public int SearchPixels", StringComparison.Ordinal),
+            "Similar matcher should cap the search raster independently of template size and expose the active budget");
+        AssertTrue(
+            mainWindow.Contains("Similar count scan started", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count scan completed", StringComparison.Ordinal) &&
+            mainWindow.Contains("searchPixels={session.SearchPixels}", StringComparison.Ordinal),
+            "Similar Count runtime logs should report scan duration and the matcher budget");
+    }
+
     public static void ViewportStatusUsesUiDispatcher()
     {
         string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
@@ -876,9 +903,9 @@ internal static class SimilarSymbolMatcherTests
         string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         AssertTrue(
-            normalizedMainWindow.Contains(
-                "cancellationToken);\n            cancellationToken.ThrowIfCancellationRequested();\n            lastMatches.Clear();",
-                StringComparison.Ordinal),
+            normalizedMainWindow.Contains("cancellationToken.ThrowIfCancellationRequested();", StringComparison.Ordinal) &&
+            normalizedMainWindow.IndexOf("cancellationToken.ThrowIfCancellationRequested();", StringComparison.Ordinal) <
+            normalizedMainWindow.IndexOf("lastMatches.Clear();", StringComparison.Ordinal),
             "Similar Count should check cancellation before a completed stale scan can replace review candidates");
         AssertTrue(
             dialog.Contains("_scanCts?.Cancel();", StringComparison.Ordinal) &&

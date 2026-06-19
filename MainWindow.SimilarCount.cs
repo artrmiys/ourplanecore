@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -379,10 +380,16 @@ public partial class MainWindow
             bool allSheets,
             CancellationToken cancellationToken)
         {
+            var scanWatch = Stopwatch.StartNew();
+            AppLog.Info(
+                $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
             List<SimilarSymbolMatch> matches = await Task.Run(
                 () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
                 cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            scanWatch.Stop();
+            AppLog.Info(
+                $"Similar count scan completed; elapsedMs={scanWatch.ElapsedMilliseconds}; matches={matches.Count}; downsample={session.DownsampleFactor}; searchPixels={session.SearchPixels}; page='{request.PageFolder}'");
             lastMatches.Clear();
             lastMatches.AddRange(matches);
             ApplyDefaultSimilarReviewExclusions();

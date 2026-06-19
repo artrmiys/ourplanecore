@@ -79,6 +79,7 @@ public sealed record SimilarSymbolMatch(
 public sealed class SimilarSymbolMatchSession
 {
     private const int MaxTemplateSide = 96;      // downsample until template fits
+    private const int MaxSearchRasterPixels = 16_000_000;
     private const int MinTemplateInk = 12;
     private const int TemplateAutoTightenPadding = 2;
     private const float EdgeRelaxedInsetRatio = 0.08f;
@@ -109,6 +110,9 @@ public sealed class SimilarSymbolMatchSession
     private readonly TemplateVariant[] _variants; // 0/90/180/270 degrees
 
     public int DownsampleFactor => _factor;
+    public int SearchWidth => _page.Width;
+    public int SearchHeight => _page.Height;
+    public int SearchPixels => _page.Width * _page.Height;
     public int TemplateInkPixels => _variants[0].InkCount;
     public string TemplateWarning { get; }
 
@@ -163,7 +167,9 @@ public sealed class SimilarSymbolMatchSession
             return null;
         }
 
-        int factor = TemplateDownsampleFactor(templateInkBounds);
+        int factor = Math.Max(
+            TemplateDownsampleFactor(templateInkBounds),
+            SearchDownsampleFactor(page.Width, page.Height));
 
         bool[] inkPixels = BinarizeDownsampled(page, factor, inkModel, out int width, out int height);
 
@@ -753,6 +759,15 @@ public sealed class SimilarSymbolMatchSession
         int inkHeight = Math.Max(0, templateInkBounds.Height) + TemplateAutoTightenPadding * 2;
         int factor = 1;
         while (Math.Max(inkWidth, inkHeight) / factor > MaxTemplateSide)
+            factor *= 2;
+        return factor;
+    }
+
+    private static int SearchDownsampleFactor(int width, int height)
+    {
+        long pixels = (long)Math.Max(0, width) * Math.Max(0, height);
+        int factor = 1;
+        while (pixels / ((long)factor * factor) > MaxSearchRasterPixels)
             factor *= 2;
         return factor;
     }
