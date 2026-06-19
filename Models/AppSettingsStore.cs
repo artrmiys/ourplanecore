@@ -468,6 +468,8 @@ public static class AppSettingsStore
         }
 
         settings.SimilarCountThreshold = threshold;
+        // Keep the expensive whole-job scan as an explicit per-dialog action.
+        settings.SimilarCountAllSheets = false;
     }
 
     public static void NormalizeJobsRoots(AppSettings settings)

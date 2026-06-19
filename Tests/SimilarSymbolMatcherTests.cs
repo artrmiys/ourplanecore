@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using OurPlaneCore;
+using OurPlaneCore.Controls;
 using SkiaSharp;
 
 // Synthetic-raster checks for the offline "count similar symbols" matcher:
@@ -406,6 +408,7 @@ internal static class SimilarSymbolMatcherTests
         string matcher = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
         string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
         string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string settings = File.ReadAllText(Path.Combine("Models", "AppSettingsStore.cs"));
 
         AssertTrue(
             matcher.Contains("public List<SimilarSymbolMatch> FindMatchesOnBitmap", StringComparison.Ordinal) &&
@@ -423,8 +426,10 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
-            mainWindow.Contains("_settings.SimilarCountAllSheets = dialog.IncludeAllSheets", StringComparison.Ordinal),
-            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and persist the option");
+            mainWindow.Contains("initialAllSheets: false", StringComparison.Ordinal) &&
+            mainWindow.Contains("_settings.SimilarCountAllSheets = false", StringComparison.Ordinal) &&
+            settings.Contains("settings.SimilarCountAllSheets = false", StringComparison.Ordinal),
+            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and stay an explicit per-dialog action");
     }
 
     public static void RejectsNearMissAtPrecisionThreshold()
@@ -618,10 +623,12 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count precision default should be strict enough to avoid near-symbol false hits");
         AssertTrue(!settings.SimilarCountRotations, "rotations should be opt-in for precise Similar Count");
         AssertTrue(!settings.SimilarCountMirrored, "mirrored search should be opt-in for precise Similar Count");
+        AssertTrue(!settings.SimilarCountAllSheets, "all-sheets scan should be opt-in for each Similar Count dialog");
 
         settings.SimilarCountThreshold = 0.6;
         settings.SimilarCountRotations = true;
         settings.SimilarCountMirrored = false;
+        settings.SimilarCountAllSheets = true;
         settings.SimilarCountSettingsVersion = 0;
         AppSettingsStore.NormalizeSimilarCountSettings(settings);
 
@@ -630,6 +637,7 @@ internal static class SimilarSymbolMatcherTests
             "legacy noisy Similar Count threshold should migrate to the precision default");
         AssertTrue(!settings.SimilarCountRotations, "legacy rotation-on default should migrate to opt-in");
         AssertTrue(!settings.SimilarCountMirrored, "mirrored matching should stay opt-in after migration");
+        AssertTrue(!settings.SimilarCountAllSheets, "saved all-sheets scan should not reopen Similar Count into a whole-job scan");
         AssertTrue(
             settings.SimilarCountSettingsVersion == AppSettingsStore.SimilarCountSettingsCurrentVersion,
             "Similar Count settings version should be current after normalization");
@@ -721,11 +729,14 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("SimilarCountMaxRenderPixels = 120_000_000f", StringComparison.Ordinal) &&
             source.Contains("SimilarCountRequestedBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
             source.Contains("SimilarCountRequiredBitmapScaleForCurrentPage", StringComparison.Ordinal) &&
+            source.Contains("IsSimilarCountRasterSheetPath", StringComparison.Ordinal) &&
+            source.Contains("ViewportRenderPolicy.RasterSheetDisplayMaxDpi", StringComparison.Ordinal) &&
+            source.Contains("TargetRasterSheetDpiForCurrentZoom", StringComparison.Ordinal) &&
             source.Contains("IsSimilarCountBitmapScaleReady", StringComparison.Ordinal) &&
             source.Contains("QueueSimilarCountReadableBitmap(forceSharper: true)", StringComparison.Ordinal) &&
             source.Contains("TryEnsureSimilarCountBitmapReady", StringComparison.Ordinal) &&
             source.Contains("QueueSimilarCountReadableBitmap()", StringComparison.Ordinal),
-            "Similar count should guard against matching from a low-resolution preview bitmap and request a high-resolution, pixel-budgeted search raster");
+            "Similar count should guard against matching from a low-resolution preview bitmap and use the reachable raster-sheet DPI cap instead of waiting for an impossible 3.5x raster");
         AssertTrue(
             source.Contains("if (!TryEnsureSimilarCountBitmapReady(out string status))", StringComparison.Ordinal),
             "BeginSimilarCountSelection should check bitmap readiness before starting the crop interaction");
@@ -749,6 +760,49 @@ internal static class SimilarSymbolMatcherTests
             source.Contains("IsPageBitmapFor(_pdfPath, _pdfIndex, _pageFolder)", StringComparison.Ordinal) &&
             source.Contains("_pdfIndex != _similarCountWaitingPdfIndex", StringComparison.Ordinal),
             "Similar count should only start and scan against the current page bitmap");
+    }
+
+    public static void SimilarCountRasterSheetsUseReachableDpiCap()
+    {
+        MethodInfo? method = typeof(PdfViewport).GetMethod(
+            "SimilarCountReachableRasterSheetBitmapScale",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(method != null, "Similar Count raster-sheet scale helper should exist");
+
+        object? result = method!.Invoke(null, new object[]
+        {
+            3.5f,
+            2.0f,
+            ViewportRenderPolicy.RasterSheetDisplayMaxDpi,
+        });
+        float scale = (float)(result ?? 0f);
+        float expected = RasterSheetCacheService.RasterDpiToRenderScale(ViewportRenderPolicy.RasterSheetDisplayMaxDpi);
+        AssertTrue(
+            Math.Abs(scale - expected) < 0.001f,
+            $"raster-sheet Similar Count should use reachable display DPI cap {expected:0.###}x, got {scale:0.###}x");
+
+        object? lowZoomResult = method.Invoke(null, new object[]
+        {
+            3.5f,
+            2.0f,
+            72,
+        });
+        float lowZoomScale = (float)(lowZoomResult ?? 0f);
+        AssertTrue(
+            Math.Abs(lowZoomScale - 2.0f) < 0.001f,
+            $"low-zoom raster-sheet Similar Count should still require the readable minimum 2.0x, got {lowZoomScale:0.###}x");
+    }
+
+    public static void ViewportStatusUsesUiDispatcher()
+    {
+        string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
+
+        AssertTrue(
+            mainWindow.Contains("_viewport.StatusChanged      += SetViewportStatus", StringComparison.Ordinal) &&
+            mainWindow.Contains("private void SetViewportStatus(string msg)", StringComparison.Ordinal) &&
+            mainWindow.Contains("Dispatcher.CheckAccess()", StringComparison.Ordinal) &&
+            mainWindow.Contains("Dispatcher.BeginInvoke(new Action(() => TxtStatus.Text = msg))", StringComparison.Ordinal),
+            "viewport status updates can arrive from render workers and must marshal TxtStatus updates to the UI dispatcher");
     }
 
     public static void SimilarCountPreviewSupportsReviewBeforeAdd()

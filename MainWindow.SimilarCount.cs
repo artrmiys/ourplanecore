@@ -397,12 +397,12 @@ public partial class MainWindow
         }
 
         dialog = new SimilarCountDialog(
-            ScanAsync,
-            (float)_settings.SimilarCountThreshold,
-            _settings.SimilarCountRotations,
-            _settings.SimilarCountMirrored,
-            _settings.SimilarCountAllSheets,
-            destinationName,
+            scan: ScanAsync,
+            initialThreshold: (float)_settings.SimilarCountThreshold,
+            initialRotations: _settings.SimilarCountRotations,
+            initialMirrored: _settings.SimilarCountMirrored,
+            initialAllSheets: false,
+            destinationName: destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
             templateWarning: session.TemplateWarning)
         {
@@ -427,7 +427,9 @@ public partial class MainWindow
             _settings.SimilarCountThreshold = dialog.Threshold;
             _settings.SimilarCountRotations = dialog.IncludeRotations;
             _settings.SimilarCountMirrored = dialog.IncludeMirrored;
-            _settings.SimilarCountAllSheets = dialog.IncludeAllSheets;
+            // All-sheets is intentionally session-only; restoring it makes the
+            // next Similar review open straight into a whole-job scan.
+            _settings.SimilarCountAllSheets = false;
             SaveAppSettings();
 
             if (!IsReviewJobCurrent())

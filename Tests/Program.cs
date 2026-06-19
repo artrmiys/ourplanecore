@@ -59,6 +59,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher keeps hits near adjacent plan ink", SimilarSymbolMatcherTests.KeepsHitsNearAdjacentPlanInk),
     ("similar matcher keeps hits with disconnected window ink", SimilarSymbolMatcherTests.KeepsHitsWithDisconnectedWindowInk),
     ("similar count waits for readable bitmap", SimilarSymbolMatcherTests.ViewportRequiresReadableBitmapBeforeSimilarCount),
+    ("similar count raster sheets use reachable dpi cap", SimilarSymbolMatcherTests.SimilarCountRasterSheetsUseReachableDpiCap),
+    ("viewport status uses ui dispatcher", SimilarSymbolMatcherTests.ViewportStatusUsesUiDispatcher),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("similar count review choices survive rescan", SimilarSymbolMatcherTests.SimilarCountReviewChoicesSurviveRescan),
     ("similar count ignores cancelled stale scans", SimilarSymbolMatcherTests.SimilarCountIgnoresCancelledStaleScans),

@@ -290,7 +290,7 @@ public partial class MainWindow : Window
             ActiveAnnotationStrokeWidth = _annotationStrokeWidth,
             ActiveCountSymbol = _newCountSymbol,
         };
-        _viewport.StatusChanged      += msg => TxtStatus.Text = msg;
+        _viewport.StatusChanged      += SetViewportStatus;
         _viewport.ScaleChanged       += OnScaleChanged;
         _viewport.ToolChanged        += OnToolChanged;
         _viewport.SnapChanged        += OnViewportSnapChanged;
@@ -426,6 +426,17 @@ public partial class MainWindow : Window
 
         ApplyPersistedSettings();
         Loaded += MainWindow_Loaded;
+    }
+
+    private void SetViewportStatus(string msg)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            TxtStatus.Text = msg;
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() => TxtStatus.Text = msg));
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)

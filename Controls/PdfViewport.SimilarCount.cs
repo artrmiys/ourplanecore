@@ -208,8 +208,37 @@ public sealed partial class PdfViewport
     private float SimilarCountMinimumBitmapScaleForCurrentPage() =>
         Math.Min(SimilarCountMinimumBitmapScale, SimilarCountRequestedBitmapScaleForCurrentPage());
 
-    private float SimilarCountRequiredBitmapScaleForCurrentPage() =>
-        SimilarCountRequestedBitmapScaleForCurrentPage();
+    private float SimilarCountRequiredBitmapScaleForCurrentPage()
+    {
+        float requestedScale = SimilarCountRequestedBitmapScaleForCurrentPage();
+        if (!IsSimilarCountRasterSheetPath())
+            return requestedScale;
+
+        return SimilarCountReachableRasterSheetBitmapScale(
+            requestedScale,
+            SimilarCountMinimumBitmapScaleForCurrentPage(),
+            TargetRasterSheetDpiForCurrentZoom());
+    }
+
+    private static float SimilarCountReachableRasterSheetBitmapScale(
+        float requestedScale,
+        float minimumScale,
+        int targetDpi)
+    {
+        float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
+        float displayMaxScale = RasterSheetCacheService.RasterDpiToRenderScale(ViewportRenderPolicy.RasterSheetDisplayMaxDpi);
+        float reachableScale = Math.Clamp(
+            Math.Max(minimumScale, targetScale),
+            SimilarCountFallbackMinimumBitmapScale,
+            displayMaxScale);
+        return Math.Min(requestedScale, reachableScale);
+    }
+
+    private bool IsSimilarCountRasterSheetPath() =>
+        _rasterSheetSource?.Enabled == true &&
+        !_pdfLayersLoadedForPage &&
+        !_usingLayerRenderer &&
+        !RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource);
 
     private static bool IsSimilarCountBitmapScaleReady(float bitmapScale, float requiredScale) =>
         bitmapScale >= requiredScale * 0.95f;
@@ -235,7 +264,7 @@ public sealed partial class PdfViewport
         try
         {
             float minimumScale = SimilarCountMinimumBitmapScaleForCurrentPage();
-            float requestedScale = SimilarCountRequestedBitmapScaleForCurrentPage();
+            float requestedScale = SimilarCountRequiredBitmapScaleForCurrentPage();
             bool appliedReadyBitmap = TryApplyReadyRasterSheetForCurrentZoom();
             if ((!forceSharper && (appliedReadyBitmap || _bitmapScale >= minimumScale)) ||
                 (forceSharper && _bitmapScale >= requestedScale * 0.95f))
