@@ -418,6 +418,14 @@ public partial class MainWindow
             }
         }
 
+        void ClearStaleSimilarReviewPreview()
+        {
+            lastMatches.Clear();
+            excludedIndexes.Clear();
+            alreadyCountedIndexes.Clear();
+            _viewport.SetSimilarCountPreviewMarkers(null);
+        }
+
         void ClearManualSimilarReviewChoices() => manualReviewStatesByCenter.Clear();
 
         void ApplyDefaultSimilarReviewExclusions()
@@ -536,6 +544,7 @@ public partial class MainWindow
             {
                 textCandidateReviewFallbackActive = false;
                 includeTextCandidateReviewMatchesByDefault = false;
+                ClearStaleSimilarReviewPreview();
                 AppLog.Info(
                     $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
                 List<SimilarSymbolMatch> matches;

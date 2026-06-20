@@ -1385,11 +1385,32 @@ internal static class SimilarSymbolMatcherTests
         string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
         string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
         string normalizedMainWindow = mainWindow.Replace("\r\n", "\n", StringComparison.Ordinal);
+        int scanIndex = normalizedMainWindow.IndexOf(
+            "async Task<SimilarCountScanResult> ScanAsync",
+            StringComparison.Ordinal);
+        int staleClearIndex = scanIndex >= 0
+            ? normalizedMainWindow.IndexOf("ClearStaleSimilarReviewPreview();", scanIndex, StringComparison.Ordinal)
+            : -1;
+        int scanStartedLogIndex = scanIndex >= 0
+            ? normalizedMainWindow.IndexOf("Similar count scan started", scanIndex, StringComparison.Ordinal)
+            : -1;
+        int cancellationCheckIndex = normalizedMainWindow.IndexOf(
+            "cancellationToken.ThrowIfCancellationRequested();",
+            StringComparison.Ordinal);
+        int addMatchesIndex = normalizedMainWindow.IndexOf(
+            "lastMatches.AddRange(matches);",
+            StringComparison.Ordinal);
 
         AssertTrue(
-            normalizedMainWindow.Contains("cancellationToken.ThrowIfCancellationRequested();", StringComparison.Ordinal) &&
-            normalizedMainWindow.IndexOf("cancellationToken.ThrowIfCancellationRequested();", StringComparison.Ordinal) <
-            normalizedMainWindow.IndexOf("lastMatches.Clear();", StringComparison.Ordinal),
+            normalizedMainWindow.Contains(
+                "void ClearStaleSimilarReviewPreview()\n        {\n            lastMatches.Clear();\n            excludedIndexes.Clear();\n            alreadyCountedIndexes.Clear();\n            _viewport.SetSimilarCountPreviewMarkers(null);\n        }",
+                StringComparison.Ordinal) &&
+            staleClearIndex > scanIndex &&
+            staleClearIndex < scanStartedLogIndex,
+            "Similar Count should clear stale review candidates and preview markers as soon as a new scan starts");
+        AssertTrue(
+            cancellationCheckIndex >= 0 &&
+            addMatchesIndex > cancellationCheckIndex,
             "Similar Count should check cancellation before a completed stale scan can replace review candidates");
         AssertTrue(
             dialog.Contains("_scanCts?.Cancel();", StringComparison.Ordinal) &&
