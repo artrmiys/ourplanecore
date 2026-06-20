@@ -1028,6 +1028,30 @@ internal static class SimilarSymbolMatcherTests
             !selectedTextUsesRaster && nearbyTextUsesRaster,
             "text selected inside the box may fall back to text-only when raster is less complete, but nearby text must stay raster-only");
 
+        MethodInfo? selectedTextMethod = typeof(MainWindow).GetMethod(
+            "SimilarTextAnchorLooksSelectedText",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(selectedTextMethod != null, "Similar Count selected-text guard should exist");
+
+        var incidentalText = new PdfSimilarTextMatch(
+            "H6",
+            new SKRect(2, 2, 10, 10),
+            new SKPoint(6, 6));
+        bool incidentalLooksSelected = (bool)(selectedTextMethod!.Invoke(null, new object[]
+        {
+            incidentalText,
+            new ViewportSimilarCountRequest(new SKRect(0, 0, 28, 28), "Pages\\sample", 1),
+        }) ?? true);
+        bool tightTextLooksSelected = (bool)(selectedTextMethod.Invoke(null, new object[]
+        {
+            incidentalText,
+            new ViewportSimilarCountRequest(new SKRect(0, 0, 11, 11), "Pages\\sample", 1),
+        }) ?? false);
+
+        AssertTrue(
+            !incidentalLooksSelected && tightTextLooksSelected,
+            "small text inside a larger symbol box should guide raster only, while a tight text box can still use exact text matching");
+
         MethodInfo? toleranceMethod = typeof(MainWindow).GetMethod(
             "SimilarCountTextFallbackTolerancePdf",
             BindingFlags.NonPublic | BindingFlags.Static);
@@ -1432,8 +1456,10 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("ShouldUseTextGuidedRasterMatchesForExactText", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count exact text-raster matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("textOnlyMatches", StringComparison.Ordinal) &&
-            mainWindow.Contains("textAnchorTouchesSelection", StringComparison.Ordinal) &&
-            mainWindow.Contains("nearby text guide skipped text-only markers", StringComparison.Ordinal) &&
+            mainWindow.Contains("textAnchorSelectedAsText", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarTextAnchorLooksSelectedText", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarTextResultLooksIntentionalSelection", StringComparison.Ordinal) &&
+            mainWindow.Contains("nearby text guide added weak offset candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountNearbyTextFallbackPaddingMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&

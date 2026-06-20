@@ -157,6 +157,10 @@ public partial class MainWindow
         bool textAnchorTouchesSelection =
             textAnchor != null &&
             RectsIntersect(textAnchor.Rect, SimilarCountTextSearchRect(request));
+        bool textAnchorSelectedAsText =
+            textAnchor != null &&
+            textAnchorTouchesSelection &&
+            SimilarTextAnchorLooksSelectedText(textAnchor, request);
         string templateWarning = SimilarCountTemplateWarning(
             session.TemplateWarning,
             textResult,
@@ -530,16 +534,35 @@ public partial class MainWindow
                         cancellationToken.ThrowIfCancellationRequested();
                     }
 
-                    if (ShouldUseTextGuidedRasterMatchesForExactText(
+                    if (textAnchor != null && !textAnchorSelectedAsText)
+                    {
+                        matches = rasterMatches;
+                        int weakAdded = AppendUnverifiedTextCandidateReviewMatches(
+                            matches,
+                            BuildWeakTextCandidateReviewMatches(
+                                textResult,
+                                textAnchor,
+                                request,
+                                bitmapScale),
+                            bitmapScale);
+                        if (weakAdded > 0 || matches.Count > 0)
+                        {
+                            textCandidateReviewFallbackActive = true;
+                            includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
+                        }
+                        AppLog.Info(
+                            $"Similar count nearby text guide added weak offset candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                    }
+                    else if (ShouldUseTextGuidedRasterMatchesForExactText(
                             rasterMatches,
                             textMatches,
-                            textAnchorTouchesSelection))
+                            textAnchorSelectedAsText))
                     {
                         matches = rasterMatches;
                         AppLog.Info(
                             $"Similar count exact text-raster matches applied; query='{textResult.Query}'; textOnlyMatches={textMatches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
                     }
-                    else if (textAnchorTouchesSelection)
+                    else if (textAnchorSelectedAsText)
                     {
                         matches = textMatches.ToList();
                         AppLog.Info(
@@ -822,8 +845,11 @@ public partial class MainWindow
             return null;
         }
 
-        if (IsUsableSimilarTextResult(result))
+        if (IsUsableSimilarTextResult(result) &&
+            (request.PreferNearestRepeatedText || SimilarTextResultLooksIntentionalSelection(result, request)))
+        {
             return result;
+        }
 
         if (request.PreferNearestRepeatedText || !request.AllowExactTextMatches)
             return null;
@@ -955,9 +981,30 @@ public partial class MainWindow
     private static bool ShouldUseTextGuidedRasterMatchesForExactText(
         IReadOnlyList<SimilarSymbolMatch> rasterMatches,
         IReadOnlyList<SimilarSymbolMatch> textMatches,
-        bool textAnchorTouchesSelection) =>
+        bool textAnchorSelectedAsText) =>
         rasterMatches.Count > 0 &&
-        (!textAnchorTouchesSelection || rasterMatches.Count >= textMatches.Count);
+        (!textAnchorSelectedAsText || rasterMatches.Count >= textMatches.Count);
+
+    private static bool SimilarTextAnchorLooksSelectedText(
+        PdfSimilarTextMatch textAnchor,
+        ViewportSimilarCountRequest request)
+    {
+        SKRect searchRect = SimilarCountTextSearchRect(request);
+        float selectionArea = Math.Abs(searchRect.Width * searchRect.Height);
+        if (!float.IsFinite(selectionArea) || selectionArea <= 0f)
+            return false;
+
+        float textArea = Math.Abs(textAnchor.Rect.Width * textAnchor.Rect.Height);
+        return textArea / selectionArea >= 0.20f;
+    }
+
+    private static bool SimilarTextResultLooksIntentionalSelection(
+        PdfSimilarTextResult result,
+        ViewportSimilarCountRequest request)
+    {
+        PdfSimilarTextMatch? anchor = SelectSimilarTextAnchor(result, request);
+        return anchor != null && SimilarTextAnchorLooksSelectedText(anchor, request);
+    }
 
     private static int AppendUnverifiedTextCandidateReviewMatches(
         List<SimilarSymbolMatch> matches,
