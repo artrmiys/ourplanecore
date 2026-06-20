@@ -1285,8 +1285,9 @@ internal static class SimilarSymbolMatcherTests
             similarCount.Contains("request.AlreadyCountedCentersPdf", StringComparison.Ordinal) &&
             similarCount.Contains("SimilarCountTextTemplateFallbackRequest", StringComparison.Ordinal) &&
             similarCount.Contains("BuildWeakTextCandidateReviewMatches", StringComparison.Ordinal) &&
+            similarCount.Contains("AppendUnverifiedTextCandidateReviewMatches", StringComparison.Ordinal) &&
             similarCount.Contains("Text-only candidates need manual review", StringComparison.Ordinal),
-            "Similar review should be reusable from Beam/Openings, skip the original measured center, and show text-only candidates as weak manual-review markers when raster verification leaves no new hits");
+            "Similar review should be reusable from Beam/Openings, skip the original measured center, and keep unverified text candidates as weak manual-review markers");
     }
 
     public static void SimilarCountUsesExactPdfTextWhenAvailable()
@@ -1327,7 +1328,8 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("request.PreferNearestRepeatedText", StringComparison.Ordinal) &&
             mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
-            mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal),
+            mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal) &&
+            mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections and raster-verify text candidates for Beam/Openings");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&

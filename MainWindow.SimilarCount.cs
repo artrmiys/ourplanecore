@@ -113,7 +113,7 @@ public partial class MainWindow
         string otherSheetSweepKey = "";       // "rotations|mirrored" the sweep cache was built for
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
-        bool textOnlyReviewFallbackActive = false;
+        bool textCandidateReviewFallbackActive = false;
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
         OurPlaneCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
@@ -269,7 +269,7 @@ public partial class MainWindow
 
         string SimilarCountLimitSummary()
         {
-            if (textOnlyReviewFallbackActive)
+            if (textCandidateReviewFallbackActive)
                 return "Text-only candidates need manual review";
 
             var limits = lastMatches
@@ -456,7 +456,7 @@ public partial class MainWindow
             var scanWatch = Stopwatch.StartNew();
             try
             {
-                textOnlyReviewFallbackActive = false;
+                textCandidateReviewFallbackActive = false;
                 AppLog.Info(
                     $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
                 List<SimilarSymbolMatch> matches;
@@ -493,9 +493,26 @@ public partial class MainWindow
                             textAnchor,
                             request,
                             bitmapScale);
-                        textOnlyReviewFallbackActive = true;
+                        textCandidateReviewFallbackActive = true;
                         AppLog.Info(
                             $"Similar count text-raster produced no new verified markers; showing weak text-only review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                    }
+                    else
+                    {
+                        int weakAdded = AppendUnverifiedTextCandidateReviewMatches(
+                            matches,
+                            BuildWeakTextCandidateReviewMatches(
+                                textResult,
+                                textAnchor,
+                                request,
+                                bitmapScale),
+                            bitmapScale);
+                        if (weakAdded > 0)
+                        {
+                            textCandidateReviewFallbackActive = true;
+                            AppLog.Info(
+                                $"Similar count text-raster added weak unverified text review candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                        }
                     }
                 }
                 else
@@ -735,6 +752,34 @@ public partial class MainWindow
             .Select(match => new SKPoint(match.Center.X - textOffset.X, match.Center.Y - textOffset.Y))
             .Select(center => TextSimilarMatch(center, bitmapScale, SimilarCountWeakTextCandidateScore))
             .ToList();
+    }
+
+    private static int AppendUnverifiedTextCandidateReviewMatches(
+        List<SimilarSymbolMatch> matches,
+        IReadOnlyList<SimilarSymbolMatch> textCandidates,
+        float bitmapScale)
+    {
+        float duplicateTolerancePx = Math.Max(10f, SimilarCountDuplicateTolerancePdf * bitmapScale);
+        float duplicateToleranceSq = duplicateTolerancePx * duplicateTolerancePx;
+        int added = 0;
+
+        foreach (SimilarSymbolMatch candidate in textCandidates)
+        {
+            if (matches.Any(match => DistanceSquaredPixels(match, candidate) <= duplicateToleranceSq))
+                continue;
+
+            matches.Add(candidate);
+            added++;
+        }
+
+        return added;
+    }
+
+    private static float DistanceSquaredPixels(SimilarSymbolMatch left, SimilarSymbolMatch right)
+    {
+        float dx = left.CenterX - right.CenterX;
+        float dy = left.CenterY - right.CenterY;
+        return dx * dx + dy * dy;
     }
 
     private static PdfSimilarTextMatch? SelectSimilarTextAnchor(
