@@ -37,6 +37,7 @@ public sealed class SimilarCountDialog : Window
     public bool IncludeMirrored { get; private set; }
     public bool IncludeAllSheets { get; private set; }
     public bool QueueAiDoubleCheck { get; private set; }
+    public string DestinationName => CleanDestinationName(_destinationNameBox?.Text ?? _destinationName);
     public event EventHandler? Accepted;
     public event EventHandler? Cancelled;
     public event EventHandler? IncludeAllRequested;
@@ -52,6 +53,7 @@ public sealed class SimilarCountDialog : Window
     private readonly TextBlock _reviewDetailsLabel;
     private readonly TextBlock _otherSheetsLabel;
     private readonly TextBlock _thresholdLabel;
+    private readonly TextBox? _destinationNameBox;
     private readonly Button _strictButton;
     private readonly Button _defaultButton;
     private readonly Button _looseButton;
@@ -88,7 +90,8 @@ public sealed class SimilarCountDialog : Window
         bool initialAllSheets,
         string destinationName,
         bool aiAvailable,
-        string templateWarning = "")
+        string templateWarning = "",
+        bool allowDestinationNameEdit = false)
     {
         _scan = scan;
         _destinationName = CleanDestinationName(destinationName);
@@ -109,6 +112,23 @@ public sealed class SimilarCountDialog : Window
             Margin = new Thickness(0, 0, 0, 10),
         };
         panel.Children.Add(_foundLabel);
+
+        if (allowDestinationNameEdit)
+        {
+            panel.Children.Add(new TextBlock { Text = "Takeoff name:", Margin = new Thickness(0, -2, 0, 4) });
+            _destinationNameBox = new TextBox
+            {
+                Text = _destinationName,
+                Margin = new Thickness(0, 0, 0, 10),
+            };
+            _destinationNameBox.TextChanged += (_, _) =>
+            {
+                Title = $"Count Similar: {DestinationName}";
+                if (_addButton != null)
+                    _addButton.Content = AddButtonText(_lastFound);
+            };
+            panel.Children.Add(_destinationNameBox);
+        }
 
         if (!string.IsNullOrWhiteSpace(templateWarning))
         {
@@ -325,6 +345,7 @@ public sealed class SimilarCountDialog : Window
                 Left = Owner.Left + 90;
                 Top = Owner.Top + 140;
             }
+            _destinationNameBox?.SelectAll();
             UpdateThresholdLabel();
             _ = RunScanAsync();
         };
@@ -455,9 +476,10 @@ public sealed class SimilarCountDialog : Window
 
     private string AddButtonText(int count)
     {
-        string name = _destinationName.Length <= 22
-            ? _destinationName
-            : _destinationName[..21] + "...";
+        string destination = DestinationName;
+        string name = destination.Length <= 22
+            ? destination
+            : destination[..21] + "...";
         return count <= 0
             ? $"Add to {name}"
             : $"Add {count} to {name}";

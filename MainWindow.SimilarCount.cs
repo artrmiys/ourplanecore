@@ -75,11 +75,12 @@ public partial class MainWindow
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
-        TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem();
-        string destinationName = SimilarCountDestinationName(destinationItem);
         OurPlaneCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
         PdfSimilarTextResult? textResult = TryFindSimilarCountText(request);
+        TakeoffItem? destinationItem = RequestedSimilarCountDestinationItem(request);
+        bool canRenameDestination = destinationItem == null;
+        string destinationName = SimilarCountDestinationName(destinationItem, request, textResult);
         IReadOnlyList<SimilarSymbolMatch> textMatches = textResult == null
             ? []
             : textResult.Matches
@@ -490,7 +491,8 @@ public partial class MainWindow
             initialAllSheets: false,
             destinationName: destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
-            templateWarning: templateWarning)
+            templateWarning: templateWarning,
+            allowDestinationNameEdit: canRenameDestination)
         {
             Owner = this,
         };
@@ -536,19 +538,25 @@ public partial class MainWindow
             }
 
             int added = 0;
+            TakeoffItem? addedItem = null;
+            string acceptedDestinationName = dialog.DestinationName;
             if (included.Count > 0)
             {
-                added = AddSimilarCountMeasurements(request, included, destinationItem);
+                added = AddSimilarCountMeasurements(
+                    request,
+                    included,
+                    destinationItem,
+                    acceptedDestinationName,
+                    out addedItem);
                 if (added > 0 && dialog.QueueAiDoubleCheck)
-                    QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, destinationName);
+                    QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, acceptedDestinationName);
             }
 
             if (offSheet.Count > 0)
             {
                 TakeoffItem offItem = ResolveOrCreateSimilarCountItem(
-                    included.Count > 0
-                        ? (ResolveSimilarCountDestinationItem(destinationItem) ?? _activeItem)
-                        : destinationItem);
+                    addedItem ?? destinationItem,
+                    acceptedDestinationName);
                 (int offSheets, int offMarkers) = AddOtherSheetSimilarCounts(offItem, offSheet);
                 if (offMarkers > 0)
                     TxtStatus.Text = $"{TxtStatus.Text} Plus {offMarkers} marker(s) on {offSheets} other sheet(s).".Trim();
@@ -723,16 +731,19 @@ public partial class MainWindow
     private int AddSimilarCountMeasurements(
         ViewportSimilarCountRequest request,
         IReadOnlyList<SKPoint> centers,
-        TakeoffItem? destinationItem)
+        TakeoffItem? destinationItem,
+        string newItemName,
+        out TakeoffItem item)
     {
-        TakeoffItem item = ResolveOrCreateSimilarCountItem(destinationItem);
+        TakeoffItem resolvedItem = ResolveOrCreateSimilarCountItem(destinationItem, newItemName);
+        item = resolvedItem;
 
         var newCenters = centers
-            .Where(center => !IsSimilarCountAlreadyCounted(item, request, center))
+            .Where(center => !IsSimilarCountAlreadyCounted(resolvedItem, request, center))
             .ToList();
         if (newCenters.Count == 0)
         {
-            TxtStatus.Text = $"Count similar: all reviewed marker(s) are already counted in {item.Name}.";
+            TxtStatus.Text = $"Count similar: all reviewed marker(s) are already counted in {resolvedItem.Name}.";
             return 0;
         }
 
@@ -743,32 +754,32 @@ public partial class MainWindow
             {
                 MType = "point",
                 Points = [center],
-                Color = item.Color,
-                CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol),
+                Color = resolvedItem.Color,
+                CountSymbol = CountDisplaySymbol.Normalize(resolvedItem.CountSymbol),
                 PageFolder = request.PageFolder,
-                TakeoffFolder = item.FolderPath,
+                TakeoffFolder = resolvedItem.FolderPath,
                 ScaleMetersPerPt = request.ScaleMetersPerPt,
             });
         }
 
         foreach (Measurement measurement in generated)
-            item.Measurements.Add(measurement);
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            resolvedItem.Measurements.Add(measurement);
+        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(resolvedItem);
         bool scannedSheetIsOpen = IsSamePageFolder(_currentPage?.FolderPath, request.PageFolder);
         _viewport.AddGeneratedMeasurements(generated);
         if (scannedSheetIsOpen)
             _viewport.SelectMeasurements(generated);
-        RefreshTreeItem(item);
-        QueueTakeoffAutosave(item);
+        RefreshTreeItem(resolvedItem);
+        QueueTakeoffAutosave(resolvedItem);
         using (UsePageMeasurementLookup())
         {
-            RefreshTakeoffRowVisualsForItems(new[] { item });
+            RefreshTakeoffRowVisualsForItems(new[] { resolvedItem });
             RefreshPageTakeoffIndicatorsForFolder(request.PageFolder);
             RefreshSheetLegend();
         }
         UpdateTotalDisplay();
         int skipped = centers.Count - generated.Count;
-        TxtStatus.Text = SimilarCountAddedStatus(generated.Count, skipped, item.Name, scannedSheetIsOpen);
+        TxtStatus.Text = SimilarCountAddedStatus(generated.Count, skipped, resolvedItem.Name, scannedSheetIsOpen);
         return generated.Count;
     }
 
@@ -786,15 +797,18 @@ public partial class MainWindow
     // Resolve the live destination point takeoff, or create a fresh
     // "Similar Count" item when there is no suitable active one. Shared by the
     // current-sheet add and the all-sheets add so both target the same item.
-    private TakeoffItem ResolveOrCreateSimilarCountItem(TakeoffItem? destinationItem)
+    private TakeoffItem ResolveOrCreateSimilarCountItem(TakeoffItem? destinationItem, string newItemName)
     {
         TakeoffItem? item = ResolveSimilarCountDestinationItem(destinationItem);
         if (item != null)
             return item;
 
         string parent = NewTakeoffItemParentFolderForUserCreate();
+        string cleanName = string.IsNullOrWhiteSpace(newItemName)
+            ? "Similar Count"
+            : newItemName.Trim();
         TakeoffItem created = CreateUniqueTakeoffItem(
-            "Similar Count",
+            cleanName,
             RandomTakeoffColor(_viewport.ActiveColor),
             "point",
             parent);
@@ -810,16 +824,11 @@ public partial class MainWindow
         return item;
     }
 
-    private TakeoffItem? CurrentSimilarCountDestinationItem()
-    {
-        if (_activeItem == null ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != "point")
-        {
-            return null;
-        }
-
-        return _activeItem;
-    }
+    private TakeoffItem? RequestedSimilarCountDestinationItem(ViewportSimilarCountRequest request) =>
+        string.IsNullOrWhiteSpace(request.DestinationTakeoffFolderPath)
+            ? null
+            : _takeoffItems.FirstOrDefault(item =>
+                string.Equals(item.FolderPath, request.DestinationTakeoffFolderPath, StringComparison.OrdinalIgnoreCase));
 
     private TakeoffItem? ResolveSimilarCountDestinationItem(TakeoffItem? destinationItem)
     {
@@ -834,10 +843,19 @@ public partial class MainWindow
             destinationItem;
     }
 
-    private static string SimilarCountDestinationName(TakeoffItem? destinationItem)
+    private static string SimilarCountDestinationName(
+        TakeoffItem? destinationItem,
+        ViewportSimilarCountRequest request,
+        PdfSimilarTextResult? textResult)
     {
         string name = destinationItem?.Name?.Trim() ?? "";
-        return string.IsNullOrWhiteSpace(name) ? "Similar Count" : name;
+        if (!string.IsNullOrWhiteSpace(name))
+            return name;
+        if (!string.IsNullOrWhiteSpace(request.DefaultDestinationName))
+            return request.DefaultDestinationName.Trim();
+        if (request.AllowExactTextMatches && !string.IsNullOrWhiteSpace(textResult?.Query))
+            return textResult.Query.Trim();
+        return "Similar Count";
     }
 
     private static bool IsSimilarCountDuplicateCenter(TakeoffItem item, string pageFolder, SKPoint center)

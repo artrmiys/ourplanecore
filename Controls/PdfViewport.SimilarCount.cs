@@ -18,7 +18,9 @@ public sealed record ViewportSimilarCountRequest(
     bool UseTextCandidateRasterMatches = false,
     SKPoint? TemplateAnchorPdf = null,
     SKPoint? MarkerCenterPdf = null,
-    SKRect? TextSearchRectPdf = null);
+    SKRect? TextSearchRectPdf = null,
+    string DestinationTakeoffFolderPath = "",
+    string DefaultDestinationName = "");
 public sealed record ViewportSimilarCountPreviewMarker(
     SKPoint CenterPdf,
     bool Included,

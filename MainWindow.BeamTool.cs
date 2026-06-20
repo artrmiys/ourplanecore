@@ -171,7 +171,9 @@ public partial class MainWindow
             UseTextCandidateRasterMatches: true,
             TemplateAnchorPdf: templateCenter,
             MarkerCenterPdf: request.CountPointPdf,
-            TextSearchRectPdf: PadRect(segmentRect, SimilarBeamOpeningTextPadding(segmentLength)));
+            TextSearchRectPdf: PadRect(segmentRect, SimilarBeamOpeningTextPadding(segmentLength)),
+            DestinationTakeoffFolderPath: _activeItem?.FolderPath ?? "",
+            DefaultDestinationName: _activeItem?.Name ?? "");
     }
 
     private ViewportSimilarCountRequest BuildOpeningSimilarCountRequest(OpeningMeasurementRequest request)
@@ -190,7 +192,9 @@ public partial class MainWindow
             UseTextCandidateRasterMatches: true,
             TemplateAnchorPdf: request.CountPointPdf,
             MarkerCenterPdf: request.CountPointPdf,
-            TextSearchRectPdf: PadRect(openingRect, SimilarBeamOpeningTextPadding(Math.Max(openingRect.Width, openingRect.Height))));
+            TextSearchRectPdf: PadRect(openingRect, SimilarBeamOpeningTextPadding(Math.Max(openingRect.Width, openingRect.Height))),
+            DestinationTakeoffFolderPath: _activeItem?.FolderPath ?? "",
+            DefaultDestinationName: _activeItem?.Name ?? "");
     }
 
     private static float SimilarBeamOpeningPadding(float sizePdf)

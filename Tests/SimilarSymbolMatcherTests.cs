@@ -1197,18 +1197,22 @@ internal static class SimilarSymbolMatcherTests
         string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
 
         AssertTrue(
-            mainWindow.Contains("TakeoffItem? destinationItem = CurrentSimilarCountDestinationItem()", StringComparison.Ordinal) &&
-            mainWindow.Contains("string destinationName = SimilarCountDestinationName(destinationItem)", StringComparison.Ordinal) &&
+            mainWindow.Contains("TakeoffItem? destinationItem = RequestedSimilarCountDestinationItem(request)", StringComparison.Ordinal) &&
+            mainWindow.Contains("bool canRenameDestination = destinationItem == null", StringComparison.Ordinal) &&
+            mainWindow.Contains("string destinationName = SimilarCountDestinationName(destinationItem, request, textResult)", StringComparison.Ordinal) &&
             mainWindow.Contains("OurPlaneCoreJob reviewJob = _currentJob;", StringComparison.Ordinal) &&
             mainWindow.Contains("PageInfo reviewPage = _currentPage;", StringComparison.Ordinal),
-            "Similar Count should capture the active point takeoff before the modeless review starts");
+            "Similar Count should capture an explicit Beam/Openings destination, while manual Similar starts a new named item");
         AssertTrue(
-            mainWindow.Contains("AddSimilarCountMeasurements(request, included, destinationItem)", StringComparison.Ordinal) &&
-            mainWindow.Contains("ResolveSimilarCountDestinationItem(destinationItem)", StringComparison.Ordinal),
-            "Similar Count should add reviewed markers to the captured destination takeoff, not a later active item");
+            mainWindow.Contains("acceptedDestinationName = dialog.DestinationName", StringComparison.Ordinal) &&
+            mainWindow.Contains("AddSimilarCountMeasurements(", StringComparison.Ordinal) &&
+            mainWindow.Contains("acceptedDestinationName,", StringComparison.Ordinal) &&
+            mainWindow.Contains("out addedItem", StringComparison.Ordinal) &&
+            mainWindow.Contains("ResolveOrCreateSimilarCountItem(", StringComparison.Ordinal),
+            "Similar Count should add reviewed markers to the dialog-named destination and reuse that item for off-sheet additions");
         AssertTrue(
             mainWindow.Contains("original job changed; review was not added", StringComparison.Ordinal) &&
-            mainWindow.Contains("QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, destinationName)", StringComparison.Ordinal) &&
+            mainWindow.Contains("QueueSimilarCountAiRequest(reviewJob, reviewPage, request, added, acceptedDestinationName)", StringComparison.Ordinal) &&
             mainWindow.Contains("AI double-check skipped because the scanned sheet is not open", StringComparison.Ordinal),
             "Similar Count review should not write into a changed job or queue AI context for the wrong sheet");
         AssertTrue(
@@ -1216,8 +1220,11 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count measurements should keep the scanned sheet scale even if the user switches sheets while reviewing");
         AssertTrue(
             dialog.Contains("Title = $\"Count Similar: {_destinationName}\"", StringComparison.Ordinal) &&
+            dialog.Contains("public string DestinationName", StringComparison.Ordinal) &&
+            dialog.Contains("Takeoff name:", StringComparison.Ordinal) &&
+            dialog.Contains("allowDestinationNameEdit", StringComparison.Ordinal) &&
             dialog.Contains("AddButtonText", StringComparison.Ordinal),
-            "Similar Count review should show the destination takeoff in the dialog title and add button");
+            "Similar Count review should show and edit the destination takeoff name before Add when creating a new item");
     }
 
     public static void SimilarCountHandlesSwitchedSheetAddStatus()
@@ -1260,8 +1267,9 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("BuildBeamSimilarCountRequest", StringComparison.Ordinal) &&
             beamTool.Contains("BuildOpeningSimilarCountRequest", StringComparison.Ordinal) &&
             beamTool.Contains("[request.CountPointPdf]", StringComparison.Ordinal) &&
-            beamTool.Contains("[request.CountPointPdf]", StringComparison.Ordinal),
-            "Beam/Openings Similar requests should mark the original measured item as already counted");
+            beamTool.Contains("DestinationTakeoffFolderPath: _activeItem?.FolderPath", StringComparison.Ordinal) &&
+            beamTool.Contains("DefaultDestinationName: _activeItem?.Name", StringComparison.Ordinal),
+            "Beam/Openings Similar requests should mark the original measured item as already counted and target the newly created item");
         AssertTrue(
             similarCount.Contains("private void StartSimilarCountReview", StringComparison.Ordinal) &&
             similarCount.Contains("IsSimilarCountAlreadyCounted", StringComparison.Ordinal) &&
@@ -1307,6 +1315,8 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("SKPoint? TemplateAnchorPdf = null", StringComparison.Ordinal) &&
             viewport.Contains("SKPoint? MarkerCenterPdf = null", StringComparison.Ordinal) &&
             viewport.Contains("SKRect? TextSearchRectPdf = null", StringComparison.Ordinal) &&
+            viewport.Contains("string DestinationTakeoffFolderPath = \"\"", StringComparison.Ordinal) &&
+            viewport.Contains("string DefaultDestinationName = \"\"", StringComparison.Ordinal) &&
             viewport.Contains("PdfPageIndex: pdfPageIndex", StringComparison.Ordinal) &&
             beamTool.Contains("PageInfo page = _currentPage ?? throw", StringComparison.Ordinal) &&
             beamTool.Contains("PdfPath: page.PdfPath", StringComparison.Ordinal) &&
@@ -1315,8 +1325,10 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("UseTextCandidateRasterMatches: true", StringComparison.Ordinal) &&
             beamTool.Contains("TemplateAnchorPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("MarkerCenterPdf:", StringComparison.Ordinal) &&
-            beamTool.Contains("TextSearchRectPdf:", StringComparison.Ordinal),
-            "Similar Count requests should carry the source PDF identity, while Beam/Openings keep geometry/raster matching and preserve marker offset");
+            beamTool.Contains("TextSearchRectPdf:", StringComparison.Ordinal) &&
+            beamTool.Contains("DestinationTakeoffFolderPath:", StringComparison.Ordinal) &&
+            beamTool.Contains("DefaultDestinationName:", StringComparison.Ordinal),
+            "Similar Count requests should carry the source PDF identity, while Beam/Openings keep geometry/raster matching, preserve marker offset, and target their named item");
     }
 
     public static void SimilarCountIsExposedAsContextTool()
@@ -1330,8 +1342,9 @@ internal static class SimilarSymbolMatcherTests
             commandPalette.Contains("BtnSimilarCount_Click(this, new RoutedEventArgs())", StringComparison.Ordinal),
             "Similar Count should be exposed in the command palette as a first-class tool");
         AssertTrue(
-            xaml.Contains("active Count/Beam/Openings takeoff", StringComparison.Ordinal),
-            "Similar toolbar tooltip should explain the active destination takeoff behavior");
+            xaml.Contains("name the result", StringComparison.Ordinal) &&
+            commandPalette.Contains("name the result", StringComparison.Ordinal),
+            "Similar toolbar and command palette copy should explain that manual Similar names a new result item");
         AssertTrue(
             beamTool.Contains("Use Similar to add reviewed matches to this Beam item", StringComparison.Ordinal) &&
             beamTool.Contains("Use Similar to add reviewed matches to this Opening item", StringComparison.Ordinal),
