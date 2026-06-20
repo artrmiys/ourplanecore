@@ -452,9 +452,13 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SweepOtherSimilarSheetsAsync", StringComparison.Ordinal) &&
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
             mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
+            mainWindow.Contains("EnsureOtherSheetSweepAsync(threshold, rotations, mirrored", StringComparison.Ordinal) &&
+            mainWindow.Contains("string.Format(CultureInfo.InvariantCulture, \"{0:0.000}|{1}|{2}\", threshold, rotations, mirrored)", StringComparison.Ordinal) &&
+            mainWindow.Replace("\r\n", "\n").Contains("bitmapScale,\n                    threshold,\n                    rotations", StringComparison.Ordinal) &&
             otherSheets.Contains("TryBuildOtherSheetTextGuide", StringComparison.Ordinal) &&
             otherSheets.Contains("TemplateFromTextOffset", StringComparison.Ordinal) &&
             otherSheets.Contains("FindOtherSheetTextGuidedRasterMatches", StringComparison.Ordinal) &&
+            otherSheets.Contains("Math.Clamp(threshold, (float)AppSettingsStore.SimilarCountThresholdMin, 1f)", StringComparison.Ordinal) &&
             otherSheets.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
             otherSheets.Contains("request.UseTextCandidateRasterMatches || request.AllowExactTextMatches", StringComparison.Ordinal) &&
             otherSheets.Contains("Similar count all-sheets text-guided raster matches", StringComparison.Ordinal) &&
@@ -480,7 +484,7 @@ internal static class SimilarSymbolMatcherTests
             settings.Contains("settings.SimilarCountRotations = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountMirrored = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountAllSheets = false", StringComparison.Ordinal),
-            "the all-sheets sweep should render other sheets, use PDF text as a raster-verified search guide, add their markers, cap the sheet count, and manual Similar defaults should keep heavy options opt-in");
+            "the all-sheets sweep should render other sheets, honor the active threshold, use PDF text as a raster-verified search guide, add their markers, cap the sheet count, and manual Similar defaults should keep heavy options opt-in");
     }
 
     public static void RejectsNearMissAtPrecisionThreshold()

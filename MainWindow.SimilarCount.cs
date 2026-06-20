@@ -140,7 +140,7 @@ public partial class MainWindow
         var alreadyCountedIndexes = new HashSet<int>();
         var manualReviewStatesByCenter = new Dictionary<string, bool>(StringComparer.Ordinal);
         var otherSheetSweeps = new List<SimilarSheetSweep>();
-        string otherSheetSweepKey = "";       // "rotations|mirrored" the sweep cache was built for
+        string otherSheetSweepKey = "";       // "threshold|rotations|mirrored" the sweep cache was built for
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
         int otherSheetTextRejectedSheets = 0;
@@ -216,8 +216,8 @@ public partial class MainWindow
                 .ToList();
 
         // Above-threshold, not-already-counted hits on other sheets, grouped by
-        // sheet. Sweeps are cached at the loose floor; this re-filters them to
-        // the current threshold so the slider stays instant.
+        // sheet. Sweeps are cached per requested threshold; this is a final
+        // guard against stale previews and duplicate markers.
         List<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> OtherSheetAdditions(float threshold)
         {
             var additions = new List<(SimilarSheetSweep, List<SKPoint>)>();
@@ -482,9 +482,9 @@ public partial class MainWindow
             TxtStatus.Text = SimilarReviewStatus(result);
         }
 
-        async Task EnsureOtherSheetSweepAsync(bool rotations, bool mirrored, CancellationToken cancellationToken)
+        async Task EnsureOtherSheetSweepAsync(float threshold, bool rotations, bool mirrored, CancellationToken cancellationToken)
         {
-            string key = $"{rotations}|{mirrored}";
+            string key = string.Format(CultureInfo.InvariantCulture, "{0:0.000}|{1}|{2}", threshold, rotations, mirrored);
             if (string.Equals(otherSheetSweepKey, key, StringComparison.Ordinal))
                 return;
 
@@ -497,6 +497,7 @@ public partial class MainWindow
                     textAnchor,
                     session,
                     bitmapScale,
+                    threshold,
                     rotations,
                     mirrored,
                     cancellationToken);
@@ -667,7 +668,7 @@ public partial class MainWindow
             currentThreshold = threshold;
             otherSheetEnabled = allSheets;
             if (allSheets)
-                await EnsureOtherSheetSweepAsync(rotations, mirrored, cancellationToken);
+                await EnsureOtherSheetSweepAsync(threshold, rotations, mirrored, cancellationToken);
 
             return BuildReviewResult();
         }

@@ -9,8 +9,8 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    // One other sheet's matches for the boxed template, captured at the loose
-    // floor so threshold changes re-filter instantly without re-rendering.
+    // One other sheet's matches for the boxed template, captured at the
+    // requested threshold so broad scans get narrower as the threshold rises.
     private sealed class SimilarSheetSweep
     {
         public required string PageFolder { get; init; }
@@ -40,6 +40,7 @@ public partial class MainWindow
         PdfSimilarTextMatch? textAnchor,
         SimilarSymbolMatchSession session,
         float bitmapScale,
+        float threshold,
         bool rotations,
         bool mirrored,
         CancellationToken cancellationToken)
@@ -59,7 +60,7 @@ public partial class MainWindow
             pages = pages.Take(SimilarCountMaxSweepSheets).ToList();
         }
 
-        float floor = (float)AppSettingsStore.SimilarCountThresholdMin;
+        float minScore = Math.Clamp(threshold, (float)AppSettingsStore.SimilarCountThresholdMin, 1f);
         int textGuidedPages = 0;
         int textGuidedMatches = 0;
         int textGuidedSkippedNoText = 0;
@@ -108,7 +109,7 @@ public partial class MainWindow
                     session,
                     bitmap,
                     pxPerPt,
-                    floor,
+                    minScore,
                     rotations,
                     mirrored,
                     cancellationToken),
@@ -156,7 +157,7 @@ public partial class MainWindow
         SimilarSymbolMatchSession session,
         SKBitmap bitmap,
         double pxPerPt,
-        float floor,
+        float minScore,
         bool rotations,
         bool mirrored,
         CancellationToken cancellationToken)
@@ -168,7 +169,7 @@ public partial class MainWindow
                 request,
                 session,
                 pxPerPt,
-                floor,
+                minScore,
                 rotations,
                 mirrored,
                 cancellationToken);
@@ -179,7 +180,7 @@ public partial class MainWindow
         }
 
         return (
-            session.FindMatchesOnBitmap(bitmap, floor, rotations, mirrored, cancellationToken),
+            session.FindMatchesOnBitmap(bitmap, minScore, rotations, mirrored, cancellationToken),
             false,
             false);
     }
@@ -231,7 +232,7 @@ public partial class MainWindow
         ViewportSimilarCountRequest request,
         SimilarSymbolMatchSession session,
         double pxPerPt,
-        float floor,
+        float minScore,
         bool rotations,
         bool mirrored,
         CancellationToken cancellationToken)
@@ -245,7 +246,7 @@ public partial class MainWindow
         return session.FindMatchesNearCenters(
             candidateCenters,
             radiusPixels,
-            floor,
+            minScore,
             rotations,
             mirrored,
             cancellationToken);
