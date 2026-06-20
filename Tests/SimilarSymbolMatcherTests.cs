@@ -1652,6 +1652,8 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count text-raster merged full-sheet visual matches", StringComparison.Ordinal) &&
+            mainWindow.Contains("AppendDistinctSimilarMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("raster-checked before Add", StringComparison.Ordinal) &&
             mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
             mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal) &&

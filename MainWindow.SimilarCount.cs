@@ -611,6 +611,16 @@ public partial class MainWindow
                     cancellationToken.ThrowIfCancellationRequested();
                     AppLog.Info(
                         $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
+                    List<SimilarSymbolMatch> visualMatches = await Task.Run(
+                        () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
+                        cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int visualAdded = AppendDistinctSimilarMatches(matches, visualMatches, bitmapScale);
+                    if (visualAdded > 0)
+                    {
+                        AppLog.Info(
+                            $"Similar count text-raster merged full-sheet visual matches; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; textGuidedMatches={matches.Count - visualAdded}; visualAdded={visualAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                    }
                     if (TextRasterMatchesLeaveNoNewMarkers(matches))
                     {
                         matches = BuildWeakTextCandidateReviewMatches(
@@ -1046,13 +1056,19 @@ public partial class MainWindow
     private static int AppendUnverifiedTextCandidateReviewMatches(
         List<SimilarSymbolMatch> matches,
         IReadOnlyList<SimilarSymbolMatch> textCandidates,
+        float bitmapScale) =>
+        AppendDistinctSimilarMatches(matches, textCandidates, bitmapScale);
+
+    private static int AppendDistinctSimilarMatches(
+        List<SimilarSymbolMatch> matches,
+        IReadOnlyList<SimilarSymbolMatch> candidates,
         float bitmapScale)
     {
         float duplicateTolerancePx = Math.Max(10f, SimilarCountDuplicateTolerancePdf * bitmapScale);
         float duplicateToleranceSq = duplicateTolerancePx * duplicateTolerancePx;
         int added = 0;
 
-        foreach (SimilarSymbolMatch candidate in textCandidates)
+        foreach (SimilarSymbolMatch candidate in candidates)
         {
             if (matches.Any(match => DistanceSquaredPixels(match, candidate) <= duplicateToleranceSq))
                 continue;
