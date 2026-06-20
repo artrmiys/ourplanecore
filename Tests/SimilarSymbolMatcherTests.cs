@@ -1109,6 +1109,48 @@ internal static class SimilarSymbolMatcherTests
             sparseRasterUsesLabels && !usefulRasterKeepsRaster,
             "nearby mark text should fall back to label review candidates only when raster verification is sparse");
 
+        MethodInfo? weakTextCandidatesMethod = typeof(MainWindow).GetMethod(
+            "BuildWeakTextCandidateReviewMatches",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(weakTextCandidatesMethod != null, "Similar Count weak text-candidate helper should exist");
+
+        var sourceText = new PdfSimilarTextMatch(
+            "HDUE3",
+            new SKRect(94, 94, 106, 106),
+            new SKPoint(100, 100));
+        var dualSideTextResult = new PdfSimilarTextResult
+        {
+            Query = "HDUE3",
+            Matches =
+            [
+                sourceText,
+                new PdfSimilarTextMatch(
+                    "HDUE3",
+                    new SKRect(194, 94, 206, 106),
+                    new SKPoint(200, 100)),
+            ],
+        };
+        var markerLeftOfTextRequest = new ViewportSimilarCountRequest(
+            new SKRect(64, 104, 76, 116),
+            "Pages\\sample",
+            1,
+            TemplateAnchorPdf: new SKPoint(70, 110));
+        var dualSideCandidates = (List<SimilarSymbolMatch>)(weakTextCandidatesMethod!.Invoke(null, new object[]
+        {
+            dualSideTextResult,
+            sourceText,
+            markerLeftOfTextRequest,
+            1f,
+        }) ?? new List<SimilarSymbolMatch>());
+
+        bool hasOriginalOffset = dualSideCandidates.Any(match => match.CenterX == 70 && match.CenterY == 110);
+        bool hasMirroredOffset = dualSideCandidates.Any(match => match.CenterX == 130 && match.CenterY == 110);
+        bool hasFarOriginalOffset = dualSideCandidates.Any(match => match.CenterX == 170 && match.CenterY == 110);
+        bool hasFarMirroredOffset = dualSideCandidates.Any(match => match.CenterX == 230 && match.CenterY == 110);
+        AssertTrue(
+            hasOriginalOffset && hasMirroredOffset && hasFarOriginalOffset && hasFarMirroredOffset,
+            "HDUE3-like text-guided Similar should review both left/right marker offsets around every repeated text label");
+
         MethodInfo? toleranceMethod = typeof(MainWindow).GetMethod(
             "SimilarCountTextFallbackTolerancePdf",
             BindingFlags.NonPublic | BindingFlags.Static);

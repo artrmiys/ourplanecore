@@ -961,12 +961,8 @@ public partial class MainWindow
         bool nearbyTextGuide,
         CancellationToken cancellationToken)
     {
-        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
-        SKPoint textOffset = new(textAnchor.Center.X - anchor.X, textAnchor.Center.Y - anchor.Y);
-        var candidateCenters = textResult.Matches
-            .Select(match => new SKPoint(
-                (match.Center.X - textOffset.X) * bitmapScale,
-                (match.Center.Y - textOffset.Y) * bitmapScale))
+        var candidateCenters = SimilarCountTextCandidateCentersPdf(textResult, textAnchor, request)
+            .Select(center => new SKPoint(center.X * bitmapScale, center.Y * bitmapScale))
             .ToList();
         int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(
             request,
@@ -987,11 +983,33 @@ public partial class MainWindow
         ViewportSimilarCountRequest request,
         float bitmapScale)
     {
-        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
-        SKPoint textOffset = new(textAnchor.Center.X - anchor.X, textAnchor.Center.Y - anchor.Y);
-        return textResult.Matches
-            .Select(match => new SKPoint(match.Center.X - textOffset.X, match.Center.Y - textOffset.Y))
+        return SimilarCountTextCandidateCentersPdf(textResult, textAnchor, request)
             .Select(center => TextSimilarMatch(center, bitmapScale, SimilarCountWeakTextCandidateScore))
+            .ToList();
+    }
+
+    private static List<SKPoint> SimilarCountTextCandidateCentersPdf(
+        PdfSimilarTextResult textResult,
+        PdfSimilarTextMatch textAnchor,
+        ViewportSimilarCountRequest request)
+    {
+        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
+        SKPoint markerFromTextOffset = new(anchor.X - textAnchor.Center.X, anchor.Y - textAnchor.Center.Y);
+        return SimilarCountTextCandidateCentersPdf(textResult, markerFromTextOffset);
+    }
+
+    private static List<SKPoint> SimilarCountTextCandidateCentersPdf(
+        PdfSimilarTextResult textResult,
+        SKPoint markerFromTextOffset)
+    {
+        var offsets = new List<SKPoint> { markerFromTextOffset };
+        if (Math.Abs(markerFromTextOffset.X) >= SimilarCountDuplicateTolerancePdf)
+            offsets.Add(new SKPoint(-markerFromTextOffset.X, markerFromTextOffset.Y));
+
+        return textResult.Matches
+            .SelectMany(match => offsets.Select(offset => new SKPoint(
+                match.Center.X + offset.X,
+                match.Center.Y + offset.Y)))
             .ToList();
     }
 

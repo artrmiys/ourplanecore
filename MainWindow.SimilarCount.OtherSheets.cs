@@ -230,10 +230,10 @@ public partial class MainWindow
         bool mirrored,
         CancellationToken cancellationToken)
     {
-        var candidateCenters = textGuide.PageText.Matches
-            .Select(match => new SKPoint(
-                (float)((match.Center.X + textGuide.MarkerFromTextOffset.X) * pxPerPt),
-                (float)((match.Center.Y + textGuide.MarkerFromTextOffset.Y) * pxPerPt)))
+        var candidateCenters = SimilarCountTextCandidateCentersPdf(textGuide.PageText, textGuide.MarkerFromTextOffset)
+            .Select(center => new SKPoint(
+                (float)(center.X * pxPerPt),
+                (float)(center.Y * pxPerPt)))
             .ToList();
         int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(request, (float)pxPerPt);
         return session.FindMatchesNearCenters(
