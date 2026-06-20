@@ -266,9 +266,10 @@ public sealed class SimilarCountDialog : Window
         };
         _includeAllButton = new Button
         {
-            Content = "Include all",
-            MinWidth = 86,
+            Content = "Include candidates",
+            MinWidth = 128,
             IsEnabled = false,
+            ToolTip = "Include all visible candidates, including orange weak review markers.",
             Margin = new Thickness(0, 0, 6, 0),
         };
         _strongOnlyButton = new Button
@@ -276,6 +277,7 @@ public sealed class SimilarCountDialog : Window
             Content = "Strong only",
             MinWidth = 86,
             IsEnabled = false,
+            ToolTip = "Exclude weak candidates and keep only strong matches.",
         };
         _includeAllButton.Click += (_, _) => IncludeAllRequested?.Invoke(this, EventArgs.Empty);
         _strongOnlyButton.Click += (_, _) => StrongOnlyRequested?.Invoke(this, EventArgs.Empty);

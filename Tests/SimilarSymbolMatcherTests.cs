@@ -1395,7 +1395,8 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             dialog.Contains("IncludeAllRequested", StringComparison.Ordinal) &&
             dialog.Contains("StrongOnlyRequested", StringComparison.Ordinal) &&
-            dialog.Contains("Include all", StringComparison.Ordinal) &&
+            dialog.Contains("Include candidates", StringComparison.Ordinal) &&
+            dialog.Contains("orange weak review markers", StringComparison.Ordinal) &&
             dialog.Contains("Strong only", StringComparison.Ordinal),
             "Similar Count review should expose quick actions to include candidates or return to strong matches only");
         AssertTrue(
