@@ -23,6 +23,7 @@ public partial class MainWindow
     private const float SimilarCountTextFallbackPaddingMinPdf = 6f;
     private const float SimilarCountTextFallbackPaddingMaxPdf = 24f;
     private const float SimilarCountTextFallbackPaddingRatio = 0.75f;
+    private const float SimilarCountWeakTextCandidateScore = 0.50f;
 
     private SimilarCountDialog? _similarCountDialog;
 
@@ -112,6 +113,7 @@ public partial class MainWindow
         string otherSheetSweepKey = "";       // "rotations|mirrored" the sweep cache was built for
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
+        bool textOnlyReviewFallbackActive = false;
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
         OurPlaneCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
@@ -267,6 +269,9 @@ public partial class MainWindow
 
         string SimilarCountLimitSummary()
         {
+            if (textOnlyReviewFallbackActive)
+                return "Text-only candidates need manual review";
+
             var limits = lastMatches
                 .Select((match, index) => new { Match = match, Index = index })
                 .Where(item => !alreadyCountedIndexes.Contains(item.Index) && IsWeakSimilarMatch(item.Match))
@@ -451,6 +456,7 @@ public partial class MainWindow
             var scanWatch = Stopwatch.StartNew();
             try
             {
+                textOnlyReviewFallbackActive = false;
                 AppLog.Info(
                     $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
                 List<SimilarSymbolMatch> matches;
@@ -480,10 +486,16 @@ public partial class MainWindow
                     cancellationToken.ThrowIfCancellationRequested();
                     AppLog.Info(
                         $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
-                    if (matches.Count == 0)
+                    if (TextRasterMatchesLeaveNoNewMarkers(matches))
                     {
+                        matches = BuildWeakTextCandidateReviewMatches(
+                            textResult,
+                            textAnchor,
+                            request,
+                            bitmapScale);
+                        textOnlyReviewFallbackActive = true;
                         AppLog.Info(
-                            $"Similar count text-raster found no verified matches; full-page fallback skipped for text-constrained request; query='{textResult.Query}'; page='{request.PageFolder}'");
+                            $"Similar count text-raster produced no new verified markers; showing weak text-only review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
                     }
                 }
                 else
@@ -515,6 +527,18 @@ public partial class MainWindow
                 await EnsureOtherSheetSweepAsync(rotations, mirrored, cancellationToken);
 
             return BuildReviewResult();
+        }
+
+        bool TextRasterMatchesLeaveNoNewMarkers(IReadOnlyList<SimilarSymbolMatch> matches)
+        {
+            if (matches.Count == 0)
+                return true;
+
+            if (destinationItem == null)
+                return false;
+
+            return matches.All(match =>
+                IsSimilarCountAlreadyCounted(destinationItem, request, ReviewCenterPdf(match)));
         }
 
         dialog = new SimilarCountDialog(
@@ -699,6 +723,20 @@ public partial class MainWindow
             cancellationToken);
     }
 
+    private static List<SimilarSymbolMatch> BuildWeakTextCandidateReviewMatches(
+        PdfSimilarTextResult textResult,
+        PdfSimilarTextMatch textAnchor,
+        ViewportSimilarCountRequest request,
+        float bitmapScale)
+    {
+        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
+        SKPoint textOffset = new(textAnchor.Center.X - anchor.X, textAnchor.Center.Y - anchor.Y);
+        return textResult.Matches
+            .Select(match => new SKPoint(match.Center.X - textOffset.X, match.Center.Y - textOffset.Y))
+            .Select(center => TextSimilarMatch(center, bitmapScale, SimilarCountWeakTextCandidateScore))
+            .ToList();
+    }
+
     private static PdfSimilarTextMatch? SelectSimilarTextAnchor(
         PdfSimilarTextResult result,
         ViewportSimilarCountRequest request)
@@ -711,11 +749,25 @@ public partial class MainWindow
             .FirstOrDefault();
     }
 
-    private static SimilarSymbolMatch TextSimilarMatch(SKPoint centerPdf, float bitmapScale)
+    private static SimilarSymbolMatch TextSimilarMatch(
+        SKPoint centerPdf,
+        float bitmapScale,
+        float score = 1f)
     {
         int centerX = (int)MathF.Round(centerPdf.X * bitmapScale);
         int centerY = (int)MathF.Round(centerPdf.Y * bitmapScale);
-        return new SimilarSymbolMatch(centerX, centerY, 1f, 0);
+        score = Math.Clamp(score, 0f, 1f);
+        return new SimilarSymbolMatch(
+            centerX,
+            centerY,
+            score,
+            0,
+            TemplateCoverage: score,
+            WindowPrecision: score,
+            InkRatio: score,
+            ProfileScore: score,
+            ProjectionScore: score,
+            StrokeScore: score);
     }
 
     private static string SimilarCountTemplateWarning(

@@ -1279,8 +1279,9 @@ internal static class SimilarSymbolMatcherTests
             similarCount.Contains("IsSimilarCountAlreadyCounted", StringComparison.Ordinal) &&
             similarCount.Contains("request.AlreadyCountedCentersPdf", StringComparison.Ordinal) &&
             similarCount.Contains("SimilarCountTextTemplateFallbackRequest", StringComparison.Ordinal) &&
-            similarCount.Contains("full-page fallback skipped for text-constrained request", StringComparison.Ordinal),
-            "Similar review should be reusable from Beam/Openings, skip the original measured center, and avoid a broad garbage scan after text-constrained matching");
+            similarCount.Contains("BuildWeakTextCandidateReviewMatches", StringComparison.Ordinal) &&
+            similarCount.Contains("Text-only candidates need manual review", StringComparison.Ordinal),
+            "Similar review should be reusable from Beam/Openings, skip the original measured center, and show text-only candidates as weak manual-review markers when raster verification leaves no new hits");
     }
 
     public static void SimilarCountUsesExactPdfTextWhenAvailable()
@@ -1319,7 +1320,9 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
             mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("request.PreferNearestRepeatedText", StringComparison.Ordinal) &&
-            mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal),
+            mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
+            mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections and raster-verify text candidates for Beam/Openings");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
