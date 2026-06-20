@@ -1079,11 +1079,6 @@ internal static class SimilarSymbolMatcherTests
             !incidentalLooksSelected && tightTextLooksSelected,
             "small text inside a larger symbol box should guide raster only, while a tight text box can still use exact text matching");
 
-        MethodInfo? sparseFallbackMethod = typeof(MainWindow).GetMethod(
-            "ShouldUseTextLabelReviewFallbackForSparseRaster",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        AssertTrue(sparseFallbackMethod != null, "Similar Count sparse text-label fallback helper should exist");
-
         var repeatedMarkResult = new PdfSimilarTextResult
         {
             Query = "HDUE3",
@@ -1094,20 +1089,6 @@ internal static class SimilarSymbolMatcherTests
                     new SKPoint(index * 20 + 8, 4)))
                 .ToList(),
         };
-        bool sparseRasterUsesLabels = (bool)(sparseFallbackMethod!.Invoke(null, new object[]
-        {
-            oneRaster,
-            repeatedMarkResult,
-        }) ?? false);
-        bool usefulRasterKeepsRaster = (bool)(sparseFallbackMethod.Invoke(null, new object[]
-        {
-            Enumerable.Range(0, 4).Select(index => new SimilarSymbolMatch(index * 20, 10, 0.9f, 0)).ToList(),
-            repeatedMarkResult,
-        }) ?? true);
-
-        AssertTrue(
-            sparseRasterUsesLabels && !usefulRasterKeepsRaster,
-            "nearby mark text should fall back to label review candidates only when raster verification is sparse");
 
         MethodInfo? weakTextCandidatesMethod = typeof(MainWindow).GetMethod(
             "BuildWeakTextCandidateReviewMatches",
@@ -1148,8 +1129,12 @@ internal static class SimilarSymbolMatcherTests
         bool hasFarOriginalOffset = dualSideCandidates.Any(match => match.CenterX == 170 && match.CenterY == 110);
         bool hasFarMirroredOffset = dualSideCandidates.Any(match => match.CenterX == 230 && match.CenterY == 110);
         AssertTrue(
-            hasOriginalOffset && hasMirroredOffset && hasFarOriginalOffset && hasFarMirroredOffset,
-            "HDUE3-like text-guided Similar should review both left/right marker offsets around every repeated text label");
+            hasOriginalOffset &&
+            hasMirroredOffset &&
+            hasFarOriginalOffset &&
+            hasFarMirroredOffset &&
+            !dualSideCandidates.Any(match => match.CenterX == 100 && match.CenterY == 100),
+            "HDUE3-like text-guided Similar should review marker/text offsets on both sides, not drop back to text-label centers");
 
         MethodInfo? toleranceMethod = typeof(MainWindow).GetMethod(
             "SimilarCountTextFallbackTolerancePdf",
@@ -1608,9 +1593,8 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarTextAnchorLooksSelectedText", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarTextResultLooksIntentionalSelection", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountNearbyTextCandidateSearchRadiusMultiplier", StringComparison.Ordinal) &&
-            mainWindow.Contains("ShouldUseTextLabelReviewFallbackForSparseRaster", StringComparison.Ordinal) &&
-            mainWindow.Contains("BuildWeakTextLabelReviewMatches", StringComparison.Ordinal) &&
-            mainWindow.Contains("useTextLabelFallback", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountTextCandidateCentersPdf", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count nearby text guide added weak offset candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountNearbyTextFallbackPaddingMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
