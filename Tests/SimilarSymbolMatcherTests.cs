@@ -441,6 +441,7 @@ internal static class SimilarSymbolMatcherTests
             "matcher should expose a reusable template that can scan any sheet bitmap");
         AssertTrue(
             dialog.Contains("Search all sheets in this job", StringComparison.Ordinal) &&
+            dialog.Contains("text-only candidates are reported only", StringComparison.Ordinal) &&
             dialog.Contains("IncludeAllSheets", StringComparison.Ordinal) &&
             dialog.Contains("OtherSheetSummary", StringComparison.Ordinal) &&
             dialog.Contains("_allSheetsBox", StringComparison.Ordinal),
@@ -456,7 +457,12 @@ internal static class SimilarSymbolMatcherTests
             otherSheets.Contains("Similar count all-sheets text-guided raster matches", StringComparison.Ordinal) &&
             otherSheets.Contains("skippedNoText", StringComparison.Ordinal) &&
             otherSheets.Contains("rejectedByRaster", StringComparison.Ordinal) &&
+            otherSheets.Contains("rejectedTextCandidates", StringComparison.Ordinal) &&
             otherSheets.Contains("return ([], true, true);", StringComparison.Ordinal) &&
+            mainWindow.Contains("otherSheetTextRejectedCandidates", StringComparison.Ordinal) &&
+            mainWindow.Contains("PDF text candidate(s)", StringComparison.Ordinal) &&
+            mainWindow.Contains("were not auto-added without a raster match", StringComparison.Ordinal) &&
+            mainWindow.Contains("Other sheets: no new raster matches.", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
             mainWindow.Contains("initialRotations: request.InitialIncludeRotations", StringComparison.Ordinal) &&

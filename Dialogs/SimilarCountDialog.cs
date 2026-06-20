@@ -223,7 +223,7 @@ public sealed class SimilarCountDialog : Window
         {
             Content = "Search all sheets in this job",
             IsChecked = initialAllSheets,
-            ToolTip = "Also scan every other sheet for this symbol; strong matches are added there automatically.",
+            ToolTip = "Also scan every other sheet; raster-verified matches are added automatically, text-only candidates are reported only.",
             Margin = new Thickness(0, 0, 0, 8),
         };
         panel.Children.Add(_allSheetsBox);

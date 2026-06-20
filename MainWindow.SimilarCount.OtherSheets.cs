@@ -29,7 +29,11 @@ public partial class MainWindow
     // was boxed at, then run the template against each. Renders go through the
     // shared render cache; matching uses the same offline matcher. Bounded by
     // SimilarCountMaxSweepSheets so a huge job cannot stall the review.
-    private async Task<(List<SimilarSheetSweep> Sweeps, int SkippedOverLimit)> SweepOtherSimilarSheetsAsync(
+    private async Task<(
+        List<SimilarSheetSweep> Sweeps,
+        int SkippedOverLimit,
+        int TextRejectedSheets,
+        int TextRejectedCandidates)> SweepOtherSimilarSheetsAsync(
         OurPlaneCoreJob job,
         ViewportSimilarCountRequest request,
         PdfSimilarTextResult? textResult,
@@ -42,7 +46,7 @@ public partial class MainWindow
     {
         var sweeps = new List<SimilarSheetSweep>();
         if (bitmapScale <= 0)
-            return (sweeps, 0);
+            return (sweeps, 0, 0, 0);
 
         List<PageInfo> pages = CollectPagesUnder(job.PagesRoot)
             .Where(page => !IsSamePageFolder(page.FolderPath, request.PageFolder))
@@ -60,6 +64,7 @@ public partial class MainWindow
         int textGuidedMatches = 0;
         int textGuidedSkippedNoText = 0;
         int textGuidedRejectedByRaster = 0;
+        int textGuidedRejectedCandidates = 0;
         bool useTextGuide = CanUseOtherSheetTextGuide(request, textResult, textAnchor);
         foreach (PageInfo page in pages)
         {
@@ -110,7 +115,10 @@ public partial class MainWindow
                 cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (rejectedByRaster)
+            {
                 textGuidedRejectedByRaster++;
+                textGuidedRejectedCandidates += textGuide?.PageText.Matches.Count ?? 0;
+            }
             if (matches.Count == 0)
                 continue;
             if (textGuided)
@@ -133,13 +141,13 @@ public partial class MainWindow
             });
         }
 
-        if (textGuidedPages > 0)
+        if (textGuidedPages > 0 || textGuidedRejectedByRaster > 0)
         {
             AppLog.Info(
-                $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; rejectedByRaster={textGuidedRejectedByRaster}; page='{request.PageFolder}'");
+                $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; rejectedByRaster={textGuidedRejectedByRaster}; rejectedTextCandidates={textGuidedRejectedCandidates}; page='{request.PageFolder}'");
         }
 
-        return (sweeps, skipped);
+        return (sweeps, skipped, textGuidedRejectedByRaster, textGuidedRejectedCandidates);
     }
 
     private static (List<SimilarSymbolMatch> Matches, bool TextGuided, bool RejectedByRaster) FindOtherSheetSimilarMatches(

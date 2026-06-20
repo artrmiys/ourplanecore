@@ -143,6 +143,8 @@ public partial class MainWindow
         string otherSheetSweepKey = "";       // "rotations|mirrored" the sweep cache was built for
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
+        int otherSheetTextRejectedSheets = 0;
+        int otherSheetTextRejectedCandidates = 0;
         bool textCandidateReviewFallbackActive = false;
         bool includeTextCandidateReviewMatchesByDefault = false;
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
@@ -252,9 +254,12 @@ public partial class MainWindow
             string skipped = otherSheetSkippedOverLimit > 0
                 ? $" {otherSheetSkippedOverLimit} sheet(s) skipped over scan limit."
                 : "";
+            string textRejected = otherSheetTextRejectedCandidates > 0
+                ? $" {otherSheetTextRejectedCandidates} PDF text candidate(s) on {otherSheetTextRejectedSheets} sheet(s) were not auto-added without a raster match."
+                : "";
             return markers == 0
-                ? $"Other sheets: no new matches.{skipped}"
-                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{skipped}";
+                ? $"Other sheets: no new raster matches.{textRejected}{skipped}"
+                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{textRejected}{skipped}";
         }
 
         SimilarCountScanResult BuildReviewResult()
@@ -484,20 +489,23 @@ public partial class MainWindow
                 return;
 
             TxtStatus.Text = "Count similar: scanning other sheets...";
-            (List<SimilarSheetSweep> sweeps, int skipped) = await SweepOtherSimilarSheetsAsync(
-                reviewJob,
-                request,
-                textResult,
-                textAnchor,
-                session,
-                bitmapScale,
-                rotations,
-                mirrored,
-                cancellationToken);
+            (List<SimilarSheetSweep> sweeps, int skipped, int textRejectedSheets, int textRejectedCandidates) =
+                await SweepOtherSimilarSheetsAsync(
+                    reviewJob,
+                    request,
+                    textResult,
+                    textAnchor,
+                    session,
+                    bitmapScale,
+                    rotations,
+                    mirrored,
+                    cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             otherSheetSweeps.Clear();
             otherSheetSweeps.AddRange(sweeps);
             otherSheetSkippedOverLimit = skipped;
+            otherSheetTextRejectedSheets = textRejectedSheets;
+            otherSheetTextRejectedCandidates = textRejectedCandidates;
             otherSheetSweepKey = key;
         }
 
