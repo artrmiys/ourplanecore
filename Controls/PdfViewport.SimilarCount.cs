@@ -16,6 +16,7 @@ public sealed record ViewportSimilarCountRequest(
     int PdfPageIndex = -1,
     bool AllowExactTextMatches = true,
     bool UseTextCandidateRasterMatches = false,
+    bool IncludeTextCandidatesByDefault = false,
     SKPoint? TemplateAnchorPdf = null,
     SKPoint? MarkerCenterPdf = null,
     SKRect? TextSearchRectPdf = null,

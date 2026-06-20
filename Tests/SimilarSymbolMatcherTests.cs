@@ -1014,7 +1014,7 @@ internal static class SimilarSymbolMatcherTests
             addIndex > clearIndex &&
             applyIndex > addIndex &&
             normalizedMainWindow.Contains(
-                "ExcludeWeakSimilarMatches();\n            ExcludeAlreadyCountedSimilarMatches();\n            ApplyManualSimilarReviewChoices();",
+                "ExcludeWeakSimilarMatches(includeTextCandidateReviewMatchesByDefault);\n            ExcludeAlreadyCountedSimilarMatches();\n            ApplyManualSimilarReviewChoices();",
                 StringComparison.Ordinal),
             "Similar Count rescans should rebuild default weak/duplicate state and then reapply manual choices");
         AssertTrue(
@@ -1160,9 +1160,10 @@ internal static class SimilarSymbolMatcherTests
 
         AssertTrue(
             mainWindow.Contains("IsWeakSimilarMatch", StringComparison.Ordinal) &&
-            mainWindow.Contains("ExcludeWeakSimilarMatches()", StringComparison.Ordinal) &&
-            normalizedMainWindow.Contains("excludedIndexes.Clear();\n            ExcludeWeakSimilarMatches();", StringComparison.Ordinal),
-            "Similar Count should make below-default confidence matches review-only after each scan");
+            mainWindow.Contains("ExcludeWeakSimilarMatches(bool includeTextCandidatesByDefault)", StringComparison.Ordinal) &&
+            normalizedMainWindow.Contains("excludedIndexes.Clear();\n            ExcludeWeakSimilarMatches(includeTextCandidateReviewMatchesByDefault);", StringComparison.Ordinal) &&
+            normalizedMainWindow.Contains("ExcludeWeakSimilarMatches(includeTextCandidatesByDefault: false);", StringComparison.Ordinal),
+            "Similar Count should make ordinary below-default confidence matches review-only while allowing Beam/Openings text candidates to start included for review");
         AssertTrue(
             dialog.Contains("IncludeAllRequested", StringComparison.Ordinal) &&
             dialog.Contains("StrongOnlyRequested", StringComparison.Ordinal) &&
@@ -1240,9 +1241,9 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             mainWindow.Contains("bool scannedSheetIsOpen = IsSamePageFolder(_currentPage?.FolderPath, request.PageFolder)", StringComparison.Ordinal) &&
             normalizedMainWindow.Contains(
-                "_viewport.AddGeneratedMeasurements(generated);\n        if (scannedSheetIsOpen)\n            _viewport.SelectMeasurements(generated);",
+                "if (scannedSheetIsOpen)\n        {\n            _viewport.AddGeneratedMeasurements(generated);\n            _viewport.SelectMeasurements(generated);\n        }",
                 StringComparison.Ordinal),
-            "Similar Count should only select generated markers when the scanned sheet is still open");
+            "Similar Count should only inject and select generated markers when the scanned sheet is still open");
         AssertTrue(
             mainWindow.Contains("SimilarCountAddedStatus", StringComparison.Ordinal) &&
             mainWindow.Contains("Open the scanned sheet to review them", StringComparison.Ordinal) &&
@@ -1276,6 +1277,7 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("DefaultDestinationName: _activeItem?.Name", StringComparison.Ordinal) &&
             beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
             beamTool.Contains("TextCandidateSearchRadiusPdf: textPadding", StringComparison.Ordinal) &&
+            beamTool.Contains("IncludeTextCandidatesByDefault: true", StringComparison.Ordinal) &&
             beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal) &&
             beamTool.Contains("SimilarOpeningPadding", StringComparison.Ordinal),
             "Beam/Openings Similar requests should mark the original measured item as already counted, target the newly created item, and use auto text/raster matching tuned for measured objects");
@@ -1286,8 +1288,10 @@ internal static class SimilarSymbolMatcherTests
             similarCount.Contains("SimilarCountTextTemplateFallbackRequest", StringComparison.Ordinal) &&
             similarCount.Contains("BuildWeakTextCandidateReviewMatches", StringComparison.Ordinal) &&
             similarCount.Contains("AppendUnverifiedTextCandidateReviewMatches", StringComparison.Ordinal) &&
-            similarCount.Contains("Text-only candidates need manual review", StringComparison.Ordinal),
-            "Similar review should be reusable from Beam/Openings, skip the original measured center, and keep unverified text candidates as weak manual-review markers");
+            similarCount.Contains("Text-only candidates included; review before Add", StringComparison.Ordinal) &&
+            similarCount.Contains("RetryStartSimilarCountReviewAsync", StringComparison.Ordinal) &&
+            similarCount.Contains("ShouldRetrySimilarCountReviewReadiness", StringComparison.Ordinal),
+            "Similar review should be reusable from Beam/Openings, skip the original measured center, include exact text candidates for review, and retry until the readable raster is ready");
     }
 
     public static void SimilarCountUsesExactPdfTextWhenAvailable()
@@ -1337,6 +1341,7 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
             viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&
             viewport.Contains("UseTextCandidateRasterMatches = false", StringComparison.Ordinal) &&
+            viewport.Contains("IncludeTextCandidatesByDefault = false", StringComparison.Ordinal) &&
             viewport.Contains("SKPoint? TemplateAnchorPdf = null", StringComparison.Ordinal) &&
             viewport.Contains("SKPoint? MarkerCenterPdf = null", StringComparison.Ordinal) &&
             viewport.Contains("SKRect? TextSearchRectPdf = null", StringComparison.Ordinal) &&
@@ -1352,6 +1357,7 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("PdfPageIndex: page.PdfPage", StringComparison.Ordinal) &&
             beamTool.Contains("AllowExactTextMatches: false", StringComparison.Ordinal) &&
             beamTool.Contains("UseTextCandidateRasterMatches: true", StringComparison.Ordinal) &&
+            beamTool.Contains("IncludeTextCandidatesByDefault: true", StringComparison.Ordinal) &&
             beamTool.Contains("TemplateAnchorPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("MarkerCenterPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("TextSearchRectPdf:", StringComparison.Ordinal) &&

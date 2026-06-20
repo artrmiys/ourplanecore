@@ -27,8 +27,11 @@ public partial class MainWindow
     private const float SimilarCountNearestTextFallbackPaddingRatio = 0.35f;
     private const float SimilarCountNearestTextFallbackPaddingMinPdf = 8f;
     private const float SimilarCountNearestTextFallbackPaddingMaxPdf = 48f;
+    private const int SimilarCountReviewReadinessRetryLimit = 24;
+    private static readonly TimeSpan SimilarCountReviewReadinessRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private SimilarCountDialog? _similarCountDialog;
+    private int _similarCountReviewStartSerial;
 
     private void BtnSimilarCount_Click(object sender, RoutedEventArgs e)
     {
@@ -53,6 +56,15 @@ public partial class MainWindow
 
     private void StartSimilarCountReview(ViewportSimilarCountRequest request)
     {
+        int serial = ++_similarCountReviewStartSerial;
+        StartSimilarCountReview(request, serial, 0);
+    }
+
+    private void StartSimilarCountReview(
+        ViewportSimilarCountRequest request,
+        int startSerial,
+        int readinessRetryCount)
+    {
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -72,6 +84,13 @@ public partial class MainWindow
                 request.PdfRect, out SimilarSymbolMatchSession? session, out float bitmapScale, out string error) ||
             session == null)
         {
+            if (ShouldRetrySimilarCountReviewReadiness(error, readinessRetryCount))
+            {
+                TxtStatus.Text = SimilarCountReviewReadinessRetryStatus(error, readinessRetryCount);
+                _ = RetryStartSimilarCountReviewAsync(request, startSerial, readinessRetryCount + 1);
+                return;
+            }
+
             string originalError = error;
             if (request.UseTextCandidateRasterMatches && textAnchor != null)
             {
@@ -117,6 +136,7 @@ public partial class MainWindow
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
         bool textCandidateReviewFallbackActive = false;
+        bool includeTextCandidateReviewMatchesByDefault = false;
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
         OurPlaneCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
@@ -273,7 +293,11 @@ public partial class MainWindow
         string SimilarCountLimitSummary()
         {
             if (textCandidateReviewFallbackActive)
-                return "Text-only candidates need manual review";
+            {
+                return includeTextCandidateReviewMatchesByDefault
+                    ? "Text-only candidates included; review before Add"
+                    : "Text-only candidates need manual review";
+            }
 
             var limits = lastMatches
                 .Select((match, index) => new { Match = match, Index = index })
@@ -312,12 +336,15 @@ public partial class MainWindow
                 .Where((match, index) => !alreadyCountedIndexes.Contains(index) && IsWeakSimilarMatch(match))
                 .Count();
 
-        void ExcludeWeakSimilarMatches()
+        void ExcludeWeakSimilarMatches(bool includeTextCandidatesByDefault)
         {
             for (int i = 0; i < lastMatches.Count; i++)
             {
-                if (IsWeakSimilarMatch(lastMatches[i]))
+                if (IsWeakSimilarMatch(lastMatches[i]) &&
+                    !(includeTextCandidatesByDefault && textCandidateReviewFallbackActive))
+                {
                     excludedIndexes.Add(i);
+                }
             }
         }
 
@@ -365,7 +392,15 @@ public partial class MainWindow
         void ApplyDefaultSimilarReviewExclusions()
         {
             excludedIndexes.Clear();
-            ExcludeWeakSimilarMatches();
+            ExcludeWeakSimilarMatches(includeTextCandidateReviewMatchesByDefault);
+            ExcludeAlreadyCountedSimilarMatches();
+            ApplyManualSimilarReviewChoices();
+        }
+
+        void ApplyStrongSimilarReviewExclusions()
+        {
+            excludedIndexes.Clear();
+            ExcludeWeakSimilarMatches(includeTextCandidatesByDefault: false);
             ExcludeAlreadyCountedSimilarMatches();
             ApplyManualSimilarReviewChoices();
         }
@@ -421,7 +456,7 @@ public partial class MainWindow
         void KeepOnlyStrongPreviewMarkers(object? sender, EventArgs e)
         {
             ClearManualSimilarReviewChoices();
-            ApplyDefaultSimilarReviewExclusions();
+            ApplyStrongSimilarReviewExclusions();
             RefreshPreviewReview();
             SimilarCountScanResult result = BuildReviewResult();
             TxtStatus.Text = SimilarReviewStatus(result);
@@ -460,6 +495,7 @@ public partial class MainWindow
             try
             {
                 textCandidateReviewFallbackActive = false;
+                includeTextCandidateReviewMatchesByDefault = false;
                 AppLog.Info(
                     $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
                 List<SimilarSymbolMatch> matches;
@@ -497,6 +533,7 @@ public partial class MainWindow
                             request,
                             bitmapScale);
                         textCandidateReviewFallbackActive = true;
+                        includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
                         AppLog.Info(
                             $"Similar count text-raster produced no new verified markers; showing weak text-only review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
                     }
@@ -513,6 +550,7 @@ public partial class MainWindow
                         if (weakAdded > 0)
                         {
                             textCandidateReviewFallbackActive = true;
+                            includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
                             AppLog.Info(
                                 $"Similar count text-raster added weak unverified text review candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
                         }
@@ -653,6 +691,48 @@ public partial class MainWindow
         dialog.Show();
         dialog.Activate();
         TxtStatus.Text = $"Count similar review for {destinationName}: click preview markers on the sheet to exclude or include them.";
+    }
+
+    private async Task RetryStartSimilarCountReviewAsync(
+        ViewportSimilarCountRequest request,
+        int startSerial,
+        int readinessRetryCount)
+    {
+        await Task.Delay(SimilarCountReviewReadinessRetryDelay);
+        if (startSerial != _similarCountReviewStartSerial || _similarCountDialog != null)
+            return;
+
+        if (_currentJob == null || _currentPage == null)
+            return;
+
+        if (!IsSamePageFolder(_currentPage.FolderPath, request.PageFolder))
+        {
+            TxtStatus.Text = "Count similar: scanned sheet changed before the review raster was ready.";
+            return;
+        }
+
+        StartSimilarCountReview(request, startSerial, readinessRetryCount);
+    }
+
+    private static bool ShouldRetrySimilarCountReviewReadiness(string error, int readinessRetryCount) =>
+        readinessRetryCount < SimilarCountReviewReadinessRetryLimit &&
+        IsSimilarCountReviewReadinessError(error);
+
+    private static bool IsSimilarCountReviewReadinessError(string error) =>
+        !string.IsNullOrWhiteSpace(error) &&
+        (error.Contains("sheet is rendering", StringComparison.OrdinalIgnoreCase) ||
+         error.Contains("sheet is sharpening", StringComparison.OrdinalIgnoreCase));
+
+    private static string SimilarCountReviewReadinessRetryStatus(string error, int readinessRetryCount)
+    {
+        string clean = (error ?? "").Replace(
+            " Selection will start automatically.",
+            "",
+            StringComparison.OrdinalIgnoreCase).Trim();
+        if (string.IsNullOrWhiteSpace(clean))
+            clean = "Count similar: sheet raster is preparing.";
+
+        return $"{clean} Retrying Similar review {readinessRetryCount + 1}/{SimilarCountReviewReadinessRetryLimit}.";
     }
 
     private static string SimilarReviewStatus(SimilarCountScanResult result)
@@ -981,9 +1061,11 @@ public partial class MainWindow
             resolvedItem.Measurements.Add(measurement);
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(resolvedItem);
         bool scannedSheetIsOpen = IsSamePageFolder(_currentPage?.FolderPath, request.PageFolder);
-        _viewport.AddGeneratedMeasurements(generated);
         if (scannedSheetIsOpen)
+        {
+            _viewport.AddGeneratedMeasurements(generated);
             _viewport.SelectMeasurements(generated);
+        }
         RefreshTreeItem(resolvedItem);
         QueueTakeoffAutosave(resolvedItem);
         using (UsePageMeasurementLookup())
