@@ -24,6 +24,8 @@ public partial class MainWindow
     private const float SimilarCountTextFallbackPaddingMaxPdf = 24f;
     private const float SimilarCountTextFallbackPaddingRatio = 0.75f;
     private const float SimilarCountWeakTextCandidateScore = 0.50f;
+    private const int SimilarCountSparseRasterTextFallbackMinCount = 3;
+    private const float SimilarCountSparseRasterTextFallbackRatio = 0.34f;
     private const float SimilarCountNearestTextFallbackPaddingRatio = 0.35f;
     private const float SimilarCountNearestTextFallbackPaddingMinPdf = 8f;
     private const float SimilarCountNearestTextFallbackPaddingMaxPdf = 48f;
@@ -540,13 +542,18 @@ public partial class MainWindow
                     if (textAnchor != null && !textAnchorSelectedAsText)
                     {
                         matches = rasterMatches;
+                        bool useTextLabelFallback = ShouldUseTextLabelReviewFallbackForSparseRaster(
+                            rasterMatches,
+                            textResult);
                         int weakAdded = AppendUnverifiedTextCandidateReviewMatches(
                             matches,
-                            BuildWeakTextCandidateReviewMatches(
-                                textResult,
-                                textAnchor,
-                                request,
-                                bitmapScale),
+                            useTextLabelFallback
+                                ? BuildWeakTextLabelReviewMatches(textResult, bitmapScale)
+                                : BuildWeakTextCandidateReviewMatches(
+                                    textResult,
+                                    textAnchor,
+                                    request,
+                                    bitmapScale),
                             bitmapScale);
                         if (weakAdded > 0 || matches.Count > 0)
                         {
@@ -554,7 +561,7 @@ public partial class MainWindow
                             includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
                         }
                         AppLog.Info(
-                            $"Similar count nearby text guide added weak offset candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                            $"Similar count nearby text guide added weak {(useTextLabelFallback ? "label" : "offset")} candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
                     }
                     else if (ShouldUseTextGuidedRasterMatchesForExactText(
                             rasterMatches,
@@ -984,6 +991,27 @@ public partial class MainWindow
             .Select(match => new SKPoint(match.Center.X - textOffset.X, match.Center.Y - textOffset.Y))
             .Select(center => TextSimilarMatch(center, bitmapScale, SimilarCountWeakTextCandidateScore))
             .ToList();
+    }
+
+    private static List<SimilarSymbolMatch> BuildWeakTextLabelReviewMatches(
+        PdfSimilarTextResult textResult,
+        float bitmapScale) =>
+        textResult.Matches
+            .Select(match => TextSimilarMatch(match.Center, bitmapScale, SimilarCountWeakTextCandidateScore))
+            .ToList();
+
+    private static bool ShouldUseTextLabelReviewFallbackForSparseRaster(
+        IReadOnlyList<SimilarSymbolMatch> rasterMatches,
+        PdfSimilarTextResult textResult)
+    {
+        int textCount = textResult.Matches.Count;
+        if (textCount < SimilarCountSparseRasterTextFallbackMinCount)
+            return false;
+
+        int minimumUsefulRasterCount = Math.Max(
+            SimilarCountSparseRasterTextFallbackMinCount,
+            (int)MathF.Ceiling(textCount * SimilarCountSparseRasterTextFallbackRatio));
+        return rasterMatches.Count < minimumUsefulRasterCount;
     }
 
     private static bool ShouldUseTextGuidedRasterMatchesForExactText(

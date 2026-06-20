@@ -1077,6 +1077,36 @@ internal static class SimilarSymbolMatcherTests
             !incidentalLooksSelected && tightTextLooksSelected,
             "small text inside a larger symbol box should guide raster only, while a tight text box can still use exact text matching");
 
+        MethodInfo? sparseFallbackMethod = typeof(MainWindow).GetMethod(
+            "ShouldUseTextLabelReviewFallbackForSparseRaster",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(sparseFallbackMethod != null, "Similar Count sparse text-label fallback helper should exist");
+
+        var repeatedMarkResult = new PdfSimilarTextResult
+        {
+            Query = "HDUE3",
+            Matches = Enumerable.Range(0, 10)
+                .Select(index => new PdfSimilarTextMatch(
+                    "HDUE3",
+                    new SKRect(index * 20, 0, index * 20 + 16, 8),
+                    new SKPoint(index * 20 + 8, 4)))
+                .ToList(),
+        };
+        bool sparseRasterUsesLabels = (bool)(sparseFallbackMethod!.Invoke(null, new object[]
+        {
+            oneRaster,
+            repeatedMarkResult,
+        }) ?? false);
+        bool usefulRasterKeepsRaster = (bool)(sparseFallbackMethod.Invoke(null, new object[]
+        {
+            Enumerable.Range(0, 4).Select(index => new SimilarSymbolMatch(index * 20, 10, 0.9f, 0)).ToList(),
+            repeatedMarkResult,
+        }) ?? true);
+
+        AssertTrue(
+            sparseRasterUsesLabels && !usefulRasterKeepsRaster,
+            "nearby mark text should fall back to label review candidates only when raster verification is sparse");
+
         MethodInfo? toleranceMethod = typeof(MainWindow).GetMethod(
             "SimilarCountTextFallbackTolerancePdf",
             BindingFlags.NonPublic | BindingFlags.Static);
@@ -1485,7 +1515,9 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarTextAnchorLooksSelectedText", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarTextResultLooksIntentionalSelection", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountNearbyTextCandidateSearchRadiusMultiplier", StringComparison.Ordinal) &&
-            mainWindow.Contains("nearby text guide added weak offset candidates", StringComparison.Ordinal) &&
+            mainWindow.Contains("ShouldUseTextLabelReviewFallbackForSparseRaster", StringComparison.Ordinal) &&
+            mainWindow.Contains("BuildWeakTextLabelReviewMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("useTextLabelFallback", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountNearbyTextFallbackPaddingMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
