@@ -1351,6 +1351,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountLimitLabel", StringComparison.Ordinal) &&
             mainWindow.Contains("Weak limit:", StringComparison.Ordinal) &&
             mainWindow.Contains("Text-only candidates waiting for review", StringComparison.Ordinal) &&
+            mainWindow.Contains("candidate(s) waiting for review", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarReviewStatus", StringComparison.Ordinal) &&
             mainWindow.Contains("result.LimitSummary", StringComparison.Ordinal) &&
             mainWindow.Contains("result.AlreadyCountedCount", StringComparison.Ordinal),
@@ -1390,7 +1391,10 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("IsWeakSimilarMatch", StringComparison.Ordinal) &&
             mainWindow.Contains("ExcludeWeakSimilarMatches(bool includeTextCandidatesByDefault)", StringComparison.Ordinal) &&
             normalizedMainWindow.Contains("excludedIndexes.Clear();\n            ExcludeWeakSimilarMatches(includeTextCandidateReviewMatchesByDefault);", StringComparison.Ordinal) &&
-            normalizedMainWindow.Contains("ExcludeWeakSimilarMatches(includeTextCandidatesByDefault: false);", StringComparison.Ordinal),
+            normalizedMainWindow.Contains("ExcludeWeakSimilarMatches(includeTextCandidatesByDefault: false);", StringComparison.Ordinal) &&
+            normalizedMainWindow.Contains(
+                "void IncludeAllPreviewMarkers(object? sender, EventArgs e)\n        {\n            RememberCurrentSimilarReviewChoices(include: true);\n            ApplyDefaultSimilarReviewExclusions();\n            RefreshPreviewReview();",
+                StringComparison.Ordinal),
             "Similar Count should make below-default confidence and text-only fallback matches review-only unless they are explicitly included");
         AssertTrue(
             dialog.Contains("IncludeAllRequested", StringComparison.Ordinal) &&

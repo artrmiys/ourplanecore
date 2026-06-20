@@ -821,7 +821,9 @@ public partial class MainWindow
 
     private static string SimilarReviewStatus(SimilarCountScanResult result)
     {
-        string status = $"Count similar review: {result.Included}/{result.NewCandidateCount} new marker(s) ready";
+        string status = result.Included <= 0 && result.NewCandidateCount > 0
+            ? $"Count similar review: {result.NewCandidateCount} candidate(s) waiting for review"
+            : $"Count similar review: {result.Included}/{result.NewCandidateCount} new marker(s) ready";
         if (result.WeakCount > 0)
             status += $", {result.WeakCount} weak";
         if (result.AlreadyCountedCount > 0)
