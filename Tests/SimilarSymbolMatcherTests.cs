@@ -431,6 +431,7 @@ internal static class SimilarSymbolMatcherTests
         string matcher = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
         string dialog = File.ReadAllText(Path.Combine("Dialogs", "SimilarCountDialog.cs"));
         string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string otherSheets = File.ReadAllText("MainWindow.SimilarCount.OtherSheets.cs");
         string settings = File.ReadAllText(Path.Combine("Models", "AppSettingsStore.cs"));
 
         AssertTrue(
@@ -446,8 +447,11 @@ internal static class SimilarSymbolMatcherTests
             "dialog should offer the all-sheets option and surface the other-sheet summary");
         AssertTrue(
             mainWindow.Contains("SweepOtherSimilarSheetsAsync", StringComparison.Ordinal) &&
-            mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
+            mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
+            otherSheets.Contains("FindOtherSheetTextGuidedRasterMatches", StringComparison.Ordinal) &&
+            otherSheets.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
+            otherSheets.Contains("Similar count all-sheets text-guided raster matches", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
             mainWindow.Contains("initialRotations: request.InitialIncludeRotations", StringComparison.Ordinal) &&
@@ -461,7 +465,7 @@ internal static class SimilarSymbolMatcherTests
             settings.Contains("settings.SimilarCountRotations = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountMirrored = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountAllSheets = false", StringComparison.Ordinal),
-            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and manual Similar defaults should keep heavy options opt-in");
+            "the all-sheets sweep should render other sheets, use PDF text as a raster-verified search guide, add their markers, cap the sheet count, and manual Similar defaults should keep heavy options opt-in");
     }
 
     public static void RejectsNearMissAtPrecisionThreshold()
@@ -1306,6 +1310,7 @@ internal static class SimilarSymbolMatcherTests
             helper.Contains("def similar_text_data", StringComparison.Ordinal) &&
             helper.Contains("_similar_text_key", StringComparison.Ordinal) &&
             helper.Contains("prefer_nearest_repeated_text", StringComparison.Ordinal) &&
+            helper.Contains("requested_query = _similar_text_key", StringComparison.Ordinal) &&
             helper.Contains("key_counts", StringComparison.Ordinal) &&
             helper.Contains("distance_sq", StringComparison.Ordinal) &&
             helper.Contains("elif action == \"similartext\"", StringComparison.Ordinal) &&
@@ -1315,6 +1320,7 @@ internal static class SimilarSymbolMatcherTests
             service.Contains("PdfSimilarTextService", StringComparison.Ordinal) &&
             service.Contains("TryInvokeHelper(", StringComparison.Ordinal) &&
             service.Contains("\"similartext\"", StringComparison.Ordinal) &&
+            service.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
             service.Contains("PdfSimilarTextMatch", StringComparison.Ordinal) &&
             service.Contains("PreferNearestRepeatedText", StringComparison.Ordinal) &&
             service.Contains("PdfSimilarTextPoint", StringComparison.Ordinal),
@@ -1336,7 +1342,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
             mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
-            "Similar Count should use exact PDF text for direct text selections, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings");
+            "Similar Count should use exact PDF text for direct text selections, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
             viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&

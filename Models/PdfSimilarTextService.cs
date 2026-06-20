@@ -17,6 +17,60 @@ public sealed class PdfSimilarTextResult
 
 public static class PdfSimilarTextService
 {
+    public static bool TryFindSimilarTextByQuery(
+        string pdfPath,
+        int pageIndex,
+        string query,
+        out PdfSimilarTextResult result,
+        out string error)
+    {
+        result = new PdfSimilarTextResult();
+        error = "";
+
+        string cleanQuery = CleanQuery(query);
+        if (string.IsNullOrWhiteSpace(pdfPath) ||
+            !File.Exists(pdfPath) ||
+            pageIndex < 0 ||
+            cleanQuery.Length < 2)
+        {
+            return false;
+        }
+
+        try
+        {
+            var request = new PdfSimilarTextRequest
+            {
+                Pdf = pdfPath,
+                Page = pageIndex,
+                Query = cleanQuery,
+            };
+
+            if (!PdfLayerRenderService.TryInvokeHelper(
+                    "similartext",
+                    request,
+                    out PdfSimilarTextResponse? response,
+                    out error))
+            {
+                return false;
+            }
+
+            if (response == null || !response.Ok)
+            {
+                error = response?.Error ?? "PyMuPDF did not return a similar text response.";
+                return false;
+            }
+
+            result = BuildResult(response);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Similar text query scan failed for {pdfPath} page {pageIndex + 1}");
+            error = ex.Message;
+            return false;
+        }
+    }
+
     public static bool TryFindSimilarText(
         string pdfPath,
         int pageIndex,
@@ -58,25 +112,7 @@ public static class PdfSimilarTextService
                 return false;
             }
 
-            result = new PdfSimilarTextResult
-            {
-                Query = response.Query ?? "",
-                Matches = response.Matches
-                    .Where(match =>
-                        IsFinite(match.X0) &&
-                        IsFinite(match.Y0) &&
-                        IsFinite(match.X1) &&
-                        IsFinite(match.Y1))
-                    .Select(match =>
-                    {
-                        var rect = new SKRect(match.X0, match.Y0, match.X1, match.Y1);
-                        return new PdfSimilarTextMatch(
-                            match.Text ?? "",
-                            rect,
-                            new SKPoint((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f));
-                    })
-                    .ToList(),
-            };
+            result = BuildResult(response);
             return true;
         }
         catch (Exception ex)
@@ -86,6 +122,33 @@ public static class PdfSimilarTextService
             return false;
         }
     }
+
+    private static PdfSimilarTextResult BuildResult(PdfSimilarTextResponse response) =>
+        new()
+        {
+            Query = response.Query ?? "",
+            Matches = response.Matches
+                .Where(match =>
+                    IsFinite(match.X0) &&
+                    IsFinite(match.Y0) &&
+                    IsFinite(match.X1) &&
+                    IsFinite(match.Y1))
+                .Select(match =>
+                {
+                    var rect = new SKRect(match.X0, match.Y0, match.X1, match.Y1);
+                    return new PdfSimilarTextMatch(
+                        match.Text ?? "",
+                        rect,
+                        new SKPoint((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f));
+                })
+                .ToList(),
+        };
+
+    private static string CleanQuery(string query) =>
+        new((query ?? "")
+            .ToUpperInvariant()
+            .Where(char.IsLetterOrDigit)
+            .ToArray());
 
     private static bool IsFinite(float value) =>
         !float.IsNaN(value) && !float.IsInfinity(value);
@@ -97,6 +160,7 @@ public static class PdfSimilarTextService
         public PdfSimilarTextRect Rect { get; init; } = new();
         public bool PreferNearestRepeatedText { get; init; }
         public PdfSimilarTextPoint? Anchor { get; init; }
+        public string Query { get; init; } = "";
     }
 
     private sealed class PdfSimilarTextRect

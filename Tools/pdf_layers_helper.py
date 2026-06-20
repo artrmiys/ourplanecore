@@ -2850,6 +2850,15 @@ def similar_text_data(req: dict) -> dict:
     if not words:
         return {"ok": True, "query": "", "matches": []}
 
+    requested_query = _similar_text_key(str(req.get("query") or ""))
+    if len(requested_query) >= 2:
+        matches = [
+            _word_payload(word)
+            for word in words
+            if _similar_text_key(str(word[4] or "")) == requested_query
+        ]
+        return {"ok": True, "query": requested_query, "matches": matches}
+
     key_counts = {}
     for word in words:
         key = _similar_text_key(str(word[4] or ""))

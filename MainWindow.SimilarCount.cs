@@ -471,7 +471,9 @@ public partial class MainWindow
             TxtStatus.Text = "Count similar: scanning other sheets...";
             (List<SimilarSheetSweep> sweeps, int skipped) = await SweepOtherSimilarSheetsAsync(
                 reviewJob,
-                request.PageFolder,
+                request,
+                textResult,
+                textAnchor,
                 session,
                 bitmapScale,
                 rotations,
@@ -1199,147 +1201,6 @@ public partial class MainWindow
         float dx = existing.X - center.X;
         float dy = existing.Y - center.Y;
         return dx * dx + dy * dy <= SimilarCountDuplicateTolerancePdf * SimilarCountDuplicateTolerancePdf;
-    }
-
-    // One other sheet's matches for the boxed template, captured at the loose
-    // floor so threshold changes re-filter instantly without re-rendering.
-    private sealed class SimilarSheetSweep
-    {
-        public required string PageFolder { get; init; }
-        public required string PageName { get; init; }
-        public required double ScaleMetersPerPt { get; init; }
-        public required List<(SKPoint CenterPdf, float Score)> Hits { get; init; }
-    }
-
-    // Render every other sheet at the same pixel-per-point scale the template
-    // was boxed at, then run the template against each. Renders go through the
-    // shared render cache; matching uses the same offline matcher. Bounded by
-    // SimilarCountMaxSweepSheets so a huge job cannot stall the review.
-    private async Task<(List<SimilarSheetSweep> Sweeps, int SkippedOverLimit)> SweepOtherSimilarSheetsAsync(
-        OurPlaneCoreJob job,
-        string scannedPageFolder,
-        SimilarSymbolMatchSession session,
-        float bitmapScale,
-        bool rotations,
-        bool mirrored,
-        CancellationToken cancellationToken)
-    {
-        var sweeps = new List<SimilarSheetSweep>();
-        if (bitmapScale <= 0)
-            return (sweeps, 0);
-
-        List<PageInfo> pages = CollectPagesUnder(job.PagesRoot)
-            .Where(page => !IsSamePageFolder(page.FolderPath, scannedPageFolder))
-            .ToList();
-
-        int skipped = 0;
-        if (pages.Count > SimilarCountMaxSweepSheets)
-        {
-            skipped = pages.Count - SimilarCountMaxSweepSheets;
-            pages = pages.Take(SimilarCountMaxSweepSheets).ToList();
-        }
-
-        float floor = (float)AppSettingsStore.SimilarCountThresholdMin;
-        foreach (PageInfo page in pages)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(page.PdfPath))
-                continue;
-
-            (bool ok, PdfLayerRenderResult render, _) = await PdfLayerRenderService.TryRenderAsync(
-                page.PdfPath,
-                page.PdfPage,
-                bitmapScale,
-                new Dictionary<int, bool>(),
-                [],
-                page.PdfLayersCached ? page.PdfLayers : null);
-            if (!ok || render.ImageBytes.Length == 0 || render.WidthPt <= 0)
-                continue;
-
-            using SKBitmap? bitmap = SKBitmap.Decode(render.ImageBytes);
-            if (bitmap == null || bitmap.Width <= 0)
-                continue;
-
-            double pxPerPt = bitmap.Width / render.WidthPt;
-            if (pxPerPt <= 0)
-                continue;
-
-            List<SimilarSymbolMatch> matches = await Task.Run(
-                () => session.FindMatchesOnBitmap(bitmap, floor, rotations, mirrored, cancellationToken),
-                cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (matches.Count == 0)
-                continue;
-
-            var hits = matches
-                .Select(match => (
-                    new SKPoint((float)(match.CenterX / pxPerPt), (float)(match.CenterY / pxPerPt)),
-                    match.Score))
-                .ToList();
-            sweeps.Add(new SimilarSheetSweep
-            {
-                PageFolder = page.FolderPath,
-                PageName = page.Name,
-                ScaleMetersPerPt = page.ScaleMetersPerPt,
-                Hits = hits,
-            });
-        }
-
-        return (sweeps, skipped);
-    }
-
-    // Add the resolved off-sheet matches to the destination item. These sheets
-    // are not open, so there is no per-marker review and no viewport call; the
-    // markers persist with each sheet's own page folder and scale.
-    private (int Sheets, int Markers) AddOtherSheetSimilarCounts(
-        TakeoffItem item,
-        IReadOnlyList<(SimilarSheetSweep Sweep, List<SKPoint> Centers)> additions)
-    {
-        int sheets = 0;
-        int markers = 0;
-        var touchedFolders = new List<string>();
-        foreach ((SimilarSheetSweep sweep, List<SKPoint> centers) in additions)
-        {
-            var fresh = centers
-                .Where(center => !IsSimilarCountDuplicateCenter(item, sweep.PageFolder, center))
-                .ToList();
-            if (fresh.Count == 0)
-                continue;
-
-            foreach (SKPoint center in fresh)
-            {
-                item.Measurements.Add(new Measurement
-                {
-                    MType = "point",
-                    Points = [center],
-                    Color = item.Color,
-                    CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol),
-                    PageFolder = sweep.PageFolder,
-                    TakeoffFolder = item.FolderPath,
-                    ScaleMetersPerPt = sweep.ScaleMetersPerPt,
-                });
-            }
-
-            sheets++;
-            markers += fresh.Count;
-            touchedFolders.Add(sweep.PageFolder);
-        }
-
-        if (markers == 0)
-            return (0, 0);
-
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        RefreshTreeItem(item);
-        QueueTakeoffAutosave(item);
-        using (UsePageMeasurementLookup())
-        {
-            RefreshTakeoffRowVisualsForItems(new[] { item });
-            foreach (string folder in touchedFolders)
-                RefreshPageTakeoffIndicatorsForFolder(folder);
-            RefreshSheetLegend();
-        }
-        UpdateTotalDisplay();
-        return (sheets, markers);
     }
 
     private void QueueSimilarCountAiRequest(
