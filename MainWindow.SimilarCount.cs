@@ -147,6 +147,7 @@ public partial class MainWindow
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
         int otherSheetTextGuideSkippedSheets = 0;
+        int otherSheetTextTemplateFallbackSkippedSheets = 0;
         int otherSheetTextRejectedSheets = 0;
         int otherSheetTextRejectedCandidates = 0;
         bool textCandidateReviewFallbackActive = false;
@@ -261,12 +262,15 @@ public partial class MainWindow
             string textNoGuide = otherSheetTextGuideSkippedSheets > 0
                 ? $" {otherSheetTextGuideSkippedSheets} sheet(s) were not auto-added without a usable PDF text guide."
                 : "";
+            string textTemplateFallback = otherSheetTextTemplateFallbackSkippedSheets > 0
+                ? $" {otherSheetTextTemplateFallbackSkippedSheets} sheet(s) were not auto-added because the measured object did not produce a usable raster template."
+                : "";
             string textRejected = otherSheetTextRejectedCandidates > 0
                 ? $" {otherSheetTextRejectedCandidates} PDF text candidate(s) on {otherSheetTextRejectedSheets} sheet(s) were not auto-added without a raster match."
                 : "";
             return markers == 0
-                ? $"Other sheets: no new raster matches.{textNoGuide}{textRejected}{skipped}"
-                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{textNoGuide}{textRejected}{skipped}";
+                ? $"Other sheets: no new raster matches.{textNoGuide}{textTemplateFallback}{textRejected}{skipped}"
+                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{textNoGuide}{textTemplateFallback}{textRejected}{skipped}";
         }
 
         SimilarCountScanResult BuildReviewResult()
@@ -496,7 +500,7 @@ public partial class MainWindow
                 return;
 
             TxtStatus.Text = "Count similar: scanning other sheets...";
-            (List<SimilarSheetSweep> sweeps, int skipped, int textGuideSkippedSheets, int textRejectedSheets, int textRejectedCandidates) =
+            (List<SimilarSheetSweep> sweeps, int skipped, int textGuideSkippedSheets, int textTemplateFallbackSkippedSheets, int textRejectedSheets, int textRejectedCandidates) =
                 await SweepOtherSimilarSheetsAsync(
                     reviewJob,
                     request,
@@ -507,12 +511,14 @@ public partial class MainWindow
                     threshold,
                     rotations,
                     mirrored,
+                    usedTextTemplateFallback,
                     cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             otherSheetSweeps.Clear();
             otherSheetSweeps.AddRange(sweeps);
             otherSheetSkippedOverLimit = skipped;
             otherSheetTextGuideSkippedSheets = textGuideSkippedSheets;
+            otherSheetTextTemplateFallbackSkippedSheets = textTemplateFallbackSkippedSheets;
             otherSheetTextRejectedSheets = textRejectedSheets;
             otherSheetTextRejectedCandidates = textRejectedCandidates;
             otherSheetSweepKey = key;

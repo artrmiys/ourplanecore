@@ -33,6 +33,7 @@ public partial class MainWindow
         List<SimilarSheetSweep> Sweeps,
         int SkippedOverLimit,
         int TextGuideSkippedSheets,
+        int TextTemplateFallbackSkippedSheets,
         int TextRejectedSheets,
         int TextRejectedCandidates)> SweepOtherSimilarSheetsAsync(
         OurPlaneCoreJob job,
@@ -44,11 +45,12 @@ public partial class MainWindow
         float threshold,
         bool rotations,
         bool mirrored,
+        bool textTemplateFallback,
         CancellationToken cancellationToken)
     {
         var sweeps = new List<SimilarSheetSweep>();
         if (bitmapScale <= 0)
-            return (sweeps, 0, 0, 0, 0);
+            return (sweeps, 0, 0, 0, 0, 0);
 
         List<PageInfo> pages = CollectPagesUnder(job.PagesRoot)
             .Where(page => !IsSamePageFolder(page.FolderPath, request.PageFolder))
@@ -69,11 +71,18 @@ public partial class MainWindow
         int textGuidedRejectedCandidates = 0;
         bool useTextGuide = CanUseOtherSheetTextGuide(request, textResult, textAnchor);
         bool textGuideRequired = request.UseTextCandidateRasterMatches && !request.AllowExactTextMatches;
+        if (textGuideRequired && textTemplateFallback)
+        {
+            AppLog.Info(
+                $"Similar count all-sheets skipped text-template fallback auto-add; sheets={pages.Count}; page='{request.PageFolder}'");
+            return (sweeps, skipped, 0, pages.Count, 0, 0);
+        }
+
         if (textGuideRequired && !useTextGuide)
         {
             AppLog.Info(
                 $"Similar count all-sheets skipped visual-only Beam/Openings sweep; sheets={pages.Count}; page='{request.PageFolder}'");
-            return (sweeps, skipped, pages.Count, 0, 0);
+            return (sweeps, skipped, pages.Count, 0, 0, 0);
         }
 
         foreach (PageInfo page in pages)
@@ -157,7 +166,7 @@ public partial class MainWindow
                 $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; rejectedByRaster={textGuidedRejectedByRaster}; rejectedTextCandidates={textGuidedRejectedCandidates}; page='{request.PageFolder}'");
         }
 
-        return (sweeps, skipped, textGuidedSkippedNoText, textGuidedRejectedByRaster, textGuidedRejectedCandidates);
+        return (sweeps, skipped, textGuidedSkippedNoText, 0, textGuidedRejectedByRaster, textGuidedRejectedCandidates);
     }
 
     private static (List<SimilarSymbolMatch> Matches, bool TextGuided, bool RejectedByRaster) FindOtherSheetSimilarMatches(
