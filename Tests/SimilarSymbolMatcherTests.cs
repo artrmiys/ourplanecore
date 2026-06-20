@@ -976,8 +976,18 @@ internal static class SimilarSymbolMatcherTests
     {
         MethodInfo? method = typeof(MainWindow).GetMethod(
             "SimilarCountTextCandidateSearchRadiusPixels",
-            BindingFlags.NonPublic | BindingFlags.Static);
+            BindingFlags.NonPublic | BindingFlags.Static,
+            binder: null,
+            types: [typeof(ViewportSimilarCountRequest), typeof(float)],
+            modifiers: null);
         AssertTrue(method != null, "Similar Count text candidate radius helper should exist");
+        MethodInfo? nearbyMethod = typeof(MainWindow).GetMethod(
+            "SimilarCountTextCandidateSearchRadiusPixels",
+            BindingFlags.NonPublic | BindingFlags.Static,
+            binder: null,
+            types: [typeof(ViewportSimilarCountRequest), typeof(float), typeof(PdfSimilarTextMatch)],
+            modifiers: null);
+        AssertTrue(nearbyMethod != null, "Similar Count nearby text candidate radius helper should exist");
 
         var exactTextRequest = new ViewportSimilarCountRequest(
             new SKRect(10, 10, 30, 26),
@@ -1002,6 +1012,21 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             exactRadius > explicitRadius && explicitRadius == 48,
             $"explicit Beam/Openings text radius should stay request-driven at 24 PDF pt/2x, got exact={exactRadius}px explicit={explicitRadius}px");
+
+        var nearbyTextAnchor = new PdfSimilarTextMatch(
+            "HDUE3",
+            new SKRect(72, 12, 92, 24),
+            new SKPoint(82, 18));
+        int nearbyRadius = (int)(nearbyMethod!.Invoke(null, new object[]
+        {
+            exactTextRequest,
+            2f,
+            nearbyTextAnchor,
+        }) ?? 0);
+
+        AssertTrue(
+            nearbyRadius > exactRadius && nearbyRadius >= 256,
+            $"nearby mark-text Similar should widen raster search enough for opposite-side symbols, got exact={exactRadius}px nearby={nearbyRadius}px");
     }
 
     public static void NearbyTextGuideDoesNotBecomeTextOnlyMarkers()
@@ -1459,6 +1484,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("textAnchorSelectedAsText", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarTextAnchorLooksSelectedText", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarTextResultLooksIntentionalSelection", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountNearbyTextCandidateSearchRadiusMultiplier", StringComparison.Ordinal) &&
             mainWindow.Contains("nearby text guide added weak offset candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountNearbyTextFallbackPaddingMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f", StringComparison.Ordinal) &&

@@ -33,6 +33,8 @@ public partial class MainWindow
     private const float SimilarCountExactTextCandidateSearchRadiusRatio = 0.75f;
     private const float SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f;
     private const float SimilarCountExactTextCandidateSearchRadiusMaxPdf = 144f;
+    private const float SimilarCountNearbyTextCandidateSearchRadiusMultiplier = 2.25f;
+    private const float SimilarCountNearbyTextCandidateSearchRadiusMaxPdf = 192f;
     private const int SimilarCountReviewReadinessRetryLimit = 24;
     private static readonly TimeSpan SimilarCountReviewReadinessRetryDelay = TimeSpan.FromMilliseconds(500);
 
@@ -529,6 +531,7 @@ public partial class MainWindow
                                 threshold,
                                 rotations,
                                 mirrored,
+                                nearbyTextGuide: !textAnchorSelectedAsText,
                                 cancellationToken),
                             cancellationToken);
                         cancellationToken.ThrowIfCancellationRequested();
@@ -593,6 +596,7 @@ public partial class MainWindow
                             threshold,
                             rotations,
                             mirrored,
+                            nearbyTextGuide: false,
                             cancellationToken),
                         cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
@@ -945,6 +949,7 @@ public partial class MainWindow
         float threshold,
         bool rotations,
         bool mirrored,
+        bool nearbyTextGuide,
         CancellationToken cancellationToken)
     {
         SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
@@ -954,7 +959,10 @@ public partial class MainWindow
                 (match.Center.X - textOffset.X) * bitmapScale,
                 (match.Center.Y - textOffset.Y) * bitmapScale))
             .ToList();
-        int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(request, bitmapScale);
+        int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(
+            request,
+            bitmapScale,
+            nearbyTextGuide ? textAnchor : null);
         return session.FindMatchesNearCenters(
             candidateCenters,
             radiusPixels,
@@ -1115,7 +1123,13 @@ public partial class MainWindow
 
     private static int SimilarCountTextCandidateSearchRadiusPixels(
         ViewportSimilarCountRequest request,
-        float bitmapScale)
+        float bitmapScale) =>
+        SimilarCountTextCandidateSearchRadiusPixels(request, bitmapScale, nearbyTextAnchor: null);
+
+    private static int SimilarCountTextCandidateSearchRadiusPixels(
+        ViewportSimilarCountRequest request,
+        float bitmapScale,
+        PdfSimilarTextMatch? nearbyTextAnchor)
     {
         float radius = 0f;
         if (request.TextCandidateSearchRadiusPdf > 0f && float.IsFinite(request.TextCandidateSearchRadiusPdf))
@@ -1133,6 +1147,21 @@ public partial class MainWindow
         {
             float templateSide = Math.Max(request.PdfRect.Width, request.PdfRect.Height);
             radius = templateSide * bitmapScale * 0.18f;
+        }
+
+        if (nearbyTextAnchor != null &&
+            request.TextCandidateSearchRadiusPdf <= 0f &&
+            request.AllowExactTextMatches &&
+            !request.UseTextCandidateRasterMatches)
+        {
+            SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
+            float offsetPdf = MathF.Sqrt(DistanceSquared(nearbyTextAnchor.Center, anchor));
+            float templateSide = Math.Max(Math.Abs(request.PdfRect.Width), Math.Abs(request.PdfRect.Height));
+            float nearbyRadiusPdf = Math.Clamp(
+                offsetPdf * SimilarCountNearbyTextCandidateSearchRadiusMultiplier + templateSide * 0.5f,
+                SimilarCountExactTextCandidateSearchRadiusMinPdf,
+                SimilarCountNearbyTextCandidateSearchRadiusMaxPdf);
+            radius = Math.Max(radius, nearbyRadiusPdf * bitmapScale);
         }
 
         radius = Math.Clamp(radius, 14f, 384f);
