@@ -1465,7 +1465,7 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             dialog.Contains("_reviewDetailsLabel", StringComparison.Ordinal) &&
             dialog.Contains("ReviewDetails", StringComparison.Ordinal) &&
-            dialog.Contains("Review {result.NewCandidateCount} candidates", StringComparison.Ordinal) &&
+            dialog.Contains("Review {result.NewCandidateCount} candidates before Add", StringComparison.Ordinal) &&
             dialog.Contains("Already counted", StringComparison.Ordinal) &&
             dialog.Contains("Excluded", StringComparison.Ordinal) &&
             dialog.Contains("result.LimitSummary", StringComparison.Ordinal),
@@ -1525,9 +1525,12 @@ internal static class SimilarSymbolMatcherTests
             dialog.Contains("IncludeAllRequested", StringComparison.Ordinal) &&
             dialog.Contains("StrongOnlyRequested", StringComparison.Ordinal) &&
             dialog.Contains("Include candidates", StringComparison.Ordinal) &&
+            dialog.Contains("Include review candidates", StringComparison.Ordinal) &&
+            dialog.Contains("Include candidates to enable Add", StringComparison.Ordinal) &&
+            dialog.Contains("_includeAllButton.IsDefault = !canAdd && canInclude", StringComparison.Ordinal) &&
             dialog.Contains("orange weak review markers", StringComparison.Ordinal) &&
             dialog.Contains("Strong only", StringComparison.Ordinal),
-            "Similar Count review should expose quick actions to include candidates or return to strong matches only");
+            "Similar Count review should expose quick actions to include candidates, make that action primary while Add is disabled, or return to strong matches only");
         AssertTrue(
             viewport.Contains("canvas.DrawCircle(center, radius, weakerMatch ? weakStroke : excludedStroke)", StringComparison.Ordinal),
             "Excluded weak Similar candidates should keep a distinct low-confidence ring");

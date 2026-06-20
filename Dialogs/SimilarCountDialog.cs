@@ -428,14 +428,16 @@ public sealed class SimilarCountDialog : Window
             _addButton.IsEnabled = false;
             _includeAllButton.IsEnabled = false;
             _strongOnlyButton.IsEnabled = false;
+            _addButton.IsDefault = false;
+            _includeAllButton.IsDefault = false;
             return;
         }
 
         if (_lastFound == 0 && result.NewCandidateCount > 0)
         {
             _foundLabel.Text = result.NewCandidateCount == 1
-                ? "Review 1 candidate."
-                : $"Review {result.NewCandidateCount} candidates.";
+                ? "Review 1 candidate before Add."
+                : $"Review {result.NewCandidateCount} candidates before Add.";
             _addButton.Content = AddButtonText(0, _lastOtherSheetNewCount);
         }
         else if (_lastFound == _lastTotal && _lastAlreadyCountedCount == 0)
@@ -452,8 +454,15 @@ public sealed class SimilarCountDialog : Window
         }
 
         _reviewDetailsLabel.Text = ReviewDetails(result);
-        _addButton.IsEnabled = _lastFound > 0 || _lastOtherSheetNewCount > 0;
-        _includeAllButton.IsEnabled = _lastFound < result.NewCandidateCount;
+        bool canAdd = _lastFound > 0 || _lastOtherSheetNewCount > 0;
+        bool canInclude = _lastFound < result.NewCandidateCount;
+        _addButton.IsEnabled = canAdd;
+        _includeAllButton.IsEnabled = canInclude;
+        _addButton.IsDefault = canAdd;
+        _includeAllButton.IsDefault = !canAdd && canInclude;
+        _includeAllButton.Content = !canAdd && canInclude
+            ? "Include review candidates"
+            : "Include candidates";
         _strongOnlyButton.IsEnabled = result.NewCandidateCount > 0;
     }
 
@@ -474,6 +483,8 @@ public sealed class SimilarCountDialog : Window
             parts.Add($"Excluded {result.ExcludedNewCount}");
         if (!string.IsNullOrWhiteSpace(result.LimitSummary))
             parts.Add(result.LimitSummary);
+        if (result.Included <= 0 && result.NewCandidateCount > 0)
+            parts.Add("Include candidates to enable Add");
         return string.Join(" | ", parts);
     }
 
@@ -556,6 +567,8 @@ public sealed class SimilarCountDialog : Window
         _addButton.IsEnabled = false;
         _includeAllButton.IsEnabled = false;
         _strongOnlyButton.IsEnabled = false;
+        _addButton.IsDefault = false;
+        _includeAllButton.IsDefault = false;
         try
         {
             SimilarCountScanResult result = await _scan(
@@ -591,6 +604,8 @@ public sealed class SimilarCountDialog : Window
             _addButton.IsEnabled = false;
             _includeAllButton.IsEnabled = false;
             _strongOnlyButton.IsEnabled = false;
+            _addButton.IsDefault = false;
+            _includeAllButton.IsDefault = false;
         }
         catch (Exception ex)
         {
