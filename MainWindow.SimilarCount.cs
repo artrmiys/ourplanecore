@@ -37,6 +37,7 @@ public partial class MainWindow
     private const float SimilarCountNearbyTextCandidateSearchRadiusMaxPdf = 192f;
     private const int SimilarCountMaxTextCandidateMatches = 240;
     private const int SimilarCountReviewReadinessRetryLimit = 24;
+    private static readonly TimeSpan SimilarCountTextRasterVisualMergeTimeout = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SimilarCountReviewReadinessRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private SimilarCountDialog? _similarCountDialog;
@@ -617,10 +618,15 @@ public partial class MainWindow
                     cancellationToken.ThrowIfCancellationRequested();
                     AppLog.Info(
                         $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
-                    List<SimilarSymbolMatch> visualMatches = await Task.Run(
-                        () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
-                        cancellationToken);
-                    cancellationToken.ThrowIfCancellationRequested();
+                    List<SimilarSymbolMatch> visualMatches =
+                        await TryFindTextRasterVisualMergeMatchesAsync(
+                            session,
+                            textResult.Query,
+                            request.PageFolder,
+                            threshold,
+                            rotations,
+                            mirrored,
+                            cancellationToken);
                     int visualAdded = AppendDistinctSimilarMatches(matches, visualMatches, bitmapScale);
                     if (visualAdded > 0)
                     {
@@ -814,6 +820,31 @@ public partial class MainWindow
         }
 
         StartSimilarCountReview(request, startSerial, readinessRetryCount);
+    }
+
+    private static async Task<List<SimilarSymbolMatch>> TryFindTextRasterVisualMergeMatchesAsync(
+        SimilarSymbolMatchSession session,
+        string query,
+        string pageFolder,
+        float threshold,
+        bool rotations,
+        bool mirrored,
+        CancellationToken cancellationToken)
+    {
+        using var mergeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        mergeCts.CancelAfter(SimilarCountTextRasterVisualMergeTimeout);
+        try
+        {
+            return await Task.Run(
+                () => session.FindMatches(threshold, rotations, mirrored, mergeCts.Token),
+                mergeCts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && mergeCts.IsCancellationRequested)
+        {
+            AppLog.Info(
+                $"Similar count text-raster skipped slow full-sheet visual merge after {SimilarCountTextRasterVisualMergeTimeout.TotalSeconds:0}s; query='{query}'; page='{pageFolder}'");
+            return [];
+        }
     }
 
     private static bool ShouldRetrySimilarCountReviewReadiness(string error, int readinessRetryCount) =>
