@@ -67,6 +67,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher recovers multiple symbols per text label", SimilarSymbolMatcherTests.TextGuidedRasterCanRecoverMultipleSymbolsPerLabel),
     ("similar count exact text radius covers nearby repeated symbols", SimilarSymbolMatcherTests.ExactTextGuidedRadiusCoversNearbyRepeatedSymbols),
     ("similar count nearby text guide stays raster only", SimilarSymbolMatcherTests.NearbyTextGuideDoesNotBecomeTextOnlyMarkers),
+    ("similar count all sheets keeps manual text offset", SimilarSymbolMatcherTests.AllSheetsTextGuideKeepsManualTemplateOffset),
     ("viewport status uses ui dispatcher", SimilarSymbolMatcherTests.ViewportStatusUsesUiDispatcher),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("similar count review choices survive rescan", SimilarSymbolMatcherTests.SimilarCountReviewChoicesSurviveRescan),

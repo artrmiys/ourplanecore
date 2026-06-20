@@ -202,14 +202,22 @@ public partial class MainWindow
             return null;
         }
 
-        SKPoint markerFromTextOffset = request.MarkerCenterPdf is { } marker
-            ? new SKPoint(marker.X - sourceTextAnchor.Center.X, marker.Y - sourceTextAnchor.Center.Y)
-            : default;
+        SKPoint markerFromTextOffset = SimilarCountTextMarkerOffset(sourceTextAnchor, request);
         return new OtherSheetTextGuide
         {
             PageText = pageText,
             MarkerFromTextOffset = markerFromTextOffset,
         };
+    }
+
+    private static SKPoint SimilarCountTextMarkerOffset(
+        PdfSimilarTextMatch sourceTextAnchor,
+        ViewportSimilarCountRequest request)
+    {
+        SKPoint marker = request.MarkerCenterPdf ??
+            request.TemplateAnchorPdf ??
+            RectCenter(request.PdfRect);
+        return new SKPoint(marker.X - sourceTextAnchor.Center.X, marker.Y - sourceTextAnchor.Center.Y);
     }
 
     private static List<SimilarSymbolMatch> FindOtherSheetTextGuidedRasterMatches(

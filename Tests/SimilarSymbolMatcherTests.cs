@@ -1120,6 +1120,48 @@ internal static class SimilarSymbolMatcherTests
             $"nearby repeated text fallback should cover HDUE3 labels about 56 PDF pt from the symbol, got {nearbyTolerance:0.##}");
     }
 
+    public static void AllSheetsTextGuideKeepsManualTemplateOffset()
+    {
+        MethodInfo? method = typeof(MainWindow).GetMethod(
+            "SimilarCountTextMarkerOffset",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(method != null, "Similar Count all-sheets text-guide offset helper should exist");
+
+        var textAnchor = new PdfSimilarTextMatch(
+            "HDUE3",
+            new SKRect(94, 94, 106, 106),
+            new SKPoint(100, 100));
+        var manualRequest = new ViewportSimilarCountRequest(
+            new SKRect(68, 82, 88, 102),
+            "Pages\\sample",
+            1);
+        SKPoint manualOffset = (SKPoint)(method!.Invoke(null, new object[]
+        {
+            textAnchor,
+            manualRequest,
+        }) ?? default(SKPoint));
+
+        AssertTrue(
+            Math.Abs(manualOffset.X + 22f) < 0.001f &&
+            Math.Abs(manualOffset.Y + 8f) < 0.001f,
+            $"manual all-sheets text guide should preserve template center offset from text, got {manualOffset.X:0.###},{manualOffset.Y:0.###}");
+
+        var beamRequest = manualRequest with
+        {
+            MarkerCenterPdf = new SKPoint(72, 116),
+        };
+        SKPoint markerOffset = (SKPoint)(method.Invoke(null, new object[]
+        {
+            textAnchor,
+            beamRequest,
+        }) ?? default(SKPoint));
+
+        AssertTrue(
+            Math.Abs(markerOffset.X + 28f) < 0.001f &&
+            Math.Abs(markerOffset.Y - 16f) < 0.001f,
+            $"Beam/Openings all-sheets text guide should keep explicit marker offset, got {markerOffset.X:0.###},{markerOffset.Y:0.###}");
+    }
+
     public static void ViewportStatusUsesUiDispatcher()
     {
         string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
