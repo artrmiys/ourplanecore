@@ -1385,7 +1385,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountLimitSummary()", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountLimitLabel", StringComparison.Ordinal) &&
             mainWindow.Contains("Weak limit:", StringComparison.Ordinal) &&
-            mainWindow.Contains("Text-only candidates waiting for review", StringComparison.Ordinal) &&
+            mainWindow.Contains("Text-guided candidates waiting for review", StringComparison.Ordinal) &&
             mainWindow.Contains("candidate(s) waiting for review", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarReviewStatus", StringComparison.Ordinal) &&
             mainWindow.Contains("result.LimitSummary", StringComparison.Ordinal) &&
@@ -1556,7 +1556,7 @@ internal static class SimilarSymbolMatcherTests
             similarCount.Contains("SimilarCountTextTemplateFallbackRequest", StringComparison.Ordinal) &&
             similarCount.Contains("BuildWeakTextCandidateReviewMatches", StringComparison.Ordinal) &&
             similarCount.Contains("AppendUnverifiedTextCandidateReviewMatches", StringComparison.Ordinal) &&
-            similarCount.Contains("Text-only candidates included; review before Add", StringComparison.Ordinal) &&
+            similarCount.Contains("Text-guided candidates included; review before Add", StringComparison.Ordinal) &&
             similarCount.Contains("RetryStartSimilarCountReviewAsync", StringComparison.Ordinal) &&
             similarCount.Contains("ShouldRetrySimilarCountReviewReadiness", StringComparison.Ordinal),
             "Similar review should be reusable from Beam/Openings, skip the original measured center, include exact text candidates for review, and retry until the readable raster is ready");
@@ -1608,6 +1608,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&
+            mainWindow.Contains("raster-checked before Add", StringComparison.Ordinal) &&
             mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
             mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("request.PreferNearestRepeatedText", StringComparison.Ordinal) &&
@@ -1615,7 +1616,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("NearestRepeatedTextFallbackLooksIntentional", StringComparison.Ordinal) &&
             mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
-            mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal) &&
+            mainWindow.Contains("showing weak text-guided review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections, prefer text-guided raster when it recovers equal or more markers, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");
         AssertTrue(

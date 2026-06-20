@@ -315,8 +315,8 @@ public partial class MainWindow
             if (textCandidateReviewFallbackActive)
             {
                 return includeTextCandidateReviewMatchesByDefault
-                    ? "Text-only candidates included; review before Add"
-                    : "Text-only candidates waiting for review";
+                    ? "Text-guided candidates included; review before Add"
+                    : "Text-guided candidates waiting for review";
             }
 
             var limits = lastMatches
@@ -620,7 +620,7 @@ public partial class MainWindow
                         textCandidateReviewFallbackActive = true;
                         includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
                         AppLog.Info(
-                            $"Similar count text-raster produced no new verified markers; showing weak text-only review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                            $"Similar count text-raster produced no new verified markers; showing weak text-guided review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
                     }
                     else
                     {
@@ -1126,7 +1126,7 @@ public partial class MainWindow
             return rasterWarning;
 
         string textWarning = request.UseTextCandidateRasterMatches && !request.AllowExactTextMatches
-            ? $"PDF text candidates: {textResult.Query} ({textResult.Matches.Count}); raster verified."
+            ? $"PDF text candidates: {textResult.Query} ({textResult.Matches.Count}); raster-checked before Add."
             : $"PDF text exact match: {textResult.Query} ({textResult.Matches.Count} found).";
         if (usedTextTemplateFallback)
             textWarning += " Template fell back to the text mark because the measured box had no matchable linework.";
