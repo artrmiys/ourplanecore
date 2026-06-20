@@ -270,8 +270,14 @@ public sealed class SimilarSymbolMatchSession
                 int bottom = Math.Min(_page.Height - variant.Height, baseY + radius);
                 for (int y = top; y <= bottom; y++)
                 {
+                    if ((y & 15) == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+
                     for (int x = left; x <= right; x++)
                     {
+                        if ((x & 255) == 0)
+                            cancellationToken.ThrowIfCancellationRequested();
+
                         if (TryMatchVariantAt(_page, variant, x, y, minScore, out SimilarSymbolMatch match))
                             matches.Add(match);
                     }

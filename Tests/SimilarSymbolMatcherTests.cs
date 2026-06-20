@@ -872,8 +872,10 @@ internal static class SimilarSymbolMatcherTests
             matcher.Contains("MaxSearchRasterPixels", StringComparison.Ordinal) &&
             matcher.Contains("SearchDownsampleFactor(page.Width, page.Height)", StringComparison.Ordinal) &&
             matcher.Contains("(x & 255) == 0", StringComparison.Ordinal) &&
+            matcher.Contains("(y & 15) == 0", StringComparison.Ordinal) &&
+            matcher.Contains("FindMatchesNearCenters", StringComparison.Ordinal) &&
             matcher.Contains("public int SearchPixels", StringComparison.Ordinal),
-            "Similar matcher should cap the search raster independently of template size, expose the active budget, and cancel inside long rows");
+            "Similar matcher should cap the search raster independently of template size, expose the active budget, and cancel inside long rows and near-center radius sweeps");
         AssertTrue(
             mainWindow.Contains("Similar count scan started", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count scan completed", StringComparison.Ordinal) &&
