@@ -20,6 +20,9 @@ public partial class MainWindow
     private const float SimilarCountDuplicateTolerancePdf = 4f;
     private const int SimilarCountReviewKeyQuantumPx = 4;
     private const int SimilarCountMaxSweepSheets = 80;
+    private const float SimilarCountTextFallbackPaddingMinPdf = 6f;
+    private const float SimilarCountTextFallbackPaddingMaxPdf = 24f;
+    private const float SimilarCountTextFallbackPaddingRatio = 0.75f;
 
     private SimilarCountDialog? _similarCountDialog;
 
@@ -56,14 +59,49 @@ public partial class MainWindow
             return;
         }
 
+        PdfSimilarTextResult? textResult = TryFindSimilarCountText(request);
+        PdfSimilarTextMatch? textAnchor = textResult == null
+            ? null
+            : SelectSimilarTextAnchor(textResult, request);
+        bool usedTextTemplateFallback = false;
         if (!_viewport.TryCreateSimilarCountSession(
                 request.PdfRect, out SimilarSymbolMatchSession? session, out float bitmapScale, out string error) ||
             session == null)
         {
-            TxtStatus.Text = $"Count similar: {error}";
-            MessageBox.Show($"Count similar symbols:\n{error}", "Count Similar",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
+            string originalError = error;
+            if (request.UseTextCandidateRasterMatches && textAnchor != null)
+            {
+                ViewportSimilarCountRequest fallbackRequest = SimilarCountTextTemplateFallbackRequest(request, textAnchor);
+                if (_viewport.TryCreateSimilarCountSession(
+                        fallbackRequest.PdfRect,
+                        out SimilarSymbolMatchSession? fallbackSession,
+                        out float fallbackBitmapScale,
+                        out string fallbackError) &&
+                    fallbackSession != null)
+                {
+                    request = fallbackRequest;
+                    session = fallbackSession;
+                    bitmapScale = fallbackBitmapScale;
+                    usedTextTemplateFallback = true;
+                    textAnchor = SelectSimilarTextAnchor(textResult!, request) ?? textAnchor;
+                    AppLog.Info(
+                        $"Similar count text-template fallback used; originalError='{originalError}'; query='{textResult!.Query}'; page='{request.PageFolder}'");
+                }
+                else
+                {
+                    error = string.IsNullOrWhiteSpace(fallbackError)
+                        ? originalError
+                        : $"{originalError} Text mark fallback also failed: {fallbackError}";
+                }
+            }
+
+            if (session == null)
+            {
+                TxtStatus.Text = $"Count similar: {error}";
+                MessageBox.Show($"Count similar symbols:\n{error}", "Count Similar",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
         }
 
         var lastMatches = new List<SimilarSymbolMatch>();
@@ -77,7 +115,6 @@ public partial class MainWindow
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
         OurPlaneCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
-        PdfSimilarTextResult? textResult = TryFindSimilarCountText(request);
         TakeoffItem? destinationItem = RequestedSimilarCountDestinationItem(request);
         bool canRenameDestination = destinationItem == null;
         string destinationName = SimilarCountDestinationName(destinationItem, request, textResult);
@@ -86,10 +123,11 @@ public partial class MainWindow
             : textResult.Matches
                 .Select(match => TextSimilarMatch(match.Center, bitmapScale))
                 .ToList();
-        PdfSimilarTextMatch? textAnchor = textResult == null
-            ? null
-            : SelectSimilarTextAnchor(textResult, request);
-        string templateWarning = SimilarCountTemplateWarning(session.TemplateWarning, textResult, request);
+        string templateWarning = SimilarCountTemplateWarning(
+            session.TemplateWarning,
+            textResult,
+            request,
+            usedTextTemplateFallback);
         SimilarCountDialog? dialog = null;
 
         bool IsReviewJobCurrent() =>
@@ -444,12 +482,8 @@ public partial class MainWindow
                         $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
                     if (matches.Count == 0)
                     {
-                        matches = await Task.Run(
-                            () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
-                            cancellationToken);
-                        cancellationToken.ThrowIfCancellationRequested();
                         AppLog.Info(
-                            $"Similar count text-raster fallback scan used; query='{textResult.Query}'; fallbackMatches={matches.Count}; page='{request.PageFolder}'");
+                            $"Similar count text-raster found no verified matches; full-page fallback skipped for text-constrained request; query='{textResult.Query}'; page='{request.PageFolder}'");
                     }
                 }
                 else
@@ -486,8 +520,8 @@ public partial class MainWindow
         dialog = new SimilarCountDialog(
             scan: ScanAsync,
             initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault,
-            initialRotations: false,
-            initialMirrored: false,
+            initialRotations: request.InitialIncludeRotations,
+            initialMirrored: request.InitialIncludeMirrored,
             initialAllSheets: false,
             destinationName: destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
@@ -602,6 +636,8 @@ public partial class MainWindow
                 request.PdfPath,
                 request.PdfPageIndex,
                 searchRect,
+                request.PreferNearestRepeatedText,
+                request.TemplateAnchorPdf ?? RectCenter(searchRect),
                 out PdfSimilarTextResult result,
                 out string error))
         {
@@ -614,6 +650,25 @@ public partial class MainWindow
             return null;
 
         return result;
+    }
+
+    private static ViewportSimilarCountRequest SimilarCountTextTemplateFallbackRequest(
+        ViewportSimilarCountRequest request,
+        PdfSimilarTextMatch textAnchor)
+    {
+        float side = Math.Max(textAnchor.Rect.Width, textAnchor.Rect.Height);
+        float padding = !float.IsFinite(side) || side <= 0f
+            ? SimilarCountTextFallbackPaddingMinPdf
+            : Math.Clamp(
+                side * SimilarCountTextFallbackPaddingRatio,
+                SimilarCountTextFallbackPaddingMinPdf,
+                SimilarCountTextFallbackPaddingMaxPdf);
+
+        return request with
+        {
+            PdfRect = PadRect(textAnchor.Rect, padding),
+            TemplateAnchorPdf = textAnchor.Center,
+        };
     }
 
     private static List<SimilarSymbolMatch> FindTextCandidateRasterMatches(
@@ -666,7 +721,8 @@ public partial class MainWindow
     private static string SimilarCountTemplateWarning(
         string rasterWarning,
         PdfSimilarTextResult? textResult,
-        ViewportSimilarCountRequest request)
+        ViewportSimilarCountRequest request,
+        bool usedTextTemplateFallback)
     {
         if (textResult == null)
             return rasterWarning;
@@ -674,6 +730,8 @@ public partial class MainWindow
         string textWarning = request.UseTextCandidateRasterMatches && !request.AllowExactTextMatches
             ? $"PDF text candidates: {textResult.Query} ({textResult.Matches.Count}); raster verified."
             : $"PDF text exact match: {textResult.Query} ({textResult.Matches.Count} found).";
+        if (usedTextTemplateFallback)
+            textWarning += " Template fell back to the text mark because the measured box had no matchable linework.";
         return string.IsNullOrWhiteSpace(rasterWarning)
             ? textWarning
             : rasterWarning + " " + textWarning;
@@ -697,8 +755,16 @@ public partial class MainWindow
         ViewportSimilarCountRequest request,
         float bitmapScale)
     {
-        float templateSide = Math.Max(request.PdfRect.Width, request.PdfRect.Height);
-        float radius = Math.Clamp(templateSide * bitmapScale * 0.18f, 14f, 96f);
+        float radius = 0f;
+        if (request.TextCandidateSearchRadiusPdf > 0f && float.IsFinite(request.TextCandidateSearchRadiusPdf))
+            radius = request.TextCandidateSearchRadiusPdf * bitmapScale;
+        else
+        {
+            float templateSide = Math.Max(request.PdfRect.Width, request.PdfRect.Height);
+            radius = templateSide * bitmapScale * 0.18f;
+        }
+
+        radius = Math.Clamp(radius, 14f, 384f);
         return (int)MathF.Ceiling(radius);
     }
 

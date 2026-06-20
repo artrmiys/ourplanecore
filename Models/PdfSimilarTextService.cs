@@ -21,6 +21,8 @@ public static class PdfSimilarTextService
         string pdfPath,
         int pageIndex,
         SKRect pdfRect,
+        bool preferNearestRepeatedText,
+        SKPoint? anchorPdf,
         out PdfSimilarTextResult result,
         out string error)
     {
@@ -37,6 +39,8 @@ public static class PdfSimilarTextService
                 Pdf = pdfPath,
                 Page = pageIndex,
                 Rect = PdfSimilarTextRect.From(pdfRect),
+                PreferNearestRepeatedText = preferNearestRepeatedText,
+                Anchor = anchorPdf is { } anchor ? PdfSimilarTextPoint.From(anchor) : null,
             };
 
             if (!PdfLayerRenderService.TryInvokeHelper(
@@ -91,6 +95,8 @@ public static class PdfSimilarTextService
         public string Pdf { get; init; } = "";
         public int Page { get; init; }
         public PdfSimilarTextRect Rect { get; init; } = new();
+        public bool PreferNearestRepeatedText { get; init; }
+        public PdfSimilarTextPoint? Anchor { get; init; }
     }
 
     private sealed class PdfSimilarTextRect
@@ -114,6 +120,22 @@ public static class PdfSimilarTextService
                 Y0 = Math.Min(rect.Top, rect.Bottom),
                 X1 = Math.Max(rect.Left, rect.Right),
                 Y1 = Math.Max(rect.Top, rect.Bottom),
+            };
+    }
+
+    private sealed class PdfSimilarTextPoint
+    {
+        [JsonPropertyName("x")]
+        public float X { get; init; }
+
+        [JsonPropertyName("y")]
+        public float Y { get; init; }
+
+        public static PdfSimilarTextPoint From(SKPoint point) =>
+            new()
+            {
+                X = point.X,
+                Y = point.Y,
             };
     }
 

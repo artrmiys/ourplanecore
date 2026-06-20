@@ -11,9 +11,12 @@ public partial class MainWindow
     private const float BeamOpeningSimilarPaddingMinPdf = 6f;
     private const float BeamOpeningSimilarPaddingMaxPdf = 24f;
     private const float BeamOpeningSimilarPaddingRatio = 0.08f;
-    private const float BeamOpeningSimilarTextPaddingMinPdf = 18f;
-    private const float BeamOpeningSimilarTextPaddingMaxPdf = 72f;
-    private const float BeamOpeningSimilarTextPaddingRatio = 0.35f;
+    private const float OpeningSimilarPaddingMinPdf = 18f;
+    private const float OpeningSimilarPaddingMaxPdf = 96f;
+    private const float OpeningSimilarPaddingRatio = 0.35f;
+    private const float BeamOpeningSimilarTextPaddingMinPdf = 24f;
+    private const float BeamOpeningSimilarTextPaddingMaxPdf = 144f;
+    private const float BeamOpeningSimilarTextPaddingRatio = 0.65f;
 
     private void OnBeamMeasurementCompleted(BeamMeasurementRequest request)
     {
@@ -160,6 +163,7 @@ public partial class MainWindow
             Math.Max(segmentRect.Width, segmentRect.Height)));
         SKRect templateRect = PadRect(segmentRect, padding);
         SKPoint templateCenter = Midpoint(request.StartPdf, request.EndPdf);
+        float textPadding = SimilarBeamOpeningTextPadding(segmentLength);
         return new ViewportSimilarCountRequest(
             templateRect,
             request.PageFolder,
@@ -171,16 +175,21 @@ public partial class MainWindow
             UseTextCandidateRasterMatches: true,
             TemplateAnchorPdf: templateCenter,
             MarkerCenterPdf: request.CountPointPdf,
-            TextSearchRectPdf: PadRect(segmentRect, SimilarBeamOpeningTextPadding(segmentLength)),
+            TextSearchRectPdf: PadRect(segmentRect, textPadding),
             DestinationTakeoffFolderPath: _activeItem?.FolderPath ?? "",
-            DefaultDestinationName: _activeItem?.Name ?? "");
+            DefaultDestinationName: _activeItem?.Name ?? "",
+            PreferNearestRepeatedText: true,
+            TextCandidateSearchRadiusPdf: textPadding,
+            InitialIncludeMirrored: true);
     }
 
     private ViewportSimilarCountRequest BuildOpeningSimilarCountRequest(OpeningMeasurementRequest request)
     {
         PageInfo page = _currentPage ?? throw new InvalidOperationException("Current page is required for Opening Similar.");
         SKRect openingRect = MeasurementGeometry.NormalizeRect(request.FirstCornerPdf, request.OppositeCornerPdf);
-        float padding = SimilarBeamOpeningPadding(Math.Max(openingRect.Width, openingRect.Height));
+        float openingSize = Math.Max(openingRect.Width, openingRect.Height);
+        float padding = SimilarOpeningPadding(openingSize);
+        float textPadding = SimilarBeamOpeningTextPadding(openingSize);
         return new ViewportSimilarCountRequest(
             PadRect(openingRect, padding),
             request.PageFolder,
@@ -192,9 +201,12 @@ public partial class MainWindow
             UseTextCandidateRasterMatches: true,
             TemplateAnchorPdf: request.CountPointPdf,
             MarkerCenterPdf: request.CountPointPdf,
-            TextSearchRectPdf: PadRect(openingRect, SimilarBeamOpeningTextPadding(Math.Max(openingRect.Width, openingRect.Height))),
+            TextSearchRectPdf: PadRect(openingRect, textPadding),
             DestinationTakeoffFolderPath: _activeItem?.FolderPath ?? "",
-            DefaultDestinationName: _activeItem?.Name ?? "");
+            DefaultDestinationName: _activeItem?.Name ?? "",
+            PreferNearestRepeatedText: true,
+            TextCandidateSearchRadiusPdf: textPadding,
+            InitialIncludeMirrored: true);
     }
 
     private static float SimilarBeamOpeningPadding(float sizePdf)
@@ -217,6 +229,17 @@ public partial class MainWindow
             sizePdf * BeamOpeningSimilarTextPaddingRatio,
             BeamOpeningSimilarTextPaddingMinPdf,
             BeamOpeningSimilarTextPaddingMaxPdf);
+    }
+
+    private static float SimilarOpeningPadding(float sizePdf)
+    {
+        if (!float.IsFinite(sizePdf) || sizePdf <= 0f)
+            return OpeningSimilarPaddingMinPdf;
+
+        return Math.Clamp(
+            sizePdf * OpeningSimilarPaddingRatio,
+            OpeningSimilarPaddingMinPdf,
+            OpeningSimilarPaddingMaxPdf);
     }
 
     private static SKRect PadRect(SKRect rect, float padding) =>

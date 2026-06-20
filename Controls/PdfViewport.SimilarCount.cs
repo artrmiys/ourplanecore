@@ -20,7 +20,11 @@ public sealed record ViewportSimilarCountRequest(
     SKPoint? MarkerCenterPdf = null,
     SKRect? TextSearchRectPdf = null,
     string DestinationTakeoffFolderPath = "",
-    string DefaultDestinationName = "");
+    string DefaultDestinationName = "",
+    bool PreferNearestRepeatedText = false,
+    float TextCandidateSearchRadiusPdf = 0f,
+    bool InitialIncludeRotations = false,
+    bool InitialIncludeMirrored = false);
 public sealed record ViewportSimilarCountPreviewMarker(
     SKPoint CenterPdf,
     bool Included,

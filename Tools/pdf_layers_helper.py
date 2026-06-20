@@ -2786,6 +2786,22 @@ def _rect_from_request(req: dict) -> fitz.Rect:
     return fitz.Rect(left, top, right, bottom)
 
 
+def _point_from_request(value) -> tuple[float, float] | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        return float(value.get("x", 0.0)), float(value.get("y", 0.0))
+    except (TypeError, ValueError):
+        return None
+
+
+def _word_center(word) -> tuple[float, float]:
+    return (
+        (float(word[0]) + float(word[2])) / 2.0,
+        (float(word[1]) + float(word[3])) / 2.0,
+    )
+
+
 def _word_payload(word) -> dict:
     return {
         "text": str(word[4] or ""),
@@ -2797,8 +2813,7 @@ def _word_payload(word) -> dict:
 
 
 def _word_center_inside(word, rect: fitz.Rect) -> bool:
-    cx = (float(word[0]) + float(word[2])) / 2.0
-    cy = (float(word[1]) + float(word[3])) / 2.0
+    cx, cy = _word_center(word)
     return rect.x0 <= cx <= rect.x1 and rect.y0 <= cy <= rect.y1
 
 
@@ -2835,6 +2850,12 @@ def similar_text_data(req: dict) -> dict:
     if not words:
         return {"ok": True, "query": "", "matches": []}
 
+    key_counts = {}
+    for word in words:
+        key = _similar_text_key(str(word[4] or ""))
+        if len(key) >= 2:
+            key_counts[key] = key_counts.get(key, 0) + 1
+
     selected = []
     for word in words:
         key = _similar_text_key(str(word[4] or ""))
@@ -2843,11 +2864,31 @@ def similar_text_data(req: dict) -> dict:
         if _word_center_inside(word, selection) or _word_intersection_ratio(word, selection) >= 0.55:
             selected.append((key, word))
 
-    keys = {key for key, _ in selected}
-    if len(keys) != 1:
-        return {"ok": True, "query": "", "matches": []}
+    prefer_nearest_repeated = bool(req.get("prefer_nearest_repeated_text", False))
+    if prefer_nearest_repeated:
+        anchor = _point_from_request(req.get("anchor")) or (
+            (selection.x0 + selection.x1) / 2.0,
+            (selection.y0 + selection.y1) / 2.0,
+        )
+        repeated = [
+            (key, word)
+            for key, word in selected
+            if key_counts.get(key, 0) >= 2
+        ]
+        if not repeated:
+            return {"ok": True, "query": "", "matches": []}
 
-    query = next(iter(keys))
+        def distance_sq(item) -> float:
+            cx, cy = _word_center(item[1])
+            return (cx - anchor[0]) * (cx - anchor[0]) + (cy - anchor[1]) * (cy - anchor[1])
+
+        query = min(repeated, key=distance_sq)[0]
+    else:
+        keys = {key for key, _ in selected}
+        if len(keys) != 1:
+            return {"ok": True, "query": "", "matches": []}
+        query = next(iter(keys))
+
     matches = [
         _word_payload(word)
         for word in words

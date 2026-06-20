@@ -450,8 +450,8 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
-            mainWindow.Contains("initialRotations: false", StringComparison.Ordinal) &&
-            mainWindow.Contains("initialMirrored: false", StringComparison.Ordinal) &&
+            mainWindow.Contains("initialRotations: request.InitialIncludeRotations", StringComparison.Ordinal) &&
+            mainWindow.Contains("initialMirrored: request.InitialIncludeMirrored", StringComparison.Ordinal) &&
             mainWindow.Contains("initialAllSheets: false", StringComparison.Ordinal) &&
             mainWindow.Contains("_settings.SimilarCountThreshold = AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
             mainWindow.Contains("_settings.SimilarCountRotations = false", StringComparison.Ordinal) &&
@@ -461,7 +461,7 @@ internal static class SimilarSymbolMatcherTests
             settings.Contains("settings.SimilarCountRotations = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountMirrored = false", StringComparison.Ordinal) &&
             settings.Contains("settings.SimilarCountAllSheets = false", StringComparison.Ordinal),
-            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and every heavy Similar option should stay an explicit per-dialog action");
+            "the all-sheets sweep should render other sheets, add their markers, cap the sheet count, and manual Similar defaults should keep heavy options opt-in");
     }
 
     public static void RejectsNearMissAtPrecisionThreshold()
@@ -1268,13 +1268,19 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("BuildOpeningSimilarCountRequest", StringComparison.Ordinal) &&
             beamTool.Contains("[request.CountPointPdf]", StringComparison.Ordinal) &&
             beamTool.Contains("DestinationTakeoffFolderPath: _activeItem?.FolderPath", StringComparison.Ordinal) &&
-            beamTool.Contains("DefaultDestinationName: _activeItem?.Name", StringComparison.Ordinal),
-            "Beam/Openings Similar requests should mark the original measured item as already counted and target the newly created item");
+            beamTool.Contains("DefaultDestinationName: _activeItem?.Name", StringComparison.Ordinal) &&
+            beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
+            beamTool.Contains("TextCandidateSearchRadiusPdf: textPadding", StringComparison.Ordinal) &&
+            beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal) &&
+            beamTool.Contains("SimilarOpeningPadding", StringComparison.Ordinal),
+            "Beam/Openings Similar requests should mark the original measured item as already counted, target the newly created item, and use auto text/raster matching tuned for measured objects");
         AssertTrue(
             similarCount.Contains("private void StartSimilarCountReview", StringComparison.Ordinal) &&
             similarCount.Contains("IsSimilarCountAlreadyCounted", StringComparison.Ordinal) &&
-            similarCount.Contains("request.AlreadyCountedCentersPdf", StringComparison.Ordinal),
-            "Similar review should be reusable from Beam/Openings and skip the original measured center");
+            similarCount.Contains("request.AlreadyCountedCentersPdf", StringComparison.Ordinal) &&
+            similarCount.Contains("SimilarCountTextTemplateFallbackRequest", StringComparison.Ordinal) &&
+            similarCount.Contains("full-page fallback skipped for text-constrained request", StringComparison.Ordinal),
+            "Similar review should be reusable from Beam/Openings, skip the original measured center, and avoid a broad garbage scan after text-constrained matching");
     }
 
     public static void SimilarCountUsesExactPdfTextWhenAvailable()
@@ -1288,6 +1294,9 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             helper.Contains("def similar_text_data", StringComparison.Ordinal) &&
             helper.Contains("_similar_text_key", StringComparison.Ordinal) &&
+            helper.Contains("prefer_nearest_repeated_text", StringComparison.Ordinal) &&
+            helper.Contains("key_counts", StringComparison.Ordinal) &&
+            helper.Contains("distance_sq", StringComparison.Ordinal) &&
             helper.Contains("elif action == \"similartext\"", StringComparison.Ordinal) &&
             helper.Contains("\"similartext\"", StringComparison.Ordinal),
             "PyMuPDF helper should expose a similartext action for exact PDF word matches");
@@ -1295,8 +1304,10 @@ internal static class SimilarSymbolMatcherTests
             service.Contains("PdfSimilarTextService", StringComparison.Ordinal) &&
             service.Contains("TryInvokeHelper(", StringComparison.Ordinal) &&
             service.Contains("\"similartext\"", StringComparison.Ordinal) &&
-            service.Contains("PdfSimilarTextMatch", StringComparison.Ordinal),
-            "C# Similar text service should call the helper and normalize word rectangles into PDF centers");
+            service.Contains("PdfSimilarTextMatch", StringComparison.Ordinal) &&
+            service.Contains("PreferNearestRepeatedText", StringComparison.Ordinal) &&
+            service.Contains("PdfSimilarTextPoint", StringComparison.Ordinal),
+            "C# Similar text service should call the helper, normalize word rectangles into PDF centers, and support nearest repeated text for auto Beam/Openings");
         AssertTrue(
             mainWindow.Contains("TryFindSimilarCountText", StringComparison.Ordinal) &&
             mainWindow.Contains("TextSimilarMatch", StringComparison.Ordinal) &&
@@ -1306,7 +1317,9 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&
             mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
-            mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal),
+            mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("request.PreferNearestRepeatedText", StringComparison.Ordinal) &&
+            mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections and raster-verify text candidates for Beam/Openings");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
@@ -1317,6 +1330,10 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("SKRect? TextSearchRectPdf = null", StringComparison.Ordinal) &&
             viewport.Contains("string DestinationTakeoffFolderPath = \"\"", StringComparison.Ordinal) &&
             viewport.Contains("string DefaultDestinationName = \"\"", StringComparison.Ordinal) &&
+            viewport.Contains("bool PreferNearestRepeatedText = false", StringComparison.Ordinal) &&
+            viewport.Contains("float TextCandidateSearchRadiusPdf = 0f", StringComparison.Ordinal) &&
+            viewport.Contains("bool InitialIncludeRotations = false", StringComparison.Ordinal) &&
+            viewport.Contains("bool InitialIncludeMirrored = false", StringComparison.Ordinal) &&
             viewport.Contains("PdfPageIndex: pdfPageIndex", StringComparison.Ordinal) &&
             beamTool.Contains("PageInfo page = _currentPage ?? throw", StringComparison.Ordinal) &&
             beamTool.Contains("PdfPath: page.PdfPath", StringComparison.Ordinal) &&
@@ -1327,7 +1344,9 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("MarkerCenterPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("TextSearchRectPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("DestinationTakeoffFolderPath:", StringComparison.Ordinal) &&
-            beamTool.Contains("DefaultDestinationName:", StringComparison.Ordinal),
+            beamTool.Contains("DefaultDestinationName:", StringComparison.Ordinal) &&
+            beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
+            beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal),
             "Similar Count requests should carry the source PDF identity, while Beam/Openings keep geometry/raster matching, preserve marker offset, and target their named item");
     }
 
