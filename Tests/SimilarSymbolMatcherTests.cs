@@ -1038,11 +1038,16 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count should check cancellation before a completed stale scan can replace review candidates");
         AssertTrue(
             dialog.Contains("_scanCts?.Cancel();", StringComparison.Ordinal) &&
+            dialog.Contains("CurrentSheetScanTimeout", StringComparison.Ordinal) &&
+            dialog.Contains("AllSheetsScanTimeout", StringComparison.Ordinal) &&
+            dialog.Contains("cts.CancelAfter(timeout)", StringComparison.Ordinal) &&
+            dialog.Contains("Scan stopped after", StringComparison.Ordinal) &&
+            dialog.Contains("_closed", StringComparison.Ordinal) &&
             dialog.Contains("_scanRequestedWhileRunning", StringComparison.Ordinal) &&
             dialog.Contains("RunLatestScanAsync", StringComparison.Ordinal) &&
             dialog.Contains("ReferenceEquals(_scanCts, cts)", StringComparison.Ordinal) &&
             dialog.Contains("catch (OperationCanceledException)", StringComparison.Ordinal),
-            "Similar Count dialog should cancel superseded scans, run only the latest queued scan, and ignore stale cancellation results");
+            "Similar Count dialog should cancel superseded scans, bound long-running scans, run only the latest queued scan, and ignore stale cancellation results");
     }
 
     public static void SimilarCountPreviewShowsConfidence()

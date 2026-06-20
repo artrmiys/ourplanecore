@@ -31,6 +31,8 @@ public sealed class SimilarCountDialog : Window
 {
     private const double StrictThresholdPreset = 0.98;
     private const double LooseThresholdPreset = 0.82;
+    private static readonly TimeSpan CurrentSheetScanTimeout = TimeSpan.FromSeconds(14);
+    private static readonly TimeSpan AllSheetsScanTimeout = TimeSpan.FromSeconds(45);
 
     public float Threshold { get; private set; }
     public bool IncludeRotations { get; private set; }
@@ -73,6 +75,7 @@ public sealed class SimilarCountDialog : Window
     private string _lastLimitSummary = "";
     private bool _suppressThresholdScan;
     private bool _accepted;
+    private bool _closed;
     private bool _scanRunning;
     private bool _scanRequestedWhileRunning;
 
@@ -351,6 +354,7 @@ public sealed class SimilarCountDialog : Window
         };
         Closed += (_, _) =>
         {
+            _closed = true;
             _debounce.Stop();
             _scanCts?.Cancel();
             if (!_accepted)
@@ -528,6 +532,8 @@ public sealed class SimilarCountDialog : Window
         var cts = new CancellationTokenSource();
         _scanCts = cts;
         SimilarCountScanRequest request = CurrentScanRequest();
+        TimeSpan timeout = request.AllSheets ? AllSheetsScanTimeout : CurrentSheetScanTimeout;
+        cts.CancelAfter(timeout);
         _foundLabel.Text = "Scanning...";
         _reviewDetailsLabel.Text = "";
         _addButton.IsEnabled = false;
@@ -558,7 +564,16 @@ public sealed class SimilarCountDialog : Window
         }
         catch (OperationCanceledException)
         {
-            // A newer scan superseded this one.
+            if (!ReferenceEquals(_scanCts, cts) || _accepted || _closed || _scanRequestedWhileRunning)
+                return;
+
+            _foundLabel.Text = $"Scan stopped after {timeout.TotalSeconds:0}s.";
+            _reviewDetailsLabel.Text = request.AllSheets
+                ? "This all-sheets scan is too broad. Search the current sheet first, or raise the threshold."
+                : "This scan is too broad. Raise the threshold, use Strict/Default, or rely on text review markers.";
+            _addButton.IsEnabled = false;
+            _includeAllButton.IsEnabled = false;
+            _strongOnlyButton.IsEnabled = false;
         }
         catch (Exception ex)
         {
