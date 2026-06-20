@@ -1528,9 +1528,11 @@ internal static class SimilarSymbolMatcherTests
             dialog.Contains("Include review candidates", StringComparison.Ordinal) &&
             dialog.Contains("Include candidates to enable Add", StringComparison.Ordinal) &&
             dialog.Contains("_includeAllButton.IsDefault = !canAdd && canInclude", StringComparison.Ordinal) &&
+            dialog.Contains("ResetReviewActionButtons", StringComparison.Ordinal) &&
+            dialog.Contains("_includeAllButton.Content = \"Include candidates\"", StringComparison.Ordinal) &&
             dialog.Contains("orange weak review markers", StringComparison.Ordinal) &&
             dialog.Contains("Strong only", StringComparison.Ordinal),
-            "Similar Count review should expose quick actions to include candidates, make that action primary while Add is disabled, or return to strong matches only");
+            "Similar Count review should expose quick actions to include candidates, make that action primary while Add is disabled, reset stale include-button state, or return to strong matches only");
         AssertTrue(
             viewport.Contains("canvas.DrawCircle(center, radius, weakerMatch ? weakStroke : excludedStroke)", StringComparison.Ordinal),
             "Excluded weak Similar candidates should keep a distinct low-confidence ring");

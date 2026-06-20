@@ -425,11 +425,7 @@ public sealed class SimilarCountDialog : Window
             _foundLabel.Text = "Found 0 symbols.";
             _reviewDetailsLabel.Text = "";
             _addButton.Content = AddButtonText(0, 0);
-            _addButton.IsEnabled = false;
-            _includeAllButton.IsEnabled = false;
-            _strongOnlyButton.IsEnabled = false;
-            _addButton.IsDefault = false;
-            _includeAllButton.IsDefault = false;
+            ResetReviewActionButtons();
             return;
         }
 
@@ -464,6 +460,16 @@ public sealed class SimilarCountDialog : Window
             ? "Include review candidates"
             : "Include candidates";
         _strongOnlyButton.IsEnabled = result.NewCandidateCount > 0;
+    }
+
+    private void ResetReviewActionButtons()
+    {
+        _addButton.IsEnabled = false;
+        _includeAllButton.IsEnabled = false;
+        _strongOnlyButton.IsEnabled = false;
+        _addButton.IsDefault = false;
+        _includeAllButton.IsDefault = false;
+        _includeAllButton.Content = "Include candidates";
     }
 
     private static string ReviewDetails(SimilarCountScanResult result)
@@ -564,11 +570,7 @@ public sealed class SimilarCountDialog : Window
         cts.CancelAfter(timeout);
         _foundLabel.Text = "Scanning...";
         _reviewDetailsLabel.Text = "";
-        _addButton.IsEnabled = false;
-        _includeAllButton.IsEnabled = false;
-        _strongOnlyButton.IsEnabled = false;
-        _addButton.IsDefault = false;
-        _includeAllButton.IsDefault = false;
+        ResetReviewActionButtons();
         try
         {
             SimilarCountScanResult result = await _scan(
@@ -601,11 +603,7 @@ public sealed class SimilarCountDialog : Window
             _reviewDetailsLabel.Text = request.AllSheets
                 ? "This all-sheets scan is too broad. Search the current sheet first, or raise the threshold."
                 : "This scan is too broad. Raise the threshold, use Strict/Default, or rely on text review markers.";
-            _addButton.IsEnabled = false;
-            _includeAllButton.IsEnabled = false;
-            _strongOnlyButton.IsEnabled = false;
-            _addButton.IsDefault = false;
-            _includeAllButton.IsDefault = false;
+            ResetReviewActionButtons();
         }
         catch (Exception ex)
         {
@@ -613,6 +611,7 @@ public sealed class SimilarCountDialog : Window
                 return;
 
             _foundLabel.Text = $"Scan failed: {ex.Message}";
+            ResetReviewActionButtons();
             AppLog.Warn(ex, "Similar count scan failed.");
         }
         finally
