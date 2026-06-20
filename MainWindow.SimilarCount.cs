@@ -36,6 +36,7 @@ public partial class MainWindow
     private const float SimilarCountNearbyTextCandidateSearchRadiusMultiplier = 2.25f;
     private const float SimilarCountNearbyTextCandidateSearchRadiusMaxPdf = 192f;
     private const int SimilarCountMaxTextCandidateMatches = 240;
+    private const int SimilarCountMaxTextRasterVisualMergeMatches = 240;
     private const int SimilarCountReviewReadinessRetryLimit = 24;
     private static readonly TimeSpan SimilarCountTextRasterVisualMergeTimeout = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SimilarCountReviewReadinessRetryDelay = TimeSpan.FromMilliseconds(500);
@@ -835,9 +836,17 @@ public partial class MainWindow
         mergeCts.CancelAfter(SimilarCountTextRasterVisualMergeTimeout);
         try
         {
-            return await Task.Run(
+            List<SimilarSymbolMatch> matches = await Task.Run(
                 () => session.FindMatches(threshold, rotations, mirrored, mergeCts.Token),
                 mergeCts.Token);
+            if (matches.Count > SimilarCountMaxTextRasterVisualMergeMatches)
+            {
+                AppLog.Info(
+                    $"Similar count text-raster skipped broad full-sheet visual merge; query='{query}'; matches={matches.Count}; max={SimilarCountMaxTextRasterVisualMergeMatches}; page='{pageFolder}'");
+                return [];
+            }
+
+            return matches;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && mergeCts.IsCancellationRequested)
         {

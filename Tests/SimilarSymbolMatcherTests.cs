@@ -1699,9 +1699,11 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountTextRasterVisualMergeTimeout", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountMaxTextRasterVisualMergeMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("TryFindTextRasterVisualMergeMatchesAsync", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster merged full-sheet visual matches", StringComparison.Ordinal) &&
             mainWindow.Contains("text-raster skipped slow full-sheet visual merge", StringComparison.Ordinal) &&
+            mainWindow.Contains("text-raster skipped broad full-sheet visual merge", StringComparison.Ordinal) &&
             mainWindow.Contains("AppendDistinctSimilarMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("raster-checked before Add", StringComparison.Ordinal) &&
             mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
