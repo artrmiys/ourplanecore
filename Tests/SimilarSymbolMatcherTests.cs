@@ -1209,6 +1209,30 @@ internal static class SimilarSymbolMatcherTests
             !dualSideCandidates.Any(match => match.CenterX == 100 && match.CenterY == 100),
             "HDUE3-like text-guided Similar should review marker/text offsets on both sides, not drop back to text-label centers");
 
+        var markerAboveLeftOfTextRequest = new ViewportSimilarCountRequest(
+            new SKRect(64, 64, 76, 76),
+            "Pages\\sample",
+            1,
+            TemplateAnchorPdf: new SKPoint(70, 70));
+        var quadSideCandidates = (List<SimilarSymbolMatch>)(weakTextCandidatesMethod.Invoke(null, new object[]
+        {
+            dualSideTextResult,
+            sourceText,
+            markerAboveLeftOfTextRequest,
+            1f,
+        }) ?? new List<SimilarSymbolMatch>());
+
+        AssertTrue(
+            quadSideCandidates.Any(match => match.CenterX == 70 && match.CenterY == 70) &&
+            quadSideCandidates.Any(match => match.CenterX == 130 && match.CenterY == 70) &&
+            quadSideCandidates.Any(match => match.CenterX == 70 && match.CenterY == 130) &&
+            quadSideCandidates.Any(match => match.CenterX == 130 && match.CenterY == 130) &&
+            quadSideCandidates.Any(match => match.CenterX == 170 && match.CenterY == 70) &&
+            quadSideCandidates.Any(match => match.CenterX == 230 && match.CenterY == 70) &&
+            quadSideCandidates.Any(match => match.CenterX == 170 && match.CenterY == 130) &&
+            quadSideCandidates.Any(match => match.CenterX == 230 && match.CenterY == 130),
+            "text-guided Similar should try vertical and diagonal mirrored marker/text offsets for mirrored plan sides");
+
         MethodInfo? toleranceMethod = typeof(MainWindow).GetMethod(
             "SimilarCountTextFallbackTolerancePdf",
             BindingFlags.NonPublic | BindingFlags.Static);

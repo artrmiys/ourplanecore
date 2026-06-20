@@ -1042,11 +1042,21 @@ public partial class MainWindow
         var offsets = new List<SKPoint> { markerFromTextOffset };
         if (Math.Abs(markerFromTextOffset.X) >= SimilarCountDuplicateTolerancePdf)
             offsets.Add(new SKPoint(-markerFromTextOffset.X, markerFromTextOffset.Y));
+        if (Math.Abs(markerFromTextOffset.Y) >= SimilarCountDuplicateTolerancePdf)
+            offsets.Add(new SKPoint(markerFromTextOffset.X, -markerFromTextOffset.Y));
+        if (Math.Abs(markerFromTextOffset.X) >= SimilarCountDuplicateTolerancePdf &&
+            Math.Abs(markerFromTextOffset.Y) >= SimilarCountDuplicateTolerancePdf)
+        {
+            offsets.Add(new SKPoint(-markerFromTextOffset.X, -markerFromTextOffset.Y));
+        }
 
         return textResult.Matches
-            .SelectMany(match => offsets.Select(offset => new SKPoint(
-                match.Center.X + offset.X,
-                match.Center.Y + offset.Y)))
+            .SelectMany(match => offsets
+                .Distinct()
+                .Select(offset => new SKPoint(
+                    match.Center.X + offset.X,
+                    match.Center.Y + offset.Y)))
+            .Distinct()
             .ToList();
     }
 
