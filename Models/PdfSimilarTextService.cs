@@ -77,6 +77,7 @@ public static class PdfSimilarTextService
         SKRect pdfRect,
         bool preferNearestRepeatedText,
         SKPoint? anchorPdf,
+        bool nearbyRepeatedTextFallback,
         out PdfSimilarTextResult result,
         out string error)
     {
@@ -94,6 +95,7 @@ public static class PdfSimilarTextService
                 Page = pageIndex,
                 Rect = PdfSimilarTextRect.From(pdfRect),
                 PreferNearestRepeatedText = preferNearestRepeatedText,
+                NearbyRepeatedTextFallback = nearbyRepeatedTextFallback,
                 Anchor = anchorPdf is { } anchor ? PdfSimilarTextPoint.From(anchor) : null,
             };
 
@@ -159,6 +161,7 @@ public static class PdfSimilarTextService
         public int Page { get; init; }
         public PdfSimilarTextRect Rect { get; init; } = new();
         public bool PreferNearestRepeatedText { get; init; }
+        public bool NearbyRepeatedTextFallback { get; init; }
         public PdfSimilarTextPoint? Anchor { get; init; }
         public string Query { get; init; } = "";
     }

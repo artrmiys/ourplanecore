@@ -2775,6 +2775,14 @@ def _similar_text_key(value: str) -> str:
     return re.sub(r"[^A-Z0-9]+", "", (value or "").upper())
 
 
+def _similar_text_nearby_mark_key(key: str) -> bool:
+    if len(key) < 4:
+        return False
+    letters = sum(1 for ch in key if ch.isalpha())
+    digits = sum(1 for ch in key if ch.isdigit())
+    return letters >= 2 and digits >= 1
+
+
 def _rect_from_request(req: dict) -> fitz.Rect:
     raw = req.get("rect") or {}
     x0 = float(raw.get("x0", 0.0))
@@ -2884,6 +2892,13 @@ def similar_text_data(req: dict) -> dict:
             for key, word in selected
             if key_counts.get(key, 0) >= 2
         ]
+        if not repeated and bool(req.get("nearby_repeated_text_fallback", False)):
+            repeated = [
+                (key, word)
+                for word in words
+                for key in [_similar_text_key(str(word[4] or ""))]
+                if key_counts.get(key, 0) >= 2 and _similar_text_nearby_mark_key(key)
+            ]
         if not repeated:
             return {"ok": True, "query": "", "matches": []}
 

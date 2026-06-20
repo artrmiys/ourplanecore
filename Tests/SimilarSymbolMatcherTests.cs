@@ -1004,6 +1004,41 @@ internal static class SimilarSymbolMatcherTests
             $"explicit Beam/Openings text radius should stay request-driven at 24 PDF pt/2x, got exact={exactRadius}px explicit={explicitRadius}px");
     }
 
+    public static void NearbyTextGuideDoesNotBecomeTextOnlyMarkers()
+    {
+        MethodInfo? useRasterMethod = typeof(MainWindow).GetMethod(
+            "ShouldUseTextGuidedRasterMatchesForExactText",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(useRasterMethod != null, "Similar Count exact text/raster choice helper should exist");
+
+        var oneRaster = new List<SimilarSymbolMatch>
+        {
+            new(10, 10, 0.98f, 0),
+        };
+        var twoText = new List<SimilarSymbolMatch>
+        {
+            new(10, 10, 1f, 0),
+            new(80, 10, 1f, 0),
+        };
+
+        bool selectedTextUsesRaster = (bool)(useRasterMethod!.Invoke(null, new object[] { oneRaster, twoText, true }) ?? false);
+        bool nearbyTextUsesRaster = (bool)(useRasterMethod.Invoke(null, new object[] { oneRaster, twoText, false }) ?? false);
+
+        AssertTrue(
+            !selectedTextUsesRaster && nearbyTextUsesRaster,
+            "text selected inside the box may fall back to text-only when raster is less complete, but nearby text must stay raster-only");
+
+        MethodInfo? toleranceMethod = typeof(MainWindow).GetMethod(
+            "SimilarCountTextFallbackTolerancePdf",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(toleranceMethod != null, "Similar Count text fallback tolerance helper should exist");
+
+        float nearbyTolerance = (float)(toleranceMethod!.Invoke(null, new object[] { new SKRect(0, 0, 20, 16), false }) ?? 0f);
+        AssertTrue(
+            nearbyTolerance >= 64f,
+            $"nearby repeated text fallback should cover HDUE3 labels about 56 PDF pt from the symbol, got {nearbyTolerance:0.##}");
+    }
+
     public static void ViewportStatusUsesUiDispatcher()
     {
         string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
@@ -1397,6 +1432,9 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("ShouldUseTextGuidedRasterMatchesForExactText", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count exact text-raster matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("textOnlyMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("textAnchorTouchesSelection", StringComparison.Ordinal) &&
+            mainWindow.Contains("nearby text guide skipped text-only markers", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountNearbyTextFallbackPaddingMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
@@ -1411,6 +1449,14 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections, prefer text-guided raster when it recovers equal or more markers, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");
+        AssertTrue(
+            helper.Contains("nearby_repeated_text_fallback", StringComparison.Ordinal) &&
+            helper.Contains("_similar_text_nearby_mark_key", StringComparison.Ordinal) &&
+            helper.Contains("letters >= 2 and digits >= 1", StringComparison.Ordinal) &&
+            service.Contains("NearbyRepeatedTextFallback", StringComparison.Ordinal) &&
+            mainWindow.Contains("nearbyRepeatedTextFallback: true", StringComparison.Ordinal) &&
+            mainWindow.Contains("nearbyRepeatedTextFallback: false", StringComparison.Ordinal),
+            "manual Similar should be able to use a nearby repeated mark-like text label as a raster guide without enabling that broad fallback for normal Beam/Openings text searches or short grid labels");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
             viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&

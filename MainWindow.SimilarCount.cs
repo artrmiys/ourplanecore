@@ -27,6 +27,9 @@ public partial class MainWindow
     private const float SimilarCountNearestTextFallbackPaddingRatio = 0.35f;
     private const float SimilarCountNearestTextFallbackPaddingMinPdf = 8f;
     private const float SimilarCountNearestTextFallbackPaddingMaxPdf = 48f;
+    private const float SimilarCountNearbyTextFallbackPaddingRatio = 1.5f;
+    private const float SimilarCountNearbyTextFallbackPaddingMinPdf = 64f;
+    private const float SimilarCountNearbyTextFallbackPaddingMaxPdf = 96f;
     private const float SimilarCountExactTextCandidateSearchRadiusRatio = 0.75f;
     private const float SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f;
     private const float SimilarCountExactTextCandidateSearchRadiusMaxPdf = 144f;
@@ -151,6 +154,9 @@ public partial class MainWindow
             : textResult.Matches
                 .Select(match => TextSimilarMatch(match.Center, bitmapScale))
                 .ToList();
+        bool textAnchorTouchesSelection =
+            textAnchor != null &&
+            RectsIntersect(textAnchor.Rect, SimilarCountTextSearchRect(request));
         string templateWarning = SimilarCountTemplateWarning(
             session.TemplateWarning,
             textResult,
@@ -524,17 +530,29 @@ public partial class MainWindow
                         cancellationToken.ThrowIfCancellationRequested();
                     }
 
-                    if (ShouldUseTextGuidedRasterMatchesForExactText(rasterMatches, textMatches))
+                    if (ShouldUseTextGuidedRasterMatchesForExactText(
+                            rasterMatches,
+                            textMatches,
+                            textAnchorTouchesSelection))
                     {
                         matches = rasterMatches;
                         AppLog.Info(
                             $"Similar count exact text-raster matches applied; query='{textResult.Query}'; textOnlyMatches={textMatches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
                     }
-                    else
+                    else if (textAnchorTouchesSelection)
                     {
                         matches = textMatches.ToList();
                         AppLog.Info(
                             $"Similar count text matches applied; query='{textResult.Query}'; matches={matches.Count}; rasterVerified={rasterMatches.Count}; page='{request.PageFolder}'");
+                    }
+                    else
+                    {
+                        matches = await Task.Run(
+                            () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
+                            cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        AppLog.Info(
+                            $"Similar count nearby text guide skipped text-only markers; query='{textResult.Query}'; rasterVerified={rasterMatches.Count}; visualMatches={matches.Count}; page='{request.PageFolder}'");
                     }
                 }
                 else if (request.UseTextCandidateRasterMatches &&
@@ -795,6 +813,7 @@ public partial class MainWindow
                 searchRect,
                 request.PreferNearestRepeatedText,
                 anchor,
+                nearbyRepeatedTextFallback: false,
                 out PdfSimilarTextResult result,
                 out string error))
         {
@@ -815,6 +834,7 @@ public partial class MainWindow
                 searchRect,
                 preferNearestRepeatedText: true,
                 anchor,
+                nearbyRepeatedTextFallback: true,
                 out PdfSimilarTextResult nearestResult,
                 out string nearestError))
         {
@@ -846,15 +866,29 @@ public partial class MainWindow
             .Where(match => RectsIntersect(match.Rect, searchRect))
             .OrderBy(match => DistanceSquared(match.Center, anchor))
             .FirstOrDefault();
+        bool touchesSelection = selectedAnchor != null;
+        selectedAnchor ??= result.Matches
+            .OrderBy(match => DistanceSquared(match.Center, anchor))
+            .FirstOrDefault();
         if (selectedAnchor == null)
             return false;
 
-        float side = Math.Max(Math.Abs(searchRect.Width), Math.Abs(searchRect.Height));
-        float tolerance = Math.Clamp(
-            side * SimilarCountNearestTextFallbackPaddingRatio,
-            SimilarCountNearestTextFallbackPaddingMinPdf,
-            SimilarCountNearestTextFallbackPaddingMaxPdf);
+        float tolerance = SimilarCountTextFallbackTolerancePdf(searchRect, touchesSelection);
         return DistanceSquared(selectedAnchor.Center, anchor) <= tolerance * tolerance;
+    }
+
+    private static float SimilarCountTextFallbackTolerancePdf(SKRect searchRect, bool touchesSelection)
+    {
+        float side = Math.Max(Math.Abs(searchRect.Width), Math.Abs(searchRect.Height));
+        return touchesSelection
+            ? Math.Clamp(
+                side * SimilarCountNearestTextFallbackPaddingRatio,
+                SimilarCountNearestTextFallbackPaddingMinPdf,
+                SimilarCountNearestTextFallbackPaddingMaxPdf)
+            : Math.Clamp(
+                side * SimilarCountNearbyTextFallbackPaddingRatio,
+                SimilarCountNearbyTextFallbackPaddingMinPdf,
+                SimilarCountNearbyTextFallbackPaddingMaxPdf);
     }
 
     private static ViewportSimilarCountRequest SimilarCountTextTemplateFallbackRequest(
@@ -920,8 +954,10 @@ public partial class MainWindow
 
     private static bool ShouldUseTextGuidedRasterMatchesForExactText(
         IReadOnlyList<SimilarSymbolMatch> rasterMatches,
-        IReadOnlyList<SimilarSymbolMatch> textMatches) =>
-        rasterMatches.Count > 0 && rasterMatches.Count >= textMatches.Count;
+        IReadOnlyList<SimilarSymbolMatch> textMatches,
+        bool textAnchorTouchesSelection) =>
+        rasterMatches.Count > 0 &&
+        (!textAnchorTouchesSelection || rasterMatches.Count >= textMatches.Count);
 
     private static int AppendUnverifiedTextCandidateReviewMatches(
         List<SimilarSymbolMatch> matches,
@@ -957,10 +993,23 @@ public partial class MainWindow
     {
         SKRect searchRect = SimilarCountTextSearchRect(request);
         SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
-        return result.Matches
+        PdfSimilarTextMatch? selectedAnchor = result.Matches
             .Where(match => RectsIntersect(match.Rect, searchRect))
             .OrderBy(match => DistanceSquared(match.Center, anchor))
             .FirstOrDefault();
+        if (selectedAnchor != null)
+            return selectedAnchor;
+
+        PdfSimilarTextMatch? nearbyAnchor = result.Matches
+            .OrderBy(match => DistanceSquared(match.Center, anchor))
+            .FirstOrDefault();
+        if (nearbyAnchor == null)
+            return null;
+
+        float tolerance = SimilarCountTextFallbackTolerancePdf(searchRect, touchesSelection: false);
+        return DistanceSquared(nearbyAnchor.Center, anchor) <= tolerance * tolerance
+            ? nearbyAnchor
+            : null;
     }
 
     private static SimilarSymbolMatch TextSimilarMatch(
