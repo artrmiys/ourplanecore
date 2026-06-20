@@ -455,6 +455,8 @@ internal static class SimilarSymbolMatcherTests
             otherSheets.Contains("request.UseTextCandidateRasterMatches || request.AllowExactTextMatches", StringComparison.Ordinal) &&
             otherSheets.Contains("Similar count all-sheets text-guided raster matches", StringComparison.Ordinal) &&
             otherSheets.Contains("skippedNoText", StringComparison.Ordinal) &&
+            otherSheets.Contains("rejectedByRaster", StringComparison.Ordinal) &&
+            otherSheets.Contains("return ([], true, true);", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
             mainWindow.Contains("initialRotations: request.InitialIncludeRotations", StringComparison.Ordinal) &&

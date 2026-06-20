@@ -59,6 +59,7 @@ public partial class MainWindow
         int textGuidedPages = 0;
         int textGuidedMatches = 0;
         int textGuidedSkippedNoText = 0;
+        int textGuidedRejectedByRaster = 0;
         bool useTextGuide = CanUseOtherSheetTextGuide(request, textResult, textAnchor);
         foreach (PageInfo page in pages)
         {
@@ -95,7 +96,7 @@ public partial class MainWindow
             if (pxPerPt <= 0)
                 continue;
 
-            (List<SimilarSymbolMatch> matches, bool textGuided) = await Task.Run(
+            (List<SimilarSymbolMatch> matches, bool textGuided, bool rejectedByRaster) = await Task.Run(
                 () => FindOtherSheetSimilarMatches(
                     textGuide,
                     request,
@@ -108,6 +109,8 @@ public partial class MainWindow
                     cancellationToken),
                 cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (rejectedByRaster)
+                textGuidedRejectedByRaster++;
             if (matches.Count == 0)
                 continue;
             if (textGuided)
@@ -133,13 +136,13 @@ public partial class MainWindow
         if (textGuidedPages > 0)
         {
             AppLog.Info(
-                $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; page='{request.PageFolder}'");
+                $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; rejectedByRaster={textGuidedRejectedByRaster}; page='{request.PageFolder}'");
         }
 
         return (sweeps, skipped);
     }
 
-    private static (List<SimilarSymbolMatch> Matches, bool TextGuided) FindOtherSheetSimilarMatches(
+    private static (List<SimilarSymbolMatch> Matches, bool TextGuided, bool RejectedByRaster) FindOtherSheetSimilarMatches(
         OtherSheetTextGuide? textGuide,
         ViewportSimilarCountRequest request,
         SimilarSymbolMatchSession session,
@@ -162,11 +165,14 @@ public partial class MainWindow
                 mirrored,
                 cancellationToken);
             if (textGuided.Count > 0)
-                return (textGuided, true);
+                return (textGuided, true, false);
+
+            return ([], true, true);
         }
 
         return (
             session.FindMatchesOnBitmap(bitmap, floor, rotations, mirrored, cancellationToken),
+            false,
             false);
     }
 
