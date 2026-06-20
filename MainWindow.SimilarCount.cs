@@ -503,9 +503,36 @@ public partial class MainWindow
                 List<SimilarSymbolMatch> matches;
                 if (request.AllowExactTextMatches && textResult != null && textMatches.Count > 0)
                 {
-                    matches = textMatches.ToList();
-                    AppLog.Info(
-                        $"Similar count text matches applied; query='{textResult.Query}'; matches={matches.Count}; page='{request.PageFolder}'");
+                    List<SimilarSymbolMatch> rasterMatches = [];
+                    if (textAnchor != null && textResult.Matches.Count > 1)
+                    {
+                        rasterMatches = await Task.Run(
+                            () => FindTextCandidateRasterMatches(
+                                session,
+                                textResult,
+                                textAnchor,
+                                request,
+                                bitmapScale,
+                                threshold,
+                                rotations,
+                                mirrored,
+                                cancellationToken),
+                            cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    if (ShouldUseTextGuidedRasterMatchesForExactText(rasterMatches, textMatches))
+                    {
+                        matches = rasterMatches;
+                        AppLog.Info(
+                            $"Similar count exact text-raster matches applied; query='{textResult.Query}'; textOnlyMatches={textMatches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
+                    }
+                    else
+                    {
+                        matches = textMatches.ToList();
+                        AppLog.Info(
+                            $"Similar count text matches applied; query='{textResult.Query}'; matches={matches.Count}; rasterVerified={rasterMatches.Count}; page='{request.PageFolder}'");
+                    }
                 }
                 else if (request.UseTextCandidateRasterMatches &&
                          textResult != null &&
@@ -887,6 +914,11 @@ public partial class MainWindow
             .Select(center => TextSimilarMatch(center, bitmapScale, SimilarCountWeakTextCandidateScore))
             .ToList();
     }
+
+    private static bool ShouldUseTextGuidedRasterMatchesForExactText(
+        IReadOnlyList<SimilarSymbolMatch> rasterMatches,
+        IReadOnlyList<SimilarSymbolMatch> textMatches) =>
+        rasterMatches.Count > 0 && rasterMatches.Count >= textMatches.Count;
 
     private static int AppendUnverifiedTextCandidateReviewMatches(
         List<SimilarSymbolMatch> matches,

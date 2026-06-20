@@ -945,6 +945,33 @@ internal static class SimilarSymbolMatcherTests
             AssertTrue(matches.Any(match => NearCenter(match, x, y)), $"candidate raster verification missed ({x},{y})");
     }
 
+    public static void TextGuidedRasterCanRecoverMultipleSymbolsPerLabel()
+    {
+        var placements = new[] { (80, 90), (135, 90), (260, 90) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? session = CreateSession(page);
+
+        var textCandidateCenters = new List<SKPoint>
+        {
+            new(135, 105),
+            new(282, 105),
+        };
+
+        List<SimilarSymbolMatch> matches = session!.FindMatchesNearCenters(
+            textCandidateCenters,
+            searchRadiusPixels: 44,
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"one repeated text label can point at multiple nearby symbols; expected {placements.Length}, got {matches.Count}: " +
+            string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}")));
+        foreach ((int x, int y) in placements)
+            AssertTrue(matches.Any(match => NearCenter(match, x, y)), $"text-guided raster missed symbol near one label at ({x},{y})");
+    }
+
     public static void ViewportStatusUsesUiDispatcher()
     {
         string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
@@ -1335,6 +1362,9 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("TextSimilarMatch", StringComparison.Ordinal) &&
             mainWindow.Contains("FindTextCandidateRasterMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("FindMatchesNearCenters", StringComparison.Ordinal) &&
+            mainWindow.Contains("ShouldUseTextGuidedRasterMatchesForExactText", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count exact text-raster matches applied", StringComparison.Ordinal) &&
+            mainWindow.Contains("textOnlyMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&
@@ -1347,7 +1377,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
             mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
-            "Similar Count should use exact PDF text for direct text selections, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");
+            "Similar Count should use exact PDF text for direct text selections, prefer text-guided raster when it recovers equal or more markers, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
             viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&
