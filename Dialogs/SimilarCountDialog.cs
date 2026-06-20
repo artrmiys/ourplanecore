@@ -429,7 +429,14 @@ public sealed class SimilarCountDialog : Window
             return;
         }
 
-        if (_lastFound == _lastTotal && _lastAlreadyCountedCount == 0)
+        if (_lastFound == 0 && result.NewCandidateCount > 0)
+        {
+            _foundLabel.Text = result.NewCandidateCount == 1
+                ? "Review 1 candidate."
+                : $"Review {result.NewCandidateCount} candidates.";
+            _addButton.Content = AddButtonText(0);
+        }
+        else if (_lastFound == _lastTotal && _lastAlreadyCountedCount == 0)
         {
             _foundLabel.Text = _lastFound == 1
                 ? $"Found 1 symbol{ScoreSuffix()}."

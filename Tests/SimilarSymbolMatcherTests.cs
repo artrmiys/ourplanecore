@@ -1340,15 +1340,17 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             dialog.Contains("_reviewDetailsLabel", StringComparison.Ordinal) &&
             dialog.Contains("ReviewDetails", StringComparison.Ordinal) &&
+            dialog.Contains("Review {result.NewCandidateCount} candidates", StringComparison.Ordinal) &&
             dialog.Contains("Already counted", StringComparison.Ordinal) &&
             dialog.Contains("Excluded", StringComparison.Ordinal) &&
             dialog.Contains("result.LimitSummary", StringComparison.Ordinal),
-            "Similar Count dialog should explain the review state and weak-match limit summary in a compact details line");
+            "Similar Count dialog should explain the review state, including all-weak candidate sets, and weak-match limit summary in a compact details line");
         AssertTrue(
             mainWindow.Contains("WeakSimilarMatchCount()", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountLimitSummary()", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountLimitLabel", StringComparison.Ordinal) &&
             mainWindow.Contains("Weak limit:", StringComparison.Ordinal) &&
+            mainWindow.Contains("Text-only candidates waiting for review", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarReviewStatus", StringComparison.Ordinal) &&
             mainWindow.Contains("result.LimitSummary", StringComparison.Ordinal) &&
             mainWindow.Contains("result.AlreadyCountedCount", StringComparison.Ordinal),

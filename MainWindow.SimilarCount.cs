@@ -313,7 +313,7 @@ public partial class MainWindow
             {
                 return includeTextCandidateReviewMatchesByDefault
                     ? "Text-only candidates included; review before Add"
-                    : "Text-only candidates need manual review";
+                    : "Text-only candidates waiting for review";
             }
 
             var limits = lastMatches
