@@ -424,7 +424,7 @@ public sealed class SimilarCountDialog : Window
         {
             _foundLabel.Text = "Found 0 symbols.";
             _reviewDetailsLabel.Text = "";
-            _addButton.Content = AddButtonText(0);
+            _addButton.Content = AddButtonText(0, 0);
             _addButton.IsEnabled = false;
             _includeAllButton.IsEnabled = false;
             _strongOnlyButton.IsEnabled = false;
@@ -436,19 +436,19 @@ public sealed class SimilarCountDialog : Window
             _foundLabel.Text = result.NewCandidateCount == 1
                 ? "Review 1 candidate."
                 : $"Review {result.NewCandidateCount} candidates.";
-            _addButton.Content = AddButtonText(0);
+            _addButton.Content = AddButtonText(0, _lastOtherSheetNewCount);
         }
         else if (_lastFound == _lastTotal && _lastAlreadyCountedCount == 0)
         {
             _foundLabel.Text = _lastFound == 1
                 ? $"Found 1 symbol{ScoreSuffix()}."
                 : $"Found {_lastFound} symbols{ScoreSuffix()}.";
-            _addButton.Content = AddButtonText(_lastFound);
+            _addButton.Content = AddButtonText(_lastFound, _lastOtherSheetNewCount);
         }
         else
         {
             _foundLabel.Text = $"Ready to add {_lastFound} of {_lastTotal} found{ScoreSuffix()}.";
-            _addButton.Content = AddButtonText(_lastFound);
+            _addButton.Content = AddButtonText(_lastFound, _lastOtherSheetNewCount);
         }
 
         _reviewDetailsLabel.Text = ReviewDetails(result);
@@ -487,12 +487,20 @@ public sealed class SimilarCountDialog : Window
             : $" (score {_lastMinScore:0.00}-{_lastMaxScore:0.00})";
     }
 
-    private string AddButtonText(int count)
+    private string AddButtonText(int count) =>
+        AddButtonText(count, _lastOtherSheetNewCount);
+
+    private string AddButtonText(int count, int otherSheetCount)
     {
         string destination = DestinationName;
         string name = destination.Length <= 22
             ? destination
             : destination[..21] + "...";
+        otherSheetCount = Math.Max(0, otherSheetCount);
+        if (otherSheetCount > 0 && count > 0)
+            return $"Add {count}+{otherSheetCount} off-sheet to {name}";
+        if (otherSheetCount > 0)
+            return $"Add {otherSheetCount} off-sheet to {name}";
         return count <= 0
             ? $"Add to {name}"
             : $"Add {count} to {name}";

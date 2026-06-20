@@ -444,8 +444,10 @@ internal static class SimilarSymbolMatcherTests
             dialog.Contains("text-only candidates are reported only", StringComparison.Ordinal) &&
             dialog.Contains("IncludeAllSheets", StringComparison.Ordinal) &&
             dialog.Contains("OtherSheetSummary", StringComparison.Ordinal) &&
+            dialog.Contains("AddButtonText(_lastFound, _lastOtherSheetNewCount)", StringComparison.Ordinal) &&
+            dialog.Contains("off-sheet to", StringComparison.Ordinal) &&
             dialog.Contains("_allSheetsBox", StringComparison.Ordinal),
-            "dialog should offer the all-sheets option and surface the other-sheet summary");
+            "dialog should offer the all-sheets option, surface the other-sheet summary, and label Add with off-sheet counts");
         AssertTrue(
             mainWindow.Contains("SweepOtherSimilarSheetsAsync", StringComparison.Ordinal) &&
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
