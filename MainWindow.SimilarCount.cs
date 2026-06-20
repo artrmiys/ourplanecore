@@ -257,7 +257,9 @@ public partial class MainWindow
                 : "";
             string textRejected = otherSheetTextRejectedCandidates > 0
                 ? $" {otherSheetTextRejectedCandidates} PDF text candidate(s) on {otherSheetTextRejectedSheets} sheet(s) were not auto-added without a raster match."
-                : "";
+                : otherSheetTextRejectedSheets > 0
+                    ? $" {otherSheetTextRejectedSheets} sheet(s) were not auto-added without a usable PDF text guide."
+                    : "";
             return markers == 0
                 ? $"Other sheets: no new raster matches.{textRejected}{skipped}"
                 : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{textRejected}{skipped}";

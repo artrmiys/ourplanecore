@@ -495,6 +495,8 @@ internal static class SimilarSymbolMatcherTests
             otherSheets.Contains("TemplateFromTextOffset", StringComparison.Ordinal) &&
             otherSheets.Contains("FindOtherSheetTextGuidedRasterMatches", StringComparison.Ordinal) &&
             otherSheets.Contains("session.FindMatchesNearCentersOnBitmap", StringComparison.Ordinal) &&
+            otherSheets.Contains("textGuideRequired", StringComparison.Ordinal) &&
+            otherSheets.Contains("skipped visual-only Beam/Openings sweep", StringComparison.Ordinal) &&
             otherSheets.Contains("Math.Clamp(threshold, (float)AppSettingsStore.SimilarCountThresholdMin, 1f)", StringComparison.Ordinal) &&
             otherSheets.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
             otherSheets.Contains("request.UseTextCandidateRasterMatches || request.AllowExactTextMatches", StringComparison.Ordinal) &&
@@ -506,6 +508,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("otherSheetTextRejectedCandidates", StringComparison.Ordinal) &&
             mainWindow.Contains("PDF text candidate(s)", StringComparison.Ordinal) &&
             mainWindow.Contains("were not auto-added without a raster match", StringComparison.Ordinal) &&
+            mainWindow.Contains("were not auto-added without a usable PDF text guide", StringComparison.Ordinal) &&
             mainWindow.Contains("Other sheets: no new raster matches.", StringComparison.Ordinal) &&
             mainWindow.Contains("AddMarkerOffset(center)", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&

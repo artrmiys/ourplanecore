@@ -67,6 +67,14 @@ public partial class MainWindow
         int textGuidedRejectedByRaster = 0;
         int textGuidedRejectedCandidates = 0;
         bool useTextGuide = CanUseOtherSheetTextGuide(request, textResult, textAnchor);
+        bool textGuideRequired = request.UseTextCandidateRasterMatches && !request.AllowExactTextMatches;
+        if (textGuideRequired && !useTextGuide)
+        {
+            AppLog.Info(
+                $"Similar count all-sheets skipped visual-only Beam/Openings sweep; sheets={pages.Count}; page='{request.PageFolder}'");
+            return (sweeps, skipped, pages.Count, 0);
+        }
+
         foreach (PageInfo page in pages)
         {
             cancellationToken.ThrowIfCancellationRequested();
