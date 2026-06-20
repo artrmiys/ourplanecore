@@ -1391,7 +1391,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("ExcludeWeakSimilarMatches(bool includeTextCandidatesByDefault)", StringComparison.Ordinal) &&
             normalizedMainWindow.Contains("excludedIndexes.Clear();\n            ExcludeWeakSimilarMatches(includeTextCandidateReviewMatchesByDefault);", StringComparison.Ordinal) &&
             normalizedMainWindow.Contains("ExcludeWeakSimilarMatches(includeTextCandidatesByDefault: false);", StringComparison.Ordinal),
-            "Similar Count should make ordinary below-default confidence matches review-only while allowing Beam/Openings text candidates to start included for review");
+            "Similar Count should make below-default confidence and text-only fallback matches review-only unless they are explicitly included");
         AssertTrue(
             dialog.Contains("IncludeAllRequested", StringComparison.Ordinal) &&
             dialog.Contains("StrongOnlyRequested", StringComparison.Ordinal) &&
@@ -1506,10 +1506,10 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("DefaultDestinationName: _activeItem?.Name", StringComparison.Ordinal) &&
             beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
             beamTool.Contains("TextCandidateSearchRadiusPdf: textPadding", StringComparison.Ordinal) &&
-            beamTool.Contains("IncludeTextCandidatesByDefault: true", StringComparison.Ordinal) &&
+            beamTool.Contains("IncludeTextCandidatesByDefault: false", StringComparison.Ordinal) &&
             beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal) &&
             beamTool.Contains("SimilarOpeningPadding", StringComparison.Ordinal),
-            "Beam/Openings Similar requests should mark the original measured item as already counted, target the newly created item, and use auto text/raster matching tuned for measured objects");
+            "Beam/Openings Similar requests should mark the original measured item as already counted, target the newly created item, use auto text/raster matching tuned for measured objects, and keep unverified text-only fallback review-only");
         AssertTrue(
             similarCount.Contains("private void StartSimilarCountReview", StringComparison.Ordinal) &&
             similarCount.Contains("IsSimilarCountAlreadyCounted", StringComparison.Ordinal) &&
@@ -1608,13 +1608,13 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("PdfPageIndex: page.PdfPage", StringComparison.Ordinal) &&
             beamTool.Contains("AllowExactTextMatches: false", StringComparison.Ordinal) &&
             beamTool.Contains("UseTextCandidateRasterMatches: true", StringComparison.Ordinal) &&
-            beamTool.Contains("IncludeTextCandidatesByDefault: true", StringComparison.Ordinal) &&
             beamTool.Contains("TemplateAnchorPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("MarkerCenterPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("TextSearchRectPdf:", StringComparison.Ordinal) &&
             beamTool.Contains("DestinationTakeoffFolderPath:", StringComparison.Ordinal) &&
             beamTool.Contains("DefaultDestinationName:", StringComparison.Ordinal) &&
             beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
+            beamTool.Contains("IncludeTextCandidatesByDefault: false", StringComparison.Ordinal) &&
             beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal),
             "Similar Count requests should carry the source PDF identity, while Beam/Openings keep geometry/raster matching, preserve marker offset, and target their named item");
     }
