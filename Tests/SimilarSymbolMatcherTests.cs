@@ -1682,6 +1682,64 @@ internal static class SimilarSymbolMatcherTests
             "Similar review should be reusable from Beam/Openings, skip the original measured center, include exact text candidates for review, and retry until the readable raster is ready");
     }
 
+    public static void SimilarTextQueryFindsSplitMarkTokens()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "opc_similar_text_split", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        string pdfPath = Path.Combine(tempDir, "split-mark.pdf");
+        try
+        {
+            using (var stream = File.Create(pdfPath))
+            using (var document = SKDocument.CreatePdf(stream))
+            {
+                SKCanvas canvas = document.BeginPage(320, 180);
+                canvas.Clear(SKColors.White);
+                using var text = new SKPaint
+                {
+                    Color = SKColors.Black,
+                    TextSize = 12,
+                    IsAntialias = true,
+                    Typeface = SKTypeface.FromFamilyName("Arial"),
+                };
+
+                canvas.DrawText("HDUE3", 40, 40, text);
+                canvas.DrawText("HDUE", 40, 82, text);
+                canvas.DrawText("3", 77, 82, text);
+                canvas.DrawText("HDUE3", 190, 40, text);
+                canvas.DrawText("HDUE", 190, 82, text);
+                canvas.DrawText("3", 227, 82, text);
+                document.EndPage();
+                document.Close();
+            }
+
+            bool ok = PdfSimilarTextService.TryFindSimilarTextByQuery(
+                pdfPath,
+                0,
+                "HDUE3",
+                out PdfSimilarTextResult result,
+                out string error);
+
+            AssertTrue(ok, $"similar text query should run against synthetic split-mark PDF: {error}");
+            AssertTrue(result.Query == "HDUE3", $"normalized split-mark query should be HDUE3, got {result.Query}");
+            AssertTrue(
+                result.Matches.Count >= 4,
+                $"query HDUE3 should return both whole-word and split-token occurrences, got {result.Matches.Count}: " +
+                string.Join(", ", result.Matches.Select(match => $"{match.Text}@{match.Center.X:0.#},{match.Center.Y:0.#}")));
+            AssertTrue(
+                result.Matches.Count(match => string.Equals(match.Text, "HDUE3", StringComparison.OrdinalIgnoreCase)) >= 4,
+                "split HDUE + 3 occurrences should be returned as HDUE3 candidates with combined bounds");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch { }
+        }
+    }
+
     public static void SimilarCountUsesExactPdfTextWhenAvailable()
     {
         string helper = File.ReadAllText(Path.Combine("Tools", "pdf_layers_helper.py"));
@@ -1695,6 +1753,9 @@ internal static class SimilarSymbolMatcherTests
             helper.Contains("_similar_text_key", StringComparison.Ordinal) &&
             helper.Contains("prefer_nearest_repeated_text", StringComparison.Ordinal) &&
             helper.Contains("requested_query = _similar_text_key", StringComparison.Ordinal) &&
+            helper.Contains("_similar_text_candidates", StringComparison.Ordinal) &&
+            helper.Contains("_similar_text_payload_center_inside", StringComparison.Ordinal) &&
+            helper.Contains("_similar_text_nearby_mark_key(key)", StringComparison.Ordinal) &&
             helper.Contains("key_counts", StringComparison.Ordinal) &&
             helper.Contains("distance_sq", StringComparison.Ordinal) &&
             helper.Contains("elif action == \"similartext\"", StringComparison.Ordinal) &&

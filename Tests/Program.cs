@@ -81,6 +81,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count locks destination takeoff", SimilarSymbolMatcherTests.SimilarCountLocksDestinationTakeoff),
     ("similar count handles switched sheet add status", SimilarSymbolMatcherTests.SimilarCountHandlesSwitchedSheetAddStatus),
     ("similar count beam openings completion can launch review", SimilarSymbolMatcherTests.BeamOpeningsCompletionCanLaunchSimilarReview),
+    ("similar text query finds split mark tokens", SimilarSymbolMatcherTests.SimilarTextQueryFindsSplitMarkTokens),
     ("similar count uses exact pdf text when available", SimilarSymbolMatcherTests.SimilarCountUsesExactPdfTextWhenAvailable),
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),

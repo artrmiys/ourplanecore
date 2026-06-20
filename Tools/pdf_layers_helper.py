@@ -2811,31 +2811,122 @@ def _word_center(word) -> tuple[float, float]:
 
 
 def _word_payload(word) -> dict:
+    return _similar_text_payload(
+        str(word[4] or ""),
+        float(word[0]),
+        float(word[1]),
+        float(word[2]),
+        float(word[3]),
+    )
+
+
+def _similar_text_payload(text: str, x0: float, y0: float, x1: float, y1: float) -> dict:
     return {
-        "text": str(word[4] or ""),
-        "x0": float(word[0]),
-        "y0": float(word[1]),
-        "x1": float(word[2]),
-        "y1": float(word[3]),
+        "text": text,
+        "x0": x0,
+        "y0": y0,
+        "x1": x1,
+        "y1": y1,
     }
 
 
-def _word_center_inside(word, rect: fitz.Rect) -> bool:
-    cx, cy = _word_center(word)
+def _similar_text_payload_center(payload: dict) -> tuple[float, float]:
+    return (
+        (float(payload["x0"]) + float(payload["x1"])) / 2.0,
+        (float(payload["y0"]) + float(payload["y1"])) / 2.0,
+    )
+
+
+def _similar_text_payload_center_inside(payload: dict, rect: fitz.Rect) -> bool:
+    cx, cy = _similar_text_payload_center(payload)
     return rect.x0 <= cx <= rect.x1 and rect.y0 <= cy <= rect.y1
 
 
-def _word_intersection_ratio(word, rect: fitz.Rect) -> float:
-    x0 = float(word[0])
-    y0 = float(word[1])
-    x1 = float(word[2])
-    y1 = float(word[3])
+def _similar_text_payload_intersection_ratio(payload: dict, rect: fitz.Rect) -> float:
+    x0 = float(payload["x0"])
+    y0 = float(payload["y0"])
+    x1 = float(payload["x1"])
+    y1 = float(payload["y1"])
     area = max(0.0, x1 - x0) * max(0.0, y1 - y0)
     if area <= 0:
         return 0.0
     overlap_w = max(0.0, min(x1, rect.x1) - max(x0, rect.x0))
     overlap_h = max(0.0, min(y1, rect.y1) - max(y0, rect.y0))
     return (overlap_w * overlap_h) / area
+
+
+def _similar_text_candidates(words: list) -> list[tuple[str, dict]]:
+    candidates: list[tuple[str, dict]] = []
+    seen: set[tuple] = set()
+
+    def add_candidate(key: str, payload: dict) -> None:
+        if len(key) < 2:
+            return
+        dedupe_key = (
+            key,
+            round(float(payload["x0"]), 2),
+            round(float(payload["y0"]), 2),
+            round(float(payload["x1"]), 2),
+            round(float(payload["y1"]), 2),
+        )
+        if dedupe_key in seen:
+            return
+        seen.add(dedupe_key)
+        candidates.append((key, payload))
+
+    for word in words:
+        payload = _word_payload(word)
+        add_candidate(_similar_text_key(payload["text"]), payload)
+
+    rows: list[dict] = []
+    for word in sorted(words, key=lambda w: (_word_center(w)[1], float(w[0]))):
+        cx, cy = _word_center(word)
+        height = max(1.0, abs(float(word[3]) - float(word[1])))
+        for row in rows:
+            tolerance = max(3.0, row["height"] * 0.65, height * 0.65)
+            if abs(cy - row["cy"]) <= tolerance:
+                row["words"].append(word)
+                count = len(row["words"])
+                row["cy"] = ((row["cy"] * (count - 1)) + cy) / count
+                row["height"] = max(row["height"], height)
+                break
+        else:
+            rows.append({"cy": cy, "height": height, "words": [word]})
+
+    for row in rows:
+        line_words = sorted(row["words"], key=lambda w: float(w[0]))
+        for start in range(len(line_words)):
+            parts: list[str] = []
+            x0 = y0 = x1 = y1 = 0.0
+            previous_right: float | None = None
+            maximum_height = 1.0
+            for index in range(start, min(start + 6, len(line_words))):
+                word = line_words[index]
+                wx0, wy0, wx1, wy1 = _word_box(word)
+                height = max(1.0, abs(wy1 - wy0))
+                if previous_right is not None:
+                    gap = wx0 - previous_right
+                    if gap > max(12.0, maximum_height * 1.2, height * 1.2):
+                        break
+
+                if not parts:
+                    x0, y0, x1, y1 = wx0, wy0, wx1, wy1
+                else:
+                    x0 = min(x0, wx0)
+                    y0 = min(y0, wy0)
+                    x1 = max(x1, wx1)
+                    y1 = max(y1, wy1)
+                parts.append(str(word[4] or ""))
+                previous_right = wx1
+                maximum_height = max(maximum_height, height)
+
+                if len(parts) < 2:
+                    continue
+                key = _similar_text_key("".join(parts))
+                if _similar_text_nearby_mark_key(key):
+                    add_candidate(key, _similar_text_payload("".join(parts), x0, y0, x1, y1))
+
+    return candidates
 
 
 def similar_text_data(req: dict) -> dict:
@@ -2858,28 +2949,27 @@ def similar_text_data(req: dict) -> dict:
     if not words:
         return {"ok": True, "query": "", "matches": []}
 
+    candidates = _similar_text_candidates(words)
     requested_query = _similar_text_key(str(req.get("query") or ""))
     if len(requested_query) >= 2:
         matches = [
-            _word_payload(word)
-            for word in words
-            if _similar_text_key(str(word[4] or "")) == requested_query
+            payload
+            for key, payload in candidates
+            if key == requested_query
         ]
         return {"ok": True, "query": requested_query, "matches": matches}
 
     key_counts = {}
-    for word in words:
-        key = _similar_text_key(str(word[4] or ""))
+    for key, _payload in candidates:
         if len(key) >= 2:
             key_counts[key] = key_counts.get(key, 0) + 1
 
     selected = []
-    for word in words:
-        key = _similar_text_key(str(word[4] or ""))
+    for key, payload in candidates:
         if len(key) < 2:
             continue
-        if _word_center_inside(word, selection) or _word_intersection_ratio(word, selection) >= 0.55:
-            selected.append((key, word))
+        if _similar_text_payload_center_inside(payload, selection) or _similar_text_payload_intersection_ratio(payload, selection) >= 0.55:
+            selected.append((key, payload))
 
     prefer_nearest_repeated = bool(req.get("prefer_nearest_repeated_text", False))
     if prefer_nearest_repeated:
@@ -2894,16 +2984,15 @@ def similar_text_data(req: dict) -> dict:
         ]
         if not repeated and bool(req.get("nearby_repeated_text_fallback", False)):
             repeated = [
-                (key, word)
-                for word in words
-                for key in [_similar_text_key(str(word[4] or ""))]
+                (key, payload)
+                for key, payload in candidates
                 if key_counts.get(key, 0) >= 2 and _similar_text_nearby_mark_key(key)
             ]
         if not repeated:
             return {"ok": True, "query": "", "matches": []}
 
         def distance_sq(item) -> float:
-            cx, cy = _word_center(item[1])
+            cx, cy = _similar_text_payload_center(item[1])
             return (cx - anchor[0]) * (cx - anchor[0]) + (cy - anchor[1]) * (cy - anchor[1])
 
         query = min(repeated, key=distance_sq)[0]
@@ -2914,9 +3003,9 @@ def similar_text_data(req: dict) -> dict:
         query = next(iter(keys))
 
     matches = [
-        _word_payload(word)
-        for word in words
-        if _similar_text_key(str(word[4] or "")) == query
+        payload
+        for key, payload in candidates
+        if key == query
     ]
     return {"ok": True, "query": query, "matches": matches}
 
