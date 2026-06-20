@@ -65,6 +65,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher finds far copies on downsampled large raster", SimilarSymbolMatcherTests.FindsFarCopiesOnDownsampledLargeRaster),
     ("similar matcher verifies text candidate windows by raster", SimilarSymbolMatcherTests.VerifiesTextCandidateWindowsByRaster),
     ("similar matcher recovers multiple symbols per text label", SimilarSymbolMatcherTests.TextGuidedRasterCanRecoverMultipleSymbolsPerLabel),
+    ("similar count exact text radius covers nearby repeated symbols", SimilarSymbolMatcherTests.ExactTextGuidedRadiusCoversNearbyRepeatedSymbols),
     ("viewport status uses ui dispatcher", SimilarSymbolMatcherTests.ViewportStatusUsesUiDispatcher),
     ("similar count preview supports review before add", SimilarSymbolMatcherTests.SimilarCountPreviewSupportsReviewBeforeAdd),
     ("similar count review choices survive rescan", SimilarSymbolMatcherTests.SimilarCountReviewChoicesSurviveRescan),

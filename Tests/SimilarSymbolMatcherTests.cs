@@ -972,6 +972,38 @@ internal static class SimilarSymbolMatcherTests
             AssertTrue(matches.Any(match => NearCenter(match, x, y)), $"text-guided raster missed symbol near one label at ({x},{y})");
     }
 
+    public static void ExactTextGuidedRadiusCoversNearbyRepeatedSymbols()
+    {
+        MethodInfo? method = typeof(MainWindow).GetMethod(
+            "SimilarCountTextCandidateSearchRadiusPixels",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(method != null, "Similar Count text candidate radius helper should exist");
+
+        var exactTextRequest = new ViewportSimilarCountRequest(
+            new SKRect(10, 10, 30, 26),
+            "Pages\\sample",
+            1,
+            AllowExactTextMatches: true,
+            UseTextCandidateRasterMatches: false);
+        int exactRadius = (int)(method!.Invoke(null, new object[] { exactTextRequest, 2f }) ?? 0);
+
+        AssertTrue(
+            exactRadius >= 128,
+            $"manual exact-text Similar should search at least 64 PDF pt around each label at 2x, got {exactRadius}px");
+
+        var explicitBeamRadiusRequest = exactTextRequest with
+        {
+            AllowExactTextMatches = false,
+            UseTextCandidateRasterMatches = true,
+            TextCandidateSearchRadiusPdf = 24f,
+        };
+        int explicitRadius = (int)(method.Invoke(null, new object[] { explicitBeamRadiusRequest, 2f }) ?? 0);
+
+        AssertTrue(
+            exactRadius > explicitRadius && explicitRadius == 48,
+            $"explicit Beam/Openings text radius should stay request-driven at 24 PDF pt/2x, got exact={exactRadius}px explicit={explicitRadius}px");
+    }
+
     public static void ViewportStatusUsesUiDispatcher()
     {
         string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
@@ -1365,6 +1397,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("ShouldUseTextGuidedRasterMatchesForExactText", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count exact text-raster matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("textOnlyMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
             mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&

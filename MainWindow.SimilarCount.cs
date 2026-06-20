@@ -27,6 +27,9 @@ public partial class MainWindow
     private const float SimilarCountNearestTextFallbackPaddingRatio = 0.35f;
     private const float SimilarCountNearestTextFallbackPaddingMinPdf = 8f;
     private const float SimilarCountNearestTextFallbackPaddingMaxPdf = 48f;
+    private const float SimilarCountExactTextCandidateSearchRadiusRatio = 0.75f;
+    private const float SimilarCountExactTextCandidateSearchRadiusMinPdf = 64f;
+    private const float SimilarCountExactTextCandidateSearchRadiusMaxPdf = 144f;
     private const int SimilarCountReviewReadinessRetryLimit = 24;
     private static readonly TimeSpan SimilarCountReviewReadinessRetryDelay = TimeSpan.FromMilliseconds(500);
 
@@ -1021,6 +1024,15 @@ public partial class MainWindow
         float radius = 0f;
         if (request.TextCandidateSearchRadiusPdf > 0f && float.IsFinite(request.TextCandidateSearchRadiusPdf))
             radius = request.TextCandidateSearchRadiusPdf * bitmapScale;
+        else if (request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches)
+        {
+            float templateSide = Math.Max(request.PdfRect.Width, request.PdfRect.Height);
+            float radiusPdf = Math.Clamp(
+                templateSide * SimilarCountExactTextCandidateSearchRadiusRatio,
+                SimilarCountExactTextCandidateSearchRadiusMinPdf,
+                SimilarCountExactTextCandidateSearchRadiusMaxPdf);
+            radius = radiusPdf * bitmapScale;
+        }
         else
         {
             float templateSide = Math.Max(request.PdfRect.Width, request.PdfRect.Height);
