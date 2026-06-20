@@ -1715,6 +1715,8 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxTextCandidateMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("text scan skipped broad query", StringComparison.Ordinal) &&
+            mainWindow.Contains("if (usedTextTemplateFallback)", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count text-template fallback is review-only", StringComparison.Ordinal) &&
             mainWindow.Contains("showing weak text-guided review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections, prefer text-guided raster when it recovers equal or more markers, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");

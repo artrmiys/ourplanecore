@@ -603,38 +603,7 @@ public partial class MainWindow
                          textAnchor != null &&
                          textResult.Matches.Count > 1)
                 {
-                    matches = await Task.Run(
-                        () => FindTextCandidateRasterMatches(
-                            session,
-                            textResult,
-                            textAnchor,
-                            request,
-                            bitmapScale,
-                            threshold,
-                            rotations,
-                            mirrored,
-                            nearbyTextGuide: false,
-                            cancellationToken),
-                        cancellationToken);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    AppLog.Info(
-                        $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
-                    List<SimilarSymbolMatch> visualMatches =
-                        await TryFindTextRasterVisualMergeMatchesAsync(
-                            session,
-                            textResult.Query,
-                            request.PageFolder,
-                            threshold,
-                            rotations,
-                            mirrored,
-                            cancellationToken);
-                    int visualAdded = AppendDistinctSimilarMatches(matches, visualMatches, bitmapScale);
-                    if (visualAdded > 0)
-                    {
-                        AppLog.Info(
-                            $"Similar count text-raster merged full-sheet visual matches; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; textGuidedMatches={matches.Count - visualAdded}; visualAdded={visualAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
-                    }
-                    if (TextRasterMatchesLeaveNoNewMarkers(matches))
+                    if (usedTextTemplateFallback)
                     {
                         matches = BuildWeakTextCandidateReviewMatches(
                             textResult,
@@ -644,24 +613,70 @@ public partial class MainWindow
                         textCandidateReviewFallbackActive = true;
                         includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
                         AppLog.Info(
-                            $"Similar count text-raster produced no new verified markers; showing weak text-guided review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                            $"Similar count text-template fallback is review-only; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
                     }
                     else
                     {
-                        int weakAdded = AppendUnverifiedTextCandidateReviewMatches(
-                            matches,
-                            BuildWeakTextCandidateReviewMatches(
+                        matches = await Task.Run(
+                            () => FindTextCandidateRasterMatches(
+                                session,
                                 textResult,
                                 textAnchor,
                                 request,
-                                bitmapScale),
-                            bitmapScale);
-                        if (weakAdded > 0)
+                                bitmapScale,
+                                threshold,
+                                rotations,
+                                mirrored,
+                                nearbyTextGuide: false,
+                                cancellationToken),
+                            cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        AppLog.Info(
+                            $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
+                        List<SimilarSymbolMatch> visualMatches =
+                            await TryFindTextRasterVisualMergeMatchesAsync(
+                                session,
+                                textResult.Query,
+                                request.PageFolder,
+                                threshold,
+                                rotations,
+                                mirrored,
+                                cancellationToken);
+                        int visualAdded = AppendDistinctSimilarMatches(matches, visualMatches, bitmapScale);
+                        if (visualAdded > 0)
                         {
+                            AppLog.Info(
+                                $"Similar count text-raster merged full-sheet visual matches; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; textGuidedMatches={matches.Count - visualAdded}; visualAdded={visualAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                        }
+                        if (TextRasterMatchesLeaveNoNewMarkers(matches))
+                        {
+                            matches = BuildWeakTextCandidateReviewMatches(
+                                textResult,
+                                textAnchor,
+                                request,
+                                bitmapScale);
                             textCandidateReviewFallbackActive = true;
                             includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
                             AppLog.Info(
-                                $"Similar count text-raster added weak unverified text review candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                                $"Similar count text-raster produced no new verified markers; showing weak text-guided review candidates instead; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                        }
+                        else
+                        {
+                            int weakAdded = AppendUnverifiedTextCandidateReviewMatches(
+                                matches,
+                                BuildWeakTextCandidateReviewMatches(
+                                    textResult,
+                                    textAnchor,
+                                    request,
+                                    bitmapScale),
+                                bitmapScale);
+                            if (weakAdded > 0)
+                            {
+                                textCandidateReviewFallbackActive = true;
+                                includeTextCandidateReviewMatchesByDefault = request.IncludeTextCandidatesByDefault;
+                                AppLog.Info(
+                                    $"Similar count text-raster added weak unverified text review candidates; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count - weakAdded}; weakAdded={weakAdded}; reviewCandidates={matches.Count}; page='{request.PageFolder}'");
+                            }
                         }
                     }
                 }
