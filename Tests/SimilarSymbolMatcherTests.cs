@@ -453,6 +453,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
             mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
             otherSheets.Contains("TryBuildOtherSheetTextGuide", StringComparison.Ordinal) &&
+            otherSheets.Contains("TemplateFromTextOffset", StringComparison.Ordinal) &&
             otherSheets.Contains("FindOtherSheetTextGuidedRasterMatches", StringComparison.Ordinal) &&
             otherSheets.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
             otherSheets.Contains("request.UseTextCandidateRasterMatches || request.AllowExactTextMatches", StringComparison.Ordinal) &&
@@ -465,6 +466,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("PDF text candidate(s)", StringComparison.Ordinal) &&
             mainWindow.Contains("were not auto-added without a raster match", StringComparison.Ordinal) &&
             mainWindow.Contains("Other sheets: no new raster matches.", StringComparison.Ordinal) &&
+            mainWindow.Contains("AddMarkerOffset(center)", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
             mainWindow.Contains("initialRotations: request.InitialIncludeRotations", StringComparison.Ordinal) &&
@@ -1158,9 +1160,9 @@ internal static class SimilarSymbolMatcherTests
     public static void AllSheetsTextGuideKeepsManualTemplateOffset()
     {
         MethodInfo? method = typeof(MainWindow).GetMethod(
-            "SimilarCountTextMarkerOffset",
+            "SimilarCountTextTemplateOffset",
             BindingFlags.NonPublic | BindingFlags.Static);
-        AssertTrue(method != null, "Similar Count all-sheets text-guide offset helper should exist");
+        AssertTrue(method != null, "Similar Count all-sheets text-guide template offset helper should exist");
 
         var textAnchor = new PdfSimilarTextMatch(
             "HDUE3",
@@ -1183,18 +1185,19 @@ internal static class SimilarSymbolMatcherTests
 
         var beamRequest = manualRequest with
         {
+            TemplateAnchorPdf = new SKPoint(82, 108),
             MarkerCenterPdf = new SKPoint(72, 116),
         };
-        SKPoint markerOffset = (SKPoint)(method.Invoke(null, new object[]
+        SKPoint templateOffset = (SKPoint)(method.Invoke(null, new object[]
         {
             textAnchor,
             beamRequest,
         }) ?? default(SKPoint));
 
         AssertTrue(
-            Math.Abs(markerOffset.X + 28f) < 0.001f &&
-            Math.Abs(markerOffset.Y - 16f) < 0.001f,
-            $"Beam/Openings all-sheets text guide should keep explicit marker offset, got {markerOffset.X:0.###},{markerOffset.Y:0.###}");
+            Math.Abs(templateOffset.X + 18f) < 0.001f &&
+            Math.Abs(templateOffset.Y - 8f) < 0.001f,
+            $"Beam/Openings all-sheets text guide should search at the template offset before applying marker offset once, got {templateOffset.X:0.###},{templateOffset.Y:0.###}");
     }
 
     public static void ViewportStatusUsesUiDispatcher()

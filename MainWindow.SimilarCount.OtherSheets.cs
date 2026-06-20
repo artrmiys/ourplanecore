@@ -22,7 +22,7 @@ public partial class MainWindow
     private sealed class OtherSheetTextGuide
     {
         public required PdfSimilarTextResult PageText { get; init; }
-        public required SKPoint MarkerFromTextOffset { get; init; }
+        public required SKPoint TemplateFromTextOffset { get; init; }
     }
 
     // Render every other sheet at the same pixel-per-point scale the template
@@ -210,22 +210,20 @@ public partial class MainWindow
             return null;
         }
 
-        SKPoint markerFromTextOffset = SimilarCountTextMarkerOffset(sourceTextAnchor, request);
+        SKPoint templateFromTextOffset = SimilarCountTextTemplateOffset(sourceTextAnchor, request);
         return new OtherSheetTextGuide
         {
             PageText = pageText,
-            MarkerFromTextOffset = markerFromTextOffset,
+            TemplateFromTextOffset = templateFromTextOffset,
         };
     }
 
-    private static SKPoint SimilarCountTextMarkerOffset(
+    private static SKPoint SimilarCountTextTemplateOffset(
         PdfSimilarTextMatch sourceTextAnchor,
         ViewportSimilarCountRequest request)
     {
-        SKPoint marker = request.MarkerCenterPdf ??
-            request.TemplateAnchorPdf ??
-            RectCenter(request.PdfRect);
-        return new SKPoint(marker.X - sourceTextAnchor.Center.X, marker.Y - sourceTextAnchor.Center.Y);
+        SKPoint template = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
+        return new SKPoint(template.X - sourceTextAnchor.Center.X, template.Y - sourceTextAnchor.Center.Y);
     }
 
     private static List<SimilarSymbolMatch> FindOtherSheetTextGuidedRasterMatches(
@@ -238,7 +236,7 @@ public partial class MainWindow
         bool mirrored,
         CancellationToken cancellationToken)
     {
-        var candidateCenters = SimilarCountTextCandidateCentersPdf(textGuide.PageText, textGuide.MarkerFromTextOffset)
+        var candidateCenters = SimilarCountTextCandidateCentersPdf(textGuide.PageText, textGuide.TemplateFromTextOffset)
             .Select(center => new SKPoint(
                 (float)(center.X * pxPerPt),
                 (float)(center.Y * pxPerPt)))
