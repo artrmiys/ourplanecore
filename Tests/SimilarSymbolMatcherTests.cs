@@ -449,9 +449,12 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("SweepOtherSimilarSheetsAsync", StringComparison.Ordinal) &&
             mainWindow.Contains("OtherSheetAdditions", StringComparison.Ordinal) &&
             mainWindow.Contains("AddOtherSheetSimilarCounts", StringComparison.Ordinal) &&
+            otherSheets.Contains("TryBuildOtherSheetTextGuide", StringComparison.Ordinal) &&
             otherSheets.Contains("FindOtherSheetTextGuidedRasterMatches", StringComparison.Ordinal) &&
             otherSheets.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
+            otherSheets.Contains("request.UseTextCandidateRasterMatches || request.AllowExactTextMatches", StringComparison.Ordinal) &&
             otherSheets.Contains("Similar count all-sheets text-guided raster matches", StringComparison.Ordinal) &&
+            otherSheets.Contains("skippedNoText", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxSweepSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("initialThreshold: (float)AppSettingsStore.SimilarCountThresholdDefault", StringComparison.Ordinal) &&
             mainWindow.Contains("initialRotations: request.InitialIncludeRotations", StringComparison.Ordinal) &&

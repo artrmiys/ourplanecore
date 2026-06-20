@@ -19,6 +19,12 @@ public partial class MainWindow
         public required List<(SKPoint CenterPdf, float Score)> Hits { get; init; }
     }
 
+    private sealed class OtherSheetTextGuide
+    {
+        public required PdfSimilarTextResult PageText { get; init; }
+        public required SKPoint MarkerFromTextOffset { get; init; }
+    }
+
     // Render every other sheet at the same pixel-per-point scale the template
     // was boxed at, then run the template against each. Renders go through the
     // shared render cache; matching uses the same offline matcher. Bounded by
@@ -52,11 +58,24 @@ public partial class MainWindow
         float floor = (float)AppSettingsStore.SimilarCountThresholdMin;
         int textGuidedPages = 0;
         int textGuidedMatches = 0;
+        int textGuidedSkippedNoText = 0;
+        bool useTextGuide = CanUseOtherSheetTextGuide(request, textResult, textAnchor);
         foreach (PageInfo page in pages)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(page.PdfPath))
                 continue;
+
+            OtherSheetTextGuide? textGuide = null;
+            if (useTextGuide)
+            {
+                textGuide = TryBuildOtherSheetTextGuide(page, textResult!, textAnchor!, request);
+                if (textGuide == null)
+                {
+                    textGuidedSkippedNoText++;
+                    continue;
+                }
+            }
 
             (bool ok, PdfLayerRenderResult render, _) = await PdfLayerRenderService.TryRenderAsync(
                 page.PdfPath,
@@ -78,9 +97,7 @@ public partial class MainWindow
 
             (List<SimilarSymbolMatch> matches, bool textGuided) = await Task.Run(
                 () => FindOtherSheetSimilarMatches(
-                    page,
-                    textResult,
-                    textAnchor,
+                    textGuide,
                     request,
                     session,
                     bitmap,
@@ -116,16 +133,14 @@ public partial class MainWindow
         if (textGuidedPages > 0)
         {
             AppLog.Info(
-                $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; page='{request.PageFolder}'");
+                $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; page='{request.PageFolder}'");
         }
 
         return (sweeps, skipped);
     }
 
     private static (List<SimilarSymbolMatch> Matches, bool TextGuided) FindOtherSheetSimilarMatches(
-        PageInfo page,
-        PdfSimilarTextResult? sourceTextResult,
-        PdfSimilarTextMatch? sourceTextAnchor,
+        OtherSheetTextGuide? textGuide,
         ViewportSimilarCountRequest request,
         SimilarSymbolMatchSession session,
         SKBitmap bitmap,
@@ -135,46 +150,41 @@ public partial class MainWindow
         bool mirrored,
         CancellationToken cancellationToken)
     {
-        List<SimilarSymbolMatch> textGuided = FindOtherSheetTextGuidedRasterMatches(
-            page,
-            sourceTextResult,
-            sourceTextAnchor,
-            request,
-            session,
-            pxPerPt,
-            floor,
-            rotations,
-            mirrored,
-            cancellationToken);
-        if (textGuided.Count > 0)
-            return (textGuided, true);
+        if (textGuide != null)
+        {
+            List<SimilarSymbolMatch> textGuided = FindOtherSheetTextGuidedRasterMatches(
+                textGuide,
+                request,
+                session,
+                pxPerPt,
+                floor,
+                rotations,
+                mirrored,
+                cancellationToken);
+            if (textGuided.Count > 0)
+                return (textGuided, true);
+        }
 
         return (
             session.FindMatchesOnBitmap(bitmap, floor, rotations, mirrored, cancellationToken),
             false);
     }
 
-    private static List<SimilarSymbolMatch> FindOtherSheetTextGuidedRasterMatches(
-        PageInfo page,
-        PdfSimilarTextResult? sourceTextResult,
-        PdfSimilarTextMatch? sourceTextAnchor,
+    private static bool CanUseOtherSheetTextGuide(
         ViewportSimilarCountRequest request,
-        SimilarSymbolMatchSession session,
-        double pxPerPt,
-        float floor,
-        bool rotations,
-        bool mirrored,
-        CancellationToken cancellationToken)
-    {
-        if (!request.UseTextCandidateRasterMatches ||
-            sourceTextResult == null ||
-            sourceTextAnchor == null ||
-            string.IsNullOrWhiteSpace(sourceTextResult.Query) ||
-            string.IsNullOrWhiteSpace(page.PdfPath))
-        {
-            return [];
-        }
+        PdfSimilarTextResult? sourceTextResult,
+        PdfSimilarTextMatch? sourceTextAnchor) =>
+        (request.UseTextCandidateRasterMatches || request.AllowExactTextMatches) &&
+        sourceTextResult != null &&
+        sourceTextAnchor != null &&
+        !string.IsNullOrWhiteSpace(sourceTextResult.Query);
 
+    private static OtherSheetTextGuide? TryBuildOtherSheetTextGuide(
+        PageInfo page,
+        PdfSimilarTextResult sourceTextResult,
+        PdfSimilarTextMatch sourceTextAnchor,
+        ViewportSimilarCountRequest request)
+    {
         if (!PdfSimilarTextService.TryFindSimilarTextByQuery(
                 page.PdfPath,
                 page.PdfPage,
@@ -183,16 +193,33 @@ public partial class MainWindow
                 out _) ||
             pageText.Matches.Count == 0)
         {
-            return [];
+            return null;
         }
 
         SKPoint markerFromTextOffset = request.MarkerCenterPdf is { } marker
             ? new SKPoint(marker.X - sourceTextAnchor.Center.X, marker.Y - sourceTextAnchor.Center.Y)
             : default;
-        var candidateCenters = pageText.Matches
+        return new OtherSheetTextGuide
+        {
+            PageText = pageText,
+            MarkerFromTextOffset = markerFromTextOffset,
+        };
+    }
+
+    private static List<SimilarSymbolMatch> FindOtherSheetTextGuidedRasterMatches(
+        OtherSheetTextGuide textGuide,
+        ViewportSimilarCountRequest request,
+        SimilarSymbolMatchSession session,
+        double pxPerPt,
+        float floor,
+        bool rotations,
+        bool mirrored,
+        CancellationToken cancellationToken)
+    {
+        var candidateCenters = textGuide.PageText.Matches
             .Select(match => new SKPoint(
-                (float)((match.Center.X + markerFromTextOffset.X) * pxPerPt),
-                (float)((match.Center.Y + markerFromTextOffset.Y) * pxPerPt)))
+                (float)((match.Center.X + textGuide.MarkerFromTextOffset.X) * pxPerPt),
+                (float)((match.Center.Y + textGuide.MarkerFromTextOffset.Y) * pxPerPt)))
             .ToList();
         int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(request, (float)pxPerPt);
         return session.FindMatchesNearCenters(
