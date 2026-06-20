@@ -32,6 +32,7 @@ public partial class MainWindow
     private async Task<(
         List<SimilarSheetSweep> Sweeps,
         int SkippedOverLimit,
+        int TextGuideSkippedSheets,
         int TextRejectedSheets,
         int TextRejectedCandidates)> SweepOtherSimilarSheetsAsync(
         OurPlaneCoreJob job,
@@ -47,7 +48,7 @@ public partial class MainWindow
     {
         var sweeps = new List<SimilarSheetSweep>();
         if (bitmapScale <= 0)
-            return (sweeps, 0, 0, 0);
+            return (sweeps, 0, 0, 0, 0);
 
         List<PageInfo> pages = CollectPagesUnder(job.PagesRoot)
             .Where(page => !IsSamePageFolder(page.FolderPath, request.PageFolder))
@@ -72,7 +73,7 @@ public partial class MainWindow
         {
             AppLog.Info(
                 $"Similar count all-sheets skipped visual-only Beam/Openings sweep; sheets={pages.Count}; page='{request.PageFolder}'");
-            return (sweeps, skipped, pages.Count, 0);
+            return (sweeps, skipped, pages.Count, 0, 0);
         }
 
         foreach (PageInfo page in pages)
@@ -150,13 +151,13 @@ public partial class MainWindow
             });
         }
 
-        if (textGuidedPages > 0 || textGuidedRejectedByRaster > 0)
+        if (textGuidedPages > 0 || textGuidedSkippedNoText > 0 || textGuidedRejectedByRaster > 0)
         {
             AppLog.Info(
                 $"Similar count all-sheets text-guided raster matches; query='{textResult?.Query}'; sheets={textGuidedPages}; matches={textGuidedMatches}; skippedNoText={textGuidedSkippedNoText}; rejectedByRaster={textGuidedRejectedByRaster}; rejectedTextCandidates={textGuidedRejectedCandidates}; page='{request.PageFolder}'");
         }
 
-        return (sweeps, skipped, textGuidedRejectedByRaster, textGuidedRejectedCandidates);
+        return (sweeps, skipped, textGuidedSkippedNoText, textGuidedRejectedByRaster, textGuidedRejectedCandidates);
     }
 
     private static (List<SimilarSymbolMatch> Matches, bool TextGuided, bool RejectedByRaster) FindOtherSheetSimilarMatches(

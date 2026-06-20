@@ -505,6 +505,7 @@ internal static class SimilarSymbolMatcherTests
             otherSheets.Contains("rejectedByRaster", StringComparison.Ordinal) &&
             otherSheets.Contains("rejectedTextCandidates", StringComparison.Ordinal) &&
             otherSheets.Contains("return ([], true, true);", StringComparison.Ordinal) &&
+            mainWindow.Contains("otherSheetTextGuideSkippedSheets", StringComparison.Ordinal) &&
             mainWindow.Contains("otherSheetTextRejectedCandidates", StringComparison.Ordinal) &&
             mainWindow.Contains("PDF text candidate(s)", StringComparison.Ordinal) &&
             mainWindow.Contains("were not auto-added without a raster match", StringComparison.Ordinal) &&

@@ -144,6 +144,7 @@ public partial class MainWindow
         string otherSheetSweepKey = "";       // "threshold|rotations|mirrored" the sweep cache was built for
         bool otherSheetEnabled = false;       // whether the last scan included other sheets
         int otherSheetSkippedOverLimit = 0;
+        int otherSheetTextGuideSkippedSheets = 0;
         int otherSheetTextRejectedSheets = 0;
         int otherSheetTextRejectedCandidates = 0;
         bool textCandidateReviewFallbackActive = false;
@@ -255,14 +256,15 @@ public partial class MainWindow
             string skipped = otherSheetSkippedOverLimit > 0
                 ? $" {otherSheetSkippedOverLimit} sheet(s) skipped over scan limit."
                 : "";
+            string textNoGuide = otherSheetTextGuideSkippedSheets > 0
+                ? $" {otherSheetTextGuideSkippedSheets} sheet(s) were not auto-added without a usable PDF text guide."
+                : "";
             string textRejected = otherSheetTextRejectedCandidates > 0
                 ? $" {otherSheetTextRejectedCandidates} PDF text candidate(s) on {otherSheetTextRejectedSheets} sheet(s) were not auto-added without a raster match."
-                : otherSheetTextRejectedSheets > 0
-                    ? $" {otherSheetTextRejectedSheets} sheet(s) were not auto-added without a usable PDF text guide."
-                    : "";
+                : "";
             return markers == 0
-                ? $"Other sheets: no new raster matches.{textRejected}{skipped}"
-                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{textRejected}{skipped}";
+                ? $"Other sheets: no new raster matches.{textNoGuide}{textRejected}{skipped}"
+                : $"Other sheets: +{markers} on {additions.Count} sheet(s) added on Add.{textNoGuide}{textRejected}{skipped}";
         }
 
         SimilarCountScanResult BuildReviewResult()
@@ -492,7 +494,7 @@ public partial class MainWindow
                 return;
 
             TxtStatus.Text = "Count similar: scanning other sheets...";
-            (List<SimilarSheetSweep> sweeps, int skipped, int textRejectedSheets, int textRejectedCandidates) =
+            (List<SimilarSheetSweep> sweeps, int skipped, int textGuideSkippedSheets, int textRejectedSheets, int textRejectedCandidates) =
                 await SweepOtherSimilarSheetsAsync(
                     reviewJob,
                     request,
@@ -508,6 +510,7 @@ public partial class MainWindow
             otherSheetSweeps.Clear();
             otherSheetSweeps.AddRange(sweeps);
             otherSheetSkippedOverLimit = skipped;
+            otherSheetTextGuideSkippedSheets = textGuideSkippedSheets;
             otherSheetTextRejectedSheets = textRejectedSheets;
             otherSheetTextRejectedCandidates = textRejectedCandidates;
             otherSheetSweepKey = key;
