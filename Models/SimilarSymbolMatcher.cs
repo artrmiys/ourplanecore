@@ -87,6 +87,8 @@ public sealed class SimilarSymbolMatchSession
     private const float EdgeRelaxedScoreMultiplier = 0.93f;
     private const float PeripheralNoiseMaxTotalShare = 0.35f;
     private const float PeripheralNoiseMaxCoreRatio = 0.85f;
+    private const int PeripheralNoiseMaxThinSide = 3;
+    private const float PeripheralNoiseLineSpanRatio = 0.65f;
     private const float TemplateMajorComponentMinShare = 0.28f;
     private const float TemplateSecondMajorMinLargestRatio = 0.55f;
     private const float LooseTemplateSelectionAreaRatio = 6.0f;
@@ -234,6 +236,52 @@ public sealed class SimilarSymbolMatchSession
         return FindMatchesOn(raster, minScore, includeRotations, includeMirrored, cancellationToken);
     }
 
+    public List<SimilarSymbolMatch> FindMatchesNearCenters(
+        IReadOnlyList<SKPoint> candidateCenters,
+        int searchRadiusPixels,
+        float minScore,
+        bool includeRotations,
+        bool includeMirrored,
+        CancellationToken cancellationToken)
+    {
+        if (candidateCenters.Count == 0)
+            return [];
+
+        minScore = Math.Clamp(minScore, 0.05f, 1f);
+        int radius = Math.Max(0, (int)MathF.Ceiling(searchRadiusPixels / (float)_factor));
+        var matches = new List<SimilarSymbolMatch>();
+        IEnumerable<TemplateVariant> variants = _variants.Where(variant =>
+            (includeRotations || variant.RotationDegrees == 0) &&
+            (includeMirrored || !variant.Mirrored));
+
+        foreach (TemplateVariant variant in variants)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (SKPoint candidateCenter in candidateCenters)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int centerX = (int)MathF.Round(candidateCenter.X / _factor);
+                int centerY = (int)MathF.Round(candidateCenter.Y / _factor);
+                int baseX = centerX - variant.Width / 2;
+                int baseY = centerY - variant.Height / 2;
+                int left = Math.Max(0, baseX - radius);
+                int top = Math.Max(0, baseY - radius);
+                int right = Math.Min(_page.Width - variant.Width, baseX + radius);
+                int bottom = Math.Min(_page.Height - variant.Height, baseY + radius);
+                for (int y = top; y <= bottom; y++)
+                {
+                    for (int x = left; x <= right; x++)
+                    {
+                        if (TryMatchVariantAt(_page, variant, x, y, minScore, out SimilarSymbolMatch match))
+                            matches.Add(match);
+                    }
+                }
+            }
+        }
+
+        return SuppressNonMaxima(matches);
+    }
+
     private List<SimilarSymbolMatch> FindMatchesOn(
         PageRaster page,
         float minScore,
@@ -316,37 +364,8 @@ public sealed class SimilarSymbolMatchSession
                         continue;
                     }
 
-                    SimilarWindowScore score = ScoreWindow(page, template, x, y, minScore);
-                    if (score.Score < minScore && template.EdgeRelaxed != null)
-                    {
-                        TemplateVariant relaxed = template.EdgeRelaxed;
-                        SimilarWindowScore relaxedScore = ScoreWindow(
-                            page,
-                            relaxed,
-                            x + relaxed.OffsetX,
-                            y + relaxed.OffsetY,
-                            minScore);
-                        float adjustedScore = relaxedScore.Score * EdgeRelaxedScoreMultiplier;
-                        if (relaxedScore.Score >= minScore && adjustedScore > score.Score)
-                            score = relaxedScore with { Score = adjustedScore };
-                    }
-
-                    float finalScore = score.Score * template.ScoreMultiplier;
-                    if (finalScore >= minScore)
-                        local.Add(new SimilarSymbolMatch(
-                            (x + tw / 2) * _factor + _factor / 2,
-                            (y + th / 2) * _factor + _factor / 2,
-                            finalScore,
-                            template.RotationDegrees,
-                            template.Mirrored,
-                            template.ScalePercent,
-                            score.TemplateCoverage,
-                            score.WindowPrecision,
-                            score.InkRatio,
-                            score.ProfileScore,
-                            score.ProjectionScore,
-                            score.StrokeScore,
-                            score.UsedFocusedScore));
+                    if (TryMatchVariantAt(page, template, x, y, minScore, out SimilarSymbolMatch match))
+                        local.Add(match);
                 }
 
                 return local;
@@ -359,6 +378,62 @@ public sealed class SimilarSymbolMatchSession
                     sink.AddRange(local);
             });
     }
+
+    private bool TryMatchVariantAt(
+        PageRaster page,
+        TemplateVariant template,
+        int x,
+        int y,
+        float minScore,
+        out SimilarSymbolMatch match)
+    {
+        match = default!;
+        if (!IsVariantInBounds(page, template, x, y))
+            return false;
+
+        SimilarWindowScore score = ScoreWindow(page, template, x, y, minScore);
+        if (score.Score < minScore &&
+            template.EdgeRelaxed != null &&
+            IsVariantInBounds(page, template.EdgeRelaxed, x + template.EdgeRelaxed.OffsetX, y + template.EdgeRelaxed.OffsetY))
+        {
+            TemplateVariant relaxed = template.EdgeRelaxed;
+            SimilarWindowScore relaxedScore = ScoreWindow(
+                page,
+                relaxed,
+                x + relaxed.OffsetX,
+                y + relaxed.OffsetY,
+                minScore);
+            float adjustedScore = relaxedScore.Score * EdgeRelaxedScoreMultiplier;
+            if (relaxedScore.Score >= minScore && adjustedScore > score.Score)
+                score = relaxedScore with { Score = adjustedScore };
+        }
+
+        float finalScore = score.Score * template.ScoreMultiplier;
+        if (finalScore < minScore)
+            return false;
+
+        match = new SimilarSymbolMatch(
+            (x + template.Width / 2) * _factor + _factor / 2,
+            (y + template.Height / 2) * _factor + _factor / 2,
+            finalScore,
+            template.RotationDegrees,
+            template.Mirrored,
+            template.ScalePercent,
+            score.TemplateCoverage,
+            score.WindowPrecision,
+            score.InkRatio,
+            score.ProfileScore,
+            score.ProjectionScore,
+            score.StrokeScore,
+            score.UsedFocusedScore);
+        return true;
+    }
+
+    private static bool IsVariantInBounds(PageRaster page, TemplateVariant template, int x, int y) =>
+        x >= 0 &&
+        y >= 0 &&
+        x + template.Width <= page.Width &&
+        y + template.Height <= page.Height;
 
     private SimilarWindowScore ScoreWindow(PageRaster page, TemplateVariant template, int x, int y, float minScore)
     {
@@ -815,7 +890,7 @@ public sealed class SimilarSymbolMatchSession
                 return false;
 
             List<TemplateComponent> components = ReadTemplateComponents(selectionInk);
-            List<TemplateComponent> noise = FindPeripheralTemplateNoiseComponents(components);
+            List<TemplateComponent> noise = FindPeripheralTemplateNoiseComponents(components, width, height);
             List<TemplateComponent> boundsComponents = noise.Count == 0
                 ? components
                 : components.Where(component => !noise.Contains(component)).ToList();
@@ -1163,7 +1238,7 @@ public sealed class SimilarSymbolMatchSession
         int height = source.GetLength(1);
         List<TemplateComponent> components = ReadTemplateComponents(source);
 
-        List<TemplateComponent> remove = FindPeripheralTemplateNoiseComponents(components);
+        List<TemplateComponent> remove = FindPeripheralTemplateNoiseComponents(components, width, height);
         if (remove.Count == 0)
             return source;
 
@@ -1182,7 +1257,10 @@ public sealed class SimilarSymbolMatchSession
         return CountInk(cleaned) >= MinTemplateInk ? cleaned : source;
     }
 
-    private static List<TemplateComponent> FindPeripheralTemplateNoiseComponents(List<TemplateComponent> components)
+    private static List<TemplateComponent> FindPeripheralTemplateNoiseComponents(
+        List<TemplateComponent> components,
+        int templateWidth,
+        int templateHeight)
     {
         if (components.Count <= 1)
             return new List<TemplateComponent>();
@@ -1200,8 +1278,25 @@ public sealed class SimilarSymbolMatchSession
             .Where(component =>
                 component.TouchesBorder &&
                 (component.Pixels.Count <= totalInk * PeripheralNoiseMaxTotalShare ||
-                 component.Pixels.Count <= largestCore * PeripheralNoiseMaxCoreRatio))
+                 component.Pixels.Count <= largestCore * PeripheralNoiseMaxCoreRatio ||
+                 IsLongPeripheralLineNoise(component, templateWidth, templateHeight)))
             .ToList();
+    }
+
+    private static bool IsLongPeripheralLineNoise(
+        TemplateComponent component,
+        int templateWidth,
+        int templateHeight)
+    {
+        int componentWidth = component.Width;
+        int componentHeight = component.Height;
+        int thinSide = Math.Min(componentWidth, componentHeight);
+        int longSide = Math.Max(componentWidth, componentHeight);
+        int templateLongSide = Math.Max(templateWidth, templateHeight);
+        if (thinSide > PeripheralNoiseMaxThinSide || templateLongSide <= 0)
+            return false;
+
+        return longSide >= templateLongSide * PeripheralNoiseLineSpanRatio;
     }
 
     private static SKRectI TemplateComponentBounds(
@@ -1343,6 +1438,7 @@ public sealed class SimilarSymbolMatchSession
             visited[pixel] = true;
             component.Pixels.Add(pixel);
             component.TouchesBorder |= x == 0 || y == 0 || x == width - 1 || y == height - 1;
+            component.Include(x, y);
 
             for (int dy = -1; dy <= 1; dy++)
             {
@@ -1549,6 +1645,20 @@ public sealed class SimilarSymbolMatchSession
     {
         public List<int> Pixels { get; } = new();
         public bool TouchesBorder { get; set; }
+        public int MinX { get; private set; } = int.MaxValue;
+        public int MinY { get; private set; } = int.MaxValue;
+        public int MaxX { get; private set; } = int.MinValue;
+        public int MaxY { get; private set; } = int.MinValue;
+        public int Width => MaxX >= MinX ? MaxX - MinX + 1 : 0;
+        public int Height => MaxY >= MinY ? MaxY - MinY + 1 : 0;
+
+        public void Include(int x, int y)
+        {
+            MinX = Math.Min(MinX, x);
+            MinY = Math.Min(MinY, y);
+            MaxX = Math.Max(MaxX, x);
+            MaxY = Math.Max(MaxY, y);
+        }
     }
 
     // One sheet's binarized ink, packed 1bpp per row (plus a zero pad word) with

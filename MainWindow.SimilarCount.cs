@@ -41,10 +41,20 @@ public partial class MainWindow
         _viewport.BeginSimilarCountSelection();
     }
 
-    private void OnSimilarCountSelectionCompleted(ViewportSimilarCountRequest request)
+    private void OnSimilarCountSelectionCompleted(ViewportSimilarCountRequest request) =>
+        StartSimilarCountReview(request);
+
+    private void StartSimilarCountReview(ViewportSimilarCountRequest request)
     {
         if (_currentJob == null || _currentPage == null)
             return;
+
+        if (_similarCountDialog != null)
+        {
+            _similarCountDialog.Activate();
+            TxtStatus.Text = "Count similar review is already open.";
+            return;
+        }
 
         if (!_viewport.TryCreateSimilarCountSession(
                 request.PdfRect, out SimilarSymbolMatchSession? session, out float bitmapScale, out string error) ||
@@ -69,6 +79,16 @@ public partial class MainWindow
         string destinationName = SimilarCountDestinationName(destinationItem);
         OurPlaneCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
+        PdfSimilarTextResult? textResult = TryFindSimilarCountText(request);
+        IReadOnlyList<SimilarSymbolMatch> textMatches = textResult == null
+            ? []
+            : textResult.Matches
+                .Select(match => TextSimilarMatch(match.Center, bitmapScale))
+                .ToList();
+        PdfSimilarTextMatch? textAnchor = textResult == null
+            ? null
+            : SelectSimilarTextAnchor(textResult, request);
+        string templateWarning = SimilarCountTemplateWarning(session.TemplateWarning, textResult, request);
         SimilarCountDialog? dialog = null;
 
         bool IsReviewJobCurrent() =>
@@ -78,13 +98,21 @@ public partial class MainWindow
                 NormalizePathForCompare(reviewJob.RootPath),
                 StringComparison.OrdinalIgnoreCase);
 
+        SKPoint matchMarkerOffsetPdf = SimilarCountMarkerOffset(request);
+
         SKPoint MatchCenterPdf(SimilarSymbolMatch match) =>
             new(match.CenterX / bitmapScale, match.CenterY / bitmapScale);
+
+        SKPoint AddMarkerOffset(SKPoint rawCenter) =>
+            new(rawCenter.X + matchMarkerOffsetPdf.X, rawCenter.Y + matchMarkerOffsetPdf.Y);
+
+        SKPoint ReviewCenterPdf(SimilarSymbolMatch match) =>
+            AddMarkerOffset(MatchCenterPdf(match));
 
         IReadOnlyList<ViewportSimilarCountPreviewMarker> BuildPreviewMarkers() =>
             lastMatches
                 .Select((match, index) => new ViewportSimilarCountPreviewMarker(
-                    MatchCenterPdf(match),
+                    ReviewCenterPdf(match),
                     Included: !excludedIndexes.Contains(index) && !alreadyCountedIndexes.Contains(index),
                     match.Score,
                     match.RotationDegrees,
@@ -103,7 +131,7 @@ public partial class MainWindow
         IReadOnlyList<SKPoint> IncludedCenters() =>
             lastMatches
                 .Where((_, index) => !excludedIndexes.Contains(index) && !alreadyCountedIndexes.Contains(index))
-                .Select(MatchCenterPdf)
+                .Select(ReviewCenterPdf)
                 .ToList();
 
         // Above-threshold, not-already-counted hits on other sheets, grouped by
@@ -122,10 +150,11 @@ public partial class MainWindow
                 {
                     if (score < threshold)
                         continue;
+                    SKPoint markerCenter = AddMarkerOffset(center);
                     if (destinationItem != null &&
-                        IsSimilarCountDuplicateCenter(destinationItem, sweep.PageFolder, center))
+                        IsSimilarCountDuplicateCenter(destinationItem, sweep.PageFolder, markerCenter))
                         continue;
-                    centers.Add(center);
+                    centers.Add(markerCenter);
                 }
                 if (centers.Count > 0)
                     additions.Add((sweep, centers));
@@ -251,7 +280,7 @@ public partial class MainWindow
             for (int i = 0; i < lastMatches.Count; i++)
             {
                 if (destinationItem != null &&
-                    IsSimilarCountDuplicateCenter(destinationItem, request.PageFolder, MatchCenterPdf(lastMatches[i])))
+                    IsSimilarCountAlreadyCounted(destinationItem, request, ReviewCenterPdf(lastMatches[i])))
                 {
                     alreadyCountedIndexes.Add(i);
                     excludedIndexes.Add(i);
@@ -385,10 +414,50 @@ public partial class MainWindow
             {
                 AppLog.Info(
                     $"Similar count scan started; page='{request.PageFolder}'; bitmapScale={bitmapScale:0.###}; downsample={session.DownsampleFactor}; search={session.SearchWidth}x{session.SearchHeight}; threshold={threshold:0.###}; rotations={rotations}; mirrored={mirrored}; allSheets={allSheets}");
-                List<SimilarSymbolMatch> matches = await Task.Run(
-                    () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
-                    cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
+                List<SimilarSymbolMatch> matches;
+                if (request.AllowExactTextMatches && textResult != null && textMatches.Count > 0)
+                {
+                    matches = textMatches.ToList();
+                    AppLog.Info(
+                        $"Similar count text matches applied; query='{textResult.Query}'; matches={matches.Count}; page='{request.PageFolder}'");
+                }
+                else if (request.UseTextCandidateRasterMatches &&
+                         textResult != null &&
+                         textAnchor != null &&
+                         textResult.Matches.Count > 1)
+                {
+                    matches = await Task.Run(
+                        () => FindTextCandidateRasterMatches(
+                            session,
+                            textResult,
+                            textAnchor,
+                            request,
+                            bitmapScale,
+                            threshold,
+                            rotations,
+                            mirrored,
+                            cancellationToken),
+                        cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    AppLog.Info(
+                        $"Similar count text-raster candidates applied; query='{textResult.Query}'; textCandidates={textResult.Matches.Count}; verifiedMatches={matches.Count}; page='{request.PageFolder}'");
+                    if (matches.Count == 0)
+                    {
+                        matches = await Task.Run(
+                            () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
+                            cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        AppLog.Info(
+                            $"Similar count text-raster fallback scan used; query='{textResult.Query}'; fallbackMatches={matches.Count}; page='{request.PageFolder}'");
+                    }
+                }
+                else
+                {
+                    matches = await Task.Run(
+                        () => session.FindMatches(threshold, rotations, mirrored, cancellationToken),
+                        cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
                 scanWatch.Stop();
                 AppLog.Info(
                     $"Similar count scan completed; elapsedMs={scanWatch.ElapsedMilliseconds}; matches={matches.Count}; downsample={session.DownsampleFactor}; searchPixels={session.SearchPixels}; page='{request.PageFolder}'");
@@ -421,7 +490,7 @@ public partial class MainWindow
             initialAllSheets: false,
             destinationName: destinationName,
             aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
-            templateWarning: session.TemplateWarning)
+            templateWarning: templateWarning)
         {
             Owner = this,
         };
@@ -512,6 +581,135 @@ public partial class MainWindow
         return status + ".";
     }
 
+    private static PdfSimilarTextResult? TryFindSimilarCountText(ViewportSimilarCountRequest request)
+    {
+        if (!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(request.PdfPath) || request.PdfPageIndex < 0)
+            return null;
+
+        SKRect searchRect = SimilarCountTextSearchRect(request);
+        if (!PdfSimilarTextService.TryFindSimilarText(
+                request.PdfPath,
+                request.PdfPageIndex,
+                searchRect,
+                out PdfSimilarTextResult result,
+                out string error))
+        {
+            if (!string.IsNullOrWhiteSpace(error))
+                AppLog.Info($"Similar count text scan unavailable; {error}");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(result.Query) || result.Matches.Count < 2)
+            return null;
+
+        return result;
+    }
+
+    private static List<SimilarSymbolMatch> FindTextCandidateRasterMatches(
+        SimilarSymbolMatchSession session,
+        PdfSimilarTextResult textResult,
+        PdfSimilarTextMatch textAnchor,
+        ViewportSimilarCountRequest request,
+        float bitmapScale,
+        float threshold,
+        bool rotations,
+        bool mirrored,
+        CancellationToken cancellationToken)
+    {
+        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
+        SKPoint textOffset = new(textAnchor.Center.X - anchor.X, textAnchor.Center.Y - anchor.Y);
+        var candidateCenters = textResult.Matches
+            .Select(match => new SKPoint(
+                (match.Center.X - textOffset.X) * bitmapScale,
+                (match.Center.Y - textOffset.Y) * bitmapScale))
+            .ToList();
+        int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(request, bitmapScale);
+        return session.FindMatchesNearCenters(
+            candidateCenters,
+            radiusPixels,
+            threshold,
+            rotations,
+            mirrored,
+            cancellationToken);
+    }
+
+    private static PdfSimilarTextMatch? SelectSimilarTextAnchor(
+        PdfSimilarTextResult result,
+        ViewportSimilarCountRequest request)
+    {
+        SKRect searchRect = SimilarCountTextSearchRect(request);
+        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(request.PdfRect);
+        return result.Matches
+            .Where(match => RectsIntersect(match.Rect, searchRect))
+            .OrderBy(match => DistanceSquared(match.Center, anchor))
+            .FirstOrDefault();
+    }
+
+    private static SimilarSymbolMatch TextSimilarMatch(SKPoint centerPdf, float bitmapScale)
+    {
+        int centerX = (int)MathF.Round(centerPdf.X * bitmapScale);
+        int centerY = (int)MathF.Round(centerPdf.Y * bitmapScale);
+        return new SimilarSymbolMatch(centerX, centerY, 1f, 0);
+    }
+
+    private static string SimilarCountTemplateWarning(
+        string rasterWarning,
+        PdfSimilarTextResult? textResult,
+        ViewportSimilarCountRequest request)
+    {
+        if (textResult == null)
+            return rasterWarning;
+
+        string textWarning = request.UseTextCandidateRasterMatches && !request.AllowExactTextMatches
+            ? $"PDF text candidates: {textResult.Query} ({textResult.Matches.Count}); raster verified."
+            : $"PDF text exact match: {textResult.Query} ({textResult.Matches.Count} found).";
+        return string.IsNullOrWhiteSpace(rasterWarning)
+            ? textWarning
+            : rasterWarning + " " + textWarning;
+    }
+
+    private static SKPoint SimilarCountMarkerOffset(ViewportSimilarCountRequest request)
+    {
+        if (request.TemplateAnchorPdf is not { } anchor ||
+            request.MarkerCenterPdf is not { } marker)
+        {
+            return default;
+        }
+
+        return new SKPoint(marker.X - anchor.X, marker.Y - anchor.Y);
+    }
+
+    private static SKRect SimilarCountTextSearchRect(ViewportSimilarCountRequest request) =>
+        request.TextSearchRectPdf ?? request.PdfRect;
+
+    private static int SimilarCountTextCandidateSearchRadiusPixels(
+        ViewportSimilarCountRequest request,
+        float bitmapScale)
+    {
+        float templateSide = Math.Max(request.PdfRect.Width, request.PdfRect.Height);
+        float radius = Math.Clamp(templateSide * bitmapScale * 0.18f, 14f, 96f);
+        return (int)MathF.Ceiling(radius);
+    }
+
+    private static SKPoint RectCenter(SKRect rect) =>
+        new((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
+
+    private static float DistanceSquared(SKPoint left, SKPoint right)
+    {
+        float dx = left.X - right.X;
+        float dy = left.Y - right.Y;
+        return dx * dx + dy * dy;
+    }
+
+    private static bool RectsIntersect(SKRect left, SKRect right) =>
+        left.Left <= right.Right &&
+        left.Right >= right.Left &&
+        left.Top <= right.Bottom &&
+        left.Bottom >= right.Top;
+
     private static string SimilarReviewKey(SimilarSymbolMatch match) =>
         SimilarReviewKeyPart(match.CenterX) + ":" + SimilarReviewKeyPart(match.CenterY);
 
@@ -530,7 +728,7 @@ public partial class MainWindow
         TakeoffItem item = ResolveOrCreateSimilarCountItem(destinationItem);
 
         var newCenters = centers
-            .Where(center => !IsSimilarCountDuplicateCenter(item, request.PageFolder, center))
+            .Where(center => !IsSimilarCountAlreadyCounted(item, request, center))
             .ToList();
         if (newCenters.Count == 0)
         {
@@ -644,7 +842,6 @@ public partial class MainWindow
 
     private static bool IsSimilarCountDuplicateCenter(TakeoffItem item, string pageFolder, SKPoint center)
     {
-        float toleranceSq = SimilarCountDuplicateTolerancePdf * SimilarCountDuplicateTolerancePdf;
         foreach (Measurement measurement in item.Measurements)
         {
             if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "point" ||
@@ -654,14 +851,39 @@ public partial class MainWindow
                 continue;
             }
 
-            SKPoint existing = measurement.Points[0];
-            float dx = existing.X - center.X;
-            float dy = existing.Y - center.Y;
-            if (dx * dx + dy * dy <= toleranceSq)
+            if (IsSimilarCountDuplicatePoint(measurement.Points[0], center))
                 return true;
         }
 
         return false;
+    }
+
+    private static bool IsSimilarCountAlreadyCounted(
+        TakeoffItem item,
+        ViewportSimilarCountRequest request,
+        SKPoint center) =>
+        IsSimilarCountDuplicateCenter(item, request.PageFolder, center) ||
+        IsSimilarCountDuplicateCenter(request.AlreadyCountedCentersPdf, center);
+
+    private static bool IsSimilarCountDuplicateCenter(IReadOnlyList<SKPoint>? centers, SKPoint center)
+    {
+        if (centers == null)
+            return false;
+
+        foreach (SKPoint existing in centers)
+        {
+            if (IsSimilarCountDuplicatePoint(existing, center))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsSimilarCountDuplicatePoint(SKPoint existing, SKPoint center)
+    {
+        float dx = existing.X - center.X;
+        float dy = existing.Y - center.Y;
+        return dx * dx + dy * dy <= SimilarCountDuplicateTolerancePdf * SimilarCountDuplicateTolerancePdf;
     }
 
     // One other sheet's matches for the boxed template, captured at the loose

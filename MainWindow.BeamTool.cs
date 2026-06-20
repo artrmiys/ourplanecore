@@ -2,11 +2,19 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using OurPlaneCore.Controls;
+using SkiaSharp;
 
 namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private const float BeamOpeningSimilarPaddingMinPdf = 6f;
+    private const float BeamOpeningSimilarPaddingMaxPdf = 24f;
+    private const float BeamOpeningSimilarPaddingRatio = 0.08f;
+    private const float BeamOpeningSimilarTextPaddingMinPdf = 18f;
+    private const float BeamOpeningSimilarTextPaddingMaxPdf = 72f;
+    private const float BeamOpeningSimilarTextPaddingRatio = 0.35f;
+
     private void OnBeamMeasurementCompleted(BeamMeasurementRequest request)
     {
         if (_currentJob == null || _currentPage == null)
@@ -34,7 +42,9 @@ public partial class MainWindow
             lockType: true,
             defaultColor: defaultColor,
             defaultCountSymbol: _newCountSymbol,
-            initialNameSelectionLength: editablePrefixLength)
+            initialNameSelectionLength: editablePrefixLength,
+            showSimilarReviewOption: true,
+            similarReviewOptionText: "Review similar Beam marks on this sheet")
         {
             Owner = this,
         };
@@ -70,6 +80,8 @@ public partial class MainWindow
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
         TxtStatus.Text = $"Beam Count created: {item.Name}. Ruler {request.LengthFeet:0.##} ft, order size {request.OrderLengthText}. Use Similar to add reviewed matches to this Beam item.";
+        if (dialog.MarkSimilarOnCurrentSheet)
+            StartSimilarCountReview(BuildBeamSimilarCountRequest(request));
     }
 
     private void OnOpeningMeasurementCompleted(OpeningMeasurementRequest request)
@@ -96,7 +108,9 @@ public partial class MainWindow
             lockType: true,
             defaultColor: defaultColor,
             defaultCountSymbol: _newCountSymbol,
-            initialNameCaretIndex: defaultName.Length)
+            initialNameCaretIndex: defaultName.Length,
+            showSimilarReviewOption: true,
+            similarReviewOptionText: "Review similar Opening marks on this sheet")
         {
             Owner = this,
         };
@@ -132,5 +146,78 @@ public partial class MainWindow
         RefreshActiveTakeoffVisuals();
         UpdateTotalDisplay();
         TxtStatus.Text = $"Opening Count created: {item.Name}. Dimensions {request.SizeText}. Use Similar to add reviewed matches to this Opening item.";
+        if (dialog.MarkSimilarOnCurrentSheet)
+            StartSimilarCountReview(BuildOpeningSimilarCountRequest(request));
     }
+
+    private ViewportSimilarCountRequest BuildBeamSimilarCountRequest(BeamMeasurementRequest request)
+    {
+        PageInfo page = _currentPage ?? throw new InvalidOperationException("Current page is required for Beam Similar.");
+        SKRect segmentRect = MeasurementGeometry.NormalizeRect(request.StartPdf, request.EndPdf);
+        float segmentLength = MeasurementGeometry.Distance(request.StartPdf, request.EndPdf);
+        float padding = SimilarBeamOpeningPadding(Math.Max(
+            segmentLength,
+            Math.Max(segmentRect.Width, segmentRect.Height)));
+        SKRect templateRect = PadRect(segmentRect, padding);
+        SKPoint templateCenter = Midpoint(request.StartPdf, request.EndPdf);
+        return new ViewportSimilarCountRequest(
+            templateRect,
+            request.PageFolder,
+            _viewport.ScaleMetersPerPt,
+            [request.CountPointPdf],
+            PdfPath: page.PdfPath,
+            PdfPageIndex: page.PdfPage,
+            AllowExactTextMatches: false,
+            UseTextCandidateRasterMatches: true,
+            TemplateAnchorPdf: templateCenter,
+            MarkerCenterPdf: request.CountPointPdf,
+            TextSearchRectPdf: PadRect(segmentRect, SimilarBeamOpeningTextPadding(segmentLength)));
+    }
+
+    private ViewportSimilarCountRequest BuildOpeningSimilarCountRequest(OpeningMeasurementRequest request)
+    {
+        PageInfo page = _currentPage ?? throw new InvalidOperationException("Current page is required for Opening Similar.");
+        SKRect openingRect = MeasurementGeometry.NormalizeRect(request.FirstCornerPdf, request.OppositeCornerPdf);
+        float padding = SimilarBeamOpeningPadding(Math.Max(openingRect.Width, openingRect.Height));
+        return new ViewportSimilarCountRequest(
+            PadRect(openingRect, padding),
+            request.PageFolder,
+            _viewport.ScaleMetersPerPt,
+            [request.CountPointPdf],
+            PdfPath: page.PdfPath,
+            PdfPageIndex: page.PdfPage,
+            AllowExactTextMatches: false,
+            UseTextCandidateRasterMatches: true,
+            TemplateAnchorPdf: request.CountPointPdf,
+            MarkerCenterPdf: request.CountPointPdf,
+            TextSearchRectPdf: PadRect(openingRect, SimilarBeamOpeningTextPadding(Math.Max(openingRect.Width, openingRect.Height))));
+    }
+
+    private static float SimilarBeamOpeningPadding(float sizePdf)
+    {
+        if (!float.IsFinite(sizePdf) || sizePdf <= 0f)
+            return BeamOpeningSimilarPaddingMinPdf;
+
+        return Math.Clamp(
+            sizePdf * BeamOpeningSimilarPaddingRatio,
+            BeamOpeningSimilarPaddingMinPdf,
+            BeamOpeningSimilarPaddingMaxPdf);
+    }
+
+    private static float SimilarBeamOpeningTextPadding(float sizePdf)
+    {
+        if (!float.IsFinite(sizePdf) || sizePdf <= 0f)
+            return BeamOpeningSimilarTextPaddingMinPdf;
+
+        return Math.Clamp(
+            sizePdf * BeamOpeningSimilarTextPaddingRatio,
+            BeamOpeningSimilarTextPaddingMinPdf,
+            BeamOpeningSimilarTextPaddingMaxPdf);
+    }
+
+    private static SKRect PadRect(SKRect rect, float padding) =>
+        new(rect.Left - padding, rect.Top - padding, rect.Right + padding, rect.Bottom + padding);
+
+    private static SKPoint Midpoint(SKPoint left, SKPoint right) =>
+        new((left.X + right.X) / 2f, (left.Y + right.Y) / 2f);
 }

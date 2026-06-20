@@ -18,6 +18,7 @@ public sealed class NewItemDialog : Window
     public string ItemColor { get; private set; } = "#FF4444";
     public string ItemType  { get; private set; } = "line";
     public string ItemCountSymbol { get; private set; } = CountDisplaySymbol.Circle;
+    public bool MarkSimilarOnCurrentSheet { get; private set; }
     public IReadOnlyList<NewItemOffsetSpec> OffsetLines { get; private set; } = [];
 
     private static readonly (string Label, string Hex)[] Presets =
@@ -64,6 +65,9 @@ public sealed class NewItemDialog : Window
         int? initialNameSelectionLength = null,
         int? initialNameCaretIndex = null,
         bool showOffsetLines = false,
+        bool showSimilarReviewOption = false,
+        bool defaultSimilarReview = false,
+        string similarReviewOptionText = "Review similar on this sheet",
         UnitMode unitMode = UnitMode.Metric)
     {
         Title                 = "New Takeoff Item";
@@ -109,6 +113,31 @@ public sealed class NewItemDialog : Window
         }
         typeBox.SelectionChanged += (_, _) => RefreshCountSymbolVisibility();
         RefreshCountSymbolVisibility();
+
+        CheckBox? similarReviewBox = null;
+        if (showSimilarReviewOption)
+        {
+            similarReviewBox = new CheckBox
+            {
+                Content = string.IsNullOrWhiteSpace(similarReviewOptionText)
+                    ? "Review similar on this sheet"
+                    : similarReviewOptionText.Trim(),
+                IsChecked = defaultSimilarReview,
+                Margin = new Thickness(0, 10, 0, 0),
+                ToolTip = "Open the Similar review for the current sheet after creating this Count item.",
+            };
+            panel.Children.Add(similarReviewBox);
+
+            void RefreshSimilarReviewVisibility()
+            {
+                similarReviewBox.Visibility =
+                    string.Equals(typeBox.SelectedValue?.ToString(), "point", System.StringComparison.OrdinalIgnoreCase)
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+            }
+            typeBox.SelectionChanged += (_, _) => RefreshSimilarReviewVisibility();
+            RefreshSimilarReviewVisibility();
+        }
 
         panel.Children.Add(new TextBlock { Text = "Color:", Margin = new Thickness(0, 10, 0, 4) });
 
@@ -287,6 +316,10 @@ public sealed class NewItemDialog : Window
             ItemColor    = selectedHex;
             ItemType     = typeBox.SelectedValue?.ToString() ?? "line";
             ItemCountSymbol = CountDisplaySymbol.Normalize(countSymbolBox.SelectedValue?.ToString());
+            MarkSimilarOnCurrentSheet =
+                showSimilarReviewOption &&
+                similarReviewBox?.IsChecked == true &&
+                string.Equals(ItemType, "point", System.StringComparison.OrdinalIgnoreCase);
 
             OffsetLines = [];
             if (showOffsetLines && offsetSection.Visibility == Visibility.Visible)

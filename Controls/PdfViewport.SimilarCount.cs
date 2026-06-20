@@ -7,7 +7,18 @@ using SkiaSharp;
 
 namespace OurPlaneCore.Controls;
 
-public sealed record ViewportSimilarCountRequest(SKRect PdfRect, string PageFolder, double ScaleMetersPerPt);
+public sealed record ViewportSimilarCountRequest(
+    SKRect PdfRect,
+    string PageFolder,
+    double ScaleMetersPerPt,
+    IReadOnlyList<SKPoint>? AlreadyCountedCentersPdf = null,
+    string PdfPath = "",
+    int PdfPageIndex = -1,
+    bool AllowExactTextMatches = true,
+    bool UseTextCandidateRasterMatches = false,
+    SKPoint? TemplateAnchorPdf = null,
+    SKPoint? MarkerCenterPdf = null,
+    SKRect? TextSearchRectPdf = null);
 public sealed record ViewportSimilarCountPreviewMarker(
     SKPoint CenterPdf,
     bool Included,
@@ -475,6 +486,8 @@ public sealed partial class PdfViewport
                         PdfToScreenDistance(rect.Height) < 8f;
         string pageFolder = _pageFolder;
         double scaleMetersPerPt = ScaleMetersPerPt;
+        string pdfPath = _pdfPath;
+        int pdfPageIndex = _pdfIndex;
         ResetSimilarCountSelection();
 
         if (tooSmall)
@@ -485,7 +498,12 @@ public sealed partial class PdfViewport
         }
 
         RequestRepaint();
-        SimilarCountSelectionCompleted?.Invoke(new ViewportSimilarCountRequest(rect, pageFolder, scaleMetersPerPt));
+        SimilarCountSelectionCompleted?.Invoke(new ViewportSimilarCountRequest(
+            rect,
+            pageFolder,
+            scaleMetersPerPt,
+            PdfPath: pdfPath,
+            PdfPageIndex: pdfPageIndex));
         return true;
     }
 

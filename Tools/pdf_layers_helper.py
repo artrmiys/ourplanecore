@@ -2771,6 +2771,95 @@ def sheetmeta(input_path: str, output_path: str) -> None:
     _write_json(output_path, sheetmeta_data(_load_json(input_path)))
 
 
+def _similar_text_key(value: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "", (value or "").upper())
+
+
+def _rect_from_request(req: dict) -> fitz.Rect:
+    raw = req.get("rect") or {}
+    x0 = float(raw.get("x0", 0.0))
+    y0 = float(raw.get("y0", 0.0))
+    x1 = float(raw.get("x1", 0.0))
+    y1 = float(raw.get("y1", 0.0))
+    left, right = sorted((x0, x1))
+    top, bottom = sorted((y0, y1))
+    return fitz.Rect(left, top, right, bottom)
+
+
+def _word_payload(word) -> dict:
+    return {
+        "text": str(word[4] or ""),
+        "x0": float(word[0]),
+        "y0": float(word[1]),
+        "x1": float(word[2]),
+        "y1": float(word[3]),
+    }
+
+
+def _word_center_inside(word, rect: fitz.Rect) -> bool:
+    cx = (float(word[0]) + float(word[2])) / 2.0
+    cy = (float(word[1]) + float(word[3])) / 2.0
+    return rect.x0 <= cx <= rect.x1 and rect.y0 <= cy <= rect.y1
+
+
+def _word_intersection_ratio(word, rect: fitz.Rect) -> float:
+    x0 = float(word[0])
+    y0 = float(word[1])
+    x1 = float(word[2])
+    y1 = float(word[3])
+    area = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+    if area <= 0:
+        return 0.0
+    overlap_w = max(0.0, min(x1, rect.x1) - max(x0, rect.x0))
+    overlap_h = max(0.0, min(y1, rect.y1) - max(y0, rect.y0))
+    return (overlap_w * overlap_h) / area
+
+
+def similar_text_data(req: dict) -> dict:
+    pdf_path = req.get("pdf", "")
+    page_index = int(req.get("page", 0))
+    if not pdf_path:
+        return {"ok": False, "error": "pdf path is empty"}
+
+    rect = _rect_from_request(req)
+    # The user may box a tight word at high zoom; expand a little in PDF points
+    # but keep the selection local enough to reject neighboring labels.
+    selection = fitz.Rect(rect.x0 - 2.0, rect.y0 - 2.0, rect.x1 + 2.0, rect.y1 + 2.0)
+
+    doc, _doc_key = _get_doc(pdf_path, "similartext")
+    if page_index < 0 or page_index >= doc.page_count:
+        return {"ok": False, "error": "page index is out of range"}
+
+    page = doc.load_page(page_index)
+    words = page.get_text("words") or []
+    if not words:
+        return {"ok": True, "query": "", "matches": []}
+
+    selected = []
+    for word in words:
+        key = _similar_text_key(str(word[4] or ""))
+        if len(key) < 2:
+            continue
+        if _word_center_inside(word, selection) or _word_intersection_ratio(word, selection) >= 0.55:
+            selected.append((key, word))
+
+    keys = {key for key, _ in selected}
+    if len(keys) != 1:
+        return {"ok": True, "query": "", "matches": []}
+
+    query = next(iter(keys))
+    matches = [
+        _word_payload(word)
+        for word in words
+        if _similar_text_key(str(word[4] or "")) == query
+    ]
+    return {"ok": True, "query": query, "matches": matches}
+
+
+def similar_text(input_path: str, output_path: str) -> None:
+    _write_json(output_path, similar_text_data(_load_json(input_path)))
+
+
 def worker_loop() -> int:
     for raw_line in sys.stdin:
         raw_line = raw_line.strip()
@@ -2793,6 +2882,8 @@ def worker_loop() -> int:
                 response = trace_layer_data(req)
             elif action == "sheetmeta":
                 response = sheetmeta_data(req)
+            elif action == "similartext":
+                response = similar_text_data(req)
             elif action == "pdftakeoffs":
                 response = pdf_takeoff_annotations_data(req)
             elif action == "pdftakeoffclean":
@@ -2817,8 +2908,8 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta", "pdftakeoffs", "pdftakeoffclean"}:
-        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta", "similartext", "pdftakeoffs", "pdftakeoffclean"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|similartext|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
@@ -2831,6 +2922,8 @@ def main() -> int:
             _write_json(sys.argv[3], pdf_snap_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "layertrace":
             _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "similartext":
+            similar_text(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "pdftakeoffs":
             pdf_takeoff_annotations(sys.argv[2], sys.argv[3])
         elif sys.argv[1] == "pdftakeoffclean":

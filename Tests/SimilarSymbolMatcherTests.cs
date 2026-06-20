@@ -180,6 +180,29 @@ internal static class SimilarSymbolMatcherTests
             $"edge selection noise should be trimmed before matching; clean ink {cleanSession.TemplateInkPixels}, noisy ink {noisySession.TemplateInkPixels}");
     }
 
+    public static void TrimsLongPeripheralLineSelectionNoise()
+    {
+        var placements = new[] { (80, 90), (240, 90), (80, 230), (240, 230) };
+        using SKBitmap cleanPage = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? cleanSession = CreateSession(cleanPage);
+
+        using SKBitmap noisyPage = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        DrawPeripheralTemplateNoise(noisyPage, left: 15, top: placements[0].Item2 - 9, width: 180);
+        SimilarSymbolMatchSession? noisySession = SimilarSymbolMatchSession.TryCreate(
+            noisyPage,
+            new SKRectI(
+                placements[0].Item1 - 65,
+                placements[0].Item2 - 12,
+                placements[0].Item1 + SymbolWidth + 8,
+                placements[0].Item2 + SymbolHeight + 8),
+            out string error);
+
+        AssertTrue(noisySession != null, $"long-line noisy template session creation failed: {error}");
+        AssertTrue(
+            Math.Abs(noisySession!.TemplateInkPixels - cleanSession!.TemplateInkPixels) <= 12,
+            $"long peripheral context line should be trimmed before matching; clean ink {cleanSession.TemplateInkPixels}, noisy ink {noisySession.TemplateInkPixels}");
+    }
+
     public static void LooseWhitespaceSelectionKeepsCentersPrecise()
     {
         var placements = new[] { (40, 40), (200, 60), (120, 220) };
@@ -774,9 +797,14 @@ internal static class SimilarSymbolMatcherTests
             viewport.Contains("TryStartPendingSimilarCountSelection();", StringComparison.Ordinal),
             "Similar count should auto-enter selection after sharpening without requiring a second toolbar click");
         AssertTrue(
-            source.Contains("ViewportSimilarCountRequest(SKRect PdfRect, string PageFolder, double ScaleMetersPerPt)", StringComparison.Ordinal) &&
+            source.Contains("public sealed record ViewportSimilarCountRequest", StringComparison.Ordinal) &&
+            source.Contains("IReadOnlyList<SKPoint>? AlreadyCountedCentersPdf = null", StringComparison.Ordinal) &&
+            source.Contains("string PdfPath = \"\"", StringComparison.Ordinal) &&
+            source.Contains("int PdfPageIndex = -1", StringComparison.Ordinal) &&
+            source.Contains("bool AllowExactTextMatches = true", StringComparison.Ordinal) &&
             source.Contains("double scaleMetersPerPt = ScaleMetersPerPt;", StringComparison.Ordinal) &&
-            source.Contains("new ViewportSimilarCountRequest(rect, pageFolder, scaleMetersPerPt)", StringComparison.Ordinal),
+            source.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
+            source.Contains("PdfPageIndex: pdfPageIndex", StringComparison.Ordinal),
             "Similar count should capture the scanned sheet scale with the selection request");
         AssertTrue(
             source.Contains("HasCurrentSimilarCountBitmap", StringComparison.Ordinal) &&
@@ -844,6 +872,70 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count runtime logs should report scan duration and the matcher budget");
     }
 
+    public static void FindsFarCopiesOnDownsampledLargeRaster()
+    {
+        var placements = new[] { (380, 360), (560, 360), (5950, 1640), (6130, 1640) };
+        using SKBitmap page = BuildLargePageWithSimilarCopies(placements);
+        SimilarSymbolMatchSession? session = SimilarSymbolMatchSession.TryCreate(
+            page,
+            new SKRectI(
+                placements[0].Item1 - 90,
+                placements[0].Item2 - 18,
+                placements[0].Item1 + SymbolWidth + 10,
+                placements[0].Item2 + SymbolHeight + 8),
+            out string error);
+
+        AssertTrue(session != null, $"large raster session creation failed: {error}");
+        AssertTrue(session!.DownsampleFactor == 2,
+            $"large raster should exercise the full-page downsample path, got factor {session.DownsampleFactor}");
+
+        List<SimilarSymbolMatch> matches = session.FindMatches(
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"expected all four identical symbols, including far-side copies, got {matches.Count}: " +
+            string.Join(", ", matches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}")));
+        foreach ((int x, int y) in placements)
+        {
+            AssertTrue(
+                matches.Any(match => NearCenter(match, x, y)),
+                $"large downsampled raster missed identical far-side symbol at ({x},{y})");
+        }
+    }
+
+    public static void VerifiesTextCandidateWindowsByRaster()
+    {
+        var placements = new[] { (80, 90), (240, 90), (80, 230), (240, 230) };
+        using SKBitmap page = BuildPage(placements, rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? session = CreateSession(page);
+        AssertTrue(session != null, "candidate-window session should be created");
+
+        var textCandidateCenters = new List<SKPoint>
+        {
+            new(placements[0].Item1 + SymbolWidth / 2f + 3, placements[0].Item2 + SymbolHeight / 2f - 2),
+            new(placements[1].Item1 + SymbolWidth / 2f - 2, placements[1].Item2 + SymbolHeight / 2f + 3),
+            new(placements[2].Item1 + SymbolWidth / 2f + 1, placements[2].Item2 + SymbolHeight / 2f + 1),
+            new(placements[3].Item1 + SymbolWidth / 2f - 4, placements[3].Item2 + SymbolHeight / 2f - 1),
+            new(345, 245),
+        };
+
+        List<SimilarSymbolMatch> matches = session!.FindMatchesNearCenters(
+            textCandidateCenters,
+            searchRadiusPixels: 18,
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+
+        AssertTrue(matches.Count == placements.Length,
+            $"text candidate raster verification should keep the four real symbols and reject the empty same-mark location, got {matches.Count}");
+        foreach ((int x, int y) in placements)
+            AssertTrue(matches.Any(match => NearCenter(match, x, y)), $"candidate raster verification missed ({x},{y})");
+    }
+
     public static void ViewportStatusUsesUiDispatcher()
     {
         string mainWindow = File.ReadAllText("MainWindow.xaml.cs");
@@ -876,7 +968,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("excludedIndexes", StringComparison.Ordinal) &&
             mainWindow.Contains("IncludedCenters()", StringComparison.Ordinal) &&
             mainWindow.Contains("SetSimilarCountPreviewMarkers(BuildPreviewMarkers(), request.PageFolder)", StringComparison.Ordinal) &&
-            mainWindow.Contains("templateWarning: session.TemplateWarning", StringComparison.Ordinal),
+            mainWindow.Contains("templateWarning: templateWarning", StringComparison.Ordinal),
             "Similar Count should keep include/exclude review state, add only included centers, and pass template warnings into review");
         AssertTrue(
             viewport.Contains("_similarCountPreviewPageFolder", StringComparison.Ordinal) &&
@@ -1146,6 +1238,87 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count add status should distinguish open-sheet review from switched-sheet saves");
     }
 
+    public static void BeamOpeningsCompletionCanLaunchSimilarReview()
+    {
+        string dialog = File.ReadAllText(Path.Combine("Dialogs", "NewItemDialog.cs"));
+        string beamTool = File.ReadAllText("MainWindow.BeamTool.cs");
+        string similarCount = File.ReadAllText("MainWindow.SimilarCount.cs");
+
+        AssertTrue(
+            dialog.Contains("MarkSimilarOnCurrentSheet", StringComparison.Ordinal) &&
+            dialog.Contains("showSimilarReviewOption", StringComparison.Ordinal) &&
+            dialog.Contains("Review similar on this sheet", StringComparison.Ordinal),
+            "NewItemDialog should expose an opt-in Similar review checkbox only when a caller requests it");
+        AssertTrue(
+            beamTool.Contains("showSimilarReviewOption: true", StringComparison.Ordinal) &&
+            beamTool.Contains("Review similar Beam marks on this sheet", StringComparison.Ordinal) &&
+            beamTool.Contains("Review similar Opening marks on this sheet", StringComparison.Ordinal) &&
+            beamTool.Contains("StartSimilarCountReview(BuildBeamSimilarCountRequest(request))", StringComparison.Ordinal) &&
+            beamTool.Contains("StartSimilarCountReview(BuildOpeningSimilarCountRequest(request))", StringComparison.Ordinal),
+            "Beam and Openings completion should optionally open Similar review against the newly created Count item");
+        AssertTrue(
+            beamTool.Contains("BuildBeamSimilarCountRequest", StringComparison.Ordinal) &&
+            beamTool.Contains("BuildOpeningSimilarCountRequest", StringComparison.Ordinal) &&
+            beamTool.Contains("[request.CountPointPdf]", StringComparison.Ordinal) &&
+            beamTool.Contains("[request.CountPointPdf]", StringComparison.Ordinal),
+            "Beam/Openings Similar requests should mark the original measured item as already counted");
+        AssertTrue(
+            similarCount.Contains("private void StartSimilarCountReview", StringComparison.Ordinal) &&
+            similarCount.Contains("IsSimilarCountAlreadyCounted", StringComparison.Ordinal) &&
+            similarCount.Contains("request.AlreadyCountedCentersPdf", StringComparison.Ordinal),
+            "Similar review should be reusable from Beam/Openings and skip the original measured center");
+    }
+
+    public static void SimilarCountUsesExactPdfTextWhenAvailable()
+    {
+        string helper = File.ReadAllText(Path.Combine("Tools", "pdf_layers_helper.py"));
+        string service = File.ReadAllText(Path.Combine("Models", "PdfSimilarTextService.cs"));
+        string mainWindow = File.ReadAllText("MainWindow.SimilarCount.cs");
+        string viewport = File.ReadAllText(Path.Combine("Controls", "PdfViewport.SimilarCount.cs"));
+        string beamTool = File.ReadAllText("MainWindow.BeamTool.cs");
+
+        AssertTrue(
+            helper.Contains("def similar_text_data", StringComparison.Ordinal) &&
+            helper.Contains("_similar_text_key", StringComparison.Ordinal) &&
+            helper.Contains("elif action == \"similartext\"", StringComparison.Ordinal) &&
+            helper.Contains("\"similartext\"", StringComparison.Ordinal),
+            "PyMuPDF helper should expose a similartext action for exact PDF word matches");
+        AssertTrue(
+            service.Contains("PdfSimilarTextService", StringComparison.Ordinal) &&
+            service.Contains("TryInvokeHelper(", StringComparison.Ordinal) &&
+            service.Contains("\"similartext\"", StringComparison.Ordinal) &&
+            service.Contains("PdfSimilarTextMatch", StringComparison.Ordinal),
+            "C# Similar text service should call the helper and normalize word rectangles into PDF centers");
+        AssertTrue(
+            mainWindow.Contains("TryFindSimilarCountText", StringComparison.Ordinal) &&
+            mainWindow.Contains("TextSimilarMatch", StringComparison.Ordinal) &&
+            mainWindow.Contains("FindTextCandidateRasterMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("FindMatchesNearCenters", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountMarkerOffset", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count text matches applied", StringComparison.Ordinal) &&
+            mainWindow.Contains("Similar count text-raster candidates applied", StringComparison.Ordinal) &&
+            mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
+            mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal),
+            "Similar Count should use exact PDF text for direct text selections and raster-verify text candidates for Beam/Openings");
+        AssertTrue(
+            viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
+            viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&
+            viewport.Contains("UseTextCandidateRasterMatches = false", StringComparison.Ordinal) &&
+            viewport.Contains("SKPoint? TemplateAnchorPdf = null", StringComparison.Ordinal) &&
+            viewport.Contains("SKPoint? MarkerCenterPdf = null", StringComparison.Ordinal) &&
+            viewport.Contains("SKRect? TextSearchRectPdf = null", StringComparison.Ordinal) &&
+            viewport.Contains("PdfPageIndex: pdfPageIndex", StringComparison.Ordinal) &&
+            beamTool.Contains("PageInfo page = _currentPage ?? throw", StringComparison.Ordinal) &&
+            beamTool.Contains("PdfPath: page.PdfPath", StringComparison.Ordinal) &&
+            beamTool.Contains("PdfPageIndex: page.PdfPage", StringComparison.Ordinal) &&
+            beamTool.Contains("AllowExactTextMatches: false", StringComparison.Ordinal) &&
+            beamTool.Contains("UseTextCandidateRasterMatches: true", StringComparison.Ordinal) &&
+            beamTool.Contains("TemplateAnchorPdf:", StringComparison.Ordinal) &&
+            beamTool.Contains("MarkerCenterPdf:", StringComparison.Ordinal) &&
+            beamTool.Contains("TextSearchRectPdf:", StringComparison.Ordinal),
+            "Similar Count requests should carry the source PDF identity, while Beam/Openings keep geometry/raster matching and preserve marker offset");
+    }
+
     public static void SimilarCountIsExposedAsContextTool()
     {
         string commandPalette = File.ReadAllText("MainWindow.CommandPalette.cs");
@@ -1261,6 +1434,43 @@ internal static class SimilarSymbolMatcherTests
 
         foreach ((int x, int y) in placements)
             DrawSymbol(canvas, stroke, fill, x, y);
+
+        return bitmap;
+    }
+
+    private static SKBitmap BuildLargePageWithSimilarCopies((int X, int Y)[] placements)
+    {
+        TemplateOrigin = placements[0];
+        var bitmap = new SKBitmap(7000, 2600, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+
+        using var stroke = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = false,
+        };
+        using var fill = new SKPaint
+        {
+            Color = SKColors.Black,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = false,
+        };
+
+        foreach ((int x, int y) in placements)
+            DrawSymbol(canvas, stroke, fill, x, y);
+
+        // Simulate a tight-looking selection that accidentally includes a
+        // nearby plan line around the local pair. Far copies should still match
+        // the symbol itself instead of requiring the same surrounding context.
+        canvas.DrawLine(
+            placements[0].X - 86,
+            placements[0].Y - 11,
+            placements[1].X + SymbolWidth + 20,
+            placements[0].Y - 11,
+            stroke);
 
         return bitmap;
     }
