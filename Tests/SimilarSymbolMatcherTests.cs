@@ -426,6 +426,41 @@ internal static class SimilarSymbolMatcherTests
         }
     }
 
+    public static void TextGuidedNearCentersUseOtherSheetBitmap()
+    {
+        using SKBitmap templatePage = BuildPage([(40, 40)], rotatedAt: null, withDistractors: false);
+        SimilarSymbolMatchSession? session = CreateSession(templatePage);
+
+        using SKBitmap otherPage = BuildPage([(220, 120)], rotatedAt: null, withDistractors: false);
+        var candidateCenters = new List<SKPoint>
+        {
+            new(220 + SymbolWidth / 2f, 120 + SymbolHeight / 2f),
+        };
+
+        List<SimilarSymbolMatch> sourceMatches = session!.FindMatchesNearCenters(
+            candidateCenters,
+            searchRadiusPixels: 12,
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+        List<SimilarSymbolMatch> otherMatches = session.FindMatchesNearCentersOnBitmap(
+            otherPage,
+            candidateCenters,
+            searchRadiusPixels: 12,
+            DefaultThreshold(),
+            includeRotations: false,
+            includeMirrored: false,
+            CancellationToken.None);
+
+        AssertTrue(sourceMatches.Count == 0,
+            "source sheet should be empty at the other-sheet text candidate window");
+        AssertTrue(
+            otherMatches.Count == 1 && NearCenter(otherMatches[0], 220, 120),
+            $"other-sheet text-guided raster verification should scan the supplied bitmap, got {otherMatches.Count}: " +
+            string.Join(", ", otherMatches.Select(match => $"{match.CenterX},{match.CenterY}:{match.Score:0.00}")));
+    }
+
     public static void SimilarCountSearchesAllSheets()
     {
         string matcher = File.ReadAllText(Path.Combine("Models", "SimilarSymbolMatcher.cs"));
@@ -436,6 +471,7 @@ internal static class SimilarSymbolMatcherTests
 
         AssertTrue(
             matcher.Contains("public List<SimilarSymbolMatch> FindMatchesOnBitmap", StringComparison.Ordinal) &&
+            matcher.Contains("public List<SimilarSymbolMatch> FindMatchesNearCentersOnBitmap", StringComparison.Ordinal) &&
             matcher.Contains("private sealed class PageRaster", StringComparison.Ordinal) &&
             matcher.Contains("FindMatchesOn(", StringComparison.Ordinal),
             "matcher should expose a reusable template that can scan any sheet bitmap");
@@ -458,6 +494,7 @@ internal static class SimilarSymbolMatcherTests
             otherSheets.Contains("TryBuildOtherSheetTextGuide", StringComparison.Ordinal) &&
             otherSheets.Contains("TemplateFromTextOffset", StringComparison.Ordinal) &&
             otherSheets.Contains("FindOtherSheetTextGuidedRasterMatches", StringComparison.Ordinal) &&
+            otherSheets.Contains("session.FindMatchesNearCentersOnBitmap", StringComparison.Ordinal) &&
             otherSheets.Contains("Math.Clamp(threshold, (float)AppSettingsStore.SimilarCountThresholdMin, 1f)", StringComparison.Ordinal) &&
             otherSheets.Contains("TryFindSimilarTextByQuery", StringComparison.Ordinal) &&
             otherSheets.Contains("request.UseTextCandidateRasterMatches || request.AllowExactTextMatches", StringComparison.Ordinal) &&

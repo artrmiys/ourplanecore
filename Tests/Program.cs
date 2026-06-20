@@ -48,6 +48,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar matcher warns on downsampled large template", SimilarSymbolMatcherTests.WarnsOnDownsampledLargeTemplate),
     ("similar symbol matcher can include mirrored copies", SimilarSymbolMatcherTests.FindsMirroredCopyOnlyWhenEnabled),
     ("similar symbol matcher matches another sheet bitmap", SimilarSymbolMatcherTests.FindsMatchesOnAnotherSheetBitmap),
+    ("similar matcher text-guided centers use other sheet bitmap", SimilarSymbolMatcherTests.TextGuidedNearCentersUseOtherSheetBitmap),
     ("similar count searches all sheets", SimilarSymbolMatcherTests.SimilarCountSearchesAllSheets),
     ("similar symbol matcher rejects near misses at precision threshold", SimilarSymbolMatcherTests.RejectsNearMissAtPrecisionThreshold),
     ("similar symbol matcher scores stroke orientation", SimilarSymbolMatcherTests.ScoresStrokeOrientationForNearMiss),

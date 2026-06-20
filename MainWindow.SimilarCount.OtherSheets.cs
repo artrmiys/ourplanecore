@@ -168,6 +168,7 @@ public partial class MainWindow
                 textGuide,
                 request,
                 session,
+                bitmap,
                 pxPerPt,
                 minScore,
                 rotations,
@@ -231,6 +232,7 @@ public partial class MainWindow
         OtherSheetTextGuide textGuide,
         ViewportSimilarCountRequest request,
         SimilarSymbolMatchSession session,
+        SKBitmap bitmap,
         double pxPerPt,
         float minScore,
         bool rotations,
@@ -243,7 +245,8 @@ public partial class MainWindow
                 (float)(center.Y * pxPerPt)))
             .ToList();
         int radiusPixels = SimilarCountTextCandidateSearchRadiusPixels(request, (float)pxPerPt);
-        return session.FindMatchesNearCenters(
+        return session.FindMatchesNearCentersOnBitmap(
+            bitmap,
             candidateCenters,
             radiusPixels,
             minScore,

@@ -242,6 +242,35 @@ public sealed class SimilarSymbolMatchSession
         float minScore,
         bool includeRotations,
         bool includeMirrored,
+        CancellationToken cancellationToken) =>
+        FindMatchesNearCentersOn(_page, candidateCenters, searchRadiusPixels, minScore, includeRotations, includeMirrored, cancellationToken);
+
+    // Verify text-guided candidate windows on a different sheet's rendered
+    // bitmap while reusing the boxed template, downsample factor, and ink model.
+    public List<SimilarSymbolMatch> FindMatchesNearCentersOnBitmap(
+        SKBitmap page,
+        IReadOnlyList<SKPoint> candidateCenters,
+        int searchRadiusPixels,
+        float minScore,
+        bool includeRotations,
+        bool includeMirrored,
+        CancellationToken cancellationToken)
+    {
+        if (page == null || page.Width <= 0 || page.Height <= 0)
+            return [];
+
+        bool[] inkPixels = BinarizeDownsampled(page, _factor, _inkModel, out int width, out int height);
+        PageRaster raster = PackPageRaster(inkPixels, width, height);
+        return FindMatchesNearCentersOn(raster, candidateCenters, searchRadiusPixels, minScore, includeRotations, includeMirrored, cancellationToken);
+    }
+
+    private List<SimilarSymbolMatch> FindMatchesNearCentersOn(
+        PageRaster page,
+        IReadOnlyList<SKPoint> candidateCenters,
+        int searchRadiusPixels,
+        float minScore,
+        bool includeRotations,
+        bool includeMirrored,
         CancellationToken cancellationToken)
     {
         if (candidateCenters.Count == 0)
@@ -266,8 +295,10 @@ public sealed class SimilarSymbolMatchSession
                 int baseY = centerY - variant.Height / 2;
                 int left = Math.Max(0, baseX - radius);
                 int top = Math.Max(0, baseY - radius);
-                int right = Math.Min(_page.Width - variant.Width, baseX + radius);
-                int bottom = Math.Min(_page.Height - variant.Height, baseY + radius);
+                int right = Math.Min(page.Width - variant.Width, baseX + radius);
+                int bottom = Math.Min(page.Height - variant.Height, baseY + radius);
+                if (right < left || bottom < top)
+                    continue;
                 for (int y = top; y <= bottom; y++)
                 {
                     if ((y & 15) == 0)
@@ -278,7 +309,7 @@ public sealed class SimilarSymbolMatchSession
                         if ((x & 255) == 0)
                             cancellationToken.ThrowIfCancellationRequested();
 
-                        if (TryMatchVariantAt(_page, variant, x, y, minScore, out SimilarSymbolMatch match))
+                        if (TryMatchVariantAt(page, variant, x, y, minScore, out SimilarSymbolMatch match))
                             matches.Add(match);
                     }
                 }
