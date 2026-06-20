@@ -212,6 +212,9 @@ public partial class MainWindow
             return null;
         }
 
+        if (SimilarCountTextResultTooBroad(pageText))
+            return null;
+
         SKPoint templateFromTextOffset = SimilarCountTextTemplateOffset(sourceTextAnchor, request);
         return new OtherSheetTextGuide
         {

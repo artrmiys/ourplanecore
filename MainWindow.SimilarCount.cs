@@ -35,6 +35,7 @@ public partial class MainWindow
     private const float SimilarCountExactTextCandidateSearchRadiusMaxPdf = 144f;
     private const float SimilarCountNearbyTextCandidateSearchRadiusMultiplier = 2.25f;
     private const float SimilarCountNearbyTextCandidateSearchRadiusMaxPdf = 192f;
+    private const int SimilarCountMaxTextCandidateMatches = 240;
     private const int SimilarCountReviewReadinessRetryLimit = 24;
     private static readonly TimeSpan SimilarCountReviewReadinessRetryDelay = TimeSpan.FromMilliseconds(500);
 
@@ -870,6 +871,13 @@ public partial class MainWindow
             return null;
         }
 
+        if (SimilarCountTextResultTooBroad(result))
+        {
+            AppLog.Info(
+                $"Similar count text scan skipped broad query; query='{result.Query}'; matches={result.Matches.Count}; page='{request.PageFolder}'");
+            return null;
+        }
+
         if (IsUsableSimilarTextResult(result) &&
             (request.PreferNearestRepeatedText || SimilarTextResultLooksIntentionalSelection(result, request)))
         {
@@ -894,6 +902,13 @@ public partial class MainWindow
             return null;
         }
 
+        if (SimilarCountTextResultTooBroad(nearestResult))
+        {
+            AppLog.Info(
+                $"Similar count nearest repeated text fallback skipped broad query; query='{nearestResult.Query}'; matches={nearestResult.Matches.Count}; page='{request.PageFolder}'");
+            return null;
+        }
+
         if (!IsUsableSimilarTextResult(nearestResult) ||
             !NearestRepeatedTextFallbackLooksIntentional(nearestResult, searchRect, anchor))
         {
@@ -906,7 +921,12 @@ public partial class MainWindow
     }
 
     private static bool IsUsableSimilarTextResult(PdfSimilarTextResult result) =>
-        !string.IsNullOrWhiteSpace(result.Query) && result.Matches.Count >= 2;
+        !string.IsNullOrWhiteSpace(result.Query) &&
+        result.Matches.Count >= 2 &&
+        !SimilarCountTextResultTooBroad(result);
+
+    private static bool SimilarCountTextResultTooBroad(PdfSimilarTextResult result) =>
+        result.Matches.Count > SimilarCountMaxTextCandidateMatches;
 
     private static bool NearestRepeatedTextFallbackLooksIntentional(
         PdfSimilarTextResult result,

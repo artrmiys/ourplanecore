@@ -1088,6 +1088,10 @@ internal static class SimilarSymbolMatcherTests
             "ShouldUseTextGuidedRasterMatchesForExactText",
             BindingFlags.NonPublic | BindingFlags.Static);
         AssertTrue(useRasterMethod != null, "Similar Count exact text/raster choice helper should exist");
+        MethodInfo? usableTextMethod = typeof(MainWindow).GetMethod(
+            "IsUsableSimilarTextResult",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        AssertTrue(usableTextMethod != null, "Similar Count usable text-result guard should exist");
 
         var oneRaster = new List<SimilarSymbolMatch>
         {
@@ -1105,6 +1109,20 @@ internal static class SimilarSymbolMatcherTests
         AssertTrue(
             !selectedTextUsesRaster && nearbyTextUsesRaster,
             "text selected inside the box may fall back to text-only when raster is less complete, but nearby text must stay raster-only");
+
+        var broadTextResult = new PdfSimilarTextResult
+        {
+            Query = "A",
+            Matches = Enumerable.Range(0, 241)
+                .Select(index => new PdfSimilarTextMatch(
+                    "A",
+                    new SKRect(index, 0, index + 1, 1),
+                    new SKPoint(index + 0.5f, 0.5f)))
+                .ToList(),
+        };
+        bool broadTextUsable = (bool)(usableTextMethod!.Invoke(null, new object[] { broadTextResult }) ?? true);
+        AssertTrue(!broadTextUsable,
+            "overly broad PDF text guides should be ignored so Similar does not scan hundreds of weak text windows");
 
         MethodInfo? selectedTextMethod = typeof(MainWindow).GetMethod(
             "SimilarTextAnchorLooksSelectedText",
@@ -1662,6 +1680,8 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("NearestRepeatedTextFallbackLooksIntentional", StringComparison.Ordinal) &&
             mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
+            mainWindow.Contains("SimilarCountMaxTextCandidateMatches", StringComparison.Ordinal) &&
+            mainWindow.Contains("text scan skipped broad query", StringComparison.Ordinal) &&
             mainWindow.Contains("showing weak text-guided review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
             "Similar Count should use exact PDF text for direct text selections, prefer text-guided raster when it recovers equal or more markers, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings and all-sheets scans");
