@@ -24,6 +24,9 @@ public partial class MainWindow
     private const float SimilarCountTextFallbackPaddingMaxPdf = 24f;
     private const float SimilarCountTextFallbackPaddingRatio = 0.75f;
     private const float SimilarCountWeakTextCandidateScore = 0.50f;
+    private const float SimilarCountNearestTextFallbackPaddingRatio = 0.35f;
+    private const float SimilarCountNearestTextFallbackPaddingMinPdf = 8f;
+    private const float SimilarCountNearestTextFallbackPaddingMaxPdf = 48f;
 
     private SimilarCountDialog? _similarCountDialog;
 
@@ -673,12 +676,13 @@ public partial class MainWindow
             return null;
 
         SKRect searchRect = SimilarCountTextSearchRect(request);
+        SKPoint anchor = request.TemplateAnchorPdf ?? RectCenter(searchRect);
         if (!PdfSimilarTextService.TryFindSimilarText(
                 request.PdfPath,
                 request.PdfPageIndex,
                 searchRect,
                 request.PreferNearestRepeatedText,
-                request.TemplateAnchorPdf ?? RectCenter(searchRect),
+                anchor,
                 out PdfSimilarTextResult result,
                 out string error))
         {
@@ -687,10 +691,58 @@ public partial class MainWindow
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(result.Query) || result.Matches.Count < 2)
+        if (IsUsableSimilarTextResult(result))
+            return result;
+
+        if (request.PreferNearestRepeatedText || !request.AllowExactTextMatches)
             return null;
 
-        return result;
+        if (!PdfSimilarTextService.TryFindSimilarText(
+                request.PdfPath,
+                request.PdfPageIndex,
+                searchRect,
+                preferNearestRepeatedText: true,
+                anchor,
+                out PdfSimilarTextResult nearestResult,
+                out string nearestError))
+        {
+            if (!string.IsNullOrWhiteSpace(nearestError))
+                AppLog.Info($"Similar count nearest text fallback unavailable; {nearestError}");
+            return null;
+        }
+
+        if (!IsUsableSimilarTextResult(nearestResult) ||
+            !NearestRepeatedTextFallbackLooksIntentional(nearestResult, searchRect, anchor))
+        {
+            return null;
+        }
+
+        AppLog.Info(
+            $"Similar count nearest repeated text fallback used; query='{nearestResult.Query}'; matches={nearestResult.Matches.Count}; page='{request.PageFolder}'");
+        return nearestResult;
+    }
+
+    private static bool IsUsableSimilarTextResult(PdfSimilarTextResult result) =>
+        !string.IsNullOrWhiteSpace(result.Query) && result.Matches.Count >= 2;
+
+    private static bool NearestRepeatedTextFallbackLooksIntentional(
+        PdfSimilarTextResult result,
+        SKRect searchRect,
+        SKPoint anchor)
+    {
+        PdfSimilarTextMatch? selectedAnchor = result.Matches
+            .Where(match => RectsIntersect(match.Rect, searchRect))
+            .OrderBy(match => DistanceSquared(match.Center, anchor))
+            .FirstOrDefault();
+        if (selectedAnchor == null)
+            return false;
+
+        float side = Math.Max(Math.Abs(searchRect.Width), Math.Abs(searchRect.Height));
+        float tolerance = Math.Clamp(
+            side * SimilarCountNearestTextFallbackPaddingRatio,
+            SimilarCountNearestTextFallbackPaddingMinPdf,
+            SimilarCountNearestTextFallbackPaddingMaxPdf);
+        return DistanceSquared(selectedAnchor.Center, anchor) <= tolerance * tolerance;
     }
 
     private static ViewportSimilarCountRequest SimilarCountTextTemplateFallbackRequest(

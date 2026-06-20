@@ -1326,11 +1326,13 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("PDF text exact match", StringComparison.Ordinal) &&
             mainWindow.Contains("!request.AllowExactTextMatches && !request.UseTextCandidateRasterMatches", StringComparison.Ordinal) &&
             mainWindow.Contains("request.PreferNearestRepeatedText", StringComparison.Ordinal) &&
+            mainWindow.Contains("nearest repeated text fallback used", StringComparison.Ordinal) &&
+            mainWindow.Contains("NearestRepeatedTextFallbackLooksIntentional", StringComparison.Ordinal) &&
             mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
             mainWindow.Contains("showing weak text-only review candidates", StringComparison.Ordinal) &&
             mainWindow.Contains("added weak unverified text review candidates", StringComparison.Ordinal),
-            "Similar Count should use exact PDF text for direct text selections and raster-verify text candidates for Beam/Openings");
+            "Similar Count should use exact PDF text for direct text selections, recover loose manual text boxes with a nearest repeated text fallback, and raster-verify text candidates for Beam/Openings");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
             viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&
