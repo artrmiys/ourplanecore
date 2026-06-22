@@ -176,8 +176,13 @@ public partial class MainWindow
     private void SetAnnotationStrokeWidth(double width)
     {
         _annotationStrokeWidth = Math.Clamp(width, 0.75, 12.0);
-        _viewport.ActiveAnnotationStrokeWidth = _annotationStrokeWidth;
+        if (_viewport != null)
+            _viewport.ActiveAnnotationStrokeWidth = _annotationStrokeWidth;
         UpdateAnnotationMenuButton();
+        if (TxtAnnotThickness != null)
+            TxtAnnotThickness.Text = $"{_annotationStrokeWidth:0.#} px";
+        if (SliderAnnotThickness != null && Math.Abs(SliderAnnotThickness.Value - _annotationStrokeWidth) > 0.01)
+            SliderAnnotThickness.Value = _annotationStrokeWidth;
         TxtStatus.Text = $"Annotation thickness: {_annotationStrokeWidth:0.#} px.";
     }
 
@@ -186,7 +191,62 @@ public partial class MainWindow
         _annotationColor = color;
         _viewport.ActiveAnnotationColor = _annotationColor;
         UpdateAnnotationMenuButton();
+        RefreshAnnotationSwatchSelection();
         TxtStatus.Text = $"Annotation color: {color}.";
+    }
+
+    private void SliderAnnotThickness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsInitialized)
+            return; // ignore the coercion that fires while XAML is still loading
+        SetAnnotationStrokeWidth(e.NewValue);
+    }
+
+    // Inline thickness slider + colour swatches in the Annotation ribbon group.
+    private readonly System.Collections.Generic.List<(string Hex, Border Swatch)> _annotationSwatches = new();
+
+    private void BuildAnnotationStyleControls()
+    {
+        if (SliderAnnotThickness != null)
+            SliderAnnotThickness.Value = _annotationStrokeWidth;
+        if (TxtAnnotThickness != null)
+            TxtAnnotThickness.Text = $"{_annotationStrokeWidth:0.#} px";
+
+        if (AnnotationColorSwatches == null)
+            return;
+
+        AnnotationColorSwatches.Children.Clear();
+        _annotationSwatches.Clear();
+        foreach (var (label, hex) in AnnotationColorPresets())
+        {
+            string selectedHex = hex;
+            var swatch = new Border
+            {
+                Width = 17,
+                Height = 17,
+                Margin = new Thickness(0, 0, 4, 0),
+                CornerRadius = new CornerRadius(3),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(2),
+                ToolTip = label,
+                Cursor = Cursors.Hand,
+            };
+            swatch.MouseLeftButtonUp += (_, _) => SetAnnotationColor(selectedHex);
+            _annotationSwatches.Add((hex, swatch));
+            AnnotationColorSwatches.Children.Add(swatch);
+        }
+
+        RefreshAnnotationSwatchSelection();
+    }
+
+    private void RefreshAnnotationSwatchSelection()
+    {
+        Brush ring = Application.Current.Resources["ControlForegroundBrush"] as Brush ?? Brushes.White;
+        foreach (var (hex, swatch) in _annotationSwatches)
+            swatch.BorderBrush = string.Equals(hex, _annotationColor, StringComparison.OrdinalIgnoreCase)
+                ? ring
+                : Brushes.Transparent;
     }
 
     private void UpdateAnnotationMenuButton()

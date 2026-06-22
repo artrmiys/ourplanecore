@@ -17,10 +17,10 @@
     <SolidColorBrush x:Key="RowDropBadBrush"       Color="#FFD6D6"/>
     <SolidColorBrush x:Key="RowFlagForegroundBrush" Color="#111111"/>
     <SolidColorBrush x:Key="RowActiveAccentBrush"   Color="#1F52A6"/>
-    <SolidColorBrush x:Key="RowSelectionBrush"      Color="#CCE5FF"/>
-    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#CCE5FF"/>
+    <SolidColorBrush x:Key="RowSelectionBrush"      Color="#BFD4EC"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#BFD4EC"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#111111"/>
-    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#CCE5FF"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#BFD4EC"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#111111"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.MenuBrushKey}" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.MenuTextBrushKey}" Color="#202020"/>
@@ -368,6 +368,7 @@
         </Style.Triggers>
     </Style>
     <!-- RadioButton styled as a tool toggle (used for drawing tools group). -->
+    <!-- Bottom-bar tool toggle: bordered chrome (Pan/Select/Count/Line/…). -->
     <Style x:Key="ToolRadio" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
@@ -406,6 +407,113 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- Borderless ribbon tool toggle for the Annotation tab — clean look like
+         TopCommandButton on the Page tab: transparent, hover/active fill only. -->
+    <Style x:Key="ToolRadioFlat" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Padding" Value="7,3"/>
+        <Setter Property="MinWidth" Value="40"/>
+        <Setter Property="Margin" Value="0,0,2,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderThickness="0"
+                            CornerRadius="5"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource ControlActiveBackgroundBrush}"/>
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource ControlActiveForegroundBrush}"/>
+                            <Setter Property="FontWeight" Value="Normal"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- Themed horizontal slider: thin track, accent-filled portion, round thumb. -->
+    <Style TargetType="Slider">
+        <Setter Property="MinHeight" Value="20"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ControlBorderBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid VerticalAlignment="Center" Background="Transparent">
+                        <Border Height="4" CornerRadius="2"
+                                Background="{TemplateBinding Background}"
+                                VerticalAlignment="Center"/>
+                        <Track x:Name="PART_Track">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="Slider.DecreaseLarge" Focusable="False" OverridesDefaultStyle="True">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Height="4" CornerRadius="2" Margin="0,0,-3,0"
+                                                    Background="{DynamicResource AccentBrush}"
+                                                    VerticalAlignment="Center"/>
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" OverridesDefaultStyle="True">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Background="Transparent"/>
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb OverridesDefaultStyle="True">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Grid Width="14" Height="14" Background="Transparent">
+                                                <Ellipse x:Name="ThumbEl"
+                                                         Fill="{DynamicResource AccentBrush}"
+                                                         Stroke="{DynamicResource SurfaceBackgroundBrush}"
+                                                         StrokeThickness="2"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ThumbEl" Property="Fill" Value="{DynamicResource AccentHoverBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="ThumbEl" Property="Fill" Value="{DynamicResource AccentHoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="TextBox">
         <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
@@ -588,14 +696,39 @@
         <Setter Property="Padding" Value="8,6"/>
     </Style>
 
-    <!-- GridView column headers follow theme -->
+    <!-- GridView column headers (AI Inbox): clean theme hover/press instead of
+         the washed-out default highlight in the dark theme. -->
     <Style TargetType="GridViewColumnHeader">
-        <Setter Property="Background"   Value="{DynamicResource ControlBackgroundBrush}"/>
+        <Setter Property="Background"   Value="{DynamicResource ManagerHeaderBrush}"/>
         <Setter Property="Foreground"   Value="{DynamicResource ControlForegroundBrush}"/>
         <Setter Property="BorderBrush"  Value="{DynamicResource ControlBorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0,0,1,1"/>
         <Setter Property="Padding"      Value="6,3"/>
         <Setter Property="FontSize"     Value="11"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridViewColumnHeader">
+                    <Border x:Name="HdrBd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="0,0,1,1"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HdrBd" Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="HdrBd" Property="Background" Value="{DynamicResource ControlPressedBackgroundBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ListView rows follow theme -->
@@ -610,6 +743,43 @@
                 <Setter Property="Foreground" Value="{DynamicResource ControlActiveForegroundBrush}"/>
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- List rows that select like the Pages/Takeoffs trees: a solid,
+         focus-independent fill of RowSelectionBrush. The default ListView
+         selection renders a washed-out near-white band in the dark theme, so
+         Bookmarks and the AI Inbox use this template instead. -->
+    <Style x:Key="TreeRowListItem" TargetType="ListViewItem">
+        <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="2,2"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListViewItem">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                              Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                              VerticalAlignment="Center"
+                                              SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlHoverBackgroundBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowSelectionBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ListView control itself -->

@@ -803,10 +803,11 @@ internal static class TakeoffsTreeRegressionTests
             pagesCommands.Contains("_pageTakeoffMultiSelection.Clear();", StringComparison.Ordinal),
             "Pages tree should clear page and linked-takeoff selection on Esc before requiring a selected item");
         AssertTrue(
-            pagesTree.Contains("CreateFolderTreeIcon()", StringComparison.Ordinal) &&
-            takeoffVisuals.Contains("private static FrameworkElement CreateFolderTreeIcon()", StringComparison.Ordinal) &&
+            pagesTree.Contains("CreateFolderTreeIcon(pageCount > 0)", StringComparison.Ordinal) &&
+            takeoffVisuals.Contains("private static FrameworkElement CreateFolderTreeIcon(bool filled)", StringComparison.Ordinal) &&
+            takeoffVisuals.Contains("TakeoffFolderHasContent", StringComparison.Ordinal) &&
             takeoffVisuals.Contains("SetFolderTreeItemHeader", StringComparison.Ordinal),
-            "Pages and Takeoffs folder rows should share a small folder icon");
+            "Pages and Takeoffs folder rows should share a small folder icon, filled when the folder has content");
     }
 
     public static void PagesDropUsesBatchMoveAndSilentRefresh()

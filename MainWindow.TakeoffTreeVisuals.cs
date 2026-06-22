@@ -395,47 +395,54 @@ public partial class MainWindow
             joist: item.IsJoistArea,
             countSymbol: item.CountSymbol);
 
-    private static FrameworkElement CreateFolderTreeIcon()
+    // Single-stroke folder in the theme text color, per
+    // docs/60-ux-ui/BLUEBEAM_DESIGN_SYSTEM.md §7. Filled when the folder holds
+    // any real content (page/takeoff item anywhere in its subtree); a hollow
+    // outline when it is empty or only contains other empty folders.
+    private static FrameworkElement CreateFolderTreeIcon(bool filled)
     {
-        var canvas = new Canvas
+        var icon = new System.Windows.Shapes.Path
         {
-            Width = 15,
-            Height = 12,
+            Width = 7.5,
+            Height = 6.5,
+            Stretch = Stretch.Uniform,
+            StrokeThickness = 1.1,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            Fill = Brushes.Transparent,
+            SnapsToDevicePixels = true,
             Margin = new Thickness(0, 0, 5, 0),
             VerticalAlignment = VerticalAlignment.Center,
+            Data = Geometry.Parse("M2.5,12.5 L2.5,4.8 L6,4.8 L7.5,6.3 L13.5,6.3 L13.5,12.5 Z M2.5,6.3 L7.5,6.3"),
         };
-        var tab = new Border
+        icon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "ControlForegroundBrush");
+        if (filled)
+            icon.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "ControlForegroundBrush");
+        return icon;
+    }
+
+    // True when the takeoff folder subtree contains at least one takeoff item
+    // (a folder with measurements.json). Empty nested folders do not count.
+    private static bool TakeoffFolderHasContent(string folderPath)
+    {
+        try
         {
-            Width = 6,
-            Height = 4,
-            Background = new SolidColorBrush(Color.FromRgb(244, 196, 91)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(149, 100, 30)),
-            BorderThickness = new Thickness(1, 1, 1, 0),
-            CornerRadius = new CornerRadius(1, 1, 0, 0),
-        };
-        Canvas.SetLeft(tab, 1);
-        Canvas.SetTop(tab, 1);
-        var body = new Border
+            return !string.IsNullOrEmpty(folderPath)
+                && Directory.Exists(folderPath)
+                && Directory.EnumerateFiles(folderPath, "measurements.json", SearchOption.AllDirectories).Any();
+        }
+        catch
         {
-            Width = 13,
-            Height = 8,
-            Background = new SolidColorBrush(Color.FromRgb(232, 171, 62)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(149, 100, 30)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(1.5),
-        };
-        Canvas.SetLeft(body, 1);
-        Canvas.SetTop(body, 3);
-        canvas.Children.Add(tab);
-        canvas.Children.Add(body);
-        return canvas;
+            return false;
+        }
     }
 
     private void SetFolderTreeItemHeader(TreeViewItem tvi, TakeoffFolderNode folder)
     {
         TakeoffFolderProperties properties = TakeoffFolderPropertiesStore.Load(folder.FolderPath);
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        panel.Children.Add(CreateFolderTreeIcon());
+        panel.Children.Add(CreateFolderTreeIcon(TakeoffFolderHasContent(folder.FolderPath)));
         panel.Children.Add(new TextBlock
         {
             Text = folder.Name,

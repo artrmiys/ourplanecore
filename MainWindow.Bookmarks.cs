@@ -193,25 +193,12 @@ public partial class MainWindow
         }
     }
 
-    private static Style BuildBookmarkListItemStyle()
-    {
-        var style = new Style(typeof(ListViewItem));
-        style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
-        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(2, 1, 2, 1)));
-        style.Setters.Add(new Setter(Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
-        style.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("ControlForegroundBrush")));
-
-        var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-        hover.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("ControlHoverBackgroundBrush")));
-        style.Triggers.Add(hover);
-
-        var selected = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
-        selected.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("ControlActiveBackgroundBrush")));
-        selected.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("ControlActiveForegroundBrush")));
-        style.Triggers.Add(selected);
-
-        return style;
-    }
+    // Bookmarks select exactly like the AI Inbox / trees: the shared
+    // TreeRowListItem template paints a solid RowSelectionBrush fill that does
+    // not wash out (the default ListView selection renders a near-white band in
+    // the dark theme).
+    private static Style BuildBookmarkListItemStyle() =>
+        (Style)Application.Current.FindResource("TreeRowListItem");
 
     private static Style BuildHiddenBookmarkColumnHeaderStyle()
     {

@@ -25,19 +25,20 @@ public partial class MainWindow
         BtnSelect.Content = "Select";
         BtnScale.Content = "Scale";
         BtnRuler.Content = "Ruler";
-        BtnHighlight.Content = "Highlight";
-        BtnDrawLine.Content = "Draw";
-        BtnDrawArrow.Content = "Arrow";
-        BtnDrawRect.Content = "Box";
-        BtnDrawCloud.Content = "Cloud";
-        BtnDrawAreaAnnot.Content = "Area";
-        BtnNote.Content = "Note";
+        BtnHighlight.Content = CreateStrokeIconLabel("IconHighlight", "Highlight", glyphBrush);
+        BtnDrawLine.Content = CreateStrokeIconLabel("IconDrawLine", "Draw", glyphBrush);
+        BtnDrawArrow.Content = CreateStrokeIconLabel("IconArrow", "Arrow", glyphBrush);
+        BtnDrawRect.Content = CreateStrokeIconLabel("IconBox", "Box", glyphBrush);
+        BtnDrawCloud.Content = CreateStrokeIconLabel("IconCloud", "Cloud", glyphBrush);
+        BtnDrawAreaAnnot.Content = CreateStrokeIconLabel("IconAreaFill", "Area", glyphBrush);
+        BtnNote.Content = CreateStrokeIconLabel("IconNote", "Note", glyphBrush);
         BtnPoint.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Count", glyphBrush);
         BtnLine.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Line, "Line", glyphBrush);
         BtnArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Area, "Area", glyphBrush);
         BtnJoistArea.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Joist, "J Area", glyphBrush);
         BtnBeam.Content = CreateToolGlyphLabel(MeasurementGlyphKind.Count, "Beam", glyphBrush);
         BtnOpenings.Content = CreateToolGlyphLabel(MeasurementGlyphKind.CountSquare, "Openings", glyphBrush);
+        BuildAnnotationStyleControls();
     }
 
     private static FrameworkElement CreateToolGlyphLabel(
@@ -55,6 +56,44 @@ public partial class MainWindow
             glyphBrush,
             14,
             new Thickness(0, 0, 4, 0)));
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return row;
+    }
+
+    // Icon + label for the Annotation markup tools, using a single-stroke folder
+    // /tool geometry from MainWindowResources.xaml (matches the ribbon icon set).
+    private FrameworkElement CreateStrokeIconLabel(string geometryKey, string label, Brush glyphBrush)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        // Geometries live in MainWindowResources.xaml (merged into the Window,
+        // not the Application), so look them up via the Window's resource chain.
+        if (TryFindResource(geometryKey) is Geometry geometry)
+        {
+            row.Children.Add(new System.Windows.Shapes.Path
+            {
+                Data = geometry,
+                Width = 14,
+                Height = 14,
+                Stretch = Stretch.Uniform,
+                Stroke = glyphBrush,
+                StrokeThickness = 1.35,
+                StrokeLineJoin = PenLineJoin.Round,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                Fill = Brushes.Transparent,
+                SnapsToDevicePixels = true,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 5, 0),
+            });
+        }
         row.Children.Add(new TextBlock
         {
             Text = label,

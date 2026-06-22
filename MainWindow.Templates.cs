@@ -102,10 +102,11 @@ public partial class MainWindow
     private FrameworkElement BuildTakeoffTemplateToolbar(TreeView tree, bool settingsMode)
     {
         var toolbar = new StackPanel { Margin = new Thickness(0, 0, 0, 3) };
-        var presetRow = TemplateToolbarRow();
-        var createRow = TemplateToolbarRow();
-        var editRow = TemplateToolbarRow();
 
+        // Always-visible row: pick a template + Create. Everything else lives in
+        // a collapsed "Edit" expander, the same way the 3D panel tucks its
+        // secondary controls under a "Details" expander.
+        var presetRow = TemplateToolbarRow();
         presetRow.Children.Add(new TextBlock
         {
             Text = "Template:",
@@ -127,29 +128,35 @@ public partial class MainWindow
         else
             _templatePresetCombo = presetCombo;
         presetRow.Children.Add(presetCombo);
+        if (!settingsMode)
+            presetRow.Children.Add(TemplateButton("Create", (_, _) => CreateTakeoffFromTemplateSelection(tree), "Create a new takeoff item from the selected template item", primary: true, minWidth: 48));
+        toolbar.Children.Add(presetRow);
+
+        // Collapsed editing controls.
+        var editStack = new StackPanel();
 
         if (settingsMode)
         {
-            presetRow.Children.Add(TemplateButton("New", (_, _) => AddTakeoffTemplatePreset(), "Copy the current template into a new named template", minWidth: 38));
-            presetRow.Children.Add(TemplateButton("Rename", (_, _) => RenameTakeoffTemplatePreset(), "Rename the selected template", minWidth: 50));
-            presetRow.Children.Add(TemplateButton("Delete", (_, _) => DeleteTakeoffTemplatePreset(), "Delete the selected non-default template", minWidth: 48));
+            var presetManageRow = TemplateToolbarRow();
+            presetManageRow.Children.Add(TemplateButton("New", (_, _) => AddTakeoffTemplatePreset(), "Copy the current template into a new named template", minWidth: 38));
+            presetManageRow.Children.Add(TemplateButton("Rename", (_, _) => RenameTakeoffTemplatePreset(), "Rename the selected template", minWidth: 50));
+            presetManageRow.Children.Add(TemplateButton("Delete", (_, _) => DeleteTakeoffTemplatePreset(), "Delete the selected non-default template", minWidth: 48));
+            editStack.Children.Add(presetManageRow);
         }
 
-        if (!settingsMode)
-            createRow.Children.Add(TemplateButton("Create", (_, _) => CreateTakeoffFromTemplateSelection(tree), "Create a new takeoff item from the selected template item", primary: true, minWidth: 48));
+        var createRow = TemplateToolbarRow();
         createRow.Children.Add(TemplateButton("Folder", (_, _) => AddTemplateFolder(tree), "Add a folder to the template tree"));
         createRow.Children.Add(TemplateButton("Line", (_, _) => AddTemplateItem(tree, "line"), "Add a Line preset"));
         createRow.Children.Add(TemplateButton("Area", (_, _) => AddTemplateItem(tree, "area"), "Add an Area preset"));
         createRow.Children.Add(TemplateButton("Count", (_, _) => AddTemplateItem(tree, "point"), "Add a Count preset"));
+        editStack.Children.Add(createRow);
 
+        var editRow = TemplateToolbarRow();
         editRow.Children.Add(TemplateButton("Edit", (_, _) => EditTemplateNode(tree), "Edit the selected template node"));
         editRow.Children.Add(TemplateButton("Dup", (_, _) => DuplicateTemplateNode(tree), "Duplicate the selected template node"));
         editRow.Children.Add(TemplateButton("Del", (_, _) => DeleteTemplateNode(tree), "Delete the selected template node"));
         editRow.Children.Add(TemplateButton("Reset", (_, _) => ResetTakeoffTemplateToDefault(), "Reset this template tree to the built-in presets"));
-
-        toolbar.Children.Add(presetRow);
-        toolbar.Children.Add(createRow);
-        toolbar.Children.Add(editRow);
+        editStack.Children.Add(editRow);
 
         if (settingsMode)
         {
@@ -157,8 +164,18 @@ public partial class MainWindow
             saveRow.Children.Add(TemplateButton("Global", (_, _) => SaveTakeoffTemplateGlobal(), "Save this template tree as the global default", primary: true, minWidth: 48));
             saveRow.Children.Add(TemplateButton("Job", (_, _) => SaveTakeoffTemplateJob(), "Save this template tree as a per-job override"));
             saveRow.Children.Add(TemplateButton("Clear", (_, _) => ClearTakeoffTemplateJobOverride(), "Return this job to the global/default template tree"));
-            toolbar.Children.Add(saveRow);
+            editStack.Children.Add(saveRow);
         }
+
+        var editExpander = new Expander
+        {
+            Header = "Edit",
+            IsExpanded = false,
+            Margin = new Thickness(0, 2, 0, 0),
+            Content = editStack,
+        };
+        editExpander.SetResourceReference(Control.ForegroundProperty, "ControlForegroundBrush");
+        toolbar.Children.Add(editExpander);
 
         return toolbar;
     }

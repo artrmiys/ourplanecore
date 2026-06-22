@@ -136,9 +136,11 @@ public partial class MainWindow
         Color tree     = dark ? Color.FromRgb(38, 38, 38)    : Colors.White;                 // elevated (row)
         Color splitter = dark ? Color.FromRgb(56, 56, 56)    : Color.FromRgb(200, 204, 210); // border
         Brush foreground = new SolidColorBrush(dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40)); // txt
-        Color rowSelection = MuteRowHighlight(
-            dark ? Color.FromRgb(36, 67, 100) : Color.FromRgb(220, 233, 245),  // info-soft (blue = selected)
-            tree);
+        // Selected row = the same solid tint the Pages/Takeoffs trees use. Active
+        // and inactive are identical so list selection never fades when the list
+        // loses focus (matches the always-solid tree highlight the user wants).
+        Color rowSelection = dark ? Color.FromRgb(62, 78, 102) : Color.FromRgb(191, 212, 236);
+        Color rowSelectionInactive = rowSelection;
         UpdateAppBrush("WindowBackgroundBrush", window);
         UpdateAppBrush("PanelBackgroundBrush", panel);
         UpdateAppBrush("SurfaceBackgroundBrush", tree);
@@ -156,9 +158,7 @@ public partial class MainWindow
         UpdateAppBrush("RowSelectionBrush", rowSelection);
         UpdateAppBrush(SystemColors.HighlightBrushKey, rowSelection);
         UpdateAppBrush(SystemColors.HighlightTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
-        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, MuteRowHighlight(
-            dark ? Color.FromRgb(36, 67, 100) : Color.FromRgb(220, 233, 245),
-            tree));
+        UpdateAppBrush(SystemColors.InactiveSelectionHighlightBrushKey, rowSelectionInactive);
         UpdateAppBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));
         UpdateAppBrush(SystemColors.MenuBrushKey, dark ? tree : Colors.White);
         UpdateAppBrush(SystemColors.MenuTextBrushKey, dark ? Color.FromRgb(228, 228, 228) : Color.FromRgb(31, 35, 40));

@@ -153,7 +153,7 @@ public partial class MainWindow
             Orientation = Orientation.Horizontal,
             Background = Brushes.Transparent,
         };
-        panel.Children.Add(CreateFolderTreeIcon());
+        panel.Children.Add(CreateFolderTreeIcon(pageCount > 0));
         panel.Children.Add(new TextBlock
         {
             Text = folder.Name,

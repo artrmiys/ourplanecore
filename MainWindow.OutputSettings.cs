@@ -53,7 +53,7 @@ public partial class MainWindow
 
         scroll.Content = panel;
         tab.Content = scroll;
-        TopMainTabs.Items.Insert(Math.Min(TopMainTabs.Items.Count, 2), tab);
+        TopMainTabs.Items.Insert(Math.Min(TopMainTabs.Items.Count, 3), tab);
         SyncOutputSettingsControls();
         _outputUiReady = true;
     }

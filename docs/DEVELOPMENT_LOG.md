@@ -1,5 +1,34 @@
 ﻿# Development Log
 
+## 2026-06-22 UI overhaul: trees, annotation ribbon, list selection
+
+Visual/UX pass on the live app (deployed to the desktop shortcut).
+
+- **Tree folder icons** — replaced the filled manila-yellow folder with a single-stroke
+  outline folder in the theme text colour (`CreateFolderTreeIcon`, per the Bluebeam design
+  system §7). Half the previous size. The icon is **filled** when the folder holds real
+  content (a page / takeoff item anywhere in its subtree) and a **hollow outline** when it is
+  empty or only contains other empty folders (`TakeoffFolderHasContent` scans for
+  `measurements.json`; Pages use the recursive `pageCount`).
+- **Bookmarks + AI Inbox row selection** — the default WPF list selection renders a washed-out
+  near-white band in the dark theme. Added a shared `TreeRowListItem` ItemContainer template
+  (solid `RowSelectionBrush` fill, focus-independent) applied only to those two lists so they
+  select like the Pages/Takeoffs trees. AI Inbox column headers (`GridViewColumnHeader`) got a
+  clean themed hover/press template.
+- **Annotation ribbon tab** — tool buttons are now borderless icon+label (new `ToolRadioFlat`
+  style; bottom-bar `ToolRadio` kept its borders), single-stroke icons built in
+  `SetupToolButtonContent`/`CreateStrokeIconLabel`, laid out in two rows. New inline **STYLE**
+  group: a themed `Slider` (global slider style: thin track, accent fill, round thumb) for line
+  width + a colour-swatch palette. The old "Style" popup button is hidden (`Collapsed`, kept in
+  XAML for the future). **Ruler** moved back to the bottom tool strip as a plain text button.
+- **Tab order** — `Annotation` moved to right after `Page` (Main · Page · Annotation · PDF
+  Output · Viewport · Display); the code-inserted PDF Output tab now lands at index 3.
+- **Templates panel (right)** — the many editing buttons (New/Rename/Delete, Folder/Line/Area/
+  Count, Edit/Dup/Del/Reset, Global/Job/Clear) moved into a collapsed "Edit" `Expander`, the
+  same pattern the 3D side panel uses for its "Details"; only the template picker + Create stay
+  visible.
+- Verified: build 0/0, tests 362/362, Debug + published-exe log validation clean, deployed.
+
 ## 2026-06-14 Perf: machine-adaptive page prefetch (kill the page-switch tail)
 
 - Profiled real page switching with the viewport page-stress smoke against the live 389-page
