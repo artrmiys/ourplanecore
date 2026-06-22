@@ -1183,11 +1183,14 @@ internal static class TakeoffsTreeRegressionTests
         string toolControls = ReadRepoFile("MainWindow.ToolControls.cs");
 
         AssertTrue(
-            xaml.Contains("x:Name=\"BtnResetScaleSelection\" Content=\"1x\"", StringComparison.Ordinal) &&
-            toolControls.Contains("BtnResetScaleSelection.Content = FormatTransformScaleLabel(e.NewValue);", StringComparison.Ordinal) &&
-            toolControls.Contains("BtnResetScaleSelection.Content = FormatTransformScaleLabel(value);", StringComparison.Ordinal) &&
-            toolControls.Contains("private static string FormatTransformScaleLabel(double value)", StringComparison.Ordinal),
-            "Transform scale reset button should display the current relative scale factor as the slider moves");
+            xaml.Contains("x:Name=\"TxtScaleSelectionFactor\"", StringComparison.Ordinal) &&
+            xaml.Contains("KeyDown=\"TxtScaleSelectionFactor_KeyDown\"", StringComparison.Ordinal) &&
+            xaml.Contains("LostFocus=\"TxtScaleSelectionFactor_LostFocus\"", StringComparison.Ordinal) &&
+            toolControls.Contains("TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(value);", StringComparison.Ordinal) &&
+            toolControls.Contains("ApplyTransformScaleTextEntry", StringComparison.Ordinal) &&
+            toolControls.Contains("TryParseTransformScaleFactor", StringComparison.Ordinal) &&
+            toolControls.Contains("value /= 100.0;", StringComparison.Ordinal),
+            "Transform scale field should display slider value and accept typed scale factors like 1.25x or 125%");
     }
 
     public static void TakeoffFolderRandomColorsAreWired()

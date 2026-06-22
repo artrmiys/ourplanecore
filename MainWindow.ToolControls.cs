@@ -692,22 +692,45 @@ public partial class MainWindow
         if (_updatingTransformSliders || _viewport == null)
             return;
 
+        ApplyTransformScaleValue(e.NewValue, syncSlider: false);
+    }
+
+    private bool ApplyTransformScaleValue(double newValue, bool syncSlider)
+    {
         double previous = Math.Max(0.05, _lastTransformScaleSliderValue);
-        double factor = e.NewValue / previous;
+        double factor = newValue / previous;
         if (Math.Abs(factor - 1.0) < 0.0001)
-            return;
+        {
+            SyncTransformScaleValueDisplay(newValue, syncSlider);
+            return true;
+        }
 
         if (_viewport.ScaleSelectedBy(factor))
         {
-            _lastTransformScaleSliderValue = e.NewValue;
-            BtnResetScaleSelection.Content = FormatTransformScaleLabel(e.NewValue);
-        }
-        else
-        {
-            ResetTransformEditSliders();
+            SyncTransformScaleValueDisplay(newValue, syncSlider);
+            UpdateTransformEditControls();
+            return true;
         }
 
+        ResetTransformEditSliders();
         UpdateTransformEditControls();
+        return false;
+    }
+
+    private void SyncTransformScaleValueDisplay(double value, bool syncSlider)
+    {
+        _updatingTransformSliders = true;
+        try
+        {
+            if (syncSlider)
+                SliderScaleSelection.Value = value;
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(value);
+            _lastTransformScaleSliderValue = value;
+        }
+        finally
+        {
+            _updatingTransformSliders = false;
+        }
     }
 
     private void BtnResetRotateSelection_Click(object sender, RoutedEventArgs e)
@@ -716,10 +739,49 @@ public partial class MainWindow
         UpdateTransformEditControls();
     }
 
-    private void BtnResetScaleSelection_Click(object sender, RoutedEventArgs e)
+    private void TxtScaleSelectionFactor_KeyDown(object sender, KeyEventArgs e)
     {
-        SetTransformScaleSlider(1);
-        UpdateTransformEditControls();
+        if (e.Key == Key.Return || e.Key == Key.Enter)
+        {
+            ApplyTransformScaleTextEntry();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(_lastTransformScaleSliderValue);
+            e.Handled = true;
+        }
+    }
+
+    private void TxtScaleSelectionFactor_LostFocus(object sender, RoutedEventArgs e) =>
+        ApplyTransformScaleTextEntry();
+
+    private void ApplyTransformScaleTextEntry()
+    {
+        if (_updatingTransformSliders || _viewport == null)
+            return;
+
+        if (!_viewport.HasTransformSelection)
+        {
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(_lastTransformScaleSliderValue);
+            TxtStatus.Text = "Select measurements or markups before typing a transform scale.";
+            return;
+        }
+
+        if (!TryParseTransformScaleFactor(TxtScaleSelectionFactor.Text, out double value))
+        {
+            TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(_lastTransformScaleSliderValue);
+            TxtStatus.Text = "Enter a scale factor like 1.25x or 125%.";
+            return;
+        }
+
+        double normalized = Math.Clamp(value, SliderScaleSelection.Minimum, SliderScaleSelection.Maximum);
+        if (Math.Abs(normalized - value) > 0.0001)
+            TxtStatus.Text = $"Scale factor limited to {FormatTransformScaleLabel(SliderScaleSelection.Minimum)} - {FormatTransformScaleLabel(SliderScaleSelection.Maximum)}.";
+
+        ApplyTransformScaleValue(normalized, syncSlider: true);
     }
 
     private void OnViewportTransformSelectionChanged(bool hasSelection) =>
@@ -736,7 +798,7 @@ public partial class MainWindow
         SliderRotateSelection.IsEnabled = enabled;
         SliderScaleSelection.IsEnabled = enabled;
         BtnResetRotateSelection.IsEnabled = enabled;
-        BtnResetScaleSelection.IsEnabled = enabled;
+        TxtScaleSelectionFactor.IsEnabled = enabled;
 
         if (!enabled)
             ResetTransformEditSliders();
@@ -791,12 +853,40 @@ public partial class MainWindow
     private void SetTransformScaleSliderCore(double value)
     {
         SliderScaleSelection.Value = value;
-        BtnResetScaleSelection.Content = FormatTransformScaleLabel(value);
+        TxtScaleSelectionFactor.Text = FormatTransformScaleLabel(value);
         _lastTransformScaleSliderValue = value;
     }
 
     private static string FormatTransformScaleLabel(double value) =>
         $"{Math.Clamp(value, 0.01, 99.0).ToString("0.##", CultureInfo.InvariantCulture)}x";
+
+    private static bool TryParseTransformScaleFactor(string text, out double value)
+    {
+        string clean = (text ?? "")
+            .Trim()
+            .ToLowerInvariant()
+            .Replace('×', 'x');
+
+        bool percent = clean.EndsWith("%", StringComparison.Ordinal);
+        if (percent)
+            clean = clean[..^1].Trim();
+        if (clean.EndsWith("x", StringComparison.Ordinal))
+            clean = clean[..^1].Trim();
+
+        clean = clean.Replace(',', '.');
+        if (!double.TryParse(clean, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ||
+            double.IsNaN(value) ||
+            double.IsInfinity(value) ||
+            value <= 0)
+        {
+            value = 0;
+            return false;
+        }
+
+        if (percent)
+            value /= 100.0;
+        return true;
+    }
 
     private void BtnFit_Click(object sender, RoutedEventArgs e)    => _viewport.ZoomFit();
     private void BtnZoomIn_Click(object sender, RoutedEventArgs e)  => _viewport.ZoomIn();

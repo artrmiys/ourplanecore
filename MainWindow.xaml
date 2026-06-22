@@ -757,9 +757,14 @@
                     Style="{StaticResource RibbonSlider}"
                     ValueChanged="SliderScaleSelection_ValueChanged"
                     ToolTip="Scale selected geometry around its center"/>
-            <Button x:Name="BtnResetScaleSelection" Content="1x" Click="BtnResetScaleSelection_Click"
-                    ToolTip="Scale selected geometry; click to reset the relative scale slider to 1x"
-                    Style="{StaticResource ToolBtn}" MinWidth="30"/>
+            <TextBox x:Name="TxtScaleSelectionFactor"
+                     Width="44"
+                     VerticalAlignment="Center"
+                     Text="1x"
+                     Style="{StaticResource RibbonValue}"
+                     KeyDown="TxtScaleSelectionFactor_KeyDown"
+                     LostFocus="TxtScaleSelectionFactor_LostFocus"
+                     ToolTip="Type selected-geometry scale, e.g. 1.25x or 125%, and press Enter"/>
 
             <Border Style="{StaticResource ToolDiv}"/>
 
