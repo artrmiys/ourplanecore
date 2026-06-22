@@ -109,6 +109,7 @@ public partial class MainWindow
             Placement = PlacementMode.Bottom,
         };
 
+        AddAnnotationToolItem(menu, "Highlighter", "drawhighlight");
         AddAnnotationToolItem(menu, "Draw line", "drawline");
         AddAnnotationToolItem(menu, "Arrow", "drawarrow");
         AddAnnotationToolItem(menu, "Box", "drawrect");
@@ -192,6 +193,7 @@ public partial class MainWindow
     {
         string tool = _activeTool switch
         {
+            "drawhighlight" => "Highlight",
             "drawline" => "Draw",
             "drawarrow" => "Arrow",
             "drawrect" => "Box",
@@ -698,6 +700,7 @@ public partial class MainWindow
         if (_viewport.ScaleSelectedBy(factor))
         {
             _lastTransformScaleSliderValue = e.NewValue;
+            BtnResetScaleSelection.Content = FormatTransformScaleLabel(e.NewValue);
         }
         else
         {
@@ -788,8 +791,12 @@ public partial class MainWindow
     private void SetTransformScaleSliderCore(double value)
     {
         SliderScaleSelection.Value = value;
+        BtnResetScaleSelection.Content = FormatTransformScaleLabel(value);
         _lastTransformScaleSliderValue = value;
     }
+
+    private static string FormatTransformScaleLabel(double value) =>
+        $"{Math.Clamp(value, 0.01, 99.0).ToString("0.##", CultureInfo.InvariantCulture)}x";
 
     private void BtnFit_Click(object sender, RoutedEventArgs e)    => _viewport.ZoomFit();
     private void BtnZoomIn_Click(object sender, RoutedEventArgs e)  => _viewport.ZoomIn();

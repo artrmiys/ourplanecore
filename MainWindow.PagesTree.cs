@@ -153,9 +153,10 @@ public partial class MainWindow
             Orientation = Orientation.Horizontal,
             Background = Brushes.Transparent,
         };
+        panel.Children.Add(CreateFolderTreeIcon());
         panel.Children.Add(new TextBlock
         {
-            Text = $"  {folder.Name}",
+            Text = folder.Name,
             FontWeight = FontWeights.Normal,
             VerticalAlignment = VerticalAlignment.Center,
         });

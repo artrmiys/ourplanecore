@@ -502,6 +502,95 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+            <TabItem Header="Annotation">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6,1">
+
+                        <!-- GROUP: MARKUP TOOLS -->
+                        <StackPanel Style="{StaticResource RibbonGroup}">
+                            <StackPanel Style="{StaticResource RibbonGroupBody}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Grid Margin="1,0">
+                                        <RadioButton x:Name="BtnRuler" Content="Ruler" Click="BtnTool_Click" Tag="ruler"
+                                                     GroupName="DrawingTool" ToolTip="Place a dimension/ruler markup on the PDF (R)"
+                                                     Style="{StaticResource ToolRadio}"
+                                                     Margin="0"
+                                                     MinWidth="58"
+                                                     Padding="6,3,21,3"/>
+                                        <ToggleButton x:Name="BtnRulerSheetVisibility"
+                                                      Width="14"
+                                                      Height="14"
+                                                      Padding="0"
+                                                      Margin="0,0,4,0"
+                                                      HorizontalAlignment="Right"
+                                                      VerticalAlignment="Center"
+                                                      Focusable="False"
+                                                      Checked="BtnRulerSheetVisibility_Changed"
+                                                      Unchecked="BtnRulerSheetVisibility_Changed"
+                                                      ToolTip="Hide all ruler markups on this sheet">
+                                            <ToggleButton.Template>
+                                                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                                    <Grid>
+                                                        <Ellipse Stroke="{DynamicResource ControlBorderBrush}"
+                                                                 StrokeThickness="1"
+                                                                 Fill="{DynamicResource ControlBackgroundBrush}"/>
+                                                        <Ellipse x:Name="RulerSheetVisibilityDot"
+                                                                 Width="7"
+                                                                 Height="7"
+                                                                 Fill="{DynamicResource AccentBrush}"
+                                                                 Visibility="Collapsed"/>
+                                                    </Grid>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Stroke" TargetName="RulerSheetVisibilityDot" Value="{DynamicResource AccentHoverBrush}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter Property="Visibility" TargetName="RulerSheetVisibilityDot" Value="Visible"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </ToggleButton.Template>
+                                        </ToggleButton>
+                                    </Grid>
+                                    <RadioButton x:Name="BtnHighlight" Content="Highlight" Click="BtnTool_Click" Tag="drawhighlight"
+                                                 GroupName="DrawingTool" ToolTip="Draw a transparent highlighter box (H)"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                    <RadioButton x:Name="BtnDrawLine"  Content="Draw"  Click="BtnTool_Click" Tag="drawline"
+                                                 GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff line markup (D)"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                    <RadioButton x:Name="BtnDrawArrow"  Content="Arrow"  Click="BtnTool_Click" Tag="drawarrow"
+                                                 GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff arrow markup"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                    <RadioButton x:Name="BtnDrawRect"  Content="Box"  Click="BtnTool_Click" Tag="drawrect"
+                                                 GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff box markup"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                    <RadioButton x:Name="BtnDrawCloud"  Content="Cloud"  Click="BtnTool_Click" Tag="drawcloud"
+                                                 GroupName="DrawingTool" ToolTip="Draw a cloud annotation"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                    <RadioButton x:Name="BtnDrawAreaAnnot"  Content="Area"  Click="BtnTool_Click" Tag="drawarea"
+                                                 GroupName="DrawingTool" ToolTip="Draw a filled color area annotation"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                    <RadioButton x:Name="BtnNote"  Content="Note"  Click="BtnTool_Click" Tag="note"
+                                                 GroupName="DrawingTool" ToolTip="Write a text note on the sheet (N)"
+                                                 Style="{StaticResource ToolRadio}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <Button x:Name="BtnAnnotationMenu"
+                                            Content="Style"
+                                            Click="BtnAnnotationMenu_Click"
+                                            ToolTip="Annotation tools, color, and thickness"
+                                            Style="{StaticResource TopCommandButton}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource RibbonGroupCap}">
+                                <TextBlock Text="MARKUP TOOLS" Style="{StaticResource RibbonGroupLabel}"/>
+                            </Border>
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
 
         <StatusBar x:Name="MainStatusBar" DockPanel.Dock="Bottom" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1">
@@ -557,74 +646,7 @@
             <RadioButton x:Name="BtnScale"  Content="Scale"  Click="BtnTool_Click" Tag="scale"
                          GroupName="DrawingTool" ToolTip="Set scale (S)"
                          Style="{StaticResource ToolRadio}"/>
-            <Grid Margin="1,0">
-                <RadioButton x:Name="BtnRuler" Content="Ruler" Click="BtnTool_Click" Tag="ruler"
-                             GroupName="DrawingTool" ToolTip="Place a dimension/ruler markup on the PDF (R)"
-                             Style="{StaticResource ToolRadio}"
-                             Margin="0"
-                             MinWidth="58"
-                             Padding="6,3,21,3"/>
-                <ToggleButton x:Name="BtnRulerSheetVisibility"
-                              Width="14"
-                              Height="14"
-                              Padding="0"
-                              Margin="0,0,4,0"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Center"
-                              Focusable="False"
-                              Checked="BtnRulerSheetVisibility_Changed"
-                              Unchecked="BtnRulerSheetVisibility_Changed"
-                              ToolTip="Hide all ruler markups on this sheet">
-                    <ToggleButton.Template>
-                        <ControlTemplate TargetType="{x:Type ToggleButton}">
-                            <Grid>
-                                <Ellipse Stroke="{DynamicResource ControlBorderBrush}"
-                                         StrokeThickness="1"
-                                         Fill="{DynamicResource ControlBackgroundBrush}"/>
-                                <Ellipse x:Name="RulerSheetVisibilityDot"
-                                         Width="7"
-                                         Height="7"
-                                         Fill="{DynamicResource AccentBrush}"
-                                         Visibility="Collapsed"/>
-                            </Grid>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Stroke" TargetName="RulerSheetVisibilityDot" Value="{DynamicResource AccentHoverBrush}"/>
-                                </Trigger>
-                                <Trigger Property="IsChecked" Value="True">
-                                    <Setter Property="Visibility" TargetName="RulerSheetVisibilityDot" Value="Visible"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </ToggleButton.Template>
-                </ToggleButton>
-            </Grid>
-            <Button x:Name="BtnAnnotationMenu"
-                    Content="Annot"
-                    Click="BtnAnnotationMenu_Click"
-                    ToolTip="Annotation tools, color, and thickness"
-                    Style="{StaticResource ToolBtn}"
-                    MinWidth="58"
-                    Padding="6,2"/>
             <Border Style="{StaticResource ToolDiv}"/>
-            <RadioButton x:Name="BtnDrawLine"  Content="Draw"  Click="BtnTool_Click" Tag="drawline"
-                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff line markup (D)"
-                         Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
-            <RadioButton x:Name="BtnDrawArrow"  Content="Arrow"  Click="BtnTool_Click" Tag="drawarrow"
-                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff arrow markup"
-                         Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
-            <RadioButton x:Name="BtnDrawRect"  Content="Box"  Click="BtnTool_Click" Tag="drawrect"
-                         GroupName="DrawingTool" ToolTip="Draw a simple non-takeoff box markup"
-                         Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
-            <RadioButton x:Name="BtnDrawCloud"  Content="Cloud"  Click="BtnTool_Click" Tag="drawcloud"
-                         GroupName="DrawingTool" ToolTip="Draw a cloud annotation"
-                         Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
-            <RadioButton x:Name="BtnDrawAreaAnnot"  Content="Area"  Click="BtnTool_Click" Tag="drawarea"
-                         GroupName="DrawingTool" ToolTip="Draw a filled color area annotation"
-                         Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
-            <RadioButton x:Name="BtnNote"  Content="Note"  Click="BtnTool_Click" Tag="note"
-                         GroupName="DrawingTool" ToolTip="Write a text note on the sheet (N)"
-                         Style="{StaticResource ToolRadio}" Visibility="Collapsed"/>
             <RadioButton x:Name="BtnPoint"  Content="Count"  Click="BtnTool_Click" Tag="point"
                          GroupName="DrawingTool" ToolTip="Create a new Count item and start recording (P). Use the active target Record button to continue an existing item"
                          Style="{StaticResource ToolRadio}"/>
@@ -736,7 +758,7 @@
                     ValueChanged="SliderScaleSelection_ValueChanged"
                     ToolTip="Scale selected geometry around its center"/>
             <Button x:Name="BtnResetScaleSelection" Content="1x" Click="BtnResetScaleSelection_Click"
-                    ToolTip="Center scale slider for another relative adjustment"
+                    ToolTip="Scale selected geometry; click to reset the relative scale slider to 1x"
                     Style="{StaticResource ToolBtn}" MinWidth="30"/>
 
             <Border Style="{StaticResource ToolDiv}"/>

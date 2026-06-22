@@ -92,7 +92,7 @@ public sealed partial class PdfViewport
             return;
         }
 
-        bool selectTouched = _boxSelectEndPdf.X >= _boxSelectStartPdf.X;
+        bool selectTouched = _boxSelectEndPdf.X < _boxSelectStartPdf.X;
         var hits = ActivePageMeasurementsNear(rect)
             .Where(m => selectTouched
                 ? MeasurementIntersectsRect(m, rect)
@@ -154,8 +154,8 @@ public sealed partial class PdfViewport
                 : $"Selected {annotationHits.Count} markups. Delete removes them."
             : hits.Count == 0
             ? selectTouched
-                ? "Select touched: no measurements touched by box."
-                : "Select inside: no measurements fully inside box."
+                ? "Crossing select: no measurements touched by box."
+                : "Window select: no measurements fully inside box."
             : selectTouched
                 ? $"Selected {GetSelectedMeasurements().Count} touched measurement(s). Ctrl+C copies, Ctrl+V pastes."
                 : $"Selected {GetSelectedMeasurements().Count} enclosed measurement(s). Ctrl+C copies, Ctrl+V pastes.");
@@ -384,8 +384,8 @@ public sealed partial class PdfViewport
 
         _lastPointerStatusAt = now;
         SKRect rect = NormalizeRect(_boxSelectStartPdf, _boxSelectEndPdf);
-        string mode = _boxSelectEndPdf.X >= _boxSelectStartPdf.X
-            ? "touched"
+        string mode = _boxSelectEndPdf.X < _boxSelectStartPdf.X
+            ? "crossing"
             : "inside only";
         PostStatus($"Select box ({mode}): {PdfToScreenDistance(rect.Width):F0}px x {PdfToScreenDistance(rect.Height):F0}px.");
     }

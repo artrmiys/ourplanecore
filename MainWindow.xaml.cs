@@ -308,6 +308,7 @@ public partial class MainWindow : Window
         _viewport.MeasurementsChanged += OnMeasurementsChanged;
         _viewport.MeasurementSelectionChanged += OnViewportMeasurementSelectionChanged;
         _viewport.MeasurementsSelectionChanged += OnViewportMeasurementsSelectionChanged;
+        _viewport.TakeoffRenameRequested += OnViewportTakeoffRenameRequested;
         _viewport.PageAnnotationAdded += OnPageAnnotationChanged;
         _viewport.PageAnnotationRemoved += OnPageAnnotationChanged;
         _viewport.PageAnnotationChanged += OnPageAnnotationChanged;
@@ -333,6 +334,7 @@ public partial class MainWindow : Window
             ["select"] = BtnSelect,
             ["scale"] = BtnScale,
             ["ruler"] = BtnRuler,
+            ["drawhighlight"] = BtnHighlight,
             ["drawline"] = BtnDrawLine,
             ["drawarrow"] = BtnDrawArrow,
             ["drawrect"] = BtnDrawRect,
@@ -352,6 +354,7 @@ public partial class MainWindow : Window
         BtnSelect.ToolTip = $"Select ({KeyboardShortcutKeys.EnglishLayoutDisplay("e")})";
         BtnScale.ToolTip = $"Scale ({KeyboardShortcutKeys.EnglishLayoutDisplay("s")})";
         BtnRuler.ToolTip = $"Ruler ({KeyboardShortcutKeys.EnglishLayoutDisplay("r")})";
+        BtnHighlight.ToolTip = $"Highlighter ({KeyboardShortcutKeys.EnglishLayoutDisplay("h")})";
         BtnDrawLine.ToolTip = $"Draw line ({KeyboardShortcutKeys.EnglishLayoutDisplay("d")})";
         BtnDrawRect.ToolTip = "Draw box";
         BtnDrawCloud.ToolTip = "Cloud annotation";

@@ -87,6 +87,12 @@ public sealed partial class PdfViewport
             return;
         }
 
+        if (kind == "highlight")
+        {
+            DrawHighlightAnnotation(canvas, annotation, color, stroke);
+            return;
+        }
+
         if (kind == "area")
         {
             DrawAreaAnnotation(canvas, annotation, color, stroke);
@@ -146,6 +152,33 @@ public sealed partial class PdfViewport
         using SKPath path = BuildClosedAnnotationPath(annotation.Points);
         canvas.DrawPath(path, fill);
         canvas.DrawPath(path, stroke);
+    }
+
+    private void DrawHighlightAnnotation(SKCanvas canvas, PageAnnotation annotation, SKColor color, SKPaint stroke)
+    {
+        IReadOnlyList<SKPoint> corners = AnnotationRectangleCorners(annotation.Points);
+        if (corners.Count < 4)
+            return;
+
+        using var fill = new SKPaint
+        {
+            Color = color.WithAlpha(78),
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
+            BlendMode = SKBlendMode.Multiply,
+        };
+        using var edge = new SKPaint
+        {
+            Color = color.WithAlpha(115),
+            StrokeWidth = Math.Max(ScreenToPdfDistance(1.0f), stroke.StrokeWidth * 0.35f),
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        };
+        using SKPath path = BuildClosedAnnotationPath(corners);
+        canvas.DrawPath(path, fill);
+        canvas.DrawPath(path, edge);
     }
 
     private void DrawCloudAnnotation(SKCanvas canvas, PageAnnotation annotation, SKPaint stroke)

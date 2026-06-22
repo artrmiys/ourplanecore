@@ -395,10 +395,47 @@ public partial class MainWindow
             joist: item.IsJoistArea,
             countSymbol: item.CountSymbol);
 
+    private static FrameworkElement CreateFolderTreeIcon()
+    {
+        var canvas = new Canvas
+        {
+            Width = 15,
+            Height = 12,
+            Margin = new Thickness(0, 0, 5, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var tab = new Border
+        {
+            Width = 6,
+            Height = 4,
+            Background = new SolidColorBrush(Color.FromRgb(244, 196, 91)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(149, 100, 30)),
+            BorderThickness = new Thickness(1, 1, 1, 0),
+            CornerRadius = new CornerRadius(1, 1, 0, 0),
+        };
+        Canvas.SetLeft(tab, 1);
+        Canvas.SetTop(tab, 1);
+        var body = new Border
+        {
+            Width = 13,
+            Height = 8,
+            Background = new SolidColorBrush(Color.FromRgb(232, 171, 62)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(149, 100, 30)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(1.5),
+        };
+        Canvas.SetLeft(body, 1);
+        Canvas.SetTop(body, 3);
+        canvas.Children.Add(tab);
+        canvas.Children.Add(body);
+        return canvas;
+    }
+
     private void SetFolderTreeItemHeader(TreeViewItem tvi, TakeoffFolderNode folder)
     {
         TakeoffFolderProperties properties = TakeoffFolderPropertiesStore.Load(folder.FolderPath);
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(CreateFolderTreeIcon());
         panel.Children.Add(new TextBlock
         {
             Text = folder.Name,

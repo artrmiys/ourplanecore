@@ -72,6 +72,31 @@ public partial class MainWindow
 
     private void OnToolChanged(string tool) => SetTool(tool, forceNewTakeoff: IsRecordTool(tool));
 
+    private void OnViewportTakeoffRenameRequested(Measurement? measurement)
+    {
+        if (measurement == null)
+        {
+            TxtStatus.Text = "Select a measurement before pressing F2.";
+            return;
+        }
+
+        if (FindTakeoffItemForMeasurement(measurement) is not { } item)
+        {
+            TxtStatus.Text = "Selected measurement is not linked to a takeoff.";
+            return;
+        }
+
+        if (FindTakeoffTreeItem(item) is not { } tvi)
+        {
+            TxtStatus.Text = $"Takeoff is not visible in the tree: {item.Name}.";
+            return;
+        }
+
+        tvi.IsSelected = true;
+        tvi.BringIntoView();
+        RenameItem(tvi, item);
+    }
+
     private void OnViewportContextRequested(ViewportContextRequest request)
     {
         if (_currentJob == null || _currentPage == null)

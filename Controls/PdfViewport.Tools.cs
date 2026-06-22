@@ -41,6 +41,9 @@ public sealed partial class PdfViewport
             case ViewerTool.Openings:
                 AddOpeningMeasurementPoint(pdf);
                 break;
+            case ViewerTool.DrawHighlight:
+                AddTwoPointAnnotation(pdf, "highlight");
+                break;
             case ViewerTool.DrawLine:
                 AddTwoPointAnnotation(pdf, "line");
                 break;

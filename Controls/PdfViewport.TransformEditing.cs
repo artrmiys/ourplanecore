@@ -590,7 +590,7 @@ public sealed partial class PdfViewport
     }
 
     private static bool IsRectangularAnnotation(PageAnnotation annotation) =>
-        OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) is "rectangle" or "note" or "cloud";
+        OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) is "rectangle" or "note" or "cloud" or "highlight";
 
     private static IReadOnlyList<SKPoint> AnnotationRectangleCorners(IReadOnlyList<SKPoint> points)
     {

@@ -147,7 +147,11 @@ public sealed partial class PdfViewport
         {
             Kind = normalizedKind,
             Points = _drawPts.Take(2).ToList(),
-            Color = normalizedKind == "dimension" ? "#1565C0" : ActiveAnnotationColor,
+            Color = normalizedKind == "dimension"
+                ? "#1565C0"
+                : normalizedKind == "highlight"
+                    ? "#FFC107"
+                    : ActiveAnnotationColor,
             StrokeWidth = normalizedKind == "dimension" ? RulerStrokeWidthPx() : ActiveAnnotationStrokeWidth,
             PageFolder = _pageFolder,
             ScaleMetersPerPt = ScaleMetersPerPt,

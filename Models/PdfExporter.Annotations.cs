@@ -56,6 +56,30 @@ public static partial class PdfExporter
                 continue;
             }
 
+            if (kind == "highlight")
+            {
+                using var fill = new SKPaint
+                {
+                    IsAntialias = true,
+                    Color = color.WithAlpha(78),
+                    Style = SKPaintStyle.Fill,
+                    BlendMode = SKBlendMode.Multiply,
+                };
+                using var edge = new SKPaint
+                {
+                    IsAntialias = true,
+                    Color = color.WithAlpha(115),
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = Math.Max(0.75f, stroke.StrokeWidth * 0.35f),
+                    StrokeCap = SKStrokeCap.Round,
+                    StrokeJoin = SKStrokeJoin.Round,
+                };
+                using SKPath path = BuildClosedAnnotationPath(AnnotationRectangleCorners(annotation.Points));
+                canvas.DrawPath(path, fill);
+                canvas.DrawPath(path, edge);
+                continue;
+            }
+
             if (kind == "area")
             {
                 if (annotation.Points.Count < 3)

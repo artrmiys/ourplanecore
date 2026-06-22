@@ -17,17 +17,21 @@ internal static class PageAnnotationStore
         try
         {
             var dtos = JsonSerializer.Deserialize<List<PageAnnotationDto>>(File.ReadAllText(path)) ?? [];
-            return dtos.Select(dto => new PageAnnotation
+            return dtos.Select(dto =>
             {
-                Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
-                Kind = NormalizePageAnnotationKind(dto.Kind),
-                Text = dto.Text ?? "",
-                Color = string.IsNullOrWhiteSpace(dto.Color) ? "#1565C0" : dto.Color,
-                StrokeWidth = NormalizeStrokeWidth(dto.StrokeWidth),
-                PageFolder = pageFolder,
-                ScaleMetersPerPt = dto.ScaleMetersPerPt,
-                Hidden = dto.Hidden,
-                Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
+                string kind = NormalizePageAnnotationKind(dto.Kind);
+                return new PageAnnotation
+                {
+                    Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
+                    Kind = kind,
+                    Text = dto.Text ?? "",
+                    Color = string.IsNullOrWhiteSpace(dto.Color) ? DefaultAnnotationColor(kind) : dto.Color,
+                    StrokeWidth = NormalizeStrokeWidth(dto.StrokeWidth),
+                    PageFolder = pageFolder,
+                    ScaleMetersPerPt = dto.ScaleMetersPerPt,
+                    Hidden = dto.Hidden,
+                    Points = dto.PointsPdf.Select(p => new SKPoint(p.X, p.Y)).ToList(),
+                };
             }).ToList();
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
@@ -45,17 +49,21 @@ internal static class PageAnnotationStore
     public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations)
     {
         Directory.CreateDirectory(pageFolder);
-        var dtos = annotations.Select(annotation => new PageAnnotationDto
+        var dtos = annotations.Select(annotation =>
         {
-            Id = annotation.Id,
-            Kind = NormalizePageAnnotationKind(annotation.Kind),
-            Text = annotation.Text ?? "",
-            Color = string.IsNullOrWhiteSpace(annotation.Color) ? "#1565C0" : annotation.Color,
-            StrokeWidth = NormalizeStrokeWidth(annotation.StrokeWidth),
-            PageFolder = pageFolder,
-            ScaleMetersPerPt = annotation.ScaleMetersPerPt,
-            Hidden = annotation.Hidden,
-            PointsPdf = annotation.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
+            string kind = NormalizePageAnnotationKind(annotation.Kind);
+            return new PageAnnotationDto
+            {
+                Id = annotation.Id,
+                Kind = kind,
+                Text = annotation.Text ?? "",
+                Color = string.IsNullOrWhiteSpace(annotation.Color) ? DefaultAnnotationColor(kind) : annotation.Color,
+                StrokeWidth = NormalizeStrokeWidth(annotation.StrokeWidth),
+                PageFolder = pageFolder,
+                ScaleMetersPerPt = annotation.ScaleMetersPerPt,
+                Hidden = annotation.Hidden,
+                PointsPdf = annotation.Points.Select(p => new PointDto(p.X, p.Y)).ToList(),
+            };
         }).ToList();
 
         try
@@ -82,7 +90,8 @@ internal static class PageAnnotationStore
             "arrow" => "arrow",
             "rectangle" or "rect" or "box" => "rectangle",
             "cloud" or "calloutcloud" or "callout_cloud" => "cloud",
-            "area" or "highlight" or "fill" => "area",
+            "highlight" or "highlighter" => "highlight",
+            "area" or "fill" => "area",
             "note" or "text" => "note",
             _ => "line",
         };
@@ -90,4 +99,7 @@ internal static class PageAnnotationStore
 
     private static double NormalizeStrokeWidth(double value) =>
         value is >= 0.75 and <= 12.0 ? value : 5.0;
+
+    private static string DefaultAnnotationColor(string kind) =>
+        kind == "highlight" ? "#FFC107" : "#1565C0";
 }

@@ -356,7 +356,7 @@ public sealed partial class PdfViewport
         SKPoint start = annotation.Points[0];
         SKPoint end = annotation.Points[1];
         string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
-        if (kind is "rectangle" or "note" or "cloud")
+        if (kind is "rectangle" or "note" or "cloud" or "highlight")
         {
             IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);
             if (points.Count < 2)

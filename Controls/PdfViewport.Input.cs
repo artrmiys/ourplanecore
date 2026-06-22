@@ -188,6 +188,12 @@ public sealed partial class PdfViewport
                     return;
                 }
 
+                if (e.ClickCount == 2 && TryRequestTakeoffRenameAt(pdf))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 if (TryBeginMeasurementEdit(pdf, pos, clearSelectionOnMiss: !hasInProgressInput && !preserveSelectionForAdd))
                 {
                     if (_draggingVertex || _draggingMeasurement)
@@ -485,7 +491,7 @@ public sealed partial class PdfViewport
 
         SKPoint rawPointerPdf = pointerPdf;
         if (_pageBitmap != null &&
-            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
+            _tool is ViewerTool.Scale or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.Point or ViewerTool.Line or ViewerTool.Area or ViewerTool.AreaCut &&
             !IsMissingScaleForLinearArea())
         {
             pointerPdf = ResolveDigitizerPoint(pointerPdf, updatePreview: true);
@@ -499,7 +505,7 @@ public sealed partial class PdfViewport
         }
 
         // Rubber-band
-        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.AreaCut)
+        if (_drawPts.Count > 0 && _tool is ViewerTool.Line or ViewerTool.Area or ViewerTool.Ruler or ViewerTool.Beam or ViewerTool.Openings or ViewerTool.DrawHighlight or ViewerTool.DrawLine or ViewerTool.DrawArrow or ViewerTool.DrawRect or ViewerTool.DrawCloud or ViewerTool.DrawArea or ViewerTool.AreaCut)
         {
             _rubberEnd = pointerPdf;
             RequestRepaint();
@@ -770,6 +776,10 @@ public sealed partial class PdfViewport
                 DeleteSelectedOverlay();
                 e.Handled = true;
                 break;
+            case Key.F2 when Keyboard.Modifiers == ModifierKeys.None:
+                RequestSelectedTakeoffRename();
+                e.Handled = true;
+                break;
             case Key.F:
                 ZoomFit();
                 e.Handled = true;
@@ -813,6 +823,7 @@ public sealed partial class PdfViewport
             case Key.E: ToolChanged?.Invoke("select"); e.Handled = true; break;
             case Key.S: ToolChanged?.Invoke("scale"); e.Handled = true; break;
             case Key.R: ToolChanged?.Invoke("ruler"); e.Handled = true; break;
+            case Key.H: ToolChanged?.Invoke("drawhighlight"); e.Handled = true; break;
             case Key.D: ToolChanged?.Invoke("drawline"); e.Handled = true; break;
             case Key.B: ToolChanged?.Invoke("beam"); e.Handled = true; break;
             case Key.O: ToolChanged?.Invoke("openings"); e.Handled = true; break;
@@ -823,6 +834,25 @@ public sealed partial class PdfViewport
             case Key.J: ToolChanged?.Invoke("joistarea"); e.Handled = true; break;
             case Key.X: ToolChanged?.Invoke("areacut"); e.Handled = true; break;
         }
+    }
+
+    private bool TryRequestTakeoffRenameAt(SKPoint pdf)
+    {
+        if (TryHitSelectedMeasurement(pdf, out Measurement selectedMeasurement) ||
+            TryHitMeasurement(pdf, out selectedMeasurement))
+        {
+            SelectMeasurement(selectedMeasurement, -1);
+            TakeoffRenameRequested?.Invoke(selectedMeasurement);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void RequestSelectedTakeoffRename()
+    {
+        Measurement? measurement = GetSelectedMeasurements().LastOrDefault();
+        TakeoffRenameRequested?.Invoke(measurement);
     }
 
 

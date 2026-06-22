@@ -161,6 +161,11 @@ public sealed partial class PdfViewport
                     ? $"Openings: click the first corner.{modes}"
                     : $"Openings: click the opposite corner to create size Rulers and a Count item.{modes}");
                 break;
+            case ViewerTool.DrawHighlight:
+                PostStatus(_drawPts.Count == 0
+                    ? $"Highlighter: click the first corner.{modes}"
+                    : $"Highlighter: click the opposite corner.{modes}");
+                break;
             case ViewerTool.DrawLine:
                 PostStatus(_drawPts.Count == 0
                     ? $"Draw line: click the first endpoint.{modes}"
@@ -223,6 +228,7 @@ public sealed partial class PdfViewport
             "dimension" => "Ruler",
             "beam" => "Beam",
             "openings" => "Openings",
+            "highlight" => "Highlighter",
             "arrow" => "Arrow",
             "rectangle" => "Box",
             "cloud" => "Cloud",

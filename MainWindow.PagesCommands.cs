@@ -37,8 +37,15 @@ public partial class MainWindow
 
     private void PagesTree_KeyDown(object sender, KeyEventArgs e)
     {
-        if (PagesTree.SelectedItem is not TreeViewItem item) return;
         Key key = KeyboardShortcutKeys.EffectiveKey(e);
+        if (Keyboard.Modifiers == ModifierKeys.None && key == Key.Escape)
+        {
+            ClearPagesTreeSelectionFromEscape();
+            e.Handled = true;
+            return;
+        }
+
+        if (PagesTree.SelectedItem is not TreeViewItem item) return;
 
         if (item.Tag is PageTakeoffNode node)
         {
@@ -95,6 +102,30 @@ public partial class MainWindow
             RenamePagesNode(item);
             e.Handled = true;
         }
+    }
+
+    private void ClearPagesTreeSelectionFromEscape()
+    {
+        _pagesMultiSelection.Clear();
+        _pageTakeoffMultiSelection.Clear();
+        _pagesRangeAnchorPath = null;
+        _pageTakeoffRangeAnchorKey = null;
+
+        if (PagesTree.SelectedItem is TreeViewItem selected)
+        {
+            _syncingPageTreeSelection = true;
+            try
+            {
+                selected.IsSelected = false;
+            }
+            finally
+            {
+                _syncingPageTreeSelection = false;
+            }
+        }
+
+        ApplyPagesMultiSelectionVisuals();
+        TxtStatus.Text = "Pages selection cleared.";
     }
 
     private ContextMenu BuildPagesContextMenu(TreeViewItem item)

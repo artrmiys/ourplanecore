@@ -84,6 +84,7 @@ public partial class MainWindow
         Add("tool.pan", "Pan Tool", "Tools", Shortcut("v"), "Use left-button panning; right-button pan still works.");
         Add("tool.scale", "Scale Tool", "Tools", Shortcut("s"), "Draw a calibration line for sheet scale.");
         Add("tool.ruler", "Ruler Tool", "Tools", Shortcut("r"), "Measure a temporary distance without creating a takeoff.");
+        Add("tool.highlight", "Highlighter Tool", "Tools", Shortcut("h"), "Draw a transparent highlighter markup.");
         Add("tool.drawLine", "Draw Line Tool", "Tools", Shortcut("d"), "Draw a page annotation line.");
         Add("tool.drawBox", "Draw Box Tool", "Tools", "", "Draw a page annotation box.");
         Add("tool.note", "Note Tool", "Tools", Shortcut("n"), "Write a text note on the active sheet.", hasPage, "Select a page first.");
@@ -192,6 +193,7 @@ public partial class MainWindow
             case "tool.pan": SetTool("pan"); break;
             case "tool.scale": SetTool("scale"); break;
             case "tool.ruler": SetTool("ruler"); break;
+            case "tool.highlight": SetTool("drawhighlight"); break;
             case "tool.drawLine": SetTool("drawline"); break;
             case "tool.drawBox": SetTool("drawrect"); break;
             case "tool.note": SetTool("note"); break;

@@ -284,6 +284,7 @@ internal static class StorageTests
             AssertEqual("4", loaded[0].Points.Count.ToString(), "annotation corner count preserved");
             AssertClose(10, loaded[0].Points[1].X, "annotation second corner x");
             AssertEqual("dimension", OurPlaneCoreJobStore.NormalizePageAnnotationKind("ruler"), "ruler alias");
+            AssertEqual("highlight", OurPlaneCoreJobStore.NormalizePageAnnotationKind("highlighter"), "highlighter alias");
             AssertEqual("note", OurPlaneCoreJobStore.NormalizePageAnnotationKind("text"), "text note alias");
         });
     }

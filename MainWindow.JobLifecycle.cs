@@ -25,6 +25,7 @@ public partial class MainWindow
         BtnSelect.Content = "Select";
         BtnScale.Content = "Scale";
         BtnRuler.Content = "Ruler";
+        BtnHighlight.Content = "Highlight";
         BtnDrawLine.Content = "Draw";
         BtnDrawArrow.Content = "Arrow";
         BtnDrawRect.Content = "Box";

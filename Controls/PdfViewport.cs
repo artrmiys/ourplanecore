@@ -63,7 +63,7 @@ public sealed record OpeningMeasurementRequest(
 
 // в”Ђв”Ђ Tool enum в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-public enum ViewerTool { Pan, Select, Scale, Ruler, Beam, Openings, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
+public enum ViewerTool { Pan, Select, Scale, Ruler, Beam, Openings, DrawHighlight, DrawLine, DrawArrow, DrawRect, DrawCloud, DrawArea, Note, Point, Line, Area, AreaCut }
 public enum PdfLayerTraceMode { Full, Edge, Point, AllEdges }
 public enum ViewportOverlayHitKind { None, SheetLegend, SheetHeader }
 
@@ -429,6 +429,7 @@ public sealed partial class PdfViewport : SKElement
     public event Action<bool>?                             TransformSelectionChanged;
     public event Action<Measurement?>?                    MeasurementSelectionChanged;
     public event Action<IReadOnlyList<Measurement>>?      MeasurementsSelectionChanged;
+    public event Action<Measurement?>?                    TakeoffRenameRequested;
     public event Action<IReadOnlyList<Measurement>>?      CopyMeasurementsRequested;
     public event Action<SKPoint?>?                        PasteMeasurementsRequested;
     public event Action<ViewportContextRequest>?          ContextRequested;

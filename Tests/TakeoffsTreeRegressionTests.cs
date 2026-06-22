@@ -790,6 +790,25 @@ internal static class TakeoffsTreeRegressionTests
             "targeted page refreshes should not leave a repaired sheet displayed as a folder node");
     }
 
+    public static void PagesEscAndFolderIconsAreWired()
+    {
+        string pagesCommands = ReadRepoFile("MainWindow.PagesCommands.cs");
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string takeoffVisuals = ReadRepoFile("MainWindow.TakeoffTreeVisuals.cs");
+
+        AssertTrue(
+            pagesCommands.Contains("key == Key.Escape", StringComparison.Ordinal) &&
+            pagesCommands.Contains("ClearPagesTreeSelectionFromEscape", StringComparison.Ordinal) &&
+            pagesCommands.Contains("_pagesMultiSelection.Clear();", StringComparison.Ordinal) &&
+            pagesCommands.Contains("_pageTakeoffMultiSelection.Clear();", StringComparison.Ordinal),
+            "Pages tree should clear page and linked-takeoff selection on Esc before requiring a selected item");
+        AssertTrue(
+            pagesTree.Contains("CreateFolderTreeIcon()", StringComparison.Ordinal) &&
+            takeoffVisuals.Contains("private static FrameworkElement CreateFolderTreeIcon()", StringComparison.Ordinal) &&
+            takeoffVisuals.Contains("SetFolderTreeItemHeader", StringComparison.Ordinal),
+            "Pages and Takeoffs folder rows should share a small folder icon");
+    }
+
     public static void PagesDropUsesBatchMoveAndSilentRefresh()
     {
         string actions = ReadRepoFile("MainWindow.PagesNodeActions.cs");
@@ -1097,6 +1116,78 @@ internal static class TakeoffsTreeRegressionTests
             viewportSelectionEditing.Contains("Moving {selected.Count} selected markups.", StringComparison.Ordinal) &&
             viewportInput.Contains("foreach (var (annotation, originalPoints) in _dragAnnotationSelectionOriginalPoints)", StringComparison.Ordinal),
             "selected ruler/markup annotations must drag as a group instead of collapsing to the primary annotation");
+    }
+
+    public static void AnnotationTabHighlighterIsWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string mainWindow = ReadRepoFile("MainWindow.xaml.cs");
+        string toolControls = ReadRepoFile("MainWindow.ToolControls.cs");
+        string viewCommands = ReadRepoFile("Controls/PdfViewport.ViewCommands.cs");
+        string viewport = ReadRepoFile("Controls/PdfViewport.cs");
+        string tools = ReadRepoFile("Controls/PdfViewport.Tools.cs");
+        string rendering = ReadRepoFile("Controls/PdfViewport.AnnotationRendering.cs");
+        string store = ReadRepoFile("Models/Storage/PageAnnotationStore.cs");
+        string exporter = ReadRepoFile("Models/PdfExporter.Annotations.cs");
+
+        AssertTrue(
+            xaml.Contains("<TabItem Header=\"Annotation\">", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"BtnHighlight\"", StringComparison.Ordinal) &&
+            xaml.Contains("Tag=\"drawhighlight\"", StringComparison.Ordinal),
+            "Annotation ribbon tab should expose a visible Highlighter tool");
+        AssertTrue(
+            mainWindow.Contains("[\"drawhighlight\"] = BtnHighlight", StringComparison.Ordinal) &&
+            toolControls.Contains("AddAnnotationToolItem(menu, \"Highlighter\", \"drawhighlight\")", StringComparison.Ordinal),
+            "MainWindow should include Highlighter in tool button and annotation menu wiring");
+        AssertTrue(
+            viewport.Contains("DrawHighlight", StringComparison.Ordinal) &&
+            viewCommands.Contains("\"drawhighlight\" => ViewerTool.DrawHighlight", StringComparison.Ordinal) &&
+            tools.Contains("AddTwoPointAnnotation(pdf, \"highlight\")", StringComparison.Ordinal),
+            "Viewport should route drawhighlight into a separate highlight annotation");
+        AssertTrue(
+            store.Contains("\"highlight\" or \"highlighter\" => \"highlight\"", StringComparison.Ordinal) &&
+            rendering.Contains("DrawHighlightAnnotation", StringComparison.Ordinal) &&
+            exporter.Contains("kind == \"highlight\"", StringComparison.Ordinal),
+            "Highlight annotations should persist, render, and export separately from area fills");
+    }
+
+    public static void ViewportRenameAndCadBoxSelectionAreWired()
+    {
+        string viewport = ReadRepoFile("Controls/PdfViewport.cs");
+        string input = ReadRepoFile("Controls/PdfViewport.Input.cs");
+        string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
+        string mainWindow = ReadRepoFile("MainWindow.xaml.cs");
+        string boxSelection = ReadRepoFile("Controls/PdfViewport.BoxSelection.cs");
+
+        AssertTrue(
+            viewport.Contains("TakeoffRenameRequested", StringComparison.Ordinal) &&
+            input.Contains("case Key.F2", StringComparison.Ordinal) &&
+            input.Contains("TryRequestTakeoffRenameAt", StringComparison.Ordinal) &&
+            input.Contains("TakeoffRenameRequested?.Invoke", StringComparison.Ordinal),
+            "Viewport F2 and double-click should request a takeoff-level rename");
+        AssertTrue(
+            mainWindow.Contains("_viewport.TakeoffRenameRequested += OnViewportTakeoffRenameRequested", StringComparison.Ordinal) &&
+            callbacks.Contains("FindTakeoffItemForMeasurement(measurement)", StringComparison.Ordinal) &&
+            callbacks.Contains("RenameItem(tvi, item)", StringComparison.Ordinal),
+            "MainWindow should rename the owning takeoff item, not an individual viewport segment");
+        AssertTrue(
+            boxSelection.Contains("bool selectTouched = _boxSelectEndPdf.X < _boxSelectStartPdf.X;", StringComparison.Ordinal) &&
+            boxSelection.Contains("? \"crossing\"", StringComparison.Ordinal) &&
+            boxSelection.Contains(": \"inside only\"", StringComparison.Ordinal),
+            "Box selection should use CAD direction: right-to-left crossing, left-to-right enclosed");
+    }
+
+    public static void TransformScaleSliderLabelIsWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string toolControls = ReadRepoFile("MainWindow.ToolControls.cs");
+
+        AssertTrue(
+            xaml.Contains("x:Name=\"BtnResetScaleSelection\" Content=\"1x\"", StringComparison.Ordinal) &&
+            toolControls.Contains("BtnResetScaleSelection.Content = FormatTransformScaleLabel(e.NewValue);", StringComparison.Ordinal) &&
+            toolControls.Contains("BtnResetScaleSelection.Content = FormatTransformScaleLabel(value);", StringComparison.Ordinal) &&
+            toolControls.Contains("private static string FormatTransformScaleLabel(double value)", StringComparison.Ordinal),
+            "Transform scale reset button should display the current relative scale factor as the slider moves");
     }
 
     public static void TakeoffFolderRandomColorsAreWired()
