@@ -1216,7 +1216,7 @@ def _detect_suffix(
         return floor_suffix, False
     if "foundation plan" in title or (label.startswith("f") and "foundation" in title):
         return "f", False
-    if is_struct and sheet_num is not None and 700 <= sheet_num <= 799:
+    if is_struct and sheet_num is not None and 700 <= sheet_num <= 799 and "section" not in title:
         return "sec", False
     if is_struct and sheet_num is not None and 800 <= sheet_num <= 899:
         return "d", True
@@ -1300,14 +1300,16 @@ def _detect_suffix(
         return "u", False
     if re.search(r"\blevel[\s_-]*u\d+\b", title) or re.search(r"u\d+", label):
         return "u", False
+    if is_struct and "section" in title:
+        if sheet_num is not None and 500 <= sheet_num <= 799:
+            return "d", True
+        return "sec", False
     if floor_suffix:
         return floor_suffix, False
     if "roof" in title:
         return "rf", False
     if "elevation" in title:
         return "el", False
-    if is_struct and "section" in title:
-        return "sec", False
     if is_struct and sheet_num is not None and 500 <= sheet_num <= 699:
         return "d", True
     if "section" in title:

@@ -2600,8 +2600,9 @@ internal static class TakeoffsTreeRegressionTests
             "sheet metadata helper should prefer the right-side rotated title block before body text so plan sheets do not inherit note or legend suffixes");
         AssertTrue(
             helper.Contains("if is_struct and \"section\" in title:", StringComparison.Ordinal) &&
-            helper.Contains("return \"sec\", False", StringComparison.Ordinal),
-            "structural section sheets should remain scale-capable sections instead of falling through to detail suffixes");
+            helper.Contains("500 <= sheet_num <= 799", StringComparison.Ordinal) &&
+            helper.Contains("return \"d\", True", StringComparison.Ordinal),
+            "structural S5/S6/S7 section sheets should classify as unscaled detail sheets");
         AssertFalse(
             helper.Contains("if not sheet_label:\r\n        skip_scale = True", StringComparison.Ordinal) ||
             helper.Contains("if not sheet_label:\n        skip_scale = True", StringComparison.Ordinal),
