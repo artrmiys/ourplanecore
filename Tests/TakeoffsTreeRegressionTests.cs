@@ -2592,6 +2592,16 @@ internal static class TakeoffsTreeRegressionTests
             helper.Contains("str(w[4]).strip().lower().rstrip(\":\") == \"title\"", StringComparison.Ordinal) &&
             helper.Contains("return _clean_sheet_title(\" \".join(str(w[4]) for w in ordered))", StringComparison.Ordinal),
             "sheet metadata helper should detect large rotated sheet labels and titles in bottom title blocks");
+        AssertTrue(
+            helper.Contains("def _extract_right_title_block_title", StringComparison.Ordinal) &&
+            helper.Contains("float(w[2]) - float(w[0]) >= 18.0", StringComparison.Ordinal) &&
+            helper.Contains("abs(float(column[0][0]) - x) <= 18.0", StringComparison.Ordinal) &&
+            helper.Contains("right_title or", StringComparison.Ordinal),
+            "sheet metadata helper should prefer the right-side rotated title block before body text so plan sheets do not inherit note or legend suffixes");
+        AssertTrue(
+            helper.Contains("if is_struct and \"section\" in title:", StringComparison.Ordinal) &&
+            helper.Contains("return \"sec\", False", StringComparison.Ordinal),
+            "structural section sheets should remain scale-capable sections instead of falling through to detail suffixes");
         AssertFalse(
             helper.Contains("if not sheet_label:\r\n        skip_scale = True", StringComparison.Ordinal) ||
             helper.Contains("if not sheet_label:\n        skip_scale = True", StringComparison.Ordinal),

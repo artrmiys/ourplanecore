@@ -666,6 +666,70 @@ def _extract_bottom_view_title_and_scale(
     return best[1], best[2], best[3]
 
 
+def _extract_right_title_block_title(words: list, sheet_label: str | None, max_x: float, max_y: float) -> str:
+    column_words = [
+        w for w in words
+        if max_x * 0.92 <= float(w[0]) <= max_x * 0.955
+        and max_y * 0.70 <= float(w[1]) <= max_y * 0.92
+        and float(w[2]) - float(w[0]) >= 18.0
+    ]
+    candidates: list[tuple[float, str]] = []
+    columns: list[list] = []
+    for word in sorted(column_words, key=lambda w: float(w[0])):
+        x = float(word[0])
+        target = next((column for column in columns if abs(float(column[0][0]) - x) <= 18.0), None)
+        if target is None:
+            columns.append([word])
+        else:
+            target.append(word)
+
+    for column in columns:
+        ordered = sorted(column, key=lambda w: float(w[1]), reverse=True)
+        title = _clean_sheet_title(" ".join(str(w[4]) for w in ordered))
+        if not title or _is_title_block_noise_line(title, sheet_label):
+            continue
+        if _find_scales_in_text(title) or "scale" in title.lower():
+            continue
+        if not _looks_like_view_title(title):
+            continue
+
+        x = min(float(w[0]) for w in column)
+        score = 1400.0
+        score += len(ordered) * 35.0
+        score += x / 20.0
+        if re.search(r"\b(?:foundation|first|second|third|roof|floor|framing|sections?|details?|notes?)\b", title, flags=re.IGNORECASE):
+            score += 100.0
+        candidates.append((score, title))
+
+    title_words = [
+        w for w in words
+        if float(w[0]) >= max_x * 0.92
+        and max_y * 0.62 <= float(w[1]) <= max_y * 0.94
+    ]
+    for line in _line_groups(title_words):
+        for segment in _line_segments(line, gap=80.0):
+            title = _clean_sheet_title(_words_text(segment))
+            if not title or _is_title_block_noise_line(title, sheet_label):
+                continue
+            if _find_scales_in_text(title) or "scale" in title.lower():
+                continue
+            if not _looks_like_view_title(title):
+                continue
+
+            y = _segment_y(segment)
+            x = min(float(w[0]) for w in segment)
+            score = 1000.0
+            score += y / 10.0
+            score += x / 20.0
+            if re.search(r"\b(?:foundation|first|second|third|roof|floor|framing|sections?|details?|notes?)\b", title, flags=re.IGNORECASE):
+                score += 100.0
+            candidates.append((score, title))
+
+    if not candidates:
+        return ""
+    return max(candidates, key=lambda item: item[0])[1]
+
+
 def _word_box(word: object) -> tuple[float, float, float, float]:
     return (float(word[0]), float(word[1]), float(word[2]), float(word[3]))
 
@@ -1242,6 +1306,8 @@ def _detect_suffix(
         return "rf", False
     if "elevation" in title:
         return "el", False
+    if is_struct and "section" in title:
+        return "sec", False
     if is_struct and sheet_num is not None and 500 <= sheet_num <= 699:
         return "d", True
     if "section" in title:
@@ -2926,7 +2992,9 @@ def sheetmeta_data(req: dict) -> dict:
     sheet_display_key = _sheet_display_key(sheet_label)
     filename_title = _filename_title(pdf_path, sheet_label or filename_label) if doc.page_count <= 1 or filename_label else ""
     bottom_title, bottom_scale, bottom_scale_raw = _extract_bottom_view_title_and_scale(words, sheet_label, max_x, max_y)
+    right_title = _extract_right_title_block_title(words, sheet_label, max_x, max_y)
     sheet_title = (
+        right_title or
         _extract_title_from_sheet_no_lines(text, sheet_label) or
         bottom_title or
         _extract_title_near_sheet_label(words, prominent_label_word, max_x, max_y) or
