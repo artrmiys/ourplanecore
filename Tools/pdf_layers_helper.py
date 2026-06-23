@@ -50,7 +50,11 @@ AI_SCALE_SUFFIXES = {
     "fr n", "df", "wt pl", "fl pl", "u sc", "elev sec", "str sec", "d sec",
 }
 AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t", "w d sc", "f d", "wd d", "jamb d"}
-SHEET_PREFIXES = {"a", "ar", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l", "id", "fp", "fa", "fs"}
+SHEET_PREFIXES = {
+    "a", "ar", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l",
+    "id", "fp", "fa", "fs",
+    "cd", "d", "f", "hc", "i", "rc", "sch",
+}
 SHEET_LABEL_RE = re.compile(
     r"\b([A-Z]{1,3}-?\d{1,4}(?:\.(?:R\d+[A-Z]?|[0-9]?U\d+[A-Z]?|\d+[A-Z]{0,2}))?[A-Z]{0,2})\b",
     flags=re.IGNORECASE,
@@ -330,6 +334,37 @@ def _extract_sheet_label_from_page_label(page: fitz.Page) -> str | None:
     return candidates[0] if candidates else None
 
 
+def _extract_sheet_label_from_toc(doc: fitz.Document, page_index: int) -> str | None:
+    try:
+        toc = doc.get_toc(simple=True)
+    except Exception:
+        return None
+
+    matches: list[str] = []
+    for row in toc:
+        if len(row) < 3:
+            continue
+        try:
+            target_page = int(row[2]) - 1
+        except Exception:
+            continue
+        if target_page != page_index:
+            continue
+
+        title = str(row[1] or "")
+        tail = title.rsplit("-", 1)[-1]
+        candidates = _sheet_label_candidates(tail) or _sheet_label_candidates(title)
+        if candidates:
+            matches.append(candidates[-1])
+            continue
+
+        clean_tail = re.sub(r"[^a-z]+", "", tail.lower())
+        if clean_tail in {"title", "cover"}:
+            matches.append(clean_tail)
+
+    return matches[-1] if matches else None
+
+
 def _extract_sheet_label_from_text(text: str) -> str | None:
     candidates = _sheet_label_candidates(text)
     return candidates[0] if candidates else None
@@ -460,6 +495,175 @@ def _title_block_words(words: list, max_x: float, max_y: float) -> list:
         w for w in words
         if float(w[0]) >= max_x * TITLE_BLOCK_RIGHT_X or float(w[1]) >= max_y * TITLE_BLOCK_BOTTOM_Y
     ]
+
+
+def _line_groups(words: list, y_tolerance: float = 5.0) -> list[list]:
+    ordered = sorted(words, key=lambda w: (float(w[1]), float(w[0])))
+    groups: list[list] = []
+    for word in ordered:
+        y = float(word[1])
+        if not groups or abs(float(groups[-1][0][1]) - y) > y_tolerance:
+            groups.append([word])
+        else:
+            groups[-1].append(word)
+    return [sorted(group, key=lambda w: float(w[0])) for group in groups]
+
+
+def _word_gap(left: object, right: object) -> float:
+    return float(right[0]) - float(left[2])
+
+
+def _line_segments(words: list, gap: float = 120.0) -> list[list]:
+    if not words:
+        return []
+
+    segments: list[list] = [[words[0]]]
+    for word in words[1:]:
+        if _word_gap(segments[-1][-1], word) > gap:
+            segments.append([word])
+        else:
+            segments[-1].append(word)
+    return segments
+
+
+def _segment_center_x(words: list) -> float:
+    if not words:
+        return 0.0
+    return (float(words[0][0]) + float(words[-1][2])) / 2.0
+
+
+def _segment_y(words: list) -> float:
+    if not words:
+        return 0.0
+    return sum(float(w[1]) for w in words) / len(words)
+
+
+def _clean_bottom_view_title(value: str | None, sheet_label: str | None) -> str:
+    source = re.sub(r"\s+", " ", value or "").strip()
+    if not source:
+        return ""
+
+    if sheet_label:
+        key = re.escape(_sheet_display_key(sheet_label))
+        source = re.sub(
+            rf"\b\d+\s*/\s*{key}\b",
+            "",
+            source,
+            flags=re.IGNORECASE,
+        )
+        source = re.sub(
+            rf"\b{re.escape(sheet_label)}\b",
+            "",
+            source,
+            flags=re.IGNORECASE,
+        )
+        source = re.sub(
+            rf"\b{key}\b",
+            "",
+            source,
+            flags=re.IGNORECASE,
+        )
+
+    source = re.sub(r"\bSCALE\b:?.*", "", source, flags=re.IGNORECASE)
+    source = re.sub(r"\b(?:matchline|see)\b", "", source, flags=re.IGNORECASE)
+    source = re.sub(r"\b\d+\s*/\s*[A-Z]{1,3}-?\d{1,4}(?:\.\d+)?[A-Z]?\b", "", source, flags=re.IGNORECASE)
+    source = re.sub(r"\b[A-Z]{1,3}-?\d{1,4}(?:\.\d+)?[A-Z]?\b", "", source, flags=re.IGNORECASE)
+    source = re.sub(r"\b\d+\b", "", source)
+    source = re.sub(r"\s+", " ", source).strip(" -:|")
+    return _clean_sheet_title(source)
+
+
+def _looks_like_view_title(value: str | None) -> bool:
+    title = _title_rule_text(value)
+    if len(title) < 4:
+        return False
+    if re.fullmatch(r"[\d\s./'\"-]+", value or ""):
+        return False
+    return bool(re.search(
+        r"\b(?:plan|elevation|section|detail|details|schedule|notes?|code|data|"
+        r"floor|foundation|roof|framing|finish|accessibility|egress|stair|wall|"
+        r"ceiling|reflected|fire|protection|cassette|riser|shaft)\b",
+        title,
+        flags=re.IGNORECASE,
+    ))
+
+
+def _extract_bottom_view_title_and_scale(
+    words: list,
+    sheet_label: str | None,
+    max_x: float,
+    max_y: float,
+) -> tuple[str, str | None, str]:
+    bottom_words = [w for w in words if float(w[1]) >= max_y * 0.78]
+    lines = _line_groups(bottom_words)
+    if not lines:
+        return "", None, ""
+
+    best: tuple[float, str, str | None, str] | None = None
+    for index, line in enumerate(lines):
+        line_text = _words_text(line)
+        if "scale" not in line_text.lower() and not _find_scales_in_text(line_text):
+            continue
+
+        scale_segments = [
+            segment for segment in _line_segments(line)
+            if "scale" in _words_text(segment).lower() or _find_scales_in_text(_words_text(segment))
+        ]
+        if not scale_segments:
+            scale_segments = [line]
+
+        previous_lines = lines[max(0, index - 3):index]
+        candidate_title_segments: list[list] = []
+        for prev in reversed(previous_lines):
+            for segment in _line_segments(prev):
+                title = _clean_bottom_view_title(_words_text(segment), sheet_label)
+                if _looks_like_view_title(title):
+                    candidate_title_segments.append(segment)
+            if candidate_title_segments:
+                break
+
+        if not candidate_title_segments:
+            for segment in _line_segments(line):
+                title = _clean_bottom_view_title(_words_text(segment), sheet_label)
+                if _looks_like_view_title(title):
+                    candidate_title_segments.append(segment)
+
+        for scale_segment in scale_segments:
+            scale_text = _words_text(scale_segment)
+            scales = _find_scales_in_text(scale_text)
+            scale = _normalize_scale_candidate(scale_text) or (scales[0] if scales else None)
+            scale_center = _segment_center_x(scale_segment)
+            scale_y = _segment_y(scale_segment)
+            if candidate_title_segments:
+                title_segment = min(
+                    candidate_title_segments,
+                    key=lambda segment: (
+                        abs(_segment_center_x(segment) - scale_center),
+                        abs(_segment_y(segment) - scale_y),
+                    ),
+                )
+                raw_title = _words_text(title_segment)
+            else:
+                title_segment = scale_segment
+                raw_title = line_text
+
+            title = _clean_bottom_view_title(raw_title, sheet_label)
+            if not _looks_like_view_title(title):
+                continue
+
+            score = 1000.0
+            if scale:
+                score += 100.0
+            if sheet_label and _sheet_display_key(sheet_label) in _sheet_display_key(scale_text):
+                score += 140.0
+            score -= abs(_segment_center_x(title_segment) - scale_center) / 10.0
+            score -= max(0.0, scale_y - _segment_y(title_segment)) / 3.0
+            if best is None or score > best[0]:
+                best = (score, title, scale, scale_text)
+
+    if best is None:
+        return "", None, ""
+    return best[1], best[2], best[3]
 
 
 def _word_box(word: object) -> tuple[float, float, float, float]:
@@ -856,6 +1060,67 @@ def _sheet_label_floor_suffix(sheet_label: str | None) -> str | None:
     }.get(match.group("floor"))
 
 
+def _floor_suffix_from_text(title: str) -> str | None:
+    ordinals = {
+        1: "1st",
+        2: "2nd",
+        3: "3rd",
+        4: "4th",
+        5: "5th",
+        6: "6th",
+        7: "7th",
+        8: "8th",
+    }
+    word_levels = [
+        ("first", 1),
+        ("second", 2),
+        ("third", 3),
+        ("fourth", 4),
+        ("fifth", 5),
+        ("sixth", 6),
+        ("seventh", 7),
+        ("eighth", 8),
+    ]
+
+    matches: set[int] = set()
+    ordinal_tokens = {
+        "first": 1,
+        "1st": 1,
+        "second": 2,
+        "2nd": 2,
+        "third": 3,
+        "3rd": 3,
+        "fourth": 4,
+        "4th": 4,
+        "fifth": 5,
+        "5th": 5,
+        "sixth": 6,
+        "6th": 6,
+        "seventh": 7,
+        "7th": 7,
+        "eighth": 8,
+        "8th": 8,
+    }
+    for token in re.findall(
+        r"\b(first|second|third|fourth|fifth|sixth|seventh|eighth|[1-8](?:st|nd|rd|th))\b(?=[^.;:]{0,40}\bfloors?\b)",
+        title,
+        flags=re.IGNORECASE,
+    ):
+        matches.add(ordinal_tokens[token.lower()])
+    if len(matches) > 1:
+        return None
+
+    for word, level in word_levels:
+        if f"{word} floor" in title or f"{ordinals[level]} floor" in title or f"{ordinals[level]} floors" in title:
+            matches.add(level)
+
+    level_match = re.search(r"\blevel[\s_-]*0?([1-8])(?=\D|$)", title)
+    if level_match:
+        matches.add(int(level_match.group(1)))
+
+    return ordinals[next(iter(matches))] if len(matches) == 1 else None
+
+
 def _detect_suffix(
     sheet_title: str | None,
     has_details: bool,
@@ -871,17 +1136,26 @@ def _detect_suffix(
     is_arch = label.startswith("a")
     is_struct = label.startswith("s")
     sheet_num = _sheet_number_code(sheet_label)
-    ordinals = {
-        1: "1st",
-        2: "2nd",
-        3: "3rd",
-        4: "4th",
-        5: "5th",
-        6: "6th",
-        7: "7th",
-        8: "8th",
-    }
+    floor_suffix = _floor_suffix_from_text(title)
 
+    if label.startswith("d"):
+        return "d", True
+    if label in {"title", "cover"}:
+        return "n", True
+    if label.startswith("sch"):
+        return "sc", True
+    if label.startswith("cd") and "plan" not in title:
+        return "n", True
+    if label.startswith("i") and _has_finish_word(title):
+        return "f", False
+    if label.startswith("rc") and "reflected ceiling plan" in title and floor_suffix:
+        return floor_suffix, False
+    if "foundation plan" in title or (label.startswith("f") and "foundation" in title):
+        return "f", False
+    if is_struct and sheet_num is not None and 700 <= sheet_num <= 799:
+        return "sec", False
+    if is_struct and sheet_num is not None and 800 <= sheet_num <= 899:
+        return "d", True
     if is_struct and ("general notes" in title or re.search(r"\bnotes?\b", title)):
         return "n", True
     if "life safety" in title or "fire rating" in title or "fire rated" in title or "fire resistance" in title:
@@ -962,22 +1236,8 @@ def _detect_suffix(
         return "u", False
     if re.search(r"\blevel[\s_-]*u\d+\b", title) or re.search(r"u\d+", label):
         return "u", False
-    word_levels = [
-        ("first", 1),
-        ("second", 2),
-        ("third", 3),
-        ("fourth", 4),
-        ("fifth", 5),
-        ("sixth", 6),
-        ("seventh", 7),
-        ("eighth", 8),
-    ]
-    for word, level in word_levels:
-        if f"{word} floor" in title or f"{ordinals[level]} floor" in title:
-            return ordinals[level], False
-    level_match = re.search(r"\blevel[\s_-]*0?([1-8])(?=\D|$)", title)
-    if level_match:
-        return ordinals[int(level_match.group(1))], False
+    if floor_suffix:
+        return floor_suffix, False
     if "roof" in title:
         return "rf", False
     if "elevation" in title:
@@ -2653,18 +2913,22 @@ def sheetmeta_data(req: dict) -> dict:
     bottom_text = _words_text(bottom_words)
     page_label = _extract_sheet_label_from_page_label(page)
     filename_label = _extract_sheet_label_from_filename(pdf_path)
+    toc_label = _extract_sheet_label_from_toc(doc, page_index)
     prominent_label, prominent_label_word = _prominent_sheet_label_from_title_block(words, max_x, max_y)
     sheet_label = (
         _extract_sheet_label_from_title_block(words, max_x, max_y)
         or prominent_label
         or page_label
+        or toc_label
         or filename_label
     )
     sheet_key = _sheet_key(sheet_label)
     sheet_display_key = _sheet_display_key(sheet_label)
     filename_title = _filename_title(pdf_path, sheet_label or filename_label) if doc.page_count <= 1 or filename_label else ""
+    bottom_title, bottom_scale, bottom_scale_raw = _extract_bottom_view_title_and_scale(words, sheet_label, max_x, max_y)
     sheet_title = (
         _extract_title_from_sheet_no_lines(text, sheet_label) or
+        bottom_title or
         _extract_title_near_sheet_label(words, prominent_label_word, max_x, max_y) or
         _extract_title_from_title_block(words, sheet_label, max_x, max_y)
         or _extract_pdf_title(words, text, sheet_label, bottom_y0, max_x, max_y)
@@ -2678,6 +2942,9 @@ def sheetmeta_data(req: dict) -> dict:
         sheet_title = ""
 
     title_scale, title_scale_raw = _extract_title_block_scale(words, max_x, max_y)
+    if not title_scale and bottom_scale:
+        title_scale = bottom_scale
+        title_scale_raw = bottom_scale_raw
     body_scales = _find_scales_in_text(text)
     all_scales = []
     for scale in [title_scale, *body_scales]:
@@ -2727,6 +2994,8 @@ def sheetmeta_data(req: dict) -> dict:
     selected_scale_m_per_pt = _PT_M * ratio if ratio else 0.0
     if not sheet_label:
         warnings.append("sheet label not found in PDF text")
+    elif toc_label and _sheet_display_key(sheet_label) == _sheet_display_key(toc_label) and not prominent_label and not page_label:
+        warnings.append("sheet label resolved from PDF bookmarks")
     if not sheet_title:
         warnings.append("sheet title not found in PDF text")
     if not selected_scale and not skip_scale:
