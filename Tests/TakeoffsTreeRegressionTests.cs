@@ -3100,8 +3100,11 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("BuildSheetOverlayAutoFitSearchRank", StringComparison.Ordinal) &&
             autoSelect.Contains("AutoSelectAndFitSheetOverlay(PageInfo page, bool replaceExistingOverlay)", StringComparison.Ordinal) &&
             autoSelect.Contains("Overlay auto select: reselecting the best matching sheet", StringComparison.Ordinal) &&
-            autoSelect.Contains("ClearReciprocalSheetOverlay(latestTarget)", StringComparison.Ordinal),
-            "sheet overlay Auto Fit should auto-select a matching sheet when no overlay is already configured");
+            autoSelect.Contains("ClearReciprocalSheetOverlay(latestTarget)", StringComparison.Ordinal) &&
+            autoSelect.Contains("sheets compared", StringComparison.Ordinal) &&
+            autoSelect.Contains("candidates={search.ComparableCount}/{search.CandidateCount}", StringComparison.Ordinal) &&
+            autoSelect.Contains("method='{search.Fit.Method}'", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should auto-select a matching sheet and report the selected match quality");
         AssertTrue(
             service.Contains("SheetOverlayAutoFitCandidateSearchService", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectConfidence", StringComparison.Ordinal) &&

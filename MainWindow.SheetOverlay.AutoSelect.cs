@@ -89,12 +89,17 @@ public partial class MainWindow
         OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true);
 
         PageInfo selectedTarget = OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) ?? latestTarget;
+        AppLog.Info(
+            $"Sheet overlay auto select chose overlay; base='{selectedTarget.FolderPath}'; overlay='{search.OverlayPage.FolderPath}'; " +
+            $"candidates={search.ComparableCount}/{search.CandidateCount}; confidence={search.Fit.Confidence:0.###}; " +
+            $"matched={search.Fit.MatchedSamples}/{search.Fit.SampleCount}; method='{search.Fit.Method}'");
         ApplySheetOverlayAutoFitResult(
             selectedTarget,
             search.OverlayPage,
             search.Read,
             search.Fit,
-            $"Auto-selected overlay: {search.OverlayPage.Name}. ");
+            $"Auto-selected overlay: {search.OverlayPage.Name} " +
+            $"({search.ComparableCount}/{search.CandidateCount} sheets compared). ");
     }
 
     private static SheetOverlayAutoFitCandidateSearch FindSheetOverlayAutoFitCandidate(
@@ -152,6 +157,7 @@ public partial class MainWindow
             match.Page,
             SheetOverlayAutoFitReadResult.Success(baseRead, selectedRead),
             match.Fit,
+            inputs.Count,
             tried);
     }
 
@@ -260,17 +266,19 @@ public partial class MainWindow
         SheetOverlayAutoFitReadResult? Read,
         SheetOverlayAutoFitResult Fit,
         string Error,
+        int ComparableCount,
         int CandidateCount)
     {
         public static SheetOverlayAutoFitCandidateSearch Success(
             PageInfo overlayPage,
             SheetOverlayAutoFitReadResult read,
             SheetOverlayAutoFitResult fit,
+            int comparableCount,
             int candidateCount) =>
-            new(true, overlayPage, read, fit, "", candidateCount);
+            new(true, overlayPage, read, fit, "", comparableCount, candidateCount);
 
         public static SheetOverlayAutoFitCandidateSearch Failed(string error) =>
-            new(false, null, null, FailedFit(error), error, 0);
+            new(false, null, null, FailedFit(error), error, 0, 0);
     }
 
     private sealed record SheetOverlayAutoFitCandidatePage(PageInfo Page, int SearchRank);
