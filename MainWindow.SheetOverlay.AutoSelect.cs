@@ -9,9 +9,49 @@ public partial class MainWindow
 {
     private const int MaxSheetOverlayAutoSelectCandidates = 48;
 
+    private async void AutoSelectAndFitSheetOverlay(PageInfo page, bool replaceExistingOverlay)
+    {
+        PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        if (targetPage == null)
+        {
+            TxtStatus.Text = "Overlay auto select: sheet source is missing.";
+            return;
+        }
+
+        OurPlaneCoreJob? job = _currentJob;
+        if (job == null)
+        {
+            TxtStatus.Text = "Overlay auto select: open a job before searching sheets.";
+            return;
+        }
+
+        TxtStatus.Text = replaceExistingOverlay
+            ? "Overlay auto select: reselecting the best matching sheet..."
+            : "Overlay auto select: searching job sheets for matching plan geometry...";
+
+        try
+        {
+            SheetOverlayAutoFitCandidateSearch search = await System.Threading.Tasks.Task.Run(() =>
+                FindSheetOverlayAutoFitCandidate(job, targetPage));
+            if (!search.Ok)
+            {
+                TxtStatus.Text = search.Error;
+                return;
+            }
+
+            ApplySheetOverlayAutoSelectedFit(targetPage, search, replaceExistingOverlay);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Sheet overlay auto select failed for {targetPage.Name}");
+            TxtStatus.Text = $"Overlay auto select failed: {ex.Message}";
+        }
+    }
+
     private void ApplySheetOverlayAutoSelectedFit(
         PageInfo targetPage,
-        SheetOverlayAutoFitCandidateSearch search)
+        SheetOverlayAutoFitCandidateSearch search,
+        bool replaceExistingOverlay = false)
     {
         if (search.OverlayPage == null || search.Read == null)
         {
@@ -27,10 +67,18 @@ public partial class MainWindow
         }
 
         if (!string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) &&
-            !SameFolder(latestTarget.OverlayPageFolder, search.OverlayPage.FolderPath))
+            !SameFolder(latestTarget.OverlayPageFolder, search.OverlayPage.FolderPath) &&
+            !replaceExistingOverlay)
         {
             TxtStatus.Text = "Overlay auto fit skipped: overlay changed while searching.";
             return;
+        }
+
+        if (replaceExistingOverlay &&
+            !string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) &&
+            !SameFolder(latestTarget.OverlayPageFolder, search.OverlayPage.FolderPath))
+        {
+            ClearReciprocalSheetOverlay(latestTarget);
         }
 
         OurPlaneCoreJobStore.SavePageOverlay(

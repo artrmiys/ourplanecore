@@ -20,7 +20,7 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem(
             "Auto Select + Fit This Sheet",
             _currentJob != null,
-            () => AutoFitSheetOverlay(candidatePage)));
+            () => AutoSelectAndFitSheetOverlay(candidatePage, replaceExistingOverlay: true)));
         menu.Items.Add(MakeMenuItem("Clear Current Sheet Overlay", currentHasOverlay, ClearCurrentSheetOverlay));
         if (currentHasOverlay)
             menu.Items.Add(BuildSheetOverlayAdjustmentMenu(_currentPage!, "Adjust Current Overlay"));
@@ -72,7 +72,7 @@ public partial class MainWindow
             menu.Items.Add(MakeMenuItem(
                 "Auto Select + Fit Sheet Overlay",
                 _currentJob != null,
-                () => AutoFitSheetOverlay(currentPage)));
+                () => AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)));
             return true;
         }
 
@@ -85,6 +85,10 @@ public partial class MainWindow
         bool hasOverlay = !string.IsNullOrWhiteSpace(page.OverlayPageFolder);
         var menu = new MenuItem { Header = header, IsEnabled = hasOverlay };
         menu.Items.Add(MakeMenuItem("Auto Fit", hasOverlay, () => AutoFitSheetOverlay(page)));
+        menu.Items.Add(MakeMenuItem(
+            "Auto Select + Replace Overlay",
+            _currentJob != null,
+            () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)));
         menu.Items.Add(MakeMenuItem("Edit by Points", hasOverlay, () => BeginSheetOverlayPointEdit(page)));
         menu.Items.Add(MakeMenuItem("Edit Transform...", hasOverlay, () => EditSheetOverlayTransform(page)));
         menu.Items.Add(new Separator());
