@@ -2920,6 +2920,10 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("Auto Select + Fit This Sheet", StringComparison.Ordinal) &&
             menus.Contains("Auto Select + Fit Sheet Overlay", StringComparison.Ordinal) &&
             menus.Contains("Auto Select + Replace Overlay", StringComparison.Ordinal) &&
+            menus.Contains("Open Overlay Sheet", StringComparison.Ordinal) &&
+            menus.Contains("Hide Overlay", StringComparison.Ordinal) &&
+            menus.Contains("Show Overlay", StringComparison.Ordinal) &&
+            menus.Contains("Clear Overlay", StringComparison.Ordinal) &&
             menus.Contains("Auto Fit", StringComparison.Ordinal) &&
             menus.Contains("Edit by Points", StringComparison.Ordinal) &&
             menus.Contains("Edit Transform...", StringComparison.Ordinal) &&
@@ -2928,6 +2932,11 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("Rotate Left 1 deg", StringComparison.Ordinal) &&
             menus.Contains("Reset Transform", StringComparison.Ordinal),
             "sheet overlay adjustment commands should share one discoverable submenu instead of only living on the hidden overlay-node context menu");
+        AssertTrue(
+            menus.Contains("OpenSheetOverlaySource(page)", StringComparison.Ordinal) &&
+            menus.Contains("TogglePageOverlayVisibility(page)", StringComparison.Ordinal) &&
+            menus.Contains("ClearPageOverlay(page)", StringComparison.Ordinal),
+            "sheet overlay adjustment menus should let the user jump to, hide/show, or clear the selected overlay without hunting for the overlay node");
         AssertTrue(
             menus.Contains("BuildSheetOverlayAdjustmentMenu(candidatePage", StringComparison.Ordinal) &&
             menus.Contains("BuildSheetOverlayAdjustmentMenu(node.Page", StringComparison.Ordinal),
@@ -3075,6 +3084,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
         string autoSelect = ReadRepoFile("MainWindow.SheetOverlay.AutoSelect.cs");
+        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
         string menus = ReadRepoFile("MainWindow.SheetOverlay.Menus.cs");
         string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayAutoFitCandidateSearchService.cs"));
 
@@ -3106,6 +3116,11 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)", StringComparison.Ordinal),
             "auto-selected overlay fitting must be reachable from page and viewport menus before an overlay exists and must be able to replace a wrong overlay");
+        AssertTrue(
+            main.Contains("private void OpenSheetOverlaySource(PageInfo page)", StringComparison.Ordinal) &&
+            main.Contains("OpenPageInActiveTab(overlayPage)", StringComparison.Ordinal) &&
+            main.Contains("Opened overlay sheet: {overlayPage.Name}", StringComparison.Ordinal),
+            "auto-selected overlays should be easy to inspect by jumping directly to the matched overlay sheet");
     }
 
     public static void SheetOverlayAutoFitRasterFallbackIsWired()

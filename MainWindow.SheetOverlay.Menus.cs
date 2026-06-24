@@ -89,6 +89,12 @@ public partial class MainWindow
             "Auto Select + Replace Overlay",
             _currentJob != null,
             () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)));
+        menu.Items.Add(MakeMenuItem("Open Overlay Sheet", hasOverlay, () => OpenSheetOverlaySource(page)));
+        menu.Items.Add(MakeMenuItem(
+            page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
+            hasOverlay,
+            () => TogglePageOverlayVisibility(page)));
+        menu.Items.Add(MakeMenuItem("Clear Overlay", hasOverlay, () => ClearPageOverlay(page)));
         menu.Items.Add(MakeMenuItem("Edit by Points", hasOverlay, () => BeginSheetOverlayPointEdit(page)));
         menu.Items.Add(MakeMenuItem("Edit Transform...", hasOverlay, () => EditSheetOverlayTransform(page)));
         menu.Items.Add(new Separator());

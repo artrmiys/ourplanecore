@@ -271,6 +271,26 @@ public partial class MainWindow
         TxtStatus.Text = status;
     }
 
+    private void OpenSheetOverlaySource(PageInfo page)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
+        {
+            TxtStatus.Text = "Set a sheet overlay before opening the overlay sheet.";
+            return;
+        }
+
+        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(latest.OverlayPageFolder);
+        if (overlayPage == null)
+        {
+            TxtStatus.Text = "Overlay sheet source is missing.";
+            return;
+        }
+
+        OpenPageInActiveTab(overlayPage);
+        TxtStatus.Text = $"Opened overlay sheet: {overlayPage.Name}.";
+    }
+
     private void RefreshPageOverlayTreeNode(PageInfo page)
     {
         if (FindPageTreeItemByFolder(page.FolderPath) is not { } item)
