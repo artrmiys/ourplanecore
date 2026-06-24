@@ -688,6 +688,9 @@ public sealed partial class PdfViewport
         if (HandleThreeDRoofKey(e))
             return;
 
+        if (TryHandleSheetOverlayTransformShortcut(e))
+            return;
+
         Key key = KeyboardShortcutKeys.EffectiveKey(e);
         switch (key)
         {

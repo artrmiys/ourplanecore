@@ -125,6 +125,9 @@ public partial class MainWindow
             menu.Items.Add(new Separator());
         }
 
+        if (AddCurrentSheetOverlayAdjustmentMenuItems(menu))
+            menu.Items.Add(new Separator());
+
         AddViewportThreeDMenuItems(menu, request);
         menu.Items.Add(new Separator());
 

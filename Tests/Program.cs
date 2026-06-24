@@ -86,6 +86,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("sheet overlay auto fit recovers scale and offset", SheetOverlayAutoFitServiceTests.RecoversScaleAndOffsetFromRepeatedPlanGeometry),
     ("sheet overlay auto fit rejects sparse geometry", SheetOverlayAutoFitServiceTests.RejectsSparseGeometry),
+    ("sheet overlay adjustment menus are exposed", TakeoffsTreeRegressionTests.SheetOverlayAdjustmentMenusAreExposed),
+    ("sheet overlay transform shortcuts are wired", TakeoffsTreeRegressionTests.SheetOverlayTransformShortcutsAreWired),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("area line grid creates horizontal and vertical segments", AreaLineGridServiceTests.RectangleCreatesHorizontalAndVerticalSegments),

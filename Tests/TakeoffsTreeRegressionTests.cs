@@ -2910,6 +2910,51 @@ internal static class TakeoffsTreeRegressionTests
             "main window sheet overlay loading should use zoom-aware render scale selection and wire viewport refresh requests");
     }
 
+    public static void SheetOverlayAdjustmentMenusAreExposed()
+    {
+        string menus = ReadRepoFile("MainWindow.SheetOverlay.Menus.cs");
+        string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
+
+        AssertTrue(
+            menus.Contains("BuildSheetOverlayAdjustmentMenu", StringComparison.Ordinal) &&
+            menus.Contains("Auto Fit", StringComparison.Ordinal) &&
+            menus.Contains("Edit by Points", StringComparison.Ordinal) &&
+            menus.Contains("Edit Transform...", StringComparison.Ordinal) &&
+            menus.Contains("Move Left 6 pt", StringComparison.Ordinal) &&
+            menus.Contains("Scale Up 5%", StringComparison.Ordinal) &&
+            menus.Contains("Reset Transform", StringComparison.Ordinal),
+            "sheet overlay adjustment commands should share one discoverable submenu instead of only living on the hidden overlay-node context menu");
+        AssertTrue(
+            menus.Contains("BuildSheetOverlayAdjustmentMenu(candidatePage", StringComparison.Ordinal) &&
+            menus.Contains("BuildSheetOverlayAdjustmentMenu(node.Page", StringComparison.Ordinal),
+            "page context menus and overlay-node context menus should both expose the same sheet overlay adjustment surface");
+        AssertTrue(
+            callbacks.Contains("AddCurrentSheetOverlayAdjustmentMenuItems(menu)", StringComparison.Ordinal),
+            "viewport right-click should expose current sheet overlay adjustment commands when a compare overlay is configured");
+    }
+
+    public static void SheetOverlayTransformShortcutsAreWired()
+    {
+        string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
+        string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+
+        AssertTrue(
+            input.Contains("TryHandleSheetOverlayTransformShortcut(e)", StringComparison.Ordinal),
+            "viewport keyboard handling should route current sheet overlay transform shortcuts before ordinary tool hotkeys");
+        AssertTrue(
+            overlay.Contains("ModifierKeys.Control", StringComparison.Ordinal) &&
+            overlay.Contains("ModifierKeys.Alt", StringComparison.Ordinal) &&
+            overlay.Contains("Key.Left", StringComparison.Ordinal) &&
+            overlay.Contains("Key.Right", StringComparison.Ordinal) &&
+            overlay.Contains("Key.Up", StringComparison.Ordinal) &&
+            overlay.Contains("Key.Down", StringComparison.Ordinal) &&
+            overlay.Contains("Key.OemPlus", StringComparison.Ordinal) &&
+            overlay.Contains("Key.OemMinus", StringComparison.Ordinal) &&
+            overlay.Contains("Key.NumPad0", StringComparison.Ordinal) &&
+            overlay.Contains("SheetOverlayTransformChanged?.Invoke", StringComparison.Ordinal),
+            "sheet overlay shortcuts should support nudge, scale, reset, and persist through the existing transform-changed event");
+    }
+
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
     {
         string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");

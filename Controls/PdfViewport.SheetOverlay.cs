@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Windows.Input;
 using SkiaSharp;
 
 namespace OurPlaneCore.Controls;
@@ -98,6 +100,105 @@ public sealed partial class PdfViewport
     private bool IsSheetOverlayPointEditing =>
         _sheetOverlayPointEditStep != SheetOverlayPointEditStep.None;
 
+    private bool TryHandleSheetOverlayTransformShortcut(KeyEventArgs e)
+    {
+        if (_sheetOverlayBitmap == null)
+            return false;
+
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        if ((modifiers & ModifierKeys.Control) == 0 ||
+            (modifiers & ModifierKeys.Alt) == 0)
+        {
+            return false;
+        }
+
+        bool fine = (modifiers & ModifierKeys.Shift) != 0;
+        float nudgePt = fine ? 1f : 6f;
+        float scaleFactor = fine ? 1.01f : 1.05f;
+        Key key = OurPlaneCore.KeyboardShortcutKeys.EffectiveKey(e);
+
+        switch (key)
+        {
+            case Key.Left:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt - nudgePt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay moved",
+                        _sheetOverlayOffsetXPt - nudgePt,
+                        _sheetOverlayOffsetYPt,
+                        _sheetOverlayScale));
+                break;
+            case Key.Right:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt + nudgePt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay moved",
+                        _sheetOverlayOffsetXPt + nudgePt,
+                        _sheetOverlayOffsetYPt,
+                        _sheetOverlayScale));
+                break;
+            case Key.Up:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt - nudgePt,
+                    _sheetOverlayScale,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay moved",
+                        _sheetOverlayOffsetXPt,
+                        _sheetOverlayOffsetYPt - nudgePt,
+                        _sheetOverlayScale));
+                break;
+            case Key.Down:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt + nudgePt,
+                    _sheetOverlayScale,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay moved",
+                        _sheetOverlayOffsetXPt,
+                        _sheetOverlayOffsetYPt + nudgePt,
+                        _sheetOverlayScale));
+                break;
+            case Key.Add:
+            case Key.OemPlus:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale * scaleFactor,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay scaled",
+                        _sheetOverlayOffsetXPt,
+                        _sheetOverlayOffsetYPt,
+                        NormalizeSheetOverlayScale(_sheetOverlayScale * scaleFactor)));
+                break;
+            case Key.Subtract:
+            case Key.OemMinus:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale / scaleFactor,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay scaled",
+                        _sheetOverlayOffsetXPt,
+                        _sheetOverlayOffsetYPt,
+                        NormalizeSheetOverlayScale(_sheetOverlayScale / scaleFactor)));
+                break;
+            case Key.D0:
+            case Key.NumPad0:
+                ApplySheetOverlayTransform(0, 0, 1, "Overlay transform reset.");
+                break;
+            default:
+                return false;
+        }
+
+        e.Handled = true;
+        return true;
+    }
+
     private bool HandleSheetOverlayPointEditClick(SKPoint pdf)
     {
         if (!IsSheetOverlayPointEditing)
@@ -188,6 +289,19 @@ public sealed partial class PdfViewport
             status));
         PostStatus(status);
     }
+
+    private static string BuildSheetOverlayTransformStatus(
+        string prefix,
+        float offsetXPt,
+        float offsetYPt,
+        float overlayScale) =>
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "{0}: X {1:0.###}, Y {2:0.###}, scale {3:0.###}x.",
+            prefix,
+            offsetXPt,
+            offsetYPt,
+            overlayScale);
 
     private SKPoint OverlayDisplayToLocal(SKPoint displayPoint)
     {

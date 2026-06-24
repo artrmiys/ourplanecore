@@ -32,83 +32,6 @@ public partial class MainWindow
         ("Gray", "#546E7A"),
     ];
 
-    private MenuItem BuildSheetOverlayMenu(PageInfo candidatePage)
-    {
-        bool hasCurrentPage = _currentPage != null;
-        bool canSetOverlay = hasCurrentPage &&
-                             !SameFolder(_currentPage!.FolderPath, candidatePage.FolderPath);
-        bool hasOverlay = hasCurrentPage &&
-                          !string.IsNullOrWhiteSpace(_currentPage!.OverlayPageFolder);
-
-        var menu = new MenuItem { Header = "Sheet Overlay" };
-        menu.Items.Add(MakeMenuItem("Use This Sheet as Overlay", canSetOverlay, () => SetCurrentSheetOverlay(candidatePage)));
-        menu.Items.Add(MakeMenuItem("Clear Current Sheet Overlay", hasOverlay, ClearCurrentSheetOverlay));
-        menu.Items.Add(MakeMenuItem("Auto Fit Current Overlay", hasOverlay, () => AutoFitSheetOverlay(_currentPage!)));
-        menu.Items.Add(MakeMenuItem(
-            "Edit Overlay by Points",
-            !string.IsNullOrWhiteSpace(candidatePage.OverlayPageFolder),
-            () => BeginSheetOverlayPointEdit(candidatePage)));
-        menu.Items.Add(new Separator());
-
-        var colorMenu = new MenuItem { Header = "Color" };
-        foreach ((string label, string hex) in SheetOverlayColors)
-            colorMenu.Items.Add(MakeSheetOverlayColorMenuItem(label, hex, hasOverlay));
-        menu.Items.Add(colorMenu);
-
-        return menu;
-    }
-
-    private ContextMenu BuildPageOverlayContextMenu(PageOverlayNode node)
-    {
-        var menu = new ContextMenu();
-        bool isCurrent = _currentPage != null && SameFolder(_currentPage.FolderPath, node.Page.FolderPath);
-        menu.Items.Add(MakeMenuItem(
-            node.Page.OverlayVisible ? "Hide Overlay" : "Show Overlay",
-            true,
-            () => TogglePageOverlayVisibility(node.Page)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Auto Fit Overlay", true, () => AutoFitSheetOverlay(node.Page)));
-        menu.Items.Add(MakeMenuItem("Edit Overlay by Points", true, () => BeginSheetOverlayPointEdit(node.Page)));
-        menu.Items.Add(MakeMenuItem("Edit Transform...", true, () => EditSheetOverlayTransform(node.Page)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Move Left 6 pt", true, () => NudgeSheetOverlay(node.Page, -6, 0)));
-        menu.Items.Add(MakeMenuItem("Move Right 6 pt", true, () => NudgeSheetOverlay(node.Page, 6, 0)));
-        menu.Items.Add(MakeMenuItem("Move Up 6 pt", true, () => NudgeSheetOverlay(node.Page, 0, -6)));
-        menu.Items.Add(MakeMenuItem("Move Down 6 pt", true, () => NudgeSheetOverlay(node.Page, 0, 6)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Scale Up 5%", true, () => ScaleSheetOverlay(node.Page, 1.05)));
-        menu.Items.Add(MakeMenuItem("Scale Down 5%", true, () => ScaleSheetOverlay(node.Page, 1 / 1.05)));
-        menu.Items.Add(MakeMenuItem("Reset Transform", true, () => SetSheetOverlayTransform(node.Page, 0, 0, 1, "Overlay transform reset.")));
-        menu.Items.Add(new Separator());
-
-        var colorMenu = new MenuItem { Header = "Color" };
-        foreach ((string label, string hex) in SheetOverlayColors)
-            colorMenu.Items.Add(MakePageOverlayColorMenuItem(node.Page, label, hex));
-        menu.Items.Add(colorMenu);
-        menu.Items.Add(MakeMenuItem("Clear Overlay", true, () =>
-            ClearPageOverlay(node.Page)));
-        if (!isCurrent)
-            menu.Items.Add(MakeMenuItem("Open Sheet", true, () => OpenPageInActiveTab(node.Page)));
-        return menu;
-    }
-
-    private MenuItem MakePageOverlayColorMenuItem(PageInfo page, string label, string hex)
-    {
-        var item = MakeMenuItem(label, true, () => SetPageSheetOverlayColor(page, hex));
-        item.IsCheckable = true;
-        item.IsChecked = string.Equals(page.OverlayColor, hex, StringComparison.OrdinalIgnoreCase);
-        return item;
-    }
-
-    private MenuItem MakeSheetOverlayColorMenuItem(string label, string hex, bool isEnabled)
-    {
-        var item = MakeMenuItem(label, isEnabled, () => SetCurrentSheetOverlayColor(hex));
-        item.IsCheckable = true;
-        item.IsChecked = _currentPage != null &&
-                         string.Equals(CurrentSheetOverlayColor(), hex, StringComparison.OrdinalIgnoreCase);
-        return item;
-    }
-
     private void SetCurrentSheetOverlay(PageInfo overlayPage)
     {
         if (_currentPage == null)
@@ -176,28 +99,38 @@ public partial class MainWindow
         RefreshPageOverlayState(page.FolderPath, $"Overlay color: {color}");
     }
 
-    private void NudgeSheetOverlay(PageInfo page, double dxPt, double dyPt) =>
+    private void NudgeSheetOverlay(PageInfo page, double dxPt, double dyPt)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        double nextX = latest.OverlayOffsetXPt + dxPt;
+        double nextY = latest.OverlayOffsetYPt + dyPt;
         SetSheetOverlayTransform(
-            page,
-            page.OverlayOffsetXPt + dxPt,
-            page.OverlayOffsetYPt + dyPt,
-            page.OverlayScale,
-            $"Overlay moved: X {FormatOverlayNumber(page.OverlayOffsetXPt + dxPt)}, Y {FormatOverlayNumber(page.OverlayOffsetYPt + dyPt)}.");
+            latest,
+            nextX,
+            nextY,
+            latest.OverlayScale,
+            $"Overlay moved: X {FormatOverlayNumber(nextX)}, Y {FormatOverlayNumber(nextY)}.");
+    }
 
-    private void ScaleSheetOverlay(PageInfo page, double factor) =>
+    private void ScaleSheetOverlay(PageInfo page, double factor)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        double nextScale = latest.OverlayScale * factor;
         SetSheetOverlayTransform(
-            page,
-            page.OverlayOffsetXPt,
-            page.OverlayOffsetYPt,
-            page.OverlayScale * factor,
-            $"Overlay scale: {FormatOverlayNumber(page.OverlayScale * factor)}x.");
+            latest,
+            latest.OverlayOffsetXPt,
+            latest.OverlayOffsetYPt,
+            nextScale,
+            $"Overlay scale: {FormatOverlayNumber(nextScale)}x.");
+    }
 
     private void EditSheetOverlayTransform(PageInfo page)
     {
-        if (!ShowSheetOverlayTransformDialog(page, out double xPt, out double yPt, out double scale))
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (!ShowSheetOverlayTransformDialog(latest, out double xPt, out double yPt, out double scale))
             return;
 
-        SetSheetOverlayTransform(page, xPt, yPt, scale, "Overlay transform updated.");
+        SetSheetOverlayTransform(latest, xPt, yPt, scale, "Overlay transform updated.");
     }
 
     private void SetSheetOverlayTransform(
@@ -207,12 +140,16 @@ public partial class MainWindow
         double overlayScale,
         string status)
     {
-        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
             return;
 
-        OurPlaneCoreJobStore.SavePageOverlayTransform(page.FolderPath, offsetXPt, offsetYPt, overlayScale);
-        RefreshPageOverlayState(page.FolderPath, status);
+        OurPlaneCoreJobStore.SavePageOverlayTransform(latest.FolderPath, offsetXPt, offsetYPt, overlayScale);
+        RefreshPageOverlayState(latest.FolderPath, status);
     }
+
+    private static PageInfo ReadLatestSheetOverlayPage(PageInfo page) =>
+        OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
 
     private void BeginSheetOverlayPointEdit(PageInfo page)
     {
