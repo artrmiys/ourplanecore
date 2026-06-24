@@ -52,6 +52,7 @@ public partial class MainWindow
             CurrentSheetOverlayColor(),
             CurrentSheetOverlayOpacity());
         OurPlaneCoreJobStore.SavePageOverlayVisibility(_currentPage.FolderPath, true);
+        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
 
         ReloadCurrentSheetOverlay($"Overlay set: {overlayPage.Name}");
     }
@@ -61,6 +62,7 @@ public partial class MainWindow
         if (_currentPage == null)
             return;
 
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
         OurPlaneCoreJobStore.ClearPageOverlay(_currentPage.FolderPath);
         if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
             _currentPage = updated;
@@ -82,6 +84,7 @@ public partial class MainWindow
             _currentPage.OverlayPageFolder,
             color,
             CurrentSheetOverlayOpacity());
+        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
 
         ReloadCurrentSheetOverlay($"Overlay color: {color}");
     }
@@ -96,6 +99,7 @@ public partial class MainWindow
             page.OverlayPageFolder,
             color,
             page.OverlayOpacity);
+        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(page));
         RefreshPageOverlayState(page.FolderPath, $"Overlay color: {color}");
     }
 
@@ -166,6 +170,7 @@ public partial class MainWindow
             offsetYPt,
             overlayScale,
             overlayRotationDegrees);
+        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest));
         RefreshPageOverlayState(latest.FolderPath, status);
     }
 
@@ -207,6 +212,7 @@ public partial class MainWindow
         if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
         {
             _currentPage = updated;
+            SyncReciprocalSheetOverlay(updated);
             RefreshPageOverlayTreeNode(updated);
         }
 
@@ -215,6 +221,7 @@ public partial class MainWindow
 
     private void ClearPageOverlay(PageInfo page)
     {
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(page));
         OurPlaneCoreJobStore.ClearPageOverlay(page.FolderPath);
         if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
         {
@@ -228,6 +235,24 @@ public partial class MainWindow
         else
             RefreshPagesTakeoffIndicators();
         TxtStatus.Text = "Sheet overlay cleared.";
+    }
+
+    private void SyncReciprocalSheetOverlay(PageInfo page)
+    {
+        if (!SheetOverlayReciprocalService.TrySync(page, out string reciprocalPageFolder))
+            return;
+
+        if (OurPlaneCoreJobStore.TryReadPage(reciprocalPageFolder) is { } reciprocalPage)
+            RefreshPageOverlayTreeNode(reciprocalPage);
+    }
+
+    private void ClearReciprocalSheetOverlay(PageInfo page)
+    {
+        if (!SheetOverlayReciprocalService.TryClear(page, out string reciprocalPageFolder))
+            return;
+
+        if (OurPlaneCoreJobStore.TryReadPage(reciprocalPageFolder) is { } reciprocalPage)
+            RefreshPageOverlayTreeNode(reciprocalPage);
     }
 
     private void RefreshPageOverlayState(string pageFolder, string status)

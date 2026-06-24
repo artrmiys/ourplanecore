@@ -62,6 +62,8 @@ public partial class MainWindow
                 fit.OffsetYPt,
                 fit.OverlayScale,
                 fit.OverlayRotationDegrees);
+            if (OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
+                SyncReciprocalSheetOverlay(updatedTarget);
             RefreshPageOverlayState(latestTarget.FolderPath, fit.Message);
         }
         catch (Exception ex)

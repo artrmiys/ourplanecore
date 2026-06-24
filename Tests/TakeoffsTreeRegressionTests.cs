@@ -2958,6 +2958,32 @@ internal static class TakeoffsTreeRegressionTests
             "sheet overlay shortcuts should support nudge, scale, rotation, reset, and persist through the existing transform-changed event");
     }
 
+    public static void SheetOverlayReciprocalSyncIsWired()
+    {
+        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
+        string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayReciprocalService.cs"));
+
+        AssertTrue(
+            main.Contains("SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage))", StringComparison.Ordinal) &&
+            main.Contains("ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage))", StringComparison.Ordinal) &&
+            main.Contains("SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest))", StringComparison.Ordinal) &&
+            main.Contains("SyncReciprocalSheetOverlay(updated)", StringComparison.Ordinal) &&
+            main.Contains("SheetOverlayReciprocalService.TrySync", StringComparison.Ordinal) &&
+            main.Contains("SheetOverlayReciprocalService.TryClear", StringComparison.Ordinal),
+            "setting, clearing, menu transforms, and viewport point-edit transforms should keep the reciprocal overlay sheet in sync");
+        AssertTrue(
+            autoFit.Contains("SyncReciprocalSheetOverlay(updatedTarget)", StringComparison.Ordinal),
+            "overlay Auto Fit should update the reciprocal sheet so switching between compared sheets keeps an overlay visible");
+        AssertTrue(
+            service.Contains("public static bool TrySync", StringComparison.Ordinal) &&
+            service.Contains("public static bool TryClear", StringComparison.Ordinal) &&
+            service.Contains("ShouldWriteReciprocal", StringComparison.Ordinal) &&
+            service.Contains("string.IsNullOrWhiteSpace(reciprocalPage.OverlayPageFolder)", StringComparison.Ordinal) &&
+            service.Contains("SameFolder(reciprocalPage.OverlayPageFolder, basePageFolder)", StringComparison.Ordinal),
+            "reciprocal sync should fill empty targets or update true reciprocal targets without overwriting unrelated overlay comparisons");
+    }
+
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
     {
         string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");
