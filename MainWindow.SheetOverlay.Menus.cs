@@ -89,6 +89,10 @@ public partial class MainWindow
             "Auto Select + Replace Overlay",
             _currentJob != null,
             () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)));
+        menu.Items.Add(MakeMenuItem(
+            "Auto Select + Next Candidate",
+            hasOverlay && _currentJob != null,
+            () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true, skipCurrentOverlay: true)));
         menu.Items.Add(MakeMenuItem("Open Overlay Sheet", hasOverlay, () => OpenSheetOverlaySource(page)));
         menu.Items.Add(MakeMenuItem(
             page.OverlayVisible ? "Hide Overlay" : "Show Overlay",

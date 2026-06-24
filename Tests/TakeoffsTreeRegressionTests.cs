@@ -3096,9 +3096,16 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlay(", StringComparison.Ordinal) &&
             autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true)", StringComparison.Ordinal) &&
-            autoSelect.Contains("Auto-selected overlay: {search.OverlayPage.Name}", StringComparison.Ordinal) &&
+            autoSelect.Contains("Auto-selected overlay", StringComparison.Ordinal) &&
             autoSelect.Contains("BuildSheetOverlayAutoFitSearchRank", StringComparison.Ordinal) &&
-            autoSelect.Contains("AutoSelectAndFitSheetOverlay(PageInfo page, bool replaceExistingOverlay)", StringComparison.Ordinal) &&
+            autoSelect.Contains("AutoSelectAndFitSheetOverlay(", StringComparison.Ordinal) &&
+            autoSelect.Contains("bool replaceExistingOverlay", StringComparison.Ordinal) &&
+            autoSelect.Contains("bool skipCurrentOverlay = false", StringComparison.Ordinal) &&
+            autoSelect.Contains("Overlay auto select: trying the next matching sheet", StringComparison.Ordinal) &&
+            autoSelect.Contains("skipCurrentOverlay ? targetPage.OverlayPageFolder : \"\"", StringComparison.Ordinal) &&
+            autoSelect.Contains("excludedOverlayFolder", StringComparison.Ordinal) &&
+            autoSelect.Contains("no alternate similar sheet matched", StringComparison.Ordinal) &&
+            autoSelect.Contains("Next overlay candidate", StringComparison.Ordinal) &&
             autoSelect.Contains("Overlay auto select: reselecting the best matching sheet", StringComparison.Ordinal) &&
             autoSelect.Contains("ClearReciprocalSheetOverlay(latestTarget)", StringComparison.Ordinal) &&
             autoSelect.Contains("sheets compared", StringComparison.Ordinal) &&
@@ -3119,10 +3126,12 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("\"Auto Select + Fit This Sheet\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Fit Sheet Overlay\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Replace Overlay\"", StringComparison.Ordinal) &&
+            menus.Contains("\"Auto Select + Next Candidate\"", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(candidatePage, replaceExistingOverlay: true)", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)", StringComparison.Ordinal) &&
-            menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)", StringComparison.Ordinal),
-            "auto-selected overlay fitting must be reachable from page and viewport menus before an overlay exists and must be able to replace a wrong overlay");
+            menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)", StringComparison.Ordinal) &&
+            menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true, skipCurrentOverlay: true)", StringComparison.Ordinal),
+            "auto-selected overlay fitting must be reachable from page and viewport menus, replace a wrong overlay, and cycle to the next ranked candidate");
         AssertTrue(
             main.Contains("private void OpenSheetOverlaySource(PageInfo page)", StringComparison.Ordinal) &&
             main.Contains("OpenPageInActiveTab(overlayPage)", StringComparison.Ordinal) &&

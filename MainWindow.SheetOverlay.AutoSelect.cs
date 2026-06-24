@@ -9,7 +9,10 @@ public partial class MainWindow
 {
     private const int MaxSheetOverlayAutoSelectCandidates = 48;
 
-    private async void AutoSelectAndFitSheetOverlay(PageInfo page, bool replaceExistingOverlay)
+    private async void AutoSelectAndFitSheetOverlay(
+        PageInfo page,
+        bool replaceExistingOverlay,
+        bool skipCurrentOverlay = false)
     {
         PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
         if (targetPage == null)
@@ -25,21 +28,26 @@ public partial class MainWindow
             return;
         }
 
-        TxtStatus.Text = replaceExistingOverlay
+        TxtStatus.Text = skipCurrentOverlay
+            ? "Overlay auto select: trying the next matching sheet..."
+            : replaceExistingOverlay
             ? "Overlay auto select: reselecting the best matching sheet..."
             : "Overlay auto select: searching job sheets for matching plan geometry...";
 
         try
         {
             SheetOverlayAutoFitCandidateSearch search = await System.Threading.Tasks.Task.Run(() =>
-                FindSheetOverlayAutoFitCandidate(job, targetPage));
+                FindSheetOverlayAutoFitCandidate(
+                    job,
+                    targetPage,
+                    skipCurrentOverlay ? targetPage.OverlayPageFolder : ""));
             if (!search.Ok)
             {
                 TxtStatus.Text = search.Error;
                 return;
             }
 
-            ApplySheetOverlayAutoSelectedFit(targetPage, search, replaceExistingOverlay);
+            ApplySheetOverlayAutoSelectedFit(targetPage, search, replaceExistingOverlay, skipCurrentOverlay);
         }
         catch (Exception ex)
         {
@@ -51,7 +59,8 @@ public partial class MainWindow
     private void ApplySheetOverlayAutoSelectedFit(
         PageInfo targetPage,
         SheetOverlayAutoFitCandidateSearch search,
-        bool replaceExistingOverlay = false)
+        bool replaceExistingOverlay = false,
+        bool skipCurrentOverlay = false)
     {
         if (search.OverlayPage == null || search.Read == null)
         {
@@ -99,13 +108,14 @@ public partial class MainWindow
             search.OverlayPage,
             search.Read,
             search.Fit,
-            $"Auto-selected overlay: {search.OverlayPage.Name} " +
+            $"{(skipCurrentOverlay ? "Next overlay candidate" : "Auto-selected overlay")}: {search.OverlayPage.Name} " +
             $"({search.ComparableCount}/{search.CandidateCount} sheets compared; {alternatives}). ");
     }
 
     private static SheetOverlayAutoFitCandidateSearch FindSheetOverlayAutoFitCandidate(
         OurPlaneCoreJob job,
-        PageInfo targetPage)
+        PageInfo targetPage,
+        string excludedOverlayFolder = "")
     {
         SheetOverlayAutoFitSnapRead baseRead = ReadSheetOverlayAutoFitCandidateSnap(targetPage);
         if (!baseRead.Ok)
@@ -114,7 +124,10 @@ public partial class MainWindow
                 $"Overlay auto fit: base sheet geometry unavailable. {baseRead.Error}");
         }
 
-        List<SheetOverlayAutoFitCandidatePage> pages = BuildSheetOverlayAutoFitCandidatePages(job, targetPage).ToList();
+        List<SheetOverlayAutoFitCandidatePage> pages = BuildSheetOverlayAutoFitCandidatePages(
+            job,
+            targetPage,
+            excludedOverlayFolder).ToList();
         var inputs = new List<SheetOverlayAutoFitCandidateInput>();
         var readsByFolder = new Dictionary<string, SheetOverlayAutoFitSnapRead>(StringComparer.OrdinalIgnoreCase);
         int tried = 0;
@@ -138,7 +151,9 @@ public partial class MainWindow
         if (inputs.Count == 0)
         {
             return SheetOverlayAutoFitCandidateSearch.Failed(
-                $"Overlay auto fit: no comparable sheet geometry found in {tried} candidate sheets.");
+                string.IsNullOrWhiteSpace(excludedOverlayFolder)
+                    ? $"Overlay auto fit: no comparable sheet geometry found in {tried} candidate sheets."
+                    : $"Overlay auto fit: no alternate comparable sheet geometry found in {tried} candidate sheets.");
         }
 
         if (!SheetOverlayAutoFitCandidateSearchService.TryFindBest(
@@ -148,7 +163,9 @@ public partial class MainWindow
                 out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches))
         {
             return SheetOverlayAutoFitCandidateSearch.Failed(
-                $"Overlay auto fit: no similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough.");
+                string.IsNullOrWhiteSpace(excludedOverlayFolder)
+                    ? $"Overlay auto fit: no similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough."
+                    : $"Overlay auto fit: no alternate similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough.");
         }
 
         if (!readsByFolder.TryGetValue(SheetOverlayFolderKey(match.Page.FolderPath), out SheetOverlayAutoFitSnapRead? selectedRead) ||
@@ -179,7 +196,8 @@ public partial class MainWindow
 
     private static IEnumerable<SheetOverlayAutoFitCandidatePage> BuildSheetOverlayAutoFitCandidatePages(
         OurPlaneCoreJob job,
-        PageInfo targetPage)
+        PageInfo targetPage,
+        string excludedOverlayFolder = "")
     {
         List<PageInfo> pages = CollectSheetOverlayAutoFitPages(job.PagesRoot).ToList();
         int targetIndex = pages.FindIndex(page => SameFolder(page.FolderPath, targetPage.FolderPath));
@@ -189,6 +207,8 @@ public partial class MainWindow
                 page,
                 BuildSheetOverlayAutoFitSearchRank(targetPage, targetIndex, page, index)))
             .Where(candidate => !SameFolder(candidate.Page.FolderPath, targetPage.FolderPath))
+            .Where(candidate => string.IsNullOrWhiteSpace(excludedOverlayFolder) ||
+                                !SameFolder(candidate.Page.FolderPath, excludedOverlayFolder))
             .OrderBy(candidate => candidate.SearchRank)
             .ThenBy(candidate => candidate.Page.Name, StringComparer.OrdinalIgnoreCase)
             .Take(MaxSheetOverlayAutoSelectCandidates);
