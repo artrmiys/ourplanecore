@@ -17,6 +17,10 @@ public partial class MainWindow
 
         var menu = new MenuItem { Header = "Sheet Overlay" };
         menu.Items.Add(MakeMenuItem("Use This Sheet as Current Overlay", canSetOverlay, () => SetCurrentSheetOverlay(candidatePage)));
+        menu.Items.Add(MakeMenuItem(
+            "Auto Select + Fit This Sheet",
+            _currentJob != null,
+            () => AutoFitSheetOverlay(candidatePage)));
         menu.Items.Add(MakeMenuItem("Clear Current Sheet Overlay", currentHasOverlay, ClearCurrentSheetOverlay));
         if (currentHasOverlay)
             menu.Items.Add(BuildSheetOverlayAdjustmentMenu(_currentPage!, "Adjust Current Overlay"));
@@ -59,10 +63,20 @@ public partial class MainWindow
 
     private bool AddCurrentSheetOverlayAdjustmentMenuItems(ContextMenu menu)
     {
-        if (_currentPage == null || string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder))
+        if (_currentPage == null)
             return false;
 
-        menu.Items.Add(BuildSheetOverlayAdjustmentMenu(_currentPage, "Compare Overlay"));
+        PageInfo currentPage = _currentPage;
+        if (string.IsNullOrWhiteSpace(currentPage.OverlayPageFolder))
+        {
+            menu.Items.Add(MakeMenuItem(
+                "Auto Select + Fit Sheet Overlay",
+                _currentJob != null,
+                () => AutoFitSheetOverlay(currentPage)));
+            return true;
+        }
+
+        menu.Items.Add(BuildSheetOverlayAdjustmentMenu(currentPage, "Compare Overlay"));
         return true;
     }
 
