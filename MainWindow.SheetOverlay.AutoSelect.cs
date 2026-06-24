@@ -8,7 +8,7 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private const int MaxSheetOverlayAutoSelectCandidates = 48;
+    private const int MaxSheetOverlayAutoSelectCandidates = 160;
 
     private async void AutoSelectAndFitSheetOverlay(
         PageInfo page,

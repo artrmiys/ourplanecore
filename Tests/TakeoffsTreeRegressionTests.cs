@@ -3123,6 +3123,8 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlay(", StringComparison.Ordinal) &&
             autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true)", StringComparison.Ordinal) &&
             autoSelect.Contains("Auto-selected overlay", StringComparison.Ordinal) &&
+            autoSelect.Contains("MaxSheetOverlayAutoSelectCandidates = 160", StringComparison.Ordinal) &&
+            autoSelect.Contains("Take(MaxSheetOverlayAutoSelectCandidates)", StringComparison.Ordinal) &&
             autoSelect.Contains("BuildSheetOverlayAutoFitSearchRank", StringComparison.Ordinal) &&
             autoSelect.Contains("AutoSelectAndFitSheetOverlay(", StringComparison.Ordinal) &&
             autoSelect.Contains("bool replaceExistingOverlay", StringComparison.Ordinal) &&
