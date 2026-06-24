@@ -2992,10 +2992,17 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             autoFit.Contains("ReadSheetOverlayAutoFitRasterSnap(basePage)", StringComparison.Ordinal) &&
             autoFit.Contains("ReadSheetOverlayAutoFitRasterSnap(overlayPage)", StringComparison.Ordinal) &&
+            autoFit.Contains("ReadSheetOverlayAutoFitRasterGeometry(targetPage, overlayPage)", StringComparison.Ordinal) &&
+            autoFit.Contains("Raster fallback also failed", StringComparison.Ordinal) &&
             autoFit.Contains("RasterSheetCacheService.TryReadReady", StringComparison.Ordinal) &&
             autoFit.Contains("TryRenderSheetOverlayAutoFitRaster", StringComparison.Ordinal) &&
             autoFit.Contains("SheetOverlayRasterFeatureService.TryExtractSnap", StringComparison.Ordinal),
-            "sheet overlay Auto Fit should fall back to raster-image line features when PDF vector geometry is unavailable");
+            "sheet overlay Auto Fit should fall back to raster-image line features when PDF vector geometry is unavailable or fails to match");
+        AssertTrue(
+            autoFit.Contains("BuildSheetOverlayAutoFitStatus", StringComparison.Ordinal) &&
+            autoFit.Contains("source='{read.SourceSummary}'", StringComparison.Ordinal) &&
+            autoFit.Contains("Overlay auto fit (raster image)", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should report whether the accepted match came from PDF geometry or raster-image fallback");
         AssertTrue(
             feature.Contains("BuildInkMap", StringComparison.Ordinal) &&
             feature.Contains("ExtractHorizontalSegments", StringComparison.Ordinal) &&

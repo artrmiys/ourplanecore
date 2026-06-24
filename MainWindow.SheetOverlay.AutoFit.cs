@@ -44,7 +44,29 @@ public partial class MainWindow
                 return;
             }
 
-            if (!SheetOverlayAutoFitService.TryFit(read.BaseSnap, read.OverlaySnap, out SheetOverlayAutoFitResult fit))
+            bool fitted = SheetOverlayAutoFitService.TryFit(read.BaseSnap, read.OverlaySnap, out SheetOverlayAutoFitResult fit);
+            if (!fitted && !read.IsPureRaster)
+            {
+                SheetOverlayAutoFitReadResult rasterRetry = ReadSheetOverlayAutoFitRasterGeometry(targetPage, overlayPage);
+                SheetOverlayAutoFitResult rasterFit = default!;
+                if (rasterRetry.Ok &&
+                    SheetOverlayAutoFitService.TryFit(rasterRetry.BaseSnap, rasterRetry.OverlaySnap, out rasterFit))
+                {
+                    read = rasterRetry;
+                    fit = rasterFit;
+                    fitted = true;
+                }
+                else if (!rasterRetry.Ok)
+                {
+                    fit = fit with { Message = $"{fit.Message} Raster fallback: {rasterRetry.Error}" };
+                }
+                else
+                {
+                    fit = fit with { Message = $"{fit.Message} Raster fallback also failed: {rasterFit.Message}" };
+                }
+            }
+
+            if (!fitted)
             {
                 TxtStatus.Text = fit.Message;
                 return;
@@ -67,7 +89,12 @@ public partial class MainWindow
                 fit.OverlayRotationDegrees);
             if (OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
                 SyncReciprocalSheetOverlay(updatedTarget);
-            RefreshPageOverlayState(latestTarget.FolderPath, fit.Message);
+            string status = BuildSheetOverlayAutoFitStatus(read, fit);
+            AppLog.Info(
+                $"Sheet overlay auto fit applied; base='{latestTarget.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
+                $"source='{read.SourceSummary}'; matched={fit.MatchedSamples}/{fit.SampleCount}; " +
+                $"confidence={fit.Confidence:0.###}; scale={fit.OverlayScale:0.###}; rotation={fit.OverlayRotationDegrees:0.###}");
+            RefreshPageOverlayState(latestTarget.FolderPath, status);
         }
         catch (Exception ex)
         {
@@ -83,7 +110,7 @@ public partial class MainWindow
         SheetOverlayAutoFitSnapRead baseRead = ReadSheetOverlayAutoFitSnap(basePage);
         SheetOverlayAutoFitSnapRead overlayRead = ReadSheetOverlayAutoFitSnap(overlayPage);
         if (baseRead.Ok && overlayRead.Ok)
-            return new SheetOverlayAutoFitReadResult(true, baseRead.Snap, overlayRead.Snap, "");
+            return SheetOverlayAutoFitReadResult.Success(baseRead, overlayRead);
 
         SheetOverlayAutoFitSnapRead baseRasterRead = baseRead.Ok
             ? baseRead
@@ -99,7 +126,22 @@ public partial class MainWindow
             return SheetOverlayAutoFitReadResult.Failed(
                 $"Overlay auto fit: overlay geometry unavailable. {overlayRead.Error} Raster fallback: {overlayRasterRead.Error}");
 
-        return new SheetOverlayAutoFitReadResult(true, baseRasterRead.Snap, overlayRasterRead.Snap, "");
+        return SheetOverlayAutoFitReadResult.Success(baseRasterRead, overlayRasterRead);
+    }
+
+    private static SheetOverlayAutoFitReadResult ReadSheetOverlayAutoFitRasterGeometry(
+        PageInfo basePage,
+        PageInfo overlayPage)
+    {
+        SheetOverlayAutoFitSnapRead baseRead = ReadSheetOverlayAutoFitRasterSnap(basePage);
+        if (!baseRead.Ok)
+            return SheetOverlayAutoFitReadResult.Failed($"Overlay auto fit raster fallback: base sheet unavailable. {baseRead.Error}");
+
+        SheetOverlayAutoFitSnapRead overlayRead = ReadSheetOverlayAutoFitRasterSnap(overlayPage);
+        if (!overlayRead.Ok)
+            return SheetOverlayAutoFitReadResult.Failed($"Overlay auto fit raster fallback: overlay sheet unavailable. {overlayRead.Error}");
+
+        return SheetOverlayAutoFitReadResult.Success(baseRead, overlayRead);
     }
 
     private static SheetOverlayAutoFitSnapRead ReadSheetOverlayAutoFitSnap(PageInfo page)
@@ -112,7 +154,7 @@ public partial class MainWindow
                 out _) &&
             HasAutoFitGeometry(rasterSnap))
         {
-            return new SheetOverlayAutoFitSnapRead(true, rasterSnap, "");
+            return new SheetOverlayAutoFitSnapRead(true, rasterSnap, "", "raster snap index");
         }
 
         IReadOnlyList<PdfLayerInfo>? layers = page.PdfLayersCached ? page.PdfLayers : null;
@@ -125,7 +167,7 @@ public partial class MainWindow
                 out string blackError) &&
             HasAutoFitGeometry(blackSnap))
         {
-            return new SheetOverlayAutoFitSnapRead(true, blackSnap, "");
+            return new SheetOverlayAutoFitSnapRead(true, blackSnap, "", "PDF black linework");
         }
 
         if (PdfGeometrySnapService.TryReadSnapPoints(
@@ -137,7 +179,7 @@ public partial class MainWindow
                 out string error) &&
             HasAutoFitGeometry(snap))
         {
-            return new SheetOverlayAutoFitSnapRead(true, snap, "");
+            return new SheetOverlayAutoFitSnapRead(true, snap, "", "PDF linework");
         }
 
         string reason = !string.IsNullOrWhiteSpace(error)
@@ -145,7 +187,7 @@ public partial class MainWindow
             : !string.IsNullOrWhiteSpace(blackError)
                 ? blackError
                 : "not enough PDF linework was found.";
-        return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason);
+        return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason, "");
     }
 
     private static SheetOverlayAutoFitSnapRead ReadSheetOverlayAutoFitRasterSnap(PageInfo page)
@@ -166,7 +208,7 @@ public partial class MainWindow
                     out string featureError) &&
                 HasAutoFitGeometry(rasterSnap))
             {
-                return new SheetOverlayAutoFitSnapRead(true, rasterSnap, "");
+                return new SheetOverlayAutoFitSnapRead(true, rasterSnap, "", "ready raster image");
             }
 
             rasterError = string.IsNullOrWhiteSpace(featureError)
@@ -180,7 +222,7 @@ public partial class MainWindow
             string reason = !string.IsNullOrWhiteSpace(rasterError)
                 ? rasterError
                 : renderError;
-            return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason);
+            return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason, "");
         }
 
         using (renderedBitmap)
@@ -193,13 +235,13 @@ public partial class MainWindow
                     out string featureError) &&
                 HasAutoFitGeometry(snap))
             {
-                return new SheetOverlayAutoFitSnapRead(true, snap, "");
+                return new SheetOverlayAutoFitSnapRead(true, snap, "", "rendered raster image");
             }
 
             string reason = !string.IsNullOrWhiteSpace(featureError)
                 ? featureError
                 : "not enough raster linework was found.";
-            return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason);
+            return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason, "");
         }
     }
 
@@ -253,18 +295,44 @@ public partial class MainWindow
     private static bool HasAutoFitGeometry(PdfGeometrySnapResult snap) =>
         snap.Points.Count + snap.Segments.Count >= SheetOverlayAutoFitMinimumGeometry;
 
+    private static string BuildSheetOverlayAutoFitStatus(
+        SheetOverlayAutoFitReadResult read,
+        SheetOverlayAutoFitResult fit) =>
+        read.IsPureRaster
+            ? $"Overlay auto fit (raster image): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg."
+            : $"Overlay auto fit ({read.SourceSummary}): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg.";
+
     private sealed record SheetOverlayAutoFitReadResult(
         bool Ok,
         PdfGeometrySnapResult BaseSnap,
         PdfGeometrySnapResult OverlaySnap,
-        string Error)
+        string Error,
+        string BaseSource,
+        string OverlaySource)
     {
         public static SheetOverlayAutoFitReadResult Failed(string error) =>
-            new(false, new PdfGeometrySnapResult(), new PdfGeometrySnapResult(), error);
+            new(false, new PdfGeometrySnapResult(), new PdfGeometrySnapResult(), error, "", "");
+
+        public static SheetOverlayAutoFitReadResult Success(
+            SheetOverlayAutoFitSnapRead baseRead,
+            SheetOverlayAutoFitSnapRead overlayRead) =>
+            new(true, baseRead.Snap, overlayRead.Snap, "", baseRead.Source, overlayRead.Source);
+
+        public bool IsPureRaster =>
+            IsRasterSource(BaseSource) && IsRasterSource(OverlaySource);
+
+        public string SourceSummary =>
+            string.Equals(BaseSource, OverlaySource, StringComparison.OrdinalIgnoreCase)
+                ? BaseSource
+                : $"base {BaseSource}, overlay {OverlaySource}";
+
+        private static bool IsRasterSource(string source) =>
+            source.Contains("raster", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record SheetOverlayAutoFitSnapRead(
         bool Ok,
         PdfGeometrySnapResult Snap,
-        string Error);
+        string Error,
+        string Source);
 }
