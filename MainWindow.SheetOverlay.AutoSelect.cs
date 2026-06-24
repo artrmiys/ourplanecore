@@ -133,6 +133,12 @@ public partial class MainWindow
         if (!SameFolder(latestTarget.OverlayPageFolder, selectedSearch.OverlayPage.FolderPath))
             return;
 
+        if (action == SheetOverlayCandidateAction.OpenTargetSheet)
+        {
+            OpenSheetOverlayTarget(latestTarget);
+            return;
+        }
+
         if (action == SheetOverlayCandidateAction.OpenOverlaySheet)
         {
             OpenSheetOverlaySource(latestTarget);
@@ -147,6 +153,19 @@ public partial class MainWindow
 
         if (action == SheetOverlayCandidateAction.EditByPoints)
             BeginSheetOverlayPointEditWhenReady(latestTarget);
+    }
+
+    private void OpenSheetOverlayTarget(PageInfo page)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
+        {
+            TxtStatus.Text = "Set a sheet overlay before reviewing it.";
+            return;
+        }
+
+        OpenPageInActiveTab(latest);
+        TxtStatus.Text = $"Opened target sheet with overlay: {latest.Name}.";
     }
 
     private void ApplySheetOverlayAutoSelectedFit(

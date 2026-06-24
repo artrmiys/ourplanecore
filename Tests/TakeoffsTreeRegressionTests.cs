@@ -3150,6 +3150,9 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("TrySelectSheetOverlayAutoFitCandidateSearch", StringComparison.Ordinal) &&
             autoSelect.Contains("CandidateReads", StringComparison.Ordinal) &&
             autoSelect.Contains("HandleSheetOverlayCandidatePostAction", StringComparison.Ordinal) &&
+            autoSelect.Contains("SheetOverlayCandidateAction.OpenTargetSheet", StringComparison.Ordinal) &&
+            autoSelect.Contains("OpenSheetOverlayTarget(latestTarget)", StringComparison.Ordinal) &&
+            autoSelect.Contains("Opened target sheet with overlay", StringComparison.Ordinal) &&
             autoSelect.Contains("SheetOverlayCandidateAction.OpenOverlaySheet", StringComparison.Ordinal) &&
             autoSelect.Contains("SheetOverlayCandidateAction.EditTransform", StringComparison.Ordinal) &&
             autoSelect.Contains("EditSheetOverlayTransform(latestTarget)", StringComparison.Ordinal) &&
@@ -3187,7 +3190,9 @@ internal static class TakeoffsTreeRegressionTests
             candidateDialog.Contains("nameof(SheetOverlayCandidateRow.Transform)", StringComparison.Ordinal) &&
             candidateDialog.Contains("BuildTransformSummary", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use Selected", StringComparison.Ordinal) &&
-            candidateDialog.Contains("Use + Open Sheet", StringComparison.Ordinal) &&
+            candidateDialog.Contains("Use + Review Overlay", StringComparison.Ordinal) &&
+            candidateDialog.Contains("SheetOverlayCandidateAction.OpenTargetSheet", StringComparison.Ordinal) &&
+            candidateDialog.Contains("Use + Open Source", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use + Edit Transform", StringComparison.Ordinal) &&
             candidateDialog.Contains("SheetOverlayCandidateAction.EditTransform", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use + Edit by Points", StringComparison.Ordinal) &&

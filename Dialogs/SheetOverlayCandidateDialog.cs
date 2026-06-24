@@ -29,6 +29,7 @@ public sealed class SheetOverlayCandidateRow
 public enum SheetOverlayCandidateAction
 {
     UseSelected,
+    OpenTargetSheet,
     OpenOverlaySheet,
     EditTransform,
     EditByPoints,
@@ -77,11 +78,13 @@ public sealed class SheetOverlayCandidateDialog : Window
             Margin = new Thickness(0, 10, 0, 0),
         };
         var useButton = new Button { Content = "Use Selected", MinWidth = 112, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
-        var openButton = new Button { Content = "Use + Open Sheet", MinWidth = 128, Margin = new Thickness(0, 0, 6, 0) };
+        var reviewButton = new Button { Content = "Use + Review Overlay", MinWidth = 150, Margin = new Thickness(0, 0, 6, 0) };
+        var openButton = new Button { Content = "Use + Open Source", MinWidth = 138, Margin = new Thickness(0, 0, 6, 0) };
         var editTransformButton = new Button { Content = "Use + Edit Transform", MinWidth = 150, Margin = new Thickness(0, 0, 6, 0) };
         var editButton = new Button { Content = "Use + Edit by Points", MinWidth = 142, Margin = new Thickness(0, 0, 18, 0) };
         var cancelButton = new Button { Content = "Cancel", MinWidth = 78, IsCancel = true };
         buttons.Children.Add(useButton);
+        buttons.Children.Add(reviewButton);
         buttons.Children.Add(openButton);
         buttons.Children.Add(editTransformButton);
         buttons.Children.Add(editButton);
@@ -112,6 +115,7 @@ public sealed class SheetOverlayCandidateDialog : Window
         root.Children.Add(_grid);
 
         useButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.UseSelected);
+        reviewButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.OpenTargetSheet);
         openButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.OpenOverlaySheet);
         editTransformButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.EditTransform);
         editButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.EditByPoints);
