@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using OurPlaneCore.Controls;
 
 namespace OurPlaneCore;
 
@@ -56,11 +57,75 @@ public partial class MainWindow
         }
     }
 
+    private async void ChooseSheetOverlayAutoSelectCandidate(PageInfo page)
+    {
+        PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        if (targetPage == null)
+        {
+            TxtStatus.Text = "Overlay candidate chooser: sheet source is missing.";
+            return;
+        }
+
+        OurPlaneCoreJob? job = _currentJob;
+        if (job == null)
+        {
+            TxtStatus.Text = "Overlay candidate chooser: open a job before searching sheets.";
+            return;
+        }
+
+        TxtStatus.Text = "Overlay candidate chooser: ranking matching plan geometry...";
+        try
+        {
+            SheetOverlayAutoFitCandidateSearch search = await System.Threading.Tasks.Task.Run(() =>
+                FindSheetOverlayAutoFitCandidate(job, targetPage));
+            if (!search.Ok)
+            {
+                TxtStatus.Text = search.Error;
+                return;
+            }
+
+            var dialog = new SheetOverlayCandidateDialog(
+                targetPage.Name,
+                search.TopMatches,
+                targetPage.OverlayPageFolder)
+            {
+                Owner = this,
+            };
+            if (dialog.ShowDialog() != true || dialog.SelectedMatch == null)
+            {
+                TxtStatus.Text = "Overlay candidate selection cancelled.";
+                return;
+            }
+
+            if (!TrySelectSheetOverlayAutoFitCandidateSearch(
+                    search,
+                    dialog.SelectedMatch,
+                    out SheetOverlayAutoFitCandidateSearch selectedSearch,
+                    out string error))
+            {
+                TxtStatus.Text = error;
+                return;
+            }
+
+            ApplySheetOverlayAutoSelectedFit(
+                targetPage,
+                selectedSearch,
+                replaceExistingOverlay: true,
+                statusLabel: "Selected overlay candidate");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"Sheet overlay candidate chooser failed for {targetPage.Name}");
+            TxtStatus.Text = $"Overlay candidate chooser failed: {ex.Message}";
+        }
+    }
+
     private void ApplySheetOverlayAutoSelectedFit(
         PageInfo targetPage,
         SheetOverlayAutoFitCandidateSearch search,
         bool replaceExistingOverlay = false,
-        bool skipCurrentOverlay = false)
+        bool skipCurrentOverlay = false,
+        string statusLabel = "")
     {
         if (search.OverlayPage == null || search.Read == null)
         {
@@ -108,7 +173,7 @@ public partial class MainWindow
             search.OverlayPage,
             search.Read,
             search.Fit,
-            $"{(skipCurrentOverlay ? "Next overlay candidate" : "Auto-selected overlay")}: {search.OverlayPage.Name} " +
+            $"{(string.IsNullOrWhiteSpace(statusLabel) ? skipCurrentOverlay ? "Next overlay candidate" : "Auto-selected overlay" : statusLabel)}: {search.OverlayPage.Name} " +
             $"({search.ComparableCount}/{search.CandidateCount} sheets compared; {alternatives}). ");
     }
 
@@ -187,7 +252,41 @@ public partial class MainWindow
             match.Fit,
             topMatches,
             inputs.Count,
-            tried);
+            tried,
+            baseRead,
+            new Dictionary<string, SheetOverlayAutoFitSnapRead>(readsByFolder, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static bool TrySelectSheetOverlayAutoFitCandidateSearch(
+        SheetOverlayAutoFitCandidateSearch search,
+        SheetOverlayAutoFitCandidateMatch match,
+        out SheetOverlayAutoFitCandidateSearch selected,
+        out string error)
+    {
+        selected = search;
+        error = "";
+        if (search.BaseRead == null)
+        {
+            error = "Overlay candidate chooser: base sheet geometry is no longer available.";
+            return false;
+        }
+
+        if (!search.CandidateReads.TryGetValue(
+                SheetOverlayFolderKey(match.Page.FolderPath),
+                out SheetOverlayAutoFitSnapRead? selectedRead) ||
+            selectedRead == null)
+        {
+            error = "Overlay candidate chooser: selected sheet geometry changed while reviewing candidates.";
+            return false;
+        }
+
+        selected = search with
+        {
+            OverlayPage = match.Page,
+            Read = SheetOverlayAutoFitReadResult.Success(search.BaseRead, selectedRead),
+            Fit = match.Fit,
+        };
+        return true;
     }
 
     private static SheetOverlayAutoFitSnapRead ReadSheetOverlayAutoFitCandidateSnap(PageInfo page)
@@ -310,7 +409,9 @@ public partial class MainWindow
         string Error,
         IReadOnlyList<SheetOverlayAutoFitCandidateMatch> TopMatches,
         int ComparableCount,
-        int CandidateCount)
+        int CandidateCount,
+        SheetOverlayAutoFitSnapRead? BaseRead,
+        IReadOnlyDictionary<string, SheetOverlayAutoFitSnapRead> CandidateReads)
     {
         public static SheetOverlayAutoFitCandidateSearch Success(
             PageInfo overlayPage,
@@ -318,11 +419,13 @@ public partial class MainWindow
             SheetOverlayAutoFitResult fit,
             IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches,
             int comparableCount,
-            int candidateCount) =>
-            new(true, overlayPage, read, fit, "", topMatches, comparableCount, candidateCount);
+            int candidateCount,
+            SheetOverlayAutoFitSnapRead baseRead,
+            IReadOnlyDictionary<string, SheetOverlayAutoFitSnapRead> candidateReads) =>
+            new(true, overlayPage, read, fit, "", topMatches, comparableCount, candidateCount, baseRead, candidateReads);
 
         public static SheetOverlayAutoFitCandidateSearch Failed(string error) =>
-            new(false, null, null, FailedFit(error), error, [], 0, 0);
+            new(false, null, null, FailedFit(error), error, [], 0, 0, null, new Dictionary<string, SheetOverlayAutoFitSnapRead>());
     }
 
     private sealed record SheetOverlayAutoFitCandidatePage(PageInfo Page, int SearchRank);

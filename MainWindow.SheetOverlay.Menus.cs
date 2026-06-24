@@ -21,6 +21,10 @@ public partial class MainWindow
             "Auto Select + Fit This Sheet",
             _currentJob != null,
             () => AutoSelectAndFitSheetOverlay(candidatePage, replaceExistingOverlay: true)));
+        menu.Items.Add(MakeMenuItem(
+            "Auto Select + Choose Candidate...",
+            _currentJob != null,
+            () => ChooseSheetOverlayAutoSelectCandidate(candidatePage)));
         menu.Items.Add(MakeMenuItem("Clear Current Sheet Overlay", currentHasOverlay, ClearCurrentSheetOverlay));
         if (currentHasOverlay)
             menu.Items.Add(BuildSheetOverlayAdjustmentMenu(_currentPage!, "Adjust Current Overlay"));
@@ -73,6 +77,10 @@ public partial class MainWindow
                 "Auto Select + Fit Sheet Overlay",
                 _currentJob != null,
                 () => AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)));
+            menu.Items.Add(MakeMenuItem(
+                "Auto Select + Choose Candidate...",
+                _currentJob != null,
+                () => ChooseSheetOverlayAutoSelectCandidate(currentPage)));
             return true;
         }
 
@@ -89,6 +97,10 @@ public partial class MainWindow
             "Auto Select + Replace Overlay",
             _currentJob != null,
             () => AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)));
+        menu.Items.Add(MakeMenuItem(
+            "Auto Select + Choose Candidate...",
+            _currentJob != null,
+            () => ChooseSheetOverlayAutoSelectCandidate(page)));
         menu.Items.Add(MakeMenuItem(
             "Auto Select + Next Candidate",
             hasOverlay && _currentJob != null,

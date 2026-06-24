@@ -3087,6 +3087,7 @@ internal static class TakeoffsTreeRegressionTests
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
         string menus = ReadRepoFile("MainWindow.SheetOverlay.Menus.cs");
         string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayAutoFitCandidateSearchService.cs"));
+        string candidateDialog = ReadRepoFile(Path.Combine("Dialogs", "SheetOverlayCandidateDialog.cs"));
 
         AssertTrue(
             autoFit.Contains("FindSheetOverlayAutoFitCandidate(job, targetPage)", StringComparison.Ordinal) &&
@@ -3114,8 +3115,12 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("method='{search.Fit.Method}'", StringComparison.Ordinal) &&
             autoSelect.Contains("BuildSheetOverlayAutoSelectAlternativesSummary", StringComparison.Ordinal) &&
             autoSelect.Contains("top matches:", StringComparison.Ordinal) &&
-            autoSelect.Contains("alternatives='{alternatives}'", StringComparison.Ordinal),
-            "sheet overlay Auto Fit should auto-select a matching sheet and report the selected match quality");
+            autoSelect.Contains("alternatives='{alternatives}'", StringComparison.Ordinal) &&
+            autoSelect.Contains("ChooseSheetOverlayAutoSelectCandidate", StringComparison.Ordinal) &&
+            autoSelect.Contains("SheetOverlayCandidateDialog", StringComparison.Ordinal) &&
+            autoSelect.Contains("TrySelectSheetOverlayAutoFitCandidateSearch", StringComparison.Ordinal) &&
+            autoSelect.Contains("CandidateReads", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should auto-select a matching sheet, report match quality, and allow choosing a ranked candidate without rerunning the search");
         AssertTrue(
             service.Contains("SheetOverlayAutoFitCandidateSearchService", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectConfidence", StringComparison.Ordinal) &&
@@ -3128,12 +3133,23 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("\"Auto Select + Fit This Sheet\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Fit Sheet Overlay\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Replace Overlay\"", StringComparison.Ordinal) &&
+            menus.Contains("\"Auto Select + Choose Candidate...\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Next Candidate\"", StringComparison.Ordinal) &&
+            menus.Contains("ChooseSheetOverlayAutoSelectCandidate(candidatePage)", StringComparison.Ordinal) &&
+            menus.Contains("ChooseSheetOverlayAutoSelectCandidate(currentPage)", StringComparison.Ordinal) &&
+            menus.Contains("ChooseSheetOverlayAutoSelectCandidate(page)", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(candidatePage, replaceExistingOverlay: true)", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(currentPage, replaceExistingOverlay: false)", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true)", StringComparison.Ordinal) &&
             menus.Contains("AutoSelectAndFitSheetOverlay(page, replaceExistingOverlay: true, skipCurrentOverlay: true)", StringComparison.Ordinal),
-            "auto-selected overlay fitting must be reachable from page and viewport menus, replace a wrong overlay, and cycle to the next ranked candidate");
+            "auto-selected overlay fitting must be reachable from page and viewport menus, replace a wrong overlay, choose a ranked match directly, and cycle to the next ranked candidate");
+        AssertTrue(
+            candidateDialog.Contains("public sealed class SheetOverlayCandidateDialog : Window", StringComparison.Ordinal) &&
+            candidateDialog.Contains("DataGrid", StringComparison.Ordinal) &&
+            candidateDialog.Contains("Confidence", StringComparison.Ordinal) &&
+            candidateDialog.Contains("Use Selected", StringComparison.Ordinal) &&
+            candidateDialog.Contains("MouseDoubleClick", StringComparison.Ordinal),
+            "ranked overlay candidates should be reviewable in a choose dialog with confidence and quick selection");
         AssertTrue(
             main.Contains("private void OpenSheetOverlaySource(PageInfo page)", StringComparison.Ordinal) &&
             main.Contains("OpenPageInActiveTab(overlayPage)", StringComparison.Ordinal) &&
