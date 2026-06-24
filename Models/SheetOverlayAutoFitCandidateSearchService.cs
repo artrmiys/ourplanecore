@@ -14,12 +14,15 @@ public sealed record SheetOverlayAutoFitCandidateMatch(
     PageInfo Page,
     SheetOverlayAutoFitResult Fit,
     string Source,
-    int SearchRank);
+    int SearchRank,
+    bool IsAutoSelectable);
 
 public static class SheetOverlayAutoFitCandidateSearchService
 {
     public const double MinimumAutoSelectConfidence = 0.18;
     public const int MinimumAutoSelectMatchedSamples = 10;
+    public const double MinimumReviewConfidence = 0.08;
+    public const int MinimumReviewMatchedSamples = 6;
 
     public static bool TryFindBest(
         PdfGeometrySnapResult baseSnap,
@@ -52,7 +55,8 @@ public static class SheetOverlayAutoFitCandidateSearchService
                 candidate.Page,
                 fit,
                 candidate.Source,
-                candidate.SearchRank);
+                candidate.SearchRank,
+                true);
             matches.Add(current);
         }
 
@@ -65,6 +69,36 @@ public static class SheetOverlayAutoFitCandidateSearchService
 
         match = topMatches[0];
         return true;
+    }
+
+    public static bool TryRankReviewCandidates(
+        PdfGeometrySnapResult baseSnap,
+        IEnumerable<SheetOverlayAutoFitCandidateInput> candidates,
+        out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> rankedMatches)
+    {
+        var matches = new List<SheetOverlayAutoFitCandidateMatch>();
+
+        foreach (SheetOverlayAutoFitCandidateInput candidate in candidates)
+        {
+            if (candidate.Page == null ||
+                !SheetOverlayAutoFitService.TryFit(baseSnap, candidate.Snap, out SheetOverlayAutoFitResult fit) ||
+                !IsReviewable(fit))
+            {
+                continue;
+            }
+
+            matches.Add(new SheetOverlayAutoFitCandidateMatch(
+                candidate.Page,
+                fit,
+                candidate.Source,
+                candidate.SearchRank,
+                IsAutoSelectable(fit)));
+        }
+
+        rankedMatches = matches
+            .OrderByDescending(match => match, SheetOverlayAutoFitCandidateMatchComparer.Instance)
+            .ToList();
+        return rankedMatches.Count > 0;
     }
 
     public static bool TrySelectNextMatch(
@@ -113,6 +147,11 @@ public static class SheetOverlayAutoFitCandidateSearchService
         fit.Ok &&
         fit.MatchedSamples >= MinimumAutoSelectMatchedSamples &&
         fit.Confidence >= MinimumAutoSelectConfidence;
+
+    private static bool IsReviewable(SheetOverlayAutoFitResult fit) =>
+        fit.Ok &&
+        fit.MatchedSamples >= MinimumReviewMatchedSamples &&
+        fit.Confidence >= MinimumReviewConfidence;
 
     private static string NormalizeFolderKey(string folder) =>
         string.IsNullOrWhiteSpace(folder)

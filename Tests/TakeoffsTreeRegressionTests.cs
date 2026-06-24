@@ -3146,6 +3146,9 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("top matches:", StringComparison.Ordinal) &&
             autoSelect.Contains("alternatives='{alternatives}'", StringComparison.Ordinal) &&
             autoSelect.Contains("ChooseSheetOverlayAutoSelectCandidate", StringComparison.Ordinal) &&
+            autoSelect.Contains("includeReviewCandidates: true", StringComparison.Ordinal) &&
+            autoSelect.Contains("TryRankReviewCandidates", StringComparison.Ordinal) &&
+            autoSelect.Contains("no reviewable similar sheet matched", StringComparison.Ordinal) &&
             autoSelect.Contains("SheetOverlayCandidateDialog", StringComparison.Ordinal) &&
             autoSelect.Contains("TrySelectSheetOverlayAutoFitCandidateSearch", StringComparison.Ordinal) &&
             autoSelect.Contains("CandidateReads", StringComparison.Ordinal) &&
@@ -3162,10 +3165,14 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("SheetOverlayAutoFitCandidateSearchService", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectConfidence", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectMatchedSamples", StringComparison.Ordinal) &&
+            service.Contains("MinimumReviewConfidence", StringComparison.Ordinal) &&
+            service.Contains("MinimumReviewMatchedSamples", StringComparison.Ordinal) &&
+            service.Contains("TryRankReviewCandidates", StringComparison.Ordinal) &&
+            service.Contains("IsAutoSelectable", StringComparison.Ordinal) &&
             service.Contains("SearchRank", StringComparison.Ordinal) &&
             service.Contains("out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches", StringComparison.Ordinal) &&
             service.Contains("TrySelectNextMatch", StringComparison.Ordinal),
-            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking, expose alternatives, and cycle through ranked matches");
+            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking, expose alternatives, allow review-only candidates in the chooser, and cycle through ranked matches");
         AssertTrue(
             menus.Contains("\"Auto Select + Fit This Sheet\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Fit Sheet Overlay\"", StringComparison.Ordinal) &&
@@ -3187,6 +3194,8 @@ internal static class TakeoffsTreeRegressionTests
             candidateDialog.Contains("nameof(SheetOverlayCandidateRow.Review)", StringComparison.Ordinal) &&
             candidateDialog.Contains("BuildReviewLabel", StringComparison.Ordinal) &&
             candidateDialog.Contains("\"Close\"", StringComparison.Ordinal) &&
+            candidateDialog.Contains("\"Review\"", StringComparison.Ordinal) &&
+            candidateDialog.Contains("match.IsAutoSelectable", StringComparison.Ordinal) &&
             candidateDialog.Contains("nameof(SheetOverlayCandidateRow.Transform)", StringComparison.Ordinal) &&
             candidateDialog.Contains("BuildTransformSummary", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use Selected", StringComparison.Ordinal) &&

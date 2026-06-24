@@ -161,7 +161,7 @@ public sealed class SheetOverlayCandidateDialog : Window
         {
             Rank = index + 1,
             Current = SameFolder(match.Page.FolderPath, currentOverlayFolder) ? "Current" : "",
-            Review = BuildReviewLabel(index, match.Fit.Confidence, bestConfidence),
+            Review = BuildReviewLabel(index, match.Fit.Confidence, bestConfidence, match.IsAutoSelectable),
             Sheet = match.Page.Name,
             Confidence = string.Format(CultureInfo.InvariantCulture, "{0:0}%", match.Fit.Confidence * 100),
             Samples = string.Format(CultureInfo.InvariantCulture, "{0}/{1}", match.Fit.MatchedSamples, match.Fit.SampleCount),
@@ -172,8 +172,15 @@ public sealed class SheetOverlayCandidateDialog : Window
             Match = match,
         };
 
-    private static string BuildReviewLabel(int index, double confidence, double bestConfidence)
+    private static string BuildReviewLabel(
+        int index,
+        double confidence,
+        double bestConfidence,
+        bool isAutoSelectable)
     {
+        if (!isAutoSelectable)
+            return "Review";
+
         if (index == 0)
             return "Best";
 

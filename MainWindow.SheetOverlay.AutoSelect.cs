@@ -77,7 +77,7 @@ public partial class MainWindow
         try
         {
             SheetOverlayAutoFitCandidateSearch search = await System.Threading.Tasks.Task.Run(() =>
-                FindSheetOverlayAutoFitCandidate(job, targetPage));
+                FindSheetOverlayAutoFitCandidate(job, targetPage, includeReviewCandidates: true));
             if (!search.Ok)
             {
                 TxtStatus.Text = search.Error;
@@ -228,7 +228,8 @@ public partial class MainWindow
     private static SheetOverlayAutoFitCandidateSearch FindSheetOverlayAutoFitCandidate(
         OurPlaneCoreJob job,
         PageInfo targetPage,
-        string nextAfterOverlayFolder = "")
+        string nextAfterOverlayFolder = "",
+        bool includeReviewCandidates = false)
     {
         SheetOverlayAutoFitSnapRead baseRead = ReadSheetOverlayAutoFitCandidateSnap(targetPage);
         if (!baseRead.Ok)
@@ -268,17 +269,25 @@ public partial class MainWindow
                     : $"Overlay auto fit: no alternate comparable sheet geometry found in {tried} candidate sheets.");
         }
 
-        if (!SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+        IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches;
+        bool ranked = includeReviewCandidates
+            ? SheetOverlayAutoFitCandidateSearchService.TryRankReviewCandidates(baseRead.Snap, inputs, out topMatches)
+            : SheetOverlayAutoFitCandidateSearchService.TryFindBest(
                 baseRead.Snap,
                 inputs,
-                out SheetOverlayAutoFitCandidateMatch match,
-                out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches))
+                out _,
+                out topMatches);
+        if (!ranked)
         {
             return SheetOverlayAutoFitCandidateSearch.Failed(
                 string.IsNullOrWhiteSpace(nextAfterOverlayFolder)
-                    ? $"Overlay auto fit: no similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough."
+                    ? includeReviewCandidates
+                        ? $"Overlay auto fit: no reviewable similar sheet matched {inputs.Count}/{tried} candidate sheets."
+                        : $"Overlay auto fit: no similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough."
                     : $"Overlay auto fit: no alternate similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough.");
         }
+
+        SheetOverlayAutoFitCandidateMatch match = topMatches[0];
 
         if (!string.IsNullOrWhiteSpace(nextAfterOverlayFolder) &&
             !SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch(topMatches, nextAfterOverlayFolder, out match))

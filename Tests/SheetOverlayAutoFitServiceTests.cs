@@ -140,6 +140,27 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertEqual(thirdPage.FolderPath, topMatches[2].Page.FolderPath, "third ranked overlay candidate");
     }
 
+    public static void ReviewCandidatesCanIncludeWeakGeometryWithoutAutoSelecting()
+    {
+        PdfGeometrySnapResult target = BuildPointOnlyPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PdfGeometrySnapResult noisyOverlay = BuildWeakReviewPointSnap();
+        PageInfo weakPage = Page("A101 weak review", "weak-review");
+
+        bool autoOk = SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+            target,
+            [new SheetOverlayAutoFitCandidateInput(weakPage, noisyOverlay, "test noisy plan", 1)],
+            out _);
+        bool reviewOk = SheetOverlayAutoFitCandidateSearchService.TryRankReviewCandidates(
+            target,
+            [new SheetOverlayAutoFitCandidateInput(weakPage, noisyOverlay, "test noisy plan", 1)],
+            out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> reviewMatches);
+
+        AssertFalse(autoOk, "weak overlay candidates should not be auto-selected silently");
+        AssertTrue(reviewOk, "weak overlay candidates should still be available for manual review");
+        AssertEqual(weakPage.FolderPath, reviewMatches[0].Page.FolderPath, "review-only overlay candidate");
+        AssertFalse(reviewMatches[0].IsAutoSelectable, "review-only candidate should be marked as not auto-selectable");
+    }
+
     public static void AutoSelectNextCandidateCyclesRankedAlternatives()
     {
         PdfGeometrySnapResult target = BuildPlanSnap(scale: 1.05f, offsetX: 16, offsetY: 24);
@@ -294,6 +315,26 @@ internal static class SheetOverlayAutoFitServiceTests
                 Segment(0, 40, 100, 40),
             ],
         };
+
+    private static PdfGeometrySnapResult BuildWeakReviewPointSnap()
+    {
+        var points = new List<PdfGeometrySnapPoint>();
+        points.AddRange(RawPlanJunctions()
+            .Take(8)
+            .Select(point => new PdfGeometrySnapPoint(point, "raster-junction")));
+        for (int i = 0; i < 52; i++)
+        {
+            points.Add(new PdfGeometrySnapPoint(
+                new SKPoint(420 + i * 9, 360 + (i % 13) * 11),
+                "raster-junction"));
+        }
+
+        return new PdfGeometrySnapResult
+        {
+            Points = points,
+            Segments = [],
+        };
+    }
 
     private static PageInfo Page(string name, string folder) =>
         new()
