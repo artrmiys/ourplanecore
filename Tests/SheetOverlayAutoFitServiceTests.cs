@@ -33,7 +33,7 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertTrue(result.MatchedSamples >= 12, "rotated overlay fit should verify against several geometry samples");
     }
 
-    public static void RecoversRotationFromJunctionPointPairsWithoutSegments()
+    public static void RecoversRotationFromJunctionShapeWithoutSegments()
     {
         PdfGeometrySnapResult overlay = BuildPointOnlyPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
         PdfGeometrySnapResult target = BuildPointOnlyPlanSnap(scale: 0.92f, offsetX: 58, offsetY: 44, rotationDegrees: 11f);
@@ -45,6 +45,7 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertClose(58, result.OffsetXPt, "overlay fit point-pair x offset", 1.5);
         AssertClose(44, result.OffsetYPt, "overlay fit point-pair y offset", 1.5);
         AssertClose(11, result.OverlayRotationDegrees, "overlay fit point-pair angle", 0.4);
+        AssertEqual("shape points", result.Method, "overlay fit should use shape-point matching");
         AssertTrue(result.MatchedSamples >= 12, "point-pair overlay fit should verify against several junction samples");
     }
 
@@ -194,6 +195,12 @@ internal static class SheetOverlayAutoFitServiceTests
 
     private static void AssertFalse(bool condition, string message) =>
         AssertTrue(!condition, message);
+
+    private static void AssertEqual(string expected, string actual, string message)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{message}: expected '{expected}', got '{actual}'");
+    }
 
     private static void AssertClose(double expected, double actual, string message, double tolerance)
     {

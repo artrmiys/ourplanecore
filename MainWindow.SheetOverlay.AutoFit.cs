@@ -299,8 +299,8 @@ public partial class MainWindow
         SheetOverlayAutoFitReadResult read,
         SheetOverlayAutoFitResult fit) =>
         read.IsPureRaster
-            ? $"Overlay auto fit (raster image): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg."
-            : $"Overlay auto fit ({read.SourceSummary}): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg.";
+            ? $"Overlay auto fit (raster image, {fit.Method}): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg."
+            : $"Overlay auto fit ({read.SourceSummary}, {fit.Method}): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg.";
 
     private sealed record SheetOverlayAutoFitReadResult(
         bool Ok,

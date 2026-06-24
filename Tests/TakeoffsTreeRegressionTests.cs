@@ -3052,8 +3052,9 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             autoFit.Contains("BuildSheetOverlayAutoFitStatus", StringComparison.Ordinal) &&
             autoFit.Contains("source='{read.SourceSummary}'", StringComparison.Ordinal) &&
-            autoFit.Contains("Overlay auto fit (raster image)", StringComparison.Ordinal),
-            "sheet overlay Auto Fit should report whether the accepted match came from PDF geometry or raster-image fallback");
+            autoFit.Contains("Overlay auto fit (raster image, {fit.Method})", StringComparison.Ordinal) &&
+            autoFit.Contains("Overlay auto fit ({read.SourceSummary}, {fit.Method})", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should report whether the accepted match came from PDF geometry or raster-image fallback and which match method was used");
         AssertTrue(
             feature.Contains("BuildInkMap", StringComparison.Ordinal) &&
             feature.Contains("ExtractHorizontalSegments", StringComparison.Ordinal) &&
