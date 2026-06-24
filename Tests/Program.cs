@@ -86,6 +86,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("sheet overlay auto fit recovers scale and offset", SheetOverlayAutoFitServiceTests.RecoversScaleAndOffsetFromRepeatedPlanGeometry),
     ("sheet overlay auto fit recovers rotation", SheetOverlayAutoFitServiceTests.RecoversRotationFromRepeatedPlanGeometry),
+    ("sheet overlay auto fit recovers junction point pairs", SheetOverlayAutoFitServiceTests.RecoversRotationFromJunctionPointPairsWithoutSegments),
     ("sheet overlay auto fit rejects sparse geometry", SheetOverlayAutoFitServiceTests.RejectsSparseGeometry),
     ("sheet overlay raster features recover scale and offset", SheetOverlayRasterFeatureServiceTests.RasterFeaturesRecoverScaleAndOffset),
     ("sheet overlay raster features extract junction points", SheetOverlayRasterFeatureServiceTests.RasterFeaturesExtractJunctionPoints),

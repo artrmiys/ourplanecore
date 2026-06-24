@@ -22,7 +22,12 @@ public static class SheetOverlayAutoFitService
     private const int MaxBaseSegments = 220;
     private const int MaxOverlaySegments = 180;
     private const int MaxOverlaySamples = 180;
+    private const int MaxBasePointCandidates = 120;
+    private const int MaxOverlayPointCandidates = 100;
+    private const int MaxBasePointPairs = 140;
+    private const int MaxOverlayPointPairs = 100;
     private const float MinimumSegmentLengthPt = 18f;
+    private const float MinimumPointPairDistancePt = 32f;
     private const float MaximumCandidateScale = 4.0f;
     private const float MinimumCandidateScale = 0.25f;
     private const float MatchTolerancePt = 10.0f;
@@ -44,6 +49,8 @@ public static class SheetOverlayAutoFitService
 
         List<PdfGeometrySnapSegment> baseSegments = SelectCandidateSegments(baseSnap.Segments, MaxBaseSegments);
         List<PdfGeometrySnapSegment> overlaySegments = SelectCandidateSegments(overlaySnap.Segments, MaxOverlaySegments);
+        List<PdfGeometrySnapPoint> basePoints = SelectCandidatePoints(baseSnap.Points, MaxBasePointCandidates);
+        List<PdfGeometrySnapPoint> overlayPoints = SelectCandidatePoints(overlaySnap.Points, MaxOverlayPointCandidates);
         List<AutoFitSample> samples = BuildOverlaySamples(overlaySnap, overlaySegments);
         if (samples.Count < MinimumSamples)
         {
@@ -70,6 +77,7 @@ public static class SheetOverlayAutoFitService
 
         Consider(0, 0, 1, 0);
         ConsiderBoundsCandidate(baseSnap, overlaySnap, Consider);
+        ConsiderPointPairCandidates(overlayPoints, basePoints, Consider);
 
         foreach (PdfGeometrySnapSegment overlay in overlaySegments)
         {
@@ -120,6 +128,19 @@ public static class SheetOverlayAutoFitService
             .Take(maxCount)
             .ToList();
 
+    private static List<PdfGeometrySnapPoint> SelectCandidatePoints(
+        IReadOnlyList<PdfGeometrySnapPoint> points,
+        int maxCount) =>
+        points
+            .Where(point => IsFinite(point.Point.X) && IsFinite(point.Point.Y))
+            .GroupBy(point => PointKey(point.Point), StringComparer.Ordinal)
+            .Select(group => group.OrderBy(point => SamplePriority(point.Kind)).First())
+            .OrderBy(point => SamplePriority(point.Kind))
+            .ThenBy(point => point.Point.X)
+            .ThenBy(point => point.Point.Y)
+            .Take(maxCount)
+            .ToList();
+
     private static List<AutoFitSample> BuildOverlaySamples(
         PdfGeometrySnapResult snap,
         IReadOnlyList<PdfGeometrySnapSegment> overlaySegments)
@@ -132,7 +153,7 @@ public static class SheetOverlayAutoFitService
             if (!IsFinite(point.X) || !IsFinite(point.Y))
                 return;
 
-            string key = $"{MathF.Round(point.X * 2) / 2:0.##}|{MathF.Round(point.Y * 2) / 2:0.##}";
+            string key = PointKey(point);
             if (!seen.Add(key))
                 return;
 
@@ -184,6 +205,81 @@ public static class SheetOverlayAutoFitService
             baseCenter.Y - overlayCenter.Y * scale,
             scale,
             0);
+    }
+
+    private static void ConsiderPointPairCandidates(
+        IReadOnlyList<PdfGeometrySnapPoint> overlayPoints,
+        IReadOnlyList<PdfGeometrySnapPoint> basePoints,
+        Action<float, float, float, float> consider)
+    {
+        if (overlayPoints.Count < 2 || basePoints.Count < 2)
+            return;
+
+        List<PointPairCandidate> overlayPairs = BuildPointPairs(overlayPoints, MaxOverlayPointPairs);
+        List<PointPairCandidate> basePairs = BuildPointPairs(basePoints, MaxBasePointPairs);
+        if (overlayPairs.Count == 0 || basePairs.Count == 0)
+            return;
+
+        foreach (PointPairCandidate overlayPair in overlayPairs)
+        {
+            foreach (PointPairCandidate basePair in basePairs)
+            {
+                ConsiderPointPair(overlayPair, basePair, false, consider);
+                ConsiderPointPair(overlayPair, basePair, true, consider);
+            }
+        }
+    }
+
+    private static List<PointPairCandidate> BuildPointPairs(
+        IReadOnlyList<PdfGeometrySnapPoint> points,
+        int maxCount)
+    {
+        var pairs = new List<PointPairCandidate>();
+        for (int i = 0; i < points.Count; i++)
+        {
+            PdfGeometrySnapPoint first = points[i];
+            for (int j = i + 1; j < points.Count; j++)
+            {
+                PdfGeometrySnapPoint second = points[j];
+                float distance = Distance(first.Point, second.Point);
+                if (distance < MinimumPointPairDistancePt)
+                    continue;
+
+                pairs.Add(new PointPairCandidate(
+                    first.Point,
+                    second.Point,
+                    distance,
+                    DirectedAngle(first.Point, second.Point),
+                    SampleWeight(first.Kind) + SampleWeight(second.Kind)));
+            }
+        }
+
+        return pairs
+            .OrderByDescending(pair => pair.Weight)
+            .ThenByDescending(pair => pair.Distance)
+            .Take(maxCount)
+            .ToList();
+    }
+
+    private static void ConsiderPointPair(
+        PointPairCandidate overlayPair,
+        PointPairCandidate basePair,
+        bool reverseBasePair,
+        Action<float, float, float, float> consider)
+    {
+        float scale = basePair.Distance / overlayPair.Distance;
+        if (!IsCandidateScale(scale))
+            return;
+
+        SKPoint baseAnchor = reverseBasePair ? basePair.B : basePair.A;
+        float baseAngle = reverseBasePair ? basePair.AngleRadians + MathF.PI : basePair.AngleRadians;
+        float rotationDegrees = NormalizeRotationDegrees((baseAngle - overlayPair.AngleRadians) * 180f / MathF.PI);
+        SKPoint mappedAnchor = TransformPoint(overlayPair.A, 0, 0, scale, rotationDegrees);
+        consider(
+            baseAnchor.X - mappedAnchor.X,
+            baseAnchor.Y - mappedAnchor.Y,
+            scale,
+            rotationDegrees);
     }
 
     private static void ConsiderSegmentPair(
@@ -296,6 +392,9 @@ public static class SheetOverlayAutoFitService
     private static float DirectedAngle(PdfGeometrySnapSegment segment) =>
         MathF.Atan2(segment.End.Y - segment.Start.Y, segment.End.X - segment.Start.X);
 
+    private static float DirectedAngle(SKPoint start, SKPoint end) =>
+        MathF.Atan2(end.Y - start.Y, end.X - start.X);
+
     private static int SamplePriority(string kind) => kind.ToLowerInvariant() switch
     {
         "raster-junction" => 0,
@@ -356,7 +455,21 @@ public static class SheetOverlayAutoFitService
     private static bool IsFinite(float value) =>
         !float.IsNaN(value) && !float.IsInfinity(value);
 
+    private static string PointKey(SKPoint point) =>
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:0.##}|{1:0.##}",
+            MathF.Round(point.X * 2) / 2,
+            MathF.Round(point.Y * 2) / 2);
+
     private readonly record struct AutoFitSample(SKPoint Point, float Weight);
+
+    private readonly record struct PointPairCandidate(
+        SKPoint A,
+        SKPoint B,
+        float Distance,
+        float AngleRadians,
+        float Weight);
 
     private readonly record struct AutoFitCandidate(
         float OffsetXPt,

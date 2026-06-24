@@ -33,6 +33,21 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertTrue(result.MatchedSamples >= 12, "rotated overlay fit should verify against several geometry samples");
     }
 
+    public static void RecoversRotationFromJunctionPointPairsWithoutSegments()
+    {
+        PdfGeometrySnapResult overlay = BuildPointOnlyPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PdfGeometrySnapResult target = BuildPointOnlyPlanSnap(scale: 0.92f, offsetX: 58, offsetY: 44, rotationDegrees: 11f);
+
+        bool ok = SheetOverlayAutoFitService.TryFit(target, overlay, out SheetOverlayAutoFitResult result);
+
+        AssertTrue(ok, result.Message);
+        AssertClose(0.92, result.OverlayScale, "overlay fit point-pair scale", 0.02);
+        AssertClose(58, result.OffsetXPt, "overlay fit point-pair x offset", 1.5);
+        AssertClose(44, result.OffsetYPt, "overlay fit point-pair y offset", 1.5);
+        AssertClose(11, result.OverlayRotationDegrees, "overlay fit point-pair angle", 0.4);
+        AssertTrue(result.MatchedSamples >= 12, "point-pair overlay fit should verify against several junction samples");
+    }
+
     public static void RejectsSparseGeometry()
     {
         var target = new PdfGeometrySnapResult
@@ -93,6 +108,50 @@ internal static class SheetOverlayAutoFitServiceTests
             Segments = segments,
         };
     }
+
+    private static PdfGeometrySnapResult BuildPointOnlyPlanSnap(
+        float scale,
+        float offsetX,
+        float offsetY,
+        float rotationDegrees = 0)
+    {
+        List<PdfGeometrySnapPoint> points = RawPlanJunctions()
+            .Select(point => new PdfGeometrySnapPoint(
+                Transform(point, scale, offsetX, offsetY, rotationDegrees),
+                "raster-junction"))
+            .ToList();
+
+        return new PdfGeometrySnapResult
+        {
+            Points = points,
+            Segments = [],
+        };
+    }
+
+    private static List<SKPoint> RawPlanJunctions() =>
+    [
+        new SKPoint(0, 0),
+        new SKPoint(220, 0),
+        new SKPoint(220, 120),
+        new SKPoint(0, 120),
+        new SKPoint(40, 0),
+        new SKPoint(40, 55),
+        new SKPoint(40, 120),
+        new SKPoint(95, 0),
+        new SKPoint(95, 55),
+        new SKPoint(95, 88),
+        new SKPoint(95, 120),
+        new SKPoint(150, 0),
+        new SKPoint(150, 30),
+        new SKPoint(150, 88),
+        new SKPoint(150, 120),
+        new SKPoint(185, 30),
+        new SKPoint(205, 74),
+        new SKPoint(220, 55),
+        new SKPoint(220, 88),
+        new SKPoint(0, 55),
+        new SKPoint(0, 88),
+    ];
 
     private static PdfGeometrySnapSegment Transform(
         PdfGeometrySnapSegment segment,
