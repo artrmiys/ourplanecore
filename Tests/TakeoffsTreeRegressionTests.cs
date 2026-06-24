@@ -2928,10 +2928,13 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("Edit by Points", StringComparison.Ordinal) &&
             menus.Contains("Edit Transform...", StringComparison.Ordinal) &&
             menus.Contains("Move Left 6 pt", StringComparison.Ordinal) &&
+            menus.Contains("Move Left 1 pt", StringComparison.Ordinal) &&
             menus.Contains("Scale Up 5%", StringComparison.Ordinal) &&
+            menus.Contains("Scale Up 1%", StringComparison.Ordinal) &&
             menus.Contains("Rotate Left 1 deg", StringComparison.Ordinal) &&
+            menus.Contains("Rotate Left 0.25 deg", StringComparison.Ordinal) &&
             menus.Contains("Reset Transform", StringComparison.Ordinal),
-            "sheet overlay adjustment commands should share one discoverable submenu instead of only living on the hidden overlay-node context menu");
+            "sheet overlay adjustment commands should share one discoverable submenu with coarse and fine transform steps instead of only living on the hidden overlay-node context menu");
         AssertTrue(
             menus.Contains("OpenSheetOverlaySource(page)", StringComparison.Ordinal) &&
             menus.Contains("TogglePageOverlayVisibility(page)", StringComparison.Ordinal) &&

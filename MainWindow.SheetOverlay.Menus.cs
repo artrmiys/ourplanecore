@@ -118,11 +118,19 @@ public partial class MainWindow
         menu.Items.Add(MakeMenuItem("Move Right 6 pt", hasOverlay, () => NudgeSheetOverlay(page, 6, 0)));
         menu.Items.Add(MakeMenuItem("Move Up 6 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, -6)));
         menu.Items.Add(MakeMenuItem("Move Down 6 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, 6)));
+        menu.Items.Add(MakeMenuItem("Move Left 1 pt", hasOverlay, () => NudgeSheetOverlay(page, -1, 0)));
+        menu.Items.Add(MakeMenuItem("Move Right 1 pt", hasOverlay, () => NudgeSheetOverlay(page, 1, 0)));
+        menu.Items.Add(MakeMenuItem("Move Up 1 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, -1)));
+        menu.Items.Add(MakeMenuItem("Move Down 1 pt", hasOverlay, () => NudgeSheetOverlay(page, 0, 1)));
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Scale Up 5%", hasOverlay, () => ScaleSheetOverlay(page, 1.05)));
         menu.Items.Add(MakeMenuItem("Scale Down 5%", hasOverlay, () => ScaleSheetOverlay(page, 1 / 1.05)));
+        menu.Items.Add(MakeMenuItem("Scale Up 1%", hasOverlay, () => ScaleSheetOverlay(page, 1.01)));
+        menu.Items.Add(MakeMenuItem("Scale Down 1%", hasOverlay, () => ScaleSheetOverlay(page, 1 / 1.01)));
         menu.Items.Add(MakeMenuItem("Rotate Left 1 deg", hasOverlay, () => RotateSheetOverlay(page, -1)));
         menu.Items.Add(MakeMenuItem("Rotate Right 1 deg", hasOverlay, () => RotateSheetOverlay(page, 1)));
+        menu.Items.Add(MakeMenuItem("Rotate Left 0.25 deg", hasOverlay, () => RotateSheetOverlay(page, -0.25)));
+        menu.Items.Add(MakeMenuItem("Rotate Right 0.25 deg", hasOverlay, () => RotateSheetOverlay(page, 0.25)));
         menu.Items.Add(MakeMenuItem("Reset Transform", hasOverlay, () =>
             SetSheetOverlayTransform(page, 0, 0, 1, 0, "Overlay transform reset.")));
         return menu;
