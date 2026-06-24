@@ -31,6 +31,11 @@ public sealed partial class PdfViewport
     private SKPoint _sheetOverlayEditAnchorLocal;
     private SKPoint _sheetOverlayEditAnchorTarget;
     private SKPoint _sheetOverlayEditScaleLocal;
+    private bool _draggingSheetOverlay;
+    private bool _sheetOverlayDragChanged;
+    private SKPoint _sheetOverlayDragStartPdf;
+    private float _sheetOverlayDragStartOffsetXPt;
+    private float _sheetOverlayDragStartOffsetYPt;
 
     public bool HasSheetOverlay => _sheetOverlayBitmap != null;
 
@@ -81,6 +86,7 @@ public sealed partial class PdfViewport
         _sheetOverlayName = "";
         ClearOverlayPdfSnapSource();
         CancelSheetOverlayPointEdit(silent: true);
+        CancelSheetOverlayDrag(silent: true);
         RequestRepaint();
     }
 
@@ -103,6 +109,111 @@ public sealed partial class PdfViewport
 
     private bool IsSheetOverlayPointEditing =>
         _sheetOverlayPointEditStep != SheetOverlayPointEditStep.None;
+
+    private bool TryBeginSheetOverlayDrag(SKPoint pdf)
+    {
+        if (_sheetOverlayBitmap == null ||
+            IsSheetOverlayPointEditing ||
+            !IsSheetOverlayDragModifierActive() ||
+            !IsPointInsideSheetOverlay(pdf))
+        {
+            return false;
+        }
+
+        _draggingSheetOverlay = true;
+        _sheetOverlayDragChanged = false;
+        _sheetOverlayDragStartPdf = pdf;
+        _sheetOverlayDragStartOffsetXPt = _sheetOverlayOffsetXPt;
+        _sheetOverlayDragStartOffsetYPt = _sheetOverlayOffsetYPt;
+        CaptureMouse();
+        PostStatus("Overlay drag: move the mouse, release to save. Hold Shift for fine movement.");
+        RequestRepaint();
+        return true;
+    }
+
+    private bool TryUpdateSheetOverlayDrag(SKPoint pdf)
+    {
+        if (!_draggingSheetOverlay)
+            return false;
+
+        float dragScale = IsSheetOverlayFineModifierActive() ? 0.25f : 1f;
+        float deltaX = (pdf.X - _sheetOverlayDragStartPdf.X) * dragScale;
+        float deltaY = (pdf.Y - _sheetOverlayDragStartPdf.Y) * dragScale;
+        _sheetOverlayOffsetXPt = _sheetOverlayDragStartOffsetXPt + deltaX;
+        _sheetOverlayOffsetYPt = _sheetOverlayDragStartOffsetYPt + deltaY;
+        _sheetOverlayDragChanged =
+            MathF.Abs(deltaX) > 0.001f ||
+            MathF.Abs(deltaY) > 0.001f;
+        PostStatus(BuildSheetOverlayTransformStatus(
+            IsSheetOverlayFineModifierActive() ? "Overlay dragging fine" : "Overlay dragging",
+            _sheetOverlayOffsetXPt,
+            _sheetOverlayOffsetYPt,
+            _sheetOverlayScale,
+            _sheetOverlayRotationDegrees));
+        RequestRepaint();
+        return true;
+    }
+
+    private bool FinishSheetOverlayDrag()
+    {
+        if (!_draggingSheetOverlay)
+            return false;
+
+        bool changed = _sheetOverlayDragChanged;
+        _draggingSheetOverlay = false;
+        _sheetOverlayDragChanged = false;
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+
+        if (changed)
+        {
+            ApplySheetOverlayTransform(
+                _sheetOverlayOffsetXPt,
+                _sheetOverlayOffsetYPt,
+                _sheetOverlayScale,
+                _sheetOverlayRotationDegrees,
+                BuildSheetOverlayTransformStatus(
+                    "Overlay moved",
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees));
+        }
+        else
+        {
+            PostStatus("Overlay drag cancelled.");
+            RequestRepaint();
+        }
+
+        return true;
+    }
+
+    private bool CancelSheetOverlayDrag(bool silent = false)
+    {
+        if (!_draggingSheetOverlay)
+            return false;
+
+        _sheetOverlayOffsetXPt = _sheetOverlayDragStartOffsetXPt;
+        _sheetOverlayOffsetYPt = _sheetOverlayDragStartOffsetYPt;
+        _draggingSheetOverlay = false;
+        _sheetOverlayDragChanged = false;
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+        if (!silent)
+            PostStatus("Overlay drag cancelled.");
+        RequestRepaint();
+        return true;
+    }
+
+    private static bool IsSheetOverlayDragModifierActive()
+    {
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        return (modifiers & ModifierKeys.Control) != 0 &&
+               (modifiers & ModifierKeys.Alt) != 0;
+    }
+
+    private static bool IsSheetOverlayFineModifierActive() =>
+        (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
 
     private bool TryHandleSheetOverlayTransformShortcut(KeyEventArgs e)
     {
@@ -428,8 +539,11 @@ public sealed partial class PdfViewport
 
     private void DrawSheetOverlayEditGuides(SKCanvas canvas)
     {
-        if (!IsSheetOverlayPointEditing || _sheetOverlayBitmap == null)
+        if ((!IsSheetOverlayPointEditing && !_draggingSheetOverlay) ||
+            _sheetOverlayBitmap == null)
+        {
             return;
+        }
 
         using var pointPaint = new SKPaint
         {
@@ -445,6 +559,12 @@ public sealed partial class PdfViewport
             StrokeWidth = ScreenToPdfDistance(1.5f),
         };
         float radius = ScreenToPdfDistance(5f);
+
+        if (_draggingSheetOverlay)
+        {
+            DrawSheetOverlayDragGuide(canvas, linePaint);
+            return;
+        }
 
         if (_sheetOverlayPointEditStep is SheetOverlayPointEditStep.MoveTarget or SheetOverlayPointEditStep.ScaleSource or SheetOverlayPointEditStep.ScaleTarget)
         {
@@ -464,8 +584,43 @@ public sealed partial class PdfViewport
         }
     }
 
+    private void DrawSheetOverlayDragGuide(SKCanvas canvas, SKPaint linePaint)
+    {
+        if (!TryGetSheetOverlaySize(out float width, out float height))
+            return;
+
+        SKPoint p0 = OverlayLocalToDisplay(new SKPoint(0, 0));
+        SKPoint p1 = OverlayLocalToDisplay(new SKPoint(width, 0));
+        SKPoint p2 = OverlayLocalToDisplay(new SKPoint(width, height));
+        SKPoint p3 = OverlayLocalToDisplay(new SKPoint(0, height));
+        canvas.DrawLine(p0, p1, linePaint);
+        canvas.DrawLine(p1, p2, linePaint);
+        canvas.DrawLine(p2, p3, linePaint);
+        canvas.DrawLine(p3, p0, linePaint);
+    }
+
     private SKPoint OverlayLocalToDisplay(SKPoint localPoint) =>
         AddOffset(OverlayLocalTransformVector(localPoint, _sheetOverlayScale, _sheetOverlayRotationDegrees));
+
+    private bool IsPointInsideSheetOverlay(SKPoint displayPoint)
+    {
+        if (!TryGetSheetOverlaySize(out float width, out float height))
+            return false;
+
+        SKPoint local = OverlayDisplayToLocal(displayPoint);
+        float tolerance = ScreenToPdfDistance(8f) / Math.Max(_sheetOverlayScale, 0.001f);
+        return local.X >= -tolerance &&
+               local.Y >= -tolerance &&
+               local.X <= width + tolerance &&
+               local.Y <= height + tolerance;
+    }
+
+    private bool TryGetSheetOverlaySize(out float width, out float height)
+    {
+        width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;
+        height = _sheetOverlayHeightPt > 0 ? _sheetOverlayHeightPt : _pdfH;
+        return width > 0 && height > 0;
+    }
 
     private SKRect OverlayDisplayBounds(float width, float height)
     {

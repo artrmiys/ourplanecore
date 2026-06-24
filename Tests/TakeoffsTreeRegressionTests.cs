@@ -2958,6 +2958,37 @@ internal static class TakeoffsTreeRegressionTests
             "sheet overlay shortcuts should support nudge, scale, rotation, reset, and persist through the existing transform-changed event");
     }
 
+    public static void SheetOverlayMouseDragIsWired()
+    {
+        string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
+        string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string updateMethod = SliceMethod(overlay, "private bool TryUpdateSheetOverlayDrag(");
+        string finishMethod = SliceMethod(overlay, "private bool FinishSheetOverlayDrag(");
+
+        AssertTrue(
+            input.Contains("TryBeginSheetOverlayDrag(pdf)", StringComparison.Ordinal) &&
+            input.Contains("TryUpdateSheetOverlayDrag(ScreenToPdf", StringComparison.Ordinal) &&
+            input.Contains("FinishSheetOverlayDrag()", StringComparison.Ordinal) &&
+            input.Contains("CancelSheetOverlayDrag()", StringComparison.Ordinal),
+            "viewport mouse and keyboard input should route Ctrl+Alt sheet overlay dragging through down, move, up, capture-loss, and Esc paths");
+        AssertTrue(
+            overlay.Contains("private bool _draggingSheetOverlay", StringComparison.Ordinal) &&
+            overlay.Contains("IsSheetOverlayDragModifierActive", StringComparison.Ordinal) &&
+            overlay.Contains("ModifierKeys.Control", StringComparison.Ordinal) &&
+            overlay.Contains("ModifierKeys.Alt", StringComparison.Ordinal) &&
+            overlay.Contains("IsPointInsideSheetOverlay", StringComparison.Ordinal) &&
+            overlay.Contains("DrawSheetOverlayDragGuide", StringComparison.Ordinal),
+            "sheet overlay drag should require explicit Ctrl+Alt modifiers, hit-test the overlay, and show a drag guide");
+        AssertFalse(
+            updateMethod.Contains("SheetOverlayTransformChanged?.Invoke", StringComparison.Ordinal) ||
+            updateMethod.Contains("ApplySheetOverlayTransform(", StringComparison.Ordinal),
+            "sheet overlay mouse move should preview offsets without persisting source.json on every pointer update");
+        AssertTrue(
+            finishMethod.Contains("ApplySheetOverlayTransform(", StringComparison.Ordinal) &&
+            finishMethod.Contains("BuildSheetOverlayTransformStatus(", StringComparison.Ordinal),
+            "sheet overlay mouse drag should persist the transform once when the button is released");
+    }
+
     public static void SheetOverlayAsyncLoadUsesFreshPageSnapshot()
     {
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
