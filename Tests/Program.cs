@@ -90,6 +90,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay auto fit rejects sparse geometry", SheetOverlayAutoFitServiceTests.RejectsSparseGeometry),
     ("sheet overlay auto fit auto-selects matching sheet", SheetOverlayAutoFitServiceTests.AutoSelectsBestCandidateByShapeFit),
     ("sheet overlay auto fit auto-select tie uses sheet rank", SheetOverlayAutoFitServiceTests.AutoSelectPrefersCloserSheetWhenScoresTie),
+    ("sheet overlay auto fit auto-select reports alternatives", SheetOverlayAutoFitServiceTests.AutoSelectReportsRankedAlternatives),
     ("sheet overlay raster features recover scale and offset", SheetOverlayRasterFeatureServiceTests.RasterFeaturesRecoverScaleAndOffset),
     ("sheet overlay raster features extract junction points", SheetOverlayRasterFeatureServiceTests.RasterFeaturesExtractJunctionPoints),
     ("sheet overlay reciprocal transform round trips", SheetOverlayReciprocalServiceTests.InvertsTransformRoundTrip),

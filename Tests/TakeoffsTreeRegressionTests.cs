@@ -3103,14 +3103,18 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("ClearReciprocalSheetOverlay(latestTarget)", StringComparison.Ordinal) &&
             autoSelect.Contains("sheets compared", StringComparison.Ordinal) &&
             autoSelect.Contains("candidates={search.ComparableCount}/{search.CandidateCount}", StringComparison.Ordinal) &&
-            autoSelect.Contains("method='{search.Fit.Method}'", StringComparison.Ordinal),
+            autoSelect.Contains("method='{search.Fit.Method}'", StringComparison.Ordinal) &&
+            autoSelect.Contains("BuildSheetOverlayAutoSelectAlternativesSummary", StringComparison.Ordinal) &&
+            autoSelect.Contains("top matches:", StringComparison.Ordinal) &&
+            autoSelect.Contains("alternatives='{alternatives}'", StringComparison.Ordinal),
             "sheet overlay Auto Fit should auto-select a matching sheet and report the selected match quality");
         AssertTrue(
             service.Contains("SheetOverlayAutoFitCandidateSearchService", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectConfidence", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectMatchedSamples", StringComparison.Ordinal) &&
-            service.Contains("SearchRank", StringComparison.Ordinal),
-            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking");
+            service.Contains("SearchRank", StringComparison.Ordinal) &&
+            service.Contains("out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches", StringComparison.Ordinal),
+            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking and expose alternatives");
         AssertTrue(
             menus.Contains("\"Auto Select + Fit This Sheet\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Fit Sheet Overlay\"", StringComparison.Ordinal) &&

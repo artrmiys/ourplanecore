@@ -114,6 +114,32 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertEqual(nearPage.FolderPath, match.Page.FolderPath, "auto-select tie should prefer closer sheet rank");
     }
 
+    public static void AutoSelectReportsRankedAlternatives()
+    {
+        PdfGeometrySnapResult target = BuildPlanSnap(scale: 1.05f, offsetX: 16, offsetY: 24);
+        PdfGeometrySnapResult overlay = BuildPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PageInfo firstPage = Page("A101 first", "first");
+        PageInfo secondPage = Page("A102 second", "second");
+        PageInfo thirdPage = Page("A103 third", "third");
+
+        bool ok = SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+            target,
+            [
+                new SheetOverlayAutoFitCandidateInput(thirdPage, overlay, "test plan", 3),
+                new SheetOverlayAutoFitCandidateInput(firstPage, overlay, "test plan", 1),
+                new SheetOverlayAutoFitCandidateInput(secondPage, overlay, "test plan", 2),
+            ],
+            out SheetOverlayAutoFitCandidateMatch match,
+            out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches);
+
+        AssertTrue(ok, "overlay auto-select should produce ranked alternatives");
+        AssertEqual(firstPage.FolderPath, match.Page.FolderPath, "best auto-selected overlay candidate");
+        AssertTrue(topMatches.Count == 3, "auto-select should retain ranked alternatives");
+        AssertEqual(firstPage.FolderPath, topMatches[0].Page.FolderPath, "first ranked overlay candidate");
+        AssertEqual(secondPage.FolderPath, topMatches[1].Page.FolderPath, "second ranked overlay candidate");
+        AssertEqual(thirdPage.FolderPath, topMatches[2].Page.FolderPath, "third ranked overlay candidate");
+    }
+
     private static PdfGeometrySnapResult BuildPlanSnap(
         float scale,
         float offsetX,

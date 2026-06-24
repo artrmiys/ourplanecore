@@ -89,17 +89,18 @@ public partial class MainWindow
         OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true);
 
         PageInfo selectedTarget = OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) ?? latestTarget;
+        string alternatives = BuildSheetOverlayAutoSelectAlternativesSummary(search.TopMatches);
         AppLog.Info(
             $"Sheet overlay auto select chose overlay; base='{selectedTarget.FolderPath}'; overlay='{search.OverlayPage.FolderPath}'; " +
             $"candidates={search.ComparableCount}/{search.CandidateCount}; confidence={search.Fit.Confidence:0.###}; " +
-            $"matched={search.Fit.MatchedSamples}/{search.Fit.SampleCount}; method='{search.Fit.Method}'");
+            $"matched={search.Fit.MatchedSamples}/{search.Fit.SampleCount}; method='{search.Fit.Method}'; alternatives='{alternatives}'");
         ApplySheetOverlayAutoFitResult(
             selectedTarget,
             search.OverlayPage,
             search.Read,
             search.Fit,
             $"Auto-selected overlay: {search.OverlayPage.Name} " +
-            $"({search.ComparableCount}/{search.CandidateCount} sheets compared). ");
+            $"({search.ComparableCount}/{search.CandidateCount} sheets compared; {alternatives}). ");
     }
 
     private static SheetOverlayAutoFitCandidateSearch FindSheetOverlayAutoFitCandidate(
@@ -140,7 +141,11 @@ public partial class MainWindow
                 $"Overlay auto fit: no comparable sheet geometry found in {tried} candidate sheets.");
         }
 
-        if (!SheetOverlayAutoFitCandidateSearchService.TryFindBest(baseRead.Snap, inputs, out SheetOverlayAutoFitCandidateMatch match))
+        if (!SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+                baseRead.Snap,
+                inputs,
+                out SheetOverlayAutoFitCandidateMatch match,
+                out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches))
         {
             return SheetOverlayAutoFitCandidateSearch.Failed(
                 $"Overlay auto fit: no similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough.");
@@ -157,6 +162,7 @@ public partial class MainWindow
             match.Page,
             SheetOverlayAutoFitReadResult.Success(baseRead, selectedRead),
             match.Fit,
+            topMatches,
             inputs.Count,
             tried);
     }
@@ -260,12 +266,26 @@ public partial class MainWindow
         }
     }
 
+    private static string BuildSheetOverlayAutoSelectAlternativesSummary(
+        IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches)
+    {
+        IReadOnlyList<string> rows = topMatches
+            .Take(3)
+            .Select(match => $"{match.Page.Name} {match.Fit.Confidence * 100:0}%")
+            .ToList();
+
+        return rows.Count == 0
+            ? "no ranked alternatives"
+            : $"top matches: {string.Join(", ", rows)}";
+    }
+
     private sealed record SheetOverlayAutoFitCandidateSearch(
         bool Ok,
         PageInfo? OverlayPage,
         SheetOverlayAutoFitReadResult? Read,
         SheetOverlayAutoFitResult Fit,
         string Error,
+        IReadOnlyList<SheetOverlayAutoFitCandidateMatch> TopMatches,
         int ComparableCount,
         int CandidateCount)
     {
@@ -273,12 +293,13 @@ public partial class MainWindow
             PageInfo overlayPage,
             SheetOverlayAutoFitReadResult read,
             SheetOverlayAutoFitResult fit,
+            IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches,
             int comparableCount,
             int candidateCount) =>
-            new(true, overlayPage, read, fit, "", comparableCount, candidateCount);
+            new(true, overlayPage, read, fit, "", topMatches, comparableCount, candidateCount);
 
         public static SheetOverlayAutoFitCandidateSearch Failed(string error) =>
-            new(false, null, null, FailedFit(error), error, 0, 0);
+            new(false, null, null, FailedFit(error), error, [], 0, 0);
     }
 
     private sealed record SheetOverlayAutoFitCandidatePage(PageInfo Page, int SearchRank);

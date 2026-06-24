@@ -26,8 +26,18 @@ public static class SheetOverlayAutoFitCandidateSearchService
         IEnumerable<SheetOverlayAutoFitCandidateInput> candidates,
         out SheetOverlayAutoFitCandidateMatch match)
     {
+        bool ok = TryFindBest(baseSnap, candidates, out match, out _);
+        return ok;
+    }
+
+    public static bool TryFindBest(
+        PdfGeometrySnapResult baseSnap,
+        IEnumerable<SheetOverlayAutoFitCandidateInput> candidates,
+        out SheetOverlayAutoFitCandidateMatch match,
+        out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches)
+    {
         match = default!;
-        SheetOverlayAutoFitCandidateMatch? best = null;
+        var matches = new List<SheetOverlayAutoFitCandidateMatch>();
 
         foreach (SheetOverlayAutoFitCandidateInput candidate in candidates)
         {
@@ -43,14 +53,18 @@ public static class SheetOverlayAutoFitCandidateSearchService
                 fit,
                 candidate.Source,
                 candidate.SearchRank);
-            if (best == null || IsBetter(current, best))
-                best = current;
+            matches.Add(current);
         }
 
-        if (best == null)
+        topMatches = matches
+            .OrderByDescending(match => match, SheetOverlayAutoFitCandidateMatchComparer.Instance)
+            .Take(5)
+            .ToList();
+
+        if (topMatches.Count == 0)
             return false;
 
-        match = best;
+        match = topMatches[0];
         return true;
     }
 
@@ -92,5 +106,27 @@ public static class SheetOverlayAutoFitCandidateSearchService
             return 0;
 
         return delta > 0 ? 1 : -1;
+    }
+
+    private sealed class SheetOverlayAutoFitCandidateMatchComparer : IComparer<SheetOverlayAutoFitCandidateMatch>
+    {
+        public static readonly SheetOverlayAutoFitCandidateMatchComparer Instance = new();
+
+        public int Compare(SheetOverlayAutoFitCandidateMatch? left, SheetOverlayAutoFitCandidateMatch? right)
+        {
+            if (ReferenceEquals(left, right))
+                return 0;
+            if (left == null)
+                return -1;
+            if (right == null)
+                return 1;
+
+            if (IsBetter(left, right))
+                return 1;
+            if (IsBetter(right, left))
+                return -1;
+
+            return 0;
+        }
     }
 }
