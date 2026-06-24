@@ -117,11 +117,26 @@ public sealed class SheetOverlayCandidateDialog : Window
         };
         Loaded += (_, _) =>
         {
-            _grid.SelectedIndex = Rows.Count > 0 ? 0 : -1;
+            _grid.SelectedIndex = InitialSelectedIndex();
+            if (_grid.SelectedItem != null)
+                _grid.ScrollIntoView(_grid.SelectedItem);
             _grid.Focus();
         };
 
         Content = root;
+    }
+
+    private int InitialSelectedIndex()
+    {
+        if (Rows.Count == 0)
+            return -1;
+
+        int current = Rows
+            .Select((row, index) => (row, index))
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.row.Current))
+            .Select(pair => pair.index)
+            .FirstOrDefault(-1);
+        return current >= 0 ? current : 0;
     }
 
     private static SheetOverlayCandidateRow BuildRow(

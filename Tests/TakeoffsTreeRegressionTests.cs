@@ -3154,8 +3154,10 @@ internal static class TakeoffsTreeRegressionTests
             candidateDialog.Contains("Use + Open Sheet", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use + Edit by Points", StringComparison.Ordinal) &&
             candidateDialog.Contains("SelectedAction", StringComparison.Ordinal) &&
+            candidateDialog.Contains("InitialSelectedIndex", StringComparison.Ordinal) &&
+            candidateDialog.Contains("_grid.ScrollIntoView(_grid.SelectedItem)", StringComparison.Ordinal) &&
             candidateDialog.Contains("MouseDoubleClick", StringComparison.Ordinal),
-            "ranked overlay candidates should be reviewable in a choose dialog with confidence, quick selection, and direct inspection/edit actions");
+            "ranked overlay candidates should be reviewable in a choose dialog with confidence, current-overlay focus, quick selection, and direct inspection/edit actions");
         AssertTrue(
             main.Contains("private void OpenSheetOverlaySource(PageInfo page)", StringComparison.Ordinal) &&
             main.Contains("OpenPageInActiveTab(overlayPage)", StringComparison.Ordinal) &&
