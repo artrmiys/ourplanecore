@@ -943,14 +943,14 @@ public partial class MainWindow
         {
             if (!string.IsNullOrWhiteSpace(error))
                 AppLog.Info($"Similar count text scan unavailable; {error}");
-            return null;
+            return TryFindSimilarCountNearbyRepeatedTextFallback(request, searchRect, anchor);
         }
 
         if (SimilarCountTextResultTooBroad(result))
         {
             AppLog.Info(
                 $"Similar count text scan skipped broad query; query='{result.Query}'; matches={result.Matches.Count}; page='{request.PageFolder}'");
-            return null;
+            return TryFindSimilarCountNearbyRepeatedTextFallback(request, searchRect, anchor);
         }
 
         if (IsUsableSimilarTextResult(result) &&
@@ -959,9 +959,22 @@ public partial class MainWindow
             return result;
         }
 
-        if (request.PreferNearestRepeatedText || !request.AllowExactTextMatches)
-            return null;
+        PdfSimilarTextResult? fallback = TryFindSimilarCountNearbyRepeatedTextFallback(request, searchRect, anchor);
+        if (fallback != null ||
+            request.PreferNearestRepeatedText ||
+            !request.AllowExactTextMatches)
+        {
+            return fallback;
+        }
 
+        return null;
+    }
+
+    private static PdfSimilarTextResult? TryFindSimilarCountNearbyRepeatedTextFallback(
+        ViewportSimilarCountRequest request,
+        SKRect searchRect,
+        SKPoint anchor)
+    {
         if (!PdfSimilarTextService.TryFindSimilarText(
                 request.PdfPath,
                 request.PdfPageIndex,

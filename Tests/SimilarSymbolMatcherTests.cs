@@ -1414,16 +1414,18 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count should check cancellation before a completed stale scan can replace review candidates");
         AssertTrue(
             dialog.Contains("_scanCts?.Cancel();", StringComparison.Ordinal) &&
-            dialog.Contains("CurrentSheetScanTimeout", StringComparison.Ordinal) &&
             dialog.Contains("AllSheetsScanTimeout", StringComparison.Ordinal) &&
-            dialog.Contains("cts.CancelAfter(timeout)", StringComparison.Ordinal) &&
-            dialog.Contains("Scan stopped after", StringComparison.Ordinal) &&
+            dialog.Contains("if (request.AllSheets)", StringComparison.Ordinal) &&
+            dialog.Contains("cts.CancelAfter(AllSheetsScanTimeout)", StringComparison.Ordinal) &&
+            dialog.Contains("All-sheets scan stopped after", StringComparison.Ordinal) &&
+            dialog.Contains("Current-sheet results stay available", StringComparison.Ordinal) &&
+            !dialog.Contains("CurrentSheetScanTimeout", StringComparison.Ordinal) &&
             dialog.Contains("_closed", StringComparison.Ordinal) &&
             dialog.Contains("_scanRequestedWhileRunning", StringComparison.Ordinal) &&
             dialog.Contains("RunLatestScanAsync", StringComparison.Ordinal) &&
             dialog.Contains("ReferenceEquals(_scanCts, cts)", StringComparison.Ordinal) &&
             dialog.Contains("catch (OperationCanceledException)", StringComparison.Ordinal),
-            "Similar Count dialog should cancel superseded scans, bound long-running scans, run only the latest queued scan, and ignore stale cancellation results");
+            "Similar Count dialog should cancel superseded scans, bound only all-sheets scans, keep current-sheet scans running to completion, and ignore stale cancellation results");
     }
 
     public static void SimilarCountPreviewShowsConfidence()
@@ -1802,6 +1804,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("request.PreferNearestRepeatedText", StringComparison.Ordinal) &&
             mainWindow.Contains("nearest repeated text fallback used", StringComparison.Ordinal) &&
             mainWindow.Contains("NearestRepeatedTextFallbackLooksIntentional", StringComparison.Ordinal) &&
+            mainWindow.Contains("TryFindSimilarCountNearbyRepeatedTextFallback", StringComparison.Ordinal) &&
             mainWindow.Contains("TextCandidateSearchRadiusPdf", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountWeakTextCandidateScore", StringComparison.Ordinal) &&
             mainWindow.Contains("SimilarCountMaxTextCandidateMatches", StringComparison.Ordinal) &&
@@ -1818,7 +1821,7 @@ internal static class SimilarSymbolMatcherTests
             service.Contains("NearbyRepeatedTextFallback", StringComparison.Ordinal) &&
             mainWindow.Contains("nearbyRepeatedTextFallback: true", StringComparison.Ordinal) &&
             mainWindow.Contains("nearbyRepeatedTextFallback: false", StringComparison.Ordinal),
-            "manual Similar should be able to use a nearby repeated mark-like text label as a raster guide without enabling that broad fallback for normal Beam/Openings text searches or short grid labels");
+            "Similar should use a nearby repeated mark-like text label as a raster guide for manual and Beam/Openings flows while keeping the helper limited to mark-like labels, not short grid text");
         AssertTrue(
             viewport.Contains("PdfPath: pdfPath", StringComparison.Ordinal) &&
             viewport.Contains("AllowExactTextMatches = true", StringComparison.Ordinal) &&

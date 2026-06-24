@@ -31,7 +31,6 @@ public sealed class SimilarCountDialog : Window
 {
     private const double StrictThresholdPreset = 0.98;
     private const double LooseThresholdPreset = 0.82;
-    private static readonly TimeSpan CurrentSheetScanTimeout = TimeSpan.FromSeconds(14);
     private static readonly TimeSpan AllSheetsScanTimeout = TimeSpan.FromSeconds(45);
 
     public float Threshold { get; private set; }
@@ -566,8 +565,8 @@ public sealed class SimilarCountDialog : Window
         var cts = new CancellationTokenSource();
         _scanCts = cts;
         SimilarCountScanRequest request = CurrentScanRequest();
-        TimeSpan timeout = request.AllSheets ? AllSheetsScanTimeout : CurrentSheetScanTimeout;
-        cts.CancelAfter(timeout);
+        if (request.AllSheets)
+            cts.CancelAfter(AllSheetsScanTimeout);
         _foundLabel.Text = "Scanning...";
         _reviewDetailsLabel.Text = "";
         ResetReviewActionButtons();
@@ -579,7 +578,7 @@ public sealed class SimilarCountDialog : Window
                 request.Mirrored,
                 request.AllSheets,
                 cts.Token);
-            if (cts.IsCancellationRequested || !ReferenceEquals(_scanCts, cts))
+            if (!ReferenceEquals(_scanCts, cts) || _closed)
                 return;
 
             SetReviewCounts(
@@ -599,10 +598,12 @@ public sealed class SimilarCountDialog : Window
             if (!ReferenceEquals(_scanCts, cts) || _accepted || _closed || _scanRequestedWhileRunning)
                 return;
 
-            _foundLabel.Text = $"Scan stopped after {timeout.TotalSeconds:0}s.";
+            _foundLabel.Text = request.AllSheets
+                ? $"All-sheets scan stopped after {AllSheetsScanTimeout.TotalSeconds:0}s."
+                : "Scan cancelled.";
             _reviewDetailsLabel.Text = request.AllSheets
-                ? "This all-sheets scan is too broad. Search the current sheet first, or raise the threshold."
-                : "This scan is too broad. Raise the threshold, use Strict/Default, or rely on text review markers.";
+                ? "Current-sheet results stay available. Search the current sheet first, raise the threshold, or scan fewer sheets."
+                : "";
             ResetReviewActionButtons();
         }
         catch (Exception ex)
