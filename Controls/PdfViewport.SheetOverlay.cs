@@ -368,28 +368,34 @@ public sealed partial class PdfViewport
         switch (_sheetOverlayPointEditStep)
         {
             case SheetOverlayPointEditStep.MoveSource:
-                _sheetOverlayEditAnchorLocal = OverlayDisplayToLocal(pdf);
+                _sheetOverlayEditAnchorLocal = ResolveSheetOverlaySourceLocalPoint(pdf, out string moveSourceSnapKind);
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.MoveTarget;
-                PostStatus("Overlay edit: click where that point should land.");
+                PostStatus(BuildSheetOverlayPointEditSnapStatus(
+                    "Overlay edit: grabbed point",
+                    moveSourceSnapKind,
+                    "Click where that point should land."));
                 break;
 
             case SheetOverlayPointEditStep.MoveTarget:
-                _sheetOverlayEditAnchorTarget = pdf;
+                _sheetOverlayEditAnchorTarget = ResolveSheetOverlayTargetPoint(pdf, out string moveTargetSnapKind);
                 SKPoint anchorVector = OverlayLocalTransformVector(
                     _sheetOverlayEditAnchorLocal,
                     _sheetOverlayScale,
                     _sheetOverlayRotationDegrees);
                 ApplySheetOverlayTransform(
-                    pdf.X - anchorVector.X,
-                    pdf.Y - anchorVector.Y,
+                    _sheetOverlayEditAnchorTarget.X - anchorVector.X,
+                    _sheetOverlayEditAnchorTarget.Y - anchorVector.Y,
                     _sheetOverlayScale,
                     _sheetOverlayRotationDegrees,
-                    "Overlay moved by point. Click a second overlay point to scale, or press Esc to finish.");
+                    BuildSheetOverlayPointEditSnapStatus(
+                        "Overlay moved by point",
+                        moveTargetSnapKind,
+                        "Click a second overlay point to scale, or press Esc to finish."));
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.ScaleSource;
                 break;
 
             case SheetOverlayPointEditStep.ScaleSource:
-                _sheetOverlayEditScaleLocal = OverlayDisplayToLocal(pdf);
+                _sheetOverlayEditScaleLocal = ResolveSheetOverlaySourceLocalPoint(pdf, out string scaleSourceSnapKind);
                 if (OverlayDistance(_sheetOverlayEditAnchorLocal, _sheetOverlayEditScaleLocal) < 0.01f)
                 {
                     PostStatus("Overlay scale: second point is too close to the first point.");
@@ -397,12 +403,16 @@ public sealed partial class PdfViewport
                 }
 
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.ScaleTarget;
-                PostStatus("Overlay edit: click where the second point should land.");
+                PostStatus(BuildSheetOverlayPointEditSnapStatus(
+                    "Overlay edit: grabbed second point",
+                    scaleSourceSnapKind,
+                    "Click where the second point should land."));
                 break;
 
             case SheetOverlayPointEditStep.ScaleTarget:
+                SKPoint scaleTarget = ResolveSheetOverlayTargetPoint(pdf, out string scaleTargetSnapKind);
                 float localDistance = OverlayDistance(_sheetOverlayEditAnchorLocal, _sheetOverlayEditScaleLocal);
-                float targetDistance = OverlayDistance(_sheetOverlayEditAnchorTarget, pdf);
+                float targetDistance = OverlayDistance(_sheetOverlayEditAnchorTarget, scaleTarget);
                 if (localDistance < 0.01f || targetDistance < 0.01f)
                 {
                     PostStatus("Overlay scale: choose two separated points.");
@@ -415,8 +425,8 @@ public sealed partial class PdfViewport
                     _sheetOverlayEditScaleLocal.Y - _sheetOverlayEditAnchorLocal.Y,
                     _sheetOverlayEditScaleLocal.X - _sheetOverlayEditAnchorLocal.X);
                 float targetAngle = MathF.Atan2(
-                    pdf.Y - _sheetOverlayEditAnchorTarget.Y,
-                    pdf.X - _sheetOverlayEditAnchorTarget.X);
+                    scaleTarget.Y - _sheetOverlayEditAnchorTarget.Y,
+                    scaleTarget.X - _sheetOverlayEditAnchorTarget.X);
                 float newRotation = NormalizeSheetOverlayRotation((targetAngle - localAngle) * 180f / MathF.PI);
                 SKPoint rotatedAnchor = OverlayLocalTransformVector(
                     _sheetOverlayEditAnchorLocal,
@@ -427,13 +437,46 @@ public sealed partial class PdfViewport
                     _sheetOverlayEditAnchorTarget.Y - rotatedAnchor.Y,
                     newScale,
                     newRotation,
-                    $"Overlay fit by two points: {newScale:0.###}x, rotation {newRotation:0.###} deg.");
+                    BuildSheetOverlayPointEditSnapStatus(
+                        $"Overlay fit by two points: {newScale:0.###}x, rotation {newRotation:0.###} deg",
+                        scaleTargetSnapKind,
+                        ""));
                 CancelSheetOverlayPointEdit(silent: true);
                 break;
         }
 
         RequestRepaint();
         return true;
+    }
+
+    private SKPoint ResolveSheetOverlaySourceLocalPoint(SKPoint pdf, out string snapKind)
+    {
+        if (TryFindOverlayPdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt(), out SKPoint snapped, out snapKind))
+            return OverlayDisplayToLocal(snapped);
+
+        snapKind = "";
+        return OverlayDisplayToLocal(pdf);
+    }
+
+    private SKPoint ResolveSheetOverlayTargetPoint(SKPoint pdf, out string snapKind)
+    {
+        if (TryFindBasePdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt(), out SKPoint snapped, out snapKind))
+            return snapped;
+
+        snapKind = "";
+        return pdf;
+    }
+
+    private float SheetOverlayPointEditSnapTolerancePt() =>
+        ScreenToPdfDistance(14f);
+
+    private static string BuildSheetOverlayPointEditSnapStatus(string prefix, string snapKind, string next)
+    {
+        string snap = string.IsNullOrWhiteSpace(snapKind) ? "" : $" snapped to {snapKind}";
+        if (string.IsNullOrWhiteSpace(next))
+            return $"{prefix}{snap}.";
+
+        return $"{prefix}{snap}. {next}";
     }
 
     private void CancelSheetOverlayPointEdit(bool silent = false)

@@ -2989,6 +2989,29 @@ internal static class TakeoffsTreeRegressionTests
             "sheet overlay mouse drag should persist the transform once when the button is released");
     }
 
+    public static void SheetOverlayPointEditUsesPdfSnap()
+    {
+        string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
+        string pdfSnap = ReadRepoFile(Path.Combine("Controls", "PdfViewport.PdfSnap.cs"));
+        string pointEdit = SliceMethod(overlay, "private bool HandleSheetOverlayPointEditClick(");
+
+        AssertTrue(
+            pointEdit.Contains("ResolveSheetOverlaySourceLocalPoint(pdf", StringComparison.Ordinal) &&
+            pointEdit.Contains("ResolveSheetOverlayTargetPoint(pdf", StringComparison.Ordinal) &&
+            pointEdit.Contains("SKPoint scaleTarget = ResolveSheetOverlayTargetPoint(pdf", StringComparison.Ordinal),
+            "sheet overlay point edit should resolve overlay source clicks and base target clicks through separate snap paths");
+        AssertTrue(
+            overlay.Contains("TryFindOverlayPdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt()", StringComparison.Ordinal) &&
+            overlay.Contains("TryFindBasePdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt()", StringComparison.Ordinal) &&
+            overlay.Contains("BuildSheetOverlayPointEditSnapStatus", StringComparison.Ordinal),
+            "sheet overlay point edit should snap source points to overlay geometry, target points to sheet geometry, and report the snap kind");
+        AssertTrue(
+            pdfSnap.Contains("private bool TryFindBasePdfSnapPoint(", StringComparison.Ordinal) &&
+            pdfSnap.Contains("TryFindBasePdfSnapPoint(rawPdf, tolerancePt", StringComparison.Ordinal) &&
+            pdfSnap.Contains("!PdfSnapEnabled ||", StringComparison.Ordinal),
+            "PDF snap should expose a base-sheet-only helper so overlay point editing cannot snap target clicks back onto the overlay");
+    }
+
     public static void SheetOverlayAsyncLoadUsesFreshPageSnapshot()
     {
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");

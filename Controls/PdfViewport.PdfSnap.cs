@@ -421,8 +421,8 @@ public sealed partial class PdfViewport
             found = true;
         }
 
-        if (_pdfSnapIndex.TryFind(rawPdf, tolerancePt, out PdfGeometrySnapPoint snap))
-            Consider(snap.Point, NormalizePdfSnapKind(snap.Kind, overlay: false));
+        if (TryFindBasePdfSnapPoint(rawPdf, tolerancePt, out SKPoint baseSnap, out string baseKind))
+            Consider(baseSnap, baseKind);
 
         if (TryFindOverlayPdfSnapPoint(rawPdf, tolerancePt, out SKPoint overlaySnap, out string overlayKind))
             Consider(overlaySnap, overlayKind);
@@ -430,6 +430,24 @@ public sealed partial class PdfViewport
         snapped = bestPoint;
         snapKind = bestKind;
         return found;
+    }
+
+    private bool TryFindBasePdfSnapPoint(SKPoint rawPdf, float tolerancePt, out SKPoint snapped, out string snapKind)
+    {
+        snapped = default;
+        snapKind = "";
+        if (!PdfSnapEnabled)
+            return false;
+
+        if (!IsPdfSnapCacheCurrent())
+            QueuePdfSnapPointLoad(force: false);
+
+        if (!_pdfSnapIndex.TryFind(rawPdf, tolerancePt, out PdfGeometrySnapPoint snap))
+            return false;
+
+        snapped = snap.Point;
+        snapKind = NormalizePdfSnapKind(snap.Kind, overlay: false);
+        return true;
     }
 
     private bool IsPdfSnapCacheCurrent()
@@ -451,8 +469,12 @@ public sealed partial class PdfViewport
     {
         snapped = default;
         snapKind = "";
-        if (_sheetOverlayBitmap == null || string.IsNullOrWhiteSpace(_overlayPdfSnapPath))
+        if (!PdfSnapEnabled ||
+            _sheetOverlayBitmap == null ||
+            string.IsNullOrWhiteSpace(_overlayPdfSnapPath))
+        {
             return false;
+        }
 
         if (!IsOverlayPdfSnapCacheCurrent())
             QueueOverlayPdfSnapPointLoad(force: false);
