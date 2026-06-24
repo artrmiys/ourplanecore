@@ -115,7 +115,7 @@ public partial class MainWindow
     private static SheetOverlayAutoFitCandidateSearch FindSheetOverlayAutoFitCandidate(
         OurPlaneCoreJob job,
         PageInfo targetPage,
-        string excludedOverlayFolder = "")
+        string nextAfterOverlayFolder = "")
     {
         SheetOverlayAutoFitSnapRead baseRead = ReadSheetOverlayAutoFitCandidateSnap(targetPage);
         if (!baseRead.Ok)
@@ -126,8 +126,7 @@ public partial class MainWindow
 
         List<SheetOverlayAutoFitCandidatePage> pages = BuildSheetOverlayAutoFitCandidatePages(
             job,
-            targetPage,
-            excludedOverlayFolder).ToList();
+            targetPage).ToList();
         var inputs = new List<SheetOverlayAutoFitCandidateInput>();
         var readsByFolder = new Dictionary<string, SheetOverlayAutoFitSnapRead>(StringComparer.OrdinalIgnoreCase);
         int tried = 0;
@@ -151,7 +150,7 @@ public partial class MainWindow
         if (inputs.Count == 0)
         {
             return SheetOverlayAutoFitCandidateSearch.Failed(
-                string.IsNullOrWhiteSpace(excludedOverlayFolder)
+                string.IsNullOrWhiteSpace(nextAfterOverlayFolder)
                     ? $"Overlay auto fit: no comparable sheet geometry found in {tried} candidate sheets."
                     : $"Overlay auto fit: no alternate comparable sheet geometry found in {tried} candidate sheets.");
         }
@@ -163,9 +162,16 @@ public partial class MainWindow
                 out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches))
         {
             return SheetOverlayAutoFitCandidateSearch.Failed(
-                string.IsNullOrWhiteSpace(excludedOverlayFolder)
+                string.IsNullOrWhiteSpace(nextAfterOverlayFolder)
                     ? $"Overlay auto fit: no similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough."
                     : $"Overlay auto fit: no alternate similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(nextAfterOverlayFolder) &&
+            !SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch(topMatches, nextAfterOverlayFolder, out match))
+        {
+            return SheetOverlayAutoFitCandidateSearch.Failed(
+                $"Overlay auto fit: no alternate similar sheet matched {inputs.Count}/{tried} candidate sheets closely enough.");
         }
 
         if (!readsByFolder.TryGetValue(SheetOverlayFolderKey(match.Page.FolderPath), out SheetOverlayAutoFitSnapRead? selectedRead) ||
@@ -196,8 +202,7 @@ public partial class MainWindow
 
     private static IEnumerable<SheetOverlayAutoFitCandidatePage> BuildSheetOverlayAutoFitCandidatePages(
         OurPlaneCoreJob job,
-        PageInfo targetPage,
-        string excludedOverlayFolder = "")
+        PageInfo targetPage)
     {
         List<PageInfo> pages = CollectSheetOverlayAutoFitPages(job.PagesRoot).ToList();
         int targetIndex = pages.FindIndex(page => SameFolder(page.FolderPath, targetPage.FolderPath));
@@ -207,8 +212,6 @@ public partial class MainWindow
                 page,
                 BuildSheetOverlayAutoFitSearchRank(targetPage, targetIndex, page, index)))
             .Where(candidate => !SameFolder(candidate.Page.FolderPath, targetPage.FolderPath))
-            .Where(candidate => string.IsNullOrWhiteSpace(excludedOverlayFolder) ||
-                                !SameFolder(candidate.Page.FolderPath, excludedOverlayFolder))
             .OrderBy(candidate => candidate.SearchRank)
             .ThenBy(candidate => candidate.Page.Name, StringComparer.OrdinalIgnoreCase)
             .Take(MaxSheetOverlayAutoSelectCandidates);

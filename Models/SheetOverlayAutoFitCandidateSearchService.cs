@@ -68,10 +68,59 @@ public static class SheetOverlayAutoFitCandidateSearchService
         return true;
     }
 
+    public static bool TrySelectNextMatch(
+        IReadOnlyList<SheetOverlayAutoFitCandidateMatch> rankedMatches,
+        string currentPageFolder,
+        out SheetOverlayAutoFitCandidateMatch match)
+    {
+        match = default!;
+        if (rankedMatches.Count == 0)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(currentPageFolder))
+        {
+            match = rankedMatches[0];
+            return true;
+        }
+
+        int currentIndex = -1;
+        string currentKey = NormalizeFolderKey(currentPageFolder);
+        for (int index = 0; index < rankedMatches.Count; index++)
+        {
+            if (string.Equals(
+                    NormalizeFolderKey(rankedMatches[index].Page.FolderPath),
+                    currentKey,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                currentIndex = index;
+                break;
+            }
+        }
+
+        if (currentIndex < 0)
+        {
+            match = rankedMatches[0];
+            return true;
+        }
+
+        if (rankedMatches.Count == 1)
+            return false;
+
+        match = rankedMatches[(currentIndex + 1) % rankedMatches.Count];
+        return true;
+    }
+
     private static bool IsAutoSelectable(SheetOverlayAutoFitResult fit) =>
         fit.Ok &&
         fit.MatchedSamples >= MinimumAutoSelectMatchedSamples &&
         fit.Confidence >= MinimumAutoSelectConfidence;
+
+    private static string NormalizeFolderKey(string folder) =>
+        string.IsNullOrWhiteSpace(folder)
+            ? ""
+            : folder.Trim()
+                .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+                .Replace(System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.DirectorySeparatorChar);
 
     private static bool IsBetter(
         SheetOverlayAutoFitCandidateMatch left,

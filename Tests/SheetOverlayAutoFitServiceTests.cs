@@ -140,6 +140,47 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertEqual(thirdPage.FolderPath, topMatches[2].Page.FolderPath, "third ranked overlay candidate");
     }
 
+    public static void AutoSelectNextCandidateCyclesRankedAlternatives()
+    {
+        PdfGeometrySnapResult target = BuildPlanSnap(scale: 1.05f, offsetX: 16, offsetY: 24);
+        PdfGeometrySnapResult overlay = BuildPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PageInfo firstPage = Page("A101 first", "first");
+        PageInfo secondPage = Page("A102 second", "second");
+        PageInfo thirdPage = Page("A103 third", "third");
+
+        bool ok = SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+            target,
+            [
+                new SheetOverlayAutoFitCandidateInput(thirdPage, overlay, "test plan", 3),
+                new SheetOverlayAutoFitCandidateInput(firstPage, overlay, "test plan", 1),
+                new SheetOverlayAutoFitCandidateInput(secondPage, overlay, "test plan", 2),
+            ],
+            out _,
+            out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches);
+
+        AssertTrue(ok, "overlay auto-select should rank candidates before cycling");
+        AssertTrue(topMatches.Count == 3, "overlay auto-select should expose all ranked alternatives for cycling");
+
+        AssertTrue(
+            SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch(topMatches, firstPage.FolderPath, out SheetOverlayAutoFitCandidateMatch afterFirst),
+            "next candidate should advance from the first ranked sheet");
+        AssertEqual(secondPage.FolderPath, afterFirst.Page.FolderPath, "next candidate after first sheet");
+
+        AssertTrue(
+            SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch(topMatches, secondPage.FolderPath, out SheetOverlayAutoFitCandidateMatch afterSecond),
+            "next candidate should advance from the second ranked sheet");
+        AssertEqual(thirdPage.FolderPath, afterSecond.Page.FolderPath, "next candidate after second sheet");
+
+        AssertTrue(
+            SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch(topMatches, thirdPage.FolderPath, out SheetOverlayAutoFitCandidateMatch afterThird),
+            "next candidate should wrap after the last ranked sheet");
+        AssertEqual(firstPage.FolderPath, afterThird.Page.FolderPath, "next candidate after third sheet should wrap to first");
+
+        AssertFalse(
+            SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch([topMatches[0]], firstPage.FolderPath, out _),
+            "next candidate should reject cycling when the only ranked sheet is already selected");
+    }
+
     private static PdfGeometrySnapResult BuildPlanSnap(
         float scale,
         float offsetX,

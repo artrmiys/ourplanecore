@@ -3103,7 +3103,8 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("bool skipCurrentOverlay = false", StringComparison.Ordinal) &&
             autoSelect.Contains("Overlay auto select: trying the next matching sheet", StringComparison.Ordinal) &&
             autoSelect.Contains("skipCurrentOverlay ? targetPage.OverlayPageFolder : \"\"", StringComparison.Ordinal) &&
-            autoSelect.Contains("excludedOverlayFolder", StringComparison.Ordinal) &&
+            autoSelect.Contains("nextAfterOverlayFolder", StringComparison.Ordinal) &&
+            autoSelect.Contains("TrySelectNextMatch(topMatches, nextAfterOverlayFolder, out match)", StringComparison.Ordinal) &&
             autoSelect.Contains("no alternate similar sheet matched", StringComparison.Ordinal) &&
             autoSelect.Contains("Next overlay candidate", StringComparison.Ordinal) &&
             autoSelect.Contains("Overlay auto select: reselecting the best matching sheet", StringComparison.Ordinal) &&
@@ -3120,8 +3121,9 @@ internal static class TakeoffsTreeRegressionTests
             service.Contains("MinimumAutoSelectConfidence", StringComparison.Ordinal) &&
             service.Contains("MinimumAutoSelectMatchedSamples", StringComparison.Ordinal) &&
             service.Contains("SearchRank", StringComparison.Ordinal) &&
-            service.Contains("out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches", StringComparison.Ordinal),
-            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking and expose alternatives");
+            service.Contains("out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches", StringComparison.Ordinal) &&
+            service.Contains("TrySelectNextMatch", StringComparison.Ordinal),
+            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking, expose alternatives, and cycle through ranked matches");
         AssertTrue(
             menus.Contains("\"Auto Select + Fit This Sheet\"", StringComparison.Ordinal) &&
             menus.Contains("\"Auto Select + Fit Sheet Overlay\"", StringComparison.Ordinal) &&
