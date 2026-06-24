@@ -83,6 +83,10 @@ public partial class MainWindow
             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
         menu.Items.Add(MakeMenuItem(
+            "Create Line Grid...",
+            isAreaSection,
+            () => CreateLineGridFromAreaSection(item, measurement)));
+        menu.Items.Add(MakeMenuItem(
             "Set / Reset Joist Direction",
             isAreaSection,
             () => SetJoistDirectionForSection(item, measurement)));

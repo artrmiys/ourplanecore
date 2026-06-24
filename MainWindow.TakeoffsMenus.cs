@@ -31,6 +31,7 @@ public partial class MainWindow
             () => StartNewSection(tvi, item)));
         if (isArea)
         {
+            menu.Items.Add(MakeMenuItem("Create Line Grid...", singleSelection, () => CreateLineGridFromSelectedArea(tvi, item)));
             menu.Items.Add(MakeSubmenu(
                 "Joist",
                 MakeMenuItem(

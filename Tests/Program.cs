@@ -86,6 +86,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
+    ("area line grid creates horizontal and vertical segments", AreaLineGridServiceTests.RectangleCreatesHorizontalAndVerticalSegments),
+    ("area line grid holes split segments", AreaLineGridServiceTests.HolesSplitGridSegments),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
     ("measurement merge moves segment into target takeoff", MeasurementMergeMovesSegmentIntoTargetTakeoff),
     ("measurement merge rejects mixed target type", MeasurementMergeRejectsMixedTargetType),
