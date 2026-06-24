@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using OurPlaneCore.Controls;
+using SkiaSharp;
 
 namespace OurPlaneCore;
 
@@ -30,7 +33,7 @@ public partial class MainWindow
             return;
         }
 
-        TxtStatus.Text = "Overlay auto fit: reading matching plan geometry...";
+        TxtStatus.Text = "Overlay auto fit: reading matching plan geometry and raster features...";
         try
         {
             SheetOverlayAutoFitReadResult read = await Task.Run(() =>
@@ -78,14 +81,25 @@ public partial class MainWindow
         PageInfo overlayPage)
     {
         SheetOverlayAutoFitSnapRead baseRead = ReadSheetOverlayAutoFitSnap(basePage);
-        if (!baseRead.Ok)
-            return SheetOverlayAutoFitReadResult.Failed($"Overlay auto fit: base sheet geometry unavailable. {baseRead.Error}");
-
         SheetOverlayAutoFitSnapRead overlayRead = ReadSheetOverlayAutoFitSnap(overlayPage);
-        if (!overlayRead.Ok)
-            return SheetOverlayAutoFitReadResult.Failed($"Overlay auto fit: overlay geometry unavailable. {overlayRead.Error}");
+        if (baseRead.Ok && overlayRead.Ok)
+            return new SheetOverlayAutoFitReadResult(true, baseRead.Snap, overlayRead.Snap, "");
 
-        return new SheetOverlayAutoFitReadResult(true, baseRead.Snap, overlayRead.Snap, "");
+        SheetOverlayAutoFitSnapRead baseRasterRead = baseRead.Ok
+            ? baseRead
+            : ReadSheetOverlayAutoFitRasterSnap(basePage);
+        if (!baseRasterRead.Ok)
+            return SheetOverlayAutoFitReadResult.Failed(
+                $"Overlay auto fit: base sheet geometry unavailable. {baseRead.Error} Raster fallback: {baseRasterRead.Error}");
+
+        SheetOverlayAutoFitSnapRead overlayRasterRead = overlayRead.Ok
+            ? overlayRead
+            : ReadSheetOverlayAutoFitRasterSnap(overlayPage);
+        if (!overlayRasterRead.Ok)
+            return SheetOverlayAutoFitReadResult.Failed(
+                $"Overlay auto fit: overlay geometry unavailable. {overlayRead.Error} Raster fallback: {overlayRasterRead.Error}");
+
+        return new SheetOverlayAutoFitReadResult(true, baseRasterRead.Snap, overlayRasterRead.Snap, "");
     }
 
     private static SheetOverlayAutoFitSnapRead ReadSheetOverlayAutoFitSnap(PageInfo page)
@@ -132,6 +146,108 @@ public partial class MainWindow
                 ? blackError
                 : "not enough PDF linework was found.";
         return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason);
+    }
+
+    private static SheetOverlayAutoFitSnapRead ReadSheetOverlayAutoFitRasterSnap(PageInfo page)
+    {
+        if (RasterSheetCacheService.TryReadReady(
+                page.FolderPath,
+                page.PdfPath,
+                page.RasterSheet,
+                out RasterSheetBitmapResult raster,
+                out string rasterError))
+        {
+            using SKBitmap bitmap = raster.Bitmap;
+            if (SheetOverlayRasterFeatureService.TryExtractSnap(
+                    bitmap,
+                    raster.WidthPt,
+                    raster.HeightPt,
+                    out PdfGeometrySnapResult rasterSnap,
+                    out string featureError) &&
+                HasAutoFitGeometry(rasterSnap))
+            {
+                return new SheetOverlayAutoFitSnapRead(true, rasterSnap, "");
+            }
+
+            rasterError = string.IsNullOrWhiteSpace(featureError)
+                ? "not enough raster linework was found."
+                : featureError;
+        }
+
+        if (!TryRenderSheetOverlayAutoFitRaster(page, out SKBitmap? renderedBitmap, out float widthPt, out float heightPt, out string renderError) ||
+            renderedBitmap == null)
+        {
+            string reason = !string.IsNullOrWhiteSpace(rasterError)
+                ? rasterError
+                : renderError;
+            return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason);
+        }
+
+        using (renderedBitmap)
+        {
+            if (SheetOverlayRasterFeatureService.TryExtractSnap(
+                    renderedBitmap,
+                    widthPt,
+                    heightPt,
+                    out PdfGeometrySnapResult snap,
+                    out string featureError) &&
+                HasAutoFitGeometry(snap))
+            {
+                return new SheetOverlayAutoFitSnapRead(true, snap, "");
+            }
+
+            string reason = !string.IsNullOrWhiteSpace(featureError)
+                ? featureError
+                : "not enough raster linework was found.";
+            return new SheetOverlayAutoFitSnapRead(false, new PdfGeometrySnapResult(), reason);
+        }
+    }
+
+    private static bool TryRenderSheetOverlayAutoFitRaster(
+        PageInfo page,
+        out SKBitmap? bitmap,
+        out float widthPt,
+        out float heightPt,
+        out string error)
+    {
+        bitmap = null;
+        widthPt = 0;
+        heightPt = 0;
+        error = "";
+
+        IReadOnlyList<PdfLayerInfo>? layers = page.PdfLayersCached ? page.PdfLayers : null;
+        Dictionary<int, bool> layerStates = (layers ?? [])
+            .GroupBy(layer => layer.Number)
+            .ToDictionary(group => group.Key, group => group.First().IsOn);
+
+        if (!PdfLayerRenderService.TryRender(
+                page.PdfPath,
+                page.PdfPage,
+                renderScale: 1.0,
+                layerStates,
+                highlightedLayers: [],
+                layers,
+                clipRect: null,
+                allowRawFullPage: false,
+                preferRawFilePayload: true,
+                out PdfLayerRenderResult render,
+                out error))
+        {
+            return false;
+        }
+
+        bitmap = render.HasRawImage
+            ? PdfLayerRenderService.CreateBitmapFromRawRender(render)
+            : SKBitmap.Decode(render.ImageBytes);
+        if (bitmap == null)
+        {
+            error = "rendered raster could not be decoded.";
+            return false;
+        }
+
+        widthPt = render.WidthPt;
+        heightPt = render.HeightPt;
+        return true;
     }
 
     private static bool HasAutoFitGeometry(PdfGeometrySnapResult snap) =>

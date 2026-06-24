@@ -2984,6 +2984,26 @@ internal static class TakeoffsTreeRegressionTests
             "reciprocal sync should fill empty targets or update true reciprocal targets without overwriting unrelated overlay comparisons");
     }
 
+    public static void SheetOverlayAutoFitRasterFallbackIsWired()
+    {
+        string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
+        string feature = ReadRepoFile(Path.Combine("Models", "SheetOverlayRasterFeatureService.cs"));
+
+        AssertTrue(
+            autoFit.Contains("ReadSheetOverlayAutoFitRasterSnap(basePage)", StringComparison.Ordinal) &&
+            autoFit.Contains("ReadSheetOverlayAutoFitRasterSnap(overlayPage)", StringComparison.Ordinal) &&
+            autoFit.Contains("RasterSheetCacheService.TryReadReady", StringComparison.Ordinal) &&
+            autoFit.Contains("TryRenderSheetOverlayAutoFitRaster", StringComparison.Ordinal) &&
+            autoFit.Contains("SheetOverlayRasterFeatureService.TryExtractSnap", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should fall back to raster-image line features when PDF vector geometry is unavailable");
+        AssertTrue(
+            feature.Contains("BuildInkMap", StringComparison.Ordinal) &&
+            feature.Contains("ExtractHorizontalSegments", StringComparison.Ordinal) &&
+            feature.Contains("ExtractVerticalSegments", StringComparison.Ordinal) &&
+            feature.Contains("MaxFeaturePixels", StringComparison.Ordinal),
+            "raster fallback should detect long plan line features with bounded bitmap work");
+    }
+
     public static void ViewportStressSmokeCanExerciseHighZoomPan()
     {
         string source = ReadRepoFile("MainWindow.ViewportPageStressSmoke.cs");
