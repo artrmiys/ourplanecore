@@ -31,6 +31,7 @@ public sealed partial class PdfViewport
     private SKPoint _sheetOverlayEditAnchorLocal;
     private SKPoint _sheetOverlayEditAnchorTarget;
     private SKPoint _sheetOverlayEditScaleLocal;
+    private SKPoint? _sheetOverlayPointEditSnapPreview;
     private bool _draggingSheetOverlay;
     private bool _sheetOverlayDragChanged;
     private SKPoint _sheetOverlayDragStartPdf;
@@ -102,6 +103,7 @@ public sealed partial class PdfViewport
         _sheetOverlayEditAnchorLocal = default;
         _sheetOverlayEditAnchorTarget = default;
         _sheetOverlayEditScaleLocal = default;
+        ClearSheetOverlayPointEditSnapPreview();
         PostStatus("Overlay edit: click a point on the overlay to grab it.");
         RequestRepaint();
         Focus();
@@ -369,6 +371,7 @@ public sealed partial class PdfViewport
         {
             case SheetOverlayPointEditStep.MoveSource:
                 _sheetOverlayEditAnchorLocal = ResolveSheetOverlaySourceLocalPoint(pdf, out string moveSourceSnapKind);
+                ClearSheetOverlayPointEditSnapPreview();
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.MoveTarget;
                 PostStatus(BuildSheetOverlayPointEditSnapStatus(
                     "Overlay edit: grabbed point",
@@ -391,6 +394,7 @@ public sealed partial class PdfViewport
                         "Overlay moved by point",
                         moveTargetSnapKind,
                         "Click a second overlay point to scale, or press Esc to finish."));
+                ClearSheetOverlayPointEditSnapPreview();
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.ScaleSource;
                 break;
 
@@ -403,6 +407,7 @@ public sealed partial class PdfViewport
                 }
 
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.ScaleTarget;
+                ClearSheetOverlayPointEditSnapPreview();
                 PostStatus(BuildSheetOverlayPointEditSnapStatus(
                     "Overlay edit: grabbed second point",
                     scaleSourceSnapKind,
@@ -449,6 +454,37 @@ public sealed partial class PdfViewport
         return true;
     }
 
+    private void UpdateSheetOverlayPointEditPreview(SKPoint pdf)
+    {
+        ClearSheetOverlayPointEditSnapPreview();
+        if (_sheetOverlayBitmap == null)
+            return;
+
+        if (_sheetOverlayPointEditStep is SheetOverlayPointEditStep.MoveSource or SheetOverlayPointEditStep.ScaleSource)
+        {
+            if (TryFindOverlayPdfSnapPoint(
+                    pdf,
+                    SheetOverlayPointEditSnapTolerancePt(),
+                    out SKPoint snapped,
+                    out _))
+            {
+                _sheetOverlayPointEditSnapPreview = snapped;
+            }
+
+            return;
+        }
+
+        if (_sheetOverlayPointEditStep is SheetOverlayPointEditStep.MoveTarget or SheetOverlayPointEditStep.ScaleTarget &&
+            TryFindBasePdfSnapPoint(
+                pdf,
+                SheetOverlayPointEditSnapTolerancePt(),
+                out SKPoint target,
+                out _))
+        {
+            _sheetOverlayPointEditSnapPreview = target;
+        }
+    }
+
     private SKPoint ResolveSheetOverlaySourceLocalPoint(SKPoint pdf, out string snapKind)
     {
         if (TryFindOverlayPdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt(), out SKPoint snapped, out snapKind))
@@ -479,6 +515,11 @@ public sealed partial class PdfViewport
         return $"{prefix}{snap}. {next}";
     }
 
+    private void ClearSheetOverlayPointEditSnapPreview()
+    {
+        _sheetOverlayPointEditSnapPreview = null;
+    }
+
     private void CancelSheetOverlayPointEdit(bool silent = false)
     {
         bool wasEditing = IsSheetOverlayPointEditing;
@@ -486,6 +527,7 @@ public sealed partial class PdfViewport
         _sheetOverlayEditAnchorLocal = default;
         _sheetOverlayEditAnchorTarget = default;
         _sheetOverlayEditScaleLocal = default;
+        ClearSheetOverlayPointEditSnapPreview();
         if (wasEditing && !silent)
             PostStatus("Overlay edit cancelled.");
         RequestRepaint();
@@ -601,6 +643,13 @@ public sealed partial class PdfViewport
             Style = SKPaintStyle.Stroke,
             StrokeWidth = ScreenToPdfDistance(1.5f),
         };
+        using var snapPaint = new SKPaint
+        {
+            Color = new SKColor(0xFF, 0xC1, 0x07, 240),
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = ScreenToPdfDistance(2.0f),
+        };
         float radius = ScreenToPdfDistance(5f);
 
         if (_draggingSheetOverlay)
@@ -613,8 +662,9 @@ public sealed partial class PdfViewport
         {
             SKPoint anchor = OverlayLocalToDisplay(_sheetOverlayEditAnchorLocal);
             canvas.DrawCircle(anchor, radius, pointPaint);
-            if (_lastPointerPdf.HasValue && _sheetOverlayPointEditStep == SheetOverlayPointEditStep.MoveTarget)
-                canvas.DrawLine(anchor, _lastPointerPdf.Value, linePaint);
+            SKPoint? guidePointer = SheetOverlayPointEditGuidePointer();
+            if (guidePointer.HasValue && _sheetOverlayPointEditStep == SheetOverlayPointEditStep.MoveTarget)
+                canvas.DrawLine(anchor, guidePointer.Value, linePaint);
         }
 
         if (_sheetOverlayPointEditStep == SheetOverlayPointEditStep.ScaleTarget)
@@ -622,9 +672,40 @@ public sealed partial class PdfViewport
             SKPoint scalePoint = OverlayLocalToDisplay(_sheetOverlayEditScaleLocal);
             canvas.DrawCircle(scalePoint, radius, pointPaint);
             canvas.DrawLine(_sheetOverlayEditAnchorTarget, scalePoint, linePaint);
-            if (_lastPointerPdf.HasValue)
-                canvas.DrawLine(_sheetOverlayEditAnchorTarget, _lastPointerPdf.Value, linePaint);
+            SKPoint? guidePointer = SheetOverlayPointEditGuidePointer();
+            if (guidePointer.HasValue)
+                canvas.DrawLine(_sheetOverlayEditAnchorTarget, guidePointer.Value, linePaint);
         }
+
+        DrawSheetOverlayPointEditSnapPreview(canvas, snapPaint, radius);
+    }
+
+    private SKPoint? SheetOverlayPointEditGuidePointer() =>
+        _sheetOverlayPointEditSnapPreview ?? _lastPointerPdf;
+
+    private void DrawSheetOverlayPointEditSnapPreview(SKCanvas canvas, SKPaint snapPaint, float radius)
+    {
+        if (!_sheetOverlayPointEditSnapPreview.HasValue)
+            return;
+
+        SKPoint preview = _sheetOverlayPointEditSnapPreview.Value;
+        canvas.DrawCircle(preview, radius * 1.35f, snapPaint);
+        canvas.DrawCircle(preview, radius * 0.45f, snapPaint);
+
+        if (!_lastPointerPdf.HasValue ||
+            OverlayDistance(_lastPointerPdf.Value, preview) <= ScreenToPdfDistance(2f))
+        {
+            return;
+        }
+
+        using var linePaint = new SKPaint
+        {
+            Color = new SKColor(0xFF, 0xC1, 0x07, 160),
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = ScreenToPdfDistance(1.0f),
+        };
+        canvas.DrawLine(_lastPointerPdf.Value, preview, linePaint);
     }
 
     private void DrawSheetOverlayDragGuide(SKCanvas canvas, SKPaint linePaint)

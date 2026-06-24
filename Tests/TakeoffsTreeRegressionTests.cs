@@ -2991,20 +2991,30 @@ internal static class TakeoffsTreeRegressionTests
 
     public static void SheetOverlayPointEditUsesPdfSnap()
     {
+        string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));
         string overlay = ReadRepoFile(Path.Combine("Controls", "PdfViewport.SheetOverlay.cs"));
         string pdfSnap = ReadRepoFile(Path.Combine("Controls", "PdfViewport.PdfSnap.cs"));
         string pointEdit = SliceMethod(overlay, "private bool HandleSheetOverlayPointEditClick(");
 
         AssertTrue(
+            input.Contains("UpdateSheetOverlayPointEditPreview(pointerPdf)", StringComparison.Ordinal) &&
+            input.Contains("ClearSheetOverlayPointEditSnapPreview();", StringComparison.Ordinal) &&
             pointEdit.Contains("ResolveSheetOverlaySourceLocalPoint(pdf", StringComparison.Ordinal) &&
             pointEdit.Contains("ResolveSheetOverlayTargetPoint(pdf", StringComparison.Ordinal) &&
             pointEdit.Contains("SKPoint scaleTarget = ResolveSheetOverlayTargetPoint(pdf", StringComparison.Ordinal),
-            "sheet overlay point edit should resolve overlay source clicks and base target clicks through separate snap paths");
+            "sheet overlay point edit should update live snap preview and resolve overlay source clicks and base target clicks through separate snap paths");
         AssertTrue(
+            overlay.Contains("private SKPoint? _sheetOverlayPointEditSnapPreview", StringComparison.Ordinal) &&
+            overlay.Contains("private void UpdateSheetOverlayPointEditPreview(SKPoint pdf)", StringComparison.Ordinal) &&
             overlay.Contains("TryFindOverlayPdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt()", StringComparison.Ordinal) &&
             overlay.Contains("TryFindBasePdfSnapPoint(pdf, SheetOverlayPointEditSnapTolerancePt()", StringComparison.Ordinal) &&
             overlay.Contains("BuildSheetOverlayPointEditSnapStatus", StringComparison.Ordinal),
             "sheet overlay point edit should snap source points to overlay geometry, target points to sheet geometry, and report the snap kind");
+        AssertTrue(
+            overlay.Contains("DrawSheetOverlayPointEditSnapPreview(canvas, snapPaint, radius)", StringComparison.Ordinal) &&
+            overlay.Contains("SheetOverlayPointEditGuidePointer()", StringComparison.Ordinal) &&
+            overlay.Contains("ClearSheetOverlayPointEditSnapPreview()", StringComparison.Ordinal),
+            "sheet overlay point edit should draw a live snap target and clear stale preview state");
         AssertTrue(
             pdfSnap.Contains("private bool TryFindBasePdfSnapPoint(", StringComparison.Ordinal) &&
             pdfSnap.Contains("TryFindBasePdfSnapPoint(rawPdf, tolerancePt", StringComparison.Ordinal) &&

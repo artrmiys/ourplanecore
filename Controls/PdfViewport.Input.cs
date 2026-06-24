@@ -466,6 +466,7 @@ public sealed partial class PdfViewport
         _lastPointerPdf = pointerPdf;
         if (IsSheetOverlayPointEditing)
         {
+            UpdateSheetOverlayPointEditPreview(pointerPdf);
             RequestRepaint();
             e.Handled = true;
             return;
@@ -546,6 +547,7 @@ public sealed partial class PdfViewport
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         _cursorGuideVisible = false;
+        ClearSheetOverlayPointEditSnapPreview();
         ClearEdgeSnapPreview();
         RequestRepaint();
         base.OnMouseLeave(e);
