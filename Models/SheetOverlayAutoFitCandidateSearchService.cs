@@ -58,7 +58,6 @@ public static class SheetOverlayAutoFitCandidateSearchService
 
         topMatches = matches
             .OrderByDescending(match => match, SheetOverlayAutoFitCandidateMatchComparer.Instance)
-            .Take(5)
             .ToList();
 
         if (topMatches.Count == 0)

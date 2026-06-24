@@ -179,6 +179,29 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertFalse(
             SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch([topMatches[0]], firstPage.FolderPath, out _),
             "next candidate should reject cycling when the only ranked sheet is already selected");
+
+        PageInfo fourthPage = Page("A104 fourth", "fourth");
+        PageInfo fifthPage = Page("A105 fifth", "fifth");
+        PageInfo sixthPage = Page("A106 sixth", "sixth");
+        bool manyOk = SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+            target,
+            [
+                new SheetOverlayAutoFitCandidateInput(firstPage, overlay, "test plan", 1),
+                new SheetOverlayAutoFitCandidateInput(secondPage, overlay, "test plan", 2),
+                new SheetOverlayAutoFitCandidateInput(thirdPage, overlay, "test plan", 3),
+                new SheetOverlayAutoFitCandidateInput(fourthPage, overlay, "test plan", 4),
+                new SheetOverlayAutoFitCandidateInput(fifthPage, overlay, "test plan", 5),
+                new SheetOverlayAutoFitCandidateInput(sixthPage, overlay, "test plan", 6),
+            ],
+            out _,
+            out IReadOnlyList<SheetOverlayAutoFitCandidateMatch> manyMatches);
+
+        AssertTrue(manyOk, "overlay auto-select should rank more than five matching candidates");
+        AssertTrue(manyMatches.Count == 6, "next candidate should keep the full ranked match list");
+        AssertTrue(
+            SheetOverlayAutoFitCandidateSearchService.TrySelectNextMatch(manyMatches, fifthPage.FolderPath, out SheetOverlayAutoFitCandidateMatch afterFifth),
+            "next candidate should advance beyond the fifth ranked sheet");
+        AssertEqual(sixthPage.FolderPath, afterFifth.Page.FolderPath, "next candidate after fifth sheet");
     }
 
     private static PdfGeometrySnapResult BuildPlanSnap(
