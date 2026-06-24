@@ -2973,6 +2973,28 @@ internal static class TakeoffsTreeRegressionTests
             "sheet overlay shortcuts should support nudge, scale, rotation, reset, and persist through the existing transform-changed event");
     }
 
+    public static void SheetOverlayTransformDialogHasFineAdjustments()
+    {
+        string dialog = ReadRepoFile("MainWindow.SheetOverlay.TransformDialog.cs");
+
+        AssertTrue(
+            dialog.Contains("AddTransformAdjustmentButtons", StringComparison.Ordinal) &&
+            dialog.Contains("X -1", StringComparison.Ordinal) &&
+            dialog.Contains("X +1", StringComparison.Ordinal) &&
+            dialog.Contains("Y -1", StringComparison.Ordinal) &&
+            dialog.Contains("Y +1", StringComparison.Ordinal) &&
+            dialog.Contains("Scale -1%", StringComparison.Ordinal) &&
+            dialog.Contains("Scale +1%", StringComparison.Ordinal) &&
+            dialog.Contains("Rot -0.25", StringComparison.Ordinal) &&
+            dialog.Contains("Rot +0.25", StringComparison.Ordinal) &&
+            dialog.Contains("Reset", StringComparison.Ordinal),
+            "sheet overlay transform dialog should provide fine inline adjustments for post-auto-fit correction");
+        AssertTrue(
+            dialog.Contains("NormalizeSheetOverlayTransformScale(resultScale)", StringComparison.Ordinal) &&
+            dialog.Contains("Math.Clamp(scale, 0.05, 20.0)", StringComparison.Ordinal),
+            "sheet overlay transform dialog should normalize saved scale to the same usable range as viewport rendering");
+    }
+
     public static void SheetOverlayMouseDragIsWired()
     {
         string input = ReadRepoFile(Path.Combine("Controls", "PdfViewport.Input.cs"));

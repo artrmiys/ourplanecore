@@ -99,6 +99,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay reciprocal writes source json", SheetOverlayReciprocalServiceTests.SyncWritesAndClearsReciprocalSource),
     ("sheet overlay adjustment menus are exposed", TakeoffsTreeRegressionTests.SheetOverlayAdjustmentMenusAreExposed),
     ("sheet overlay transform shortcuts are wired", TakeoffsTreeRegressionTests.SheetOverlayTransformShortcutsAreWired),
+    ("sheet overlay transform dialog has fine adjustments", TakeoffsTreeRegressionTests.SheetOverlayTransformDialogHasFineAdjustments),
     ("sheet overlay mouse drag is wired", TakeoffsTreeRegressionTests.SheetOverlayMouseDragIsWired),
     ("sheet overlay point edit uses pdf snap", TakeoffsTreeRegressionTests.SheetOverlayPointEditUsesPdfSnap),
     ("sheet overlay async load uses fresh page snapshot", TakeoffsTreeRegressionTests.SheetOverlayAsyncLoadUsesFreshPageSnapshot),

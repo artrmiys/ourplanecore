@@ -40,6 +40,7 @@ public partial class MainWindow
         AddLabeledTextBox(panel, "Y offset (pt):", FormatOverlayNumber(page.OverlayOffsetYPt), out TextBox yBox);
         AddLabeledTextBox(panel, "Scale:", FormatOverlayNumber(page.OverlayScale), out TextBox scaleBox);
         AddLabeledTextBox(panel, "Rotation (deg):", FormatOverlayNumber(page.OverlayRotationDegrees), out TextBox rotationBox);
+        AddTransformAdjustmentButtons(panel, xBox, yBox, scaleBox, rotationBox);
 
         var buttons = new StackPanel
         {
@@ -83,7 +84,7 @@ public partial class MainWindow
 
         offsetXPt = resultX;
         offsetYPt = resultY;
-        overlayScale = resultScale;
+        overlayScale = NormalizeSheetOverlayTransformScale(resultScale);
         overlayRotationDegrees = NormalizeOverlayRotationDegrees(resultRotation);
         return true;
     }
@@ -99,6 +100,65 @@ public partial class MainWindow
         panel.Children.Add(box);
     }
 
+    private static void AddTransformAdjustmentButtons(
+        Panel panel,
+        TextBox xBox,
+        TextBox yBox,
+        TextBox scaleBox,
+        TextBox rotationBox)
+    {
+        var row = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+        AddTransformAdjustmentButton(row, "X -1", () => AdjustOverlayNumber(xBox, value => value - 1));
+        AddTransformAdjustmentButton(row, "X +1", () => AdjustOverlayNumber(xBox, value => value + 1));
+        AddTransformAdjustmentButton(row, "Y -1", () => AdjustOverlayNumber(yBox, value => value - 1));
+        AddTransformAdjustmentButton(row, "Y +1", () => AdjustOverlayNumber(yBox, value => value + 1));
+        AddTransformAdjustmentButton(row, "Scale -1%", () => AdjustOverlayNumber(
+            scaleBox,
+            value => NormalizeSheetOverlayTransformScale(value / 1.01)));
+        AddTransformAdjustmentButton(row, "Scale +1%", () => AdjustOverlayNumber(
+            scaleBox,
+            value => NormalizeSheetOverlayTransformScale(value * 1.01)));
+        AddTransformAdjustmentButton(row, "Rot -0.25", () => AdjustOverlayNumber(
+            rotationBox,
+            value => NormalizeOverlayRotationDegrees(value - 0.25)));
+        AddTransformAdjustmentButton(row, "Rot +0.25", () => AdjustOverlayNumber(
+            rotationBox,
+            value => NormalizeOverlayRotationDegrees(value + 0.25)));
+        AddTransformAdjustmentButton(row, "Reset", () =>
+        {
+            xBox.Text = "0";
+            yBox.Text = "0";
+            scaleBox.Text = "1";
+            rotationBox.Text = "0";
+            xBox.Focus();
+            xBox.SelectAll();
+        });
+        panel.Children.Add(row);
+    }
+
+    private static void AddTransformAdjustmentButton(Panel panel, string label, Action apply)
+    {
+        var button = new Button
+        {
+            Content = label,
+            MinWidth = 68,
+            Margin = new Thickness(0, 0, 6, 6),
+            Padding = new Thickness(6, 2, 6, 2),
+        };
+        button.Click += (_, _) => apply();
+        panel.Children.Add(button);
+    }
+
+    private static void AdjustOverlayNumber(TextBox box, Func<double, double> adjust)
+    {
+        if (!TryParseOverlayNumber(box.Text, out double value))
+            return;
+
+        box.Text = FormatOverlayNumber(adjust(value));
+        box.Focus();
+        box.SelectAll();
+    }
+
     private static bool TryParseOverlayNumber(string value, out double result) =>
         double.TryParse(
             (value ?? "").Replace(",", ".", StringComparison.Ordinal),
@@ -108,6 +168,14 @@ public partial class MainWindow
 
     private static string FormatOverlayNumber(double value) =>
         value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static double NormalizeSheetOverlayTransformScale(double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+            return 1.0;
+
+        return Math.Clamp(scale, 0.05, 20.0);
+    }
 
     private static double NormalizeOverlayRotationDegrees(double degrees)
     {
