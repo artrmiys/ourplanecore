@@ -3141,6 +3141,8 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("candidates={search.ComparableCount}/{search.CandidateCount}", StringComparison.Ordinal) &&
             autoSelect.Contains("method='{search.Fit.Method}'", StringComparison.Ordinal) &&
             autoSelect.Contains("BuildSheetOverlayAutoSelectAlternativesSummary", StringComparison.Ordinal) &&
+            autoSelect.Contains("HasCloseSheetOverlayAutoSelectAlternative", StringComparison.Ordinal) &&
+            autoSelect.Contains("close alternative needs review", StringComparison.Ordinal) &&
             autoSelect.Contains("top matches:", StringComparison.Ordinal) &&
             autoSelect.Contains("alternatives='{alternatives}'", StringComparison.Ordinal) &&
             autoSelect.Contains("ChooseSheetOverlayAutoSelectCandidate", StringComparison.Ordinal) &&
@@ -3179,6 +3181,9 @@ internal static class TakeoffsTreeRegressionTests
             candidateDialog.Contains("public sealed class SheetOverlayCandidateDialog : Window", StringComparison.Ordinal) &&
             candidateDialog.Contains("DataGrid", StringComparison.Ordinal) &&
             candidateDialog.Contains("Confidence", StringComparison.Ordinal) &&
+            candidateDialog.Contains("nameof(SheetOverlayCandidateRow.Review)", StringComparison.Ordinal) &&
+            candidateDialog.Contains("BuildReviewLabel", StringComparison.Ordinal) &&
+            candidateDialog.Contains("\"Close\"", StringComparison.Ordinal) &&
             candidateDialog.Contains("nameof(SheetOverlayCandidateRow.Transform)", StringComparison.Ordinal) &&
             candidateDialog.Contains("BuildTransformSummary", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use Selected", StringComparison.Ordinal) &&

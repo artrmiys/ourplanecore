@@ -425,10 +425,19 @@ public partial class MainWindow
             .Select(match => $"{match.Page.Name} {match.Fit.Confidence * 100:0}%")
             .ToList();
 
-        return rows.Count == 0
-            ? "no ranked alternatives"
-            : $"top matches: {string.Join(", ", rows)}";
+        if (rows.Count == 0)
+            return "no ranked alternatives";
+
+        string summary = $"top matches: {string.Join(", ", rows)}";
+        return HasCloseSheetOverlayAutoSelectAlternative(topMatches)
+            ? $"{summary}; close alternative needs review"
+            : summary;
     }
+
+    private static bool HasCloseSheetOverlayAutoSelectAlternative(
+        IReadOnlyList<SheetOverlayAutoFitCandidateMatch> topMatches) =>
+        topMatches.Count > 1 &&
+        topMatches[0].Fit.Confidence - topMatches[1].Fit.Confidence <= 0.05;
 
     private sealed record SheetOverlayAutoFitCandidateSearch(
         bool Ok,

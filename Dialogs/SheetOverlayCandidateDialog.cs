@@ -15,6 +15,7 @@ public sealed class SheetOverlayCandidateRow
 {
     public int Rank { get; init; }
     public string Current { get; init; } = "";
+    public string Review { get; init; } = "";
     public string Sheet { get; init; } = "";
     public string Confidence { get; init; } = "";
     public string Samples { get; init; } = "";
@@ -54,8 +55,9 @@ public sealed class SheetOverlayCandidateDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResizeWithGrip;
 
+        double bestConfidence = matches.Count == 0 ? 0 : matches[0].Fit.Confidence;
         Rows = new ObservableCollection<SheetOverlayCandidateRow>(
-            matches.Select((match, index) => BuildRow(index, match, currentOverlayFolder)));
+            matches.Select((match, index) => BuildRow(index, match, currentOverlayFolder, bestConfidence)));
 
         var root = new DockPanel { Margin = new Thickness(12) };
 
@@ -99,6 +101,7 @@ public sealed class SheetOverlayCandidateDialog : Window
         };
         _grid.Columns.Add(TextColumn("#", nameof(SheetOverlayCandidateRow.Rank), 44));
         _grid.Columns.Add(TextColumn("", nameof(SheetOverlayCandidateRow.Current), 72));
+        _grid.Columns.Add(TextColumn("Review", nameof(SheetOverlayCandidateRow.Review), 72));
         _grid.Columns.Add(TextColumn("Sheet", nameof(SheetOverlayCandidateRow.Sheet), 230));
         _grid.Columns.Add(TextColumn("Confidence", nameof(SheetOverlayCandidateRow.Confidence), 96));
         _grid.Columns.Add(TextColumn("Samples", nameof(SheetOverlayCandidateRow.Samples), 92));
@@ -148,11 +151,13 @@ public sealed class SheetOverlayCandidateDialog : Window
     private static SheetOverlayCandidateRow BuildRow(
         int index,
         SheetOverlayAutoFitCandidateMatch match,
-        string currentOverlayFolder) =>
+        string currentOverlayFolder,
+        double bestConfidence) =>
         new()
         {
             Rank = index + 1,
             Current = SameFolder(match.Page.FolderPath, currentOverlayFolder) ? "Current" : "",
+            Review = BuildReviewLabel(index, match.Fit.Confidence, bestConfidence),
             Sheet = match.Page.Name,
             Confidence = string.Format(CultureInfo.InvariantCulture, "{0:0}%", match.Fit.Confidence * 100),
             Samples = string.Format(CultureInfo.InvariantCulture, "{0}/{1}", match.Fit.MatchedSamples, match.Fit.SampleCount),
@@ -162,6 +167,14 @@ public sealed class SheetOverlayCandidateDialog : Window
             FolderPath = match.Page.FolderPath,
             Match = match,
         };
+
+    private static string BuildReviewLabel(int index, double confidence, double bestConfidence)
+    {
+        if (index == 0)
+            return "Best";
+
+        return bestConfidence - confidence <= 0.05 ? "Close" : "";
+    }
 
     private static string BuildTransformSummary(SheetOverlayAutoFitResult fit) =>
         string.Format(
