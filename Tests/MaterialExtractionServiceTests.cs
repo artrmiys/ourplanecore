@@ -312,6 +312,23 @@ internal static class MaterialExtractionServiceTests
             "published package must keep PyMuPDF helper/python files as sidecar content next to the compressed exe");
     }
 
+    public static void BundledToolResolverPrefersExecutableSidecars()
+    {
+        string resolver = File.ReadAllText(Path.Combine("Models", "BundledToolPathResolver.cs"));
+        int executableCandidate = resolver.IndexOf(
+            "Path.Combine(executableDirectory, candidate)",
+            StringComparison.Ordinal);
+        int baseCandidate = resolver.IndexOf(
+            "Path.Combine(baseDirectory, candidate)",
+            StringComparison.Ordinal);
+
+        AssertTrue(
+            executableCandidate >= 0 &&
+            baseCandidate >= 0 &&
+            executableCandidate < baseCandidate,
+            "resolver should prefer sidecar Tools next to the real exe before stale single-file extraction paths");
+    }
+
     public static void BundledPythonRuntimeResolvesPackagedPython()
     {
         string pythonExecutable = BundledPythonRuntime.ResolveExecutable();

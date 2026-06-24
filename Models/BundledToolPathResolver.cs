@@ -47,9 +47,9 @@ public static class BundledToolPathResolver
                 continue;
             }
 
-            yield return Path.Combine(baseDirectory, candidate);
             if (!string.IsNullOrWhiteSpace(executableDirectory))
                 yield return Path.Combine(executableDirectory, candidate);
+            yield return Path.Combine(baseDirectory, candidate);
         }
     }
 
