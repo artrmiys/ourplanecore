@@ -302,6 +302,16 @@ internal static class MaterialExtractionServiceTests
         }
     }
 
+    public static void ProjectPublishesToolsAsSidecarContent()
+    {
+        string project = File.ReadAllText("ourplanecore.csproj");
+
+        AssertTrue(
+            project.Contains("Update=\"Tools\\**\\*\"", StringComparison.Ordinal) &&
+            project.Contains("ExcludeFromSingleFile=\"true\"", StringComparison.Ordinal),
+            "published package must keep PyMuPDF helper/python files as sidecar content next to the compressed exe");
+    }
+
     public static void BundledPythonRuntimeResolvesPackagedPython()
     {
         string pythonExecutable = BundledPythonRuntime.ResolveExecutable();

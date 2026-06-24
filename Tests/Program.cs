@@ -255,6 +255,7 @@ var tests = new List<(string Name, Action Run)>
     ("material extraction writes report pdf", MaterialExtractionServiceTests.WritesMaterialReportPdf),
     ("material extraction skips generated report sources", MaterialExtractionServiceTests.UniqueSourcePdfsSkipsGeneratedMaterialReports),
     ("bundled tool resolver finds extracted nested files", MaterialExtractionServiceTests.BundledToolResolverFindsExtractedNestedFiles),
+    ("project publishes tools as sidecar content", MaterialExtractionServiceTests.ProjectPublishesToolsAsSidecarContent),
     ("bundled python runtime resolves packaged python", MaterialExtractionServiceTests.BundledPythonRuntimeResolvesPackagedPython),
     ("page copy and move preserve source overlay and layers", StorageTests.PageCopyAndMovePreserveSourceOverlayAndLayers),
     ("page corrupt source json is quarantined", StorageTests.PageCorruptSourceJsonIsQuarantined),
