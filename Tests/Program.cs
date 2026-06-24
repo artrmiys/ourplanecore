@@ -88,6 +88,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay auto fit recovers rotation", SheetOverlayAutoFitServiceTests.RecoversRotationFromRepeatedPlanGeometry),
     ("sheet overlay auto fit rejects sparse geometry", SheetOverlayAutoFitServiceTests.RejectsSparseGeometry),
     ("sheet overlay raster features recover scale and offset", SheetOverlayRasterFeatureServiceTests.RasterFeaturesRecoverScaleAndOffset),
+    ("sheet overlay raster features extract junction points", SheetOverlayRasterFeatureServiceTests.RasterFeaturesExtractJunctionPoints),
     ("sheet overlay reciprocal transform round trips", SheetOverlayReciprocalServiceTests.InvertsTransformRoundTrip),
     ("sheet overlay reciprocal skips unrelated targets", SheetOverlayReciprocalServiceTests.WritesOnlyEmptyOrExistingReciprocalTargets),
     ("sheet overlay reciprocal writes source json", SheetOverlayReciprocalServiceTests.SyncWritesAndClearsReciprocalSource),

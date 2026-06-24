@@ -13,6 +13,7 @@ public static class SheetOverlayRasterFeatureService
     private const int MaxPoints = 1_200;
     private const int AllowedGapPixels = 1;
     private const float MinimumRunFillRatio = 0.62f;
+    private const float JunctionTolerancePt = 2.5f;
 
     public static bool TryExtractSnap(
         SKBitmap source,
@@ -56,12 +57,7 @@ public static class SheetOverlayRasterFeatureService
             return false;
         }
 
-        List<PdfGeometrySnapPoint> points = segments
-            .SelectMany(segment => new[] { segment.Start, segment.End, SegmentMidpoint(segment) })
-            .GroupBy(point => $"{MathF.Round(point.X * 2f) / 2f:0.##}|{MathF.Round(point.Y * 2f) / 2f:0.##}")
-            .Select(group => new PdfGeometrySnapPoint(group.First(), "raster-corner"))
-            .Take(MaxPoints)
-            .ToList();
+        List<PdfGeometrySnapPoint> points = BuildRasterPoints(segments);
 
         snap = new PdfGeometrySnapResult
         {
@@ -265,11 +261,76 @@ public static class SheetOverlayRasterFeatureService
 
     private static string SegmentKey(PdfGeometrySnapSegment segment)
     {
-        bool horizontal = Math.Abs(segment.Start.Y - segment.End.Y) <= Math.Abs(segment.Start.X - segment.End.X);
+        bool horizontal = IsHorizontal(segment);
         return horizontal
             ? $"h|{Quantize(segment.Start.Y, 2f)}|{Quantize(Math.Min(segment.Start.X, segment.End.X), 6f)}|{Quantize(Math.Max(segment.Start.X, segment.End.X), 6f)}"
             : $"v|{Quantize(segment.Start.X, 2f)}|{Quantize(Math.Min(segment.Start.Y, segment.End.Y), 6f)}|{Quantize(Math.Max(segment.Start.Y, segment.End.Y), 6f)}";
     }
+
+    private static List<PdfGeometrySnapPoint> BuildRasterPoints(IReadOnlyList<PdfGeometrySnapSegment> segments)
+    {
+        var points = new List<PdfGeometrySnapPoint>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void Add(SKPoint point, string kind)
+        {
+            string key = PointKey(point);
+            if (!seen.Add(key))
+                return;
+
+            points.Add(new PdfGeometrySnapPoint(point, kind));
+        }
+
+        foreach (SKPoint point in ExtractJunctionPoints(segments))
+        {
+            Add(point, "raster-junction");
+            if (points.Count >= MaxPoints)
+                return points;
+        }
+
+        foreach (PdfGeometrySnapSegment segment in segments)
+        {
+            Add(segment.Start, "raster-corner");
+            Add(segment.End, "raster-corner");
+            Add(SegmentMidpoint(segment), "raster-corner");
+            if (points.Count >= MaxPoints)
+                break;
+        }
+
+        return points;
+    }
+
+    private static IEnumerable<SKPoint> ExtractJunctionPoints(IReadOnlyList<PdfGeometrySnapSegment> segments)
+    {
+        List<PdfGeometrySnapSegment> horizontal = segments.Where(IsHorizontal).ToList();
+        List<PdfGeometrySnapSegment> vertical = segments.Where(segment => !IsHorizontal(segment)).ToList();
+        foreach (PdfGeometrySnapSegment h in horizontal)
+        {
+            float y = (h.Start.Y + h.End.Y) * 0.5f;
+            float h0 = Math.Min(h.Start.X, h.End.X);
+            float h1 = Math.Max(h.Start.X, h.End.X);
+
+            foreach (PdfGeometrySnapSegment v in vertical)
+            {
+                float x = (v.Start.X + v.End.X) * 0.5f;
+                if (x < h0 - JunctionTolerancePt || x > h1 + JunctionTolerancePt)
+                    continue;
+
+                float v0 = Math.Min(v.Start.Y, v.End.Y);
+                float v1 = Math.Max(v.Start.Y, v.End.Y);
+                if (y < v0 - JunctionTolerancePt || y > v1 + JunctionTolerancePt)
+                    continue;
+
+                yield return new SKPoint(x, y);
+            }
+        }
+    }
+
+    private static string PointKey(SKPoint point) =>
+        $"{MathF.Round(point.X * 2f) / 2f:0.##}|{MathF.Round(point.Y * 2f) / 2f:0.##}";
+
+    private static bool IsHorizontal(PdfGeometrySnapSegment segment) =>
+        Math.Abs(segment.Start.Y - segment.End.Y) <= Math.Abs(segment.Start.X - segment.End.X);
 
     private static int Quantize(float value, float step) =>
         (int)MathF.Round(value / Math.Max(step, 0.001f));

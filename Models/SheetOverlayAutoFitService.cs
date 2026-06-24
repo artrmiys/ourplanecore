@@ -140,10 +140,10 @@ public static class SheetOverlayAutoFitService
         }
 
         foreach (PdfGeometrySnapPoint point in snap.Points
-                     .OrderBy(point => string.Equals(point.Kind, "pdf-corner", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                     .OrderBy(point => SamplePriority(point.Kind))
                      .Take(MaxOverlaySamples / 3))
         {
-            Add(point.Point, string.Equals(point.Kind, "pdf-corner", StringComparison.OrdinalIgnoreCase) ? 1.35f : 1.0f);
+            Add(point.Point, SampleWeight(point.Kind));
         }
 
         foreach (PdfGeometrySnapSegment segment in overlaySegments)
@@ -295,6 +295,23 @@ public static class SheetOverlayAutoFitService
 
     private static float DirectedAngle(PdfGeometrySnapSegment segment) =>
         MathF.Atan2(segment.End.Y - segment.Start.Y, segment.End.X - segment.Start.X);
+
+    private static int SamplePriority(string kind) => kind.ToLowerInvariant() switch
+    {
+        "raster-junction" => 0,
+        "pdf-corner" => 1,
+        "raster-corner" => 2,
+        "pdf-point" => 3,
+        _ => 4,
+    };
+
+    private static float SampleWeight(string kind) => kind.ToLowerInvariant() switch
+    {
+        "raster-junction" => 1.6f,
+        "pdf-corner" => 1.35f,
+        "raster-corner" => 1.2f,
+        _ => 1.0f,
+    };
 
     private static SKPoint TransformPoint(
         SKPoint point,

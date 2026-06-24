@@ -26,11 +26,38 @@ internal static class SheetOverlayRasterFeatureServiceTests
         AssertTrue(targetOk, targetError);
         AssertTrue(overlaySnap.Segments.Count >= 12, "overlay raster should expose enough line segments");
         AssertTrue(targetSnap.Segments.Count >= 12, "target raster should expose enough line segments");
+        AssertTrue(
+            overlaySnap.Points.Count(point => point.Kind == "raster-junction") >= 8,
+            "overlay raster should expose repeated plan shape junction points");
         AssertTrue(fitOk, fit.Message);
         AssertClose(1.25, fit.OverlayScale, "raster fit scale", 0.03);
         AssertClose(42, fit.OffsetXPt, "raster fit x", 4.0);
         AssertClose(67, fit.OffsetYPt, "raster fit y", 4.0);
         AssertTrue(fit.MatchedSamples >= 12, "raster fit should verify several samples");
+    }
+
+    public static void RasterFeaturesExtractJunctionPoints()
+    {
+        using SKBitmap bitmap = BuildPlanBitmap(280, 190, scale: 1.0f, offsetX: 0, offsetY: 0);
+
+        bool ok = SheetOverlayRasterFeatureService.TryExtractSnap(
+            bitmap,
+            bitmap.Width,
+            bitmap.Height,
+            out PdfGeometrySnapResult snap,
+            out string error);
+
+        AssertTrue(ok, error);
+        List<PdfGeometrySnapPoint> junctions = snap.Points
+            .Where(point => point.Kind == "raster-junction")
+            .ToList();
+        AssertTrue(junctions.Count >= 8, $"expected several raster junctions, got {junctions.Count}");
+        AssertTrue(
+            junctions.Any(point => IsNear(point.Point, 40, 55, tolerance: 3.5f)),
+            "raster junctions should include interior wall intersections");
+        AssertTrue(
+            junctions.Any(point => IsNear(point.Point, 95, 88, tolerance: 3.5f)),
+            "raster junctions should include repeated plan shape intersections");
     }
 
     private static SKBitmap BuildPlanBitmap(int width, int height, float scale, float offsetX, float offsetY)
@@ -78,6 +105,10 @@ internal static class SheetOverlayRasterFeatureServiceTests
 
     private static float Transform(float value, float scale, float offset) =>
         value * scale + offset;
+
+    private static bool IsNear(SKPoint point, float x, float y, float tolerance) =>
+        Math.Abs(point.X - x) <= tolerance &&
+        Math.Abs(point.Y - y) <= tolerance;
 
     private static void AssertTrue(bool condition, string message)
     {

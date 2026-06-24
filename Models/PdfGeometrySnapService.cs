@@ -271,8 +271,9 @@ public sealed class PdfSnapPointIndex
     private static int KindPriority(string kind) => kind.ToLowerInvariant() switch
     {
         "pdf-corner" => 0,
-        "pdf-point" => 1,
-        _ => 2,
+        "raster-junction" => 1,
+        "pdf-point" => 2,
+        _ => 3,
     };
 }
 
