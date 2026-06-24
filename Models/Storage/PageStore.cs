@@ -305,6 +305,9 @@ internal static class PageStore
         if (src == null) return;
 
         string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        bool clearsOverlay = string.IsNullOrWhiteSpace(overlayPageFolder);
+        bool changesOverlay = clearsOverlay ||
+                              !SamePageReference(pageFolder, src.OverlayPageFolder, overlayPageFolder);
         WriteSource(
             pageFolder,
             pdfAbs,
@@ -315,13 +318,13 @@ internal static class PageStore
             src.LegendTakeoffOrder,
             src.LegendTakeoffOrderMode,
             overlayPageFolder,
-            src.OverlayVisible,
+            !clearsOverlay && src.OverlayVisible,
             string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
             NormalizeOverlayOpacity(overlayOpacity),
-            src.OverlayOffsetXPt,
-            src.OverlayOffsetYPt,
-            src.OverlayScale,
-            src.OverlayRotationDegrees,
+            changesOverlay ? 0 : src.OverlayOffsetXPt,
+            changesOverlay ? 0 : src.OverlayOffsetYPt,
+            changesOverlay ? 1 : src.OverlayScale,
+            changesOverlay ? 0 : src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -676,6 +679,15 @@ internal static class PageStore
         {
             return path;
         }
+    }
+
+    private static bool SamePageReference(string pageFolder, string left, string right)
+    {
+        string leftResolved = ResolveRelativePagePath(pageFolder, left)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string rightResolved = ResolveRelativePagePath(pageFolder, right)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(leftResolved, rightResolved, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string MakeRelativePageReference(string pageFolder, string path)

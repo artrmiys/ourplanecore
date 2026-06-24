@@ -3386,6 +3386,7 @@ static void PageOverlayPersistsThroughSourceRewrites()
     {
         PageInfo basePage = CreatePageItem(job, job.PagesRoot, "S101");
         PageInfo overlayPage = CreatePageItem(job, job.PagesRoot, "S102");
+        PageInfo replacementOverlayPage = CreatePageItem(job, job.PagesRoot, "S103");
 
         OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
         OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2, 3.75);
@@ -3422,10 +3423,34 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertFalse(afterScale.OverlayVisible, "overlay visibility survives scale save");
         AssertEqual("Walls", string.Join(",", afterScale.HiddenTakeoffs), "hidden takeoffs survive scale save");
 
+        OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#43A047", 0.8);
+        PageInfo afterColor = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            ?? throw new InvalidOperationException("base page after overlay color missing");
+        AssertEqual(overlayPage.FolderPath, afterColor.OverlayPageFolder, "same overlay survives color save");
+        AssertEqual("#43A047", afterColor.OverlayColor, "overlay color changes");
+        AssertClose(13, afterColor.OverlayOffsetXPt, "same overlay x survives color save");
+        AssertClose(-8, afterColor.OverlayOffsetYPt, "same overlay y survives color save");
+        AssertClose(1.25, afterColor.OverlayScale, "same overlay scale survives color save");
+        AssertClose(3.75, afterColor.OverlayRotationDegrees, "same overlay rotation survives color save");
+
+        OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, replacementOverlayPage.FolderPath, "#E53935", 0.82);
+        PageInfo afterReplacement = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            ?? throw new InvalidOperationException("base page after replacement overlay missing");
+        AssertEqual(replacementOverlayPage.FolderPath, afterReplacement.OverlayPageFolder, "replacement overlay page path");
+        AssertClose(0, afterReplacement.OverlayOffsetXPt, "replacement overlay x resets");
+        AssertClose(0, afterReplacement.OverlayOffsetYPt, "replacement overlay y resets");
+        AssertClose(1, afterReplacement.OverlayScale, "replacement overlay scale resets");
+        AssertClose(0, afterReplacement.OverlayRotationDegrees, "replacement overlay rotation resets");
+
         OurPlaneCoreJobStore.ClearPageOverlay(basePage.FolderPath);
         PageInfo cleared = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after clear missing");
         AssertEqual("", cleared.OverlayPageFolder, "overlay clears");
+        AssertFalse(cleared.OverlayVisible, "overlay clear hides overlay");
+        AssertClose(0, cleared.OverlayOffsetXPt, "cleared overlay x resets");
+        AssertClose(0, cleared.OverlayOffsetYPt, "cleared overlay y resets");
+        AssertClose(1, cleared.OverlayScale, "cleared overlay scale resets");
+        AssertClose(0, cleared.OverlayRotationDegrees, "cleared overlay rotation resets");
     });
 }
 
