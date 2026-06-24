@@ -2958,6 +2958,26 @@ internal static class TakeoffsTreeRegressionTests
             "sheet overlay shortcuts should support nudge, scale, rotation, reset, and persist through the existing transform-changed event");
     }
 
+    public static void SheetOverlayAsyncLoadUsesFreshPageSnapshot()
+    {
+        string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
+        string queueMethod = SliceMethod(main, "private void QueueSheetOverlayLoadForPageOpen(");
+        string asyncMethod = SliceMethod(main, "private async Task LoadSheetOverlayAsync(");
+
+        AssertTrue(
+            queueMethod.Contains("TxtStatus.Text = \"Sheet overlay loading...\";", StringComparison.Ordinal),
+            "page-open overlay queue should surface a loading state when no cached overlay bitmap is ready yet");
+        AssertTrue(
+            asyncMethod.Contains("PageInfo? latest = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);", StringComparison.Ordinal) &&
+            asyncMethod.Contains("string.IsNullOrWhiteSpace(latest.OverlayPageFolder)", StringComparison.Ordinal) &&
+            asyncMethod.Contains("!latest.OverlayVisible", StringComparison.Ordinal) &&
+            asyncMethod.Contains("!SameFolder(latest.OverlayPageFolder, page.OverlayPageFolder)", StringComparison.Ordinal) &&
+            asyncMethod.Contains("LoadSheetOverlay(latest)", StringComparison.Ordinal) &&
+            asyncMethod.Contains("ApplySheetOverlayBitmapToViewport(", StringComparison.Ordinal) &&
+            asyncMethod.Contains("latest,", StringComparison.Ordinal),
+            "async sheet overlay render should re-read source.json before applying a bitmap so page switches or overlay edits cannot apply stale overlay state");
+    }
+
     public static void SheetOverlayReciprocalSyncIsWired()
     {
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");

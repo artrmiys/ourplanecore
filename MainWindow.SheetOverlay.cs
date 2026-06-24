@@ -346,7 +346,10 @@ public partial class MainWindow
 
         float renderScale = SelectSheetOverlayPageOpenFirstFrameRenderScale(page, restoreView);
         if (!TryApplyCachedSheetOverlay(page, restoreView, renderScale))
+        {
             _viewport.ClearSheetOverlay();
+            TxtStatus.Text = "Sheet overlay loading...";
+        }
         _ = LoadSheetOverlayAsync(page, version, renderScale);
     }
 
@@ -403,15 +406,31 @@ public partial class MainWindow
             return;
         }
 
+        PageInfo? latest = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        if (latest == null ||
+            string.IsNullOrWhiteSpace(latest.OverlayPageFolder) ||
+            !latest.OverlayVisible)
+        {
+            result.Bitmap?.Dispose();
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
+        if (!SameFolder(latest.OverlayPageFolder, page.OverlayPageFolder))
+        {
+            result.Bitmap?.Dispose();
+            LoadSheetOverlay(latest);
+            return;
+        }
+
         if (!result.Ok || result.Bitmap == null)
         {
             TxtStatus.Text = $"Sheet overlay unavailable: {result.Error}";
             return;
         }
 
-        PageInfo target = _currentPage;
         ApplySheetOverlayBitmapToViewport(
-            target,
+            latest,
             result.Bitmap,
             result.WidthPt,
             result.HeightPt,
