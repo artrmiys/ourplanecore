@@ -47,6 +47,7 @@ public sealed class PageInfo
     public double OverlayOffsetXPt { get; init; }
     public double OverlayOffsetYPt { get; init; }
     public double OverlayScale { get; init; } = 1.0;
+    public double OverlayRotationDegrees { get; init; }
     public RasterSheetSource? RasterSheet { get; init; }
 }
 
@@ -96,6 +97,9 @@ public sealed class SourceInfo
 
     [JsonPropertyName("overlay_scale")]
     public double OverlayScale { get; set; } = 1.0;
+
+    [JsonPropertyName("overlay_rotation_deg")]
+    public double OverlayRotationDegrees { get; set; }
 
     [JsonPropertyName("raster_sheet")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

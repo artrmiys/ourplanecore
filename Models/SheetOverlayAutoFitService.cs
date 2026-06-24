@@ -11,6 +11,7 @@ public sealed record SheetOverlayAutoFitResult(
     double OffsetXPt,
     double OffsetYPt,
     double OverlayScale,
+    double OverlayRotationDegrees,
     int MatchedSamples,
     int SampleCount,
     double Confidence,
@@ -24,7 +25,6 @@ public static class SheetOverlayAutoFitService
     private const float MinimumSegmentLengthPt = 18f;
     private const float MaximumCandidateScale = 4.0f;
     private const float MinimumCandidateScale = 0.25f;
-    private const float MaximumAngleDeltaRadians = 5.0f * MathF.PI / 180.0f;
     private const float MatchTolerancePt = 10.0f;
     private const int MinimumSamples = 12;
     private const int MinimumMatchedSamples = 8;
@@ -55,12 +55,12 @@ public static class SheetOverlayAutoFitService
         AutoFitCandidate best = default;
         bool found = false;
 
-        void Consider(float offsetXPt, float offsetYPt, float scale)
+        void Consider(float offsetXPt, float offsetYPt, float scale, float rotationDegrees)
         {
             if (!IsCandidateScale(scale))
                 return;
 
-            AutoFitCandidate candidate = ScoreCandidate(samples, baseIndex, offsetXPt, offsetYPt, scale);
+            AutoFitCandidate candidate = ScoreCandidate(samples, baseIndex, offsetXPt, offsetYPt, scale, rotationDegrees);
             if (!found || candidate.Score > best.Score)
             {
                 best = candidate;
@@ -68,30 +68,25 @@ public static class SheetOverlayAutoFitService
             }
         }
 
-        Consider(0, 0, 1);
+        Consider(0, 0, 1, 0);
         ConsiderBoundsCandidate(baseSnap, overlaySnap, Consider);
 
         foreach (PdfGeometrySnapSegment overlay in overlaySegments)
         {
             float overlayLength = SegmentLength(overlay);
-            float overlayAngle = UndirectedAngle(overlay);
+            float overlayAngle = DirectedAngle(overlay);
             SKPoint overlayMid = SegmentMidpoint(overlay);
 
             foreach (PdfGeometrySnapSegment baseSegment in baseSegments)
             {
-                float angleDelta = UndirectedAngleDelta(overlayAngle, UndirectedAngle(baseSegment));
-                if (angleDelta > MaximumAngleDeltaRadians)
-                    continue;
-
                 float scale = SegmentLength(baseSegment) / overlayLength;
                 if (!IsCandidateScale(scale))
                     continue;
 
+                float baseAngle = DirectedAngle(baseSegment);
                 SKPoint baseMid = SegmentMidpoint(baseSegment);
-                Consider(
-                    baseMid.X - overlayMid.X * scale,
-                    baseMid.Y - overlayMid.Y * scale,
-                    scale);
+                ConsiderSegmentPair(overlayMid, baseMid, scale, baseAngle - overlayAngle, Consider);
+                ConsiderSegmentPair(overlayMid, baseMid, scale, baseAngle - overlayAngle + MathF.PI, Consider);
             }
         }
 
@@ -108,6 +103,7 @@ public static class SheetOverlayAutoFitService
             best.OffsetXPt,
             best.OffsetYPt,
             best.Scale,
+            best.RotationDegrees,
             best.MatchedSamples,
             best.SampleCount,
             best.Confidence,
@@ -165,7 +161,7 @@ public static class SheetOverlayAutoFitService
     private static void ConsiderBoundsCandidate(
         PdfGeometrySnapResult baseSnap,
         PdfGeometrySnapResult overlaySnap,
-        Action<float, float, float> consider)
+        Action<float, float, float, float> consider)
     {
         if (!TryGeometryBounds(baseSnap, out SKRect baseBounds) ||
             !TryGeometryBounds(overlaySnap, out SKRect overlayBounds) ||
@@ -186,7 +182,24 @@ public static class SheetOverlayAutoFitService
         consider(
             baseCenter.X - overlayCenter.X * scale,
             baseCenter.Y - overlayCenter.Y * scale,
-            scale);
+            scale,
+            0);
+    }
+
+    private static void ConsiderSegmentPair(
+        SKPoint overlayMid,
+        SKPoint baseMid,
+        float scale,
+        float rotationRadians,
+        Action<float, float, float, float> consider)
+    {
+        float rotationDegrees = NormalizeRotationDegrees(rotationRadians * 180f / MathF.PI);
+        SKPoint mappedMid = TransformPoint(overlayMid, 0, 0, scale, rotationDegrees);
+        consider(
+            baseMid.X - mappedMid.X,
+            baseMid.Y - mappedMid.Y,
+            scale,
+            rotationDegrees);
     }
 
     private static AutoFitCandidate ScoreCandidate(
@@ -194,7 +207,8 @@ public static class SheetOverlayAutoFitService
         PdfSnapPointIndex baseIndex,
         float offsetXPt,
         float offsetYPt,
-        float scale)
+        float scale,
+        float rotationDegrees)
     {
         float weightedTotal = 0;
         float score = 0;
@@ -203,9 +217,7 @@ public static class SheetOverlayAutoFitService
         foreach (AutoFitSample sample in samples)
         {
             weightedTotal += sample.Weight;
-            SKPoint mapped = new(
-                offsetXPt + sample.Point.X * scale,
-                offsetYPt + sample.Point.Y * scale);
+            SKPoint mapped = TransformPoint(sample.Point, offsetXPt, offsetYPt, scale, rotationDegrees);
             if (!baseIndex.TryFind(mapped, MatchTolerancePt, out PdfGeometrySnapPoint snap))
                 continue;
 
@@ -216,7 +228,15 @@ public static class SheetOverlayAutoFitService
         }
 
         float confidence = weightedTotal <= 0 ? 0 : score / weightedTotal;
-        return new AutoFitCandidate(offsetXPt, offsetYPt, scale, score, matched, samples.Count, confidence);
+        return new AutoFitCandidate(
+            offsetXPt,
+            offsetYPt,
+            scale,
+            NormalizeRotationDegrees(rotationDegrees),
+            score,
+            matched,
+            samples.Count,
+            confidence);
     }
 
     private static bool TryGeometryBounds(PdfGeometrySnapResult snap, out SKRect bounds)
@@ -252,16 +272,17 @@ public static class SheetOverlayAutoFitService
     }
 
     private static SheetOverlayAutoFitResult Failed(string message) =>
-        new(false, 0, 0, 1, 0, 0, 0, message);
+        new(false, 0, 0, 1, 0, 0, 0, 0, message);
 
     private static string BuildSuccessMessage(AutoFitCandidate candidate) =>
         string.Format(
             CultureInfo.InvariantCulture,
-            "Overlay auto fit: {0}/{1} geometry samples matched, confidence {2:0}%, scale {3:0.###}x.",
+            "Overlay auto fit: {0}/{1} geometry samples matched, confidence {2:0}%, scale {3:0.###}x, rotation {4:0.###} deg.",
             candidate.MatchedSamples,
             candidate.SampleCount,
             candidate.Confidence * 100,
-            candidate.Scale);
+            candidate.Scale,
+            candidate.RotationDegrees);
 
     private static bool IsCandidateScale(float scale) =>
         IsFinite(scale) && scale >= MinimumCandidateScale && scale <= MaximumCandidateScale;
@@ -272,20 +293,37 @@ public static class SheetOverlayAutoFitService
     private static SKPoint SegmentMidpoint(PdfGeometrySnapSegment segment) =>
         new((segment.Start.X + segment.End.X) * 0.5f, (segment.Start.Y + segment.End.Y) * 0.5f);
 
-    private static float UndirectedAngle(PdfGeometrySnapSegment segment)
+    private static float DirectedAngle(PdfGeometrySnapSegment segment) =>
+        MathF.Atan2(segment.End.Y - segment.Start.Y, segment.End.X - segment.Start.X);
+
+    private static SKPoint TransformPoint(
+        SKPoint point,
+        float offsetXPt,
+        float offsetYPt,
+        float scale,
+        float rotationDegrees)
     {
-        float angle = MathF.Atan2(segment.End.Y - segment.Start.Y, segment.End.X - segment.Start.X);
-        if (angle < 0)
-            angle += MathF.PI;
-        if (angle >= MathF.PI)
-            angle -= MathF.PI;
-        return angle;
+        float radians = rotationDegrees * MathF.PI / 180f;
+        float cos = MathF.Cos(radians);
+        float sin = MathF.Sin(radians);
+        float x = point.X * scale;
+        float y = point.Y * scale;
+        return new SKPoint(
+            offsetXPt + x * cos - y * sin,
+            offsetYPt + x * sin + y * cos);
     }
 
-    private static float UndirectedAngleDelta(float first, float second)
+    private static float NormalizeRotationDegrees(float degrees)
     {
-        float delta = MathF.Abs(first - second);
-        return Math.Min(delta, MathF.PI - delta);
+        if (!IsFinite(degrees))
+            return 0;
+
+        float normalized = degrees % 360f;
+        if (normalized > 180f)
+            normalized -= 360f;
+        if (normalized <= -180f)
+            normalized += 360f;
+        return normalized;
     }
 
     private static SKPoint RectCenter(SKRect rect) =>
@@ -307,6 +345,7 @@ public static class SheetOverlayAutoFitService
         float OffsetXPt,
         float OffsetYPt,
         float Scale,
+        float RotationDegrees,
         float Score,
         int MatchedSamples,
         int SampleCount,

@@ -109,6 +109,7 @@ public partial class MainWindow
             nextX,
             nextY,
             latest.OverlayScale,
+            latest.OverlayRotationDegrees,
             $"Overlay moved: X {FormatOverlayNumber(nextX)}, Y {FormatOverlayNumber(nextY)}.");
     }
 
@@ -121,16 +122,30 @@ public partial class MainWindow
             latest.OverlayOffsetXPt,
             latest.OverlayOffsetYPt,
             nextScale,
+            latest.OverlayRotationDegrees,
             $"Overlay scale: {FormatOverlayNumber(nextScale)}x.");
+    }
+
+    private void RotateSheetOverlay(PageInfo page, double deltaDegrees)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        double nextRotation = NormalizeOverlayRotationDegrees(latest.OverlayRotationDegrees + deltaDegrees);
+        SetSheetOverlayTransform(
+            latest,
+            latest.OverlayOffsetXPt,
+            latest.OverlayOffsetYPt,
+            latest.OverlayScale,
+            nextRotation,
+            $"Overlay rotation: {FormatOverlayNumber(nextRotation)} deg.");
     }
 
     private void EditSheetOverlayTransform(PageInfo page)
     {
         PageInfo latest = ReadLatestSheetOverlayPage(page);
-        if (!ShowSheetOverlayTransformDialog(latest, out double xPt, out double yPt, out double scale))
+        if (!ShowSheetOverlayTransformDialog(latest, out double xPt, out double yPt, out double scale, out double rotation))
             return;
 
-        SetSheetOverlayTransform(latest, xPt, yPt, scale, "Overlay transform updated.");
+        SetSheetOverlayTransform(latest, xPt, yPt, scale, rotation, "Overlay transform updated.");
     }
 
     private void SetSheetOverlayTransform(
@@ -138,13 +153,19 @@ public partial class MainWindow
         double offsetXPt,
         double offsetYPt,
         double overlayScale,
+        double overlayRotationDegrees,
         string status)
     {
         PageInfo latest = ReadLatestSheetOverlayPage(page);
         if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
             return;
 
-        OurPlaneCoreJobStore.SavePageOverlayTransform(latest.FolderPath, offsetXPt, offsetYPt, overlayScale);
+        OurPlaneCoreJobStore.SavePageOverlayTransform(
+            latest.FolderPath,
+            offsetXPt,
+            offsetYPt,
+            overlayScale,
+            overlayRotationDegrees);
         RefreshPageOverlayState(latest.FolderPath, status);
     }
 
@@ -180,7 +201,8 @@ public partial class MainWindow
             _currentPage.FolderPath,
             change.OffsetXPt,
             change.OffsetYPt,
-            change.OverlayScale);
+            change.OverlayScale,
+            change.OverlayRotationDegrees);
 
         if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
         {
@@ -389,6 +411,7 @@ public partial class MainWindow
             (float)page.OverlayOffsetXPt,
             (float)page.OverlayOffsetYPt,
             (float)page.OverlayScale,
+            (float)page.OverlayRotationDegrees,
             overlayPage?.PdfPath ?? "",
             overlayPage?.PdfPage ?? 0,
             OverlaySnapLayers(overlayPage),
@@ -487,12 +510,13 @@ public partial class MainWindow
                 IsAntialias = true,
                 FilterQuality = SKFilterQuality.Medium,
             };
-            var dest = new SKRect(
-                (float)page.OverlayOffsetXPt,
-                (float)page.OverlayOffsetYPt,
-                (float)(page.OverlayOffsetXPt + overlayWidthPt * page.OverlayScale),
-                (float)(page.OverlayOffsetYPt + overlayHeightPt * page.OverlayScale));
-            canvas.DrawBitmap(bitmap, dest, paint);
+            canvas.Save();
+            canvas.ClipRect(new SKRect(0, 0, pageWidthPt, pageHeightPt));
+            canvas.Translate((float)page.OverlayOffsetXPt, (float)page.OverlayOffsetYPt);
+            canvas.RotateDegrees((float)page.OverlayRotationDegrees);
+            canvas.Scale((float)page.OverlayScale);
+            canvas.DrawBitmap(bitmap, new SKRect(0, 0, overlayWidthPt, overlayHeightPt), paint);
+            canvas.Restore();
             return (true, "");
         }
         finally
@@ -774,108 +798,6 @@ public partial class MainWindow
             : $"Sheet overlay hidden on {updated.Name}.";
     }
 
-    private bool ShowSheetOverlayTransformDialog(
-        PageInfo page,
-        out double offsetXPt,
-        out double offsetYPt,
-        out double overlayScale)
-    {
-        offsetXPt = page.OverlayOffsetXPt;
-        offsetYPt = page.OverlayOffsetYPt;
-        overlayScale = page.OverlayScale;
-
-        var dialog = new Window
-        {
-            Title = "Sheet Overlay Transform",
-            Owner = this,
-            Width = 360,
-            SizeToContent = SizeToContent.Height,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ResizeMode = ResizeMode.NoResize,
-        };
-
-        var panel = new StackPanel { Margin = new Thickness(12) };
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"Overlay: {OverlayPageName(page)}",
-            Margin = new Thickness(0, 0, 0, 10),
-        });
-
-        AddLabeledTextBox(panel, "X offset (pt):", FormatOverlayNumber(page.OverlayOffsetXPt), out TextBox xBox);
-        AddLabeledTextBox(panel, "Y offset (pt):", FormatOverlayNumber(page.OverlayOffsetYPt), out TextBox yBox);
-        AddLabeledTextBox(panel, "Scale:", FormatOverlayNumber(page.OverlayScale), out TextBox scaleBox);
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
-        };
-        var ok = new Button { Content = "OK", Width = 78, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
-        var cancel = new Button { Content = "Cancel", Width = 78, IsCancel = true };
-        buttons.Children.Add(ok);
-        buttons.Children.Add(cancel);
-        panel.Children.Add(buttons);
-        dialog.Content = panel;
-
-        double resultX = offsetXPt;
-        double resultY = offsetYPt;
-        double resultScale = overlayScale;
-        ok.Click += (_, _) =>
-        {
-            if (!TryParseOverlayNumber(xBox.Text, out resultX) ||
-                !TryParseOverlayNumber(yBox.Text, out resultY) ||
-                !TryParseOverlayNumber(scaleBox.Text, out resultScale) ||
-                resultScale <= 0)
-            {
-                MessageBox.Show("Enter numeric X, Y, and positive Scale values.", "Sheet Overlay Transform",
-                                MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            dialog.DialogResult = true;
-        };
-        dialog.Loaded += (_, _) => { xBox.Focus(); xBox.SelectAll(); };
-
-        if (dialog.ShowDialog() != true)
-            return false;
-
-        offsetXPt = resultX;
-        offsetYPt = resultY;
-        overlayScale = resultScale;
-        return true;
-    }
-
-    private static void AddLabeledTextBox(Panel panel, string label, string value, out TextBox box)
-    {
-        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 4) });
-        box = new TextBox
-        {
-            Text = value,
-            Margin = new Thickness(0, 0, 0, 8),
-        };
-        panel.Children.Add(box);
-    }
-
-    private static bool TryParseOverlayNumber(string value, out double result) =>
-        double.TryParse(
-            (value ?? "").Replace(",", ".", StringComparison.Ordinal),
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out result);
-
-    private static string FormatOverlayNumber(double value) =>
-        value.ToString("0.###", CultureInfo.InvariantCulture);
-
-    private static string OverlayPageName(PageInfo page)
-    {
-        if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
-            return "none";
-
-        return OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder)?.Name
-            ?? OurPlaneCoreJobStore.DisplayName(page.OverlayPageFolder);
-    }
-
     private static SKBitmap BuildTintedSheetOverlayBitmap(SKBitmap source, string colorHex, double opacity)
     {
         SKColor color = BuildBrightSheetOverlayColor(ParseOverlayColor(colorHex));
@@ -990,99 +912,4 @@ public partial class MainWindow
         }
     }
 
-    private sealed class SheetOverlayBitmapCache
-    {
-        private readonly int _maxEntries;
-        private readonly object _gate = new();
-        private readonly Dictionary<string, Entry> _entries = [];
-        private long _clock;
-
-        public SheetOverlayBitmapCache(int maxEntries)
-        {
-            _maxEntries = Math.Max(1, maxEntries);
-        }
-
-        public bool TryGet(string key, out Entry? entry)
-        {
-            lock (_gate)
-            {
-                if (_entries.TryGetValue(key, out Entry? cached))
-                {
-                    cached.LastUsed = ++_clock;
-                    entry = new Entry(
-                        cached.Bitmap.Copy(),
-                        cached.WidthPt,
-                        cached.HeightPt,
-                        cached.OverlayName,
-                        cached.LastUsed);
-                    return true;
-                }
-            }
-
-            entry = null;
-            return false;
-        }
-
-        public void Put(string key, SKBitmap bitmap, float widthPt, float heightPt, string overlayName)
-        {
-            SKBitmap copy = bitmap.Copy();
-            lock (_gate)
-            {
-                if (_entries.TryGetValue(key, out Entry? existing))
-                {
-                    existing.Bitmap.Dispose();
-                    existing.Bitmap = copy;
-                    existing.WidthPt = widthPt;
-                    existing.HeightPt = heightPt;
-                    existing.OverlayName = overlayName;
-                    existing.LastUsed = ++_clock;
-                    return;
-                }
-
-                _entries[key] = new Entry(copy, widthPt, heightPt, overlayName, ++_clock);
-                Trim();
-            }
-        }
-
-        private void Trim()
-        {
-            while (_entries.Count > _maxEntries)
-            {
-                string oldestKey = "";
-                long oldest = long.MaxValue;
-                foreach (var pair in _entries)
-                {
-                    if (pair.Value.LastUsed >= oldest)
-                        continue;
-
-                    oldest = pair.Value.LastUsed;
-                    oldestKey = pair.Key;
-                }
-
-                if (string.IsNullOrWhiteSpace(oldestKey))
-                    return;
-
-                _entries[oldestKey].Bitmap.Dispose();
-                _entries.Remove(oldestKey);
-            }
-        }
-
-        public sealed class Entry
-        {
-            public Entry(SKBitmap bitmap, float widthPt, float heightPt, string overlayName, long lastUsed)
-            {
-                Bitmap = bitmap;
-                WidthPt = widthPt;
-                HeightPt = heightPt;
-                OverlayName = overlayName;
-                LastUsed = lastUsed;
-            }
-
-            public SKBitmap Bitmap { get; set; }
-            public float WidthPt { get; set; }
-            public float HeightPt { get; set; }
-            public string OverlayName { get; set; }
-            public long LastUsed { get; set; }
-        }
-    }
 }

@@ -23,6 +23,7 @@ public sealed partial class PdfViewport
     private float _sheetOverlayOffsetXPt;
     private float _sheetOverlayOffsetYPt;
     private float _sheetOverlayScale = 1f;
+    private float _sheetOverlayRotationDegrees;
     private float _sheetOverlayBitmapScale;
     private float _lastSheetOverlayRefreshRequestScale;
     private string _sheetOverlayName = "";
@@ -41,6 +42,7 @@ public sealed partial class PdfViewport
         float offsetXPt = 0,
         float offsetYPt = 0,
         float overlayScale = 1,
+        float overlayRotationDegrees = 0,
         string overlayPdfPath = "",
         int overlayPageIndex = 0,
         IReadOnlyList<PdfLayerInfo>? overlayLayers = null,
@@ -53,6 +55,7 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetXPt = offsetXPt;
         _sheetOverlayOffsetYPt = offsetYPt;
         _sheetOverlayScale = NormalizeSheetOverlayScale(overlayScale);
+        _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(overlayRotationDegrees);
         _sheetOverlayBitmapScale = bitmapScale > 0 ? bitmapScale : InferSheetOverlayBitmapScale(bitmap, widthPt);
         _lastSheetOverlayRefreshRequestScale = _sheetOverlayBitmapScale;
         _sheetOverlayName = overlayName ?? "";
@@ -72,6 +75,7 @@ public sealed partial class PdfViewport
         _sheetOverlayOffsetXPt = 0;
         _sheetOverlayOffsetYPt = 0;
         _sheetOverlayScale = 1;
+        _sheetOverlayRotationDegrees = 0;
         _sheetOverlayBitmapScale = 0;
         _lastSheetOverlayRefreshRequestScale = 0;
         _sheetOverlayName = "";
@@ -115,6 +119,7 @@ public sealed partial class PdfViewport
         bool fine = (modifiers & ModifierKeys.Shift) != 0;
         float nudgePt = fine ? 1f : 6f;
         float scaleFactor = fine ? 1.01f : 1.05f;
+        float rotationStep = fine ? 0.25f : 1f;
         Key key = OurPlaneCore.KeyboardShortcutKeys.EffectiveKey(e);
 
         switch (key)
@@ -124,44 +129,52 @@ public sealed partial class PdfViewport
                     _sheetOverlayOffsetXPt - nudgePt,
                     _sheetOverlayOffsetYPt,
                     _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees,
                     BuildSheetOverlayTransformStatus(
                         "Overlay moved",
                         _sheetOverlayOffsetXPt - nudgePt,
                         _sheetOverlayOffsetYPt,
-                        _sheetOverlayScale));
+                        _sheetOverlayScale,
+                        _sheetOverlayRotationDegrees));
                 break;
             case Key.Right:
                 ApplySheetOverlayTransform(
                     _sheetOverlayOffsetXPt + nudgePt,
                     _sheetOverlayOffsetYPt,
                     _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees,
                     BuildSheetOverlayTransformStatus(
                         "Overlay moved",
                         _sheetOverlayOffsetXPt + nudgePt,
                         _sheetOverlayOffsetYPt,
-                        _sheetOverlayScale));
+                        _sheetOverlayScale,
+                        _sheetOverlayRotationDegrees));
                 break;
             case Key.Up:
                 ApplySheetOverlayTransform(
                     _sheetOverlayOffsetXPt,
                     _sheetOverlayOffsetYPt - nudgePt,
                     _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees,
                     BuildSheetOverlayTransformStatus(
                         "Overlay moved",
                         _sheetOverlayOffsetXPt,
                         _sheetOverlayOffsetYPt - nudgePt,
-                        _sheetOverlayScale));
+                        _sheetOverlayScale,
+                        _sheetOverlayRotationDegrees));
                 break;
             case Key.Down:
                 ApplySheetOverlayTransform(
                     _sheetOverlayOffsetXPt,
                     _sheetOverlayOffsetYPt + nudgePt,
                     _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees,
                     BuildSheetOverlayTransformStatus(
                         "Overlay moved",
                         _sheetOverlayOffsetXPt,
                         _sheetOverlayOffsetYPt + nudgePt,
-                        _sheetOverlayScale));
+                        _sheetOverlayScale,
+                        _sheetOverlayRotationDegrees));
                 break;
             case Key.Add:
             case Key.OemPlus:
@@ -169,11 +182,13 @@ public sealed partial class PdfViewport
                     _sheetOverlayOffsetXPt,
                     _sheetOverlayOffsetYPt,
                     _sheetOverlayScale * scaleFactor,
+                    _sheetOverlayRotationDegrees,
                     BuildSheetOverlayTransformStatus(
                         "Overlay scaled",
                         _sheetOverlayOffsetXPt,
                         _sheetOverlayOffsetYPt,
-                        NormalizeSheetOverlayScale(_sheetOverlayScale * scaleFactor)));
+                        NormalizeSheetOverlayScale(_sheetOverlayScale * scaleFactor),
+                        _sheetOverlayRotationDegrees));
                 break;
             case Key.Subtract:
             case Key.OemMinus:
@@ -181,15 +196,43 @@ public sealed partial class PdfViewport
                     _sheetOverlayOffsetXPt,
                     _sheetOverlayOffsetYPt,
                     _sheetOverlayScale / scaleFactor,
+                    _sheetOverlayRotationDegrees,
                     BuildSheetOverlayTransformStatus(
                         "Overlay scaled",
                         _sheetOverlayOffsetXPt,
                         _sheetOverlayOffsetYPt,
-                        NormalizeSheetOverlayScale(_sheetOverlayScale / scaleFactor)));
+                        NormalizeSheetOverlayScale(_sheetOverlayScale / scaleFactor),
+                        _sheetOverlayRotationDegrees));
+                break;
+            case Key.OemOpenBrackets:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees - rotationStep,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay rotated",
+                        _sheetOverlayOffsetXPt,
+                        _sheetOverlayOffsetYPt,
+                        _sheetOverlayScale,
+                        NormalizeSheetOverlayRotation(_sheetOverlayRotationDegrees - rotationStep)));
+                break;
+            case Key.OemCloseBrackets:
+                ApplySheetOverlayTransform(
+                    _sheetOverlayOffsetXPt,
+                    _sheetOverlayOffsetYPt,
+                    _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees + rotationStep,
+                    BuildSheetOverlayTransformStatus(
+                        "Overlay rotated",
+                        _sheetOverlayOffsetXPt,
+                        _sheetOverlayOffsetYPt,
+                        _sheetOverlayScale,
+                        NormalizeSheetOverlayRotation(_sheetOverlayRotationDegrees + rotationStep)));
                 break;
             case Key.D0:
             case Key.NumPad0:
-                ApplySheetOverlayTransform(0, 0, 1, "Overlay transform reset.");
+                ApplySheetOverlayTransform(0, 0, 1, 0, "Overlay transform reset.");
                 break;
             default:
                 return false;
@@ -221,10 +264,15 @@ public sealed partial class PdfViewport
 
             case SheetOverlayPointEditStep.MoveTarget:
                 _sheetOverlayEditAnchorTarget = pdf;
-                ApplySheetOverlayTransform(
-                    pdf.X - _sheetOverlayEditAnchorLocal.X * _sheetOverlayScale,
-                    pdf.Y - _sheetOverlayEditAnchorLocal.Y * _sheetOverlayScale,
+                SKPoint anchorVector = OverlayLocalTransformVector(
+                    _sheetOverlayEditAnchorLocal,
                     _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees);
+                ApplySheetOverlayTransform(
+                    pdf.X - anchorVector.X,
+                    pdf.Y - anchorVector.Y,
+                    _sheetOverlayScale,
+                    _sheetOverlayRotationDegrees,
                     "Overlay moved by point. Click a second overlay point to scale, or press Esc to finish.");
                 _sheetOverlayPointEditStep = SheetOverlayPointEditStep.ScaleSource;
                 break;
@@ -252,11 +300,23 @@ public sealed partial class PdfViewport
                 }
 
                 float newScale = NormalizeSheetOverlayScale(targetDistance / localDistance);
-                ApplySheetOverlayTransform(
-                    _sheetOverlayEditAnchorTarget.X - _sheetOverlayEditAnchorLocal.X * newScale,
-                    _sheetOverlayEditAnchorTarget.Y - _sheetOverlayEditAnchorLocal.Y * newScale,
+                float localAngle = MathF.Atan2(
+                    _sheetOverlayEditScaleLocal.Y - _sheetOverlayEditAnchorLocal.Y,
+                    _sheetOverlayEditScaleLocal.X - _sheetOverlayEditAnchorLocal.X);
+                float targetAngle = MathF.Atan2(
+                    pdf.Y - _sheetOverlayEditAnchorTarget.Y,
+                    pdf.X - _sheetOverlayEditAnchorTarget.X);
+                float newRotation = NormalizeSheetOverlayRotation((targetAngle - localAngle) * 180f / MathF.PI);
+                SKPoint rotatedAnchor = OverlayLocalTransformVector(
+                    _sheetOverlayEditAnchorLocal,
                     newScale,
-                    $"Overlay scaled by two points: {newScale:0.###}x.");
+                    newRotation);
+                ApplySheetOverlayTransform(
+                    _sheetOverlayEditAnchorTarget.X - rotatedAnchor.X,
+                    _sheetOverlayEditAnchorTarget.Y - rotatedAnchor.Y,
+                    newScale,
+                    newRotation,
+                    $"Overlay fit by two points: {newScale:0.###}x, rotation {newRotation:0.###} deg.");
                 CancelSheetOverlayPointEdit(silent: true);
                 break;
         }
@@ -277,15 +337,22 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
-    private void ApplySheetOverlayTransform(float offsetXPt, float offsetYPt, float overlayScale, string status)
+    private void ApplySheetOverlayTransform(
+        float offsetXPt,
+        float offsetYPt,
+        float overlayScale,
+        float overlayRotationDegrees,
+        string status)
     {
         _sheetOverlayOffsetXPt = offsetXPt;
         _sheetOverlayOffsetYPt = offsetYPt;
         _sheetOverlayScale = NormalizeSheetOverlayScale(overlayScale);
+        _sheetOverlayRotationDegrees = NormalizeSheetOverlayRotation(overlayRotationDegrees);
         SheetOverlayTransformChanged?.Invoke(new SheetOverlayTransformChange(
             _sheetOverlayOffsetXPt,
             _sheetOverlayOffsetYPt,
             _sheetOverlayScale,
+            _sheetOverlayRotationDegrees,
             status));
         PostStatus(status);
     }
@@ -294,21 +361,28 @@ public sealed partial class PdfViewport
         string prefix,
         float offsetXPt,
         float offsetYPt,
-        float overlayScale) =>
+        float overlayScale,
+        float overlayRotationDegrees) =>
         string.Format(
             CultureInfo.InvariantCulture,
-            "{0}: X {1:0.###}, Y {2:0.###}, scale {3:0.###}x.",
+            "{0}: X {1:0.###}, Y {2:0.###}, scale {3:0.###}x, rotation {4:0.###} deg.",
             prefix,
             offsetXPt,
             offsetYPt,
-            overlayScale);
+            overlayScale,
+            overlayRotationDegrees);
 
     private SKPoint OverlayDisplayToLocal(SKPoint displayPoint)
     {
         float scale = Math.Max(_sheetOverlayScale, 0.001f);
+        float radians = _sheetOverlayRotationDegrees * MathF.PI / 180f;
+        float cos = MathF.Cos(radians);
+        float sin = MathF.Sin(radians);
+        float dx = displayPoint.X - _sheetOverlayOffsetXPt;
+        float dy = displayPoint.Y - _sheetOverlayOffsetYPt;
         return new SKPoint(
-            (displayPoint.X - _sheetOverlayOffsetXPt) / scale,
-            (displayPoint.Y - _sheetOverlayOffsetYPt) / scale);
+            (dx * cos + dy * sin) / scale,
+            (-dx * sin + dy * cos) / scale);
     }
 
     private void DrawSheetOverlay(SKCanvas canvas, SKRect visiblePdf)
@@ -325,24 +399,20 @@ public sealed partial class PdfViewport
 
         float width = _sheetOverlayWidthPt > 0 ? _sheetOverlayWidthPt : _pdfW;
         float height = _sheetOverlayHeightPt > 0 ? _sheetOverlayHeightPt : _pdfH;
-        var dest = new SKRect(
-            _sheetOverlayOffsetXPt,
-            _sheetOverlayOffsetYPt,
-            _sheetOverlayOffsetXPt + width * _sheetOverlayScale,
-            _sheetOverlayOffsetYPt + height * _sheetOverlayScale);
-        if (!RectsIntersect(dest, visiblePdf))
+        if (width <= 0 || height <= 0)
             return;
 
-        SKRect drawDest = IntersectRects(dest, visiblePdf);
-        if (drawDest.Width <= 0 || drawDest.Height <= 0 || dest.Width <= 0 || dest.Height <= 0)
+        SKRect displayBounds = OverlayDisplayBounds(width, height);
+        if (!RectsIntersect(displayBounds, visiblePdf))
             return;
 
-        var src = new SKRect(
-            (drawDest.Left - dest.Left) / dest.Width * _sheetOverlayBitmap.Width,
-            (drawDest.Top - dest.Top) / dest.Height * _sheetOverlayBitmap.Height,
-            (drawDest.Right - dest.Left) / dest.Width * _sheetOverlayBitmap.Width,
-            (drawDest.Bottom - dest.Top) / dest.Height * _sheetOverlayBitmap.Height);
-        canvas.DrawBitmap(_sheetOverlayBitmap, src, drawDest, paint);
+        canvas.Save();
+        canvas.ClipRect(visiblePdf);
+        canvas.Translate(_sheetOverlayOffsetXPt, _sheetOverlayOffsetYPt);
+        canvas.RotateDegrees(_sheetOverlayRotationDegrees);
+        canvas.Scale(_sheetOverlayScale);
+        canvas.DrawBitmap(_sheetOverlayBitmap, new SKRect(0, 0, width, height), paint);
+        canvas.Restore();
     }
 
     private static SKRect IntersectRects(SKRect a, SKRect b)
@@ -395,9 +465,36 @@ public sealed partial class PdfViewport
     }
 
     private SKPoint OverlayLocalToDisplay(SKPoint localPoint) =>
-        new(
-            _sheetOverlayOffsetXPt + localPoint.X * _sheetOverlayScale,
-            _sheetOverlayOffsetYPt + localPoint.Y * _sheetOverlayScale);
+        AddOffset(OverlayLocalTransformVector(localPoint, _sheetOverlayScale, _sheetOverlayRotationDegrees));
+
+    private SKRect OverlayDisplayBounds(float width, float height)
+    {
+        SKPoint p0 = OverlayLocalToDisplay(new SKPoint(0, 0));
+        SKPoint p1 = OverlayLocalToDisplay(new SKPoint(width, 0));
+        SKPoint p2 = OverlayLocalToDisplay(new SKPoint(width, height));
+        SKPoint p3 = OverlayLocalToDisplay(new SKPoint(0, height));
+        return new SKRect(
+            MathF.Min(MathF.Min(p0.X, p1.X), MathF.Min(p2.X, p3.X)),
+            MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y)),
+            MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X)),
+            MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y)));
+    }
+
+    private SKPoint AddOffset(SKPoint vector) =>
+        new(_sheetOverlayOffsetXPt + vector.X, _sheetOverlayOffsetYPt + vector.Y);
+
+    private static SKPoint OverlayLocalTransformVector(
+        SKPoint localPoint,
+        float scale,
+        float rotationDegrees)
+    {
+        float radians = rotationDegrees * MathF.PI / 180f;
+        float cos = MathF.Cos(radians);
+        float sin = MathF.Sin(radians);
+        float x = localPoint.X * scale;
+        float y = localPoint.Y * scale;
+        return new SKPoint(x * cos - y * sin, x * sin + y * cos);
+    }
 
     private static float OverlayDistance(SKPoint a, SKPoint b) =>
         MeasurementGeometry.Distance(a, b);
@@ -406,6 +503,19 @@ public sealed partial class PdfViewport
         float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0
             ? 1f
             : Math.Clamp(scale, 0.05f, 20f);
+
+    private static float NormalizeSheetOverlayRotation(float degrees)
+    {
+        if (float.IsNaN(degrees) || float.IsInfinity(degrees))
+            return 0;
+
+        float normalized = degrees % 360f;
+        if (normalized > 180f)
+            normalized -= 360f;
+        if (normalized <= -180f)
+            normalized += 360f;
+        return normalized;
+    }
 
     private void MaybeRequestSheetOverlayRenderScaleRefresh()
     {

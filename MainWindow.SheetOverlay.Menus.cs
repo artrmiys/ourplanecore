@@ -81,8 +81,10 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Scale Up 5%", hasOverlay, () => ScaleSheetOverlay(page, 1.05)));
         menu.Items.Add(MakeMenuItem("Scale Down 5%", hasOverlay, () => ScaleSheetOverlay(page, 1 / 1.05)));
+        menu.Items.Add(MakeMenuItem("Rotate Left 1 deg", hasOverlay, () => RotateSheetOverlay(page, -1)));
+        menu.Items.Add(MakeMenuItem("Rotate Right 1 deg", hasOverlay, () => RotateSheetOverlay(page, 1)));
         menu.Items.Add(MakeMenuItem("Reset Transform", hasOverlay, () =>
-            SetSheetOverlayTransform(page, 0, 0, 1, "Overlay transform reset.")));
+            SetSheetOverlayTransform(page, 0, 0, 1, 0, "Overlay transform reset.")));
         return menu;
     }
 

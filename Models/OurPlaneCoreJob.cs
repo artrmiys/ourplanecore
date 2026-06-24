@@ -90,8 +90,9 @@ public static class OurPlaneCoreJobStore
         string pageFolder,
         double offsetXPt,
         double offsetYPt,
-        double overlayScale) =>
-        PageStore.SavePageOverlayTransform(pageFolder, offsetXPt, offsetYPt, overlayScale);
+        double overlayScale,
+        double? overlayRotationDegrees = null) =>
+        PageStore.SavePageOverlayTransform(pageFolder, offsetXPt, offsetYPt, overlayScale, overlayRotationDegrees);
 
     public static string CreateTakeoffFolder(OurPlaneCoreJob job, string parentFolder, string name) =>
         TakeoffStore.CreateTakeoffFolder(job, parentFolder, name);

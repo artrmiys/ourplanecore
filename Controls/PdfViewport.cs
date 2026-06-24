@@ -43,6 +43,7 @@ public sealed record SheetOverlayTransformChange(
     float OffsetXPt,
     float OffsetYPt,
     float OverlayScale,
+    float OverlayRotationDegrees,
     string Status);
 public sealed record BeamMeasurementRequest(
     SKPoint StartPdf,

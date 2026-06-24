@@ -2922,6 +2922,7 @@ internal static class TakeoffsTreeRegressionTests
             menus.Contains("Edit Transform...", StringComparison.Ordinal) &&
             menus.Contains("Move Left 6 pt", StringComparison.Ordinal) &&
             menus.Contains("Scale Up 5%", StringComparison.Ordinal) &&
+            menus.Contains("Rotate Left 1 deg", StringComparison.Ordinal) &&
             menus.Contains("Reset Transform", StringComparison.Ordinal),
             "sheet overlay adjustment commands should share one discoverable submenu instead of only living on the hidden overlay-node context menu");
         AssertTrue(
@@ -2950,9 +2951,11 @@ internal static class TakeoffsTreeRegressionTests
             overlay.Contains("Key.Down", StringComparison.Ordinal) &&
             overlay.Contains("Key.OemPlus", StringComparison.Ordinal) &&
             overlay.Contains("Key.OemMinus", StringComparison.Ordinal) &&
+            overlay.Contains("Key.OemOpenBrackets", StringComparison.Ordinal) &&
+            overlay.Contains("Key.OemCloseBrackets", StringComparison.Ordinal) &&
             overlay.Contains("Key.NumPad0", StringComparison.Ordinal) &&
             overlay.Contains("SheetOverlayTransformChanged?.Invoke", StringComparison.Ordinal),
-            "sheet overlay shortcuts should support nudge, scale, reset, and persist through the existing transform-changed event");
+            "sheet overlay shortcuts should support nudge, scale, rotation, reset, and persist through the existing transform-changed event");
     }
 
     public static void ViewportStressSmokeCanExerciseHighZoomPan()

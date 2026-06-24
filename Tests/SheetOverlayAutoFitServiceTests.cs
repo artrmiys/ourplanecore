@@ -14,7 +14,23 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertClose(1.25, result.OverlayScale, "overlay fit scale", 0.01);
         AssertClose(42, result.OffsetXPt, "overlay fit x offset", 1.0);
         AssertClose(67, result.OffsetYPt, "overlay fit y offset", 1.0);
+        AssertClose(0, result.OverlayRotationDegrees, "overlay fit rotation", 0.25);
         AssertTrue(result.MatchedSamples >= 12, "overlay fit should verify against several geometry samples");
+    }
+
+    public static void RecoversRotationFromRepeatedPlanGeometry()
+    {
+        PdfGeometrySnapResult overlay = BuildPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PdfGeometrySnapResult target = BuildPlanSnap(scale: 0.85f, offsetX: 64, offsetY: 31, rotationDegrees: 7.5f);
+
+        bool ok = SheetOverlayAutoFitService.TryFit(target, overlay, out SheetOverlayAutoFitResult result);
+
+        AssertTrue(ok, result.Message);
+        AssertClose(0.85, result.OverlayScale, "overlay fit rotated scale", 0.01);
+        AssertClose(64, result.OffsetXPt, "overlay fit rotated x offset", 1.0);
+        AssertClose(31, result.OffsetYPt, "overlay fit rotated y offset", 1.0);
+        AssertClose(7.5, result.OverlayRotationDegrees, "overlay fit rotated angle", 0.3);
+        AssertTrue(result.MatchedSamples >= 12, "rotated overlay fit should verify against several geometry samples");
     }
 
     public static void RejectsSparseGeometry()
@@ -41,7 +57,11 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertFalse(ok, "overlay auto fit should not apply a transform from sparse geometry");
     }
 
-    private static PdfGeometrySnapResult BuildPlanSnap(float scale, float offsetX, float offsetY)
+    private static PdfGeometrySnapResult BuildPlanSnap(
+        float scale,
+        float offsetX,
+        float offsetY,
+        float rotationDegrees = 0)
     {
         var raw = new List<PdfGeometrySnapSegment>
         {
@@ -59,7 +79,7 @@ internal static class SheetOverlayAutoFitServiceTests
         };
 
         List<PdfGeometrySnapSegment> segments = raw
-            .Select(segment => Transform(segment, scale, offsetX, offsetY))
+            .Select(segment => Transform(segment, scale, offsetX, offsetY, rotationDegrees))
             .ToList();
         List<PdfGeometrySnapPoint> points = segments
             .SelectMany(segment => new[] { segment.Start, segment.End })
@@ -78,15 +98,34 @@ internal static class SheetOverlayAutoFitServiceTests
         PdfGeometrySnapSegment segment,
         float scale,
         float offsetX,
-        float offsetY) =>
+        float offsetY,
+        float rotationDegrees) =>
         Segment(
-            offsetX + segment.Start.X * scale,
-            offsetY + segment.Start.Y * scale,
-            offsetX + segment.End.X * scale,
-            offsetY + segment.End.Y * scale);
+            Transform(segment.Start, scale, offsetX, offsetY, rotationDegrees),
+            Transform(segment.End, scale, offsetX, offsetY, rotationDegrees));
+
+    private static SKPoint Transform(
+        SKPoint point,
+        float scale,
+        float offsetX,
+        float offsetY,
+        float rotationDegrees)
+    {
+        float radians = rotationDegrees * MathF.PI / 180f;
+        float cos = MathF.Cos(radians);
+        float sin = MathF.Sin(radians);
+        float x = point.X * scale;
+        float y = point.Y * scale;
+        return new SKPoint(
+            offsetX + x * cos - y * sin,
+            offsetY + x * sin + y * cos);
+    }
 
     private static PdfGeometrySnapSegment Segment(float x0, float y0, float x1, float y1) =>
         new(new SKPoint(x0, y0), new SKPoint(x1, y1), "pdf-line");
+
+    private static PdfGeometrySnapSegment Segment(SKPoint start, SKPoint end) =>
+        new(start, end, "pdf-line");
 
     private static void AssertTrue(bool condition, string message)
     {

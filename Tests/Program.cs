@@ -85,6 +85,7 @@ var tests = new List<(string Name, Action Run)>
     ("similar count uses exact pdf text when available", SimilarSymbolMatcherTests.SimilarCountUsesExactPdfTextWhenAvailable),
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
     ("sheet overlay auto fit recovers scale and offset", SheetOverlayAutoFitServiceTests.RecoversScaleAndOffsetFromRepeatedPlanGeometry),
+    ("sheet overlay auto fit recovers rotation", SheetOverlayAutoFitServiceTests.RecoversRotationFromRepeatedPlanGeometry),
     ("sheet overlay auto fit rejects sparse geometry", SheetOverlayAutoFitServiceTests.RejectsSparseGeometry),
     ("sheet overlay adjustment menus are exposed", TakeoffsTreeRegressionTests.SheetOverlayAdjustmentMenusAreExposed),
     ("sheet overlay transform shortcuts are wired", TakeoffsTreeRegressionTests.SheetOverlayTransformShortcutsAreWired),
@@ -3371,7 +3372,7 @@ static void PageOverlayPersistsThroughSourceRewrites()
         PageInfo overlayPage = CreatePageItem(job, job.PagesRoot, "S102");
 
         OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
-        OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2);
+        OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2, 3.75);
         OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
         OurPlaneCoreJobStore.SavePageHiddenTakeoffs(basePage.FolderPath, ["Walls"]);
         PageInfo loaded = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
@@ -3382,16 +3383,26 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(12.5, loaded.OverlayOffsetXPt, "overlay x offset");
         AssertClose(-7.25, loaded.OverlayOffsetYPt, "overlay y offset");
         AssertClose(1.2, loaded.OverlayScale, "overlay scale");
+        AssertClose(3.75, loaded.OverlayRotationDegrees, "overlay rotation");
         AssertFalse(loaded.OverlayVisible, "overlay visibility");
         AssertEqual("Walls", string.Join(",", loaded.HiddenTakeoffs), "hidden takeoffs");
+
+        OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 13, -8, 1.25);
+        PageInfo afterLegacyTransform = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            ?? throw new InvalidOperationException("base page after legacy transform missing");
+        AssertClose(13, afterLegacyTransform.OverlayOffsetXPt, "overlay x after legacy transform");
+        AssertClose(-8, afterLegacyTransform.OverlayOffsetYPt, "overlay y after legacy transform");
+        AssertClose(1.25, afterLegacyTransform.OverlayScale, "overlay scale after legacy transform");
+        AssertClose(3.75, afterLegacyTransform.OverlayRotationDegrees, "overlay rotation survives legacy transform save");
 
         OurPlaneCoreJobStore.SavePageScale(basePage.FolderPath, 0.3048);
         PageInfo afterScale = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after scale missing");
         AssertEqual(overlayPage.FolderPath, afterScale.OverlayPageFolder, "overlay survives scale save");
-        AssertClose(12.5, afterScale.OverlayOffsetXPt, "overlay x survives scale save");
-        AssertClose(-7.25, afterScale.OverlayOffsetYPt, "overlay y survives scale save");
-        AssertClose(1.2, afterScale.OverlayScale, "overlay scale survives scale save");
+        AssertClose(13, afterScale.OverlayOffsetXPt, "overlay x survives scale save");
+        AssertClose(-8, afterScale.OverlayOffsetYPt, "overlay y survives scale save");
+        AssertClose(1.25, afterScale.OverlayScale, "overlay scale survives scale save");
+        AssertClose(3.75, afterScale.OverlayRotationDegrees, "overlay rotation survives scale save");
         AssertFalse(afterScale.OverlayVisible, "overlay visibility survives scale save");
         AssertEqual("Walls", string.Join(",", afterScale.HiddenTakeoffs), "hidden takeoffs survive scale save");
 

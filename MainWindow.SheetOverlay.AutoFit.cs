@@ -60,7 +60,8 @@ public partial class MainWindow
                 latestTarget.FolderPath,
                 fit.OffsetXPt,
                 fit.OffsetYPt,
-                fit.OverlayScale);
+                fit.OverlayScale,
+                fit.OverlayRotationDegrees);
             RefreshPageOverlayState(latestTarget.FolderPath, fit.Message);
         }
         catch (Exception ex)

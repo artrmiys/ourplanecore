@@ -177,6 +177,7 @@ internal static class PageStore
             OverlayOffsetXPt = NormalizeOverlayOffset(src.OverlayOffsetXPt),
             OverlayOffsetYPt = NormalizeOverlayOffset(src.OverlayOffsetYPt),
             OverlayScale = NormalizeOverlayScale(src.OverlayScale),
+            OverlayRotationDegrees = NormalizeOverlayRotation(src.OverlayRotationDegrees),
             RasterSheet = NormalizeRasterSheet(src.RasterSheet),
         };
     }
@@ -203,6 +204,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -235,6 +237,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -261,6 +264,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             hiddenTakeoffs,
             src.RasterSheet);
     }
@@ -286,6 +290,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             rasterSheet: null);
     }
@@ -316,6 +321,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -342,6 +348,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -353,7 +360,8 @@ internal static class PageStore
         string pageFolder,
         double overlayOffsetXPt,
         double overlayOffsetYPt,
-        double overlayScale)
+        double overlayScale,
+        double? overlayRotationDegrees = null)
     {
         SourceInfo? src = ReadSource(pageFolder);
         if (src == null) return;
@@ -375,6 +383,7 @@ internal static class PageStore
             NormalizeOverlayOffset(overlayOffsetXPt),
             NormalizeOverlayOffset(overlayOffsetYPt),
             NormalizeOverlayScale(overlayScale),
+            NormalizeOverlayRotation(overlayRotationDegrees ?? src.OverlayRotationDegrees),
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -401,6 +410,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             src.RasterSheet);
     }
@@ -427,6 +437,7 @@ internal static class PageStore
             src.OverlayOffsetXPt,
             src.OverlayOffsetYPt,
             src.OverlayScale,
+            src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
             rasterSheet);
     }
@@ -516,6 +527,7 @@ internal static class PageStore
                     overlayOffsetXPt: snap.OverlayOffsetXPt,
                     overlayOffsetYPt: snap.OverlayOffsetYPt,
                     overlayScale: snap.OverlayScale,
+                    overlayRotationDegrees: snap.OverlayRotationDegrees,
                     hiddenTakeoffs: snap.HiddenTakeoffs,
                     rasterSheet: snap.RasterSheet);
         }
@@ -547,6 +559,7 @@ internal static class PageStore
                 src.OverlayOffsetXPt,
                 src.OverlayOffsetYPt,
                 src.OverlayScale,
+                src.OverlayRotationDegrees,
                 NormalizeStringList(src.HiddenTakeoffs),
                 NormalizeRasterSheet(src.RasterSheet)));
         }
@@ -570,6 +583,7 @@ internal static class PageStore
         double overlayOffsetXPt = 0,
         double overlayOffsetYPt = 0,
         double overlayScale = 1.0,
+        double overlayRotationDegrees = 0,
         IReadOnlyList<string>? hiddenTakeoffs = null,
         RasterSheetSource? rasterSheet = null)
     {
@@ -593,6 +607,7 @@ internal static class PageStore
             OverlayOffsetXPt = NormalizeOverlayOffset(overlayOffsetXPt),
             OverlayOffsetYPt = NormalizeOverlayOffset(overlayOffsetYPt),
             OverlayScale = NormalizeOverlayScale(overlayScale),
+            OverlayRotationDegrees = NormalizeOverlayRotation(overlayRotationDegrees),
             RasterSheet = NormalizeRasterSheet(rasterSheet),
         };
         try
@@ -699,6 +714,19 @@ internal static class PageStore
             ? 1.0
             : Math.Clamp(scale, 0.05, 20.0);
 
+    private static double NormalizeOverlayRotation(double degrees)
+    {
+        if (double.IsNaN(degrees) || double.IsInfinity(degrees))
+            return 0;
+
+        double normalized = degrees % 360.0;
+        if (normalized > 180.0)
+            normalized -= 360.0;
+        if (normalized <= -180.0)
+            normalized += 360.0;
+        return Math.Round(normalized, 6);
+    }
+
     private static List<string> NormalizeStringList(IEnumerable<string>? values) =>
         values?
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -759,5 +787,6 @@ internal sealed record PageSourceSnapshot(
     double OverlayOffsetXPt,
     double OverlayOffsetYPt,
     double OverlayScale,
+    double OverlayRotationDegrees,
     IReadOnlyList<string> HiddenTakeoffs,
     RasterSheetSource? RasterSheet);
