@@ -84,6 +84,8 @@ var tests = new List<(string Name, Action Run)>
     ("similar text query finds split mark tokens", SimilarSymbolMatcherTests.SimilarTextQueryFindsSplitMarkTokens),
     ("similar count uses exact pdf text when available", SimilarSymbolMatcherTests.SimilarCountUsesExactPdfTextWhenAvailable),
     ("similar count is exposed as context tool", SimilarSymbolMatcherTests.SimilarCountIsExposedAsContextTool),
+    ("sheet overlay auto fit recovers scale and offset", SheetOverlayAutoFitServiceTests.RecoversScaleAndOffsetFromRepeatedPlanGeometry),
+    ("sheet overlay auto fit rejects sparse geometry", SheetOverlayAutoFitServiceTests.RejectsSparseGeometry),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
     ("measurement area joist without direction is blocked", MeasurementJoistWithoutDirectionIsBlocked),
     ("area line grid creates horizontal and vertical segments", AreaLineGridServiceTests.RectangleCreatesHorizontalAndVerticalSegments),
@@ -4415,11 +4417,11 @@ static void ViewportMeasurementLodLimitsDenseDetails()
 
 static void ViewportLodHidesExpensiveLayersDuringFastFrames()
 {
-    AssertFalse(
+    AssertTrue(
         ViewportRenderPolicy.ShouldDrawSheetOverlay(
             fastNavigationFrame: true,
             isOverlayEditing: false),
-        "fast navigation should hide sheet overlays until idle unless the overlay is being edited");
+        "sheet overlays should remain visible during fast navigation so page switches do not look like the overlay disappeared");
 
     AssertTrue(
         ViewportRenderPolicy.ShouldDrawSheetOverlay(

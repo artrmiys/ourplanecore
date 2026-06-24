@@ -469,7 +469,7 @@ public static class ViewportRenderPolicy
         bool fastNavigationFrame,
         bool isOverlayEditing)
     {
-        return !fastNavigationFrame || isOverlayEditing;
+        return true;
     }
 
     public static bool ShouldDrawMeasurementGeometry(

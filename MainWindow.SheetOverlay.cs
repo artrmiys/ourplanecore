@@ -43,6 +43,7 @@ public partial class MainWindow
         var menu = new MenuItem { Header = "Sheet Overlay" };
         menu.Items.Add(MakeMenuItem("Use This Sheet as Overlay", canSetOverlay, () => SetCurrentSheetOverlay(candidatePage)));
         menu.Items.Add(MakeMenuItem("Clear Current Sheet Overlay", hasOverlay, ClearCurrentSheetOverlay));
+        menu.Items.Add(MakeMenuItem("Auto Fit Current Overlay", hasOverlay, () => AutoFitSheetOverlay(_currentPage!)));
         menu.Items.Add(MakeMenuItem(
             "Edit Overlay by Points",
             !string.IsNullOrWhiteSpace(candidatePage.OverlayPageFolder),
@@ -66,6 +67,7 @@ public partial class MainWindow
             true,
             () => TogglePageOverlayVisibility(node.Page)));
         menu.Items.Add(new Separator());
+        menu.Items.Add(MakeMenuItem("Auto Fit Overlay", true, () => AutoFitSheetOverlay(node.Page)));
         menu.Items.Add(MakeMenuItem("Edit Overlay by Points", true, () => BeginSheetOverlayPointEdit(node.Page)));
         menu.Items.Add(MakeMenuItem("Edit Transform...", true, () => EditSheetOverlayTransform(node.Page)));
         menu.Items.Add(new Separator());
@@ -352,20 +354,29 @@ public partial class MainWindow
     private void QueueSheetOverlayLoadForPageOpen(PageInfo page, PdfViewport.ViewState? restoreView = null)
     {
         int version = ++_sheetOverlayLoadVersion;
-        _viewport.ClearSheetOverlay();
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
+        {
+            _viewport.ClearSheetOverlay();
             return;
+        }
 
         float renderScale = SelectSheetOverlayPageOpenFirstFrameRenderScale(page, restoreView);
+        if (!TryApplyCachedSheetOverlay(page, restoreView, renderScale))
+            _viewport.ClearSheetOverlay();
         _ = LoadSheetOverlayAsync(page, version, renderScale);
     }
 
-    private void TryApplyCachedSheetOverlay(PageInfo page, PdfViewport.ViewState? restoreView = null)
+    private bool TryApplyCachedSheetOverlay(
+        PageInfo page,
+        PdfViewport.ViewState? restoreView = null,
+        float? requestedRenderScale = null)
     {
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
-            return;
+            return false;
 
-        float renderScale = SelectSheetOverlayViewportRenderScale(page, restoreView);
+        float renderScale = requestedRenderScale is > 0
+            ? requestedRenderScale.Value
+            : SelectSheetOverlayViewportRenderScale(page, restoreView);
         if (!TryBuildSheetOverlayBitmap(
                 page,
                 renderScale,
@@ -377,10 +388,11 @@ public partial class MainWindow
                 out _) ||
             bitmap == null)
         {
-            return;
+            return false;
         }
 
         ApplySheetOverlayBitmapToViewport(page, bitmap, widthPt, heightPt, overlayName, renderScale);
+        return true;
     }
 
     private async Task LoadSheetOverlayAsync(PageInfo page, int version, float renderScale)
