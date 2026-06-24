@@ -197,6 +197,35 @@ public partial class MainWindow
         _viewport.BeginSheetOverlayPointEdit();
     }
 
+    private async void BeginSheetOverlayPointEditWhenReady(PageInfo page)
+    {
+        PageInfo latest = ReadLatestSheetOverlayPage(page);
+        if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
+        {
+            TxtStatus.Text = "Set a sheet overlay before editing it.";
+            return;
+        }
+
+        if (_currentPage == null || !SameFolder(_currentPage.FolderPath, latest.FolderPath))
+            OpenPageInActiveTab(latest);
+
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            PageInfo? current = _currentPage;
+            if (current != null &&
+                SameFolder(current.FolderPath, latest.FolderPath) &&
+                _viewport.HasSheetOverlay)
+            {
+                _viewport.BeginSheetOverlayPointEdit();
+                return;
+            }
+
+            await Task.Delay(150);
+        }
+
+        TxtStatus.Text = "Overlay edit: overlay is still loading. Use Edit by Points once it appears.";
+    }
+
     private void OnSheetOverlayTransformChanged(SheetOverlayTransformChange change)
     {
         if (_currentPage == null || string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder))

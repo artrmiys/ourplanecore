@@ -112,12 +112,35 @@ public partial class MainWindow
                 selectedSearch,
                 replaceExistingOverlay: true,
                 statusLabel: "Selected overlay candidate");
+            HandleSheetOverlayCandidatePostAction(targetPage, selectedSearch, dialog.SelectedAction);
         }
         catch (Exception ex)
         {
             AppLog.Warn(ex, $"Sheet overlay candidate chooser failed for {targetPage.Name}");
             TxtStatus.Text = $"Overlay candidate chooser failed: {ex.Message}";
         }
+    }
+
+    private void HandleSheetOverlayCandidatePostAction(
+        PageInfo targetPage,
+        SheetOverlayAutoFitCandidateSearch selectedSearch,
+        SheetOverlayCandidateAction action)
+    {
+        if (action == SheetOverlayCandidateAction.UseSelected || selectedSearch.OverlayPage == null)
+            return;
+
+        PageInfo latestTarget = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath) ?? targetPage;
+        if (!SameFolder(latestTarget.OverlayPageFolder, selectedSearch.OverlayPage.FolderPath))
+            return;
+
+        if (action == SheetOverlayCandidateAction.OpenOverlaySheet)
+        {
+            OpenSheetOverlaySource(latestTarget);
+            return;
+        }
+
+        if (action == SheetOverlayCandidateAction.EditByPoints)
+            BeginSheetOverlayPointEditWhenReady(latestTarget);
     }
 
     private void ApplySheetOverlayAutoSelectedFit(

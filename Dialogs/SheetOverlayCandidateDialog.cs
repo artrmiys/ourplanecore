@@ -24,12 +24,20 @@ public sealed class SheetOverlayCandidateRow
     public SheetOverlayAutoFitCandidateMatch Match { get; init; } = default!;
 }
 
+public enum SheetOverlayCandidateAction
+{
+    UseSelected,
+    OpenOverlaySheet,
+    EditByPoints,
+}
+
 public sealed class SheetOverlayCandidateDialog : Window
 {
     private readonly DataGrid _grid;
 
     public ObservableCollection<SheetOverlayCandidateRow> Rows { get; }
     public SheetOverlayAutoFitCandidateMatch? SelectedMatch { get; private set; }
+    public SheetOverlayCandidateAction SelectedAction { get; private set; } = SheetOverlayCandidateAction.UseSelected;
 
     public SheetOverlayCandidateDialog(
         string baseSheetName,
@@ -65,8 +73,12 @@ public sealed class SheetOverlayCandidateDialog : Window
             Margin = new Thickness(0, 10, 0, 0),
         };
         var useButton = new Button { Content = "Use Selected", MinWidth = 112, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
+        var openButton = new Button { Content = "Use + Open Sheet", MinWidth = 128, Margin = new Thickness(0, 0, 6, 0) };
+        var editButton = new Button { Content = "Use + Edit by Points", MinWidth = 142, Margin = new Thickness(0, 0, 18, 0) };
         var cancelButton = new Button { Content = "Cancel", MinWidth = 78, IsCancel = true };
         buttons.Children.Add(useButton);
+        buttons.Children.Add(openButton);
+        buttons.Children.Add(editButton);
         buttons.Children.Add(cancelButton);
         DockPanel.SetDock(buttons, Dock.Bottom);
         root.Children.Add(buttons);
@@ -91,14 +103,16 @@ public sealed class SheetOverlayCandidateDialog : Window
         _grid.Columns.Add(TextColumn("Folder", nameof(SheetOverlayCandidateRow.FolderPath), 260));
         root.Children.Add(_grid);
 
-        useButton.Click += (_, _) => AcceptSelected();
-        _grid.MouseDoubleClick += (_, _) => AcceptSelected();
+        useButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.UseSelected);
+        openButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.OpenOverlaySheet);
+        editButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.EditByPoints);
+        _grid.MouseDoubleClick += (_, _) => AcceptSelected(SheetOverlayCandidateAction.UseSelected);
         _grid.PreviewKeyDown += (_, e) =>
         {
             if (e.Key != Key.Enter)
                 return;
 
-            AcceptSelected();
+            AcceptSelected(SheetOverlayCandidateAction.UseSelected);
             e.Handled = true;
         };
         Loaded += (_, _) =>
@@ -135,12 +149,13 @@ public sealed class SheetOverlayCandidateDialog : Window
             Width = width,
         };
 
-    private void AcceptSelected()
+    private void AcceptSelected(SheetOverlayCandidateAction action)
     {
         if (_grid.SelectedItem is not SheetOverlayCandidateRow row)
             return;
 
         SelectedMatch = row.Match;
+        SelectedAction = action;
         DialogResult = true;
     }
 
