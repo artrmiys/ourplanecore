@@ -139,6 +139,12 @@ public partial class MainWindow
             return;
         }
 
+        if (action == SheetOverlayCandidateAction.EditTransform)
+        {
+            EditSheetOverlayTransform(latestTarget);
+            return;
+        }
+
         if (action == SheetOverlayCandidateAction.EditByPoints)
             BeginSheetOverlayPointEditWhenReady(latestTarget);
     }

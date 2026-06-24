@@ -3147,6 +3147,8 @@ internal static class TakeoffsTreeRegressionTests
             autoSelect.Contains("CandidateReads", StringComparison.Ordinal) &&
             autoSelect.Contains("HandleSheetOverlayCandidatePostAction", StringComparison.Ordinal) &&
             autoSelect.Contains("SheetOverlayCandidateAction.OpenOverlaySheet", StringComparison.Ordinal) &&
+            autoSelect.Contains("SheetOverlayCandidateAction.EditTransform", StringComparison.Ordinal) &&
+            autoSelect.Contains("EditSheetOverlayTransform(latestTarget)", StringComparison.Ordinal) &&
             autoSelect.Contains("SheetOverlayCandidateAction.EditByPoints", StringComparison.Ordinal),
             "sheet overlay Auto Fit should auto-select a matching sheet, report match quality, allow choosing a ranked candidate without rerunning the search, and support immediate review actions");
         AssertTrue(
@@ -3175,14 +3177,18 @@ internal static class TakeoffsTreeRegressionTests
             candidateDialog.Contains("public sealed class SheetOverlayCandidateDialog : Window", StringComparison.Ordinal) &&
             candidateDialog.Contains("DataGrid", StringComparison.Ordinal) &&
             candidateDialog.Contains("Confidence", StringComparison.Ordinal) &&
+            candidateDialog.Contains("nameof(SheetOverlayCandidateRow.Transform)", StringComparison.Ordinal) &&
+            candidateDialog.Contains("BuildTransformSummary", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use Selected", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use + Open Sheet", StringComparison.Ordinal) &&
+            candidateDialog.Contains("Use + Edit Transform", StringComparison.Ordinal) &&
+            candidateDialog.Contains("SheetOverlayCandidateAction.EditTransform", StringComparison.Ordinal) &&
             candidateDialog.Contains("Use + Edit by Points", StringComparison.Ordinal) &&
             candidateDialog.Contains("SelectedAction", StringComparison.Ordinal) &&
             candidateDialog.Contains("InitialSelectedIndex", StringComparison.Ordinal) &&
             candidateDialog.Contains("_grid.ScrollIntoView(_grid.SelectedItem)", StringComparison.Ordinal) &&
             candidateDialog.Contains("MouseDoubleClick", StringComparison.Ordinal),
-            "ranked overlay candidates should be reviewable in a choose dialog with confidence, current-overlay focus, quick selection, and direct inspection/edit actions");
+            "ranked overlay candidates should be reviewable in a choose dialog with confidence, transform values, current-overlay focus, quick selection, and direct inspection/edit actions");
         AssertTrue(
             main.Contains("private void OpenSheetOverlaySource(PageInfo page)", StringComparison.Ordinal) &&
             main.Contains("OpenPageInActiveTab(overlayPage)", StringComparison.Ordinal) &&

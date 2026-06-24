@@ -19,6 +19,7 @@ public sealed class SheetOverlayCandidateRow
     public string Confidence { get; init; } = "";
     public string Samples { get; init; } = "";
     public string Method { get; init; } = "";
+    public string Transform { get; init; } = "";
     public string Source { get; init; } = "";
     public string FolderPath { get; init; } = "";
     public SheetOverlayAutoFitCandidateMatch Match { get; init; } = default!;
@@ -28,6 +29,7 @@ public enum SheetOverlayCandidateAction
 {
     UseSelected,
     OpenOverlaySheet,
+    EditTransform,
     EditByPoints,
 }
 
@@ -45,9 +47,9 @@ public sealed class SheetOverlayCandidateDialog : Window
         string currentOverlayFolder)
     {
         Title = "Choose Sheet Overlay Candidate";
-        Width = 980;
+        Width = 1080;
         Height = 560;
-        MinWidth = 820;
+        MinWidth = 900;
         MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResizeWithGrip;
@@ -74,10 +76,12 @@ public sealed class SheetOverlayCandidateDialog : Window
         };
         var useButton = new Button { Content = "Use Selected", MinWidth = 112, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
         var openButton = new Button { Content = "Use + Open Sheet", MinWidth = 128, Margin = new Thickness(0, 0, 6, 0) };
+        var editTransformButton = new Button { Content = "Use + Edit Transform", MinWidth = 150, Margin = new Thickness(0, 0, 6, 0) };
         var editButton = new Button { Content = "Use + Edit by Points", MinWidth = 142, Margin = new Thickness(0, 0, 18, 0) };
         var cancelButton = new Button { Content = "Cancel", MinWidth = 78, IsCancel = true };
         buttons.Children.Add(useButton);
         buttons.Children.Add(openButton);
+        buttons.Children.Add(editTransformButton);
         buttons.Children.Add(editButton);
         buttons.Children.Add(cancelButton);
         DockPanel.SetDock(buttons, Dock.Bottom);
@@ -99,12 +103,14 @@ public sealed class SheetOverlayCandidateDialog : Window
         _grid.Columns.Add(TextColumn("Confidence", nameof(SheetOverlayCandidateRow.Confidence), 96));
         _grid.Columns.Add(TextColumn("Samples", nameof(SheetOverlayCandidateRow.Samples), 92));
         _grid.Columns.Add(TextColumn("Method", nameof(SheetOverlayCandidateRow.Method), 120));
+        _grid.Columns.Add(TextColumn("Transform", nameof(SheetOverlayCandidateRow.Transform), 190));
         _grid.Columns.Add(TextColumn("Source", nameof(SheetOverlayCandidateRow.Source), 150));
         _grid.Columns.Add(TextColumn("Folder", nameof(SheetOverlayCandidateRow.FolderPath), 260));
         root.Children.Add(_grid);
 
         useButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.UseSelected);
         openButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.OpenOverlaySheet);
+        editTransformButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.EditTransform);
         editButton.Click += (_, _) => AcceptSelected(SheetOverlayCandidateAction.EditByPoints);
         _grid.MouseDoubleClick += (_, _) => AcceptSelected(SheetOverlayCandidateAction.UseSelected);
         _grid.PreviewKeyDown += (_, e) =>
@@ -151,10 +157,20 @@ public sealed class SheetOverlayCandidateDialog : Window
             Confidence = string.Format(CultureInfo.InvariantCulture, "{0:0}%", match.Fit.Confidence * 100),
             Samples = string.Format(CultureInfo.InvariantCulture, "{0}/{1}", match.Fit.MatchedSamples, match.Fit.SampleCount),
             Method = match.Fit.Method,
+            Transform = BuildTransformSummary(match.Fit),
             Source = match.Source,
             FolderPath = match.Page.FolderPath,
             Match = match,
         };
+
+    private static string BuildTransformSummary(SheetOverlayAutoFitResult fit) =>
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "{0:0.###}x, {1:0.###} deg, X {2:0.#}, Y {3:0.#}",
+            fit.OverlayScale,
+            fit.OverlayRotationDegrees,
+            fit.OffsetXPt,
+            fit.OffsetYPt);
 
     private static DataGridTextColumn TextColumn(string header, string property, double width) =>
         new()
