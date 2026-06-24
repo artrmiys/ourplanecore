@@ -20,87 +20,127 @@ public partial class MainWindow
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(targetPage.OverlayPageFolder) || !targetPage.OverlayVisible)
-        {
-            TxtStatus.Text = "Set and show a sheet overlay before using Auto Fit.";
-            return;
-        }
-
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(targetPage.OverlayPageFolder);
-        if (overlayPage == null)
-        {
-            TxtStatus.Text = "Overlay auto fit: overlay sheet source is missing.";
-            return;
-        }
-
-        TxtStatus.Text = "Overlay auto fit: reading matching plan geometry and raster features...";
         try
         {
-            SheetOverlayAutoFitReadResult read = await Task.Run(() =>
-                ReadSheetOverlayAutoFitGeometry(targetPage, overlayPage));
-            if (!read.Ok)
+            if (!string.IsNullOrWhiteSpace(targetPage.OverlayPageFolder) && !targetPage.OverlayVisible)
             {
-                TxtStatus.Text = read.Error;
+                OurPlaneCoreJobStore.SavePageOverlayVisibility(targetPage.FolderPath, true);
+                targetPage = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath) ?? targetPage;
+            }
+
+            if (string.IsNullOrWhiteSpace(targetPage.OverlayPageFolder))
+            {
+                OurPlaneCoreJob? job = _currentJob;
+                if (job == null)
+                {
+                    TxtStatus.Text = "Overlay auto fit: open a job before auto-selecting an overlay.";
+                    return;
+                }
+
+                TxtStatus.Text = "Overlay auto fit: searching job sheets for matching plan geometry...";
+                SheetOverlayAutoFitCandidateSearch search = await Task.Run(() =>
+                    FindSheetOverlayAutoFitCandidate(job, targetPage));
+                if (!search.Ok)
+                {
+                    TxtStatus.Text = search.Error;
+                    return;
+                }
+
+                ApplySheetOverlayAutoSelectedFit(targetPage, search);
                 return;
             }
 
-            bool fitted = SheetOverlayAutoFitService.TryFit(read.BaseSnap, read.OverlaySnap, out SheetOverlayAutoFitResult fit);
-            if (!fitted && !read.IsPureRaster)
+            PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(targetPage.OverlayPageFolder);
+            if (overlayPage == null)
             {
-                SheetOverlayAutoFitReadResult rasterRetry = ReadSheetOverlayAutoFitRasterGeometry(targetPage, overlayPage);
-                SheetOverlayAutoFitResult rasterFit = default!;
-                if (rasterRetry.Ok &&
-                    SheetOverlayAutoFitService.TryFit(rasterRetry.BaseSnap, rasterRetry.OverlaySnap, out rasterFit))
-                {
-                    read = rasterRetry;
-                    fit = rasterFit;
-                    fitted = true;
-                }
-                else if (!rasterRetry.Ok)
-                {
-                    fit = fit with { Message = $"{fit.Message} Raster fallback: {rasterRetry.Error}" };
-                }
-                else
-                {
-                    fit = fit with { Message = $"{fit.Message} Raster fallback also failed: {rasterFit.Message}" };
-                }
-            }
-
-            if (!fitted)
-            {
-                TxtStatus.Text = fit.Message;
+                TxtStatus.Text = "Overlay auto fit: overlay sheet source is missing.";
                 return;
             }
 
-            PageInfo? latestTarget = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath);
-            if (latestTarget == null ||
-                string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) ||
-                !SameFolder(latestTarget.OverlayPageFolder, overlayPage.FolderPath))
+            TxtStatus.Text = "Overlay auto fit: reading matching plan geometry and raster features...";
+            SheetOverlayAutoFitRunResult run = await Task.Run(() =>
+                RunSheetOverlayAutoFit(targetPage, overlayPage));
+            if (!run.Ok)
             {
-                TxtStatus.Text = "Overlay auto fit skipped: overlay changed while fitting.";
+                TxtStatus.Text = run.Error;
                 return;
             }
 
-            OurPlaneCoreJobStore.SavePageOverlayTransform(
-                latestTarget.FolderPath,
-                fit.OffsetXPt,
-                fit.OffsetYPt,
-                fit.OverlayScale,
-                fit.OverlayRotationDegrees);
-            if (OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
-                SyncReciprocalSheetOverlay(updatedTarget);
-            string status = BuildSheetOverlayAutoFitStatus(read, fit);
-            AppLog.Info(
-                $"Sheet overlay auto fit applied; base='{latestTarget.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
-                $"source='{read.SourceSummary}'; matched={fit.MatchedSamples}/{fit.SampleCount}; " +
-                $"confidence={fit.Confidence:0.###}; scale={fit.OverlayScale:0.###}; rotation={fit.OverlayRotationDegrees:0.###}");
-            RefreshPageOverlayState(latestTarget.FolderPath, status);
+            ApplySheetOverlayAutoFitResult(targetPage, overlayPage, run.Read, run.Fit);
         }
         catch (Exception ex)
         {
             AppLog.Warn(ex, $"Sheet overlay auto fit failed for {targetPage.Name}");
             TxtStatus.Text = $"Overlay auto fit failed: {ex.Message}";
         }
+    }
+
+    private void ApplySheetOverlayAutoFitResult(
+        PageInfo targetPage,
+        PageInfo overlayPage,
+        SheetOverlayAutoFitReadResult read,
+        SheetOverlayAutoFitResult fit,
+        string statusPrefix = "")
+    {
+        PageInfo? latestTarget = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath);
+        if (latestTarget == null ||
+            string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) ||
+            !SameFolder(latestTarget.OverlayPageFolder, overlayPage.FolderPath))
+        {
+            TxtStatus.Text = "Overlay auto fit skipped: overlay changed while fitting.";
+            return;
+        }
+
+        OurPlaneCoreJobStore.SavePageOverlayTransform(
+            latestTarget.FolderPath,
+            fit.OffsetXPt,
+            fit.OffsetYPt,
+            fit.OverlayScale,
+            fit.OverlayRotationDegrees);
+        if (OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
+            SyncReciprocalSheetOverlay(updatedTarget);
+
+        string status = $"{statusPrefix}{BuildSheetOverlayAutoFitStatus(read, fit)}";
+        AppLog.Info(
+            $"Sheet overlay auto fit applied; base='{latestTarget.FolderPath}'; overlay='{overlayPage.FolderPath}'; " +
+            $"source='{read.SourceSummary}'; method='{fit.Method}'; matched={fit.MatchedSamples}/{fit.SampleCount}; " +
+            $"confidence={fit.Confidence:0.###}; scale={fit.OverlayScale:0.###}; rotation={fit.OverlayRotationDegrees:0.###}");
+        RefreshPageOverlayState(latestTarget.FolderPath, status);
+    }
+
+    private static SheetOverlayAutoFitRunResult RunSheetOverlayAutoFit(
+        PageInfo targetPage,
+        PageInfo overlayPage)
+    {
+        SheetOverlayAutoFitReadResult read = ReadSheetOverlayAutoFitGeometry(targetPage, overlayPage);
+        if (!read.Ok)
+            return SheetOverlayAutoFitRunResult.Failed(read.Error);
+
+        bool fitted = SheetOverlayAutoFitService.TryFit(read.BaseSnap, read.OverlaySnap, out SheetOverlayAutoFitResult fit);
+        if (!fitted && !read.IsPureRaster)
+        {
+            SheetOverlayAutoFitReadResult rasterRetry = ReadSheetOverlayAutoFitRasterGeometry(targetPage, overlayPage);
+            SheetOverlayAutoFitResult rasterFit = default!;
+            if (rasterRetry.Ok &&
+                SheetOverlayAutoFitService.TryFit(rasterRetry.BaseSnap, rasterRetry.OverlaySnap, out rasterFit))
+            {
+                read = rasterRetry;
+                fit = rasterFit;
+                fitted = true;
+            }
+            else if (!rasterRetry.Ok)
+            {
+                fit = fit with { Message = $"{fit.Message} Raster fallback: {rasterRetry.Error}" };
+            }
+            else
+            {
+                fit = fit with { Message = $"{fit.Message} Raster fallback also failed: {rasterFit.Message}" };
+            }
+        }
+
+        return fitted
+            ? SheetOverlayAutoFitRunResult.Success(read, fit)
+            : SheetOverlayAutoFitRunResult.Failed(fit.Message);
     }
 
     private static SheetOverlayAutoFitReadResult ReadSheetOverlayAutoFitGeometry(
@@ -301,6 +341,24 @@ public partial class MainWindow
         read.IsPureRaster
             ? $"Overlay auto fit (raster image, {fit.Method}): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg."
             : $"Overlay auto fit ({read.SourceSummary}, {fit.Method}): {fit.MatchedSamples}/{fit.SampleCount} samples matched, confidence {fit.Confidence * 100:0}%, scale {fit.OverlayScale:0.###}x, rotation {fit.OverlayRotationDegrees:0.###} deg.";
+
+    private sealed record SheetOverlayAutoFitRunResult(
+        bool Ok,
+        SheetOverlayAutoFitReadResult Read,
+        SheetOverlayAutoFitResult Fit,
+        string Error)
+    {
+        public static SheetOverlayAutoFitRunResult Success(
+            SheetOverlayAutoFitReadResult read,
+            SheetOverlayAutoFitResult fit) =>
+            new(true, read, fit, "");
+
+        public static SheetOverlayAutoFitRunResult Failed(string error) =>
+            new(false, SheetOverlayAutoFitReadResult.Failed(error), FailedFit(error), error);
+    }
+
+    private static SheetOverlayAutoFitResult FailedFit(string error) =>
+        new(false, 0, 0, 1, 0, 0, 0, 0, "", error);
 
     private sealed record SheetOverlayAutoFitReadResult(
         bool Ok,

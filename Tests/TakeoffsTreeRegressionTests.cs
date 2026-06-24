@@ -3068,6 +3068,31 @@ internal static class TakeoffsTreeRegressionTests
             "reciprocal sync should fill empty targets or update true reciprocal targets without overwriting unrelated overlay comparisons");
     }
 
+    public static void SheetOverlayAutoFitCanAutoSelectOverlay()
+    {
+        string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
+        string autoSelect = ReadRepoFile("MainWindow.SheetOverlay.AutoSelect.cs");
+        string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayAutoFitCandidateSearchService.cs"));
+
+        AssertTrue(
+            autoFit.Contains("FindSheetOverlayAutoFitCandidate(job, targetPage)", StringComparison.Ordinal) &&
+            autoFit.Contains("Overlay auto fit: searching job sheets for matching plan geometry", StringComparison.Ordinal) &&
+            autoFit.Contains("ApplySheetOverlayAutoSelectedFit(targetPage, search)", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should invoke auto-select when no overlay is already configured");
+        AssertTrue(
+            autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlay(", StringComparison.Ordinal) &&
+            autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true)", StringComparison.Ordinal) &&
+            autoSelect.Contains("Auto-selected overlay: {search.OverlayPage.Name}", StringComparison.Ordinal) &&
+            autoSelect.Contains("BuildSheetOverlayAutoFitSearchRank", StringComparison.Ordinal),
+            "sheet overlay Auto Fit should auto-select a matching sheet when no overlay is already configured");
+        AssertTrue(
+            service.Contains("SheetOverlayAutoFitCandidateSearchService", StringComparison.Ordinal) &&
+            service.Contains("MinimumAutoSelectConfidence", StringComparison.Ordinal) &&
+            service.Contains("MinimumAutoSelectMatchedSamples", StringComparison.Ordinal) &&
+            service.Contains("SearchRank", StringComparison.Ordinal),
+            "overlay auto-select should rank candidates by verified geometry quality with deterministic sheet-order tie breaking");
+    }
+
     public static void SheetOverlayAutoFitRasterFallbackIsWired()
     {
         string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");

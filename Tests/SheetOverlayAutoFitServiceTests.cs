@@ -73,6 +73,47 @@ internal static class SheetOverlayAutoFitServiceTests
         AssertFalse(ok, "overlay auto fit should not apply a transform from sparse geometry");
     }
 
+    public static void AutoSelectsBestCandidateByShapeFit()
+    {
+        PdfGeometrySnapResult target = BuildPlanSnap(scale: 1.18f, offsetX: 36, offsetY: 52, rotationDegrees: 4);
+        PdfGeometrySnapResult overlay = BuildPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PdfGeometrySnapResult sparse = BuildSparseSnap();
+        PageInfo weakPage = Page("A100 wrong", "weak");
+        PageInfo goodPage = Page("A101 match", "good");
+
+        bool ok = SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+            target,
+            [
+                new SheetOverlayAutoFitCandidateInput(weakPage, sparse, "test sparse", 1),
+                new SheetOverlayAutoFitCandidateInput(goodPage, overlay, "test plan", 2),
+            ],
+            out SheetOverlayAutoFitCandidateMatch match);
+
+        AssertTrue(ok, "overlay auto-select should find the candidate with matching plan geometry");
+        AssertEqual(goodPage.FolderPath, match.Page.FolderPath, "auto-selected overlay candidate");
+        AssertClose(1.18, match.Fit.OverlayScale, "auto-selected overlay scale", 0.02);
+        AssertClose(4, match.Fit.OverlayRotationDegrees, "auto-selected overlay rotation", 0.4);
+    }
+
+    public static void AutoSelectPrefersCloserSheetWhenScoresTie()
+    {
+        PdfGeometrySnapResult target = BuildPlanSnap(scale: 1.05f, offsetX: 16, offsetY: 24);
+        PdfGeometrySnapResult overlay = BuildPlanSnap(scale: 1.0f, offsetX: 0, offsetY: 0);
+        PageInfo farPage = Page("A300 far", "far");
+        PageInfo nearPage = Page("A102 near", "near");
+
+        bool ok = SheetOverlayAutoFitCandidateSearchService.TryFindBest(
+            target,
+            [
+                new SheetOverlayAutoFitCandidateInput(farPage, overlay, "test plan", 20),
+                new SheetOverlayAutoFitCandidateInput(nearPage, overlay, "test plan", 1),
+            ],
+            out SheetOverlayAutoFitCandidateMatch match);
+
+        AssertTrue(ok, "overlay auto-select should accept tied matching sheets");
+        AssertEqual(nearPage.FolderPath, match.Page.FolderPath, "auto-select tie should prefer closer sheet rank");
+    }
+
     private static PdfGeometrySnapResult BuildPlanSnap(
         float scale,
         float offsetX,
@@ -153,6 +194,24 @@ internal static class SheetOverlayAutoFitServiceTests
         new SKPoint(0, 55),
         new SKPoint(0, 88),
     ];
+
+    private static PdfGeometrySnapResult BuildSparseSnap() =>
+        new()
+        {
+            Segments =
+            [
+                Segment(0, 0, 100, 0),
+                Segment(0, 40, 100, 40),
+            ],
+        };
+
+    private static PageInfo Page(string name, string folder) =>
+        new()
+        {
+            Name = name,
+            FolderPath = folder,
+            PdfPath = "source.pdf",
+        };
 
     private static PdfGeometrySnapSegment Transform(
         PdfGeometrySnapSegment segment,
