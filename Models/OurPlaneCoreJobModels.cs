@@ -111,6 +111,9 @@ public sealed class RasterSheetSource
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; }
 
+    [JsonPropertyName("use_as_page_open_raster")]
+    public bool UseAsPageOpenRaster { get; set; }
+
     [JsonPropertyName("image")]
     public string Image { get; set; } = "";
 
@@ -170,6 +173,7 @@ public sealed class RasterSheetSource
         new()
         {
             Enabled = Enabled,
+            UseAsPageOpenRaster = UseAsPageOpenRaster,
             Image = Image,
             OverviewImage = OverviewImage,
             Format = Format,

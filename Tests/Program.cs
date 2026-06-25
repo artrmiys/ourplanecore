@@ -366,9 +366,9 @@ var tests = new List<(string Name, Action Run)>
     ("pdf preview render cache round trips", PdfPreviewRenderCacheRoundTrips),
     ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
-    ("viewport raster page open uses preview at fit and hot cache at work zoom", ViewportRasterPageOpenAppliesHotBitmapCache),
-    ("viewport overlay raster page open queues warmup without docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
-    ("viewport oversized raster page open queues responsive dpi with preview fallback", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallback),
+    ("viewport raster page open keeps preview path unless raster first", ViewportRasterPageOpenAppliesHotBitmapCache),
+    ("viewport raster first page open avoids docnet fallback", ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback),
+    ("viewport raster first oversized page open paints active bitmap first", ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallback),
     ("pdf full-scale render cache is wired before worker", TakeoffsTreeRegressionTests.PdfFullScaleRenderCacheIsWiredBeforeWorker),
     ("pdf layer render uses portable inline image protocol", TakeoffsTreeRegressionTests.PdfLayerRenderUsesPortableInlineImageProtocol),
     ("pdf sheet metadata handles rotated bottom title block", TakeoffsTreeRegressionTests.PdfSheetMetadataHandlesRotatedBottomTitleBlock),
@@ -4574,6 +4574,9 @@ static void ViewportRasterPageOpenAppliesHotBitmapCache()
 {
     WithTempRasterBackedPage("raster_hot_open", page =>
     {
+        AssertFalse(
+            page.RasterSheet?.UseAsPageOpenRaster == true,
+            "raster-backed viewport test page should default to the normal preview-first open path");
         AssertTrue(
             PdfViewport.WarmRasterSheetBitmapCache(page),
             "raster bitmap cache should warm before hot page open");
@@ -4585,7 +4588,25 @@ static void ViewportRasterPageOpenAppliesHotBitmapCache()
 
             AssertFalse(
                 GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
-                "fit raster-backed page open should use a cheap preview instead of painting a full raster bitmap");
+                "default fit raster-backed page open should keep the normal preview-first path");
+        });
+
+        PageInfo rasterFirstPage = EnableRasterFirst(page);
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(
+                rasterFirstPage.PdfPath,
+                rasterFirstPage.PdfPage,
+                rasterFirstPage.FolderPath,
+                rasterSheet: rasterFirstPage.RasterSheet);
+
+            AssertTrue(
+                GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                "Raster First fit page open should apply the pre-rendered raster bitmap immediately");
+            AssertTrue(
+                GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                "Raster First fit page open must not queue docnet PDF render when the pre-rendered raster exists");
         });
 
         RunOnStaThread(() =>
@@ -4600,16 +4621,16 @@ static void ViewportRasterPageOpenAppliesHotBitmapCache()
 
             AssertTrue(
                 GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
-                "work-zoom hot raster-backed page open should apply raster bitmap synchronously");
+                "default work-zoom hot raster-backed page open should still apply raster bitmap synchronously");
             AssertFalse(
                 GetPrivateField<bool>(viewport, "_showingPreviousPageDuringSwitch"),
-                "work-zoom hot raster-backed page open should not keep a previous sheet placeholder");
+                "default work-zoom hot raster-backed page open should not keep a previous sheet placeholder");
             AssertTrue(
                 GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
-                "work-zoom hot raster-backed page open must not queue docnet PDF render");
+                "default work-zoom hot raster-backed page open must not queue docnet PDF render");
             AssertTrue(
                 GetPrivateFieldValue(viewport, "_pageBitmap") is SKBitmap { Width: > 0, Height: > 0 },
-                "work-zoom hot raster-backed page open should load a visible bitmap");
+                "default work-zoom hot raster-backed page open should load a visible bitmap");
         });
     });
 }
@@ -4625,8 +4646,26 @@ static void ViewportRasterPageOpenQueuesWarmupWithoutDocnetFallback()
 
             bool usingRaster = GetPrivateField<bool>(viewport, "_usingRasterSheetRender");
             AssertFalse(
-                usingRaster || HasRasterBitmapWarmupInFlight(viewport),
-                "ordinary cold raster-backed fit-open should stay on cheap preview/docnet fallback instead of full-raster low-zoom warmup");
+                usingRaster,
+                "ordinary cold raster-backed fit-open should keep the normal preview-first path unless Raster First is enabled");
+        });
+
+        PageInfo rasterFirstPage = EnableRasterFirst(page);
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(
+                rasterFirstPage.PdfPath,
+                rasterFirstPage.PdfPage,
+                rasterFirstPage.FolderPath,
+                rasterSheet: rasterFirstPage.RasterSheet);
+
+            AssertTrue(
+                GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                "Raster First cold fit-open should synchronously apply the pre-rendered raster image");
+            AssertTrue(
+                GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                "Raster First cold fit-open must not fall back to docnet while a raster image exists");
         });
 
         RunOnStaThread(() =>
@@ -4670,10 +4709,31 @@ static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallbac
 
             AssertFalse(
                 HasRasterDpiBuildInFlight(viewport, 72),
-                "oversized 200dpi raster fit-open should defer missing 72dpi raster instead of building during page browsing");
+                "default oversized 200dpi raster fit-open should not build a lower-DPI raster before the first frame");
             AssertFalse(
                 GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
-                "oversized 200dpi raster fit-open should not paint the oversized bitmap while lower dpi is missing");
+                "default oversized 200dpi raster fit-open should keep the normal preview-first path");
+        });
+
+        PageInfo rasterFirstPage = EnableRasterFirst(page);
+        RunOnStaThread(() =>
+        {
+            var viewport = new PdfViewport();
+            viewport.LoadPage(
+                rasterFirstPage.PdfPath,
+                rasterFirstPage.PdfPage,
+                rasterFirstPage.FolderPath,
+                rasterSheet: rasterFirstPage.RasterSheet);
+
+            AssertFalse(
+                HasRasterDpiBuildInFlight(viewport, 72),
+                "Raster First oversized 200dpi raster fit-open should not build a lower-DPI raster before the first frame");
+            AssertTrue(
+                GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
+                "Raster First oversized 200dpi raster fit-open should paint the active pre-rendered bitmap immediately");
+            AssertTrue(
+                GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                "Raster First oversized 200dpi raster fit-open must not queue docnet PDF render when the raster exists");
         });
 
         foreach ((float zoom, int expectedDpi) in new[] { (0.67f, 72), (1.50f, 144) })
@@ -4682,18 +4742,21 @@ static void ViewportOversizedRasterPageOpenQueuesResponsiveDpiWithPreviewFallbac
             {
                 var viewport = new PdfViewport();
                 viewport.LoadPage(
-                    page.PdfPath,
-                    page.PdfPage,
-                    page.FolderPath,
+                    rasterFirstPage.PdfPath,
+                    rasterFirstPage.PdfPage,
+                    rasterFirstPage.FolderPath,
                     restoreView: new PdfViewport.ViewState(zoom, 0, 0),
-                    rasterSheet: page.RasterSheet);
+                    rasterSheet: rasterFirstPage.RasterSheet);
 
-                AssertTrue(
-                    HasRasterDpiBuildInFlight(viewport, expectedDpi) || HasReadyRasterDpi(page, expectedDpi),
-                    $"oversized 200dpi raster page open at {zoom:P0} should queue or prepare {expectedDpi}dpi raster");
                 AssertFalse(
+                    HasRasterDpiBuildInFlight(viewport, expectedDpi),
+                    $"Raster First oversized 200dpi raster page open at {zoom:P0} should not block first frame on {expectedDpi}dpi build");
+                AssertTrue(
                     GetPrivateField<bool>(viewport, "_usingRasterSheetRender"),
-                    $"oversized 200dpi raster page open at {zoom:P0} should not paint the oversized bitmap while lower dpi is missing");
+                    $"Raster First oversized 200dpi raster page open at {zoom:P0} should paint the active pre-rendered bitmap immediately");
+                AssertTrue(
+                    GetPrivateFieldValue(viewport, "_pendingDocnetRender") == null,
+                    $"Raster First oversized 200dpi raster page open at {zoom:P0} must not queue docnet PDF render when the raster exists");
             });
         }
     }, RasterSheetCacheService.DefaultRenderScale);
@@ -4809,13 +4872,6 @@ static bool HasRasterDpiBuildInFlight(PdfViewport viewport, int dpi)
         string marker = $"|dpi:{dpi}";
         return inFlight.Any(key => key.Contains(marker, StringComparison.OrdinalIgnoreCase));
     }
-}
-
-static bool HasReadyRasterDpi(PageInfo page, int dpi)
-{
-    PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
-    float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(dpi);
-    return RasterSheetCacheService.HasReadyReadableRaster(refreshed, renderScale);
 }
 
 static void RunOnStaThread(Action action)
@@ -5308,6 +5364,21 @@ static void WithTempRasterBackedPage(
     {
         TryDeleteDirectory(tempRoot);
     }
+}
+
+static PageInfo EnableRasterFirst(PageInfo page)
+{
+    AssertTrue(
+        RasterSheetCacheService.TrySetUseAsPageOpenRaster(page, true, out string error, out bool changed),
+        error);
+    AssertTrue(changed, "Raster First should change the persisted raster sheet metadata");
+
+    PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+        ?? throw new InvalidOperationException("Raster-backed viewport test page was not readable after Raster First toggle.");
+    AssertTrue(
+        RasterSheetCacheService.UseAsPageOpenRaster(refreshed.RasterSheet),
+        "Raster First should be persisted on the page raster metadata");
+    return refreshed;
 }
 
 static string FindRepoRoot()

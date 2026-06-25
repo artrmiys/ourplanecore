@@ -10,7 +10,8 @@ public sealed partial class PdfViewport
         ViewState? restoreView,
         bool fitAfter)
     {
-        if (rasterSheet?.Enabled != true ||
+        if (RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet) ||
+            rasterSheet?.Enabled != true ||
             RasterSheetCacheService.IsSourceImageRaster(rasterSheet) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer)

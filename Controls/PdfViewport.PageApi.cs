@@ -155,6 +155,7 @@ public sealed partial class PdfViewport
         bool rasterBitmapWarmupQueuedForOpen = false;
         bool rasterWorkZoomWarmupQueuedForOpen = false;
         bool responsiveRasterDpiWorkQueuedForOpen = false;
+        bool rasterFirstForOpen = RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet);
         bool shouldUseRasterSheetForOpen = ShouldUseRasterSheetForPageOpen(rasterSheet, restoreView, fitAfter: !restoreView.HasValue);
         bool responsiveRasterDpiForOpen = ShouldUseResponsiveRasterSheetDpiForPageOpen(
             rasterSheet,
@@ -202,7 +203,7 @@ public sealed partial class PdfViewport
                 restoreView,
                 fitAfter: !restoreView.HasValue,
                 preferRasterOverviewForOpen,
-                requireCachedBitmap: true,
+                requireCachedBitmap: !rasterFirstForOpen,
                 out rasterSkipReason))
         {
             PostStatus($"Raster sheet: {Path.GetFileName(pdfPath)}  page {pageIndex + 1}");

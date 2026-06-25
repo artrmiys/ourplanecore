@@ -565,6 +565,28 @@ public partial class MainWindow
             "Sheet Manager Raster");
     }
 
+    private async void BtnSheetManagerRasterFirstOn_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Raster First On"))
+            return;
+
+        await RunAsyncUiHandler(
+            () => SetSheetManagerRasterFirstAsync(SelectedSheetManagerPagesForRaster(), enabled: true),
+            "Raster First On failed.",
+            "Sheet Manager Raster");
+    }
+
+    private async void BtnSheetManagerRasterFirstOff_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryBlockSheetManagerRasterCommandDuringPrepare("Raster First Off"))
+            return;
+
+        await RunAsyncUiHandler(
+            () => SetSheetManagerRasterFirstAsync(SelectedSheetManagerPagesForRaster(), enabled: false),
+            "Raster First Off failed.",
+            "Sheet Manager Raster");
+    }
+
     private async void BtnSheetManagerCompactRaster_Click(object sender, RoutedEventArgs e)
     {
         if (TryBlockSheetManagerRasterCommandDuringPrepare("Clean Raster"))
@@ -817,6 +839,10 @@ public partial class MainWindow
             SheetManagerRasterOnButton.IsEnabled = !running;
         if (SheetManagerRasterOffButton != null)
             SheetManagerRasterOffButton.IsEnabled = !running;
+        if (SheetManagerRasterFirstOnButton != null)
+            SheetManagerRasterFirstOnButton.IsEnabled = !running;
+        if (SheetManagerRasterFirstOffButton != null)
+            SheetManagerRasterFirstOffButton.IsEnabled = !running;
         if (SheetManagerCleanRasterButton != null)
             SheetManagerCleanRasterButton.IsEnabled = !running;
         if (SheetManagerRasterDpiBox != null)
@@ -1464,6 +1490,50 @@ public partial class MainWindow
     {
         if (result.Ok && result.Source != null)
             PdfViewport.WarmRasterSheetBitmapCache(page, result.Source);
+    }
+
+    private async Task SetSheetManagerRasterFirstAsync(IReadOnlyList<PageInfo> pages, bool enabled)
+    {
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = enabled
+                ? "Sheet Manager Raster First On: no sheets selected."
+                : "Sheet Manager Raster First Off: no sheets selected.";
+            return;
+        }
+
+        string mode = enabled ? "On" : "Off";
+        TxtStatus.Text = $"Sheet Manager Raster First {mode}: updating {pages.Count} sheet(s)...";
+        (int changed, int already, int failed) = await Task.Run(() =>
+        {
+            int changedCount = 0;
+            int alreadyCount = 0;
+            int failedCount = 0;
+            foreach (PageInfo page in pages)
+            {
+                if (RasterSheetCacheService.TrySetUseAsPageOpenRaster(page, enabled, out string error, out bool toggled))
+                {
+                    if (toggled)
+                        changedCount++;
+                    else
+                        alreadyCount++;
+                }
+                else
+                {
+                    failedCount++;
+                    AppLog.Warn($"Raster First toggle failed for '{page.Name}': {error}");
+                }
+            }
+
+            return (changedCount, alreadyCount, failedCount);
+        });
+
+        InvalidatePagePreviewPrefetchCache();
+        if (!RefreshSheetManagerRasterRows(pages))
+            RefreshSheetManager();
+        RefreshPageTreePageSnapshots(pages);
+        ReloadCurrentPageIfRasterChanged(pages);
+        TxtStatus.Text = $"Sheet Manager Raster First {mode}: changed {changed}, already {already}, failed {failed}.";
     }
 
     private async Task SetSheetManagerRasterOffFastAsync(

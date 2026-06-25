@@ -114,10 +114,12 @@ public static class RasterSheetCacheService
         File.WriteAllBytes(tempPath, workingImageBytes);
         File.Move(tempPath, imagePath, overwrite: true);
 
+        bool useAsPageOpenRaster = UseAsPageOpenRaster(CurrentRasterSheetSource(page));
         var pdfInfo = new FileInfo(page.PdfPath);
         var source = new RasterSheetSource
         {
             Enabled = true,
+            UseAsPageOpenRaster = useAsPageOpenRaster,
             Image = Path.GetRelativePath(page.FolderPath, imagePath),
             Format = workingImageFormat,
             RenderProfile = ReadableRasterProfile,
@@ -391,6 +393,7 @@ public static class RasterSheetCacheService
         File.WriteAllBytes(tempPath, workingImageBytes);
         File.Move(tempPath, imagePath, overwrite: true);
 
+        bool useAsPageOpenRaster = UseAsPageOpenRaster(CurrentRasterSheetSource(page));
         bool hasOverview = TryWriteSourceImageOverview(
             decoded,
             rasterDir,
@@ -406,6 +409,7 @@ public static class RasterSheetCacheService
         var source = new RasterSheetSource
         {
             Enabled = true,
+            UseAsPageOpenRaster = useAsPageOpenRaster,
             Image = Path.GetRelativePath(page.FolderPath, imagePath),
             OverviewImage = overviewImage,
             Format = workingImageFormat,
@@ -499,11 +503,53 @@ public static class RasterSheetCacheService
             return false;
         }
 
-        changed = source.Enabled != enabled;
+        bool useAsPageOpenRaster = enabled && source.UseAsPageOpenRaster;
+        changed = source.Enabled != enabled ||
+                  source.UseAsPageOpenRaster != useAsPageOpenRaster;
         if (!changed)
             return true;
 
         source.Enabled = enabled;
+        source.UseAsPageOpenRaster = useAsPageOpenRaster;
+        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        return true;
+    }
+
+    public static bool UseAsPageOpenRaster(RasterSheetSource? source) =>
+        source?.Enabled == true && source.UseAsPageOpenRaster;
+
+    public static bool TrySetUseAsPageOpenRaster(
+        PageInfo page,
+        bool useAsPageOpenRaster,
+        out string error,
+        out bool changed)
+    {
+        error = "";
+        changed = false;
+        RasterSheetSource? source = page.RasterSheet?.Clone();
+        if (source == null)
+        {
+            if (!useAsPageOpenRaster)
+                return true;
+
+            error = "No raster cache exists for this sheet.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(source.Image) && useAsPageOpenRaster)
+        {
+            error = "No raster cache exists for this sheet.";
+            return false;
+        }
+
+        bool nextEnabled = useAsPageOpenRaster || source.Enabled;
+        changed = source.UseAsPageOpenRaster != useAsPageOpenRaster ||
+                  source.Enabled != nextEnabled;
+        if (!changed)
+            return true;
+
+        source.UseAsPageOpenRaster = useAsPageOpenRaster;
+        source.Enabled = nextEnabled;
         OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         return true;
     }
@@ -668,8 +714,9 @@ public static class RasterSheetCacheService
             : string.Equals(source.RenderProfile, SourceImageRasterProfile, StringComparison.OrdinalIgnoreCase)
             ? "+image"
             : "";
+        string first = source.UseAsPageOpenRaster ? "+first" : "";
         string snap = source.SnapPointCount + source.SnapSegmentCount > 0 ? "+snap" : "";
-        return AppendCachedDpiSummary($"Raster {scale}{format}{profile}{snap}", cachedDpis);
+        return AppendCachedDpiSummary($"Raster {scale}{format}{profile}{first}{snap}", cachedDpis);
     }
 
     public static string CachedReadableDpiSummary(

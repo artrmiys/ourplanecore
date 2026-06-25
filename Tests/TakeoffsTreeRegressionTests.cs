@@ -1671,7 +1671,7 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("PrefetchRasterSheetBitmap(PageInfo page)", StringComparison.Ordinal) &&
             renderCache.Contains("private static bool ShouldPrefetchRasterSheetBitmap(RasterSheetSource? source, bool preferOverview)", StringComparison.Ordinal) &&
             renderCache.Contains("if (!RasterSheetCacheService.IsSourceImageRaster(source))", StringComparison.Ordinal) &&
-            renderCache.Contains("return false;", StringComparison.Ordinal) &&
+            renderCache.Contains("return RasterSheetCacheService.UseAsPageOpenRaster(source);", StringComparison.Ordinal) &&
             renderCache.Contains("RasterSheetCacheService.ShouldUseSourceImageRasterForFastOpen(source)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("public static bool WarmRasterSheetBitmapCache(PageInfo page, RasterSheetSource? rasterSheet = null)", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("QueueRasterSheetBitmapApplyAfterWarmup", StringComparison.Ordinal) &&
@@ -1695,22 +1695,25 @@ internal static class TakeoffsTreeRegressionTests
             renderCache.Contains("TryBuildRasterSheetBitmapCacheKey", StringComparison.Ordinal) &&
             layers.Contains("TryGetRasterSheetBitmapCache", StringComparison.Ordinal) &&
             layers.Contains("TryPutRasterSheetBitmapCache", StringComparison.Ordinal),
-            "raster sheet opens should apply decoded bitmaps from RAM, warm cold bitmaps off the UI thread, and prefetch nearby readable rasters for work zoom");
+            "raster sheet opens should apply decoded bitmaps from RAM, warm cold bitmaps off the UI thread, and prefetch nearby readable rasters as ready page bitmaps only when Raster First is enabled");
         AssertTrue(
             pageTabs.Contains("viewportPage.OverlayVisible && !string.IsNullOrWhiteSpace(viewportPage.OverlayPageFolder)", StringComparison.Ordinal) &&
             pageApi.Contains("bool hasSheetOverlayConfigured = false", StringComparison.Ordinal) &&
+            pageApi.Contains("bool rasterFirstForOpen = RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet)", StringComparison.Ordinal) &&
+            pageApi.Contains("requireCachedBitmap: !rasterFirstForOpen", StringComparison.Ordinal) &&
             pageApi.Contains("allowLowZoomFullRasterApply: hasSheetOverlayConfigured", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("bool allowLowZoomFullRasterApply", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldWarmRasterSheetSourceBitmapForPageOpen(source, allowLowZoomFullRasterApply)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("return allowLowZoomFullRasterApply &&", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("bool allowLowZoomFullRaster = false", StringComparison.Ordinal) &&
             rasterSheetBitmapCache.Contains("RasterSheetPageOpenImmediateWarmMaxDpi", StringComparison.Ordinal),
-            "low-zoom page-open full-raster apply should be reserved for visible sheet-overlay pages so ordinary fit-view raster sheets stay on cheap previews");
+            "readable raster sheets should open from the pre-rendered bitmap only when Raster First is enabled while legacy overlay warmup rules stay available for non-raster low-zoom pages");
         AssertTrue(
             policy.Contains("RasterSheetDisplayMinZoom = ZoomRefreshMinZoom", StringComparison.Ordinal) &&
             policy.Contains("RasterSheetDisplayExitZoom = 0.45f", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("ShouldUseRasterSheetForPageOpen", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("return rasterSheet?.Enabled == true &&", StringComparison.Ordinal) &&
+            rasterSheetViewport.Contains("RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("!IsLowZoomRasterSheetPageOpen(restoreView, fitAfter)", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TryApplyReadyRasterSheetForCurrentZoom", StringComparison.Ordinal) &&
             rasterSheetViewport.Contains("TrySwitchRasterSheetToFastPreviewForNavigation", StringComparison.Ordinal) &&
@@ -1719,7 +1722,7 @@ internal static class TakeoffsTreeRegressionTests
             !rasterSheetViewport.Contains("!RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)", StringComparison.Ordinal) &&
             viewTransform.Contains("TrySwitchRasterSheetToFastPreviewForLowZoom()", StringComparison.Ordinal) &&
             viewTransform.Contains("TryApplyReadyRasterSheetForCurrentZoom()", StringComparison.Ordinal),
-            "ordinary readable raster sheets should be used at 60-200% work zoom but fit/far zoom should stay on cheap previews, while source-image rasters keep their overview path");
+            "ordinary readable raster sheets should keep the preview-first open path unless Raster First is enabled, while later navigation can still swap to lower ready DPI tiers and source-image rasters keep their overview path");
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
@@ -1737,6 +1740,10 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Content=\"Clean Raster\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerRasterOnButton\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerRasterOffButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterFirstOnButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRasterFirstOn_Click", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"SheetManagerRasterFirstOffButton\"", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRasterFirstOff_Click", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerCleanRasterButton\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerCompactRaster_Click", StringComparison.Ordinal) &&
             xaml.Contains("Header=\"Raster Action\"", StringComparison.Ordinal) &&
@@ -1776,6 +1783,8 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerBuildRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterOnButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterOffButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterFirstOnButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterFirstOffButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerCleanRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterFormatBox.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots([page])", StringComparison.Ordinal) &&
@@ -1827,6 +1836,9 @@ internal static class TakeoffsTreeRegressionTests
             rasterOffMethod.Contains("TrySetEnabled(page, enabled: false", StringComparison.Ordinal) &&
             rasterOffMethod.Contains("RefreshSheetManagerRasterRows(pages)", StringComparison.Ordinal) &&
             !rasterOffMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private async Task SetSheetManagerRasterFirstAsync(IReadOnlyList<PageInfo> pages, bool enabled)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("TrySetUseAsPageOpenRaster(page, enabled", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("Sheet Manager Raster First {mode}: changed {changed}, already {already}, failed {failed}.", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SetSheetManagerRasterRowEnabledAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster Row", StringComparison.Ordinal) &&
@@ -1903,6 +1915,10 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("| ready", StringComparison.Ordinal) &&
             raster.Contains("out bool changed", StringComparison.Ordinal) &&
             raster.Contains("if (!enabled)", StringComparison.Ordinal) &&
+            raster.Contains("public static bool UseAsPageOpenRaster(RasterSheetSource? source)", StringComparison.Ordinal) &&
+            raster.Contains("public static bool TrySetUseAsPageOpenRaster(", StringComparison.Ordinal) &&
+            raster.Contains("source.UseAsPageOpenRaster = useAsPageOpenRaster", StringComparison.Ordinal) &&
+            raster.Contains("string first = source.UseAsPageOpenRaster ? \"+first\" : \"\"", StringComparison.Ordinal) &&
             raster.Contains("Reused: true", StringComparison.Ordinal) &&
             !prepareRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal),
             "Sheet Manager raster builds should keep 200 DPI as the default, write compact lossless WebP raster images by default, allow selected sheets to rebuild at 150/200/300/400 DPI as PNG when requested, reuse ready per-DPI variants, and prepare caches in the background without a modal busy overlay");
@@ -1971,6 +1987,7 @@ internal static class TakeoffsTreeRegressionTests
             rasterSheetDpiUpgrade.Contains("ViewportRenderPolicy.SelectRasterSheetDisplayDpi(zoom)", StringComparison.Ordinal) &&
             policy.Contains("ShouldPreferLowerRasterSheetDpi", StringComparison.Ordinal) &&
             rasterSheetPageOpenDpi.Contains("ShouldUseResponsiveRasterSheetDpiForPageOpen", StringComparison.Ordinal) &&
+            rasterSheetPageOpenDpi.Contains("RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet)", StringComparison.Ordinal) &&
             rasterSheetPageOpenDpi.Contains("ShouldSkipOversizedRasterSheetForPageOpen", StringComparison.Ordinal) &&
             rasterSheetPageOpenDpi.Contains("ViewportRenderPolicy.ShouldPreferLowerRasterSheetDpi(currentDpi, targetDpi)", StringComparison.Ordinal) &&
             rasterSheetDpiUpgrade.Contains("targetDpi != TargetRasterSheetDpiForCurrentZoom()", StringComparison.Ordinal) &&

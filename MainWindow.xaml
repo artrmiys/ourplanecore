@@ -1673,6 +1673,8 @@
                         <Button x:Name="SheetManagerCancelRasterButton" Content="Cancel" Click="BtnSheetManagerCancelRaster_Click" IsEnabled="False" ToolTip="Cancel the background raster preparation after the current sheet finishes"/>
                         <Button x:Name="SheetManagerRasterOnButton" Content="Raster On" Click="BtnSheetManagerRasterOn_Click" ToolTip="Use existing raster working sheets for selected sheets; builds missing caches at the selected DPI"/>
                         <Button x:Name="SheetManagerRasterOffButton" Content="Raster Off" Click="BtnSheetManagerRasterOff_Click" ToolTip="Return selected sheets to live PDF rendering without deleting the raster cache"/>
+                        <Button x:Name="SheetManagerRasterFirstOnButton" Content="First On" Click="BtnSheetManagerRasterFirstOn_Click" ToolTip="Open selected raster sheets from the pre-rendered raster image as the first frame"/>
+                        <Button x:Name="SheetManagerRasterFirstOffButton" Content="First Off" Click="BtnSheetManagerRasterFirstOff_Click" ToolTip="Keep selected raster sheets on the normal PDF/preview-first opening path"/>
                         <Button x:Name="SheetManagerCleanRasterButton" Content="Clean Raster" Click="BtnSheetManagerCompactRaster_Click" Margin="0,0,12,4" ToolTip="Delete unused raster image variants for selected sheets, or all sheets if none are selected; keeps the active raster image"/>
                         <TextBlock Text="Metadata" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Refresh" Click="BtnSheetManagerRefresh_Click" ToolTip="Reload the sheet table from current page folders"/>

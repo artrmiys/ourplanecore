@@ -225,12 +225,31 @@ internal static class RasterSheetCacheTests
                 string.Equals(pngPage.RasterSheet.Format, RasterSheetCacheService.PngRasterFormat, StringComparison.OrdinalIgnoreCase) &&
                 pngPage.RasterSheet.Image.EndsWith(".png", StringComparison.OrdinalIgnoreCase),
                 "explicit PNG raster build should write a PNG working image and persist PNG format metadata");
+            AssertFalse(
+                pngPage.RasterSheet!.UseAsPageOpenRaster,
+                "Raster First should be opt-in instead of changing every readable raster sheet");
             AssertTrue(
                 RasterSheetCacheService.HasReadyReadableRaster(pngPage, 1.5f, RasterSheetCacheService.PngRasterFormat),
                 "Raster On fast path should detect an explicit PNG ready cache when PNG is requested");
             AssertFalse(
                 RasterSheetCacheService.HasReadyReadableRaster(pngPage, 1.5f, RasterSheetCacheService.WebpRasterFormat),
                 "Raster On fast path should not satisfy an explicit WebP request with a PNG cache");
+            AssertTrue(
+                RasterSheetCacheService.TrySetUseAsPageOpenRaster(pngPage, true, out string firstError, out bool firstChanged),
+                firstError);
+            AssertTrue(firstChanged, "Raster First should update persisted raster metadata when enabled");
+            PageInfo firstPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after Raster First enable.");
+            AssertTrue(
+                RasterSheetCacheService.UseAsPageOpenRaster(firstPage.RasterSheet),
+                "Raster First helper should report enabled first-frame raster metadata");
+            AssertTrue(
+                RasterSheetCacheService.DisplayStatus(firstPage).Contains("+first", StringComparison.Ordinal),
+                "Sheet Manager raster status should show when Raster First is enabled");
+            AssertTrue(
+                RasterSheetCacheService.TrySetUseAsPageOpenRaster(firstPage, false, out string firstOffError, out bool firstOffChanged),
+                firstOffError);
+            AssertTrue(firstOffChanged, "Raster First should update persisted raster metadata when disabled");
 
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;

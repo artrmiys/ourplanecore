@@ -241,7 +241,8 @@ public sealed partial class PdfViewport
         }
 
         return rasterSheet?.Enabled == true &&
-               !IsLowZoomRasterSheetPageOpen(restoreView, fitAfter);
+               (RasterSheetCacheService.UseAsPageOpenRaster(rasterSheet) ||
+                !IsLowZoomRasterSheetPageOpen(restoreView, fitAfter));
     }
 
     private static bool ShouldUseRasterSheetOverviewForPageOpen(
