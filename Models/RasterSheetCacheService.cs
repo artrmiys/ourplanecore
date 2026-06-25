@@ -54,7 +54,10 @@ public static class RasterSheetCacheService
     private const float LosslessWebpCompressionEffort = 65f;
     private const double SourceImageOverviewScaleTolerance = 0.92;
 
-    public static RasterSheetBuildResult BuildAndEnable(PageInfo page, float renderScale = DefaultRenderScale)
+    public static RasterSheetBuildResult BuildAndEnable(
+        PageInfo page,
+        float renderScale = DefaultRenderScale,
+        string preferredFormat = "")
     {
         if (!TryValidateCurrentPageFolder(page, out string pageError))
             return Failed(pageError);
@@ -64,7 +67,8 @@ public static class RasterSheetCacheService
             return Failed("PDF page index is invalid.");
 
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
-        if (TryEnableReadyReadableRaster(page, scale, out RasterSheetBuildResult reused))
+        string formatPreference = NormalizeReadableRasterFormat(preferredFormat);
+        if (TryEnableReadyReadableRaster(page, scale, out RasterSheetBuildResult reused, formatPreference))
             return reused;
 
         if (!PdfLayerRenderService.TryRender(
@@ -87,20 +91,17 @@ public static class RasterSheetCacheService
         if (decoded == null)
             return Failed("Rendered image could not be decoded.");
 
-        byte[] workingImageBytes;
-        string workingImageName;
-        string workingImageFormat;
-        if (TryEncodeLosslessWebp(decoded, out byte[] webpBytes))
+        if (!TryEncodeReadableRasterImage(
+                decoded,
+                render.ImageBytes,
+                scale,
+                formatPreference,
+                out byte[] workingImageBytes,
+                out string workingImageName,
+                out string workingImageFormat,
+                out string encodeError))
         {
-            workingImageBytes = webpBytes;
-            workingImageName = WorkingImageNameForRenderScale(scale);
-            workingImageFormat = WebpRasterFormat;
-        }
-        else
-        {
-            workingImageBytes = render.ImageBytes;
-            workingImageName = LegacyWorkingImageNameForRenderScale(scale);
-            workingImageFormat = PngRasterFormat;
+            return Failed(encodeError);
         }
 
         if (!TryValidateCurrentPageFolder(page, out pageError))
@@ -139,7 +140,10 @@ public static class RasterSheetCacheService
             new(false, null, "", error);
     }
 
-    public static RasterSheetBuildResult BuildCachePreservingEnabled(PageInfo page, float renderScale = DefaultRenderScale)
+    public static RasterSheetBuildResult BuildCachePreservingEnabled(
+        PageInfo page,
+        float renderScale = DefaultRenderScale,
+        string preferredFormat = "")
     {
         RasterSheetSource? original = CurrentRasterSheetSource(page)?.Clone();
         bool originalEnabled = original?.Enabled == true;
@@ -147,7 +151,7 @@ public static class RasterSheetCacheService
             original != null &&
             (CanTrustReadableRasterMetadata(page, original) || IsSourceImageRaster(original));
 
-        RasterSheetBuildResult result = BuildAndEnable(page, renderScale);
+        RasterSheetBuildResult result = BuildAndEnable(page, renderScale, preferredFormat);
         if (!result.Ok)
             return result;
 
@@ -166,20 +170,24 @@ public static class RasterSheetCacheService
         return result with { Source = prepared };
     }
 
-    public static bool HasReadyReadableRaster(PageInfo page, float renderScale = DefaultRenderScale)
+    public static bool HasReadyReadableRaster(
+        PageInfo page,
+        float renderScale = DefaultRenderScale,
+        string preferredFormat = "")
     {
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
-        return TryFindReusableReadableRaster(page, scale, out _, out _);
+        return TryFindReusableReadableRaster(page, scale, out _, out _, preferredFormat);
     }
 
     public static bool TryGetReadyReadableRasterSource(
         PageInfo page,
         float renderScale,
-        out RasterSheetSource? source)
+        out RasterSheetSource? source,
+        string preferredFormat = "")
     {
         source = null;
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
-        if (!TryFindReusableReadableRaster(page, scale, out source, out _) || source == null)
+        if (!TryFindReusableReadableRaster(page, scale, out source, out _, preferredFormat) || source == null)
             return false;
 
         source.Enabled = true;
@@ -189,7 +197,8 @@ public static class RasterSheetCacheService
     public static bool TryEnableReadyReadableRaster(
         PageInfo page,
         float renderScale,
-        out RasterSheetBuildResult result)
+        out RasterSheetBuildResult result,
+        string preferredFormat = "")
     {
         result = new RasterSheetBuildResult(false, null, "", "");
         if (!TryValidateCurrentPageFolder(page, out string pageError))
@@ -199,7 +208,7 @@ public static class RasterSheetCacheService
         }
 
         float scale = Math.Clamp(renderScale, 0.35f, MaxRasterDpi / 72f);
-        if (!TryFindReusableReadableRaster(page, scale, out RasterSheetSource? source, out string imagePath) ||
+        if (!TryFindReusableReadableRaster(page, scale, out RasterSheetSource? source, out string imagePath, preferredFormat) ||
             source == null)
         {
             return false;
@@ -224,18 +233,19 @@ public static class RasterSheetCacheService
         PageInfo page,
         float renderScale,
         out RasterSheetSource? source,
-        out string imagePath)
+        out string imagePath,
+        string preferredFormat = "")
     {
         imagePath = "";
         source = CurrentRasterSheetSource(page);
 
         if (source != null &&
-            IsReusableReadableRaster(page, source, renderScale, out imagePath))
+            IsReusableReadableRaster(page, source, renderScale, out imagePath, preferredFormat))
         {
             return true;
         }
 
-        return TryBuildReusableReadableVariant(page, source, renderScale, out source, out imagePath);
+        return TryBuildReusableReadableVariant(page, source, renderScale, out source, out imagePath, preferredFormat);
     }
 
     private static RasterSheetSource? CurrentRasterSheetSource(PageInfo page)
@@ -290,14 +300,15 @@ public static class RasterSheetCacheService
         RasterSheetSource? source,
         float renderScale,
         out RasterSheetSource? reusable,
-        out string imagePath)
+        out string imagePath,
+        string preferredFormat = "")
     {
         reusable = null;
         imagePath = "";
         if (!CanTrustReadableRasterMetadata(page, source))
             return false;
 
-        foreach (string candidateName in WorkingImageCandidatesForRenderScale(renderScale))
+        foreach (string candidateName in WorkingImageCandidatesForRenderScale(renderScale, preferredFormat))
         {
             string candidatePath = Path.Combine(page.FolderPath, CacheFolderName, candidateName);
             if (!File.Exists(candidatePath))
@@ -649,13 +660,16 @@ public static class RasterSheetCacheService
         string scale = source.RenderScale > 0
             ? $"{RenderScaleToDpi(source.RenderScale).ToString(CultureInfo.InvariantCulture)}dpi"
             : "?";
+        string format = string.IsNullOrWhiteSpace(source.Format)
+            ? ""
+            : $" {source.Format.Trim().ToLowerInvariant()}";
         string profile = string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase)
             ? "+readable"
             : string.Equals(source.RenderProfile, SourceImageRasterProfile, StringComparison.OrdinalIgnoreCase)
             ? "+image"
             : "";
         string snap = source.SnapPointCount + source.SnapSegmentCount > 0 ? "+snap" : "";
-        return AppendCachedDpiSummary($"Raster {scale}{profile}{snap}", cachedDpis);
+        return AppendCachedDpiSummary($"Raster {scale}{format}{profile}{snap}", cachedDpis);
     }
 
     public static string CachedReadableDpiSummary(
@@ -796,7 +810,16 @@ public static class RasterSheetCacheService
     }
 
     public static string WorkingImageNameForRenderScale(double renderScale) =>
-        $"working-{Math.Clamp(RenderScaleToDpi(renderScale), 1, MaxRasterDpi).ToString(CultureInfo.InvariantCulture)}dpi.webp";
+        WorkingImageNameForRenderScale(renderScale, WebpRasterFormat);
+
+    public static string WorkingImageNameForRenderScale(double renderScale, string preferredFormat)
+    {
+        string format = NormalizeReadableRasterFormat(preferredFormat);
+        string extension = string.Equals(format, PngRasterFormat, StringComparison.OrdinalIgnoreCase)
+            ? PngRasterFormat
+            : WebpRasterFormat;
+        return $"working-{Math.Clamp(RenderScaleToDpi(renderScale), 1, MaxRasterDpi).ToString(CultureInfo.InvariantCulture)}dpi.{extension}";
+    }
 
     private static string LegacyWorkingImageNameForRenderScale(double renderScale) =>
         $"working-{Math.Clamp(RenderScaleToDpi(renderScale), 1, MaxRasterDpi).ToString(CultureInfo.InvariantCulture)}dpi.png";
@@ -1141,7 +1164,8 @@ public static class RasterSheetCacheService
         PageInfo page,
         RasterSheetSource? source,
         float renderScale,
-        out string imagePath)
+        out string imagePath,
+        string preferredFormat = "")
     {
         imagePath = "";
         if (source == null ||
@@ -1154,6 +1178,7 @@ public static class RasterSheetCacheService
             source.PdfLastWriteUtcTicks <= 0 ||
             string.IsNullOrWhiteSpace(source.Image) ||
             !IsSupportedRasterImageFormat(source.Format, source.Image) ||
+            !RasterFormatMatchesPreference(source.Format, source.Image, preferredFormat) ||
             !string.Equals(source.RenderProfile, ReadableRasterProfile, StringComparison.OrdinalIgnoreCase) ||
             IsStale(page.PdfPath, source) ||
             RenderScaleToDpi(source.RenderScale) != RenderScaleToDpi(renderScale))
@@ -1165,14 +1190,27 @@ public static class RasterSheetCacheService
         return File.Exists(imagePath);
     }
 
-    private static IEnumerable<string> WorkingImageCandidatesForRenderScale(float renderScale)
+    private static IEnumerable<string> WorkingImageCandidatesForRenderScale(float renderScale, string preferredFormat = "")
     {
-        string primary = WorkingImageNameForRenderScale(renderScale);
-        yield return primary;
-        yield return LegacyWorkingImageNameForRenderScale(renderScale);
+        string format = NormalizeReadableRasterFormat(preferredFormat);
+        string webp = WorkingImageNameForRenderScale(renderScale, WebpRasterFormat);
+        string png = LegacyWorkingImageNameForRenderScale(renderScale);
+        if (string.Equals(format, PngRasterFormat, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return png;
+        }
+        else if (string.Equals(format, WebpRasterFormat, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return webp;
+        }
+        else
+        {
+            yield return webp;
+            yield return png;
+        }
 
         if (RenderScaleToDpi(renderScale) == DefaultRasterDpi &&
-            !string.Equals(primary, WorkingImageName, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(format, WebpRasterFormat, StringComparison.OrdinalIgnoreCase))
         {
             yield return WorkingImageName;
         }
@@ -1250,6 +1288,93 @@ public static class RasterSheetCacheService
 
         bytes = data.ToArray();
         return bytes.Length > 0;
+    }
+
+    private static bool TryEncodePng(SKBitmap bitmap, out byte[] bytes)
+    {
+        bytes = [];
+        if (bitmap.Width <= 0 || bitmap.Height <= 0)
+            return false;
+
+        using SKImage image = SKImage.FromBitmap(bitmap);
+        using SKData? data = image.Encode(SKEncodedImageFormat.Png, 100);
+        if (data == null || data.Size <= 0)
+            return false;
+
+        bytes = data.ToArray();
+        return bytes.Length > 0;
+    }
+
+    private static bool TryEncodeReadableRasterImage(
+        SKBitmap bitmap,
+        byte[] fallbackPngBytes,
+        float renderScale,
+        string preferredFormat,
+        out byte[] bytes,
+        out string imageName,
+        out string imageFormat,
+        out string error)
+    {
+        bytes = [];
+        error = "";
+        string format = NormalizeReadableRasterFormat(preferredFormat);
+        if (string.Equals(format, PngRasterFormat, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryEncodePng(bitmap, out bytes))
+            {
+                error = "Rendered image could not be encoded as PNG.";
+                imageName = "";
+                imageFormat = "";
+                return false;
+            }
+
+            imageName = LegacyWorkingImageNameForRenderScale(renderScale);
+            imageFormat = PngRasterFormat;
+            return true;
+        }
+
+        if (TryEncodeLosslessWebp(bitmap, out bytes))
+        {
+            imageName = WorkingImageNameForRenderScale(renderScale, WebpRasterFormat);
+            imageFormat = WebpRasterFormat;
+            return true;
+        }
+
+        if (fallbackPngBytes.Length > 0)
+        {
+            bytes = fallbackPngBytes;
+            imageName = LegacyWorkingImageNameForRenderScale(renderScale);
+            imageFormat = PngRasterFormat;
+            return true;
+        }
+
+        error = "Rendered image could not be encoded as raster cache.";
+        imageName = "";
+        imageFormat = "";
+        return false;
+    }
+
+    public static string NormalizeReadableRasterFormat(string? format)
+    {
+        string clean = (format ?? "").Trim().TrimStart('.').ToLowerInvariant();
+        return clean switch
+        {
+            PngRasterFormat => PngRasterFormat,
+            WebpRasterFormat => WebpRasterFormat,
+            _ => "",
+        };
+    }
+
+    private static bool RasterFormatMatchesPreference(string format, string imagePath, string preferredFormat)
+    {
+        string clean = NormalizeReadableRasterFormat(preferredFormat);
+        if (string.IsNullOrWhiteSpace(clean))
+            return true;
+
+        string actual = NormalizeReadableRasterFormat(format);
+        if (string.IsNullOrWhiteSpace(actual))
+            actual = RasterFormatForPath(imagePath);
+        return string.Equals(actual, clean, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSupportedRasterImageFormat(string format, string imagePath)

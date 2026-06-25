@@ -1723,9 +1723,12 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             xaml.Contains("SheetManagerRasterDpiBox", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Auto\" Tag=\"auto\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"150 DPI\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"200 DPI\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"300 DPI\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"400 DPI\"", StringComparison.Ordinal) &&
+            xaml.Contains("SheetManagerRasterFormatBox", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"PNG\" Tag=\"png\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"SheetManagerBuildRasterButton\"", StringComparison.Ordinal) &&
             xaml.Contains("SheetManagerPrepareRasterButton", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerPrepareRaster_Click", StringComparison.Ordinal) &&
@@ -1740,6 +1743,7 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Header=\"Raster\" Binding=\"{Binding RasterStatus}\" Width=\"180\"", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRasterPdf_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
+            xaml.Contains("BtnSheetManagerRowRaster150_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRaster200_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRaster300_Click", StringComparison.Ordinal) &&
             xaml.Contains("BtnSheetManagerRowRaster400_Click", StringComparison.Ordinal) &&
@@ -1747,8 +1751,11 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private CancellationTokenSource? _sheetManagerRasterPrepareCts;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private const int SheetManagerAutoRasterDpi = 0;", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private int SelectedSheetManagerRasterDpi()", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private string SelectedSheetManagerRasterFormat()", StringComparison.Ordinal) &&
             workspaceManagers.Contains("string.Equals(raw.Trim(), \"auto\"", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterDpiBox?.SelectedItem is ComboBoxItem", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterFormatBox?.SelectedItem is ComboBoxItem", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("NormalizeReadableRasterFormat", StringComparison.Ordinal) &&
             workspaceManagers.Contains("EffectiveSheetManagerRasterDpi", StringComparison.Ordinal) &&
             workspaceManagers.Contains("BestReadyReadableRasterDpi(page)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("ReadyReadableRasterDpisByPageFolder(pages)", StringComparison.Ordinal) &&
@@ -1770,6 +1777,7 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerRasterOnButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerRasterOffButton.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("SheetManagerCleanRasterButton.IsEnabled = !running", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterFormatBox.IsEnabled = !running", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots([page])", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots(readyBatch.FastPages)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RefreshPageTreePageSnapshots(pages)", StringComparison.Ordinal) &&
@@ -1785,12 +1793,12 @@ internal static class TakeoffsTreeRegressionTests
             buildRasterMethod.Contains("SetSheetManagerRasterPrepareRunning(true)", StringComparison.Ordinal) &&
             !buildRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             buildRasterBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
-            buildRasterBackgroundMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale)", StringComparison.Ordinal) &&
+            buildRasterBackgroundMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
             buildRasterBackgroundMethod.Contains("RefreshSheetManagerRasterBackgroundPage(page, refreshSheetManager: true, reloadCurrentPage: true)", StringComparison.Ordinal) &&
             buildRasterBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
             buildRasterBackgroundMethod.Contains("Sheet Manager Raster Build {rasterDpiLabel} done", StringComparison.Ordinal) &&
             !buildRasterBackgroundMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi, rasterFormat)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("bool fastRowsRefreshed = true", StringComparison.Ordinal) &&
             workspaceManagers.Contains("readyBatch.MissingPages.Count == 0", StringComparison.Ordinal) &&
             workspaceManagers.Contains("!fastRowsRefreshed", StringComparison.Ordinal) &&
@@ -1802,14 +1810,14 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("ready {readyBatch.Ready}, queued {readyBatch.MissingPages.Count} missing sheet(s)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("return await Task.Run(() =>", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("var missingPages = new List<PageInfo>();", StringComparison.Ordinal) &&
-            rasterOnReadyMethod.Contains("HasReadyReadableRaster(page, renderScale)", StringComparison.Ordinal) &&
+            rasterOnReadyMethod.Contains("HasReadyReadableRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("missingPages.Add(page)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("fastPages.Add(plan.Page)", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("new SheetManagerRasterReadyBatch", StringComparison.Ordinal) &&
             rasterOnReadyMethod.Contains("TryEnableReadyReadableRaster", StringComparison.Ordinal) &&
             !rasterOnReadyMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
-            rasterOnBackgroundMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale)", StringComparison.Ordinal) &&
+            rasterOnBackgroundMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("SetSheetManagerRasterPrepareRunning(false)", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("ReloadCurrentPageIfRasterChanged(pages)", StringComparison.Ordinal) &&
             rasterOnBackgroundMethod.Contains("Sheet Manager Raster On {rasterDpiLabel} done", StringComparison.Ordinal) &&
@@ -1822,9 +1830,9 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SetSheetManagerRasterRowEnabledAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("BtnSheetManagerRowRasterAuto_Click", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster Row", StringComparison.Ordinal) &&
-            rowRasterMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale)", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(PageInfo page, float renderScale)", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale)", StringComparison.Ordinal) &&
+            rowRasterMethod.Contains("BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(PageInfo page, float renderScale, string rasterFormat = \"\")", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale, string rasterFormat = \"\")", StringComparison.Ordinal) &&
             workspaceManagers.Contains("private static void WarmSheetManagerRasterBitmap(PageInfo page, RasterSheetBuildResult result)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("PdfViewport.WarmRasterSheetBitmapCache(page, result.Source)", StringComparison.Ordinal) &&
             pdfImport.Contains("BuildAndWarmImportedRaster(page)", StringComparison.Ordinal) &&
@@ -1854,17 +1862,19 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("PrepareSheetManagerRasterCacheInBackgroundAsync", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Task.Run(", StringComparison.Ordinal) &&
             workspaceManagers.Contains("cts.Token.ThrowIfCancellationRequested()", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);", StringComparison.Ordinal) &&
             workspaceManagers.Contains("RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi)", StringComparison.Ordinal) &&
-            workspaceManagers.Contains("PrepareAndWarmSheetManagerRaster(page, renderScale)", StringComparison.Ordinal) &&
+            workspaceManagers.Contains("PrepareAndWarmSheetManagerRaster(page, renderScale, rasterFormat)", StringComparison.Ordinal) &&
             !prepareRasterMethod.Contains("ReloadCurrentPageIfRasterChanged", StringComparison.Ordinal) &&
             workspaceManagers.Contains("Sheet Manager Raster On {rasterDpiLabel}:", StringComparison.Ordinal) &&
             workspaceManagers.Contains("reused {reused}", StringComparison.Ordinal) &&
             raster.Contains("public const int DefaultRasterDpi = 200;", StringComparison.Ordinal) &&
             raster.Contains("public const int MaxRasterDpi = 400;", StringComparison.Ordinal) &&
             raster.Contains("public static RasterSheetBuildResult BuildCachePreservingEnabled", StringComparison.Ordinal) &&
-            raster.Contains("public static bool HasReadyReadableRaster(PageInfo page", StringComparison.Ordinal) &&
+            raster.Contains("public static bool HasReadyReadableRaster(", StringComparison.Ordinal) &&
             raster.Contains("public static bool TryEnableReadyReadableRaster(", StringComparison.Ordinal) &&
+            raster.Contains("public static string NormalizeReadableRasterFormat", StringComparison.Ordinal) &&
+            raster.Contains("PngRasterFormat = \"png\"", StringComparison.Ordinal) &&
             raster.Contains("public sealed record RasterSheetCacheCompactResult", StringComparison.Ordinal) &&
             raster.Contains("public static RasterSheetCacheCompactResult CompactCache(PageInfo page)", StringComparison.Ordinal) &&
             raster.Contains("TryCompactActiveRasterImage(page, source", StringComparison.Ordinal) &&
@@ -1895,7 +1905,7 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("if (!enabled)", StringComparison.Ordinal) &&
             raster.Contains("Reused: true", StringComparison.Ordinal) &&
             !prepareRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal),
-            "Sheet Manager raster builds should keep 200 DPI as the default, write compact lossless WebP raster images, allow selected sheets to rebuild at 300 or 400 DPI, reuse ready per-DPI variants, and prepare caches in the background without a modal busy overlay");
+            "Sheet Manager raster builds should keep 200 DPI as the default, write compact lossless WebP raster images by default, allow selected sheets to rebuild at 150/200/300/400 DPI as PNG when requested, reuse ready per-DPI variants, and prepare caches in the background without a modal busy overlay");
         AssertTrue(
             raster.Contains("SourceImageRasterProfile = \"source-image-v1\"", StringComparison.Ordinal) &&
             raster.Contains("SourceImageOverviewMaxPixels = 8_000_000", StringComparison.Ordinal) &&

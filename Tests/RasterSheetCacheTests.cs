@@ -212,6 +212,26 @@ internal static class RasterSheetCacheTests
                 compactedReason);
             compactedBitmap.Bitmap.Dispose();
 
+            RasterSheetBuildResult explicitPng = RasterSheetCacheService.BuildAndEnable(
+                compactedPage,
+                1.5f,
+                RasterSheetCacheService.PngRasterFormat);
+            AssertTrue(explicitPng.Ok, explicitPng.Error);
+            AssertFalse(explicitPng.Reused, "explicit PNG raster build should render a missing PNG DPI variant once");
+            PageInfo pngPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+                ?? throw new InvalidOperationException("Raster page source was not readable after explicit PNG build.");
+            AssertTrue(
+                pngPage.RasterSheet != null &&
+                string.Equals(pngPage.RasterSheet.Format, RasterSheetCacheService.PngRasterFormat, StringComparison.OrdinalIgnoreCase) &&
+                pngPage.RasterSheet.Image.EndsWith(".png", StringComparison.OrdinalIgnoreCase),
+                "explicit PNG raster build should write a PNG working image and persist PNG format metadata");
+            AssertTrue(
+                RasterSheetCacheService.HasReadyReadableRaster(pngPage, 1.5f, RasterSheetCacheService.PngRasterFormat),
+                "Raster On fast path should detect an explicit PNG ready cache when PNG is requested");
+            AssertFalse(
+                RasterSheetCacheService.HasReadyReadableRaster(pngPage, 1.5f, RasterSheetCacheService.WebpRasterFormat),
+                "Raster On fast path should not satisfy an explicit WebP request with a PNG cache");
+
             RasterSheetSource legacy = refreshed.RasterSheet.Clone();
             legacy.RenderProfile = RasterSheetCacheService.ReadableLineBoostProfile;
             AssertFalse(

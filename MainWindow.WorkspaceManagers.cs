@@ -534,8 +534,9 @@ public partial class MainWindow
             return;
 
         int rasterDpi = SelectedSheetManagerRasterDpi();
+        string rasterFormat = SelectedSheetManagerRasterFormat();
         await RunAsyncUiHandler(
-            () => BuildSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster(), rasterDpi),
+            () => BuildSheetManagerRasterCacheAsync(SelectedSheetManagerPagesForRaster(), rasterDpi, rasterFormat),
             "Build Raster failed.",
             "Sheet Manager Raster");
     }
@@ -546,8 +547,9 @@ public partial class MainWindow
             return;
 
         int rasterDpi = SelectedSheetManagerRasterDpi();
+        string rasterFormat = SelectedSheetManagerRasterFormat();
         await RunAsyncUiHandler(
-            () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: true, rasterDpi),
+            () => SetSheetManagerRasterEnabledAsync(SelectedSheetManagerPagesForRaster(), enabled: true, rasterDpi, rasterFormat),
             "Raster On failed.",
             "Sheet Manager Raster");
     }
@@ -590,13 +592,14 @@ public partial class MainWindow
         }
 
         int rasterDpi = SelectedSheetManagerRasterDpi();
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterFormat = SelectedSheetManagerRasterFormat();
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         var cts = new CancellationTokenSource();
         _sheetManagerRasterPrepareCts = cts;
         _sheetManagerRasterBackgroundLabel = "Prepare";
         SetSheetManagerRasterPrepareRunning(true);
         TxtStatus.Text = $"Sheet Manager Raster Prepare {rasterDpiLabel}: queued {pages.Count} sheet(s).";
-        _ = PrepareSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), rasterDpi, cts);
+        _ = PrepareSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), rasterDpi, rasterFormat, cts);
     }
 
     private void BtnSheetManagerCancelRaster_Click(object sender, RoutedEventArgs e)
@@ -629,6 +632,9 @@ public partial class MainWindow
     private async void BtnSheetManagerRowRasterAuto_Click(object sender, RoutedEventArgs e) =>
         await ApplySheetManagerRowRasterDpiAsync(sender, SheetManagerAutoRasterDpi);
 
+    private async void BtnSheetManagerRowRaster150_Click(object sender, RoutedEventArgs e) =>
+        await ApplySheetManagerRowRasterDpiAsync(sender, 150);
+
     private async void BtnSheetManagerRowRaster200_Click(object sender, RoutedEventArgs e) =>
         await ApplySheetManagerRowRasterDpiAsync(sender, 200);
 
@@ -640,7 +646,8 @@ public partial class MainWindow
 
     private async Task ApplySheetManagerRowRasterDpiAsync(object sender, int rasterDpi)
     {
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterFormat = SelectedSheetManagerRasterFormat();
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         if (TryBlockSheetManagerRasterCommandDuringPrepare($"row {rasterDpiLabel} raster") ||
             SheetManagerRowFromButton(sender) is not { } row ||
             SheetManagerPageFromRow(row) is not { } page)
@@ -649,7 +656,7 @@ public partial class MainWindow
         }
 
         await RunAsyncUiHandler(
-            () => SetSheetManagerRasterRowEnabledAsync(row, page, enabled: true, rasterDpi),
+            () => SetSheetManagerRasterRowEnabledAsync(row, page, enabled: true, rasterDpi, rasterFormat),
             $"Sheet row {rasterDpiLabel} failed.",
             "Sheet Manager Raster");
     }
@@ -658,18 +665,19 @@ public partial class MainWindow
         PdfMetadataPreviewRow row,
         PageInfo page,
         bool enabled,
-        int rasterDpi = RasterSheetCacheService.DefaultRasterDpi)
+        int rasterDpi = RasterSheetCacheService.DefaultRasterDpi,
+        string rasterFormat = "")
     {
         bool changed = false;
         bool reused = false;
         int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
 
         if (enabled && !RasterSheetCacheService.IsSourceImageRasterProfile(page.RasterSheet))
         {
             float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-            TxtStatus.Text = $"Sheet Manager Raster Row {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)}: {page.Name}";
-            RasterSheetBuildResult build = await Task.Run(() => BuildAndWarmSheetManagerRaster(page, renderScale));
+            TxtStatus.Text = $"Sheet Manager Raster Row {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi, rasterFormat)}: {page.Name}";
+            RasterSheetBuildResult build = await Task.Run(() => BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat));
             if (!build.Ok)
             {
                 AppLog.Warn($"Raster cache row build failed for '{page.Name}': {build.Error}");
@@ -811,6 +819,10 @@ public partial class MainWindow
             SheetManagerRasterOffButton.IsEnabled = !running;
         if (SheetManagerCleanRasterButton != null)
             SheetManagerCleanRasterButton.IsEnabled = !running;
+        if (SheetManagerRasterDpiBox != null)
+            SheetManagerRasterDpiBox.IsEnabled = !running;
+        if (SheetManagerRasterFormatBox != null)
+            SheetManagerRasterFormatBox.IsEnabled = !running;
         if (SheetManagerCancelRasterButton != null)
             SheetManagerCancelRasterButton.IsEnabled = running;
     }
@@ -842,10 +854,35 @@ public partial class MainWindow
         return RasterSheetCacheService.DefaultRasterDpi;
     }
 
+    private string SelectedSheetManagerRasterFormat()
+    {
+        if (SheetManagerRasterFormatBox?.SelectedItem is ComboBoxItem item)
+            return RasterSheetCacheService.NormalizeReadableRasterFormat(item.Tag?.ToString() ?? item.Content?.ToString() ?? "");
+
+        return "";
+    }
+
     private static string SheetManagerRasterDpiLabel(int rasterDpi) =>
         rasterDpi <= SheetManagerAutoRasterDpi
             ? "Auto"
             : $"{rasterDpi.ToString(CultureInfo.InvariantCulture)} DPI";
+
+    private static string SheetManagerRasterFormatLabel(string rasterFormat) =>
+        RasterSheetCacheService.NormalizeReadableRasterFormat(rasterFormat) switch
+        {
+            RasterSheetCacheService.PngRasterFormat => "PNG",
+            RasterSheetCacheService.WebpRasterFormat => "WebP",
+            _ => ""
+        };
+
+    private static string SheetManagerRasterSelectionLabel(int rasterDpi, string rasterFormat)
+    {
+        string dpi = SheetManagerRasterDpiLabel(rasterDpi);
+        string format = SheetManagerRasterFormatLabel(rasterFormat);
+        return string.IsNullOrWhiteSpace(format)
+            ? dpi
+            : $"{dpi} {format}";
+    }
 
     private static int EffectiveSheetManagerRasterDpi(PageInfo page, int rasterDpi)
     {
@@ -858,12 +895,18 @@ public partial class MainWindow
             : RasterSheetCacheService.DefaultRasterDpi;
     }
 
-    private static string SheetManagerRasterDpiProgressLabel(int rasterDpi, int effectiveDpi) =>
-        rasterDpi <= SheetManagerAutoRasterDpi
+    private static string SheetManagerRasterDpiProgressLabel(int rasterDpi, int effectiveDpi, string rasterFormat = "")
+    {
+        string dpi = rasterDpi <= SheetManagerAutoRasterDpi
             ? $"Auto->{effectiveDpi.ToString(CultureInfo.InvariantCulture)} DPI"
             : $"{effectiveDpi.ToString(CultureInfo.InvariantCulture)} DPI";
+        string format = SheetManagerRasterFormatLabel(rasterFormat);
+        return string.IsNullOrWhiteSpace(format)
+            ? dpi
+            : $"{dpi} {format}";
+    }
 
-    private Task BuildSheetManagerRasterCacheAsync(IReadOnlyList<PageInfo> pages, int rasterDpi)
+    private Task BuildSheetManagerRasterCacheAsync(IReadOnlyList<PageInfo> pages, int rasterDpi, string rasterFormat)
     {
         if (pages.Count == 0)
         {
@@ -877,26 +920,27 @@ public partial class MainWindow
             return Task.CompletedTask;
         }
 
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         var cts = new CancellationTokenSource();
         _sheetManagerRasterPrepareCts = cts;
         _sheetManagerRasterBackgroundLabel = "Build";
         SetSheetManagerRasterPrepareRunning(true);
         TxtStatus.Text = $"Sheet Manager Raster Build {rasterDpiLabel}: queued {pages.Count} sheet(s).";
-        _ = BuildSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), rasterDpi, cts);
+        _ = BuildSheetManagerRasterCacheInBackgroundAsync(pages.ToList(), rasterDpi, rasterFormat, cts);
         return Task.CompletedTask;
     }
 
     private async Task BuildSheetManagerRasterCacheInBackgroundAsync(
         IReadOnlyList<PageInfo> pages,
         int rasterDpi,
+        string rasterFormat,
         CancellationTokenSource cts)
     {
         int built = 0;
         int reused = 0;
         int failed = 0;
         bool cancelled = false;
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
 
         try
         {
@@ -907,13 +951,13 @@ public partial class MainWindow
                 PageInfo page = pages[i];
                 int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
                 float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-                TxtStatus.Text = $"Sheet Manager Raster Build {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{pages.Count}: {page.Name}";
+                TxtStatus.Text = $"Sheet Manager Raster Build {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi, rasterFormat)} {i + 1}/{pages.Count}: {page.Name}";
 
                 RasterSheetBuildResult result;
                 try
                 {
                     result = await Task.Run(
-                        () => BuildAndWarmSheetManagerRaster(page, renderScale),
+                        () => BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -970,13 +1014,14 @@ public partial class MainWindow
     private async Task PrepareSheetManagerRasterCacheInBackgroundAsync(
         IReadOnlyList<PageInfo> pages,
         int rasterDpi,
+        string rasterFormat,
         CancellationTokenSource cts)
     {
         int built = 0;
         int reused = 0;
         int failed = 0;
         bool cancelled = false;
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
 
         try
         {
@@ -987,13 +1032,13 @@ public partial class MainWindow
                 PageInfo page = pages[i];
                 int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
                 float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-                TxtStatus.Text = $"Sheet Manager Raster Prepare {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{pages.Count}: {page.Name}";
+                TxtStatus.Text = $"Sheet Manager Raster Prepare {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi, rasterFormat)} {i + 1}/{pages.Count}: {page.Name}";
 
                 RasterSheetBuildResult result;
                 try
                 {
                     result = await Task.Run(
-                        () => PrepareAndWarmSheetManagerRaster(page, renderScale),
+                        () => PrepareAndWarmSheetManagerRaster(page, renderScale, rasterFormat),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -1150,6 +1195,7 @@ public partial class MainWindow
         IReadOnlyList<PageInfo> pages,
         bool enabled,
         int rasterDpi = RasterSheetCacheService.DefaultRasterDpi,
+        string rasterFormat = "",
         bool refreshSheetManager = true)
     {
         if (pages.Count == 0)
@@ -1164,7 +1210,7 @@ public partial class MainWindow
             return;
         }
 
-        SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi);
+        SheetManagerRasterReadyBatch readyBatch = await EnableSheetManagerReadyRasterPagesAsync(pages, rasterDpi, rasterFormat);
         bool fastRowsRefreshed = true;
         if (readyBatch.FastPages.Count > 0)
         {
@@ -1175,7 +1221,7 @@ public partial class MainWindow
             ReloadCurrentPageIfRasterChanged(readyBatch.FastPages);
         }
 
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         if (readyBatch.MissingPages.Count == 0)
         {
             if (refreshSheetManager && readyBatch.FastPages.Count > 0 && !fastRowsRefreshed)
@@ -1188,6 +1234,7 @@ public partial class MainWindow
             pages.ToList(),
             readyBatch,
             rasterDpi,
+            rasterFormat,
             refreshSheetManager);
     }
 
@@ -1195,6 +1242,7 @@ public partial class MainWindow
         IReadOnlyList<PageInfo> pages,
         SheetManagerRasterReadyBatch readyBatch,
         int rasterDpi,
+        string rasterFormat,
         bool refreshSheetManager)
     {
         if (_sheetManagerRasterPrepareCts != null)
@@ -1207,13 +1255,14 @@ public partial class MainWindow
         _sheetManagerRasterPrepareCts = cts;
         _sheetManagerRasterBackgroundLabel = "On";
         SetSheetManagerRasterPrepareRunning(true);
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         TxtStatus.Text =
             $"Sheet Manager Raster On {rasterDpiLabel}: ready {readyBatch.Ready}, queued {readyBatch.MissingPages.Count} missing sheet(s).";
         _ = EnableMissingSheetManagerRasterOnInBackgroundAsync(
             pages,
             readyBatch,
             rasterDpi,
+            rasterFormat,
             refreshSheetManager,
             cts);
     }
@@ -1222,6 +1271,7 @@ public partial class MainWindow
         IReadOnlyList<PageInfo> pages,
         SheetManagerRasterReadyBatch readyBatch,
         int rasterDpi,
+        string rasterFormat,
         bool refreshSheetManager,
         CancellationTokenSource cts)
     {
@@ -1231,7 +1281,7 @@ public partial class MainWindow
         int already = readyBatch.Already;
         int failed = readyBatch.Failed;
         bool cancelled = false;
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         IReadOnlyList<PageInfo> buildPages = readyBatch.MissingPages;
 
         try
@@ -1243,13 +1293,13 @@ public partial class MainWindow
                 PageInfo page = buildPages[i];
                 int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
                 float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-                TxtStatus.Text = $"Sheet Manager Raster On {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi)} {i + 1}/{buildPages.Count}: {page.Name}";
+                TxtStatus.Text = $"Sheet Manager Raster On {SheetManagerRasterDpiProgressLabel(rasterDpi, effectiveDpi, rasterFormat)} {i + 1}/{buildPages.Count}: {page.Name}";
 
                 RasterSheetBuildResult build;
                 try
                 {
                     build = await Task.Run(
-                        () => BuildAndWarmSheetManagerRaster(page, renderScale),
+                        () => BuildAndWarmSheetManagerRaster(page, renderScale, rasterFormat),
                         cts.Token);
                 }
                 catch (OperationCanceledException)
@@ -1309,9 +1359,10 @@ public partial class MainWindow
 
     private async Task<SheetManagerRasterReadyBatch> EnableSheetManagerReadyRasterPagesAsync(
         IReadOnlyList<PageInfo> pages,
-        int rasterDpi)
+        int rasterDpi,
+        string rasterFormat)
     {
-        string rasterDpiLabel = SheetManagerRasterDpiLabel(rasterDpi);
+        string rasterDpiLabel = SheetManagerRasterSelectionLabel(rasterDpi, rasterFormat);
         TxtStatus.Text = $"Sheet Manager Raster On {rasterDpiLabel}: checking ready cache for {pages.Count} sheet(s)...";
         return await Task.Run(() =>
         {
@@ -1327,7 +1378,7 @@ public partial class MainWindow
 
                 int effectiveDpi = EffectiveSheetManagerRasterDpi(page, rasterDpi);
                 float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(effectiveDpi);
-                if (!RasterSheetCacheService.HasReadyReadableRaster(page, renderScale))
+                if (!RasterSheetCacheService.HasReadyReadableRaster(page, renderScale, rasterFormat))
                 {
                     missingPages.Add(page);
                     continue;
@@ -1371,7 +1422,8 @@ public partial class MainWindow
                 if (RasterSheetCacheService.TryEnableReadyReadableRaster(
                         plan.Page,
                         plan.RenderScale,
-                        out RasterSheetBuildResult result))
+                        out RasterSheetBuildResult result,
+                        rasterFormat))
                 {
                     WarmSheetManagerRasterBitmap(plan.Page, result);
                     readyCount++;
@@ -1394,16 +1446,16 @@ public partial class MainWindow
         });
     }
 
-    private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(PageInfo page, float renderScale)
+    private static RasterSheetBuildResult BuildAndWarmSheetManagerRaster(PageInfo page, float renderScale, string rasterFormat = "")
     {
-        RasterSheetBuildResult result = RasterSheetCacheService.BuildAndEnable(page, renderScale);
+        RasterSheetBuildResult result = RasterSheetCacheService.BuildAndEnable(page, renderScale, rasterFormat);
         WarmSheetManagerRasterBitmap(page, result);
         return result;
     }
 
-    private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale)
+    private static RasterSheetBuildResult PrepareAndWarmSheetManagerRaster(PageInfo page, float renderScale, string rasterFormat = "")
     {
-        RasterSheetBuildResult result = RasterSheetCacheService.BuildCachePreservingEnabled(page, renderScale);
+        RasterSheetBuildResult result = RasterSheetCacheService.BuildCachePreservingEnabled(page, renderScale, rasterFormat);
         WarmSheetManagerRasterBitmap(page, result);
         return result;
     }
