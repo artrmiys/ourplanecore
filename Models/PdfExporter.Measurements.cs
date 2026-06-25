@@ -16,7 +16,8 @@ public static partial class PdfExporter
         SKCanvas canvas,
         IReadOnlyList<PdfExportTakeoffInput> takeoffs,
         PageInfo page,
-        PdfExportOptions options)
+        PdfExportOptions options,
+        SKRect pageBounds)
     {
         var measurements = takeoffs
             .SelectMany(takeoff =>
@@ -29,9 +30,9 @@ public static partial class PdfExporter
         foreach ((Measurement measurement, SKColor color) in measurements)
             DrawMeasurementGeometry(canvas, measurement, color, options);
 
-        var occupiedJoistLabelBoxes = new List<SKRect>();
+        var occupiedLabelBoxes = new List<SKRect>();
         foreach ((Measurement measurement, SKColor color) in measurements)
-            DrawMeasurementLabels(canvas, measurement, color, page.ScaleMetersPerPt, options, occupiedJoistLabelBoxes);
+            DrawMeasurementLabels(canvas, measurement, color, page.ScaleMetersPerPt, options, occupiedLabelBoxes, pageBounds);
     }
     private static void DrawMeasurementGeometry(
         SKCanvas canvas,
@@ -102,7 +103,8 @@ public static partial class PdfExporter
         SKColor color,
         double pageScaleMetersPerPt,
         PdfExportOptions options,
-        List<SKRect> occupiedJoistLabelBoxes)
+        List<SKRect> occupiedLabelBoxes,
+        SKRect pageBounds)
     {
         string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
         if (measurement.Points.Count == 0)
@@ -110,7 +112,7 @@ public static partial class PdfExporter
 
         if (type == "area" && measurement.Points.Count >= 3)
         {
-            DrawJoistLayout(canvas, measurement, color, options, drawSegments: false, drawLabels: true, occupiedJoistLabelBoxes);
+            DrawJoistLayout(canvas, measurement, color, options, drawSegments: false, drawLabels: true, occupiedLabelBoxes);
             bool showAreaCentroid = measurement.JoistEnabled
                 ? ShouldExportJoistSummaryLabel(options)
                 : ShouldExportMeasurementLabel(measurement.MType, options);
@@ -122,7 +124,9 @@ public static partial class PdfExporter
                     measurement.Label(pageScaleMetersPerPt, options.UnitMode),
                     color,
                     centered: true,
-                    ExportLabelScale(options));
+                    ExportLabelScale(options),
+                    occupiedLabelBoxes,
+                    pageBounds);
             }
             return;
         }
@@ -136,7 +140,9 @@ public static partial class PdfExporter
             measurement.Label(pageScaleMetersPerPt, options.UnitMode),
             color,
             centered: false,
-            ExportLabelScale(options));
+            ExportLabelScale(options),
+            occupiedLabelBoxes,
+            pageBounds);
     }
 
     private static bool ShouldExportMeasurementLabel(string measurementType, PdfExportOptions options)
@@ -165,7 +171,7 @@ public static partial class PdfExporter
         options.ShowMeasurementLabels && options.ShowJoistLabels;
 
     private static bool ShouldExportJoistSummaryLabel(PdfExportOptions options) =>
-        options.ShowMeasurementLabels;
+        options.ShowMeasurementLabels && options.ShowAreaLabels && options.ShowJoistLabels;
 
     private static float ExportPointScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);
@@ -247,7 +253,9 @@ public static partial class PdfExporter
         string label,
         SKColor color,
         bool centered,
-        float labelScale)
+        float labelScale,
+        List<SKRect>? occupiedLabelBoxes = null,
+        SKRect? pageBounds = null)
     {
         if (string.IsNullOrWhiteSpace(label))
             return;
@@ -279,6 +287,11 @@ public static partial class PdfExporter
         float left = centered ? point.X - width / 2f - padX : point.X + offset;
         float top = centered ? point.Y - height / 2f - padY : point.Y + offset;
         var box = new SKRect(left, top, left + width + padX * 2, top + height + padY * 2);
+        float collisionPad = 1.4f * labelScale;
+        if (occupiedLabelBoxes != null && pageBounds.HasValue)
+            box = PlaceMeasurementLabelBox(box, point, collisionPad, occupiedLabelBoxes, pageBounds.Value);
+        left = box.Left;
+        top = box.Top;
 
         using var background = new SKPaint
         {
@@ -302,6 +315,7 @@ public static partial class PdfExporter
             canvas.DrawText(line, left + padX, baseline, textPaint);
             baseline += lineHeight;
         }
+        occupiedLabelBoxes?.Add(ExpandRect(box, collisionPad));
     }
 
     private static void DrawJoistLayout(

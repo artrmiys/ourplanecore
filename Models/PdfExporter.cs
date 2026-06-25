@@ -105,7 +105,12 @@ public static partial class PdfExporter
                         }
 
                     if (options.IncludeMeasurements)
-                        DrawMeasurements(canvas, input.MeasurementLayers ?? input.Takeoffs, page, options);
+                        DrawMeasurements(
+                            canvas,
+                            input.MeasurementLayers ?? input.Takeoffs,
+                            page,
+                            options,
+                            new SKRect(0, 0, renderedPage.WidthPt, renderedPage.HeightPt));
                     if (options.IncludeAnnotations)
                         DrawAnnotations(canvas, input.Annotations, page.ScaleMetersPerPt, options);
                         if (options.IncludeLegend)

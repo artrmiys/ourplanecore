@@ -319,6 +319,7 @@ var tests = new List<(string Name, Action Run)>
     ("joist pitch label explains flat slope and order lengths", JoistPitchLabelExplainsFlatSlopeAndOrderLengths),
     ("joist export uses visible label lines", JoistExportUsesVisibleLabelLines),
     ("joist export offsets overlapping segment labels", JoistExportOffsetsOverlappingSegmentLabels),
+    ("pdf export offsets overlapping measurement labels", PdfExportOffsetsOverlappingMeasurementLabels),
     ("joist area defaults use compact labels and foot rounding", JoistAreaDefaultsUseCompactLabelsAndFootRounding),
     ("legacy joist item without label flag shows labels", LegacyJoistItemWithoutLabelFlagShowsLabels),
     ("legacy joist item old false label flag migrates to labels", LegacyJoistItemOldFalseLabelFlagMigratesToLabels),
@@ -3168,6 +3169,54 @@ static void JoistExportOffsetsOverlappingSegmentLabels()
     static float CenterX(SKRect rect) => (rect.Left + rect.Right) / 2f;
 
     static float CenterY(SKRect rect) => (rect.Top + rect.Bottom) / 2f;
+}
+
+static void PdfExportOffsetsOverlappingMeasurementLabels()
+{
+    MethodInfo method = typeof(PdfExporter).GetMethod(
+        "PlaceMeasurementLabelBox",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfExporter.PlaceMeasurementLabelBox");
+
+    const float collisionPad = 2f;
+    var pageBounds = new SKRect(0f, 0f, 500f, 500f);
+    var baseBox = new SKRect(80f, 80f, 220f, 220f);
+    var occupied = new List<SKRect>();
+
+    SKRect first = Place(method, baseBox, collisionPad, occupied, pageBounds);
+    occupied.Add(Inflate(first, collisionPad));
+    SKRect second = Place(method, baseBox, collisionPad, occupied, pageBounds);
+
+    AssertFalse(Overlaps(first, second), $"overlapping PDF measurement labels should be offset: {first} vs {second}");
+    AssertTrue(
+        second.Left >= pageBounds.Left &&
+        second.Top >= pageBounds.Top &&
+        second.Right <= pageBounds.Right &&
+        second.Bottom <= pageBounds.Bottom,
+        "offset PDF measurement label should stay inside the page bounds");
+
+    static SKRect Place(MethodInfo method, SKRect baseBox, float collisionPad, IReadOnlyList<SKRect> occupied, SKRect pageBounds)
+    {
+        object? result = method.Invoke(
+            null,
+            new object?[]
+            {
+                baseBox,
+                new SKPoint((baseBox.Left + baseBox.Right) / 2f, (baseBox.Top + baseBox.Bottom) / 2f),
+                collisionPad,
+                occupied,
+                pageBounds,
+            });
+        return result is SKRect rect
+            ? rect
+            : throw new InvalidOperationException("Measurement label placement did not return a rectangle.");
+    }
+
+    static SKRect Inflate(SKRect rect, float pad) =>
+        new(rect.Left - pad, rect.Top - pad, rect.Right + pad, rect.Bottom + pad);
+
+    static bool Overlaps(SKRect a, SKRect b) =>
+        a.Left < b.Right && a.Right > b.Left && a.Top < b.Bottom && a.Bottom > b.Top;
 }
 
 static void PlanSwiftTxtExportWritesEveryRootItem()

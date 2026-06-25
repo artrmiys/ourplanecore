@@ -1314,13 +1314,16 @@ internal static class TakeoffsTreeRegressionTests
             denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "dense viewport joist summary labels must not depend on the per-joist segment label toggle");
         AssertTrue(
+            rendering.Contains("ShowMeasurementLabels && ShowAreaLabels && ShowJoistLabels", StringComparison.Ordinal),
+            "viewport joist summary labels must obey the All, Area, and Joist display toggles");
+        AssertTrue(
             joistRendering.Contains("ShouldDrawJoistSegmentLabels(measurement)", StringComparison.Ordinal) &&
             joistRendering.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "per-joist segment labels, not the joist summary label, must obey the Label each joist item toggle");
         AssertTrue(
             pdfExporter.Contains("ShouldExportJoistSummaryLabel(options)", StringComparison.Ordinal) &&
-            pdfExporter.Contains("options.ShowMeasurementLabels", StringComparison.Ordinal),
-            "PDF export must keep joist summary labels separate from per-joist segment labels");
+            pdfExporter.Contains("options.ShowMeasurementLabels && options.ShowAreaLabels && options.ShowJoistLabels", StringComparison.Ordinal),
+            "PDF export joist summary labels must obey the All, Area, and Joist output toggles");
     }
 
     public static void DisplayLabelTogglesRefreshDetachedSheets()

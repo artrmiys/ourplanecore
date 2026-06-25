@@ -454,7 +454,7 @@
                                 <CheckBox x:Name="ChkDisplayAreaLabels" Content="Area" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Show area label on each area measurement"/>
                                 <CheckBox x:Name="ChkDisplayJoistLabels" Content="Joist" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                          ToolTip="Show joist segment labels on area joist layouts (separate from the Area label)"/>
+                                          ToolTip="Show joist summary and segment labels on area joist layouts"/>
                                 <CheckBox x:Name="ChkDisplayCountLabels" Content="Count" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Show count label on each count measurement"/>
                             </StackPanel>

@@ -6,6 +6,45 @@ namespace OurPlaneCore;
 
 public static partial class PdfExporter
 {
+    private static SKRect PlaceMeasurementLabelBox(
+        SKRect baseBox,
+        SKPoint anchor,
+        float collisionPad,
+        IReadOnlyList<SKRect> occupiedBoxes,
+        SKRect pageBounds)
+    {
+        SKRect boundedBase = ClampRectToBounds(baseBox, pageBounds);
+        if (!OverlapsOccupied(ExpandRect(boundedBase, collisionPad), occupiedBoxes))
+            return boundedBase;
+
+        float stepX = Math.Max(boundedBase.Width + collisionPad * 2f, 1f);
+        float stepY = Math.Max(boundedBase.Height + collisionPad * 2f, 1f);
+        SKRect best = boundedBase;
+        float bestScore = PlacementScore(boundedBase, anchor, collisionPad, occupiedBoxes);
+
+        for (int ring = 1; ring <= 24; ring++)
+        {
+            foreach ((int dxStep, int dyStep) in GridRingOffsets(ring))
+            {
+                SKRect candidate = ClampRectToBounds(
+                    OffsetRect(boundedBase, dxStep * stepX, dyStep * stepY),
+                    pageBounds);
+                SKRect collisionBox = ExpandRect(candidate, collisionPad);
+                if (!OverlapsOccupied(collisionBox, occupiedBoxes))
+                    return candidate;
+
+                float score = PlacementScore(candidate, anchor, collisionPad, occupiedBoxes);
+                if (score < bestScore)
+                {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+        }
+
+        return best;
+    }
+
     private static SKRect PlaceJoistSegmentLabelBox(
         SKPoint start,
         SKPoint end,
@@ -55,6 +94,61 @@ public static partial class PdfExporter
         }
 
         return best;
+    }
+
+    private static IEnumerable<(int X, int Y)> GridRingOffsets(int ring)
+    {
+        for (int x = -ring; x <= ring; x++)
+        {
+            yield return (x, -ring);
+            yield return (x, ring);
+        }
+
+        for (int y = -ring + 1; y <= ring - 1; y++)
+        {
+            yield return (-ring, y);
+            yield return (ring, y);
+        }
+    }
+
+    private static float PlacementScore(
+        SKRect candidate,
+        SKPoint anchor,
+        float collisionPad,
+        IReadOnlyList<SKRect> occupiedBoxes)
+    {
+        SKRect collisionBox = ExpandRect(candidate, collisionPad);
+        float overlap = OccupiedOverlapArea(collisionBox, occupiedBoxes);
+        float distance = DistanceSquared(Center(candidate), anchor);
+        return overlap * 1_000_000f + distance;
+    }
+
+    private static SKRect ClampRectToBounds(SKRect rect, SKRect bounds)
+    {
+        if (bounds.Width <= 0f || bounds.Height <= 0f)
+            return rect;
+
+        if (rect.Width >= bounds.Width)
+        {
+            rect.Left = bounds.Left;
+            rect.Right = bounds.Right;
+        }
+        else if (rect.Left < bounds.Left)
+            rect.Offset(bounds.Left - rect.Left, 0f);
+        else if (rect.Right > bounds.Right)
+            rect.Offset(bounds.Right - rect.Right, 0f);
+
+        if (rect.Height >= bounds.Height)
+        {
+            rect.Top = bounds.Top;
+            rect.Bottom = bounds.Bottom;
+        }
+        else if (rect.Top < bounds.Top)
+            rect.Offset(0f, bounds.Top - rect.Top);
+        else if (rect.Bottom > bounds.Bottom)
+            rect.Offset(0f, bounds.Bottom - rect.Bottom);
+
+        return rect;
     }
 
     private static IEnumerable<float> NormalOffsetSteps(int stepIndex, float step)
@@ -121,6 +215,16 @@ public static partial class PdfExporter
 
     private static bool RectanglesOverlap(SKRect a, SKRect b) =>
         a.Left < b.Right && a.Right > b.Left && a.Top < b.Bottom && a.Bottom > b.Top;
+
+    private static SKPoint Center(SKRect rect) =>
+        new((rect.Left + rect.Right) / 2f, (rect.Top + rect.Bottom) / 2f);
+
+    private static float DistanceSquared(SKPoint a, SKPoint b)
+    {
+        float dx = a.X - b.X;
+        float dy = a.Y - b.Y;
+        return dx * dx + dy * dy;
+    }
 
     private static SKPoint UnitVector(SKPoint start, SKPoint end)
     {
