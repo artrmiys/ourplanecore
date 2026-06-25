@@ -39,11 +39,13 @@ public sealed class DetachedSheetWindow : Window
         AppSettings settings,
         UnitMode unitMode)
     {
+        ApplyViewportDisplaySettings(settings, unitMode);
         _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, Page, takeoffItems));
         _viewport.SetSheetLegend(settings.ShowSheetLegend
             ? SheetLegendBuilder.Build(job, Page, takeoffItems, unitMode)
             : []);
+        _viewport.InvalidateVisual();
     }
 
     private void ConfigureViewport(
@@ -56,24 +58,7 @@ public sealed class DetachedSheetWindow : Window
         _viewport.ViewBackgroundColor = settings.ViewportBackground;
         _viewport.PageBackgroundColor = settings.PageBackground;
         _viewport.ScaleMetersPerPt = page.ScaleMetersPerPt;
-        _viewport.UnitMode = unitMode;
-        _viewport.ShowMeasurementLabels = settings.ShowMeasurementLabels;
-        _viewport.ShowLineLabels = settings.ShowLineLabels;
-        _viewport.ShowAreaLabels = settings.ShowAreaLabels;
-        _viewport.ShowCountLabels = settings.ShowCountLabels;
-        _viewport.MeasurementLabelScale = ClampScale(settings.MeasurementLabelScale);
-        _viewport.MeasurementStrokeScale = ClampScale(settings.ViewportMeasurementStrokeScale);
-        _viewport.RulerStrokeWidth = Math.Clamp(settings.ViewportRulerStrokeWidth, 0.5, 6.0);
-        _viewport.PdfSnapBridgeToleranceScreenPx =
-            AppSettingsStore.NormalizePdfSnapBridgeTolerancePx(settings.ViewportPdfSnapBridgeTolerancePx);
-        _viewport.PointSizeScale = ClampScale(settings.ViewportPointSizeScale);
-        _viewport.SheetLegendAnchor = settings.SheetLegendAnchor;
-        _viewport.SheetLegendScale = ClampScale(settings.SheetLegendScale);
-        _viewport.SheetHeaderScale = ClampScale(settings.SheetHeaderScale);
-        _viewport.ScaleSheetOverlaysWithPage = settings.ScaleSheetOverlaysWithPage;
-        _viewport.ScaleMeasurementLabelsWithPage = settings.ScaleMeasurementLabelsWithPage;
-        _viewport.ScaleSheetHeaderWithPage = settings.ScaleSheetHeaderWithPage;
-        _viewport.SimplifyNavigationRendering = settings.SimplifyViewportNavigation;
+        ApplyViewportDisplaySettings(settings, unitMode);
         _viewport.SetTool("pan");
         _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, page, takeoffItems));
@@ -88,6 +73,29 @@ public sealed class DetachedSheetWindow : Window
         _viewport.SetSheetLegend(settings.ShowSheetLegend
             ? SheetLegendBuilder.Build(job, page, takeoffItems, unitMode)
             : []);
+    }
+
+    private void ApplyViewportDisplaySettings(AppSettings settings, UnitMode unitMode)
+    {
+        _viewport.UnitMode = unitMode;
+        _viewport.ShowMeasurementLabels = settings.ShowMeasurementLabels;
+        _viewport.ShowLineLabels = settings.ShowLineLabels;
+        _viewport.ShowAreaLabels = settings.ShowAreaLabels;
+        _viewport.ShowJoistLabels = settings.ShowJoistLabels;
+        _viewport.ShowCountLabels = settings.ShowCountLabels;
+        _viewport.MeasurementLabelScale = ClampScale(settings.MeasurementLabelScale);
+        _viewport.MeasurementStrokeScale = ClampScale(settings.ViewportMeasurementStrokeScale);
+        _viewport.RulerStrokeWidth = Math.Clamp(settings.ViewportRulerStrokeWidth, 0.5, 6.0);
+        _viewport.PdfSnapBridgeToleranceScreenPx =
+            AppSettingsStore.NormalizePdfSnapBridgeTolerancePx(settings.ViewportPdfSnapBridgeTolerancePx);
+        _viewport.PointSizeScale = ClampScale(settings.ViewportPointSizeScale);
+        _viewport.SheetLegendAnchor = settings.SheetLegendAnchor;
+        _viewport.SheetLegendScale = ClampScale(settings.SheetLegendScale);
+        _viewport.SheetHeaderScale = ClampScale(settings.SheetHeaderScale);
+        _viewport.ScaleSheetOverlaysWithPage = settings.ScaleSheetOverlaysWithPage;
+        _viewport.ScaleMeasurementLabelsWithPage = settings.ScaleMeasurementLabelsWithPage;
+        _viewport.ScaleSheetHeaderWithPage = settings.ScaleSheetHeaderWithPage;
+        _viewport.SimplifyNavigationRendering = settings.SimplifyViewportNavigation;
     }
 
     private static IReadOnlyList<string> HiddenTakeoffFolders(

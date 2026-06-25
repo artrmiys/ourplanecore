@@ -193,6 +193,7 @@ var tests = new List<(string Name, Action Run)>
     ("transform scale slider label is wired", TakeoffsTreeRegressionTests.TransformScaleSliderLabelIsWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
     ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
+    ("display label toggles refresh detached sheets", TakeoffsTreeRegressionTests.DisplayLabelTogglesRefreshDetachedSheets),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
     ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),
@@ -317,6 +318,7 @@ var tests = new List<(string Name, Action Run)>
     ("joist length label can use standard format", JoistLengthLabelCanUseStandardFormat),
     ("joist pitch label explains flat slope and order lengths", JoistPitchLabelExplainsFlatSlopeAndOrderLengths),
     ("joist export uses visible label lines", JoistExportUsesVisibleLabelLines),
+    ("joist export offsets overlapping segment labels", JoistExportOffsetsOverlappingSegmentLabels),
     ("joist area defaults use compact labels and foot rounding", JoistAreaDefaultsUseCompactLabelsAndFootRounding),
     ("legacy joist item without label flag shows labels", LegacyJoistItemWithoutLabelFlagShowsLabels),
     ("legacy joist item old false label flag migrates to labels", LegacyJoistItemOldFalseLabelFlagMigratesToLabels),
@@ -3117,6 +3119,55 @@ static void JoistExportUsesVisibleLabelLines()
         AssertEqual(labelLines[0], rows.First(row => row.Kind == PlanSwiftExportRowKind.Item).Value, "item row value is first label line");
         AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Pitch 3:12"), "pitch label line exported");
     });
+}
+
+static void JoistExportOffsetsOverlappingSegmentLabels()
+{
+    MethodInfo method = typeof(PdfExporter).GetMethod(
+        "PlaceJoistSegmentLabelBox",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfExporter.PlaceJoistSegmentLabelBox");
+
+    const float collisionPad = 2f;
+    var labelSize = new SKSize(36f, 10f);
+    var occupied = new List<SKRect>();
+
+    SKRect first = Place(method, labelSize, collisionPad, occupied);
+    occupied.Add(Inflate(first, collisionPad));
+    SKRect second = Place(method, labelSize, collisionPad, occupied);
+
+    AssertFalse(Overlaps(first, second), $"overlapping joist segment labels should be offset: {first} vs {second}");
+    AssertTrue(
+        Math.Abs(CenterX(first) - CenterX(second)) > 1f || Math.Abs(CenterY(first) - CenterY(second)) > 1f,
+        "second joist segment label should move away from an occupied label box");
+
+    static SKRect Place(MethodInfo method, SKSize labelSize, float collisionPad, IReadOnlyList<SKRect> occupied)
+    {
+        object? result = method.Invoke(
+            null,
+            new object?[]
+            {
+                new SKPoint(0f, 0f),
+                new SKPoint(120f, 0f),
+                new SKPoint(60f, 0f),
+                labelSize,
+                collisionPad,
+                occupied,
+            });
+        return result is SKRect rect
+            ? rect
+            : throw new InvalidOperationException("Joist label placement did not return a rectangle.");
+    }
+
+    static SKRect Inflate(SKRect rect, float pad) =>
+        new(rect.Left - pad, rect.Top - pad, rect.Right + pad, rect.Bottom + pad);
+
+    static bool Overlaps(SKRect a, SKRect b) =>
+        a.Left < b.Right && a.Right > b.Left && a.Top < b.Bottom && a.Bottom > b.Top;
+
+    static float CenterX(SKRect rect) => (rect.Left + rect.Right) / 2f;
+
+    static float CenterY(SKRect rect) => (rect.Top + rect.Bottom) / 2f;
 }
 
 static void PlanSwiftTxtExportWritesEveryRootItem()

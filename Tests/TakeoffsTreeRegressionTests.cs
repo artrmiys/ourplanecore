@@ -1323,6 +1323,37 @@ internal static class TakeoffsTreeRegressionTests
             "PDF export must keep joist summary labels separate from per-joist segment labels");
     }
 
+    public static void DisplayLabelTogglesRefreshDetachedSheets()
+    {
+        string displaySettings = ReadRepoFile("MainWindow.DisplaySettings.cs");
+        string detachedWindow = ReadRepoFile("Dialogs/DetachedSheetWindow.cs");
+        string displayClick = SliceMethod(displaySettings, "private void DisplaySetting_Click(");
+        string detachedRefresh = SliceMethod(detachedWindow, "public void RefreshTakeoffDisplay(");
+        string detachedApply = SliceMethod(detachedWindow, "private void ApplyViewportDisplaySettings(");
+
+        AssertTrue(
+            displayClick.Contains("SyncMeasurementLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal) &&
+            displayClick.Contains("RefreshDetachedSheetDisplaySettings()", StringComparison.Ordinal),
+            "Display label toggles must auto-enable the All label master when needed and refresh detached sheets");
+        AssertTrue(
+            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayLineLabels)", StringComparison.Ordinal) &&
+            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayAreaLabels)", StringComparison.Ordinal) &&
+            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayJoistLabels)", StringComparison.Ordinal) &&
+            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayCountLabels)", StringComparison.Ordinal),
+            "Line, Area, Joist, and Count toggles must be treated as individual label toggles");
+        AssertTrue(
+            detachedRefresh.Contains("ApplyViewportDisplaySettings(settings, unitMode)", StringComparison.Ordinal) &&
+            detachedRefresh.Contains("_viewport.InvalidateVisual()", StringComparison.Ordinal),
+            "Detached sheet refresh must apply display settings and repaint immediately");
+        AssertTrue(
+            detachedApply.Contains("_viewport.ShowMeasurementLabels = settings.ShowMeasurementLabels", StringComparison.Ordinal) &&
+            detachedApply.Contains("_viewport.ShowLineLabels = settings.ShowLineLabels", StringComparison.Ordinal) &&
+            detachedApply.Contains("_viewport.ShowAreaLabels = settings.ShowAreaLabels", StringComparison.Ordinal) &&
+            detachedApply.Contains("_viewport.ShowJoistLabels = settings.ShowJoistLabels", StringComparison.Ordinal) &&
+            detachedApply.Contains("_viewport.ShowCountLabels = settings.ShowCountLabels", StringComparison.Ordinal),
+            "Detached sheet display settings must include every label visibility flag");
+    }
+
     public static void PageTakeoffSelectionSyncsTakeoffsTree()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
