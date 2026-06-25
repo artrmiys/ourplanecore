@@ -299,6 +299,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf scale parser handles architectural scale", PdfScaleParserHandlesArchitecturalScale),
     ("pdf scale parser handles mixed fraction scale", PdfScaleParserHandlesMixedFractionScale),
     ("pdf scale parser handles engineering scale", PdfScaleParserHandlesEngineeringScale),
+    ("pdf scale parser handles decimal ratio scale", PdfScaleParserHandlesDecimalRatioScale),
     ("pdf metadata crop template save load round trips", PdfSheetMetadataCropServiceTests.CropTemplateSaveLoadRoundTrips),
     ("pdf metadata crop template usable when either region exists", PdfSheetMetadataCropServiceTests.CropTemplateUsableWhenEitherRegionExists),
     ("joist rounding aliases normalize", JoistRoundingAliasesNormalize),
@@ -2844,6 +2845,23 @@ static void PdfScaleParserHandlesEngineeringScale()
     AssertTrue(parsed, "engineering scale should parse");
     AssertTrue(metersPerPt > 0, "engineering scale should be positive");
     AssertEqual("1\" = 20'0\"", PdfSheetMetadataService.FormatImperialScale(metersPerPt), "engineering scale roundtrip label");
+}
+
+static void PdfScaleParserHandlesDecimalRatioScale()
+{
+    bool parsed = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287:1", out double colonMetersPerPt);
+    bool parsedKeyboardK = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287 k 1", out double keyboardMetersPerPt);
+    bool parsedCyrillicK = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287 к 1", out double cyrillicMetersPerPt);
+
+    AssertTrue(parsed, "decimal ratio scale should parse");
+    AssertTrue(parsedKeyboardK, "keyboard decimal ratio scale should parse");
+    AssertTrue(parsedCyrillicK, "cyrillic decimal ratio scale should parse");
+    AssertClose(keyboardMetersPerPt, colonMetersPerPt, "keyboard k decimal ratio should match colon ratio");
+    AssertClose(cyrillicMetersPerPt, colonMetersPerPt, "cyrillic k decimal ratio should match colon ratio");
+    AssertClose(
+        ViewportConstants.PdfPointMeters * (1.0 / 0.287),
+        colonMetersPerPt,
+        "decimal ratio should use drawing-to-real right-over-left ratio");
 }
 
 static void JoistRoundingAliasesNormalize()

@@ -340,6 +340,7 @@ public partial class MainWindow
         PageOpenTrace? trace = BeginPageOpenTrace(page.Name);
         PageInfo viewportPage = page;
         int deferredVersion = ++_pageOpenDeferredVersion;
+        _currentPageAnnotationsLoaded = false;
         _currentPage = viewportPage;
         _currentPdfPath = viewportPage.PdfPath;
         TxtStatusPage.Text = viewportPage.Name;
@@ -355,6 +356,8 @@ public partial class MainWindow
             viewportPage.RasterSheet,
             viewportPage.OverlayVisible && !string.IsNullOrWhiteSpace(viewportPage.OverlayPageFolder));
         trace?.Mark("decode");
+        LoadViewportPageAnnotations(viewportPage);
+        trace?.Mark("annotations");
         QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView);
         trace?.Mark("overlay-queued");
         _settings.LastPageFolder = viewportPage.FolderPath;
@@ -450,8 +453,6 @@ public partial class MainWindow
             QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage);
             QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage);
             ApplyViewportPageTakeoffVisibility(viewportPage);
-            _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
-            ApplyRulerVisibilityToViewport();
             RefreshAiMarkersOverlay();
             RefreshThreeDRoofGuideOverlay();
             SyncPageTreeNodeForViewportOpen(viewportPage.FolderPath);
@@ -484,6 +485,13 @@ public partial class MainWindow
         deferredVersion == _pageOpenDeferredVersion &&
         _currentPage != null &&
         IsSamePageFolder(_currentPage.FolderPath, pageFolder);
+
+    private void LoadViewportPageAnnotations(PageInfo viewportPage)
+    {
+        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
+        _currentPageAnnotationsLoaded = true;
+        ApplyRulerVisibilityToViewport();
+    }
 
     private void QueueNearbyPagePreviewPrefetchDeferred(int deferredVersion, PageInfo viewportPage)
     {

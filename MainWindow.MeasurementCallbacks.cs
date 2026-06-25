@@ -274,7 +274,7 @@ public partial class MainWindow
 
     private void SaveCurrentPageAnnotations()
     {
-        if (_currentPage == null)
+        if (_currentPage == null || !_currentPageAnnotationsLoaded)
             return;
 
         try

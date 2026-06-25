@@ -141,7 +141,11 @@ public partial class MainWindow
 
             appliedPage = OurPlaneCoreJobStore.TryReadPage(currentPath) ?? _currentPage;
             if (appliedPage != null)
-                WriteFloatingPageSetupMetadata(appliedPage, pageName, hasScale ? scaleMetersPerPt : appliedPage.ScaleMetersPerPt);
+                WriteFloatingPageSetupMetadata(
+                    appliedPage,
+                    pageName,
+                    hasScale ? scaleMetersPerPt : appliedPage.ScaleMetersPerPt,
+                    hasScale ? scaleText : "");
 
             if (!renamed)
             {
@@ -151,7 +155,7 @@ public partial class MainWindow
 
             RefreshAllTotals();
             string scaleLabel = hasScale
-                ? PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt)
+                ? PageSetupScaleStatusText(scaleText, scaleMetersPerPt)
                 : "";
             TxtStatus.Text = BuildFloatingPageSetupStatus(pageName, renamed, scaled, scaleLabel);
             return true;
@@ -203,7 +207,7 @@ public partial class MainWindow
         PageInfo page = pages[index];
         _pageSetupWindow.SetPage(
             page.Name,
-            PdfSheetMetadataService.FormatImperialScale(page.ScaleMetersPerPt),
+            PageSetupScaleDisplayText(page),
             index,
             pages.Count,
             page.FolderPath,
@@ -255,7 +259,35 @@ public partial class MainWindow
         return $"Page setup checked: {pageName}.";
     }
 
-    private static void WriteFloatingPageSetupMetadata(PageInfo page, string pageName, double scaleMetersPerPt)
+    private static string PageSetupScaleDisplayText(PageInfo page)
+    {
+        if (page.ScaleMetersPerPt <= 0)
+            return "";
+
+        string metadataText = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)?.EffectiveScaleText.Trim() ?? "";
+        if (!string.IsNullOrWhiteSpace(metadataText) &&
+            PdfSheetMetadataService.TryParseScaleMetersPerPt(metadataText, out double metadataScale) &&
+            Math.Abs(metadataScale - page.ScaleMetersPerPt) <= 0.000000001)
+        {
+            return metadataText;
+        }
+
+        return PdfSheetMetadataService.FormatImperialScale(page.ScaleMetersPerPt);
+    }
+
+    private static string PageSetupScaleStatusText(string scaleText, double scaleMetersPerPt)
+    {
+        string trimmed = scaleText.Trim();
+        return !string.IsNullOrWhiteSpace(trimmed)
+            ? trimmed
+            : PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
+    }
+
+    private static void WriteFloatingPageSetupMetadata(
+        PageInfo page,
+        string pageName,
+        double scaleMetersPerPt,
+        string manualScaleText = "")
     {
         PdfSheetMetadata metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
             ?? CreateManualSheetMetadata(page);
@@ -270,7 +302,9 @@ public partial class MainWindow
 
         if (scaleMetersPerPt > 0)
         {
-            string scaleText = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
+            string scaleText = string.IsNullOrWhiteSpace(manualScaleText)
+                ? PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt)
+                : manualScaleText.Trim();
             metadata.SkipScale = false;
             metadata.SelectedScaleText = scaleText;
             metadata.ScaleText = scaleText;

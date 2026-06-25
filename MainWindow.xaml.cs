@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private OurPlaneCoreJob? _currentJob;
     private PageInfo? _currentPage;
     private string _currentPdfPath = "";
+    private bool _currentPageAnnotationsLoaded;
 
     private readonly List<TakeoffItem> _takeoffItems = [];
     private TakeoffItem? _activeItem;

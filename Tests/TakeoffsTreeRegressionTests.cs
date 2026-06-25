@@ -33,8 +33,11 @@ internal static class TakeoffsTreeRegressionTests
     {
         string pageTabs = ReadRepoFile("MainWindow.PageTabs.cs");
         string pagePreviewWarmup = ReadRepoFile("MainWindow.PagePreviewWarmup.cs");
+        string measurementCallbacks = ReadRepoFile("MainWindow.MeasurementCallbacks.cs");
         string loadFromTabMethod = SliceMethod(pageTabs, "private void LoadPageFromTab(");
         string loadMethod = SliceMethod(pageTabs, "private void LoadPageIntoViewport(PageInfo page, PdfViewport.ViewState? restoreView)");
+        string loadAnnotationsMethod = SliceMethod(pageTabs, "private void LoadViewportPageAnnotations(");
+        string saveAnnotationsMethod = SliceMethod(measurementCallbacks, "private void SaveCurrentPageAnnotations()");
         string distinctBatchPagesMethod = SliceMethod(pageTabs, "private static IReadOnlyList<PageInfo> DistinctBatchPages(");
         string queueMethod = SliceMethod(pageTabs, "private void QueueDeferredPageOpenWork(");
         string deferredQuietMethod = SliceMethod(pageTabs, "private async void RunDeferredPageOpenWorkWhenQuiet(");
@@ -69,20 +72,27 @@ internal static class TakeoffsTreeRegressionTests
             "batch tab/detached opens should refresh selected pages from source.json before passing raster metadata into viewports");
 
         int loadPage = loadMethod.IndexOf("_viewport.LoadPage(", StringComparison.Ordinal);
+        int annotationsLoad = loadMethod.IndexOf("LoadViewportPageAnnotations(viewportPage)", StringComparison.Ordinal);
         int overlayQueue = loadMethod.IndexOf("QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView)", StringComparison.Ordinal);
         int deferred = loadMethod.IndexOf("QueueDeferredPageOpenWork", StringComparison.Ordinal);
         AssertTrue(
-            loadPage >= 0 && overlayQueue > loadPage && deferred > overlayQueue,
-            "page open should load the viewport, queue async sheet overlay work, then schedule slower follow-up work");
+            loadPage >= 0 && annotationsLoad > loadPage && overlayQueue > annotationsLoad && deferred > overlayQueue,
+            "page open should load the viewport, restore saved annotations before any page-switch autosave, queue async sheet overlay work, then schedule slower follow-up work");
+        AssertTrue(
+            loadMethod.Contains("_currentPageAnnotationsLoaded = false", StringComparison.Ordinal) &&
+            loadAnnotationsMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            loadAnnotationsMethod.Contains("_currentPageAnnotationsLoaded = true", StringComparison.Ordinal) &&
+            loadAnnotationsMethod.Contains("ApplyRulerVisibilityToViewport()", StringComparison.Ordinal) &&
+            saveAnnotationsMethod.Contains("_currentPage == null || !_currentPageAnnotationsLoaded", StringComparison.Ordinal),
+            "page annotation save must be blocked during page switching until annotations.json has been loaded into the viewport");
 
         AssertFalse(
             loadMethod.Contains("LoadSheetOverlay(", StringComparison.Ordinal) ||
-            loadMethod.Contains("LoadPageAnnotations(", StringComparison.Ordinal) ||
             loadMethod.Contains("ApplyViewportPageTakeoffVisibility(", StringComparison.Ordinal) ||
             loadMethod.Contains("ApplyScaleToCurrentPageMeasurements(", StringComparison.Ordinal) ||
             loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
             loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
-            "page open should not run overlays, annotations, takeoff visibility, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
+            "page open should not run overlays, takeoff visibility, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
         AssertFalse(
             loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage, restoreView)", StringComparison.Ordinal),
             "page open should not synchronously decode cached sheet overlays before the first viewport frame");
@@ -107,7 +117,7 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal) &&
-            deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            !deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
@@ -3417,8 +3427,12 @@ internal static class TakeoffsTreeRegressionTests
             setPage.Contains("if (selectName && IsVisible && !preservePageNameEdit && !preserveScaleEdit)", StringComparison.Ordinal) &&
             pageSetup.Contains("RefreshFloatingPageSetup(appliedPage?.FolderPath, selectName: false)", StringComparison.Ordinal) &&
             pageSetup.Contains("RefreshFloatingPageSetup(pages[targetIndex].FolderPath, selectName: true)", StringComparison.Ordinal) &&
+            pageSetup.Contains("PageSetupScaleDisplayText(page)", StringComparison.Ordinal) &&
+            pageSetup.Contains("PageSetupScaleStatusText(scaleText, scaleMetersPerPt)", StringComparison.Ordinal) &&
+            pageSetup.Contains("manualScaleText = \"\"", StringComparison.Ordinal) &&
+            pageSetup.Contains("manualScaleText.Trim()", StringComparison.Ordinal) &&
             pageSetupWindow.Contains("private bool IsSamePage(string pageFolder, int pageIndex)", StringComparison.Ordinal),
-            "floating Page Setup refreshes should not overwrite or reselect the active name/scale edit for the same sheet");
+            "floating Page Setup refreshes should not overwrite or reselect the active name/scale edit for the same sheet and should preserve manual decimal scale text");
         AssertTrue(
             pageSetupWindow.Contains("private int _selectRequestVersion;", StringComparison.Ordinal) &&
             selectPageNameText.Contains("int requestVersion = ++_selectRequestVersion;", StringComparison.Ordinal) &&

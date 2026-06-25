@@ -676,6 +676,17 @@ public static class PdfSheetMetadataService
             return 0;
         }
 
+        Match ratioPairMatch = Regex.Match(
+            clean,
+            @"^(?<left>\d+(?:\.\d+)?)\s*(?::|k|r|к|to)\s*(?<right>\d+(?:\.\d+)?)$",
+            RegexOptions.IgnoreCase);
+        if (ratioPairMatch.Success &&
+            double.TryParse(ratioPairMatch.Groups["left"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double leftRatio) &&
+            double.TryParse(ratioPairMatch.Groups["right"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double rightRatio))
+        {
+            return leftRatio > 0 && rightRatio > 0 ? rightRatio / leftRatio : 0;
+        }
+
         Match ratioMatch = Regex.Match(clean, @"^1\s*:\s*(?<ratio>\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
         if (ratioMatch.Success &&
             double.TryParse(ratioMatch.Groups["ratio"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double directRatio))
