@@ -697,7 +697,10 @@ public static class PdfSheetMetadataService
         if (!clean.Contains('=', StringComparison.Ordinal) &&
             double.TryParse(clean, NumberStyles.Float, CultureInfo.InvariantCulture, out directRatio))
         {
-            return directRatio > 0 ? directRatio : 0;
+            if (directRatio <= 0)
+                return 0;
+
+            return directRatio < 1.0 ? 1.0 / directRatio : directRatio;
         }
 
         if (string.Equals(
