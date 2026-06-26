@@ -1,5 +1,15 @@
 ﻿# Development Log
 
+## 2026-06-26 Scale/export/display packaged fixes
+
+Wrote detailed handoff: `docs/SESSION_2026_06_26_SCALE_EXPORT_DISPLAY.md`.
+
+- Fixed Display tab individual label toggles and detached sheet refresh.
+- Fixed PDF export label placement so area/joist/measurement labels separate instead of stacking.
+- Fixed decimal sheet scale parsing: bare `0.287` / `0,287` now means `0.287" = 1'0"`, matching a manually measured Scale tool result.
+- Added Pages tree command to apply the current measured sheet scale to selected sheets without measuring again.
+- Verified final packaged build: build 0/0, tests 393/393, update exe hash matched publish hash, packaged app launched from `Desktop\updates\OurPlaneCore`, app log clean after latest startup.
+
 ## 2026-06-22 UI overhaul: trees, annotation ribbon, list selection
 
 Visual/UX pass on the live app (deployed to the desktop shortcut).
