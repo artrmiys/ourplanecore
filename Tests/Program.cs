@@ -2868,6 +2868,8 @@ static void PdfScaleParserHandlesDecimalRatioScale()
         ViewportConstants.PdfPointMeters * (1.0 / 0.289),
         userDecimalMetersPerPt,
         "0.289 bare decimal ratio should use drawing-to-real right-over-left ratio");
+    AssertEqual("0.287:1", PdfSheetMetadataService.FormatImperialScale(colonMetersPerPt), "decimal ratio should roundtrip as decimal ratio label");
+    AssertEqual("0.289:1", PdfSheetMetadataService.FormatImperialScale(userDecimalMetersPerPt), "bare decimal ratio should display as entered ratio");
     AssertClose(keyboardMetersPerPt, colonMetersPerPt, "keyboard k decimal ratio should match colon ratio");
     AssertClose(cyrillicMetersPerPt, colonMetersPerPt, "cyrillic k decimal ratio should match colon ratio");
     AssertClose(

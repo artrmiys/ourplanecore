@@ -175,6 +175,9 @@ public static class PdfSheetMetadataService
         if (roundedFeet >= 10 && Math.Abs(feetPerInch - roundedFeet) <= 0.05)
             return $"1\" = {roundedFeet:0}'0\"";
 
+        if (ratio < 12.0)
+            return $"{(1.0 / ratio).ToString("0.###", CultureInfo.InvariantCulture)}:1";
+
         double inchesPerFoot = 12.0 / ratio;
         string inchLabel = FormatScaleInches(inchesPerFoot);
         return string.IsNullOrWhiteSpace(inchLabel)
