@@ -175,9 +175,6 @@ public static class PdfSheetMetadataService
         if (roundedFeet >= 10 && Math.Abs(feetPerInch - roundedFeet) <= 0.05)
             return $"1\" = {roundedFeet:0}'0\"";
 
-        if (ratio < 12.0)
-            return $"{(1.0 / ratio).ToString("0.###", CultureInfo.InvariantCulture)}:1";
-
         double inchesPerFoot = 12.0 / ratio;
         string inchLabel = FormatScaleInches(inchesPerFoot);
         return string.IsNullOrWhiteSpace(inchLabel)
@@ -687,7 +684,13 @@ public static class PdfSheetMetadataService
             double.TryParse(ratioPairMatch.Groups["left"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double leftRatio) &&
             double.TryParse(ratioPairMatch.Groups["right"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double rightRatio))
         {
-            return leftRatio > 0 && rightRatio > 0 ? rightRatio / leftRatio : 0;
+            if (leftRatio <= 0 || rightRatio <= 0)
+                return 0;
+
+            if (leftRatio < 1.0 && Math.Abs(rightRatio - 1.0) <= 0.000001)
+                return 12.0 / leftRatio;
+
+            return rightRatio / leftRatio;
         }
 
         Match ratioMatch = Regex.Match(clean, @"^1\s*:\s*(?<ratio>\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
@@ -703,7 +706,7 @@ public static class PdfSheetMetadataService
             if (directRatio <= 0)
                 return 0;
 
-            return directRatio < 1.0 ? 1.0 / directRatio : directRatio;
+            return directRatio < 1.0 ? 12.0 / directRatio : directRatio;
         }
 
         if (string.Equals(
@@ -726,6 +729,9 @@ public static class PdfSheetMetadataService
                     .Replace("in", "", StringComparison.OrdinalIgnoreCase)
                     .Trim());
             double rightInches = ParseRightScaleInches(pieces[1]);
+            if (leftInches > 0 && leftInches < 1.0 && IsBareOneScaleRight(pieces[1]))
+                return 12.0 / leftInches;
+
             return leftInches > 0 && rightInches > 0 ? rightInches / leftInches : 0;
         }
 
@@ -742,10 +748,19 @@ public static class PdfSheetMetadataService
             .Replace("\u2019", "'", StringComparison.Ordinal)
             .Replace("\u2018", "'", StringComparison.Ordinal)
             .Replace("\u2032", "'", StringComparison.Ordinal)
+            .Replace(",", ".", StringComparison.Ordinal)
             .Replace(" feet", "'", StringComparison.OrdinalIgnoreCase)
             .Replace(" foot", "'", StringComparison.OrdinalIgnoreCase)
             .Replace(" ft", "'", StringComparison.OrdinalIgnoreCase)
             .Replace("'-0\"", "'0\"", StringComparison.Ordinal);
+
+    private static bool IsBareOneScaleRight(string value)
+    {
+        string clean = NormalizeScaleInput(value)
+            .Replace("\"", "", StringComparison.Ordinal)
+            .Trim();
+        return string.Equals(clean, "1", StringComparison.Ordinal);
+    }
 
     private static double ParseRightScaleInches(string value)
     {

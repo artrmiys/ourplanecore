@@ -3438,10 +3438,12 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             commands.Contains("SetSelectedPagesScaleFromContext(item)", StringComparison.Ordinal) &&
+            commands.Contains("ApplyCurrentScaleToSelectedPagesFromContext(item)", StringComparison.Ordinal) &&
             commands.Contains("Set Scale for {selectedPageCount} Selected", StringComparison.Ordinal),
-            "page context menu must expose Set Scale for single and multi-selected sheets");
+            "page context menu must expose Set Scale and Apply Current Sheet Scale for single and multi-selected sheets");
         AssertTrue(
             scale.Contains("SelectedPagesFromPagesTree(anchor)", StringComparison.Ordinal) &&
+            scale.Contains("CurrentPageScaleMetersPerPt", StringComparison.Ordinal) &&
             scale.Contains("PdfSheetMetadataService.TryParseScaleMetersPerPt", StringComparison.Ordinal) &&
             scale.Contains("OurPlaneCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
             scale.Contains("WriteFloatingPageSetupMetadata", StringComparison.Ordinal) &&

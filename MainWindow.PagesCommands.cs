@@ -206,6 +206,10 @@ public partial class MainWindow
                 selectedPageCount >= 1,
                 () => SetSelectedPagesScaleFromContext(item)));
             menu.Items.Add(MakeMenuItem(
+                selectedPageCount > 1 ? $"Apply Current Sheet Scale to {selectedPageCount} Selected" : "Apply Current Sheet Scale",
+                selectedPageCount >= 1 && CurrentPageScaleMetersPerPt() > 0,
+                () => ApplyCurrentScaleToSelectedPagesFromContext(item)));
+            menu.Items.Add(MakeMenuItem(
                 selectedPageCount > 1 ? $"Export {selectedPageCount} Selected to PDF..." : "Export Sheet to PDF...",
                 selectedPageCount >= 1,
                 async () => await RunAsyncUiHandler(

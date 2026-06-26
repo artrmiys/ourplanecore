@@ -45,6 +45,39 @@ public partial class MainWindow
         ApplyScaleToPages(pages, scaleMetersPerPt);
     }
 
+    private void ApplyCurrentScaleToSelectedPagesFromContext(TreeViewItem anchor)
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before applying sheet scale.";
+            return;
+        }
+
+        double scaleMetersPerPt = CurrentPageScaleMetersPerPt();
+        if (scaleMetersPerPt <= 0)
+        {
+            TxtStatus.Text = "Current sheet has no scale to apply.";
+            return;
+        }
+
+        IReadOnlyList<PageInfo> pages = DistinctScalePages(SelectedPagesFromPagesTree(anchor));
+        if (pages.Count == 0)
+        {
+            TxtStatus.Text = "Pages tree: select one or more sheets first.";
+            return;
+        }
+
+        ApplyScaleToPages(pages, scaleMetersPerPt);
+    }
+
+    private double CurrentPageScaleMetersPerPt()
+    {
+        if (_currentPage?.ScaleMetersPerPt > 0)
+            return _currentPage.ScaleMetersPerPt;
+
+        return _viewport.ScaleMetersPerPt > 0 ? _viewport.ScaleMetersPerPt : 0;
+    }
+
     private void ApplyScaleToPages(IReadOnlyList<PageInfo> pages, double scaleMetersPerPt)
     {
         if (pages.Count == 0 || scaleMetersPerPt <= 0)

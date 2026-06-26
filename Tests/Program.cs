@@ -2854,28 +2854,34 @@ static void PdfScaleParserHandlesDecimalRatioScale()
 {
     bool parsed = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287:1", out double colonMetersPerPt);
     bool parsedBareDecimal = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287", out double bareDecimalMetersPerPt);
+    bool parsedBareCommaDecimal = PdfSheetMetadataService.TryParseScaleMetersPerPt("0,287", out double bareCommaDecimalMetersPerPt);
     bool parsedUserDecimal = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.289", out double userDecimalMetersPerPt);
+    bool parsedEqualsDecimal = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287 = 1", out double equalsDecimalMetersPerPt);
     bool parsedKeyboardK = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287 k 1", out double keyboardMetersPerPt);
     bool parsedCyrillicK = PdfSheetMetadataService.TryParseScaleMetersPerPt("0.287 к 1", out double cyrillicMetersPerPt);
 
     AssertTrue(parsed, "decimal ratio scale should parse");
     AssertTrue(parsedBareDecimal, "bare decimal ratio scale should parse");
+    AssertTrue(parsedBareCommaDecimal, "bare comma decimal ratio scale should parse");
     AssertTrue(parsedUserDecimal, "0.289 bare decimal ratio should parse");
+    AssertTrue(parsedEqualsDecimal, "decimal equals one scale should parse");
     AssertTrue(parsedKeyboardK, "keyboard decimal ratio scale should parse");
     AssertTrue(parsedCyrillicK, "cyrillic decimal ratio scale should parse");
     AssertClose(bareDecimalMetersPerPt, colonMetersPerPt, "bare decimal ratio should match colon ratio");
+    AssertClose(bareCommaDecimalMetersPerPt, colonMetersPerPt, "bare comma decimal ratio should match colon ratio");
+    AssertClose(equalsDecimalMetersPerPt, colonMetersPerPt, "decimal equals one scale should match colon ratio");
     AssertClose(
-        ViewportConstants.PdfPointMeters * (1.0 / 0.289),
+        ViewportConstants.PdfPointMeters * (12.0 / 0.289),
         userDecimalMetersPerPt,
-        "0.289 bare decimal ratio should use drawing-to-real right-over-left ratio");
-    AssertEqual("0.287:1", PdfSheetMetadataService.FormatImperialScale(colonMetersPerPt), "decimal ratio should roundtrip as decimal ratio label");
-    AssertEqual("0.289:1", PdfSheetMetadataService.FormatImperialScale(userDecimalMetersPerPt), "bare decimal ratio should display as entered ratio");
+        "0.289 bare decimal ratio should use inches-per-foot scale");
+    AssertEqual("0.287\" = 1'0\"", PdfSheetMetadataService.FormatImperialScale(colonMetersPerPt), "decimal ratio should roundtrip as decimal inches per foot label");
+    AssertEqual("0.289\" = 1'0\"", PdfSheetMetadataService.FormatImperialScale(userDecimalMetersPerPt), "bare decimal ratio should display as decimal inches per foot");
     AssertClose(keyboardMetersPerPt, colonMetersPerPt, "keyboard k decimal ratio should match colon ratio");
     AssertClose(cyrillicMetersPerPt, colonMetersPerPt, "cyrillic k decimal ratio should match colon ratio");
     AssertClose(
-        ViewportConstants.PdfPointMeters * (1.0 / 0.287),
+        ViewportConstants.PdfPointMeters * (12.0 / 0.287),
         colonMetersPerPt,
-        "decimal ratio should use drawing-to-real right-over-left ratio");
+        "decimal ratio should use inches-per-foot scale");
 }
 
 static void JoistRoundingAliasesNormalize()
