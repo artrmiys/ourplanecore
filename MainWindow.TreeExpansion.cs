@@ -19,7 +19,7 @@ public partial class MainWindow
     private void BtnExpandTakeoffsTree_Click(object sender, RoutedEventArgs e) =>
         SetProjectTreeExpanded(TakeoffsTree, true, "Takeoffs tree expanded.");
 
-    private void BtnCollapseProjectTrees_Click(object sender, RoutedEventArgs e)
+    private void CollapseProjectTreeDisplaysWithStatus()
     {
         CollapseProjectTreeDisplays();
         TxtStatus.Text = "Pages and Takeoffs trees collapsed.";

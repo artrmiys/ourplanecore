@@ -572,20 +572,36 @@ internal static class TakeoffsTreeRegressionTests
     {
         string xaml = ReadRepoFile("MainWindow.xaml");
         string expansion = ReadRepoFile("MainWindow.TreeExpansion.cs");
+        string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
         string takeoffsClipboard = ReadRepoFile("MainWindow.TakeoffsClipboard.cs");
 
         AssertTrue(
-            xaml.Contains("BtnCollapseProjectTreesFromPages", StringComparison.Ordinal) &&
-            xaml.Contains("BtnCollapseProjectTreesFromTakeoffs", StringComparison.Ordinal) &&
-            xaml.Contains("Click=\"BtnCollapseProjectTrees_Click\"", StringComparison.Ordinal) &&
-            xaml.Contains("ToolTip=\"Collapse Pages and Takeoffs trees\"", StringComparison.Ordinal),
-            "Pages and Takeoffs headers should expose a shared collapse-both-trees button");
+            !xaml.Contains("Content=\"2-\"", StringComparison.Ordinal) &&
+            !xaml.Contains("BtnCollapseProjectTreesFromPages", StringComparison.Ordinal) &&
+            !xaml.Contains("BtnCollapseProjectTreesFromTakeoffs", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"BtnCollapsePagesTree\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnCollapsePagesTree_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"BtnCollapseTakeoffsTree\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnCollapseTakeoffsTree_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("ToolTip=\"Collapse all Pages nodes\"", StringComparison.Ordinal) &&
+            xaml.Contains("ToolTip=\"Collapse all Takeoffs nodes\"", StringComparison.Ordinal),
+            "the existing minus buttons should keep their old individual mouse behavior without adding a separate 2- button");
 
         AssertTrue(
-            expansion.Contains("private void BtnCollapseProjectTrees_Click", StringComparison.Ordinal) &&
+            SliceMethod(expansion, "private void BtnCollapsePagesTree_Click")
+                .Contains("SetProjectTreeExpanded(PagesTree, false, \"Pages tree collapsed.\");", StringComparison.Ordinal) &&
+            SliceMethod(expansion, "private void BtnCollapseTakeoffsTree_Click")
+                .Contains("SetProjectTreeExpanded(TakeoffsTree, false, \"Takeoffs tree collapsed.\");", StringComparison.Ordinal) &&
+            expansion.Contains("private void CollapseProjectTreeDisplaysWithStatus()", StringComparison.Ordinal) &&
             expansion.Contains("CollapseProjectTreeDisplays();", StringComparison.Ordinal) &&
             expansion.Contains("Pages and Takeoffs trees collapsed.", StringComparison.Ordinal),
-            "shared tree collapse button must collapse both project trees and clear their saved expansion state");
+            "mouse minus buttons should collapse their own tree while the shared collapse helper remains available");
+
+        AssertTrue(
+            shortcuts.Contains("case Key.Subtract:", StringComparison.Ordinal) &&
+            shortcuts.Contains("case Key.OemMinus:", StringComparison.Ordinal) &&
+            shortcuts.Contains("CollapseProjectTreeDisplaysWithStatus();", StringComparison.Ordinal),
+            "keyboard minus must collapse both project trees through the shared helper");
 
         AssertTrue(
             takeoffsClipboard.Contains("TryDeleteTakeoffsKeyboardSelection()", StringComparison.Ordinal) &&

@@ -58,6 +58,11 @@ public partial class MainWindow
 
         switch (key)
         {
+            case Key.Subtract:
+            case Key.OemMinus:
+                CollapseProjectTreeDisplaysWithStatus();
+                e.Handled = true;
+                break;
             case Key.Space:
                 BtnActiveTakeoffRecord_Click(this, new RoutedEventArgs());
                 e.Handled = true;
