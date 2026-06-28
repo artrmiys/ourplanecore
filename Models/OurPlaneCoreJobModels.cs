@@ -40,6 +40,7 @@ public sealed class PageInfo
     public string LegendTakeoffOrderMode { get; set; } = "auto";
     public List<string> TakeoffLayerOrder { get; set; } = [];
     public List<string> HiddenTakeoffs { get; set; } = [];
+    public List<string> HiddenMeasurements { get; set; } = [];
     public string OverlayPageFolder { get; init; } = "";
     public bool OverlayVisible { get; init; } = true;
     public string OverlayColor { get; init; } = "#E53935";
@@ -76,6 +77,9 @@ public sealed class SourceInfo
 
     [JsonPropertyName("hidden_takeoffs")]
     public List<string> HiddenTakeoffs { get; set; } = [];
+
+    [JsonPropertyName("hidden_measurements")]
+    public List<string> HiddenMeasurements { get; set; } = [];
 
     [JsonPropertyName("overlay_page_folder")]
     public string OverlayPageFolder { get; set; } = "";

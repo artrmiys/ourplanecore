@@ -81,6 +81,7 @@ public partial class MainWindow
                     Header = BuildPageHeader(page),
                     Tag = page,
                     IsExpanded = false,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 };
                 RebuildPageTakeoffNodes(pageItem, page);
                 items.Add(pageItem);
@@ -118,14 +119,24 @@ public partial class MainWindow
             IsExpanded = true,
         };
 
-    private StackPanel BuildPageHeader(PageInfo page)
+    private DockPanel BuildPageHeader(PageInfo page)
     {
-        var panel = new StackPanel
+        var panel = new DockPanel
+        {
+            Background = Brushes.Transparent,
+            LastChildFill = true,
+        };
+
+        FrameworkElement visibilityDot = BuildPageMeasurementVisibilityDot(page);
+        DockPanel.SetDock(visibilityDot, Dock.Right);
+        panel.Children.Add(visibilityDot);
+
+        var nameRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Background = Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        panel.Children.Add(new TextBlock
+        nameRow.Children.Add(new TextBlock
         {
             Text = $"  {PdfSheetMetadataService.VisibleSheetDisplayName(page.Name)}",
             VerticalAlignment = VerticalAlignment.Center,
@@ -133,7 +144,7 @@ public partial class MainWindow
 
         if (page.ScaleMetersPerPt <= 0)
         {
-            panel.Children.Add(new TextBlock
+            nameRow.Children.Add(new TextBlock
             {
                 Text = "  unscaled",
                 Foreground = Brushes.Firebrick,
@@ -143,6 +154,7 @@ public partial class MainWindow
             });
         }
 
+        panel.Children.Add(nameRow);
         return panel;
     }
 
@@ -628,6 +640,14 @@ public partial class MainWindow
         if (FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) != null)
             return;
 
+        if (item.Tag is PageInfo visibilityPage &&
+            IsPageMeasurementVisibilityToggleSource(e.OriginalSource as DependencyObject))
+        {
+            TogglePageMeasurementVisibilitySnapshot(visibilityPage);
+            e.Handled = true;
+            return;
+        }
+
         if (item.Tag is PageTakeoffNode pageTakeoff)
         {
             HandlePageTakeoffNodeMultiSelect(item, pageTakeoff, e);
@@ -713,6 +733,8 @@ public partial class MainWindow
     private bool CanArmPagesTreeDrag(TreeViewItem item, DependencyObject? source)
     {
         if (FindAncestor<ToggleButton>(source) != null)
+            return false;
+        if (IsPageMeasurementVisibilityToggleSource(source))
             return false;
         if (IsPageOverlayVisibilityToggleSource(source))
             return false;

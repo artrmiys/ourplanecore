@@ -195,6 +195,7 @@ var tests = new List<(string Name, Action Run)>
     ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
     ("display label toggles refresh detached sheets", TakeoffsTreeRegressionTests.DisplayLabelTogglesRefreshDetachedSheets),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
+    ("page measurement visibility toggle is wired", TakeoffsTreeRegressionTests.PageMeasurementVisibilityToggleIsWired),
     ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),
     ("raster snap strict black lines only is wired", TakeoffsTreeRegressionTests.RasterSnapStrictBlackLinesOnlyIsWired),
@@ -206,6 +207,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff auto routing sends sqft areas to sqfts", TakeoffAutoRoutingSendsSqftAreasToSqfts),
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
     ("takeoff auto routing sorts page legend labels", TakeoffAutoRoutingSortsPageLegendLabels),
+    ("sheet legend hidden measurements keep new measurements visible", SheetLegendHiddenMeasurementsKeepNewMeasurementsVisible),
     ("takeoff detail refs sort by sheet then detail", TakeoffDetailRefsSortBySheetThenDetail),
     ("sample guide project creates guide pages and screenshots", SampleJobGuideTests.CreatesGuidePagesScreenshotsAndTakeoffs),
     ("sheet legend live auto ignores stored auto order", SheetLegendLiveAutoIgnoresStoredAutoOrder),
@@ -1734,6 +1736,43 @@ static void TakeoffAutoRoutingSortsPageLegendLabels()
         "corners,ext 9.98,2x8 walls,2x4 walls,13/S101,14/S101,2/S102,14/S502,base,1st,porch,count 1,count 2,count 10",
         order,
         "page legend label sort");
+}
+
+static void SheetLegendHiddenMeasurementsKeepNewMeasurementsVisible()
+{
+    WithTempJob("sheet_legend_hidden_measurements", job =>
+    {
+        PageInfo page = CreatePageItem(job, job.PagesRoot, "A701");
+        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        TakeoffItem item = CreateMeasuredTakeoffItem(
+            job,
+            walls,
+            "Walls",
+            "line",
+            page.FolderPath,
+            [new SKPoint(0, 0), new SKPoint(10, 0)]);
+        page.HiddenMeasurements = [item.Measurements[0].Id];
+
+        string hidden = string.Join(",",
+            SheetLegendBuilder.Build(job, page, [item], UnitMode.Imperial)
+                .Select(entry => entry.Name));
+        AssertEqual("", hidden, "old hidden measurement should not appear in legend");
+
+        item.Measurements.Add(new Measurement
+        {
+            Name = "Walls",
+            MType = "line",
+            Color = item.Color,
+            PageFolder = page.FolderPath,
+            TakeoffFolder = item.FolderPath,
+            Points = [new SKPoint(20, 0), new SKPoint(30, 0)],
+        });
+
+        string visible = string.Join(",",
+            SheetLegendBuilder.Build(job, page, [item], UnitMode.Imperial)
+                .Select(entry => entry.Name));
+        AssertEqual("Walls", visible, "new measurement should remain visible under snapshot hide");
+    });
 }
 
 static void TakeoffDetailRefsSortBySheetThenDetail()
@@ -3529,6 +3568,7 @@ static void PageOverlayPersistsThroughSourceRewrites()
         OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2, 3.75);
         OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
         OurPlaneCoreJobStore.SavePageHiddenTakeoffs(basePage.FolderPath, ["Walls"]);
+        OurPlaneCoreJobStore.SavePageHiddenMeasurements(basePage.FolderPath, ["m-old-1", "m-old-2"]);
         PageInfo loaded = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page missing");
         AssertEqual(overlayPage.FolderPath, loaded.OverlayPageFolder, "overlay page path");
@@ -3540,6 +3580,7 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(3.75, loaded.OverlayRotationDegrees, "overlay rotation");
         AssertFalse(loaded.OverlayVisible, "overlay visibility");
         AssertEqual("Walls", string.Join(",", loaded.HiddenTakeoffs), "hidden takeoffs");
+        AssertEqual("m-old-1,m-old-2", string.Join(",", loaded.HiddenMeasurements), "hidden measurements");
 
         OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 13, -8, 1.25);
         PageInfo afterLegacyTransform = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
@@ -3559,6 +3600,7 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(3.75, afterScale.OverlayRotationDegrees, "overlay rotation survives scale save");
         AssertFalse(afterScale.OverlayVisible, "overlay visibility survives scale save");
         AssertEqual("Walls", string.Join(",", afterScale.HiddenTakeoffs), "hidden takeoffs survive scale save");
+        AssertEqual("m-old-1,m-old-2", string.Join(",", afterScale.HiddenMeasurements), "hidden measurements survive scale save");
 
         OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#43A047", 0.8);
         PageInfo afterColor = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)

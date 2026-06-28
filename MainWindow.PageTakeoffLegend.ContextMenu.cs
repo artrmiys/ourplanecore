@@ -95,6 +95,11 @@ public partial class MainWindow
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var hiddenMeasurements = anchor.Page.HiddenMeasurements
+            .Select(NormalizeMeasurementVisibilityId)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         foreach (PageTakeoffNode node in selectedNodes)
         {
@@ -107,11 +112,21 @@ public partial class MainWindow
             else if (!hidden.Contains(key, StringComparer.OrdinalIgnoreCase))
                 hidden.Add(key);
         }
+        if (visible)
+            hiddenMeasurements = RemoveHiddenMeasurementsForTakeoffs(
+                anchor.Page,
+                selectedNodes.Select(node => node.Takeoff),
+                hiddenMeasurements);
 
         anchor.Page.HiddenTakeoffs = hidden;
+        anchor.Page.HiddenMeasurements = hiddenMeasurements;
         if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, anchor.Page.FolderPath))
+        {
             _currentPage.HiddenTakeoffs = hidden.ToList();
+            _currentPage.HiddenMeasurements = hiddenMeasurements.ToList();
+        }
         OurPlaneCoreJobStore.SavePageHiddenTakeoffs(anchor.Page.FolderPath, hidden);
+        OurPlaneCoreJobStore.SavePageHiddenMeasurements(anchor.Page.FolderPath, hiddenMeasurements);
         RefreshPageOverlayTreeNode(anchor.Page);
         ApplyViewportPageTakeoffVisibility(anchor.Page);
         RefreshSheetLegend();

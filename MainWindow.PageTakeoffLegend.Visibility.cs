@@ -19,9 +19,16 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(key))
             return true;
 
-        return !page.HiddenTakeoffs
+        if (page.HiddenTakeoffs
             .Select(NormalizeTakeoffLegendOrderKey)
-            .Contains(key, StringComparer.OrdinalIgnoreCase);
+            .Contains(key, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var measurements = MeasurementsForTakeoffOnPage(takeoff, page.FolderPath).ToList();
+        return measurements.Count == 0 ||
+               measurements.Any(measurement => !IsMeasurementHiddenByPageSnapshot(page, measurement));
     }
 
     private void TogglePageTakeoffVisibility(PageInfo page, TakeoffItem takeoff)
@@ -36,10 +43,17 @@ public partial class MainWindow
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        bool currentlyVisible = IsPageTakeoffVisible(page, takeoff);
         bool nowHidden;
-        if (hidden.Contains(key, StringComparer.OrdinalIgnoreCase))
+        var hiddenMeasurements = page.HiddenMeasurements
+            .Select(NormalizeMeasurementVisibilityId)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!currentlyVisible)
         {
             hidden.RemoveAll(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase));
+            hiddenMeasurements = RemoveHiddenMeasurementsForTakeoffs(page, [takeoff], hiddenMeasurements);
             nowHidden = false;
         }
         else
@@ -49,9 +63,14 @@ public partial class MainWindow
         }
 
         page.HiddenTakeoffs = hidden;
+        page.HiddenMeasurements = hiddenMeasurements;
         if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
+        {
             _currentPage.HiddenTakeoffs = hidden.ToList();
+            _currentPage.HiddenMeasurements = hiddenMeasurements.ToList();
+        }
         OurPlaneCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, hidden);
+        OurPlaneCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, hiddenMeasurements);
         RefreshPageOverlayTreeNode(page);
         ApplyViewportPageTakeoffVisibility(page);
         RefreshSheetLegend();
@@ -74,6 +93,7 @@ public partial class MainWindow
             .Select(item => item.FolderPath)
             .ToList();
         _viewport.SetHiddenTakeoffFolders(hiddenFolders);
+        _viewport.SetHiddenMeasurementIds(page.HiddenMeasurements);
         _viewport.SetTakeoffLayerOrder(LayerOrderedTakeoffsForPage(page).Select(item => item.FolderPath));
     }
 

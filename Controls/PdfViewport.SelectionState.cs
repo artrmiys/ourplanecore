@@ -268,6 +268,12 @@ public sealed partial class PdfViewport
 
     private bool IsMeasurementTakeoffVisible(Measurement measurement)
     {
+        if (!string.IsNullOrWhiteSpace(measurement.Id) &&
+            _hiddenMeasurementIds.Contains(measurement.Id.Trim()))
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(measurement.TakeoffFolder))
             return true;
 

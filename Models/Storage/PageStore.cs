@@ -170,6 +170,7 @@ internal static class PageStore
             LegendTakeoffOrderMode = NormalizeLegendTakeoffOrderMode(src.LegendTakeoffOrderMode),
             TakeoffLayerOrder = PageTakeoffLayerOrderStore.Load(pageFolder).ToList(),
             HiddenTakeoffs = NormalizeStringList(src.HiddenTakeoffs),
+            HiddenMeasurements = NormalizeStringList(src.HiddenMeasurements),
             OverlayPageFolder = ResolveRelativePagePath(pageFolder, src.OverlayPageFolder),
             OverlayVisible = src.OverlayVisible,
             OverlayColor = string.IsNullOrWhiteSpace(src.OverlayColor) ? "#E53935" : src.OverlayColor,
@@ -206,7 +207,8 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static void SavePageLegendTakeoffOrder(
@@ -239,7 +241,8 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static void SavePageHiddenTakeoffs(string pageFolder, IReadOnlyList<string> hiddenTakeoffs)
@@ -266,7 +269,36 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             hiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
+    }
+
+    public static void SavePageHiddenMeasurements(string pageFolder, IReadOnlyList<string> hiddenMeasurements)
+    {
+        SourceInfo? src = ReadSource(pageFolder);
+        if (src == null) return;
+
+        string pdfAbs = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
+        WriteSource(
+            pageFolder,
+            pdfAbs,
+            src.Page,
+            src.ScaleMetersPerPt,
+            src.PdfLayers,
+            src.PdfLayersCached,
+            src.LegendTakeoffOrder,
+            src.LegendTakeoffOrderMode,
+            src.OverlayPageFolder,
+            src.OverlayVisible,
+            src.OverlayColor,
+            src.OverlayOpacity,
+            src.OverlayOffsetXPt,
+            src.OverlayOffsetYPt,
+            src.OverlayScale,
+            src.OverlayRotationDegrees,
+            src.HiddenTakeoffs,
+            src.RasterSheet,
+            hiddenMeasurements);
     }
 
     public static void ReplacePagePdf(string pageFolder, string pdfAbsPath, int pageIndex = 0)
@@ -292,7 +324,8 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            rasterSheet: null);
+            rasterSheet: null,
+            hiddenMeasurements: src.HiddenMeasurements);
     }
 
     public static void SavePageOverlay(
@@ -326,7 +359,8 @@ internal static class PageStore
             changesOverlay ? 1 : src.OverlayScale,
             changesOverlay ? 0 : src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static void SavePageOverlayVisibility(string pageFolder, bool isVisible)
@@ -353,7 +387,8 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static void ClearPageOverlay(string pageFolder) =>
@@ -388,7 +423,8 @@ internal static class PageStore
             NormalizeOverlayScale(overlayScale),
             NormalizeOverlayRotation(overlayRotationDegrees ?? src.OverlayRotationDegrees),
             src.HiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static void SavePageLayerCache(string pageFolder, IReadOnlyList<PdfLayerInfo> pdfLayers)
@@ -415,7 +451,8 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            src.RasterSheet);
+            src.RasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static void SavePageRasterSheet(string pageFolder, RasterSheetSource? rasterSheet)
@@ -442,7 +479,8 @@ internal static class PageStore
             src.OverlayScale,
             src.OverlayRotationDegrees,
             src.HiddenTakeoffs,
-            rasterSheet);
+            rasterSheet,
+            src.HiddenMeasurements);
     }
 
     public static string PageLayersJsonPath(string pageFolder) =>
@@ -532,7 +570,8 @@ internal static class PageStore
                     overlayScale: snap.OverlayScale,
                     overlayRotationDegrees: snap.OverlayRotationDegrees,
                     hiddenTakeoffs: snap.HiddenTakeoffs,
-                    rasterSheet: snap.RasterSheet);
+                    rasterSheet: snap.RasterSheet,
+                    hiddenMeasurements: snap.HiddenMeasurements);
         }
     }
 
@@ -564,6 +603,7 @@ internal static class PageStore
                 src.OverlayScale,
                 src.OverlayRotationDegrees,
                 NormalizeStringList(src.HiddenTakeoffs),
+                NormalizeStringList(src.HiddenMeasurements),
                 NormalizeRasterSheet(src.RasterSheet)));
         }
 
@@ -588,7 +628,8 @@ internal static class PageStore
         double overlayScale = 1.0,
         double overlayRotationDegrees = 0,
         IReadOnlyList<string>? hiddenTakeoffs = null,
-        RasterSheetSource? rasterSheet = null)
+        RasterSheetSource? rasterSheet = null,
+        IReadOnlyList<string>? hiddenMeasurements = null)
     {
         var src = new SourceInfo
         {
@@ -603,6 +644,7 @@ internal static class PageStore
                 .ToList() ?? [],
             LegendTakeoffOrderMode = NormalizeLegendTakeoffOrderMode(legendTakeoffOrderMode),
             HiddenTakeoffs = NormalizeStringList(hiddenTakeoffs),
+            HiddenMeasurements = NormalizeStringList(hiddenMeasurements),
             OverlayPageFolder = MakeRelativePageReference(pageFolder, overlayPageFolder),
             OverlayVisible = overlayVisible,
             OverlayColor = string.IsNullOrWhiteSpace(overlayColor) ? "#E53935" : overlayColor,
@@ -801,4 +843,5 @@ internal sealed record PageSourceSnapshot(
     double OverlayScale,
     double OverlayRotationDegrees,
     IReadOnlyList<string> HiddenTakeoffs,
+    IReadOnlyList<string> HiddenMeasurements,
     RasterSheetSource? RasterSheet);

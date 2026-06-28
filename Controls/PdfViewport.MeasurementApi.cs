@@ -37,6 +37,21 @@ public sealed partial class PdfViewport
         RequestRepaint();
     }
 
+    public void SetHiddenMeasurementIds(IEnumerable<string> measurementIds)
+    {
+        _hiddenMeasurementIds.Clear();
+        foreach (string measurementId in measurementIds)
+        {
+            string clean = (measurementId ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(clean))
+                _hiddenMeasurementIds.Add(clean);
+        }
+
+        InvalidateHiddenTakeoffFolderCache();
+        PruneHiddenMeasurementSelection();
+        RequestRepaint();
+    }
+
     public void SetTakeoffLayerOrder(IEnumerable<string> takeoffFolders)
     {
         _takeoffLayerRanks.Clear();

@@ -1377,6 +1377,45 @@ internal static class TakeoffsTreeRegressionTests
             "silent Takeoffs-tree selection should reveal selected takeoffs inside folders");
     }
 
+    public static void PageMeasurementVisibilityToggleIsWired()
+    {
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pageVisibility = ReadRepoFile("MainWindow.PageMeasurementVisibility.cs");
+        string pageTakeoffVisibility = ReadRepoFile("MainWindow.PageTakeoffLegend.Visibility.cs");
+        string pageTakeoffMenu = ReadRepoFile("MainWindow.PageTakeoffLegend.ContextMenu.cs");
+        string viewportApi = ReadRepoFile("Controls/PdfViewport.MeasurementApi.cs");
+        string viewportSelection = ReadRepoFile("Controls/PdfViewport.SelectionState.cs");
+        string models = ReadRepoFile("Models/OurPlaneCoreJobModels.cs");
+        string pageStore = ReadRepoFile("Models/Storage/PageStore.cs");
+
+        AssertTrue(
+            pagesTree.Contains("BuildPageMeasurementVisibilityDot(page)", StringComparison.Ordinal) &&
+            pagesTree.Contains("IsPageMeasurementVisibilityToggleSource(e.OriginalSource as DependencyObject)", StringComparison.Ordinal) &&
+            pagesTree.Contains("TogglePageMeasurementVisibilitySnapshot(visibilityPage)", StringComparison.Ordinal) &&
+            pagesTree.Contains("IsPageMeasurementVisibilityToggleSource(source)", StringComparison.Ordinal),
+            "Pages tree sheet rows must expose a non-dragging dot that toggles all current sheet measurements");
+        AssertTrue(
+            pageVisibility.Contains("SavePageMeasurementVisibility(page, [], hiddenMeasurements)", StringComparison.Ordinal) &&
+            pageVisibility.Contains("SavePageMeasurementVisibility(page, [], [])", StringComparison.Ordinal) &&
+            pageVisibility.Contains("CurrentMeasurementsForPage(page)", StringComparison.Ordinal) &&
+            pageVisibility.Contains("New measurements stay visible", StringComparison.Ordinal),
+            "sheet dot must hide a snapshot of current measurement IDs and clear the snapshot to show all");
+        AssertTrue(
+            pageTakeoffVisibility.Contains("IsMeasurementHiddenByPageSnapshot(page, measurement)", StringComparison.Ordinal) &&
+            pageTakeoffVisibility.Contains("RemoveHiddenMeasurementsForTakeoffs(page, [takeoff], hiddenMeasurements)", StringComparison.Ordinal) &&
+            pageTakeoffMenu.Contains("RemoveHiddenMeasurementsForTakeoffs(", StringComparison.Ordinal),
+            "individual linked-takeoff show must be able to reveal only the selected takeoff after a sheet snapshot hide");
+        AssertTrue(
+            viewportApi.Contains("public void SetHiddenMeasurementIds", StringComparison.Ordinal) &&
+            viewportSelection.Contains("_hiddenMeasurementIds.Contains(measurement.Id.Trim())", StringComparison.Ordinal),
+            "viewport drawing, hit-test, and selection paths must respect hidden measurement IDs");
+        AssertTrue(
+            models.Contains("[JsonPropertyName(\"hidden_measurements\")]", StringComparison.Ordinal) &&
+            pageStore.Contains("SavePageHiddenMeasurements", StringComparison.Ordinal) &&
+            pageStore.Contains("HiddenMeasurements = NormalizeStringList(hiddenMeasurements)", StringComparison.Ordinal),
+            "source.json persistence must keep hidden measurement IDs through page rewrites");
+    }
+
     private static string ReadPageTakeoffLegendSources() =>
         string.Concat(
             ReadRepoFile("MainWindow.PageTakeoffLegend.cs"),

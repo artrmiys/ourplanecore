@@ -39,11 +39,13 @@ public sealed class DetachedSheetWindow : Window
         AppSettings settings,
         UnitMode unitMode)
     {
+        PageInfo page = OurPlaneCoreJobStore.TryReadPage(Page.FolderPath) ?? Page;
         ApplyViewportDisplaySettings(settings, unitMode);
         _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
-        _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, Page, takeoffItems));
+        _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, page, takeoffItems));
+        _viewport.SetHiddenMeasurementIds(page.HiddenMeasurements);
         _viewport.SetSheetLegend(settings.ShowSheetLegend
-            ? SheetLegendBuilder.Build(job, Page, takeoffItems, unitMode)
+            ? SheetLegendBuilder.Build(job, page, takeoffItems, unitMode)
             : []);
         _viewport.InvalidateVisual();
     }
@@ -62,6 +64,7 @@ public sealed class DetachedSheetWindow : Window
         _viewport.SetTool("pan");
         _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, page, takeoffItems));
+        _viewport.SetHiddenMeasurementIds(page.HiddenMeasurements);
 
         _viewport.LoadPage(
             page.PdfPath,

@@ -79,7 +79,9 @@ public partial class MainWindow
             var entries = VisibleOrderedTakeoffsForPage(_currentPage)
                 .Select(item =>
                 {
-                    var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath).ToList();
+                    var pageMeasurements = MeasurementsForTakeoffOnPage(item, _currentPage.FolderPath)
+                        .Where(measurement => !IsMeasurementHiddenByPageSnapshot(_currentPage, measurement))
+                        .ToList();
                     return pageMeasurements.Count == 0
                         ? null
                         : new SheetLegendEntry(

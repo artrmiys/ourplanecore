@@ -27,19 +27,28 @@ public static class SheetLegendBuilder
             .Select(key => NormalizeLegendOrderKey(job, key))
             .Where(key => !string.IsNullOrWhiteSpace(key))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hiddenMeasurements = page.HiddenMeasurements
+            .Select(NormalizeMeasurementId)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return OrderedTakeoffs(job, page, pageTakeoffs)
             .Where(item => !hidden.Contains(LegendOrderKey(job, item.FolderPath)))
-            .Select(item => BuildEntry(page, item, unitMode))
+            .Select(item => BuildEntry(page, item, unitMode, hiddenMeasurements))
             .Where(entry => entry != null)
             .Cast<SheetLegendEntry>()
             .ToList();
     }
 
-    private static SheetLegendEntry? BuildEntry(PageInfo page, TakeoffItem item, UnitMode unitMode)
+    private static SheetLegendEntry? BuildEntry(
+        PageInfo page,
+        TakeoffItem item,
+        UnitMode unitMode,
+        IReadOnlySet<string> hiddenMeasurements)
     {
         var measurements = item.Measurements
             .Where(measurement => IsSamePageFolder(measurement.PageFolder, page.FolderPath))
+            .Where(measurement => !hiddenMeasurements.Contains(NormalizeMeasurementId(measurement.Id)))
             .ToList();
         if (measurements.Count == 0)
             return null;
@@ -151,6 +160,9 @@ public static class SheetLegendBuilder
 
         return clean.Replace('\\', '/').Trim('/');
     }
+
+    private static string NormalizeMeasurementId(string? value) =>
+        (value ?? "").Trim();
 
     private static bool IsSamePageFolder(string? left, string right)
     {

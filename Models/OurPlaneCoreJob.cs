@@ -70,6 +70,9 @@ public static class OurPlaneCoreJobStore
     public static void SavePageHiddenTakeoffs(string pageFolder, IReadOnlyList<string> hiddenTakeoffs) =>
         PageStore.SavePageHiddenTakeoffs(pageFolder, hiddenTakeoffs);
 
+    public static void SavePageHiddenMeasurements(string pageFolder, IReadOnlyList<string> hiddenMeasurements) =>
+        PageStore.SavePageHiddenMeasurements(pageFolder, hiddenMeasurements);
+
     public static void ReplacePagePdf(string pageFolder, string pdfAbsPath, int pageIndex = 0) =>
         PageStore.ReplacePagePdf(pageFolder, pdfAbsPath, pageIndex);
 
