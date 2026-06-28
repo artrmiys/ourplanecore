@@ -221,7 +221,7 @@ public partial class MainWindow
             item.Foreground = brushes.RowForeground;
             item.ClearValue(Control.FontWeightProperty);
         }
-        else if (IsPageMeasuredByActiveTakeoff(item))
+        else if (_pageTakeoffMultiSelection.Count > 0 && IsPageMeasuredByActiveTakeoff(item))
         {
             item.Background = brushes.MeasuredByActive;
             item.Foreground = brushes.RowForeground;

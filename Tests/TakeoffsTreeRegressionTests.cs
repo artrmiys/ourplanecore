@@ -690,8 +690,8 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             revealMethod.Contains("BringPageTreeItemIntoCenteredView(preferredLinked)", StringComparison.Ordinal) &&
             !revealMethod.Contains("preferredLinked.IsSelected = true", StringComparison.Ordinal) &&
-            !revealMethod.Contains("_pageTakeoffMultiSelection.Add", StringComparison.Ordinal),
-            "Takeoffs-tree reveal should scroll to linked Pages rows without selecting or multi-highlighting PageTakeoffNode rows");
+            revealMethod.Contains("_pageTakeoffMultiSelection.Add(PageTakeoffSelectionKey(new PageTakeoffNode(page, takeoff)))", StringComparison.Ordinal),
+            "Takeoffs-tree reveal should scroll to and highlight linked Pages rows without selecting PageTakeoffNode and opening its sheet");
         AssertTrue(
             scheduleMethod.Contains("RunScheduledTakeoffSelectionSync(version, action)", StringComparison.Ordinal) &&
             scheduledRunMethod.Contains("_takeoffsDragStart != null && Mouse.LeftButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
@@ -1521,6 +1521,9 @@ internal static class TakeoffsTreeRegressionTests
         AssertFalse(
             applyVisual.Contains("IsActivePageTakeoffNode(item)", StringComparison.Ordinal),
             "Page tree linked-takeoff rows should only use selection highlighting when the user selected those linked rows");
+        AssertTrue(
+            applyVisual.Contains("_pageTakeoffMultiSelection.Count > 0 && IsPageMeasuredByActiveTakeoff(item)", StringComparison.Ordinal),
+            "Page row active-takeoff highlighting should clear when ordinary Pages-tree selection clears linked-takeoff selection");
     }
 
     public static void TakeoffTreeSectionRowsDefaultHiddenAndSettingWired()

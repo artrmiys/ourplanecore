@@ -230,6 +230,7 @@ public partial class MainWindow
 
             foreach (TakeoffItem takeoff in matchedTakeoffs)
             {
+                _pageTakeoffMultiSelection.Add(PageTakeoffSelectionKey(new PageTakeoffNode(page, takeoff)));
                 TreeViewItem? linked = FindPageTakeoffTreeItem(pageItem, takeoff.FolderPath);
                 firstLinked ??= linked;
                 if (isPreferredPage)
