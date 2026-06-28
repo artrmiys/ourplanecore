@@ -1489,6 +1489,7 @@ internal static class TakeoffsTreeRegressionTests
     public static void PageMeasurementVisibilityToggleIsWired()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pageTakeoffLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.cs");
         string pageVisibility = ReadRepoFile("MainWindow.PageMeasurementVisibility.cs");
         string pageTakeoffVisibility = ReadRepoFile("MainWindow.PageTakeoffLegend.Visibility.cs");
         string pageTakeoffMenu = ReadRepoFile("MainWindow.PageTakeoffLegend.ContextMenu.cs");
@@ -1513,6 +1514,19 @@ internal static class TakeoffsTreeRegressionTests
             pageVisibility.Contains("CurrentMeasurementsForPage(page)", StringComparison.Ordinal) &&
             pageVisibility.Contains("New measurements stay visible", StringComparison.Ordinal),
             "sheet dot must be compact, hide a snapshot of current measurement IDs, and clear the snapshot to show all");
+        AssertTrue(
+            pageTakeoffLegend.Contains("PageTakeoffVisibilityToggleTag", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("BuildPageTakeoffVisibilityGlyph", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("BuildTakeoffSwatchGlyph(takeoff, swatchBrush", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("Click the symbol to toggle", StringComparison.Ordinal) &&
+            !pageTakeoffLegend.Contains("Text              = $\"{legendIndex + 1}.\"", StringComparison.Ordinal) &&
+            !pageTakeoffLegend.Contains("BuildPageTakeoffVisibilityDot", StringComparison.Ordinal),
+            "linked page takeoff rows must use the clickable takeoff glyph itself without a separate colored dot or left index");
+        AssertTrue(
+            pagesTree.Contains("IsPageTakeoffVisibilityToggleSource(e.OriginalSource as DependencyObject)", StringComparison.Ordinal) &&
+            pagesTree.Contains("TogglePageTakeoffVisibility(visibilityTakeoff.Page, visibilityTakeoff.Takeoff)", StringComparison.Ordinal) &&
+            pagesTree.Contains("if (IsPageTakeoffVisibilityToggleSource(source))", StringComparison.Ordinal),
+            "clicking the linked-takeoff glyph must toggle sheet visibility without starting selection or drag");
         AssertTrue(
             pageTakeoffVisibility.Contains("PageInfo visibilityPage = _currentPage;", StringComparison.Ordinal) &&
             pageTakeoffVisibility.Contains("_viewport.SetHiddenMeasurementIds(visibilityPage.HiddenMeasurements)", StringComparison.Ordinal),

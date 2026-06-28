@@ -654,6 +654,14 @@ public partial class MainWindow
             return;
         }
 
+        if (item.Tag is PageTakeoffNode visibilityTakeoff &&
+            IsPageTakeoffVisibilityToggleSource(e.OriginalSource as DependencyObject))
+        {
+            TogglePageTakeoffVisibility(visibilityTakeoff.Page, visibilityTakeoff.Takeoff);
+            e.Handled = true;
+            return;
+        }
+
         if (item.Tag is PageTakeoffNode pageTakeoff)
         {
             HandlePageTakeoffNodeMultiSelect(item, pageTakeoff, e);
@@ -742,6 +750,8 @@ public partial class MainWindow
             return false;
         if (IsPageMeasurementVisibilityToggleSource(source))
             return false;
+        if (IsPageTakeoffVisibilityToggleSource(source))
+            return false;
         if (IsPageOverlayVisibilityToggleSource(source))
             return false;
         if (item.Tag is PageTakeoffNode)
@@ -765,6 +775,21 @@ public partial class MainWindow
         while (source != null)
         {
             if (source is FrameworkElement { Tag: PageOverlayVisibilityToggleTag })
+                return true;
+            if (source is TreeViewItem)
+                return false;
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
+    private static bool IsPageTakeoffVisibilityToggleSource(DependencyObject? source)
+    {
+        while (source != null)
+        {
+            if (source is FrameworkElement { Tag: PageTakeoffVisibilityToggleTag })
                 return true;
             if (source is TreeViewItem)
                 return false;

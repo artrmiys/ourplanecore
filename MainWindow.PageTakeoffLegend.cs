@@ -14,6 +14,7 @@ public partial class MainWindow
     // Page takeoff node rebuilding, headers, ordering, and measurement lookup.
 
     private const string PageOverlayVisibilityToggleTag = "PageOverlayVisibilityToggle";
+    private const string PageTakeoffVisibilityToggleTag = "PageTakeoffVisibilityToggle";
 
     private void RebuildPageTakeoffNodes(TreeViewItem pageItem, PageInfo page)
     {
@@ -23,7 +24,6 @@ public partial class MainWindow
         pageItem.Items.Clear();
         IReadOnlyList<TakeoffItem> orderedTakeoffs = OrderedTakeoffsForPage(page);
         var addedTakeoffs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        int legendIndex = 0;
         foreach (TakeoffItem takeoff in orderedTakeoffs)
         {
             if (!addedTakeoffs.Add(TakeoffLegendOrderKey(takeoff)))
@@ -32,13 +32,12 @@ public partial class MainWindow
             var node = new PageTakeoffNode(page, takeoff);
             var child = new TreeViewItem
             {
-                Header = BuildPageTakeoffHeader(page, takeoff, legendIndex),
+                Header = BuildPageTakeoffHeader(page, takeoff),
                 Tag = node,
             };
             AttachLazyPageTakeoffContextMenu(child, node);
             pageItem.Items.Add(child);
             RegisterPageTreeItemSubtree(child);
-            legendIndex++;
         }
 
         if (!string.IsNullOrWhiteSpace(page.OverlayPageFolder))
@@ -142,7 +141,7 @@ public partial class MainWindow
         return dot;
     }
 
-    private FrameworkElement BuildPageTakeoffHeader(PageInfo page, TakeoffItem takeoff, int legendIndex)
+    private FrameworkElement BuildPageTakeoffHeader(PageInfo page, TakeoffItem takeoff)
     {
         bool isActive = IsActivePageTakeoff(page, takeoff);
         var secondaryBrush = (Brush)Application.Current.Resources["SecondaryForegroundBrush"]
@@ -170,28 +169,12 @@ public partial class MainWindow
             dock.Children.Add(qty);
         }
 
-        var indexText = new TextBlock
-        {
-            Text              = $"{legendIndex + 1}.",
-            Width             = 22,
-            TextAlignment     = TextAlignment.Right,
-            Foreground        = secondaryBrush,
-            FontSize          = 10,
-            Margin            = new Thickness(2, 0, 6, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        var swatchHost = BuildTakeoffSwatchGlyph(takeoff, swatchBrush, isActive ? 16 : 14);
-        swatchHost.Margin = new Thickness(0, 0, 6, 0);
-
         var nameRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        nameRow.Children.Add(BuildPageTakeoffVisibilityDot(page, takeoff, swatchBrush, isVisible));
-        nameRow.Children.Add(indexText);
-        nameRow.Children.Add(swatchHost);
+        nameRow.Children.Add(BuildPageTakeoffVisibilityGlyph(page, takeoff, swatchBrush, secondaryBrush, isVisible, isActive));
         nameRow.Children.Add(new TextBlock
         {
             Text              = takeoff.Name,
@@ -202,39 +185,42 @@ public partial class MainWindow
         dock.Children.Add(nameRow);
 
         dock.ToolTip =
-            $"{(isVisible ? "Visible" : "Hidden")} on this sheet. Click the dot to toggle." + Environment.NewLine +
-            $"Legend position: {legendIndex + 1}" + Environment.NewLine +
-            "Linked to the real Takeoffs item. Use Move Up/Down here only to change this sheet's legend order.";
+            $"{(isVisible ? "Visible" : "Hidden")} on this sheet. Click the symbol to toggle." + Environment.NewLine +
+            "Linked to the real Takeoffs item. Right-click to change this sheet's legend order.";
         return dock;
     }
 
-    private FrameworkElement BuildPageTakeoffVisibilityDot(
+    private FrameworkElement BuildPageTakeoffVisibilityGlyph(
         PageInfo page,
         TakeoffItem takeoff,
         Brush swatchBrush,
-        bool isVisible)
+        Brush secondaryBrush,
+        bool isVisible,
+        bool isActive)
     {
-        var dot = new Border
+        FrameworkElement glyph = BuildTakeoffSwatchGlyph(takeoff, swatchBrush, isActive ? 16 : 14);
+        glyph.Opacity = isVisible ? 1.0 : 0.34;
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+
+        var host = new Border
         {
-            Width = 11,
-            Height = 11,
-            CornerRadius = new CornerRadius(6),
-            Background = isVisible ? swatchBrush : Brushes.Transparent,
-            BorderBrush = swatchBrush,
-            BorderThickness = new Thickness(1.5),
-            Margin = new Thickness(2, 0, 7, 0),
+            Width = isActive ? 20 : 18,
+            Height = isActive ? 20 : 18,
+            Background = Brushes.Transparent,
+            BorderBrush = isVisible ? Brushes.Transparent : secondaryBrush,
+            BorderThickness = isVisible ? new Thickness(0) : new Thickness(1),
+            Margin = new Thickness(0, 0, 7, 0),
+            Child = glyph,
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
             Cursor = Cursors.Hand,
+            Tag = PageTakeoffVisibilityToggleTag,
             ToolTip = isVisible
                 ? $"Hide {takeoff.Name} on {page.Name}"
                 : $"Show {takeoff.Name} on {page.Name}",
         };
-        dot.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            TogglePageTakeoffVisibility(page, takeoff);
-            e.Handled = true;
-        };
-        return dot;
+        return host;
     }
 
     private IEnumerable<TakeoffItem> TakeoffsForPage(string pageFolder)
