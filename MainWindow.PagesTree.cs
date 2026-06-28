@@ -632,6 +632,9 @@ public partial class MainWindow
 
     private void PagesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (TryBeginPagesTreeMarqueeSelection(e))
+            return;
+
         _pagesDragStart = e.GetPosition(PagesTree);
         _pagesDragItem = null;
         _pagesDragArmed = false;

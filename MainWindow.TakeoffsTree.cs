@@ -227,6 +227,9 @@ public partial class MainWindow
 
     private void TakeoffsTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (TryBeginTakeoffsTreeMarqueeSelection(e))
+            return;
+
         _takeoffsDragStart = e.GetPosition(TakeoffsTree);
         _takeoffsDragItem = null;
         _takeoffsDragArmed = false;

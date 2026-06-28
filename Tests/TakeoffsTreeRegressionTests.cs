@@ -514,6 +514,60 @@ internal static class TakeoffsTreeRegressionTests
             "takeoff template tree should expand top-level folders while nested folders start collapsed");
     }
 
+    public static void TreeMarqueeMultiSelectionIsWired()
+    {
+        string window = ReadRepoFile("MainWindow.xaml.cs");
+        string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pagesDragDrop = ReadRepoFile("MainWindow.PagesDragDrop.cs");
+        string takeoffsTree = ReadRepoFile("MainWindow.TakeoffsTree.cs");
+        string takeoffsDragDrop = ReadRepoFile("MainWindow.TakeoffsDragDrop.cs");
+        string marquee = ReadRepoFile("MainWindow.TreeMarqueeSelection.cs");
+
+        AssertTrue(
+            window.Contains("PagesTree.PreviewMouseLeftButtonUp += PagesTree_PreviewMouseLeftButtonUp;", StringComparison.Ordinal) &&
+            window.Contains("PagesTree.LostMouseCapture += PagesTree_LostMouseCapture;", StringComparison.Ordinal) &&
+            window.Contains("TakeoffsTree.PreviewMouseLeftButtonUp += TakeoffsTree_PreviewMouseLeftButtonUp;", StringComparison.Ordinal) &&
+            window.Contains("TakeoffsTree.LostMouseCapture += TakeoffsTree_LostMouseCapture;", StringComparison.Ordinal),
+            "Pages and Takeoffs trees must finish/cancel marquee selection independently from drag/drop");
+
+        AssertTrue(
+            SliceMethod(pagesTree, "private void PagesTree_PreviewMouseLeftButtonDown(")
+                .Contains("if (TryBeginPagesTreeMarqueeSelection(e))", StringComparison.Ordinal) &&
+            SliceMethod(takeoffsTree, "private void TakeoffsTree_PreviewMouseLeftButtonDown(")
+                .Contains("if (TryBeginTakeoffsTreeMarqueeSelection(e))", StringComparison.Ordinal),
+            "tree marquee selection should get first chance on mouse down");
+
+        AssertTrue(
+            SliceMethod(pagesDragDrop, "private void PagesTree_MouseMove(")
+                .Contains("if (UpdatePagesTreeMarqueeSelection(e))", StringComparison.Ordinal) &&
+            SliceMethod(takeoffsDragDrop, "private void TakeoffsTree_MouseMove(")
+                .Contains("if (UpdateTakeoffsTreeMarqueeSelection(e))", StringComparison.Ordinal),
+            "tree marquee selection must update before the existing drag/drop move path starts");
+
+        AssertTrue(
+            marquee.Contains("AdornerLayer.GetAdornerLayer(tree)", StringComparison.Ordinal) &&
+            marquee.Contains("private sealed class TreeSelectionMarqueeAdorner : Adorner", StringComparison.Ordinal) &&
+            marquee.Contains("TreeItemIntersectsSelection(PagesTree, item, selectionRect)", StringComparison.Ordinal) &&
+            marquee.Contains("TreeItemIntersectsSelection(TakeoffsTree, item, selectionRect)", StringComparison.Ordinal),
+            "marquee selection should draw a visible rectangle and select rows by visible tree-item bounds");
+
+        AssertTrue(
+            marquee.Contains("_pagesMultiSelection.Clear();", StringComparison.Ordinal) &&
+            marquee.Contains("_pageTakeoffMultiSelection.Clear();", StringComparison.Ordinal) &&
+            marquee.Contains("_takeoffsMultiSelection.Clear();", StringComparison.Ordinal) &&
+            marquee.Contains("_takeoffSectionMultiSelection.Clear();", StringComparison.Ordinal) &&
+            marquee.Contains("item.Tag is TakeoffItem", StringComparison.Ordinal) &&
+            marquee.Contains("item.Tag is TakeoffFolderNode { IsRoot: false }", StringComparison.Ordinal),
+            "marquee selection should target Pages sheet/folder rows and Takeoffs item/folder rows without mixing section selections");
+
+        AssertTrue(
+            marquee.Contains("SelectPagesTreeMarqueeAnchorSilently()", StringComparison.Ordinal) &&
+            marquee.Contains("SelectTakeoffsTreeMarqueeAnchorSilently()", StringComparison.Ordinal) &&
+            marquee.Contains("ModifierKeys.Alt", StringComparison.Ordinal) &&
+            marquee.Contains("ModifierKeys.Control", StringComparison.Ordinal),
+            "marquee selection should preserve command anchors and support Alt-start plus Ctrl-additive selection");
+    }
+
     public static void FastRefreshDisabledForDataSafety()
     {
         string source = ReadRepoFile("MainWindow.TakeoffsTreeFastRefresh.cs");

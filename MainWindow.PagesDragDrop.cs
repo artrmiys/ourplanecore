@@ -12,6 +12,9 @@ public partial class MainWindow
 {
     private void PagesTree_MouseMove(object sender, MouseEventArgs e)
     {
+        if (UpdatePagesTreeMarqueeSelection(e))
+            return;
+
         if (_pagesDragStart == null)
             return;
 

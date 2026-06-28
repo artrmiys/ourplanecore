@@ -389,7 +389,9 @@ public partial class MainWindow : Window
         PreviewKeyDown += MainWindow_GlobalPreviewKeyDown;
         PagesTree.PreviewMouseRightButtonDown += PagesTree_PreviewMouseRightButtonDown;
         PagesTree.PreviewMouseLeftButtonDown += PagesTree_PreviewMouseLeftButtonDown;
+        PagesTree.PreviewMouseLeftButtonUp += PagesTree_PreviewMouseLeftButtonUp;
         PagesTree.MouseMove += PagesTree_MouseMove;
+        PagesTree.LostMouseCapture += PagesTree_LostMouseCapture;
         PagesTree.DragOver += PagesTree_DragOver;
         PagesTree.DragLeave += PagesTree_DragLeave;
         PagesTree.Drop += PagesTree_Drop;
@@ -400,7 +402,9 @@ public partial class MainWindow : Window
         PagesTree.AllowDrop = true;
         TakeoffsTree.PreviewMouseRightButtonDown += TakeoffsTree_PreviewMouseRightButtonDown;
         TakeoffsTree.PreviewMouseLeftButtonDown += TakeoffsTree_PreviewMouseLeftButtonDown;
+        TakeoffsTree.PreviewMouseLeftButtonUp += TakeoffsTree_PreviewMouseLeftButtonUp;
         TakeoffsTree.MouseMove += TakeoffsTree_MouseMove;
+        TakeoffsTree.LostMouseCapture += TakeoffsTree_LostMouseCapture;
         TakeoffsTree.DragOver += TakeoffsTree_DragOver;
         TakeoffsTree.DragLeave += TakeoffsTree_DragLeave;
         TakeoffsTree.Drop += TakeoffsTree_Drop;

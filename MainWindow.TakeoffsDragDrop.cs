@@ -16,6 +16,9 @@ public partial class MainWindow
 
     private void TakeoffsTree_MouseMove(object sender, MouseEventArgs e)
     {
+        if (UpdateTakeoffsTreeMarqueeSelection(e))
+            return;
+
         if (_takeoffsDragStart == null)
             return;
 
