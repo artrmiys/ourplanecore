@@ -1317,6 +1317,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string menus = ReadRepoFile("MainWindow.TakeoffsMenus.cs");
         string colors = ReadRepoFile("MainWindow.TakeoffsRandomColors.cs");
+        string visuals = ReadRepoFile("MainWindow.TakeoffTreeVisuals.cs");
 
         AssertTrue(
             menus.Contains("Random Colors for Items", StringComparison.Ordinal) &&
@@ -1328,6 +1329,11 @@ internal static class TakeoffsTreeRegressionTests
             colors.Contains("OurPlaneCoreJobStore.SaveTakeoffItem(item)", StringComparison.Ordinal) &&
             colors.Contains("_viewport.RefreshMeasurementDisplay()", StringComparison.Ordinal),
             "random takeoff colors must update item color, measurement colors, persisted sidecars, and viewport paint");
+        AssertTrue(
+            visuals.Contains("TakeoffTreeGlyphSize = 14", StringComparison.Ordinal) &&
+            visuals.Contains("BuildTakeoffSwatchGlyph(item, swatchBrush, TakeoffTreeGlyphSize)", StringComparison.Ordinal) &&
+            !visuals.Contains("isActive ? 18 : 16", StringComparison.Ordinal),
+            "Takeoffs tree takeoff symbols should stay the same 14px size for active and inactive rows");
     }
 
     public static void PageTakeoffLayersAndAltVertexModeAreWired()
@@ -1519,8 +1525,10 @@ internal static class TakeoffsTreeRegressionTests
             pageTakeoffLegend.Contains("BuildPageTakeoffVisibilityGlyph", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("BuildTakeoffSwatchGlyph(", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("Click the symbol to toggle", StringComparison.Ordinal) &&
-            pageTakeoffLegend.Contains("PageTakeoffGlyphHostSize = 12", StringComparison.Ordinal) &&
-            pageTakeoffLegend.Contains("PageTakeoffActiveGlyphHostSize = 13", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("PageTakeoffGlyphSize = 14", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("PageTakeoffActiveGlyphSize = PageTakeoffGlyphSize", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("PageTakeoffGlyphHostSize = PageTakeoffGlyphSize", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("PageTakeoffActiveGlyphHostSize = PageTakeoffActiveGlyphSize", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("Padding = new Thickness(0)", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("FontSize          = 11", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("BorderBrush = Brushes.Transparent", StringComparison.Ordinal) &&

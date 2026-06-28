@@ -14,6 +14,8 @@ public partial class MainWindow
 {
     // Takeoff tree row visuals, headers, and sheet legend.
 
+    private const double TakeoffTreeGlyphSize = 14;
+
     private void RefreshTreeItem(TakeoffItem item)
     {
         if (FindTakeoffTreeItem(item) is { } tvi)
@@ -325,7 +327,7 @@ public partial class MainWindow
             ?? new SolidColorBrush(Color.FromRgb(128, 128, 128));
 
         // Filled glyph in the takeoff color (no separate color square).
-        var swatchHost = BuildTakeoffSwatchGlyph(item, swatchBrush, isActive ? 18 : 16);
+        var swatchHost = BuildTakeoffSwatchGlyph(item, swatchBrush, TakeoffTreeGlyphSize);
 
         // Quantity goes to the right via DockPanel for ledger-style alignment.
         var dock = new DockPanel { LastChildFill = true, HorizontalAlignment = HorizontalAlignment.Stretch };

@@ -15,10 +15,10 @@ public partial class MainWindow
 
     private const string PageOverlayVisibilityToggleTag = "PageOverlayVisibilityToggle";
     private const string PageTakeoffVisibilityToggleTag = "PageTakeoffVisibilityToggle";
-    private const double PageTakeoffGlyphSize = 10;
-    private const double PageTakeoffActiveGlyphSize = 11;
-    private const double PageTakeoffGlyphHostSize = 12;
-    private const double PageTakeoffActiveGlyphHostSize = 13;
+    private const double PageTakeoffGlyphSize = 14;
+    private const double PageTakeoffActiveGlyphSize = PageTakeoffGlyphSize;
+    private const double PageTakeoffGlyphHostSize = PageTakeoffGlyphSize;
+    private const double PageTakeoffActiveGlyphHostSize = PageTakeoffActiveGlyphSize;
 
     private void RebuildPageTakeoffNodes(TreeViewItem pageItem, PageInfo page)
     {
@@ -220,7 +220,7 @@ public partial class MainWindow
             Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Margin = new Thickness(0, 0, 5, 0),
+            Margin = new Thickness(0, 0, 6, 0),
             Child = glyph,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
