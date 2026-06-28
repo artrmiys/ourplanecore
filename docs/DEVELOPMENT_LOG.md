@@ -1,5 +1,16 @@
 ﻿# Development Log
 
+## 2026-06-28 Takeoff/Page tree visibility and Count copy cleanup
+
+Wrote detailed handoff: `docs/30-takeoffs-measurements/KB_TAKEOFF_TREE_PAGE_TREE_SELECTION_2026_06_28.md`.
+
+- Page tree linked takeoff rows now use the takeoff glyph as the show/hide control, 14px, without old dots/numbers/hidden outlines.
+- Takeoffs tree selection highlights matching linked rows in Page tree again, while ordinary Page tree sheet selection clears stale linked/page active highlighting.
+- Takeoffs tree section/count rows are hidden by default; old nested rows are opt-in in `Settings > Defaults > Show section/count rows under takeoffs`.
+- Count copy/paste preserves the Count display symbol in the viewport and pasted/new takeoff.
+- Keyboard `-` collapses both Page tree and Takeoffs tree; mouse buttons remain tree-specific.
+- Verified: build 0/0, tests 400/400, compressed publish/deploy to update exe SHA256 `BB3B790653F3FC9C758B1E31FC61642513B215681A50965A42F4E8F39F4422A3`, packaged launch log clean after latest startup.
+
 ## 2026-06-26 Scale/export/display packaged fixes
 
 Wrote detailed handoff: `docs/SESSION_2026_06_26_SCALE_EXPORT_DISPLAY.md`.
