@@ -187,6 +187,7 @@ var tests = new List<(string Name, Action Run)>
     ("bookmarks dock panel and shortcut are wired", TakeoffsTreeRegressionTests.BookmarksDockPanelAndShortcutAreWired),
     ("takeoff template presets and collapsed depth are wired", TakeoffsTreeRegressionTests.TakeoffTemplatePresetsAndCollapsedDepthAreWired),
     ("tree marquee multi selection is wired", TakeoffsTreeRegressionTests.TreeMarqueeMultiSelectionIsWired),
+    ("project tree collapse and takeoff delete selection are wired", TakeoffsTreeRegressionTests.ProjectTreeCollapseAndTakeoffDeleteSelectionAreWired),
     ("takeoff tree search bulk visibility and markup selection are wired", TakeoffsTreeRegressionTests.TreeSearchBulkVisibilityAndViewportMarkupSelectionAreWired),
     ("takeoff folder random colors are wired", TakeoffsTreeRegressionTests.TakeoffFolderRandomColorsAreWired),
     ("annotation tab highlighter is wired", TakeoffsTreeRegressionTests.AnnotationTabHighlighterIsWired),

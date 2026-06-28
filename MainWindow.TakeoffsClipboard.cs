@@ -19,17 +19,16 @@ public partial class MainWindow
             return;
         }
 
-        if (TakeoffsTree.SelectedItem is not TreeViewItem item)
+        if (Keyboard.Modifiers == ModifierKeys.None && key == Key.Delete)
         {
-            if (Keyboard.Modifiers == ModifierKeys.None &&
-                key == Key.Delete &&
-                FirstSelectedTakeoffTreeItem() is { } selected)
-            {
-                DeleteTakeoffNodes(selected);
+            if (TryDeleteTakeoffsKeyboardSelection())
                 e.Handled = true;
-            }
             return;
         }
+
+        if (TakeoffsTree.SelectedItem is not TreeViewItem item)
+            return;
+
         if (item.Tag is TakeoffMeasurementNode sectionNode)
         {
             if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Up)
@@ -40,11 +39,6 @@ public partial class MainWindow
             else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Down)
             {
                 MoveTakeoffSections(sectionNode, 1);
-                e.Handled = true;
-            }
-            else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.Delete)
-            {
-                DeleteTakeoffSections(sectionNode);
                 e.Handled = true;
             }
             else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.F2 &&
@@ -91,11 +85,6 @@ public partial class MainWindow
             MoveTakeoffNodes(item, 1);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.Delete)
-        {
-            DeleteTakeoffNodes(item);
-            e.Handled = true;
-        }
         else if (Keyboard.Modifiers == ModifierKeys.None && key == Key.F2 && TakeoffSelectionCount(item) <= 1)
         {
             if (item.Tag is TakeoffItem takeoff)
@@ -106,12 +95,93 @@ public partial class MainWindow
         }
     }
 
+    private bool TryDeleteTakeoffsKeyboardSelection()
+    {
+        if (_takeoffSectionMultiSelection.Count > 0 &&
+            TryDeleteSelectedTakeoffSectionsFromKeyboard())
+        {
+            return true;
+        }
+
+        if (_takeoffsMultiSelection.Count > 0 &&
+            TryDeleteSelectedTakeoffNodesFromKeyboard())
+        {
+            return true;
+        }
+
+        if (TakeoffsTree.SelectedItem is not TreeViewItem selected)
+            return false;
+
+        if (selected.Tag is TakeoffMeasurementNode sectionNode)
+        {
+            DeleteTakeoffSections(sectionNode);
+            return true;
+        }
+
+        if (GetTakeoffNodePath(selected) != null)
+        {
+            DeleteTakeoffNodes(selected);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryDeleteSelectedTakeoffNodesFromKeyboard()
+    {
+        if (TakeoffsTree.SelectedItem is TreeViewItem selected &&
+            GetTakeoffNodePath(selected) is { } selectedPath &&
+            _takeoffsMultiSelection.Contains(selectedPath))
+        {
+            DeleteTakeoffNodes(selected);
+            return true;
+        }
+
+        if (FirstSelectedTakeoffTreeItem() is { } fallback)
+        {
+            DeleteTakeoffNodes(fallback);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryDeleteSelectedTakeoffSectionsFromKeyboard()
+    {
+        if (TakeoffsTree.SelectedItem is TreeViewItem selected &&
+            selected.Tag is TakeoffMeasurementNode selectedNode &&
+            _takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(selectedNode)))
+        {
+            DeleteTakeoffSections(selectedNode);
+            return true;
+        }
+
+        if (FirstSelectedTakeoffSectionNode() is { } fallback)
+        {
+            DeleteTakeoffSections(fallback);
+            return true;
+        }
+
+        return false;
+    }
+
     private TreeViewItem? FirstSelectedTakeoffTreeItem()
     {
         foreach (string path in _takeoffsMultiSelection)
         {
             if (FindTakeoffTreeItemByFolder(path) is { } item)
                 return item;
+        }
+
+        return null;
+    }
+
+    private TakeoffMeasurementNode? FirstSelectedTakeoffSectionNode()
+    {
+        foreach (string key in _takeoffSectionMultiSelection)
+        {
+            if (FindTakeoffSectionTreeItemByKey(key)?.Tag is TakeoffMeasurementNode node)
+                return node;
         }
 
         return null;

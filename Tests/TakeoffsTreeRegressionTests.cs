@@ -568,6 +568,44 @@ internal static class TakeoffsTreeRegressionTests
             "marquee selection should preserve command anchors and support Alt-start plus Ctrl-additive selection");
     }
 
+    public static void ProjectTreeCollapseAndTakeoffDeleteSelectionAreWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string expansion = ReadRepoFile("MainWindow.TreeExpansion.cs");
+        string takeoffsClipboard = ReadRepoFile("MainWindow.TakeoffsClipboard.cs");
+
+        AssertTrue(
+            xaml.Contains("BtnCollapseProjectTreesFromPages", StringComparison.Ordinal) &&
+            xaml.Contains("BtnCollapseProjectTreesFromTakeoffs", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnCollapseProjectTrees_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("ToolTip=\"Collapse Pages and Takeoffs trees\"", StringComparison.Ordinal),
+            "Pages and Takeoffs headers should expose a shared collapse-both-trees button");
+
+        AssertTrue(
+            expansion.Contains("private void BtnCollapseProjectTrees_Click", StringComparison.Ordinal) &&
+            expansion.Contains("CollapseProjectTreeDisplays();", StringComparison.Ordinal) &&
+            expansion.Contains("Pages and Takeoffs trees collapsed.", StringComparison.Ordinal),
+            "shared tree collapse button must collapse both project trees and clear their saved expansion state");
+
+        AssertTrue(
+            takeoffsClipboard.Contains("TryDeleteTakeoffsKeyboardSelection()", StringComparison.Ordinal) &&
+            takeoffsClipboard.Contains("TryDeleteSelectedTakeoffNodesFromKeyboard()", StringComparison.Ordinal) &&
+            takeoffsClipboard.Contains("TryDeleteSelectedTakeoffSectionsFromKeyboard()", StringComparison.Ordinal) &&
+            takeoffsClipboard.Contains("FirstSelectedTakeoffSectionNode()", StringComparison.Ordinal),
+            "Takeoffs Delete key should route through the current selection sets instead of only TreeView.SelectedItem");
+
+        AssertTrue(
+            SliceMethod(takeoffsClipboard, "private bool TryDeleteSelectedTakeoffNodesFromKeyboard()")
+                .Contains("_takeoffsMultiSelection.Contains(selectedPath)", StringComparison.Ordinal) &&
+            SliceMethod(takeoffsClipboard, "private bool TryDeleteSelectedTakeoffNodesFromKeyboard()")
+                .Contains("FirstSelectedTakeoffTreeItem()", StringComparison.Ordinal) &&
+            SliceMethod(takeoffsClipboard, "private bool TryDeleteSelectedTakeoffSectionsFromKeyboard()")
+                .Contains("_takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(selectedNode))", StringComparison.Ordinal) &&
+            SliceMethod(takeoffsClipboard, "private bool TryDeleteSelectedTakeoffSectionsFromKeyboard()")
+                .Contains("FirstSelectedTakeoffSectionNode()", StringComparison.Ordinal),
+            "Delete must prefer the visual multi-selection but still fall back to the selected row");
+    }
+
     public static void FastRefreshDisabledForDataSafety()
     {
         string source = ReadRepoFile("MainWindow.TakeoffsTreeFastRefresh.cs");
@@ -1150,7 +1188,8 @@ internal static class TakeoffsTreeRegressionTests
             "Pages and Takeoffs trees must expose search boxes with filter handlers");
         AssertTrue(
             takeoffsClipboard.Contains("FirstSelectedTakeoffTreeItem", StringComparison.Ordinal) &&
-            takeoffsClipboard.Contains("DeleteTakeoffNodes(selected)", StringComparison.Ordinal),
+            takeoffsClipboard.Contains("TryDeleteSelectedTakeoffNodesFromKeyboard", StringComparison.Ordinal) &&
+            takeoffsClipboard.Contains("DeleteTakeoffNodes(fallback)", StringComparison.Ordinal),
             "Takeoffs Delete key must fall back to the multi-selection anchor");
         AssertTrue(
             pageLegend.Contains("SetSelectedPageTakeoffVisibility", StringComparison.Ordinal) &&
