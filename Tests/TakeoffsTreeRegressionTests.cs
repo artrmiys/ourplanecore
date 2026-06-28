@@ -1390,16 +1390,24 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             pagesTree.Contains("BuildPageMeasurementVisibilityDot(page)", StringComparison.Ordinal) &&
+            pagesTree.Contains("HasCurrentPageMeasurements(page)", StringComparison.Ordinal) &&
             pagesTree.Contains("IsPageMeasurementVisibilityToggleSource(e.OriginalSource as DependencyObject)", StringComparison.Ordinal) &&
             pagesTree.Contains("TogglePageMeasurementVisibilitySnapshot(visibilityPage)", StringComparison.Ordinal) &&
             pagesTree.Contains("IsPageMeasurementVisibilityToggleSource(source)", StringComparison.Ordinal),
-            "Pages tree sheet rows must expose a non-dragging dot that toggles all current sheet measurements");
+            "Pages tree sheet rows with measurements must expose a non-dragging dot that toggles all current sheet measurements");
         AssertTrue(
             pageVisibility.Contains("SavePageMeasurementVisibility(page, [], hiddenMeasurements)", StringComparison.Ordinal) &&
             pageVisibility.Contains("SavePageMeasurementVisibility(page, [], [])", StringComparison.Ordinal) &&
+            pageVisibility.Contains("Width = 6", StringComparison.Ordinal) &&
+            pageVisibility.Contains("Height = 6", StringComparison.Ordinal) &&
+            pageVisibility.Contains("private bool HasCurrentPageMeasurements(PageInfo page)", StringComparison.Ordinal) &&
             pageVisibility.Contains("CurrentMeasurementsForPage(page)", StringComparison.Ordinal) &&
             pageVisibility.Contains("New measurements stay visible", StringComparison.Ordinal),
-            "sheet dot must hide a snapshot of current measurement IDs and clear the snapshot to show all");
+            "sheet dot must be compact, hide a snapshot of current measurement IDs, and clear the snapshot to show all");
+        AssertTrue(
+            pageTakeoffVisibility.Contains("PageInfo visibilityPage = _currentPage;", StringComparison.Ordinal) &&
+            pageTakeoffVisibility.Contains("_viewport.SetHiddenMeasurementIds(visibilityPage.HiddenMeasurements)", StringComparison.Ordinal),
+            "viewport visibility apply must use the current page state so deferred page-open work cannot restore stale hidden IDs");
         AssertTrue(
             pageTakeoffVisibility.Contains("IsMeasurementHiddenByPageSnapshot(page, measurement)", StringComparison.Ordinal) &&
             pageTakeoffVisibility.Contains("RemoveHiddenMeasurementsForTakeoffs(page, [takeoff], hiddenMeasurements)", StringComparison.Ordinal) &&

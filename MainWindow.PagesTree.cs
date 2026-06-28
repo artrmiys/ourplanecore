@@ -127,9 +127,12 @@ public partial class MainWindow
             LastChildFill = true,
         };
 
-        FrameworkElement visibilityDot = BuildPageMeasurementVisibilityDot(page);
-        DockPanel.SetDock(visibilityDot, Dock.Right);
-        panel.Children.Add(visibilityDot);
+        if (HasCurrentPageMeasurements(page))
+        {
+            FrameworkElement visibilityDot = BuildPageMeasurementVisibilityDot(page);
+            DockPanel.SetDock(visibilityDot, Dock.Right);
+            panel.Children.Add(visibilityDot);
+        }
 
         var nameRow = new StackPanel
         {

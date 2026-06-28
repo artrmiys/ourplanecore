@@ -84,7 +84,8 @@ public partial class MainWindow
         if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
             return;
 
-        var hiddenKeys = page.HiddenTakeoffs
+        PageInfo visibilityPage = _currentPage;
+        var hiddenKeys = visibilityPage.HiddenTakeoffs
             .Select(NormalizeTakeoffLegendOrderKey)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -93,8 +94,8 @@ public partial class MainWindow
             .Select(item => item.FolderPath)
             .ToList();
         _viewport.SetHiddenTakeoffFolders(hiddenFolders);
-        _viewport.SetHiddenMeasurementIds(page.HiddenMeasurements);
-        _viewport.SetTakeoffLayerOrder(LayerOrderedTakeoffsForPage(page).Select(item => item.FolderPath));
+        _viewport.SetHiddenMeasurementIds(visibilityPage.HiddenMeasurements);
+        _viewport.SetTakeoffLayerOrder(LayerOrderedTakeoffsForPage(visibilityPage).Select(item => item.FolderPath));
     }
 
     private string TakeoffLegendOrderKey(TakeoffItem item) =>

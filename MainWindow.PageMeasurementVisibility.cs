@@ -18,13 +18,13 @@ public partial class MainWindow
         Brush stroke = (Brush?)Application.Current.Resources["ControlForegroundBrush"] ?? Brushes.DimGray;
         var dot = new Border
         {
-            Width = 11,
-            Height = 11,
-            CornerRadius = new CornerRadius(6),
+            Width = 6,
+            Height = 6,
+            CornerRadius = new CornerRadius(3),
             Background = allVisible ? stroke : Brushes.Transparent,
             BorderBrush = stroke,
-            BorderThickness = new Thickness(1.5),
-            Margin = new Thickness(8, 0, 2, 0),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(6, 0, 2, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = Cursors.Hand,
             Tag = PageMeasurementVisibilityToggleTag,
@@ -39,6 +39,9 @@ public partial class MainWindow
         };
         return dot;
     }
+
+    private bool HasCurrentPageMeasurements(PageInfo page) =>
+        CurrentMeasurementsForPage(page).Count > 0;
 
     private bool AreAllCurrentPageMeasurementsVisible(PageInfo page)
     {
