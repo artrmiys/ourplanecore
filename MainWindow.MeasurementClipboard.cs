@@ -36,6 +36,7 @@ public partial class MainWindow
                 measurement.Name,
                 measurement.Notes,
                 measurement.Color,
+                measurement.CountSymbol,
                 measurement.Points.Select(p => new SKPoint(p.X, p.Y)).ToList(),
                 measurement.Holes
                     .Select(hole => (IReadOnlyList<SKPoint>)hole.Select(p => new SKPoint(p.X, p.Y)).ToList())
@@ -45,6 +46,7 @@ public partial class MainWindow
                 item?.FolderPath ?? measurement.TakeoffFolder,
                 item?.Name ?? "",
                 item?.Color ?? measurement.Color,
+                item?.CountSymbol ?? "",
                 item?.UnitPrice ?? 0,
                 item?.Notes ?? "",
                 CaptureMeasurementJoistClipboard(measurement),
@@ -211,6 +213,8 @@ public partial class MainWindow
             ? entry.SourceTakeoffColor
             : entry.MeasurementColor;
         var target = CreateUniqueTakeoffItem(baseName, color, measurementType, NewTakeoffItemParentFolder());
+        if (measurementType == "point")
+            target.CountSymbol = MeasurementClipboardTakeoffCountSymbol(entry);
         target.UnitPrice = entry.SourceTakeoffUnitPrice;
         target.Notes = entry.SourceTakeoffNotes;
         ApplyTakeoffJoistClipboard(target, entry.SourceTakeoffJoist, measurementType);
@@ -232,16 +236,20 @@ public partial class MainWindow
 
     private Measurement CloneClipboardMeasurement(MeasurementClipboardEntry entry, TakeoffItem target, SKPoint pasteOffset)
     {
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
         double scale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
             : entry.ScaleMetersPerPt;
 
         return new Measurement
         {
-            MType = OurPlaneCoreJobStore.NormalizeMeasurementType(entry.MeasurementType),
+            MType = measurementType,
             Name = entry.MeasurementName,
             Notes = entry.MeasurementNotes,
             Color = target.Color,
+            CountSymbol = measurementType == "point"
+                ? ResolveMeasurementClipboardCountSymbol(entry, target)
+                : CountDisplaySymbol.Circle,
             Points = entry.Points.Select(p => new SKPoint(p.X + pasteOffset.X, p.Y + pasteOffset.Y)).ToList(),
             Holes = entry.Holes
                 .Select(hole => hole.Select(p => new SKPoint(p.X + pasteOffset.X, p.Y + pasteOffset.Y)).ToList())
@@ -262,6 +270,24 @@ public partial class MainWindow
             JoistShowLabels = entry.MeasurementJoist.ShowLabels,
             JoistDetailedLabels = entry.MeasurementJoist.DetailedLabels,
         };
+    }
+
+    private static string ResolveMeasurementClipboardCountSymbol(MeasurementClipboardEntry entry, TakeoffItem target)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.MeasurementCountSymbol))
+            return CountDisplaySymbol.Normalize(entry.MeasurementCountSymbol);
+        if (!string.IsNullOrWhiteSpace(target.CountSymbol))
+            return CountDisplaySymbol.Normalize(target.CountSymbol);
+        return MeasurementClipboardTakeoffCountSymbol(entry);
+    }
+
+    private static string MeasurementClipboardTakeoffCountSymbol(MeasurementClipboardEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.SourceTakeoffCountSymbol))
+            return CountDisplaySymbol.Normalize(entry.SourceTakeoffCountSymbol);
+        if (!string.IsNullOrWhiteSpace(entry.MeasurementCountSymbol))
+            return CountDisplaySymbol.Normalize(entry.MeasurementCountSymbol);
+        return CountDisplaySymbol.Circle;
     }
 
     private static SKPoint CalculateMeasurementPasteOffset(

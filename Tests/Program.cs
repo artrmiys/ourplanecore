@@ -183,6 +183,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression drag uses mouse down anchor", TakeoffsTreeRegressionTests.TreeDragUsesMouseDownAnchor),
     ("takeoff tree regression nested rows resolve drop target", TakeoffsTreeRegressionTests.NestedTreeRowsResolveToOwningDropTargets),
     ("takeoff tree regression measurement paste keeps source name", TakeoffsTreeRegressionTests.MeasurementPasteNewTakeoffKeepsSourceName),
+    ("takeoff tree regression measurement paste preserves count symbol", TakeoffsTreeRegressionTests.MeasurementPastePreservesCountSymbol),
     ("takeoff tree refresh button is wired", TakeoffsTreeRegressionTests.TakeoffsTreeRefreshButtonIsWired),
     ("bookmarks dock panel and shortcut are wired", TakeoffsTreeRegressionTests.BookmarksDockPanelAndShortcutAreWired),
     ("takeoff template presets and collapsed depth are wired", TakeoffsTreeRegressionTests.TakeoffTemplatePresetsAndCollapsedDepthAreWired),

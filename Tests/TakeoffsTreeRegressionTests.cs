@@ -1127,6 +1127,31 @@ internal static class TakeoffsTreeRegressionTests
             "measurement paste fallback name must not append Paste as a visible suffix");
     }
 
+    public static void MeasurementPastePreservesCountSymbol()
+    {
+        string supportTypes = ReadRepoFile("MainWindow.SupportTypes.cs");
+        string clipboard = ReadRepoFile("MainWindow.MeasurementClipboard.cs");
+        string copyMethod = SliceMethod(clipboard, "private void CopyMeasurementsToClipboard(");
+        string resolveMethod = SliceMethod(clipboard, "private TakeoffItem ResolveMeasurementPasteTarget(");
+        string cloneMethod = SliceMethod(clipboard, "private Measurement CloneClipboardMeasurement(");
+
+        AssertTrue(
+            supportTypes.Contains("string MeasurementCountSymbol", StringComparison.Ordinal) &&
+            supportTypes.Contains("string SourceTakeoffCountSymbol", StringComparison.Ordinal),
+            "measurement clipboard entries must carry the Count symbol from both measurement and source takeoff item");
+        AssertTrue(
+            copyMethod.Contains("measurement.CountSymbol", StringComparison.Ordinal) &&
+            copyMethod.Contains("item?.CountSymbol ?? \"\"", StringComparison.Ordinal),
+            "copying selected Count measurements must capture the current Count symbol");
+        AssertTrue(
+            resolveMethod.Contains("target.CountSymbol = MeasurementClipboardTakeoffCountSymbol(entry)", StringComparison.Ordinal),
+            "pasting into a new Count takeoff must copy the source takeoff symbol instead of using the current default");
+        AssertTrue(
+            cloneMethod.Contains("CountSymbol = measurementType == \"point\"", StringComparison.Ordinal) &&
+            cloneMethod.Contains("ResolveMeasurementClipboardCountSymbol(entry, target)", StringComparison.Ordinal),
+            "pasted Count measurements must keep their source symbol so the viewport does not fall back to a circle");
+    }
+
     public static void TakeoffsTreeRefreshButtonIsWired()
     {
         string xaml = ReadRepoFile("MainWindow.xaml");
