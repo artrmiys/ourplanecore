@@ -260,7 +260,7 @@ public sealed partial class PdfViewport : SKElement
     private int _visibleActivePageMeasurementsFolderHash;
     private int _measurementIndexVersion;
     private int _measurementGeometryVersion;
-    private int _hiddenTakeoffFoldersVersion;
+    private int _measurementVisibilityVersion;
     private ViewportMeasurementSpatialIndex? _activePageMeasurementSpatialIndex;
     private string _activePageMeasurementSpatialIndexPageKey = "";
     private int _activePageMeasurementSpatialIndexVersion = -1;

@@ -208,6 +208,7 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff auto routing sends wall lines to sheet floor walls", TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls),
     ("takeoff auto routing sorts page legend labels", TakeoffAutoRoutingSortsPageLegendLabels),
     ("sheet legend hidden measurements keep new measurements visible", SheetLegendHiddenMeasurementsKeepNewMeasurementsVisible),
+    ("viewport hidden measurement ids filter active page measurements", ViewportHiddenMeasurementIdsFilterActivePageMeasurements),
     ("takeoff detail refs sort by sheet then detail", TakeoffDetailRefsSortBySheetThenDetail),
     ("sample guide project creates guide pages and screenshots", SampleJobGuideTests.CreatesGuidePagesScreenshotsAndTakeoffs),
     ("sheet legend live auto ignores stored auto order", SheetLegendLiveAutoIgnoresStoredAutoOrder),
@@ -1772,6 +1773,56 @@ static void SheetLegendHiddenMeasurementsKeepNewMeasurementsVisible()
             SheetLegendBuilder.Build(job, page, [item], UnitMode.Imperial)
                 .Select(entry => entry.Name));
         AssertEqual("Walls", visible, "new measurement should remain visible under snapshot hide");
+    });
+}
+
+static void ViewportHiddenMeasurementIdsFilterActivePageMeasurements()
+{
+    RunOnStaThread(() =>
+    {
+        const string pageFolder = @"C:\job\Pages\A701";
+        const string takeoffFolder = @"C:\job\Takeoffs\walls";
+        var oldMeasurement = new Measurement
+        {
+            Id = "m-old",
+            Name = "Walls",
+            MType = "line",
+            Color = "#FF0000",
+            PageFolder = pageFolder,
+            TakeoffFolder = takeoffFolder,
+            Points = [new SKPoint(0, 0), new SKPoint(10, 0)],
+        };
+        var newMeasurement = new Measurement
+        {
+            Id = "m-new",
+            Name = "Walls",
+            MType = "line",
+            Color = "#FF0000",
+            PageFolder = pageFolder,
+            TakeoffFolder = takeoffFolder,
+            Points = [new SKPoint(20, 0), new SKPoint(30, 0)],
+        };
+
+        var viewport = new PdfViewport();
+        viewport.LoadMeasurements([oldMeasurement, newMeasurement]);
+        SetPrivateField(viewport, "_pageFolder", pageFolder);
+
+        AssertEqual(
+            "2",
+            ActiveViewportMeasurements(viewport).Count.ToString(),
+            "viewport starts with both measurements visible");
+
+        viewport.SetHiddenMeasurementIds(["m-old"]);
+        AssertEqual(
+            "m-new",
+            string.Join(",", ActiveViewportMeasurements(viewport).Select(measurement => measurement.Id)),
+            "viewport hide snapshot must filter hidden measurement IDs while keeping newer IDs visible");
+
+        viewport.SetHiddenMeasurementIds([]);
+        AssertEqual(
+            "2",
+            ActiveViewportMeasurements(viewport).Count.ToString(),
+            "viewport show all must restore hidden measurement IDs");
     });
 }
 
@@ -4995,6 +5046,14 @@ static int LoadedViewportMeasurementCount(PdfViewport viewport)
     if (field?.GetValue(viewport) is not ICollection<Measurement> measurements)
         throw new InvalidOperationException("PdfViewport measurement index was not available for test inspection.");
     return measurements.Count;
+}
+
+static IReadOnlyList<Measurement> ActiveViewportMeasurements(PdfViewport viewport)
+{
+    object? active = InvokePrivate(viewport, "ActivePageMeasurements");
+    if (active is not IReadOnlyList<Measurement> measurements)
+        throw new InvalidOperationException("PdfViewport active measurements were not available for test inspection.");
+    return measurements;
 }
 
 static T GetPrivateField<T>(object instance, string name)

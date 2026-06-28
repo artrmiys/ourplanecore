@@ -283,6 +283,9 @@ public sealed partial class PdfViewport
         var seen = new HashSet<Measurement>(candidates);
         foreach (Measurement selected in GetSelectedMeasurements())
         {
+            if (!IsMeasurementOnActivePage(selected))
+                continue;
+
             if (!seen.Add(selected))
                 continue;
 

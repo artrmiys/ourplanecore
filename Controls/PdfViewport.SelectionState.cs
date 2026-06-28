@@ -317,18 +317,37 @@ public sealed partial class PdfViewport
     private IReadOnlyList<Measurement> ActivePageMeasurements()
     {
         if (string.IsNullOrWhiteSpace(_pageFolder))
-            return _measurements;
+        {
+            if (!HasMeasurementVisibilityFilters())
+                return _measurements;
+
+            return VisibleActivePageMeasurements("", _measurements);
+        }
 
         string key = NormalizePageFolderForCompare(_pageFolder);
         if (!_measurementsByPage.TryGetValue(key, out List<Measurement>? measurements))
             return Array.Empty<Measurement>();
 
-        if (_hiddenTakeoffFolders.Count == 0)
+        if (!HasMeasurementVisibilityFilters())
             return measurements;
+
+        return VisibleActivePageMeasurements(key, measurements);
+    }
+
+    private bool HasMeasurementVisibilityFilters() =>
+        _hiddenTakeoffFolders.Count != 0 ||
+        _hiddenMeasurementIds.Count != 0;
+
+    private IReadOnlyList<Measurement> VisibleActivePageMeasurements(
+        string key,
+        IReadOnlyList<Measurement> measurements)
+    {
+        if (measurements.Count == 0)
+            return Array.Empty<Measurement>();
 
         int folderHash = TakeoffFolderHash(measurements);
         if (_visibleActivePageMeasurementsIndexVersion == _measurementIndexVersion &&
-            _visibleActivePageMeasurementsHiddenVersion == _hiddenTakeoffFoldersVersion &&
+            _visibleActivePageMeasurementsHiddenVersion == _measurementVisibilityVersion &&
             _visibleActivePageMeasurementsFolderHash == folderHash &&
             string.Equals(_visibleActivePageMeasurementsPageKey, key, StringComparison.OrdinalIgnoreCase))
         {
@@ -344,7 +363,7 @@ public sealed partial class PdfViewport
 
         _visibleActivePageMeasurementsPageKey = key;
         _visibleActivePageMeasurementsIndexVersion = _measurementIndexVersion;
-        _visibleActivePageMeasurementsHiddenVersion = _hiddenTakeoffFoldersVersion;
+        _visibleActivePageMeasurementsHiddenVersion = _measurementVisibilityVersion;
         _visibleActivePageMeasurementsFolderHash = folderHash;
         return _visibleActivePageMeasurements;
     }
@@ -369,7 +388,7 @@ public sealed partial class PdfViewport
         if (_activePageMeasurementSpatialIndex != null &&
             _activePageMeasurementSpatialIndexVersion == _measurementIndexVersion &&
             _activePageMeasurementSpatialIndexGeometryVersion == _measurementGeometryVersion &&
-            _activePageMeasurementSpatialIndexHiddenVersion == _hiddenTakeoffFoldersVersion &&
+            _activePageMeasurementSpatialIndexHiddenVersion == _measurementVisibilityVersion &&
             _activePageMeasurementSpatialIndexFolderHash == folderHash &&
             string.Equals(_activePageMeasurementSpatialIndexPageKey, key, StringComparison.OrdinalIgnoreCase))
         {
@@ -380,7 +399,7 @@ public sealed partial class PdfViewport
         _activePageMeasurementSpatialIndexPageKey = key;
         _activePageMeasurementSpatialIndexVersion = _measurementIndexVersion;
         _activePageMeasurementSpatialIndexGeometryVersion = _measurementGeometryVersion;
-        _activePageMeasurementSpatialIndexHiddenVersion = _hiddenTakeoffFoldersVersion;
+        _activePageMeasurementSpatialIndexHiddenVersion = _measurementVisibilityVersion;
         _activePageMeasurementSpatialIndexFolderHash = folderHash;
         return _activePageMeasurementSpatialIndex;
     }
@@ -469,9 +488,9 @@ public sealed partial class PdfViewport
         InvalidateActivePageMeasurementSpatialIndex();
     }
 
-    private void InvalidateHiddenTakeoffFolderCache()
+    private void InvalidateMeasurementVisibilityCache()
     {
-        _hiddenTakeoffFoldersVersion++;
+        _measurementVisibilityVersion++;
         _visibleActivePageMeasurements.Clear();
         _visibleActivePageMeasurementsPageKey = "";
         _visibleActivePageMeasurementsIndexVersion = -1;

@@ -32,7 +32,7 @@ public sealed partial class PdfViewport
                 _hiddenTakeoffFolders.Add(NormalizePageFolderForCompare(folder));
         }
 
-        InvalidateHiddenTakeoffFolderCache();
+        InvalidateMeasurementVisibilityCache();
         PruneHiddenMeasurementSelection();
         RequestRepaint();
     }
@@ -47,7 +47,7 @@ public sealed partial class PdfViewport
                 _hiddenMeasurementIds.Add(clean);
         }
 
-        InvalidateHiddenTakeoffFolderCache();
+        InvalidateMeasurementVisibilityCache();
         PruneHiddenMeasurementSelection();
         RequestRepaint();
     }

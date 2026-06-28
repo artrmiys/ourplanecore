@@ -1415,7 +1415,10 @@ internal static class TakeoffsTreeRegressionTests
             "individual linked-takeoff show must be able to reveal only the selected takeoff after a sheet snapshot hide");
         AssertTrue(
             viewportApi.Contains("public void SetHiddenMeasurementIds", StringComparison.Ordinal) &&
-            viewportSelection.Contains("_hiddenMeasurementIds.Contains(measurement.Id.Trim())", StringComparison.Ordinal),
+            viewportApi.Contains("InvalidateMeasurementVisibilityCache();", StringComparison.Ordinal) &&
+            viewportSelection.Contains("_hiddenMeasurementIds.Contains(measurement.Id.Trim())", StringComparison.Ordinal) &&
+            viewportSelection.Contains("if (!HasMeasurementVisibilityFilters())", StringComparison.Ordinal) &&
+            viewportSelection.Contains("_measurementVisibilityVersion", StringComparison.Ordinal),
             "viewport drawing, hit-test, and selection paths must respect hidden measurement IDs");
         AssertTrue(
             models.Contains("[JsonPropertyName(\"hidden_measurements\")]", StringComparison.Ordinal) &&
