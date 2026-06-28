@@ -215,12 +215,6 @@ public partial class MainWindow
                 ? new Thickness(0, 0, 0, 2)
                 : new Thickness(0, 2, 0, 0);
         }
-        else if (IsActivePageTakeoffNode(item))
-        {
-            item.Background = brushes.ActiveLinked;
-            item.Foreground = brushes.RowForeground;
-            item.FontWeight = FontWeights.Normal;
-        }
         else if (selected || linkedSelected)
         {
             item.Background = brushes.MultiLinked;

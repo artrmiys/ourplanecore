@@ -35,6 +35,7 @@ public sealed class AppSettings
     public bool BuildRasterCacheOnPdfImport { get; set; } = false;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
+    public bool ShowTakeoffSectionsInTree { get; set; } = false;
     public string DefaultCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public double ViewportMeasurementStrokeScale { get; set; } = 3.0;
     public double ViewportRulerStrokeWidth { get; set; } = 1.0;

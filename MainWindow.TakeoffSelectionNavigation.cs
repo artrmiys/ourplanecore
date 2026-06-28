@@ -230,7 +230,6 @@ public partial class MainWindow
 
             foreach (TakeoffItem takeoff in matchedTakeoffs)
             {
-                _pageTakeoffMultiSelection.Add(PageTakeoffSelectionKey(new PageTakeoffNode(page, takeoff)));
                 TreeViewItem? linked = FindPageTakeoffTreeItem(pageItem, takeoff.FolderPath);
                 firstLinked ??= linked;
                 if (isPreferredPage)
@@ -262,6 +261,16 @@ public partial class MainWindow
 
     private void SelectTakeoffSectionNode(Measurement measurement)
     {
+        if (!_settings.ShowTakeoffSectionsInTree)
+        {
+            if (FindTakeoffItemForMeasurement(measurement) is { } item)
+            {
+                SelectTakeoffItemSilently(item);
+                ApplyTakeoffPageHighlights();
+            }
+            return;
+        }
+
         if (FindTakeoffSectionTreeItem(TakeoffsTree, measurement) is not { } tvi)
             return;
 

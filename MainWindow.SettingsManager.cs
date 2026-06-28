@@ -21,6 +21,7 @@ public partial class MainWindow
     // Defaults panel: live mouse-wheel zoom step control.
     private Slider? _defaultsZoomSlider;
     private TextBlock? _defaultsZoomValue;
+    private CheckBox? _defaultsTakeoffSectionsBox;
     private bool _defaultsZoomSyncing;
 
     private FolderTemplateConfig _ftConfig = FolderTemplateConfig.BuildDefault();
@@ -675,6 +676,25 @@ public partial class MainWindow
         warmupBox.Unchecked += (_, _) => { _settings.BackgroundJobWarmupEnabled = false; SaveAppSettings(); };
         root.Children.Add(warmupBox);
 
+        root.Children.Add(Header("Tree display"));
+        root.Children.Add(new TextBlock
+        {
+            Text = "Keep the Takeoffs tree compact by showing only takeoff items. "
+                 + "Turn this on when you need the old nested section/count rows for per-segment actions.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 0, 0, 6),
+            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
+        });
+        _defaultsTakeoffSectionsBox = new CheckBox
+        {
+            Content = "Show section/count rows under takeoffs",
+            IsChecked = _settings.ShowTakeoffSectionsInTree,
+            Margin = new Thickness(0, 0, 0, 10),
+            FontSize = 12,
+        };
+        _defaultsTakeoffSectionsBox.Checked += (_, _) => SetTakeoffSectionRowsVisible(true);
+        _defaultsTakeoffSectionsBox.Unchecked += (_, _) => SetTakeoffSectionRowsVisible(false);
+        root.Children.Add(_defaultsTakeoffSectionsBox);
+
         root.Children.Add(Header("Display & export defaults"));
         root.Children.Add(new TextBlock
         {
@@ -720,6 +740,36 @@ public partial class MainWindow
         {
             _defaultsZoomSyncing = false;
         }
+
+        if (_defaultsTakeoffSectionsBox != null)
+            _defaultsTakeoffSectionsBox.IsChecked = _settings.ShowTakeoffSectionsInTree;
+    }
+
+    private void SetTakeoffSectionRowsVisible(bool visible)
+    {
+        if (_settings.ShowTakeoffSectionsInTree == visible)
+            return;
+
+        _settings.ShowTakeoffSectionsInTree = visible;
+        SaveAppSettings();
+        RefreshTakeoffSectionTreeVisibility();
+        TxtStatus.Text = visible
+            ? "Takeoffs tree section/count rows shown."
+            : "Takeoffs tree section/count rows hidden.";
+    }
+
+    private void RefreshTakeoffSectionTreeVisibility()
+    {
+        var itemNodes = EnumerateTakeoffTreeItems(TakeoffsTree)
+            .Where(item => item.Tag is TakeoffItem)
+            .ToList();
+        foreach (TreeViewItem itemNode in itemNodes)
+            if (itemNode.Tag is TakeoffItem item)
+                RefreshTakeoffSectionNodes(itemNode, item);
+
+        PruneTakeoffSectionMultiSelection();
+        InvalidateTakeoffTreeItemIndex();
+        ApplyTakeoffPageHighlights();
     }
 
     private void SelectTopTab(string header)

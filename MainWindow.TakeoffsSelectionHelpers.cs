@@ -141,6 +141,19 @@ public partial class MainWindow
 
     private void SelectTakeoffSectionNodesSilently(IReadOnlyList<TakeoffMeasurementNode> nodes)
     {
+        if (!_settings.ShowTakeoffSectionsInTree)
+        {
+            var items = nodes
+                .Select(node => node.Item)
+                .Where(item => !string.IsNullOrWhiteSpace(item.FolderPath))
+                .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+            if (items.Count > 0)
+                SelectTakeoffItemsSilently(items, items[0]);
+            return;
+        }
+
         _takeoffsMultiSelection.Clear();
         _takeoffSectionMultiSelection.Clear();
         foreach (TakeoffMeasurementNode node in nodes)
@@ -326,6 +339,13 @@ public partial class MainWindow
 
     private void PruneTakeoffSectionMultiSelection()
     {
+        if (!_settings.ShowTakeoffSectionsInTree)
+        {
+            _takeoffSectionMultiSelection.Clear();
+            _takeoffSectionRangeAnchorKey = null;
+            return;
+        }
+
         var validKeys = _takeoffItems
             .SelectMany(item => item.Measurements.Select(measurement => TakeoffSectionSelectionKey(new TakeoffMeasurementNode(item, measurement))))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

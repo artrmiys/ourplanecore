@@ -689,8 +689,9 @@ internal static class TakeoffsTreeRegressionTests
             "plain takeoff selection should repaint only the previous and current active rows");
         AssertTrue(
             revealMethod.Contains("BringPageTreeItemIntoCenteredView(preferredLinked)", StringComparison.Ordinal) &&
-            !revealMethod.Contains("preferredLinked.IsSelected = true", StringComparison.Ordinal),
-            "Takeoffs-tree reveal should scroll/highlight linked Pages rows without selecting PageTakeoffNode and opening its sheet");
+            !revealMethod.Contains("preferredLinked.IsSelected = true", StringComparison.Ordinal) &&
+            !revealMethod.Contains("_pageTakeoffMultiSelection.Add", StringComparison.Ordinal),
+            "Takeoffs-tree reveal should scroll to linked Pages rows without selecting or multi-highlighting PageTakeoffNode rows");
         AssertTrue(
             scheduleMethod.Contains("RunScheduledTakeoffSelectionSync(version, action)", StringComparison.Ordinal) &&
             scheduledRunMethod.Contains("_takeoffsDragStart != null && Mouse.LeftButton == MouseButtonState.Pressed", StringComparison.Ordinal) &&
@@ -1500,8 +1501,10 @@ internal static class TakeoffsTreeRegressionTests
     public static void PageTakeoffSelectionSyncsTakeoffsTree()
     {
         string pagesTree = ReadRepoFile("MainWindow.PagesTree.cs");
+        string pagesSelection = ReadRepoFile("MainWindow.PagesSelection.cs");
         string pageLegend = ReadRepoFile("MainWindow.PageTakeoffLegend.ContextMenu.cs");
         string navigation = ReadRepoFile("MainWindow.TakeoffSelectionNavigation.cs");
+        string applyVisual = SliceMethod(pagesSelection, "private void ApplyPageTreeItemVisual(");
 
         AssertTrue(
             pagesTree.Contains("SyncTakeoffsTreeSelectionFromPageTakeoffs(node, fallbackToAnchor: false)", StringComparison.Ordinal) &&
@@ -1515,6 +1518,38 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             navigation.Contains("ExpandTakeoffFolderAncestorsWithoutTracking(focusNode)", StringComparison.Ordinal),
             "silent Takeoffs-tree selection should reveal selected takeoffs inside folders");
+        AssertFalse(
+            applyVisual.Contains("IsActivePageTakeoffNode(item)", StringComparison.Ordinal),
+            "Page tree linked-takeoff rows should only use selection highlighting when the user selected those linked rows");
+    }
+
+    public static void TakeoffTreeSectionRowsDefaultHiddenAndSettingWired()
+    {
+        string settings = ReadRepoFile("Models/AppSettingsStore.cs");
+        string settingsManager = ReadRepoFile("MainWindow.SettingsManager.cs");
+        string sections = ReadRepoFile("MainWindow.TakeoffSections.cs");
+        string selectionHelpers = ReadRepoFile("MainWindow.TakeoffsSelectionHelpers.cs");
+        string navigation = ReadRepoFile("MainWindow.TakeoffSelectionNavigation.cs");
+
+        AssertTrue(
+            settings.Contains("public bool ShowTakeoffSectionsInTree { get; set; } = false;", StringComparison.Ordinal),
+            "takeoff section rows must default hidden for compact Takeoffs tree startup");
+        AssertTrue(
+            settingsManager.Contains("Show section/count rows under takeoffs", StringComparison.Ordinal) &&
+            settingsManager.Contains("SetTakeoffSectionRowsVisible(true)", StringComparison.Ordinal) &&
+            settingsManager.Contains("SetTakeoffSectionRowsVisible(false)", StringComparison.Ordinal) &&
+            settingsManager.Contains("RefreshTakeoffSectionTreeVisibility()", StringComparison.Ordinal),
+            "Settings > Defaults must expose the opt-in checkbox and refresh the Takeoffs tree immediately");
+        AssertTrue(
+            sections.Contains("if (!_settings.ShowTakeoffSectionsInTree)", StringComparison.Ordinal) &&
+            sections.Contains("itemNode.Items.Clear();", StringComparison.Ordinal) &&
+            sections.Contains("itemNode.IsExpanded = false;", StringComparison.Ordinal),
+            "Takeoffs tree item refresh must skip nested measurement rows unless the setting is enabled");
+        AssertTrue(
+            selectionHelpers.Contains("if (!_settings.ShowTakeoffSectionsInTree)", StringComparison.Ordinal) &&
+            selectionHelpers.Contains("SelectTakeoffItemsSilently(items, items[0])", StringComparison.Ordinal) &&
+            navigation.Contains("FindTakeoffItemForMeasurement(measurement)", StringComparison.Ordinal),
+            "hidden section rows must fall back to selecting their owning takeoff item");
     }
 
     public static void PageMeasurementVisibilityToggleIsWired()

@@ -198,6 +198,7 @@ var tests = new List<(string Name, Action Run)>
     ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
     ("display label toggles refresh detached sheets", TakeoffsTreeRegressionTests.DisplayLabelTogglesRefreshDetachedSheets),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
+    ("takeoff tree section rows default hidden and setting wired", TakeoffsTreeRegressionTests.TakeoffTreeSectionRowsDefaultHiddenAndSettingWired),
     ("page measurement visibility toggle is wired", TakeoffsTreeRegressionTests.PageMeasurementVisibilityToggleIsWired),
     ("viewport count hot grips and tight hit test are wired", TakeoffsTreeRegressionTests.ViewportCountHotGripsAndTightHitTestAreWired),
     ("pdf snap duplicate load guard is wired", TakeoffsTreeRegressionTests.PdfSnapDuplicateLoadGuardIsWired),

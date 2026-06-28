@@ -18,6 +18,14 @@ public partial class MainWindow
             : null;
 
         itemNode.Items.Clear();
+        if (!_settings.ShowTakeoffSectionsInTree)
+        {
+            _takeoffSectionMultiSelection.Clear();
+            _takeoffSectionRangeAnchorKey = null;
+            itemNode.IsExpanded = false;
+            return;
+        }
+
         for (int i = 0; i < item.Measurements.Count; i++)
         {
             Measurement measurement = item.Measurements[i];
