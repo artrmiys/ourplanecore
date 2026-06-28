@@ -15,6 +15,10 @@ public partial class MainWindow
 
     private const string PageOverlayVisibilityToggleTag = "PageOverlayVisibilityToggle";
     private const string PageTakeoffVisibilityToggleTag = "PageTakeoffVisibilityToggle";
+    private const double PageTakeoffGlyphSize = 10;
+    private const double PageTakeoffActiveGlyphSize = 11;
+    private const double PageTakeoffGlyphHostSize = 12;
+    private const double PageTakeoffActiveGlyphHostSize = 13;
 
     private void RebuildPageTakeoffNodes(TreeViewItem pageItem, PageInfo page)
     {
@@ -34,6 +38,8 @@ public partial class MainWindow
             {
                 Header = BuildPageTakeoffHeader(page, takeoff),
                 Tag = node,
+                MinHeight = 0,
+                Padding = new Thickness(0),
             };
             AttachLazyPageTakeoffContextMenu(child, node);
             pageItem.Items.Add(child);
@@ -158,12 +164,12 @@ public partial class MainWindow
             {
                 Text              = SheetLegendQuantityText(takeoff, pageMeasurements),
                 Foreground        = secondaryBrush,
-                FontSize          = 10,
+                FontSize          = 9,
                 FontFamily        = new FontFamily("Consolas, Cascadia Mono, Segoe UI"),
-                Margin            = new Thickness(8, 0, 4, 0),
+                Margin            = new Thickness(6, 0, 3, 0),
                 VerticalAlignment = VerticalAlignment.Center,
                 TextAlignment     = TextAlignment.Right,
-                MinWidth          = 56,
+                MinWidth          = 52,
             };
             DockPanel.SetDock(qty, Dock.Right);
             dock.Children.Add(qty);
@@ -179,6 +185,7 @@ public partial class MainWindow
         {
             Text              = takeoff.Name,
             FontWeight        = FontWeights.Normal,
+            FontSize          = 11,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming      = TextTrimming.CharacterEllipsis,
         });
@@ -198,19 +205,22 @@ public partial class MainWindow
         bool isVisible,
         bool isActive)
     {
-        FrameworkElement glyph = BuildTakeoffSwatchGlyph(takeoff, swatchBrush, isActive ? 16 : 14);
+        FrameworkElement glyph = BuildTakeoffSwatchGlyph(
+            takeoff,
+            swatchBrush,
+            isActive ? PageTakeoffActiveGlyphSize : PageTakeoffGlyphSize);
         glyph.Opacity = isVisible ? 1.0 : 0.34;
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
         glyph.VerticalAlignment = VerticalAlignment.Center;
 
         var host = new Border
         {
-            Width = isActive ? 20 : 18,
-            Height = isActive ? 20 : 18,
+            Width = isActive ? PageTakeoffActiveGlyphHostSize : PageTakeoffGlyphHostSize,
+            Height = isActive ? PageTakeoffActiveGlyphHostSize : PageTakeoffGlyphHostSize,
             Background = Brushes.Transparent,
-            BorderBrush = isVisible ? Brushes.Transparent : secondaryBrush,
-            BorderThickness = isVisible ? new Thickness(0) : new Thickness(1),
-            Margin = new Thickness(0, 0, 7, 0),
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Margin = new Thickness(0, 0, 5, 0),
             Child = glyph,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,

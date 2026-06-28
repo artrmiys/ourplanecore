@@ -1517,11 +1517,17 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             pageTakeoffLegend.Contains("PageTakeoffVisibilityToggleTag", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("BuildPageTakeoffVisibilityGlyph", StringComparison.Ordinal) &&
-            pageTakeoffLegend.Contains("BuildTakeoffSwatchGlyph(takeoff, swatchBrush", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("BuildTakeoffSwatchGlyph(", StringComparison.Ordinal) &&
             pageTakeoffLegend.Contains("Click the symbol to toggle", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("PageTakeoffGlyphHostSize = 12", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("PageTakeoffActiveGlyphHostSize = 13", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("Padding = new Thickness(0)", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("FontSize          = 11", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("BorderBrush = Brushes.Transparent", StringComparison.Ordinal) &&
+            pageTakeoffLegend.Contains("BorderThickness = new Thickness(0)", StringComparison.Ordinal) &&
             !pageTakeoffLegend.Contains("Text              = $\"{legendIndex + 1}.\"", StringComparison.Ordinal) &&
             !pageTakeoffLegend.Contains("BuildPageTakeoffVisibilityDot", StringComparison.Ordinal),
-            "linked page takeoff rows must use the clickable takeoff glyph itself without a separate colored dot or left index");
+            "linked page takeoff rows must use compact clickable glyphs without a separate colored dot, outline, or left index");
         AssertTrue(
             pagesTree.Contains("IsPageTakeoffVisibilityToggleSource(e.OriginalSource as DependencyObject)", StringComparison.Ordinal) &&
             pagesTree.Contains("TogglePageTakeoffVisibility(visibilityTakeoff.Page, visibilityTakeoff.Takeoff)", StringComparison.Ordinal) &&
