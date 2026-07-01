@@ -489,6 +489,7 @@ public partial class MainWindow : Window
         SaveCurrentPageAnnotations();
         base.OnClosed(e);
         FlushTakeoffAutosaves();
+        RunRasterCacheCleanupOnClose();
         ClearJobRecoveryLock();
         PdfLayerRenderService.StopWorker();
     }

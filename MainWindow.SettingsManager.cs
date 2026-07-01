@@ -21,6 +21,7 @@ public partial class MainWindow
     // Defaults panel: live mouse-wheel zoom step control.
     private Slider? _defaultsZoomSlider;
     private TextBlock? _defaultsZoomValue;
+    private CheckBox? _defaultsAutoCleanRasterOnCloseBox;
     private CheckBox? _defaultsTakeoffSectionsBox;
     private bool _defaultsZoomSyncing;
 
@@ -676,6 +677,24 @@ public partial class MainWindow
         warmupBox.Unchecked += (_, _) => { _settings.BackgroundJobWarmupEnabled = false; SaveAppSettings(); };
         root.Children.Add(warmupBox);
 
+        root.Children.Add(new TextBlock
+        {
+            Text = "Clean unused raster image variants when the app closes. "
+                 + "This keeps the active raster image and snap index for each sheet.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 0, 0, 6),
+            Foreground = TryFindResource("SecondaryForegroundBrush") as Brush,
+        });
+        _defaultsAutoCleanRasterOnCloseBox = new CheckBox
+        {
+            Content = "Clean unused raster cache on close",
+            IsChecked = _settings.AutoCleanRasterCacheOnClose,
+            Margin = new Thickness(0, 0, 0, 10),
+            FontSize = 12,
+        };
+        _defaultsAutoCleanRasterOnCloseBox.Checked += (_, _) => SetAutoCleanRasterCacheOnClose(true);
+        _defaultsAutoCleanRasterOnCloseBox.Unchecked += (_, _) => SetAutoCleanRasterCacheOnClose(false);
+        root.Children.Add(_defaultsAutoCleanRasterOnCloseBox);
+
         root.Children.Add(Header("Tree display"));
         root.Children.Add(new TextBlock
         {
@@ -743,6 +762,20 @@ public partial class MainWindow
 
         if (_defaultsTakeoffSectionsBox != null)
             _defaultsTakeoffSectionsBox.IsChecked = _settings.ShowTakeoffSectionsInTree;
+        if (_defaultsAutoCleanRasterOnCloseBox != null)
+            _defaultsAutoCleanRasterOnCloseBox.IsChecked = _settings.AutoCleanRasterCacheOnClose;
+    }
+
+    private void SetAutoCleanRasterCacheOnClose(bool enabled)
+    {
+        if (_settings.AutoCleanRasterCacheOnClose == enabled)
+            return;
+
+        _settings.AutoCleanRasterCacheOnClose = enabled;
+        SaveAppSettings();
+        TxtStatus.Text = enabled
+            ? "Raster cache auto-clean on close enabled."
+            : "Raster cache auto-clean on close disabled.";
     }
 
     private void SetTakeoffSectionRowsVisible(bool visible)

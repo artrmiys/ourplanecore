@@ -33,6 +33,7 @@ public sealed class AppSettings
     public string ViewportRenderQuality { get; set; } = ViewportRenderPolicy.HighQualityMode;
     public bool PdfLayersEnabled { get; set; } = false;
     public bool BuildRasterCacheOnPdfImport { get; set; } = false;
+    public bool AutoCleanRasterCacheOnClose { get; set; } = true;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
     public bool ShowTakeoffSectionsInTree { get; set; } = false;
