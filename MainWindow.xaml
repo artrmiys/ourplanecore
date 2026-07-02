@@ -961,13 +961,28 @@
                                     BorderBrush="{DynamicResource ControlBorderBrush}">
                             <TabItem Header="Pages">
                                 <DockPanel>
-                                    <TextBox x:Name="PagesTreeSearchBox"
-                                             DockPanel.Dock="Top"
-                                             Height="23"
-                                             Margin="4,4,4,2"
-                                             FontSize="11"
-                                             TextChanged="PagesTreeSearchBox_TextChanged"
-                                             ToolTip="Search Pages by sheet name"/>
+                                    <Grid DockPanel.Dock="Top"
+                                          Height="23"
+                                          Margin="4,4,4,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="PagesFolderSearchBox"
+                                                 Grid.Column="0"
+                                                 Margin="0,0,2,0"
+                                                 FontSize="11"
+                                                 AutomationProperties.Name="Page folder search"
+                                                 TextChanged="PagesTreeSearchBox_TextChanged"
+                                                 ToolTip="Search page folders by folder name"/>
+                                        <TextBox x:Name="PagesTreeSearchBox"
+                                                 Grid.Column="1"
+                                                 Margin="2,0,0,0"
+                                                 FontSize="11"
+                                                 AutomationProperties.Name="Sheet search"
+                                                 TextChanged="PagesTreeSearchBox_TextChanged"
+                                                 ToolTip="Search sheets by sheet name"/>
+                                    </Grid>
                                     <TreeView x:Name="PagesTree"
                                               AutomationProperties.AutomationId="PagesTree"
                                               SelectedItemChanged="PagesTree_SelectedItemChanged"
@@ -1508,13 +1523,28 @@
                         </Grid>
                     </StackPanel>
                     <DockPanel x:Name="TakeoffsTreeHost">
-                        <TextBox x:Name="TakeoffsTreeSearchBox"
-                                 DockPanel.Dock="Top"
-                                 Height="23"
-                                 Margin="4,4,4,2"
-                                 FontSize="11"
-                                 TextChanged="TakeoffsTreeSearchBox_TextChanged"
-                                 ToolTip="Search Takeoffs by takeoff name"/>
+                        <Grid DockPanel.Dock="Top"
+                              Height="23"
+                              Margin="4,4,4,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="TakeoffsFolderSearchBox"
+                                     Grid.Column="0"
+                                     Margin="0,0,2,0"
+                                     FontSize="11"
+                                     AutomationProperties.Name="Takeoff folder search"
+                                     TextChanged="TakeoffsTreeSearchBox_TextChanged"
+                                     ToolTip="Search takeoff folders by folder name"/>
+                            <TextBox x:Name="TakeoffsTreeSearchBox"
+                                     Grid.Column="1"
+                                     Margin="2,0,0,0"
+                                     FontSize="11"
+                                     AutomationProperties.Name="Takeoff search"
+                                     TextChanged="TakeoffsTreeSearchBox_TextChanged"
+                                     ToolTip="Search takeoffs by takeoff or measurement name"/>
+                        </Grid>
                         <TreeView x:Name="TakeoffsTree"
                                   AutomationProperties.AutomationId="TakeoffsTree"
                                   SelectedItemChanged="TakeoffsTree_SelectedItemChanged"
