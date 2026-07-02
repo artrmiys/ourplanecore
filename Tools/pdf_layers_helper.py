@@ -2778,14 +2778,66 @@ def _pdf_takeoff_scale_m_per_pt(raw: str) -> float:
     return scale if scale > 0 else 0.0
 
 
+def _pdf_takeoff_append_unique(points: list[dict], x: float, y: float) -> None:
+    if not points or abs(points[-1]["x"] - x) > 0.01 or abs(points[-1]["y"] - y) > 0.01:
+        points.append({"x": x, "y": y})
+
+
+def _pdf_takeoff_unrotated_page_height(page) -> float:
+    for attr in ("cropbox", "mediabox"):
+        box = getattr(page, attr, None)
+        try:
+            height = float(getattr(box, "height", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            height = 0.0
+        if height > 0:
+            return height
+
+    rotation = int(getattr(page, "rotation", 0) or 0) % 360
+    rect = page.rect
+    return float(rect.width if rotation in {90, 270} else rect.height)
+
+
+def _pdf_takeoff_points_from_annot_vertices(annot) -> list[dict]:
+    vertices = getattr(annot, "vertices", None) or []
+    points: list[dict] = []
+    for vertex in vertices:
+        try:
+            if hasattr(vertex, "x") and hasattr(vertex, "y"):
+                x = float(vertex.x)
+                y = float(vertex.y)
+            else:
+                x = float(vertex[0])
+                y = float(vertex[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        _pdf_takeoff_append_unique(points, x, y)
+    return points
+
+
 def _pdf_takeoff_points_from_raw(numbers: list[float], page_height: float) -> list[dict]:
     points: list[dict] = []
     for index in range(0, len(numbers) - 1, 2):
         x = float(numbers[index])
         y = float(page_height - numbers[index + 1])
-        if not points or abs(points[-1]["x"] - x) > 0.01 or abs(points[-1]["y"] - y) > 0.01:
-            points.append({"x": x, "y": y})
+        _pdf_takeoff_append_unique(points, x, y)
     return points
+
+
+def _rotate_pdf_takeoff_points_for_page(page, points: list[dict]) -> list[dict]:
+    # PDF annotation arrays and PyMuPDF annot.vertices are in unrotated page
+    # space. Our rendered sheet uses page.rect, where /Rotate is already
+    # applied, so imported takeoff points must be mapped into that same space.
+    rotation = int(getattr(page, "rotation", 0) or 0)
+    if rotation % 360 == 0:
+        return points
+
+    matrix = page.rotation_matrix
+    rotated_points: list[dict] = []
+    for point in points:
+        rotated = fitz.Point(float(point["x"]), float(point["y"])) * matrix
+        _pdf_takeoff_append_unique(rotated_points, float(rotated.x), float(rotated.y))
+    return rotated_points
 
 
 def _pdf_takeoff_color_hex(annot) -> str:
@@ -2838,7 +2890,7 @@ def _pdf_takeoff_circle_center(annot) -> list[dict]:
 def _pdf_takeoff_annotation_data(doc: fitz.Document, page, annot) -> dict | None:
     raw = doc.xref_object(int(annot.xref), compressed=False) if int(getattr(annot, "xref", 0) or 0) > 0 else ""
     subtype = _pdf_takeoff_subtype(annot, raw)
-    page_height = float(page.rect.height)
+    page_height = _pdf_takeoff_unrotated_page_height(page)
     measurement_type = ""
     role = "takeoff"
     points: list[dict] = []
@@ -2846,20 +2898,31 @@ def _pdf_takeoff_annotation_data(doc: fitz.Document, page, annot) -> dict | None
     if subtype == "/Line":
         measurement_type = "line"
         role = "dimension"
-        points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "L"), page_height)
+        points = (
+            _pdf_takeoff_points_from_annot_vertices(annot)
+            or _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "L"), page_height)
+        )
     elif subtype == "/PolyLine":
         measurement_type = "line"
-        points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "Vertices"), page_height)
+        points = (
+            _pdf_takeoff_points_from_annot_vertices(annot)
+            or _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "Vertices"), page_height)
+        )
     elif subtype == "/Polygon":
         measurement_type = "area"
-        points = _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "Vertices"), page_height)
-        if len(points) >= 2 and abs(points[0]["x"] - points[-1]["x"]) <= 0.01 and abs(points[0]["y"] - points[-1]["y"]) <= 0.01:
-            points = points[:-1]
+        points = (
+            _pdf_takeoff_points_from_annot_vertices(annot)
+            or _pdf_takeoff_points_from_raw(_pdf_numbers_from_array(raw, "Vertices"), page_height)
+        )
     elif subtype == "/Circle":
         measurement_type = "point"
         points = _pdf_takeoff_circle_center(annot)
     else:
         return None
+
+    points = _rotate_pdf_takeoff_points_for_page(page, points)
+    if measurement_type == "area" and len(points) >= 2 and abs(points[0]["x"] - points[-1]["x"]) <= 0.01 and abs(points[0]["y"] - points[-1]["y"]) <= 0.01:
+        points = points[:-1]
 
     if measurement_type == "point" and len(points) < 1:
         return None

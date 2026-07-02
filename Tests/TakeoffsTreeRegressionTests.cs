@@ -1707,6 +1707,7 @@ internal static class TakeoffsTreeRegressionTests
         string options = ReadRepoFile("Models/PdfTakeoffImportOptions.cs");
         string service = ReadRepoFile("Models/PdfTakeoffAnnotationImportService.cs");
         string helper = ReadRepoFile("Tools/pdf_layers_helper.py");
+        string rotationSmoke = ReadRepoFile("Tools/pdf_takeoff_import_rotation_smoke.py");
 
         AssertTrue(
             xaml.Contains("Content=\"PDF Takeoffs\"", StringComparison.Ordinal) &&
@@ -1757,6 +1758,13 @@ internal static class TakeoffsTreeRegressionTests
             helper.Contains("pdf_takeoff_clean_copy_data", StringComparison.Ordinal) &&
             helper.Contains("role = \"dimension\"", StringComparison.Ordinal),
             "PDF takeoff annotation extraction and clean-copy creation must use the existing PyMuPDF worker protocol");
+        AssertTrue(
+            helper.Contains("_pdf_takeoff_points_from_annot_vertices(annot)", StringComparison.Ordinal) &&
+            helper.Contains("_pdf_takeoff_unrotated_page_height(page)", StringComparison.Ordinal) &&
+            helper.Contains("_rotate_pdf_takeoff_points_for_page(page, points)", StringComparison.Ordinal) &&
+            rotationSmoke.Contains("page.set_rotation(90)", StringComparison.Ordinal) &&
+            rotationSmoke.Contains("_assert_points_close", StringComparison.Ordinal),
+            "PDF takeoff annotation import must normalize raw annotation geometry into rotated page.rect coordinates");
     }
 
     public static void ViewportEdgeSnapCommandIsWired()
