@@ -6,20 +6,52 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
-    private void PagesTreeSearchBox_TextChanged(object sender, TextChangedEventArgs e) =>
-        ApplyPagesTreeSearchFilter();
+    private void PagesTreeSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!IsInitialized)
+            return;
 
-    private void TakeoffsTreeSearchBox_TextChanged(object sender, TextChangedEventArgs e) =>
+        ApplyPagesTreeSearchFilter();
+    }
+
+    private void PagesFolderSearchCaseToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized)
+            return;
+
+        ApplyPagesTreeSearchFilter();
+    }
+
+    private void TakeoffsTreeSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!IsInitialized)
+            return;
+
         ApplyTakeoffsTreeSearchFilter();
+    }
+
+    private void TakeoffsFolderSearchCaseToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized)
+            return;
+
+        ApplyTakeoffsTreeSearchFilter();
+    }
 
     private void ApplyPagesTreeSearchFilter()
     {
         string folderQuery = TreeSearchQuery(PagesFolderSearchBox.Text);
         string pageQuery = TreeSearchQuery(PagesTreeSearchBox.Text);
+        StringComparison folderComparison = FolderSearchComparison(PagesFolderSearchCaseToggle.IsChecked == true);
         WithTreeExpansionTrackingSuppressed(() =>
         {
             foreach (TreeViewItem item in PagesTree.Items)
-                ApplyPagesTreeSearchFilter(item, folderQuery, pageQuery, ancestorFolderMatch: false);
+                ApplyPagesTreeSearchFilter(
+                    item,
+                    folderQuery,
+                    pageQuery,
+                    folderComparison,
+                    ancestorFolderMatch: false);
         });
     }
 
@@ -27,6 +59,7 @@ public partial class MainWindow
         TreeViewItem item,
         string folderQuery,
         string pageQuery,
+        StringComparison folderComparison,
         bool ancestorFolderMatch)
     {
         bool folderFiltering = folderQuery.Length > 0;
@@ -36,20 +69,32 @@ public partial class MainWindow
         {
             item.Visibility = Visibility.Visible;
             foreach (TreeViewItem child in item.Items)
-                ApplyPagesTreeSearchFilter(child, folderQuery, pageQuery, ancestorFolderMatch: false);
+                ApplyPagesTreeSearchFilter(
+                    child,
+                    folderQuery,
+                    pageQuery,
+                    folderComparison,
+                    ancestorFolderMatch: false);
             return true;
         }
 
         bool folderSelfMatch = folderFiltering &&
                                item.Tag is PageFolderNode &&
-                               PageTreeFolderSearchText(item).Contains(folderQuery, StringComparison.OrdinalIgnoreCase);
+                               PageTreeFolderSearchText(item).Contains(folderQuery, folderComparison);
         bool folderScopeMatch = ancestorFolderMatch || folderSelfMatch;
         bool pageSelfMatch = pageFiltering &&
                              item.Tag is PageInfo &&
                              PageTreePageSearchText(item).Contains(pageQuery, StringComparison.OrdinalIgnoreCase);
         bool childMatch = false;
         foreach (TreeViewItem child in item.Items)
-            childMatch |= ApplyPagesTreeSearchFilter(child, folderQuery, pageQuery, folderScopeMatch);
+        {
+            childMatch |= ApplyPagesTreeSearchFilter(
+                child,
+                folderQuery,
+                pageQuery,
+                folderComparison,
+                folderScopeMatch);
+        }
 
         bool visible = PageTreeNodeVisible(
             item,
@@ -95,10 +140,16 @@ public partial class MainWindow
     {
         string folderQuery = TreeSearchQuery(TakeoffsFolderSearchBox.Text);
         string takeoffQuery = TreeSearchQuery(TakeoffsTreeSearchBox.Text);
+        StringComparison folderComparison = FolderSearchComparison(TakeoffsFolderSearchCaseToggle.IsChecked == true);
         WithTreeExpansionTrackingSuppressed(() =>
         {
             foreach (TreeViewItem item in TakeoffsTree.Items)
-                ApplyTakeoffsTreeSearchFilter(item, folderQuery, takeoffQuery, ancestorFolderMatch: false);
+                ApplyTakeoffsTreeSearchFilter(
+                    item,
+                    folderQuery,
+                    takeoffQuery,
+                    folderComparison,
+                    ancestorFolderMatch: false);
         });
     }
 
@@ -106,6 +157,7 @@ public partial class MainWindow
         TreeViewItem item,
         string folderQuery,
         string takeoffQuery,
+        StringComparison folderComparison,
         bool ancestorFolderMatch)
     {
         bool folderFiltering = folderQuery.Length > 0;
@@ -115,20 +167,32 @@ public partial class MainWindow
         {
             item.Visibility = Visibility.Visible;
             foreach (TreeViewItem child in item.Items)
-                ApplyTakeoffsTreeSearchFilter(child, folderQuery, takeoffQuery, ancestorFolderMatch: false);
+                ApplyTakeoffsTreeSearchFilter(
+                    child,
+                    folderQuery,
+                    takeoffQuery,
+                    folderComparison,
+                    ancestorFolderMatch: false);
             return true;
         }
 
         bool folderSelfMatch = folderFiltering &&
                                item.Tag is TakeoffFolderNode &&
-                               TakeoffTreeFolderSearchText(item).Contains(folderQuery, StringComparison.OrdinalIgnoreCase);
+                               TakeoffTreeFolderSearchText(item).Contains(folderQuery, folderComparison);
         bool folderScopeMatch = ancestorFolderMatch || folderSelfMatch;
         bool takeoffSelfMatch = takeoffFiltering &&
                                 IsTakeoffSearchItem(item) &&
                                 TakeoffTreeItemSearchText(item).Contains(takeoffQuery, StringComparison.OrdinalIgnoreCase);
         bool childMatch = false;
         foreach (TreeViewItem child in item.Items)
-            childMatch |= ApplyTakeoffsTreeSearchFilter(child, folderQuery, takeoffQuery, folderScopeMatch);
+        {
+            childMatch |= ApplyTakeoffsTreeSearchFilter(
+                child,
+                folderQuery,
+                takeoffQuery,
+                folderComparison,
+                folderScopeMatch);
+        }
 
         bool visible = TakeoffTreeNodeVisible(
             item,
@@ -180,4 +244,7 @@ public partial class MainWindow
 
     private static string TreeSearchQuery(string? value) =>
         (value ?? "").Trim();
+
+    private static StringComparison FolderSearchComparison(bool matchCase) =>
+        matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 }

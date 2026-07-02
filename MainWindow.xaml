@@ -968,13 +968,24 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="PagesFolderSearchBox"
-                                                 Grid.Column="0"
-                                                 Margin="0,0,2,0"
-                                                 FontSize="11"
-                                                 AutomationProperties.Name="Page folder search"
-                                                 TextChanged="PagesTreeSearchBox_TextChanged"
-                                                 ToolTip="Search page folders by folder name"/>
+                                        <Grid Grid.Column="0"
+                                              Margin="0,0,2,0">
+                                            <TextBox x:Name="PagesFolderSearchBox"
+                                                     Padding="2,1,20,1"
+                                                     FontSize="11"
+                                                     AutomationProperties.Name="Page folder search"
+                                                     TextChanged="PagesTreeSearchBox_TextChanged"
+                                                     ToolTip="Search page folders by folder name"/>
+                                            <ToggleButton x:Name="PagesFolderSearchCaseToggle"
+                                                          Style="{StaticResource BookmarkDockToggleButton}"
+                                                          IsChecked="True"
+                                                          Margin="0,0,4,0"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Checked="PagesFolderSearchCaseToggle_Changed"
+                                                          Unchecked="PagesFolderSearchCaseToggle_Changed"
+                                                          ToolTip="Match page folder case exactly"/>
+                                        </Grid>
                                         <TextBox x:Name="PagesTreeSearchBox"
                                                  Grid.Column="1"
                                                  Margin="2,0,0,0"
@@ -1530,13 +1541,24 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TakeoffsFolderSearchBox"
-                                     Grid.Column="0"
-                                     Margin="0,0,2,0"
-                                     FontSize="11"
-                                     AutomationProperties.Name="Takeoff folder search"
-                                     TextChanged="TakeoffsTreeSearchBox_TextChanged"
-                                     ToolTip="Search takeoff folders by folder name"/>
+                            <Grid Grid.Column="0"
+                                  Margin="0,0,2,0">
+                                <TextBox x:Name="TakeoffsFolderSearchBox"
+                                         Padding="2,1,20,1"
+                                         FontSize="11"
+                                         AutomationProperties.Name="Takeoff folder search"
+                                         TextChanged="TakeoffsTreeSearchBox_TextChanged"
+                                         ToolTip="Search takeoff folders by folder name"/>
+                                <ToggleButton x:Name="TakeoffsFolderSearchCaseToggle"
+                                              Style="{StaticResource BookmarkDockToggleButton}"
+                                              IsChecked="True"
+                                              Margin="0,0,4,0"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Checked="TakeoffsFolderSearchCaseToggle_Changed"
+                                              Unchecked="TakeoffsFolderSearchCaseToggle_Changed"
+                                              ToolTip="Match takeoff folder case exactly"/>
+                            </Grid>
                             <TextBox x:Name="TakeoffsTreeSearchBox"
                                      Grid.Column="1"
                                      Margin="2,0,0,0"

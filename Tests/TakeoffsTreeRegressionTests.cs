@@ -1227,16 +1227,23 @@ internal static class TakeoffsTreeRegressionTests
 
         AssertTrue(
             xaml.Contains("PagesFolderSearchBox", StringComparison.Ordinal) &&
+            xaml.Contains("PagesFolderSearchCaseToggle", StringComparison.Ordinal) &&
+            xaml.Contains("PagesFolderSearchCaseToggle_Changed", StringComparison.Ordinal) &&
             xaml.Contains("PagesTreeSearchBox", StringComparison.Ordinal) &&
             xaml.Contains("TakeoffsFolderSearchBox", StringComparison.Ordinal) &&
+            xaml.Contains("TakeoffsFolderSearchCaseToggle", StringComparison.Ordinal) &&
+            xaml.Contains("TakeoffsFolderSearchCaseToggle_Changed", StringComparison.Ordinal) &&
             xaml.Contains("TakeoffsTreeSearchBox", StringComparison.Ordinal) &&
+            xaml.Contains("IsChecked=\"True\"", StringComparison.Ordinal) &&
             treeSearch.Contains("PageTreeFolderSearchText", StringComparison.Ordinal) &&
             treeSearch.Contains("PageTreePageSearchText", StringComparison.Ordinal) &&
             treeSearch.Contains("TakeoffTreeFolderSearchText", StringComparison.Ordinal) &&
             treeSearch.Contains("TakeoffTreeItemSearchText", StringComparison.Ordinal) &&
+            treeSearch.Contains("FolderSearchComparison", StringComparison.Ordinal) &&
+            treeSearch.Contains("StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase", StringComparison.Ordinal) &&
             treeSearch.Contains("ApplyPagesTreeSearchFilter", StringComparison.Ordinal) &&
             treeSearch.Contains("ApplyTakeoffsTreeSearchFilter", StringComparison.Ordinal),
-            "Pages and Takeoffs trees must expose split folder/item search boxes with filter handlers");
+            "Pages and Takeoffs trees must expose split folder/item search boxes with default-on folder case toggles");
         AssertTrue(
             takeoffsClipboard.Contains("FirstSelectedTakeoffTreeItem", StringComparison.Ordinal) &&
             takeoffsClipboard.Contains("TryDeleteSelectedTakeoffNodesFromKeyboard", StringComparison.Ordinal) &&
