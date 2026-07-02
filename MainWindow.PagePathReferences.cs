@@ -45,6 +45,7 @@ public partial class MainWindow
                               normalizedMoves.Any(move => OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, _currentPage.FolderPath));
         bool tabsChanged = false;
         bool measurementsChanged = RebaseMeasurementPageFolderReferences(normalizedMoves);
+        bool overlaysChanged = RebasePageOverlayReferences(normalizedMoves);
 
         foreach (PageTabState tab in _pageTabs)
         {
@@ -79,8 +80,39 @@ public partial class MainWindow
             RefreshPagesTakeoffIndicators();
             RefreshEstimateTable();
         }
+        if (overlaysChanged)
+        {
+            RefreshCurrentPageOverlayAfterPathRebase();
+            RefreshPagesTakeoffIndicators();
+        }
 
         return reloadActiveTab;
+    }
+
+    private bool RebasePageOverlayReferences(IReadOnlyList<(string OldPath, string NewPath)> moves)
+    {
+        if (_currentJob == null || moves.Count == 0)
+            return false;
+
+        int changed = OurPlaneCoreJobStore.RebasePageOverlayReferences(_currentJob.PagesRoot, moves);
+        if (changed > 0)
+            AppLog.Info($"Rebased {changed} sheet overlay page reference(s) after page path change.");
+        return changed > 0;
+    }
+
+    private void RefreshCurrentPageOverlayAfterPathRebase()
+    {
+        if (_currentPage == null ||
+            OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is not { } refreshedPage)
+        {
+            return;
+        }
+
+        bool overlayChanged = !SameFolder(_currentPage.OverlayPageFolder, refreshedPage.OverlayPageFolder);
+        _currentPage = refreshedPage;
+        RefreshPageOverlayTreeNode(refreshedPage);
+        if (overlayChanged)
+            LoadSheetOverlay(refreshedPage, keepExistingUntilReady: true);
     }
 
     private bool TryRebindCurrentPageAfterMovedPath(IReadOnlyList<(string OldPath, string NewPath)> moves)

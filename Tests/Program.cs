@@ -292,6 +292,8 @@ var tests = new List<(string Name, Action Run)>
     ("page copy and move preserve source overlay and layers", StorageTests.PageCopyAndMovePreserveSourceOverlayAndLayers),
     ("page corrupt source json is quarantined", StorageTests.PageCorruptSourceJsonIsQuarantined),
     ("page source json repairs from sheet metadata", StorageTests.PageSourceJsonRepairsFromSheetMetadata),
+    ("page overlay references rebase after page move", StorageTests.PageOverlayReferencesRebaseAfterPageMove),
+    ("page source json repair restores reciprocal overlay", StorageTests.PageSourceJsonRepairRestoresReciprocalOverlay),
     ("page annotations save load normalize defaults", StorageTests.PageAnnotationsSaveLoadNormalizeDefaults),
     ("page annotations follow moved page folder", StorageTests.PageAnnotationsFollowMovedPageFolder),
     ("page corrupt annotations json is quarantined", StorageTests.PageCorruptAnnotationsJsonIsQuarantined),

@@ -250,6 +250,73 @@ internal static class StorageTests
         });
     }
 
+    public static void PageOverlayReferencesRebaseAfterPageMove()
+    {
+        WithTempJob("Overlay Rebase", job =>
+        {
+            PageInfo basePage = CreatePageItem(job, "S101");
+            PageInfo overlayPage = CreatePageItem(job, "S102");
+            OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
+            OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2, -4.5);
+            OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
+
+            string movedParent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Moved");
+            string movedOverlayPath = OurPlaneCoreJobStore.MoveNode(overlayPage.FolderPath, movedParent);
+            int changed = OurPlaneCoreJobStore.RebasePageOverlayReferences(
+                job.PagesRoot,
+                [(overlayPage.FolderPath, movedOverlayPath)]);
+
+            PageInfo updatedBase = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("base page missing after overlay rebase");
+            AssertEqual("1", changed.ToString(), "overlay rebase count");
+            AssertEqual(movedOverlayPath, updatedBase.OverlayPageFolder, "rebased overlay path");
+            AssertClose(12.5, updatedBase.OverlayOffsetXPt, "overlay x survives rebase");
+            AssertClose(-7.25, updatedBase.OverlayOffsetYPt, "overlay y survives rebase");
+            AssertClose(1.2, updatedBase.OverlayScale, "overlay scale survives rebase");
+            AssertClose(-4.5, updatedBase.OverlayRotationDegrees, "overlay rotation survives rebase");
+            AssertFalse(updatedBase.OverlayVisible, "overlay visibility survives rebase");
+        });
+    }
+
+    public static void PageSourceJsonRepairRestoresReciprocalOverlay()
+    {
+        WithTempJob("Repair Reciprocal Overlay", job =>
+        {
+            PageInfo basePage = CreatePageItem(job, "S201");
+            PageInfo overlayPage = CreatePageItem(job, "S202");
+            OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#43A047", 0.82);
+            OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 10, -4, 1.25, 8);
+            PageInfo syncedBase = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("base page missing before reciprocal sync");
+            AssertTrue(SheetOverlayReciprocalService.TrySync(syncedBase, out _), "reciprocal overlay should sync");
+
+            OurPlaneCoreJobStore.WriteSourcePdfMetadata(
+                basePage.FolderPath,
+                new PdfSheetMetadata
+                {
+                    Source = "test",
+                    PdfPath = basePage.PdfPath,
+                    PageIndex = basePage.PdfPage,
+                    PageNumber = basePage.PdfPage + 1,
+                    SheetLabel = "S201",
+                    RenameCandidate = "S201",
+                    SelectedScaleMetersPerPt = 0.3048,
+                });
+            File.Delete(Path.Combine(basePage.FolderPath, "source.json"));
+
+            PageInfo repaired = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+                ?? throw new InvalidOperationException("page source should repair from reciprocal overlay");
+
+            AssertEqual(overlayPage.FolderPath, repaired.OverlayPageFolder, "repaired overlay path");
+            AssertEqual("#43A047", repaired.OverlayColor, "repaired overlay color");
+            AssertClose(0.82, repaired.OverlayOpacity, "repaired overlay opacity");
+            AssertClose(10, repaired.OverlayOffsetXPt, "repaired overlay x");
+            AssertClose(-4, repaired.OverlayOffsetYPt, "repaired overlay y");
+            AssertClose(1.25, repaired.OverlayScale, "repaired overlay scale");
+            AssertClose(8, repaired.OverlayRotationDegrees, "repaired overlay rotation");
+        });
+    }
+
     public static void PageAnnotationsSaveLoadNormalizeDefaults()
     {
         WithTempJob("Page Annotations", job =>

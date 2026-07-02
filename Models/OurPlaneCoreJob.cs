@@ -97,6 +97,9 @@ public static class OurPlaneCoreJobStore
         double? overlayRotationDegrees = null) =>
         PageStore.SavePageOverlayTransform(pageFolder, offsetXPt, offsetYPt, overlayScale, overlayRotationDegrees);
 
+    public static int RebasePageOverlayReferences(string pagesRoot, IReadOnlyList<(string OldPath, string NewPath)> moves) =>
+        PageStore.RebasePageOverlayReferences(pagesRoot, moves);
+
     public static string CreateTakeoffFolder(OurPlaneCoreJob job, string parentFolder, string name) =>
         TakeoffStore.CreateTakeoffFolder(job, parentFolder, name);
 

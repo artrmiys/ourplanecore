@@ -610,6 +610,56 @@ internal static class PageStore
         return snapshots;
     }
 
+    public static int RebasePageOverlayReferences(string pagesRoot, IReadOnlyList<(string OldPath, string NewPath)> moves)
+    {
+        var normalizedMoves = moves
+            .Select(move => (OldPath: NormalizeFolderPath(move.OldPath), NewPath: NormalizeFolderPath(move.NewPath)))
+            .Where(move => !string.Equals(move.OldPath, move.NewPath, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (normalizedMoves.Count == 0 || !Directory.Exists(pagesRoot))
+            return 0;
+
+        int changed = 0;
+        foreach (string dir in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(pagesRoot))
+        {
+            SourceInfo? src = ReadSource(dir);
+            if (src == null || string.IsNullOrWhiteSpace(src.OverlayPageFolder))
+                continue;
+
+            string overlayPath = ResolveRelativePagePath(dir, src.OverlayPageFolder);
+            if (!TryRebaseMovedPagePath(normalizedMoves, overlayPath, out string rebasedOverlayPath) ||
+                SamePageReference(dir, src.OverlayPageFolder, rebasedOverlayPath))
+            {
+                continue;
+            }
+
+            string pdfAbs = Path.GetFullPath(Path.Combine(dir, src.Pdf));
+            WriteSource(
+                dir,
+                pdfAbs,
+                src.Page,
+                src.ScaleMetersPerPt,
+                src.PdfLayers,
+                src.PdfLayersCached,
+                src.LegendTakeoffOrder,
+                src.LegendTakeoffOrderMode,
+                rebasedOverlayPath,
+                src.OverlayVisible,
+                src.OverlayColor,
+                src.OverlayOpacity,
+                src.OverlayOffsetXPt,
+                src.OverlayOffsetYPt,
+                src.OverlayScale,
+                src.OverlayRotationDegrees,
+                src.HiddenTakeoffs,
+                src.RasterSheet,
+                src.HiddenMeasurements);
+            changed++;
+        }
+
+        return changed;
+    }
+
     private static void WriteSource(
         string pageFolder,
         string pdfAbsPath,
@@ -730,6 +780,41 @@ internal static class PageStore
         string rightResolved = ResolveRelativePagePath(pageFolder, right)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return string.Equals(leftResolved, rightResolved, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryRebaseMovedPagePath(
+        IReadOnlyList<(string OldPath, string NewPath)> moves,
+        string path,
+        out string rebased)
+    {
+        string current = NormalizeFolderPath(path);
+        foreach (var move in moves)
+        {
+            if (!OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, current))
+                continue;
+
+            string relative = Path.GetRelativePath(move.OldPath, current);
+            rebased = relative == "."
+                ? move.NewPath
+                : Path.GetFullPath(Path.Combine(move.NewPath, relative));
+            return true;
+        }
+
+        rebased = current;
+        return false;
+    }
+
+    private static string NormalizeFolderPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
     }
 
     private static string MakeRelativePageReference(string pageFolder, string path)

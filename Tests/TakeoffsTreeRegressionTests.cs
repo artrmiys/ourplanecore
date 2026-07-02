@@ -946,6 +946,9 @@ internal static class TakeoffsTreeRegressionTests
             references.Contains("RebaseMeasurementPageFolderReferences(normalizedMoves)", StringComparison.Ordinal),
             "Pages bulk moves should rebase page refs in one pass");
         AssertTrue(
+            references.Contains("RebasePageOverlayReferences(normalizedMoves)", StringComparison.Ordinal),
+            "Pages moves should rebase sheet overlay page references in one pass");
+        AssertTrue(
             flushMethod.Contains("ReloadPagesTree(selectPath, selectSilently: true)", StringComparison.Ordinal) &&
             !flushMethod.Contains("PagesTree.UpdateLayout()", StringComparison.Ordinal) &&
             !flushMethod.Contains("PagesTree.Items.Refresh()", StringComparison.Ordinal),

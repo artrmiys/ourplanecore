@@ -62,8 +62,9 @@ internal static class PageSourceRepair
         string pageFolder,
         string pdfAbsPath,
         PdfSheetMetadata metadata,
-        double scaleMetersPerPt) =>
-        new()
+        double scaleMetersPerPt)
+    {
+        SourceInfo src = new()
         {
             Pdf = Path.GetRelativePath(pageFolder, pdfAbsPath),
             Page = Math.Max(0, metadata.PageIndex),
@@ -71,6 +72,95 @@ internal static class PageSourceRepair
             PdfLayersCached = metadata.Layers.Count > 0,
             PdfLayers = metadata.Layers,
         };
+        RestoreReciprocalOverlay(pageFolder, src);
+        return src;
+    }
+
+    private static void RestoreReciprocalOverlay(string pageFolder, SourceInfo repaired)
+    {
+        if (!TryFindReciprocalOverlay(pageFolder, out string overlayPageFolder, out SourceInfo overlaySource))
+            return;
+
+        SheetOverlayTransformValues transform = SheetOverlayReciprocalService.Invert(
+            overlaySource.OverlayOffsetXPt,
+            overlaySource.OverlayOffsetYPt,
+            overlaySource.OverlayScale,
+            overlaySource.OverlayRotationDegrees);
+        repaired.OverlayPageFolder = Path.GetRelativePath(pageFolder, overlayPageFolder);
+        repaired.OverlayVisible = overlaySource.OverlayVisible;
+        repaired.OverlayColor = overlaySource.OverlayColor;
+        repaired.OverlayOpacity = overlaySource.OverlayOpacity;
+        repaired.OverlayOffsetXPt = transform.OffsetXPt;
+        repaired.OverlayOffsetYPt = transform.OffsetYPt;
+        repaired.OverlayScale = transform.OverlayScale;
+        repaired.OverlayRotationDegrees = transform.OverlayRotationDegrees;
+    }
+
+    private static bool TryFindReciprocalOverlay(
+        string pageFolder,
+        out string overlayPageFolder,
+        out SourceInfo overlaySource)
+    {
+        overlayPageFolder = "";
+        overlaySource = new SourceInfo();
+        string? pagesRoot = FindPagesRoot(pageFolder);
+        if (string.IsNullOrWhiteSpace(pagesRoot) || !Directory.Exists(pagesRoot))
+            return false;
+
+        foreach (string candidate in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(pagesRoot).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            if (SheetOverlayReciprocalService.SameFolder(candidate, pageFolder) ||
+                !string.Equals(OurPlaneCoreJobStore.ReadClass(candidate), "Page", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            SourceInfo? source = OurPlaneCoreJobStore.ReadSource(candidate);
+            if (source == null || string.IsNullOrWhiteSpace(source.OverlayPageFolder))
+                continue;
+
+            string target = ResolvePageReference(candidate, source.OverlayPageFolder);
+            if (!SheetOverlayReciprocalService.SameFolder(target, pageFolder))
+                continue;
+
+            overlayPageFolder = candidate;
+            overlaySource = source;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? FindPagesRoot(string pageFolder)
+    {
+        string? current = Path.GetFullPath(pageFolder);
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (string.Equals(Path.GetFileName(current), "Pages", StringComparison.OrdinalIgnoreCase))
+                return current;
+
+            string? parent = Directory.GetParent(current)?.FullName;
+            if (string.Equals(parent, current, StringComparison.OrdinalIgnoreCase))
+                return null;
+            current = parent;
+        }
+
+        return null;
+    }
+
+    private static string ResolvePageReference(string pageFolder, string path)
+    {
+        try
+        {
+            return Path.IsPathRooted(path)
+                ? Path.GetFullPath(path)
+                : Path.GetFullPath(Path.Combine(pageFolder, path));
+        }
+        catch
+        {
+            return path;
+        }
+    }
 
     private static double ScaleMetersPerPtFromMetadata(PdfSheetMetadata metadata)
     {
