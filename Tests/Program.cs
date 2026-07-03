@@ -350,6 +350,8 @@ var tests = new List<(string Name, Action Run)>
     ("planswift import copies existing ourplanecore job takeoffs", PlanSwiftImportTests.ImportCopiesExistingOurPlaneCoreJobTakeoffs),
     ("planswift txt export writes every root item", PlanSwiftTxtExportWritesEveryRootItem),
     ("planswift export hides generated import notes", PlanSwiftExportHidesGeneratedImportNotes),
+    ("planswift export hides pdf import notes", PlanSwiftExportHidesPdfImportNotes),
+    ("planswift export groups selected sibling items", PlanSwiftExportGroupsSelectedSiblingItems),
     ("pdf import source finder finds nested pdf files", PdfImportSourceFinderFindsNestedPdfFiles),
     ("raster sheet cache builds working image and strict snap manifest", RasterSheetCacheTests.BuildsWorkingImageAndStrictSnapManifest),
     ("active excel export matrix keeps numbers", ActiveExcelExportMatrixKeepsNumbers),
@@ -3398,6 +3400,75 @@ static void PlanSwiftExportHidesGeneratedImportNotes()
         AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Keep item note"), "manual item note exported");
         AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Keep section note"), "manual section note exported");
         AssertEqual("Manual note", PlanSwiftTakeoffExporter.CleanExportNotes("Imported from PlanSwift: Takeoff\\sqfts\\4th\\Section\nManual note"), "csv export note cleanup");
+    });
+}
+
+static void PlanSwiftExportHidesPdfImportNotes()
+{
+    WithTempJob("PDF Import Notes Export", job =>
+    {
+        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "PDF Imported Area", "#FF0000", "area");
+        item.Notes = "Imported from PDF takeoff annotations: source.pdf\nKeep item note";
+        item.Measurements.Add(new Measurement
+        {
+            MType = "area",
+            Notes = "Imported from PDF takeoff: source.pdf\nPDF page: 1\nAnnotation: abc\nSubtype: /Polygon\nContent: 12 SF\nKeep section note",
+            ScaleMetersPerPt = 0.3048,
+            Points =
+            [
+                new SKPoint(0, 0),
+                new SKPoint(1, 0),
+                new SKPoint(1, 1),
+                new SKPoint(0, 1),
+            ],
+        });
+
+        IReadOnlyList<PlanSwiftExportRow> rows = PlanSwiftTakeoffExporter.BuildRows(
+            job,
+            [item],
+            [job.TakeoffsRoot],
+            UnitMode.Imperial);
+
+        AssertFalse(rows.Any(row => row.Name.Contains("Imported from PDF takeoff", StringComparison.OrdinalIgnoreCase)), "pdf import source note hidden");
+        AssertFalse(rows.Any(row => row.Name.Contains("PDF page:", StringComparison.OrdinalIgnoreCase)), "pdf page note hidden");
+        AssertFalse(rows.Any(row => row.Name.Contains("Annotation:", StringComparison.OrdinalIgnoreCase)), "pdf annotation id note hidden");
+        AssertFalse(rows.Any(row => row.Name.Contains("Subtype:", StringComparison.OrdinalIgnoreCase)), "pdf subtype note hidden");
+        AssertFalse(rows.Any(row => row.Name.Contains("Content:", StringComparison.OrdinalIgnoreCase)), "pdf content note hidden");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Keep item note"), "manual pdf item note exported");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Note && row.Name == "Keep section note"), "manual pdf section note exported");
+    });
+}
+
+static void PlanSwiftExportGroupsSelectedSiblingItems()
+{
+    WithTempJob("Selected Sibling Export", job =>
+    {
+        string folder = CreateTakeoffFolder(job, "PDF Import");
+        TakeoffItem first = CreateNestedTakeoffItem(job, folder, "First Line");
+        TakeoffItem second = CreateNestedTakeoffItem(job, folder, "Second Line");
+        first.Measurements.Add(new Measurement
+        {
+            MType = "line",
+            ScaleMetersPerPt = 0.3048,
+            Points = [new SKPoint(0, 0), new SKPoint(1, 0)],
+        });
+        second.Measurements.Add(new Measurement
+        {
+            MType = "line",
+            ScaleMetersPerPt = 0.3048,
+            Points = [new SKPoint(0, 0), new SKPoint(2, 0)],
+        });
+
+        IReadOnlyList<PlanSwiftExportRow> rows = PlanSwiftTakeoffExporter.BuildRows(
+            job,
+            [first, second],
+            [first.FolderPath, second.FolderPath],
+            UnitMode.Imperial);
+
+        AssertEqual("1", rows.Count(row => row.Kind == PlanSwiftExportRowKind.Header && row.Name == "PDF Import").ToString(), "selected sibling folder header count");
+        AssertEqual("2", rows.Count(row => row.Kind == PlanSwiftExportRowKind.Item).ToString(), "selected sibling item rows");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Item && row.Name == "First Line"), "selected sibling first item exported");
+        AssertTrue(rows.Any(row => row.Kind == PlanSwiftExportRowKind.Item && row.Name == "Second Line"), "selected sibling second item exported");
     });
 }
 

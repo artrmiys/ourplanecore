@@ -26,6 +26,12 @@ public static class PlanSwiftTakeoffExporter
         "Imported from PlanSwift:",
         "Imported from PlanSwift Segment Section:",
         "Imported generated PlanSwift Segment geometry from ",
+        "Imported from PDF takeoff:",
+        "Imported from PDF takeoff annotations:",
+        "PDF page:",
+        "Annotation:",
+        "Subtype:",
+        "Content:",
     ];
 
     public static IReadOnlyList<PlanSwiftExportRow> BuildRows(
@@ -41,15 +47,28 @@ public static class PlanSwiftTakeoffExporter
 
         var roots = NormalizeRoots(job, selectedRoots);
         var rows = new List<PlanSwiftExportRow>();
-        foreach (string root in roots)
+        if (roots.Count > 0 && roots.All(root => TryGetItem(itemByFolder, root, out _)))
         {
-            if (TryGetItem(itemByFolder, root, out TakeoffItem? item))
+            EmitSelectedItemGroups(
+                rows,
+                job,
+                roots
+                    .Select(root => itemByFolder[NormalizePath(root)])
+                    .ToList(),
+                unitMode);
+        }
+        else
+        {
+            foreach (string root in roots)
             {
-                EmitSingleItem(rows, job, item!, unitMode);
-                continue;
-            }
+                if (TryGetItem(itemByFolder, root, out TakeoffItem? item))
+                {
+                    EmitSingleItem(rows, job, item!, unitMode);
+                    continue;
+                }
 
-            ProcessFolder(rows, job, root, itemByFolder, unitMode, isRoot: IsSamePath(root, job.TakeoffsRoot));
+                ProcessFolder(rows, job, root, itemByFolder, unitMode, isRoot: IsSamePath(root, job.TakeoffsRoot));
+            }
         }
 
         while (rows.Count > 0 && rows[^1].Kind == PlanSwiftExportRowKind.Blank)
@@ -136,6 +155,30 @@ public static class PlanSwiftTakeoffExporter
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Header, GroupTitle(job, parent)));
         EmitItem(rows, item, unitMode);
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
+    }
+
+    private static void EmitSelectedItemGroups(
+        List<PlanSwiftExportRow> rows,
+        OurPlaneCoreJob job,
+        IReadOnlyList<TakeoffItem> selectedItems,
+        UnitMode unitMode)
+    {
+        var groups = selectedItems
+            .Select(item => new
+            {
+                Parent = Path.GetDirectoryName(item.FolderPath) ?? job.TakeoffsRoot,
+                Item = item,
+            })
+            .GroupBy(entry => NormalizePath(entry.Parent), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            string parent = group.First().Parent;
+            rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Header, GroupTitle(job, parent)));
+            foreach (TakeoffItem item in SortItemsForFolder(job, parent, group.Select(entry => entry.Item).ToList()))
+                EmitItem(rows, item, unitMode);
+            rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Blank, ""));
+        }
     }
 
     private static void ProcessFolder(
