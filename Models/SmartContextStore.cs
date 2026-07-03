@@ -72,6 +72,112 @@ public static partial class SmartContextStore
         return (archived, failed);
     }
 
+    // The single-flight guard that marks a request "running" lives only in
+    // memory, so a request left "running" on disk is a crash artifact: the app
+    // died mid-call and the status was never advanced to done/failed. Such a
+    // request is not re-runnable from the Inbox (IsRunnableAiStatus rejects
+    // "running"), so it becomes permanently stuck. On job load nothing is
+    // actually in flight yet, so any persisted "running" is stale — flip it to
+    // "failed" so the user can retry it.
+    public static int ResetStuckRunningRequests(string jobRoot)
+    {
+        string requestsDir = Path.Combine(ContextRoot(jobRoot), "requests");
+        if (!Directory.Exists(requestsDir))
+            return 0;
+
+        int reset = 0;
+        foreach (string file in Directory.EnumerateFiles(requestsDir, "*.json"))
+        {
+            try
+            {
+                SmartAiRequest? request = LoadJson<SmartAiRequest>(file);
+                if (request == null ||
+                    !request.Status.Equals("running", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                request.Status = "failed";
+                request.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
+                IoUtil.WriteAllTextAtomic(file, JsonSerializer.Serialize(request, JsonOptions));
+                reset++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                // A single unreadable request file must not block job load.
+            }
+        }
+
+        return reset;
+    }
+
+    // ArchiveStaleRequestFiles deliberately leaves crops alone because a crop
+    // can be referenced by a request, an action draft, a marker, or a bookmark.
+    // The consequence is that crops/ only ever grows. This reclaims the safe
+    // subset: crop images older than keepDays whose file name is referenced by
+    // no surviving JSON under any of the folders that can point at a crop. The
+    // reference test is a plain substring scan of the file names, so it does not
+    // depend on knowing every schema field that may carry a crop path, and it
+    // errs toward keeping a crop whenever there is any doubt.
+    public static int PruneOrphanCrops(string jobRoot, int keepDays = 60)
+    {
+        string contextRoot = ContextRoot(jobRoot);
+        string cropsDir = Path.Combine(contextRoot, "crops");
+        if (!Directory.Exists(cropsDir))
+            return 0;
+
+        DateTime cutoff = DateTime.UtcNow.AddDays(-Math.Max(7, keepDays));
+
+        var referenceText = new System.Text.StringBuilder();
+        foreach (string refDir in new[]
+                 {
+                     "requests", "responses", "actions", "markers",
+                     "marker_sets", "crop_bookmarks", "exports",
+                     Path.Combine("archive", "requests"),
+                     Path.Combine("archive", "responses"),
+                 })
+        {
+            string dir = Path.Combine(contextRoot, refDir);
+            if (!Directory.Exists(dir))
+                continue;
+
+            foreach (string file in Directory.EnumerateFiles(dir, "*.json", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    referenceText.Append(File.ReadAllText(file)).Append('\n');
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Treat an unreadable reference file as "might reference a
+                    // crop" by simply skipping it; crops stay untouched.
+                }
+            }
+        }
+
+        string references = referenceText.ToString();
+        int pruned = 0;
+        foreach (string crop in Directory.EnumerateFiles(cropsDir, "*", SearchOption.AllDirectories))
+        {
+            try
+            {
+                if (File.GetLastWriteTimeUtc(crop) >= cutoff)
+                    continue;
+
+                string name = Path.GetFileName(crop);
+                if (references.Contains(name, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                File.Delete(crop);
+                pruned++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Skip anything locked or unreadable; try again next load.
+            }
+        }
+
+        return pruned;
+    }
+
     public static SmartProjectContext EnsureProjectContext(string jobRoot, string projectName)
     {
         string contextRoot = ContextRoot(jobRoot);

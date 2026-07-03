@@ -238,11 +238,11 @@ public sealed class SimilarCountDialog : Window
 
         _aiBox = new CheckBox
         {
-            Content = "Also ask AI to double-check (online)",
+            Content = "Ask AI to identify the symbol (advisory, online)",
             IsChecked = false,
             IsEnabled = aiAvailable,
             ToolTip = aiAvailable
-                ? "Queues an OpenAI request with the symbol crop; the answer lands in the AI Inbox."
+                ? "Queues an OpenAI request with the symbol crop. The answer is advisory only — it lands in the AI Inbox and does not change the offline count."
                 : "OPENAI_API_KEY is not set; offline matching still works.",
             Margin = new Thickness(0, 0, 0, 10),
         };

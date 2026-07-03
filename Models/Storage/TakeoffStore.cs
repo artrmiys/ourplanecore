@@ -169,7 +169,7 @@ internal static class TakeoffStore
 
         try
         {
-            var dtos = JsonSerializer.Deserialize<List<MeasurementDto>>(File.ReadAllText(path)) ?? [];
+            var dtos = ParseMeasurementDtos(File.ReadAllText(path));
             return dtos.Select(dto => ToMeasurement(dto, takeoffFolder)).ToList();
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
@@ -182,6 +182,28 @@ internal static class TakeoffStore
             AppLog.Warn(ex, $"LoadMeasurements failed for {path}");
             return [];
         }
+    }
+
+    // Current on-disk format version for measurements.json. Writes still emit
+    // the legacy bare array, so this is the version a future envelope-writing
+    // build would stamp; the reader below already tolerates that envelope.
+    internal const int CurrentMeasurementsSchemaVersion = 1;
+
+    // Accept both the legacy bare array and a { schema_version, measurements }
+    // envelope so a future format bump cannot make old files look corrupt.
+    private static List<MeasurementDto> ParseMeasurementDtos(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        int i = 0;
+        while (i < json.Length && char.IsWhiteSpace(json[i]))
+            i++;
+
+        if (i < json.Length && json[i] == '{')
+            return JsonSerializer.Deserialize<MeasurementsFileDto>(json)?.Measurements ?? [];
+
+        return JsonSerializer.Deserialize<List<MeasurementDto>>(json) ?? [];
     }
 
     public static void SaveMeasurements(string takeoffFolder, IEnumerable<Measurement> measurements)

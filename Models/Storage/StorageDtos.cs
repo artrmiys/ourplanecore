@@ -3,6 +3,21 @@ using System.Text.Json.Serialization;
 
 namespace OurPlaneCore;
 
+// Envelope for measurements.json. The file has historically been a bare JSON
+// array of MeasurementDto, which leaves nowhere to record a format version.
+// This wrapper adds one so a future breaking change has a migration hook. The
+// reader accepts both shapes (see TakeoffStore.ParseMeasurementDtos); the
+// writer still emits the bare array until this reader is broadly deployed, so
+// an older build never mistakes a versioned file for corruption.
+internal sealed class MeasurementsFileDto
+{
+    [JsonPropertyName("schema_version")]
+    public int SchemaVersion { get; set; } = 1;
+
+    [JsonPropertyName("measurements")]
+    public List<MeasurementDto> Measurements { get; set; } = new();
+}
+
 internal sealed class MeasurementDto
 {
     [JsonPropertyName("id")]

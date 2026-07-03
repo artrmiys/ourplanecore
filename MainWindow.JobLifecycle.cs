@@ -223,9 +223,15 @@ public partial class MainWindow
         string aiMaintenanceRoot = _currentJob.RootPath;
         _ = System.Threading.Tasks.Task.Run(() =>
         {
+            int reset = SmartContextStore.ResetStuckRunningRequests(aiMaintenanceRoot);
+            if (reset > 0)
+                AppLog.Info($"AI context maintenance: reset {reset} stuck 'running' request(s) to failed so they can be retried.");
             (int archived, int failed) = SmartContextStore.ArchiveStaleRequestFiles(aiMaintenanceRoot);
             if (archived > 0 || failed > 0)
                 AppLog.Info($"AI context maintenance: archived {archived} stale request/response file(s), {failed} failed.");
+            int prunedCrops = SmartContextStore.PruneOrphanCrops(aiMaintenanceRoot);
+            if (prunedCrops > 0)
+                AppLog.Info($"AI context maintenance: pruned {prunedCrops} orphaned crop image(s).");
         });
         Dispatcher.BeginInvoke(
             new Action(CollapseProjectTreeDisplays),
