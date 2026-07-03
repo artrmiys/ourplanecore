@@ -82,6 +82,85 @@ public sealed partial class PdfViewport
         SKBitmap Bitmap,
         IReadOnlyList<PdfLayer> Layers);
 
+    // Shared-pixel leases: TryGet used to deep-copy the cached bitmap on every
+    // hit (30-140 MB memcpy + LOH churn per page apply). Consumers own and
+    // Dispose what they receive, so instead of a copy they now get a zero-copy
+    // SKBitmap wrapper installed over the cached pixels with a release proc
+    // that decrements a lease count. The master bitmap is only disposed once
+    // it has been evicted from the cache AND every outstanding lease has been
+    // disposed, so consumer ownership semantics are unchanged. Nothing mutates
+    // pixels obtained from these caches (verified: the only GetPixels write in
+    // the viewport targets freshly decoded bitmaps), so sharing is safe.
+    private static class BitmapLease
+    {
+        // Called under the owning cache's gate.
+        public static SKBitmap Acquire(LeaseState state)
+        {
+            SKBitmap? master = state.Master;
+            if (master == null)
+                return new SKBitmap();
+
+            var wrapper = new SKBitmap();
+            if (!wrapper.InstallPixels(
+                    master.Info,
+                    master.GetPixels(),
+                    master.RowBytes,
+                    (_, _) => Release(state),
+                    null))
+            {
+                wrapper.Dispose();
+                return master.Copy();
+            }
+
+            state.Leases++;
+            return wrapper;
+        }
+
+        private static void Release(LeaseState state)
+        {
+            SKBitmap? toDispose = null;
+            lock (state.Gate)
+            {
+                state.Leases--;
+                if (state.Evicted && state.Leases <= 0)
+                {
+                    toDispose = state.Master;
+                    state.Master = null;
+                }
+            }
+
+            toDispose?.Dispose();
+        }
+
+        // Called under the owning cache's gate when the entry leaves the cache.
+        public static void Retire(LeaseState state)
+        {
+            state.Evicted = true;
+            if (state.Leases <= 0)
+            {
+                state.Master?.Dispose();
+                state.Master = null;
+            }
+        }
+    }
+
+    // Lease bookkeeping for one cached master bitmap. Gate is the owning
+    // cache's lock object so release (which may run on a finalizer thread)
+    // synchronizes with cache mutation.
+    private sealed class LeaseState
+    {
+        public LeaseState(object gate, SKBitmap master)
+        {
+            Gate = gate;
+            Master = master;
+        }
+
+        public object Gate { get; }
+        public SKBitmap? Master { get; set; }
+        public int Leases { get; set; }
+        public bool Evicted { get; set; }
+    }
+
     private sealed class ViewportBitmapCache
     {
         private readonly int _maxEntries;
@@ -108,7 +187,7 @@ public sealed partial class PdfViewport
                         entry.WidthPt,
                         entry.HeightPt,
                         entry.BitmapScale,
-                        entry.Bitmap.Copy());
+                        entry.AcquireLease());
                     return true;
                 }
             }
@@ -136,19 +215,12 @@ public sealed partial class PdfViewport
                 if (_entries.TryGetValue(key, out CacheEntry? existing))
                 {
                     _totalBytes -= existing.EstimatedBytes;
-                    existing.Bitmap.Dispose();
-                    existing.WidthPt = widthPt;
-                    existing.HeightPt = heightPt;
-                    existing.BitmapScale = bitmapScale;
-                    existing.Bitmap = copy;
-                    existing.EstimatedBytes = EstimateBitmapBytes(copy);
-                    existing.LastUsed = ++_clock;
-                    _totalBytes += existing.EstimatedBytes;
-                    Trim();
-                    return;
+                    existing.Retire();
+                    _entries.Remove(key);
                 }
 
                 var entry = new CacheEntry(
+                    _gate,
                     widthPt,
                     heightPt,
                     bitmapScale,
@@ -189,7 +261,7 @@ public sealed partial class PdfViewport
                     return;
 
                 _totalBytes -= _entries[oldestKey].EstimatedBytes;
-                _entries[oldestKey].Bitmap.Dispose();
+                _entries[oldestKey].Retire();
                 _entries.Remove(oldestKey);
             }
         }
@@ -199,22 +271,29 @@ public sealed partial class PdfViewport
 
         private sealed class CacheEntry
         {
-            public CacheEntry(float widthPt, float heightPt, float bitmapScale, SKBitmap bitmap, long lastUsed)
+            private readonly LeaseState _lease;
+
+            public CacheEntry(object gate, float widthPt, float heightPt, float bitmapScale, SKBitmap bitmap, long lastUsed)
             {
                 WidthPt = widthPt;
                 HeightPt = heightPt;
                 BitmapScale = bitmapScale;
                 Bitmap = bitmap;
+                _lease = new LeaseState(gate, bitmap);
                 EstimatedBytes = EstimateBitmapBytes(bitmap);
                 LastUsed = lastUsed;
             }
 
-            public float WidthPt { get; set; }
-            public float HeightPt { get; set; }
-            public float BitmapScale { get; set; }
-            public SKBitmap Bitmap { get; set; }
-            public long EstimatedBytes { get; set; }
+            public float WidthPt { get; }
+            public float HeightPt { get; }
+            public float BitmapScale { get; }
+            public SKBitmap Bitmap { get; }
+            public long EstimatedBytes { get; }
             public long LastUsed { get; set; }
+
+            public SKBitmap AcquireLease() => BitmapLease.Acquire(_lease);
+
+            public void Retire() => BitmapLease.Retire(_lease);
         }
     }
 
@@ -305,21 +384,12 @@ public sealed partial class PdfViewport
                 if (_entries.TryGetValue(key, out CacheEntry? existing))
                 {
                     _totalBytes -= existing.EstimatedBytes;
-                    existing.Bitmap.Dispose();
-                    existing.WidthPt = widthPt;
-                    existing.HeightPt = heightPt;
-                    existing.BitmapScale = bitmapScale;
-                    existing.Signature = signature;
-                    existing.Bitmap = copy;
-                    existing.Layers = layerCopy;
-                    existing.EstimatedBytes = bytes;
-                    existing.LastUsed = ++_clock;
-                    _totalBytes += bytes;
-                    Trim();
-                    return;
+                    existing.Retire();
+                    _entries.Remove(key);
                 }
 
                 _entries[key] = new CacheEntry(
+                    _gate,
                     signature,
                     widthPt,
                     heightPt,
@@ -340,7 +410,7 @@ public sealed partial class PdfViewport
                 entry.WidthPt,
                 entry.HeightPt,
                 entry.BitmapScale,
-                entry.Bitmap.Copy(),
+                entry.AcquireLease(),
                 entry.Layers
                     .Select(layer => new PdfLayer(layer.Number, layer.Name, layer.IsOn, layer.IsHighlighted))
                     .ToList());
@@ -365,7 +435,7 @@ public sealed partial class PdfViewport
                     return;
 
                 _totalBytes -= _entries[oldestKey].EstimatedBytes;
-                _entries[oldestKey].Bitmap.Dispose();
+                _entries[oldestKey].Retire();
                 _entries.Remove(oldestKey);
             }
         }
@@ -375,7 +445,10 @@ public sealed partial class PdfViewport
 
         private sealed class CacheEntry
         {
+            private readonly LeaseState _lease;
+
             public CacheEntry(
+                object gate,
                 string signature,
                 float widthPt,
                 float heightPt,
@@ -390,19 +463,24 @@ public sealed partial class PdfViewport
                 HeightPt = heightPt;
                 BitmapScale = bitmapScale;
                 Bitmap = bitmap;
+                _lease = new LeaseState(gate, bitmap);
                 Layers = layers;
                 EstimatedBytes = estimatedBytes;
                 LastUsed = lastUsed;
             }
 
-            public string Signature { get; set; }
-            public float WidthPt { get; set; }
-            public float HeightPt { get; set; }
-            public float BitmapScale { get; set; }
-            public SKBitmap Bitmap { get; set; }
-            public IReadOnlyList<PdfLayer> Layers { get; set; }
-            public long EstimatedBytes { get; set; }
+            public string Signature { get; }
+            public float WidthPt { get; }
+            public float HeightPt { get; }
+            public float BitmapScale { get; }
+            public SKBitmap Bitmap { get; }
+            public IReadOnlyList<PdfLayer> Layers { get; }
+            public long EstimatedBytes { get; }
             public long LastUsed { get; set; }
+
+            public SKBitmap AcquireLease() => BitmapLease.Acquire(_lease);
+
+            public void Retire() => BitmapLease.Retire(_lease);
         }
     }
 

@@ -70,13 +70,43 @@ public static partial class PdfLayerRenderService
         return result.Ok;
     }
 
+    // The dedicated detail worker has the warmest PyMuPDF doc/display-list cache,
+    // so an idle detail worker is always the first choice. But it is a single
+    // process: when the user pans at deep zoom, visible tiles arrive faster than
+    // one render, and queueing them serially behind the in-flight tile is what
+    // reads as lingering blur. If the detail worker is busy and the prefetch pool
+    // has a free slot, overflow the tile to the pool so neighboring visible tiles
+    // render in parallel. When the pool is saturated too, fall back to the
+    // original serial detail queue rather than competing with prefetch fan-out.
     private static bool TryInvokeDetailWorker<TRequest, TResponse>(
         string action,
         TRequest request,
         out TResponse? response,
         out string error)
     {
-        var result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Detail).GetAwaiter().GetResult();
+        (bool Ok, TResponse? Response, string Error) result;
+        if (DetailWorkerSemaphore.Wait(0))
+        {
+            try
+            {
+                result = InvokeWorkerCoreAsync<TRequest, TResponse>(action, request, WorkerRole.Detail)
+                    .GetAwaiter().GetResult();
+            }
+            finally
+            {
+                DetailWorkerSemaphore.Release();
+            }
+        }
+        else if (PrefetchPoolSlots.CurrentCount > 0)
+        {
+            result = TryInvokePrefetchWorkerAsync<TRequest, TResponse>(action, request).GetAwaiter().GetResult();
+        }
+        else
+        {
+            result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Detail)
+                .GetAwaiter().GetResult();
+        }
+
         response = result.Response;
         error = result.Error;
         return result.Ok;
@@ -104,6 +134,24 @@ public static partial class PdfLayerRenderService
 
         try
         {
+            return await InvokeWorkerCoreAsync<TRequest, TResponse>(action, request, role).ConfigureAwait(false);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    // One request against a single-worker role. The caller must already hold
+    // that role's semaphore (TryInvokeWorkerAsync, or the detail overflow path
+    // that grabbed it with Wait(0)).
+    private static async Task<(bool Ok, TResponse? Response, string Error)> InvokeWorkerCoreAsync<TRequest, TResponse>(
+        string action,
+        TRequest request,
+        WorkerRole role)
+    {
+        try
+        {
             if (!EnsureWorker(role, out string error))
                 return (false, default, error);
 
@@ -125,10 +173,6 @@ public static partial class PdfLayerRenderService
             ResetWorker(role);
             AppLog.Warn(ex, $"PyMuPDF worker {action} failed");
             return (false, default, ex.Message);
-        }
-        finally
-        {
-            semaphore.Release();
         }
     }
 
