@@ -3035,8 +3035,26 @@ def sheetmeta_data(req: dict) -> dict:
     text = page.get_text("text") or ""
     words = page.get_text("words") or []
     rect = page.rect
-    max_x = float(getattr(page.mediabox, "width", 0) or getattr(page.cropbox, "width", 0) or rect.width or 1)
-    max_y = float(getattr(page.mediabox, "height", 0) or getattr(page.cropbox, "height", 0) or rect.height or 1)
+    # Text extraction reports word boxes in the page's unrotated (mediabox)
+    # space, but every region heuristic below (title block = right/bottom
+    # fractions of the sheet) assumes the visual orientation the raster is
+    # rendered in (get_pixmap applies /Rotate). Map words into the rotated
+    # page.rect space and use the rotated bounds, same as the snap/trace fix
+    # in _apply_page_rotation_to_snap. Identity for /Rotate=0.
+    rotation = int(getattr(page, "rotation", 0) or 0)
+    if rotation % 360 != 0:
+        matrix = page.rotation_matrix
+        rotated_words = []
+        for word in words:
+            box = fitz.Rect(word[0], word[1], word[2], word[3]) * matrix
+            box.normalize()
+            rotated_words.append((box.x0, box.y0, box.x1, box.y1, *word[4:]))
+        words = rotated_words
+        max_x = float(rect.width or 1)
+        max_y = float(rect.height or 1)
+    else:
+        max_x = float(getattr(page.mediabox, "width", 0) or getattr(page.cropbox, "width", 0) or rect.width or 1)
+        max_y = float(getattr(page.mediabox, "height", 0) or getattr(page.cropbox, "height", 0) or rect.height or 1)
     warnings: list[str] = []
 
     bottom_y0 = max_y * 0.91
