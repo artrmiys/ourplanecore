@@ -892,28 +892,46 @@
                                        VerticalAlignment="Center"/>
                         </DockPanel>
                     </Border>
-                    <StackPanel DockPanel.Dock="Bottom" Margin="4,6,4,4">
-                        <ComboBox x:Name="ComboFolderTemplateMode"
-                                  SelectionChanged="ComboFolderTemplateMode_SelectionChanged"
-                                  FontSize="11"
-                                  Margin="0,0,0,4"
-                                  ToolTip="Folder template mode for Pages and Takeoffs">
-                            <ComboBoxItem Content="Auto"/>
-                            <ComboBoxItem Content="COM"/>
-                            <ComboBoxItem Content="EWP"/>
-                        </ComboBox>
-                        <UniformGrid Columns="3">
+                    <!-- Quick bar: same 38px height as the Takeoffs active-target bar so the
+                         search rows of both panels sit on one horizontal line. -->
+                    <Border x:Name="PagesQuickBar"
+                            DockPanel.Dock="Top"
+                            Height="38"
+                            Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="4,0">
+                        <Grid VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="58"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="ComboFolderTemplateMode"
+                                      Grid.Column="0"
+                                      SelectionChanged="ComboFolderTemplateMode_SelectionChanged"
+                                      FontSize="11"
+                                      Margin="0,0,4,0"
+                                      VerticalAlignment="Center"
+                                      ToolTip="Folder template mode for Pages and Takeoffs">
+                                <ComboBoxItem Content="Auto"/>
+                                <ComboBoxItem Content="COM"/>
+                                <ComboBoxItem Content="EWP"/>
+                            </ComboBox>
                             <Button x:Name="BtnNewPageFolderDirect"
-                                    Content="New Folder"
+                                    Grid.Column="1"
+                                    Content="Folder"
                                     Click="BtnNewPageFolder_Click"
-                                    Padding="5,3"
+                                    Padding="2,3"
                                     Margin="0,0,4,0"
                                     FontSize="11"
                                     ToolTip="Create a new folder under the selected Pages folder"/>
                             <Button x:Name="BtnNewPageMenu"
-                                    Content="+ New  ▾"
+                                    Grid.Column="2"
+                                    Content="+ New ▾"
                                     Click="DropdownButton_Click"
-                                    Padding="5,3"
+                                    Padding="2,3"
                                     Margin="0,0,4,0"
                                     FontSize="11"
                                     ToolTip="Create pages and folders">
@@ -927,9 +945,10 @@
                                 </Button.ContextMenu>
                             </Button>
                             <Button x:Name="BtnPageSetupMenu"
-                                    Content="Setup  ▾"
+                                    Grid.Column="3"
+                                    Content="Setup ▾"
                                     Click="DropdownButton_Click"
-                                    Padding="5,3"
+                                    Padding="2,3"
                                     FontSize="11"
                                     ToolTip="Page setup and sorting actions">
                                 <Button.ContextMenu>
@@ -942,8 +961,8 @@
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>
-                        </UniformGrid>
-                    </StackPanel>
+                        </Grid>
+                    </Border>
                     <Grid x:Name="PagesAndBookmarksHost" Margin="2,0,2,2">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
@@ -1141,8 +1160,28 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Vertical quick-command strips; content is built in MainWindow.SideStrips.cs -->
+                    <Border x:Name="LeftCommandStripHost"
+                            Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
+                            Width="26"
+                            Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
+                            BorderThickness="0,0,1,0"/>
+                    <Border x:Name="RightCommandStripHost"
+                            Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
+                            Width="26"
+                            Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
+                            BorderThickness="1,0,0,0"/>
+
                     <TabControl x:Name="PageTabs"
-                                Grid.Row="0"
+                                Grid.Row="0" Grid.Column="1"
                                 Visibility="Collapsed"
                                 MinHeight="28"
                                 SelectionChanged="PageTabs_SelectionChanged"
@@ -1153,7 +1192,7 @@
                                 Foreground="{DynamicResource ControlForegroundBrush}"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"/>
                     <Grid x:Name="ViewportSurfaceHost"
-                          Grid.Row="1"
+                          Grid.Row="1" Grid.Column="1"
                           Background="#FFFFFF"
                           AllowDrop="True"
                           DragOver="PageTabs_DragOver"
@@ -1162,7 +1201,7 @@
 
                     <!-- Empty-state Start card: shown when no job is open -->
                     <Grid x:Name="NoJobOverlay"
-                          Grid.Row="1"
+                          Grid.Row="1" Grid.Column="1"
                           Panel.ZIndex="20"
                           Background="{DynamicResource WindowBackgroundBrush}"
                           Visibility="Collapsed">
@@ -1239,7 +1278,7 @@
                         </Border>
                     </Grid>
                     <!-- F1 keyboard shortcuts overlay -->
-                    <Grid x:Name="ShortcutsOverlay" Grid.Row="1" Panel.ZIndex="30"
+                    <Grid x:Name="ShortcutsOverlay" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Panel.ZIndex="30"
                           Background="#B0000000" Visibility="Collapsed">
                         <Border HorizontalAlignment="Center" VerticalAlignment="Center"
                                 Background="{DynamicResource PanelBackgroundBrush}"
@@ -1305,7 +1344,7 @@
                     </Grid>
 
                     <Border x:Name="ViewportLayerTraceBar"
-                            Grid.Row="1"
+                            Grid.Row="1" Grid.Column="1"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top"
                             Margin="0,10,12,0"
@@ -1382,10 +1421,11 @@
                     <Border x:Name="ActiveTakeoffTargetBar"
                             DockPanel.Dock="Top"
                             Visibility="Visible"
+                            Height="38"
                             Background="{DynamicResource ControlActiveBackgroundBrush}"
                             BorderBrush="{DynamicResource ControlBorderBrush}"
                             BorderThickness="0,0,0,1"
-                            Padding="6,4">
+                            Padding="6,2">
                         <DockPanel LastChildFill="True">
                             <Button x:Name="BtnActiveTakeoffRecord"
                                     DockPanel.Dock="Right"

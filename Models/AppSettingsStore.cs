@@ -75,6 +75,10 @@ public sealed class AppSettings
     public double RightPanelWidth { get; set; } = 269.0;
     public string OpenAiModel { get; set; } = OpenAiRequestRunner.DefaultModel;
     public string FolderTemplateMode { get; set; } = "AUTO";
+    // Viewport side command strips: ordered command ids ("-" = separator).
+    // Empty list = use built-in defaults (so default updates reach users who never customized).
+    public List<string> LeftStripCommands { get; set; } = [];
+    public List<string> RightStripCommands { get; set; } = [];
     public List<RecentJobInfo> RecentJobs { get; set; } = [];
 }
 
