@@ -300,12 +300,13 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (AreaCutOverlapsExistingHole(target, clippedHole))
-        {
-            error = "Cut: area cut cannot overlap an existing hole.";
-            return false;
-        }
-
+        // A cut that overlaps or encloses an existing hole is NOT rejected: the
+        // boolean subtract builds its path from the outer contour plus every
+        // existing hole, so subtracting the new cutter merges the overlapping
+        // holes into one region (union), which is what the user wants when they
+        // cut again over an existing hole. The exact-hole fast path above still
+        // refuses overlaps so it never appends a second hole that would
+        // double-count the shared area.
         if (!MeasurementAreaBooleanService.TrySubtract(target, cutShape, out geometry, out error))
             return false;
 
@@ -341,12 +342,9 @@ public sealed partial class PdfViewport
             return false;
         }
 
-        if (AreaCutOverlapsExistingHole(target, clippedCut))
-        {
-            error = "Cut: area cut cannot overlap an existing hole.";
-            return false;
-        }
-
+        // Overlap with an existing hole is allowed here too (see the note in
+        // TryBuildAreaCutGeometry): a through-cut that also crosses a hole still
+        // splits the area, and the boolean op merges the hole where they meet.
         if (!MeasurementAreaBooleanService.TrySubtractAll(target, cutShape, out geometries, out error))
             return false;
 

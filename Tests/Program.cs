@@ -20,6 +20,9 @@ var tests = new List<(string Name, Action Run)>
     ("measurement area uses fallback scale", MeasurementAreaUsesFallbackScale),
     ("measurement area subtracts holes", MeasurementAreaSubtractsHoles),
     ("area cut inside keeps hole behavior", AreaCutInsideKeepsHoleBehavior),
+    ("area cut second separate hole adds another hole", AreaCutSecondSeparateHoleAddsAnotherHole),
+    ("area cut overlapping existing hole merges", AreaCutOverlappingExistingHoleMerges),
+    ("area cut enclosing existing hole merges", AreaCutEnclosingExistingHoleMerges),
     ("area cut box clips at area edge", AreaCutBoxClipsAtAreaEdge),
     ("area cut through area splits into segments", AreaCutThroughAreaSplitsIntoSegments),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
@@ -560,6 +563,65 @@ static void AreaCutInsideKeepsHoleBehavior()
     measurement.Points = geometry.Points;
     measurement.Holes = geometry.Holes;
     AssertClose(88.0, measurement.AreaValue(1), "inside area cut should subtract the hole exactly");
+}
+
+static void AreaCutSecondSeparateHoleAddsAnotherHole()
+{
+    var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
+    List<SKPoint> firstCut = [new(2, 2), new(4, 2), new(4, 4), new(2, 4)];
+    AreaBooleanGeometry first = BuildAreaCutGeometryForTest(measurement, firstCut);
+    measurement.Points = first.Points;
+    measurement.Holes = first.Holes;
+
+    List<SKPoint> secondCut = [new(6, 6), new(8, 6), new(8, 8), new(6, 8)];
+    AreaBooleanGeometry second = BuildAreaCutGeometryForTest(measurement, secondCut);
+    AssertEqual("2", second.Holes.Count.ToString(), "a second separate cut should add a second hole");
+
+    measurement.Points = second.Points;
+    measurement.Holes = second.Holes;
+    AssertClose(92.0, measurement.AreaValue(1), "two 2x2 holes should subtract 8 from the 100 area");
+}
+
+static void AreaCutOverlappingExistingHoleMerges()
+{
+    // Reproduces the reported bug: a second cut that OVERLAPS the existing
+    // square hole used to be rejected outright ("cannot overlap an existing
+    // hole") and nothing happened. It must now merge into a single hole.
+    var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
+    List<SKPoint> firstCut = [new(3, 3), new(6, 3), new(6, 6), new(3, 6)];
+    AreaBooleanGeometry first = BuildAreaCutGeometryForTest(measurement, firstCut);
+    measurement.Points = first.Points;
+    measurement.Holes = first.Holes;
+    AssertEqual("1", first.Holes.Count.ToString(), "first cut makes one hole");
+
+    // Second box overlaps the lower-right quadrant of the first hole.
+    List<SKPoint> secondCut = [new(5, 5), new(8, 5), new(8, 8), new(5, 8)];
+    AreaBooleanGeometry second = BuildAreaCutGeometryForTest(measurement, secondCut);
+    AssertEqual("1", second.Holes.Count.ToString(), "overlapping second cut should merge into a single hole");
+
+    measurement.Points = second.Points;
+    measurement.Holes = second.Holes;
+    // Union of the two 3x3 boxes overlapping on a 1x1 corner = 9 + 9 - 1 = 17.
+    AssertClose(83.0, measurement.AreaValue(1), "merged hole area must not double-count the overlap");
+}
+
+static void AreaCutEnclosingExistingHoleMerges()
+{
+    // A second cut that fully ENCLOSES the existing hole must also succeed
+    // (the enclosure case tripped the same guard) and yield one larger hole.
+    var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
+    List<SKPoint> firstCut = [new(4, 4), new(6, 4), new(6, 6), new(4, 6)];
+    AreaBooleanGeometry first = BuildAreaCutGeometryForTest(measurement, firstCut);
+    measurement.Points = first.Points;
+    measurement.Holes = first.Holes;
+
+    List<SKPoint> secondCut = [new(2, 2), new(8, 2), new(8, 8), new(2, 8)];
+    AreaBooleanGeometry second = BuildAreaCutGeometryForTest(measurement, secondCut);
+    AssertEqual("1", second.Holes.Count.ToString(), "enclosing second cut should leave one hole");
+
+    measurement.Points = second.Points;
+    measurement.Holes = second.Holes;
+    AssertClose(64.0, measurement.AreaValue(1), "enclosing hole should equal the larger 6x6 cut");
 }
 
 static void AreaCutBoxClipsAtAreaEdge()
