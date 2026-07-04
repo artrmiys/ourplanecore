@@ -1414,7 +1414,7 @@ internal static class TakeoffsTreeRegressionTests
             areaCut.Contains("TryBuildAreaCutGeometries", StringComparison.Ordinal) &&
             areaCut.Contains("MeasurementAreaBooleanService.TrySubtract", StringComparison.Ordinal) &&
             areaCut.Contains("MeasurementAreaBooleanService.TrySubtractAll", StringComparison.Ordinal) &&
-            areaCut.Contains("ClipPolygonToConvexClip", StringComparison.Ordinal) &&
+            areaCut.Contains("AreaCutReducedFilledArea", StringComparison.Ordinal) &&
             areaCut.Contains("CloneLineMeasurement", StringComparison.Ordinal) &&
             areaCut.Contains("CloneAreaMeasurement", StringComparison.Ordinal) &&
             areaCut.Contains("PushMixedMeasurementUndo", StringComparison.Ordinal) &&

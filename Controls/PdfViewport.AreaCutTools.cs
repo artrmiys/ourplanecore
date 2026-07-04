@@ -287,28 +287,24 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (!IsConvexPolygon(cutShape))
-        {
-            error = "Cut: edge cuts need a box or convex cut shape.";
+        // Everything the fast path can't take goes through the boolean subtract:
+        // it handles convex AND concave (freehand) cut shapes, interior holes,
+        // edge bites, and cuts that overlap or enclose existing holes. The path
+        // is built from the outer contour plus every existing hole, so a cutter
+        // that crosses existing holes merges with them (their union) instead of
+        // double-counting. SkiaSharp path ops do not require a convex cutter, so
+        // there is no convexity gate here.
+        if (!MeasurementAreaBooleanService.TrySubtract(target, cutShape, out geometry, out error))
             return false;
-        }
 
-        List<SKPoint> clippedHole = ClipPolygonToConvexClip(target.Points, cutShape);
-        if (clippedHole.Count < 3 || PolygonArea(clippedHole) <= ViewportConstants.GeometryEpsilon)
+        // Reject a cut that changed nothing — the cutter missed the area or lies
+        // entirely within an existing hole. An effective cut strictly reduces the
+        // filled area, so equal-or-greater area means nothing was removed.
+        if (!AreaCutReducedFilledArea(target, geometry))
         {
             error = "Cut: no selected Area or Line was touched.";
             return false;
         }
-
-        // A cut that overlaps or encloses an existing hole is NOT rejected: the
-        // boolean subtract builds its path from the outer contour plus every
-        // existing hole, so subtracting the new cutter merges the overlapping
-        // holes into one region (union), which is what the user wants when they
-        // cut again over an existing hole. The exact-hole fast path above still
-        // refuses overlaps so it never appends a second hole that would
-        // double-count the shared area.
-        if (!MeasurementAreaBooleanService.TrySubtract(target, cutShape, out geometry, out error))
-            return false;
 
         return geometry.Points.Count >= 3;
     }
@@ -327,24 +323,9 @@ public sealed partial class PdfViewport
             return true;
         }
 
-        if (!IsConvexPolygon(cutShape))
-        {
-            error = string.IsNullOrWhiteSpace(singleError)
-                ? "Cut: edge cuts need a box or convex cut shape."
-                : singleError;
-            return false;
-        }
-
-        List<SKPoint> clippedCut = ClipPolygonToConvexClip(target.Points, cutShape);
-        if (clippedCut.Count < 3 || PolygonArea(clippedCut) <= ViewportConstants.GeometryEpsilon)
-        {
-            error = "Cut: no selected Area or Line was touched.";
-            return false;
-        }
-
-        // Overlap with an existing hole is allowed here too (see the note in
-        // TryBuildAreaCutGeometry): a through-cut that also crosses a hole still
-        // splits the area, and the boolean op merges the hole where they meet.
+        // The single subtract failed — usually because the cut splits the area
+        // into separate islands. Fall back to the multi-result subtract, which
+        // also works for convex and concave (freehand) cut shapes.
         if (!MeasurementAreaBooleanService.TrySubtractAll(target, cutShape, out geometries, out error))
             return false;
 
@@ -398,99 +379,22 @@ public sealed partial class PdfViewport
         return false;
     }
 
-    private static bool IsConvexPolygon(IReadOnlyList<SKPoint> polygon)
+    // An effective area cut always removes fill, so a boolean result whose
+    // filled area (outer minus every hole) is not smaller than the original
+    // means the cutter missed the area or fell entirely inside an existing hole.
+    private static bool AreaCutReducedFilledArea(Measurement target, AreaBooleanGeometry geometry)
     {
-        List<SKPoint> clean = CleanPolygon(polygon);
-        if (clean.Count < 3)
-            return false;
-
-        float sign = 0;
-        for (int i = 0; i < clean.Count; i++)
-        {
-            SKPoint a = clean[i];
-            SKPoint b = clean[(i + 1) % clean.Count];
-            SKPoint c = clean[(i + 2) % clean.Count];
-            float cross = Cross(a, b, c);
-            if (Math.Abs(cross) <= ViewportConstants.GeometryEpsilon)
-                continue;
-
-            float currentSign = MathF.Sign(cross);
-            if (sign == 0)
-                sign = currentSign;
-            else if (MathF.Sign(sign) != currentSign)
-                return false;
-        }
-
-        return sign != 0;
+        double before = FilledArea(target.Points, target.Holes);
+        double after = FilledArea(geometry.Points, geometry.Holes);
+        return before - after > ViewportConstants.GeometryEpsilon;
     }
 
-    private static List<SKPoint> ClipPolygonToConvexClip(
-        IReadOnlyList<SKPoint> subject,
-        IReadOnlyList<SKPoint> clip)
+    private static double FilledArea(IReadOnlyList<SKPoint> outer, IReadOnlyList<List<SKPoint>> holes)
     {
-        List<SKPoint> output = CleanPolygon(subject);
-        List<SKPoint> clipPoints = CleanPolygon(clip);
-        if (output.Count < 3 || clipPoints.Count < 3)
-            return [];
-
-        float clipArea = SignedPolygonArea(clipPoints);
-        for (int i = 0; i < clipPoints.Count; i++)
-        {
-            SKPoint edgeStart = clipPoints[i];
-            SKPoint edgeEnd = clipPoints[(i + 1) % clipPoints.Count];
-            List<SKPoint> input = output;
-            output = [];
-            if (input.Count == 0)
-                break;
-
-            SKPoint previous = input[^1];
-            bool previousInside = IsInsideClipEdge(previous, edgeStart, edgeEnd, clipArea);
-            foreach (SKPoint current in input)
-            {
-                bool currentInside = IsInsideClipEdge(current, edgeStart, edgeEnd, clipArea);
-                if (currentInside)
-                {
-                    if (!previousInside)
-                        AddDistinctPoint(output, IntersectLines(previous, current, edgeStart, edgeEnd));
-                    AddDistinctPoint(output, current);
-                }
-                else if (previousInside)
-                {
-                    AddDistinctPoint(output, IntersectLines(previous, current, edgeStart, edgeEnd));
-                }
-
-                previous = current;
-                previousInside = currentInside;
-            }
-
-            output = CleanPolygon(output);
-        }
-
-        return CleanPolygon(output);
-    }
-
-    private static bool IsInsideClipEdge(SKPoint point, SKPoint edgeStart, SKPoint edgeEnd, float clipArea)
-    {
-        float cross = Cross(edgeStart, edgeEnd, point);
-        return clipArea >= 0
-            ? cross >= -ViewportConstants.GeometryEpsilon
-            : cross <= ViewportConstants.GeometryEpsilon;
-    }
-
-    private static SKPoint IntersectLines(SKPoint start, SKPoint end, SKPoint edgeStart, SKPoint edgeEnd)
-    {
-        float rx = end.X - start.X;
-        float ry = end.Y - start.Y;
-        float sx = edgeEnd.X - edgeStart.X;
-        float sy = edgeEnd.Y - edgeStart.Y;
-        float denom = rx * sy - ry * sx;
-        if (Math.Abs(denom) <= ViewportConstants.GeometryEpsilon)
-            return end;
-
-        float qpx = edgeStart.X - start.X;
-        float qpy = edgeStart.Y - start.Y;
-        float t = (qpx * sy - qpy * sx) / denom;
-        return new SKPoint(start.X + t * rx, start.Y + t * ry);
+        double area = PolygonArea(outer);
+        foreach (List<SKPoint> hole in holes)
+            area -= PolygonArea(hole);
+        return area;
     }
 
     private static float SignedPolygonArea(IReadOnlyList<SKPoint> polygon)

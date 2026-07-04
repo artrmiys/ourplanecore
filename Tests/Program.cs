@@ -23,6 +23,10 @@ var tests = new List<(string Name, Action Run)>
     ("area cut second separate hole adds another hole", AreaCutSecondSeparateHoleAddsAnotherHole),
     ("area cut overlapping existing hole merges", AreaCutOverlappingExistingHoleMerges),
     ("area cut enclosing existing hole merges", AreaCutEnclosingExistingHoleMerges),
+    ("area cut concave interior hole is stored", AreaCutConcaveInteriorHoleIsStored),
+    ("area cut concave through cut splits", AreaCutConcaveThroughCutSplits),
+    ("area cut box through two holes merges", AreaCutBoxThroughTwoHolesMerges),
+    ("area cut concave through two holes", AreaCutConcaveThroughTwoHoles),
     ("area cut box clips at area edge", AreaCutBoxClipsAtAreaEdge),
     ("area cut through area splits into segments", AreaCutThroughAreaSplitsIntoSegments),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
@@ -624,6 +628,95 @@ static void AreaCutEnclosingExistingHoleMerges()
     AssertClose(64.0, measurement.AreaValue(1), "enclosing hole should equal the larger 6x6 cut");
 }
 
+static void AreaCutConcaveInteriorHoleIsStored()
+{
+    // A freehand (non-convex, L-shaped) cut fully inside the area must produce
+    // one hole with the L's exact area.
+    var measurement = SimpleAreaMeasurement(0, 0, 20, 20);
+    List<SKPoint> lShape =
+    [
+        new(4, 4), new(12, 4), new(12, 8), new(8, 8), new(8, 12), new(4, 12),
+    ];
+
+    AreaBooleanGeometry geometry = BuildAreaCutGeometryForTest(measurement, lShape);
+    AssertEqual("1", geometry.Holes.Count.ToString(), "concave interior cut should store one hole");
+
+    measurement.Points = geometry.Points;
+    measurement.Holes = geometry.Holes;
+    // L area = 8x4 + 4x4 = 48; remaining = 400 - 48 = 352.
+    AssertClose(352.0, measurement.AreaValue(1), "concave interior cut should subtract the L-shape area");
+}
+
+static void AreaCutConcaveThroughCutSplits()
+{
+    // A freehand concave cut that crosses the outer boundary must still cut
+    // (previously rejected with "edge cuts need a box or convex cut shape").
+    var measurement = SimpleAreaMeasurement(0, 0, 20, 20);
+    List<SKPoint> concaveEdge =
+    [
+        new(-2, 6), new(12, 6), new(12, 10), new(8, 10),
+        new(8, 14), new(-2, 14),
+    ];
+
+    bool ok = BuildAreaCutGeometriesForTest(measurement, concaveEdge, out List<AreaBooleanGeometry> geometries, out string error);
+    AssertTrue(ok, "concave edge cut should succeed: " + error);
+    AssertTrue(geometries.Count >= 1, "concave edge cut should yield geometry");
+
+    double remaining = geometries.Sum(g =>
+    {
+        double outer = Math.Abs(SignedAreaForTest(g.Points));
+        double holes = g.Holes.Sum(h => Math.Abs(SignedAreaForTest(h)));
+        return outer - holes;
+    });
+    AssertTrue(remaining < 400.0 - 1.0, "concave edge cut must remove area, not leave it unchanged");
+}
+
+static void AreaCutBoxThroughTwoHolesMerges()
+{
+    // The reported case: area with TWO box holes, then a box slice through both.
+    var measurement = SimpleAreaMeasurement(0, 0, 20, 20);
+    foreach (List<SKPoint> box in new[]
+    {
+        new List<SKPoint> { new(4, 8), new(7, 8), new(7, 12), new(4, 12) },
+        new List<SKPoint> { new(13, 8), new(16, 8), new(16, 12), new(13, 12) },
+    })
+    {
+        AreaBooleanGeometry g = BuildAreaCutGeometryForTest(measurement, box);
+        measurement.Points = g.Points;
+        measurement.Holes = g.Holes;
+    }
+    AssertEqual("2", measurement.Holes.Count.ToString(), "two separate box cuts make two holes");
+
+    // Interior horizontal slice spanning both holes but not the outer edges.
+    List<SKPoint> slice = [new(2, 9), new(18, 9), new(18, 11), new(2, 11)];
+    AreaBooleanGeometry merged = BuildAreaCutGeometryForTest(measurement, slice);
+    AssertEqual("1", merged.Holes.Count.ToString(), "a slice joining both holes should merge them into one hole");
+}
+
+static void AreaCutConcaveThroughTwoHoles()
+{
+    // Freehand concave cut weaving through two existing box holes.
+    var measurement = SimpleAreaMeasurement(0, 0, 20, 20);
+    foreach (List<SKPoint> box in new[]
+    {
+        new List<SKPoint> { new(4, 8), new(7, 8), new(7, 12), new(4, 12) },
+        new List<SKPoint> { new(13, 8), new(16, 8), new(16, 12), new(13, 12) },
+    })
+    {
+        AreaBooleanGeometry g = BuildAreaCutGeometryForTest(measurement, box);
+        measurement.Points = g.Points;
+        measurement.Holes = g.Holes;
+    }
+
+    List<SKPoint> concave =
+    [
+        new(2, 9), new(18, 9), new(18, 11), new(10, 11), new(10, 13), new(2, 13),
+    ];
+    bool ok = BuildAreaCutGeometriesForTest(measurement, concave, out List<AreaBooleanGeometry> geometries, out string error);
+    AssertTrue(ok, "concave cut through two holes should succeed: " + error);
+    AssertTrue(geometries.Sum(g => g.Points.Count) >= 3, "concave cut through two holes should yield real geometry");
+}
+
 static void AreaCutBoxClipsAtAreaEdge()
 {
     var measurement = SimpleAreaMeasurement(0, 0, 10, 10);
@@ -689,6 +782,24 @@ static AreaBooleanGeometry BuildAreaCutGeometryForTest(Measurement measurement, 
 
     return (AreaBooleanGeometry)(args[2]
         ?? throw new InvalidOperationException("Area cut helper returned no geometry."));
+}
+
+static bool BuildAreaCutGeometriesForTest(
+    Measurement measurement,
+    IReadOnlyList<SKPoint> cut,
+    out List<AreaBooleanGeometry> geometries,
+    out string error)
+{
+    MethodInfo method = typeof(PdfViewport).GetMethod(
+        "TryBuildAreaCutGeometries",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("Area cut geometries helper was not found.");
+
+    object?[] args = [measurement, cut, null, ""];
+    bool ok = (bool)(method.Invoke(null, args) ?? false);
+    geometries = (args[2] as List<AreaBooleanGeometry>) ?? [];
+    error = args[3]?.ToString() ?? "";
+    return ok;
 }
 
 static double SignedAreaForTest(IReadOnlyList<SKPoint> polygon)
