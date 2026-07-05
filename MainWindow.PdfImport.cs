@@ -271,6 +271,7 @@ public partial class MainWindow
                 // Re-arm the job warmup so freshly imported pages get preview +
                 // raster warmup without reopening the job.
                 InvalidatePagePreviewPrefetchCache();
+                QueueImportedPagePreviewWarmup(createdPages);
             }
         }
         catch (Exception ex)
@@ -283,6 +284,36 @@ public partial class MainWindow
         {
             if (importButton != null)
                 importButton.IsEnabled = true;
+        }
+    }
+
+    // Import builds no preview bitmaps, so the first open of each new page used
+    // to pay a full cold render. Pre-render previews for the created pages on
+    // the prefetch pool: the cold-open 0.20 scale for every page, plus the
+    // readable 0.75 base for the leading pages the user opens next.
+    private static void QueueImportedPagePreviewWarmup(IReadOnlyList<PageInfo> createdPages)
+    {
+        foreach (PageInfo page in createdPages)
+        {
+            PdfViewport.PrefetchPagePreview(
+                page.PdfPath,
+                page.PdfPage,
+                ViewportRenderPolicy.ColdPageSwitchPreviewRenderScale);
+        }
+
+        foreach (PageInfo page in createdPages.Take(ViewportRenderPolicy.ImportedPageReadablePreviewWarmupCount))
+        {
+            PdfViewport.PrefetchPagePreview(
+                page.PdfPath,
+                page.PdfPage,
+                ViewportRenderPolicy.InitialPagePreviewRenderScale);
+        }
+
+        if (createdPages.Count > ViewportRenderPolicy.ImportedPageReadablePreviewWarmupCount)
+        {
+            AppLog.Info(
+                $"Imported readable preview warmup capped; created={createdPages.Count}; " +
+                $"warmed={ViewportRenderPolicy.ImportedPageReadablePreviewWarmupCount}");
         }
     }
 

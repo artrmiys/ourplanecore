@@ -19,7 +19,12 @@ public sealed partial class PdfViewport
     private static readonly LayerRenderBitmapCache LayerBitmapCache = new(maxEntries: 96, maxBytes: ResolveLayerBitmapCacheBudgetBytes());
     private static readonly object DocnetPreviewPrefetchGate = new();
     private static readonly HashSet<string> DocnetPreviewPrefetchInFlight = [];
-    private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(1, 1);
+    // Preview prefetch renders on the dedicated prefetch worker pool, so its
+    // concurrency mirrors the pool size (clamp(cores/3, 1, 4)); a single-permit
+    // gate here left the pool idle and made whole-job warmup serial.
+    private static readonly SemaphoreSlim PreviewPrefetchSemaphore = new(
+        Math.Clamp(Environment.ProcessorCount / 3, 1, 4),
+        Math.Clamp(Environment.ProcessorCount / 3, 1, 4));
     private static readonly SemaphoreSlim LivePreviewRenderSemaphore = new(1, 1);
     private static long PreviewPrefetchPausedUntilUtcTicks;
     private static readonly object CleanRenderPrefetchGate = new();

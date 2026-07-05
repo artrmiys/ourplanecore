@@ -78,6 +78,10 @@ public static class ViewportRenderPolicy
     public const int JobOpenRasterSheetRefreshWarmupHugeJobCount = 24;
     public const int JobOpenWarmupLargeJobThreshold = 160;
     public const int JobOpenWarmupHugeJobThreshold = 320;
+    // Freshly imported pages are the next thing the user opens, and import
+    // builds no preview bitmaps: warm the cold 0.20 preview for every created
+    // page and the readable 0.75 base for this many leading pages.
+    public const int ImportedPageReadablePreviewWarmupCount = 16;
     public const int RasterSheetRefreshPrefetchDelayMs = 1800;
     public const int RasterSheetRefreshPrefetchCadenceMs = 6500;
     public const int RasterSheetWorkZoomWarmupDelayMs = 800;
