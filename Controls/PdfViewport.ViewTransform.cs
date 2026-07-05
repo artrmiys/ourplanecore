@@ -87,6 +87,7 @@ public sealed partial class PdfViewport
                     RasterSheetCacheService.RenderScaleToDpi(_bitmapScale),
                     targetDpi))
             {
+                QueueDetailRenderOverRasterSheetIfNeeded(force: false);
                 RequestRepaint();
                 return;
             }
@@ -99,8 +100,14 @@ public sealed partial class PdfViewport
             return;
         }
 
+        // Every idle branch must end with a detail request: a queued raster
+        // DPI upgrade takes seconds to build, and without a tile request the
+        // view stays blurry the whole time even though a sharp visible tile
+        // is 10-500ms away.
         if (!TryUpgradeRasterSheetToReadyDpiForCurrentZoom())
             QueueDetailRenderIfNeeded(force: false);
+        else
+            QueueDetailRenderOverRasterSheetIfNeeded(force: false);
         RequestRepaint();
     }
 
@@ -254,14 +261,24 @@ public sealed partial class PdfViewport
 
     private void QueueDetailRenderOverRasterSheetIfNeeded(bool force)
     {
-        if (!_usingRasterSheetRender ||
-            _usingRasterSheetOverviewRender ||
-            _rasterSheetSource == null ||
-            RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource) ||
+        // Detail tiles are the sharpness layer for the visible region: they may
+        // paint over any pdf-backed base — the raster sheet, its low-dpi
+        // overview, or a plain preview bitmap while a higher-dpi sheet is still
+        // building. That build takes seconds; a visible tile takes ~10-500ms,
+        // so gating tiles on the finished raster read as multi-second blur on
+        // first deep zoom. Only image-sourced rasters and the PDF-layer
+        // renderer manage their own sharpness.
+        if ((_usingRasterSheetRender &&
+             _rasterSheetSource != null &&
+             RasterSheetCacheService.IsSourceImageRaster(_rasterSheetSource)) ||
             _pdfLayersLoadedForPage ||
             _usingLayerRenderer ||
             !ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale))
         {
+            DetailRenderDiag(
+                "raster-guard" +
+                (_pdfLayersLoadedForPage || _usingLayerRenderer ? "-layers" : "") +
+                (!ViewportRenderPolicy.ShouldUseDetailRender(_zoom, _bitmapScale) ? "-nodetail" : ""));
             return;
         }
 

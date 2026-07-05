@@ -193,13 +193,13 @@ public sealed partial class PdfViewport
             return;
         }
 
-        if (!force && IsSameDetailRequest(_activeDetailRender, request))
+        if (!force && IsLiveDetailRequest(_activeDetailRender) && IsSameDetailRequest(_activeDetailRender, request))
         {
             DetailRenderDiag("same-as-active");
             return;
         }
 
-        if (!force && IsSameDetailRequest(_pendingDetailRender, request))
+        if (!force && IsLiveDetailRequest(_pendingDetailRender) && IsSameDetailRequest(_pendingDetailRender, request))
         {
             DetailRenderDiag("same-as-pending");
             return;
@@ -507,7 +507,15 @@ public sealed partial class PdfViewport
                 request.ClipRect);
             renderWatch.Stop();
             if (!IsCurrentDetailRequest(request))
+            {
+                // The view/bitmap changed while this render was in flight
+                // (typically a raster DPI upgrade landing mid-render). The
+                // result is useless, but the CURRENT view still needs a sharp
+                // tile — without an immediate re-queue nothing else asks.
+                DetailRenderDiag("completed-dropped-stale");
+                QueueDetailRenderIfNeeded(force: false, immediate: true);
                 return;
+            }
 
             ReportViewportRenderProfile(
                 "detail",
@@ -624,6 +632,8 @@ public sealed partial class PdfViewport
         if (!IsCurrentDetailRequest(request))
         {
             bitmap.Dispose();
+            DetailRenderDiag("apply-dropped-stale");
+            QueueDetailRenderIfNeeded(force: false, immediate: true);
             return;
         }
 
@@ -861,6 +871,14 @@ public sealed partial class PdfViewport
 
         return RectContains(request.ClipRect, visible, tolerancePt: 0.5f);
     }
+
+    // A request whose version/generation no longer match was invalidated (page
+    // bitmap swap, raster DPI upgrade, page switch): its result will be
+    // dropped, so it must never suppress queueing a replacement.
+    private bool IsLiveDetailRequest(DetailRenderRequest? request) =>
+        request != null &&
+        request.Version == _detailRenderVersion &&
+        request.TileGeneration == _detailTileGeneration;
 
     private static bool IsSameDetailRequest(DetailRenderRequest? existing, DetailRenderRequest next) =>
         existing != null &&
