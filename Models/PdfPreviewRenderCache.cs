@@ -371,7 +371,8 @@ public static class PdfPreviewRenderCache
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static string BuildPdfFingerprint(FileInfo info)
+    // Shared with DetailTileDiskCache so both caches key by the same PDF identity.
+    internal static string BuildPdfFingerprint(FileInfo info)
     {
         try
         {

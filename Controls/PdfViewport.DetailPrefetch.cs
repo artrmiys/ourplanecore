@@ -120,6 +120,9 @@ public sealed partial class PdfViewport
                     return;
                 }
 
+                if (await TryAddDetailPrefetchTileFromDiskAsync(request))
+                    return;
+
                 Stopwatch renderWatch = Stopwatch.StartNew();
                 var renderResult = await PdfLayerRenderService.TryRenderDedicatedProcessAsync(
                     request.PdfPath,
@@ -154,6 +157,7 @@ public sealed partial class PdfViewport
                 float bitmapScale = clip.Width > 0 ? decodedBitmap.Width / clip.Width : request.RenderScale;
                 AddDetailRenderTile(decodedBitmap, clip, bitmapScale, DetailPageKey(request.PdfPath, request.PdfIndex, request.PageFolder));
                 decodedBitmap = null;
+                QueueDetailTileDiskWrite(request, renderResult.Result);
                 ReportViewportRenderProfile(
                     "detail-prefetch",
                     request.PageFolder,
@@ -180,6 +184,65 @@ public sealed partial class PdfViewport
             lock (_detailPrefetchGate)
                 _detailPrefetchInFlight.Remove(key);
         }
+    }
+
+    // Prefetch twin of TryApplyDetailRenderFromDiskAsync: a disk hit fills the
+    // RAM tile list without spending a prefetch-pool render. Returns true when
+    // the request is satisfied or stale (no live render needed either way).
+    private async Task<bool> TryAddDetailPrefetchTileFromDiskAsync(DetailRenderRequest request)
+    {
+        if (!DetailTileDiskCache.IsCacheableRequest(request.LayerStates, request.HighlightedLayers, request.CachedLayers))
+            return false;
+
+        Stopwatch readWatch = Stopwatch.StartNew();
+        (bool hit, byte[] imageBytes, SKRect appliedClip) = await Task.Run(() =>
+        {
+            bool ok = DetailTileDiskCache.TryRead(
+                request.PdfPath,
+                request.PdfIndex,
+                request.RenderScale,
+                request.ClipRect,
+                out byte[] bytes,
+                out SKRect clip);
+            return (ok, bytes, clip);
+        });
+        if (!hit)
+            return false;
+
+        if (!IsCurrentDetailPrefetchRequest(request))
+            return true;
+
+        SKBitmap? bitmap = await Task.Run(() => SKBitmap.Decode(imageBytes));
+        readWatch.Stop();
+        if (bitmap == null)
+            return false;
+
+        if (!IsCurrentDetailPrefetchRequest(request))
+        {
+            bitmap.Dispose();
+            return true;
+        }
+
+        SKRect clampedClip = ClampPdfRectToPage(appliedClip);
+        if (clampedClip.Width <= 0 || clampedClip.Height <= 0)
+        {
+            bitmap.Dispose();
+            return false;
+        }
+
+        float bitmapScale = clampedClip.Width > 0 ? bitmap.Width / clampedClip.Width : request.RenderScale;
+        AddDetailRenderTile(bitmap, clampedClip, bitmapScale, DetailPageKey(request.PdfPath, request.PdfIndex, request.PageFolder));
+        ReportViewportRenderProfile(
+            "detail-prefetch",
+            request.PageFolder,
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            readWatch.ElapsedMilliseconds,
+            fromCache: true,
+            clampedClip);
+        RequestRepaint();
+        return true;
     }
 
     private bool DetailRenderTileCoversRect(SKRect rect, float targetScale)

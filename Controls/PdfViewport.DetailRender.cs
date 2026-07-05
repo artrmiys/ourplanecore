@@ -432,6 +432,9 @@ public sealed partial class PdfViewport
         try
         {
             PausePreviewPrefetchFor(ViewportRenderPolicy.PreviewPrefetchActiveRenderHoldMs);
+            if (await TryApplyDetailRenderFromDiskAsync(request))
+                return;
+
             Stopwatch renderWatch = Stopwatch.StartNew();
             var renderResult = await PdfLayerRenderService.TryRenderAsync(
                 request.PdfPath,
@@ -467,7 +470,10 @@ public sealed partial class PdfViewport
             }
 
             if (renderResult.Ok)
+            {
                 ApplyDetailRenderResult(request, renderResult.Result, decodedBitmap);
+                QueueDetailTileDiskWrite(request, renderResult.Result);
+            }
             else if (!string.IsNullOrWhiteSpace(renderResult.Error))
                 AppLog.Warn($"Viewport detail render unavailable: {renderResult.Error}");
         }
@@ -484,6 +490,66 @@ public sealed partial class PdfViewport
             if (_pendingDetailRender != null)
                 _ = StartNextDetailRenderAsync();
         }
+    }
+
+    // Disk-cached tiles restore sharpness after a page switch without paying
+    // the 450-1700ms live render for the first tile at a returning zoom.
+    private async Task<bool> TryApplyDetailRenderFromDiskAsync(DetailRenderRequest request)
+    {
+        if (!DetailTileDiskCache.IsCacheableRequest(request.LayerStates, request.HighlightedLayers, request.CachedLayers))
+            return false;
+
+        Stopwatch readWatch = Stopwatch.StartNew();
+        (bool hit, byte[] imageBytes, SKRect appliedClip) = await Task.Run(() =>
+        {
+            bool ok = DetailTileDiskCache.TryRead(
+                request.PdfPath,
+                request.PdfIndex,
+                request.RenderScale,
+                request.ClipRect,
+                out byte[] bytes,
+                out SKRect clip);
+            return (ok, bytes, clip);
+        });
+        if (!hit || !IsCurrentDetailRequest(request))
+            return false;
+
+        SKBitmap? bitmap = await Task.Run(() => SKBitmap.Decode(imageBytes));
+        readWatch.Stop();
+        if (bitmap == null)
+            return false;
+
+        if (!IsCurrentDetailRequest(request))
+        {
+            bitmap.Dispose();
+            return false;
+        }
+
+        ReportViewportRenderProfile(
+            "detail",
+            request.PageFolder,
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            readWatch.ElapsedMilliseconds,
+            fromCache: true,
+            request.ClipRect);
+        ApplyDetailRenderResult(request, new PdfLayerRenderResult { ClipRect = appliedClip }, bitmap);
+        return true;
+    }
+
+    private static void QueueDetailTileDiskWrite(DetailRenderRequest request, PdfLayerRenderResult render)
+    {
+        if (!DetailTileDiskCache.IsCacheableRequest(request.LayerStates, request.HighlightedLayers, request.CachedLayers))
+            return;
+
+        DetailTileDiskCache.QueueWrite(
+            request.PdfPath,
+            request.PdfIndex,
+            request.RenderScale,
+            request.ClipRect,
+            render.ClipRect ?? request.ClipRect,
+            render);
     }
 
     private void ApplyDetailRenderResult(DetailRenderRequest request, PdfLayerRenderResult render, SKBitmap? bitmap)

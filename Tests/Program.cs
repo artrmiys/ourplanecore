@@ -386,6 +386,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf metadata needs fallback when scale is unresolved", PdfMetadataNeedsFallbackWhenScaleUnresolved),
     ("pdf metadata skip scale avoids fallback", PdfMetadataSkipScaleAvoidsFallback),
     ("pdf preview render cache round trips", PdfPreviewRenderCacheRoundTrips),
+    ("detail tile disk cache round trips", DetailTileDiskCacheRoundTrips),
     ("pdf preview render cache is wired before layer render", TakeoffsTreeRegressionTests.PdfPreviewRenderCacheIsWiredBeforeLayerRender),
     ("pdf page open uses docnet preview on cache miss", TakeoffsTreeRegressionTests.PdfPageOpenUsesDocnetPreviewOnCacheMiss),
     ("viewport raster page open keeps preview path unless raster first", ViewportRasterPageOpenAppliesHotBitmapCache),
@@ -4418,6 +4419,78 @@ static void PdfPreviewRenderCacheRoundTrips()
     {
         Environment.SetEnvironmentVariable(
             PdfPreviewRenderCache.CacheRootEnvironmentVariable,
+            string.IsNullOrWhiteSpace(oldRoot) ? null : oldRoot);
+        TryDeleteDirectory(root);
+    }
+}
+
+static void DetailTileDiskCacheRoundTrips()
+{
+    string oldRoot = Environment.GetEnvironmentVariable(DetailTileDiskCache.CacheRootEnvironmentVariable) ?? "";
+    string root = Path.Combine(Path.GetTempPath(), "opc_detail_tile_cache_tests", Guid.NewGuid().ToString("N"));
+    string pdf = Path.Combine(root, "source.pdf");
+    try
+    {
+        Directory.CreateDirectory(root);
+        Environment.SetEnvironmentVariable(DetailTileDiskCache.CacheRootEnvironmentVariable, Path.Combine(root, "cache"));
+        File.WriteAllText(pdf, "%PDF-1.4 detail tile cache test");
+        File.SetLastWriteTimeUtc(pdf, new DateTime(2026, 7, 5, 10, 0, 0, DateTimeKind.Utc));
+
+        AssertTrue(
+            DetailTileDiskCache.IsCacheableRequest(new Dictionary<int, bool>(), [], null),
+            "clean detail request should be disk-cacheable");
+        AssertFalse(
+            DetailTileDiskCache.IsCacheableRequest(new Dictionary<int, bool> { [7] = false }, [], null),
+            "layer-overridden detail request should not be disk-cacheable");
+        AssertFalse(
+            DetailTileDiskCache.IsCacheableRequest(new Dictionary<int, bool>(), [7], null),
+            "highlighted detail request should not be disk-cacheable");
+
+        var requestedClip = new SKRect(600, 600, 1800, 1500);
+        var appliedClip = new SKRect(600, 600, 1799.5f, 1500);
+        AssertFalse(
+            DetailTileDiskCache.TryRead(pdf, 3, 2.5f, requestedClip, out _, out _),
+            "empty detail tile cache should miss");
+
+        var render = new PdfLayerRenderResult
+        {
+            ImageBytes = [9, 8, 7, 6, 5],
+            ClipRect = appliedClip,
+        };
+        DetailTileDiskCache.QueueWrite(pdf, 3, 2.5f, requestedClip, appliedClip, render);
+
+        byte[] cachedBytes = [];
+        SKRect cachedClip = SKRect.Empty;
+        bool hit = false;
+        for (int attempt = 0; attempt < 100 && !hit; attempt++)
+        {
+            hit = DetailTileDiskCache.TryRead(pdf, 3, 2.5f, requestedClip, out cachedBytes, out cachedClip);
+            if (!hit)
+                Thread.Sleep(30);
+        }
+
+        AssertTrue(hit, "queued detail tile write should become readable");
+        AssertEqual("5", cachedBytes.Length.ToString(), "cached detail tile image bytes length");
+        AssertClose(appliedClip.Right, cachedClip.Right, "cached detail tile applied clip right");
+        AssertFalse(
+            DetailTileDiskCache.TryRead(pdf, 3, 2.5f, new SKRect(0, 0, 1200, 900), out _, out _),
+            "different clip should miss the detail tile cache");
+        AssertFalse(
+            DetailTileDiskCache.TryRead(pdf, 4, 2.5f, requestedClip, out _, out _),
+            "different page should miss the detail tile cache");
+        AssertFalse(
+            DetailTileDiskCache.TryRead(pdf, 3, 3.0f, requestedClip, out _, out _),
+            "different render scale should miss the detail tile cache");
+
+        File.SetLastWriteTimeUtc(pdf, new DateTime(2026, 7, 5, 10, 1, 0, DateTimeKind.Utc));
+        AssertFalse(
+            DetailTileDiskCache.TryRead(pdf, 3, 2.5f, requestedClip, out _, out _),
+            "changing the source PDF modified time should invalidate the detail tile cache");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            DetailTileDiskCache.CacheRootEnvironmentVariable,
             string.IsNullOrWhiteSpace(oldRoot) ? null : oldRoot);
         TryDeleteDirectory(root);
     }
