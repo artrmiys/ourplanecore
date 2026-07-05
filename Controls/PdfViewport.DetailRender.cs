@@ -141,34 +141,71 @@ public sealed partial class PdfViewport
         _detailPageKey = "";
     }
 
+    // Opt-in diagnostics for "the view is blurry but no detail render starts":
+    // logs why each queue attempt was rejected. Env-gated so production runs
+    // pay nothing; enable with OPC_DETAIL_DIAG=1.
+    private static readonly bool DetailRenderDiagEnabled =
+        Environment.GetEnvironmentVariable("OPC_DETAIL_DIAG") == "1";
+
+    private void DetailRenderDiag(string reason)
+    {
+        if (DetailRenderDiagEnabled)
+        {
+            AppLog.Info(
+                $"Viewport detail diag; reason={reason}; zoom={_zoom:0.###}; " +
+                $"bitmapScale={_bitmapScale:0.###}; fastNav={_isFastNavigating}; " +
+                $"prevPage={_showingPreviousPageDuringSwitch}; page='{_pageFolder}'");
+        }
+    }
+
     private void QueueDetailRenderIfNeeded(bool force, bool immediate = false)
     {
         if (ShouldHoldDetailRender(force))
         {
+            DetailRenderDiag("hold");
             QueueDetailRenderAfterHold();
             return;
         }
 
         if (!force && _isFastNavigating)
+        {
+            DetailRenderDiag("fast-nav");
             return;
+        }
 
         if (!TryBuildDetailRenderRequest(force, out DetailRenderRequest? request))
+        {
+            DetailRenderDiag("build-rejected");
             return;
+        }
         if (request == null)
             return;
 
         if (!force && DetailRequestCoversCurrentView(_activeDetailRender, request.RenderScale))
+        {
+            DetailRenderDiag("covered-by-active");
             return;
+        }
 
         if (!force && DetailRequestCoversCurrentView(_pendingDetailRender, request.RenderScale))
+        {
+            DetailRenderDiag("covered-by-pending");
             return;
+        }
 
         if (!force && IsSameDetailRequest(_activeDetailRender, request))
+        {
+            DetailRenderDiag("same-as-active");
             return;
+        }
 
         if (!force && IsSameDetailRequest(_pendingDetailRender, request))
+        {
+            DetailRenderDiag("same-as-pending");
             return;
+        }
 
+        DetailRenderDiag("queued");
         _pendingDetailRender = request with { Version = ++_detailRenderVersion };
         QueueDetailRenderStart(force || immediate);
     }
@@ -396,6 +433,15 @@ public sealed partial class PdfViewport
         if (request == null)
             return false;
 
+        // An invalidated request (version/generation bumped by e.g. a raster
+        // DPI upgrade) will be dropped at start — it must not suppress
+        // queueing the fresh request that would actually sharpen the view.
+        if (request.Version != _detailRenderVersion ||
+            request.TileGeneration != _detailTileGeneration)
+        {
+            return false;
+        }
+
         if (!string.Equals(request.PdfPath, _pdfPath, StringComparison.OrdinalIgnoreCase) ||
             request.PdfIndex != _pdfIndex ||
             !string.Equals(request.PageFolder, _pageFolder, StringComparison.OrdinalIgnoreCase))
@@ -413,10 +459,15 @@ public sealed partial class PdfViewport
     private async Task StartNextDetailRenderAsync()
     {
         if (_detailRenderInProgress || _pendingDetailRender == null)
+        {
+            if (_pendingDetailRender != null)
+                DetailRenderDiag("start-blocked-in-progress");
             return;
+        }
 
         if (DetailRenderNavigationQuietDelay() > TimeSpan.Zero)
         {
+            DetailRenderDiag("start-blocked-nav-quiet");
             QueueDetailRenderStart(immediate: true);
             return;
         }
@@ -424,7 +475,17 @@ public sealed partial class PdfViewport
         DetailRenderRequest request = _pendingDetailRender;
         _pendingDetailRender = null;
         if (!IsCurrentDetailRequest(request))
+        {
+            // The queued request was invalidated while it waited (typically a
+            // raster DPI upgrade bumping the version/generation right after
+            // page open). Without an immediate re-queue the view stays blurry
+            // until the next user interaction — nothing else re-checks.
+            DetailRenderDiag("start-dropped-stale");
+            QueueDetailRenderIfNeeded(force: false, immediate: true);
             return;
+        }
+
+        DetailRenderDiag("start-render");
 
         _activeDetailRender = request;
         _detailRenderInProgress = true;
