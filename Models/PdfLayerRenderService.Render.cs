@@ -137,7 +137,7 @@ namespace OurPlaneCore;
             bool invoked = hasClip
                 ? TryInvokeDetailWorker("render", request, out RenderResponse? response, out error) ||
                   TryRunFileCommand("render", request, inputPath, outputPath, out response, out error)
-                : TryInvokeWorker("render", request, out response, out error) ||
+                : TryInvokeRenderWorker("render", request, out response, out error) ||
                   TryRunFileCommand("render", request, inputPath, outputPath, out response, out error);
             if (!invoked)
                 return false;

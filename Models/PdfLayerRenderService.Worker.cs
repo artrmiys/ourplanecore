@@ -22,6 +22,18 @@ public static partial class PdfLayerRenderService
         Prefetch,
     }
 
+    // The viewport's "render profile" elapsed mixes semaphore queue wait and the
+    // python roundtrip into one number, which made multi-second cold previews
+    // unattributable. Log the split whenever a worker call is slow enough to
+    // matter so queue starvation and slow renders stay distinguishable.
+    private const int SlowWorkerProfileLogMs = 150;
+
+    private static void ReportWorkerProfile(string worker, string action, long queueMs, long execMs)
+    {
+        if (queueMs + execMs >= SlowWorkerProfileLogMs)
+            AppLog.Info($"PyMuPDF worker profile; worker={worker}; action={action}; queue={queueMs}ms; exec={execMs}ms");
+    }
+
     internal static bool TryInvokeHelper<TRequest, TResponse>(
         string action,
         TRequest request,
@@ -87,6 +99,7 @@ public static partial class PdfLayerRenderService
         (bool Ok, TResponse? Response, string Error) result;
         if (DetailWorkerSemaphore.Wait(0))
         {
+            var execWatch = Stopwatch.StartNew();
             try
             {
                 result = InvokeWorkerCoreAsync<TRequest, TResponse>(action, request, WorkerRole.Detail)
@@ -96,6 +109,8 @@ public static partial class PdfLayerRenderService
             {
                 DetailWorkerSemaphore.Release();
             }
+
+            ReportWorkerProfile(WorkerLogPrefix(WorkerRole.Detail), action, 0, execWatch.ElapsedMilliseconds);
         }
         else if (PrefetchPoolSlots.CurrentCount > 0)
         {
@@ -104,6 +119,51 @@ public static partial class PdfLayerRenderService
         else
         {
             result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Detail)
+                .GetAwaiter().GetResult();
+        }
+
+        response = result.Response;
+        error = result.Error;
+        return result.Ok;
+    }
+
+    // Full-page renders (cold previews, sharp base upgrades) share the primary
+    // worker with sheetmeta/layers/snap/import-annotation batches, all FIFO on
+    // WorkerSemaphore(1,1). Right after an import that queue can hold seconds of
+    // metadata work, which showed up as 3s+ "preview-pymupdf" frames for a tiny
+    // 0.2-scale preview. If the primary worker is busy and the prefetch pool has
+    // an idle slot, render there instead (a pool slot's colder doc cache is far
+    // cheaper than the queue wait); when the pool is saturated too, fall back to
+    // the primary queue as before.
+    private static bool TryInvokeRenderWorker<TRequest, TResponse>(
+        string action,
+        TRequest request,
+        out TResponse? response,
+        out string error)
+    {
+        (bool Ok, TResponse? Response, string Error) result;
+        if (WorkerSemaphore.Wait(0))
+        {
+            var execWatch = Stopwatch.StartNew();
+            try
+            {
+                result = InvokeWorkerCoreAsync<TRequest, TResponse>(action, request, WorkerRole.Primary)
+                    .GetAwaiter().GetResult();
+            }
+            finally
+            {
+                WorkerSemaphore.Release();
+            }
+
+            ReportWorkerProfile(WorkerLogPrefix(WorkerRole.Primary), action, 0, execWatch.ElapsedMilliseconds);
+        }
+        else if (PrefetchPoolSlots.CurrentCount > 0)
+        {
+            result = TryInvokePrefetchWorkerAsync<TRequest, TResponse>(action, request).GetAwaiter().GetResult();
+        }
+        else
+        {
+            result = TryInvokeWorkerAsync<TRequest, TResponse>(action, request, WorkerRole.Primary)
                 .GetAwaiter().GetResult();
         }
 
@@ -130,8 +190,11 @@ public static partial class PdfLayerRenderService
         WorkerRole role)
     {
         SemaphoreSlim semaphore = WorkerSemaphoreFor(role);
+        var queueWatch = Stopwatch.StartNew();
         await semaphore.WaitAsync().ConfigureAwait(false);
+        long queueMs = queueWatch.ElapsedMilliseconds;
 
+        var execWatch = Stopwatch.StartNew();
         try
         {
             return await InvokeWorkerCoreAsync<TRequest, TResponse>(action, request, role).ConfigureAwait(false);
@@ -139,6 +202,7 @@ public static partial class PdfLayerRenderService
         finally
         {
             semaphore.Release();
+            ReportWorkerProfile(WorkerLogPrefix(role), action, queueMs, execWatch.ElapsedMilliseconds);
         }
     }
 
@@ -184,9 +248,12 @@ public static partial class PdfLayerRenderService
         string action,
         TRequest request)
     {
+        var queueWatch = Stopwatch.StartNew();
         await PrefetchPoolSlots.WaitAsync().ConfigureAwait(false);
+        long queueMs = queueWatch.ElapsedMilliseconds;
         int slot = PrefetchFreeSlots.TryPop(out int popped) ? popped : 0;
 
+        var execWatch = Stopwatch.StartNew();
         try
         {
             if (!EnsurePrefetchSlot(slot, out string error))
@@ -215,6 +282,7 @@ public static partial class PdfLayerRenderService
         {
             PrefetchFreeSlots.Push(slot);
             PrefetchPoolSlots.Release();
+            ReportWorkerProfile($"pyhelper-prefetch{slot}", action, queueMs, execWatch.ElapsedMilliseconds);
         }
     }
 
