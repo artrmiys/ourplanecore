@@ -211,6 +211,7 @@ public partial class MainWindow
         OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true);
 
         PageInfo selectedTarget = OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) ?? latestTarget;
+        ClearReciprocalSheetOverlay(selectedTarget);
         string alternatives = BuildSheetOverlayAutoSelectAlternativesSummary(search.TopMatches);
         AppLog.Info(
             $"Sheet overlay auto select chose overlay; base='{selectedTarget.FolderPath}'; overlay='{search.OverlayPage.FolderPath}'; " +

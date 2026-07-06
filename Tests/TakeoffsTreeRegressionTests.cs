@@ -2166,8 +2166,11 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("private static void WarmSheetManagerRasterBitmap(PageInfo page, RasterSheetBuildResult result)", StringComparison.Ordinal) &&
             workspaceManagers.Contains("PdfViewport.WarmRasterSheetBitmapCache(page, result.Source)", StringComparison.Ordinal) &&
             pdfImport.Contains("BuildAndWarmImportedRaster(page)", StringComparison.Ordinal) &&
-            importedRasterMethod.Contains("RasterSheetCacheService.BuildAndEnable(page)", StringComparison.Ordinal) &&
-            importedRasterMethod.Contains("PdfViewport.WarmRasterSheetBitmapCache(page, result.Source)", StringComparison.Ordinal) &&
+            pdfImport.Contains("private const int ImportedPdfRasterDpi = 150;", StringComparison.Ordinal) &&
+            importedRasterMethod.Contains("RasterSheetCacheService.RasterDpiToRenderScale(ImportedPdfRasterDpi)", StringComparison.Ordinal) &&
+            importedRasterMethod.Contains("RasterSheetCacheService.BuildAndEnable(page, renderScale)", StringComparison.Ordinal) &&
+            importedRasterMethod.Contains("RasterSheetCacheService.TrySetUseAsPageOpenRaster(refreshed, true", StringComparison.Ordinal) &&
+            importedRasterMethod.Contains("PdfViewport.WarmRasterSheetBitmapCache(refreshed, warmSource)", StringComparison.Ordinal) &&
             rowRasterMethod.Contains("RefreshSheetManagerRasterRow(row)", StringComparison.Ordinal) &&
             !rowRasterMethod.Contains("ShowBusyOverlay", StringComparison.Ordinal) &&
             workspaceManagers.Contains("if (refreshSheetManager)", StringComparison.Ordinal) &&
@@ -3424,30 +3427,32 @@ internal static class TakeoffsTreeRegressionTests
             "async sheet overlay render should re-read source.json before applying a bitmap so page switches or overlay edits cannot apply stale overlay state");
     }
 
-    public static void SheetOverlayReciprocalSyncIsWired()
+    public static void SheetOverlayReciprocalCleanupIsWired()
     {
         string main = ReadRepoFile("MainWindow.SheetOverlay.cs");
         string autoFit = ReadRepoFile("MainWindow.SheetOverlay.AutoFit.cs");
+        string autoSelect = ReadRepoFile("MainWindow.SheetOverlay.AutoSelect.cs");
         string service = ReadRepoFile(Path.Combine("Models", "SheetOverlayReciprocalService.cs"));
 
         AssertTrue(
-            main.Contains("SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage))", StringComparison.Ordinal) &&
             main.Contains("ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage))", StringComparison.Ordinal) &&
-            main.Contains("SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest))", StringComparison.Ordinal) &&
-            main.Contains("SyncReciprocalSheetOverlay(updated)", StringComparison.Ordinal) &&
-            main.Contains("SheetOverlayReciprocalService.TrySync", StringComparison.Ordinal) &&
-            main.Contains("SheetOverlayReciprocalService.TryClear", StringComparison.Ordinal),
-            "setting, clearing, menu transforms, and viewport point-edit transforms should keep the reciprocal overlay sheet in sync");
+            main.Contains("ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest))", StringComparison.Ordinal) &&
+            main.Contains("ClearReciprocalSheetOverlay(updated)", StringComparison.Ordinal) &&
+            main.Contains("SheetOverlayReciprocalService.TryClear", StringComparison.Ordinal) &&
+            !main.Contains("SyncReciprocalSheetOverlay(", StringComparison.Ordinal) &&
+            !main.Contains("SheetOverlayReciprocalService.TrySync", StringComparison.Ordinal),
+            "setting, clearing, menu transforms, and viewport point-edit transforms should clear stale reciprocal overlays without writing the overlay onto the source sheet");
         AssertTrue(
-            autoFit.Contains("SyncReciprocalSheetOverlay(updatedTarget)", StringComparison.Ordinal),
-            "overlay Auto Fit should update the reciprocal sheet so switching between compared sheets keeps an overlay visible");
+            autoFit.Contains("ClearReciprocalSheetOverlay(updatedTarget)", StringComparison.Ordinal) &&
+            autoSelect.Contains("ClearReciprocalSheetOverlay(selectedTarget)", StringComparison.Ordinal),
+            "overlay Auto Fit and Auto Select should leave the chosen overlay only on the active target sheet");
         AssertTrue(
             service.Contains("public static bool TrySync", StringComparison.Ordinal) &&
             service.Contains("public static bool TryClear", StringComparison.Ordinal) &&
             service.Contains("ShouldWriteReciprocal", StringComparison.Ordinal) &&
             service.Contains("string.IsNullOrWhiteSpace(reciprocalPage.OverlayPageFolder)", StringComparison.Ordinal) &&
             service.Contains("SameFolder(reciprocalPage.OverlayPageFolder, basePageFolder)", StringComparison.Ordinal),
-            "reciprocal sync should fill empty targets or update true reciprocal targets without overwriting unrelated overlay comparisons");
+            "reciprocal service should retain the legacy repair path while UI code stops writing new reciprocal overlay links");
     }
 
     public static void SheetOverlayAutoFitCanAutoSelectOverlay()

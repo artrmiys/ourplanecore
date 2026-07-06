@@ -12,6 +12,8 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private const int ImportedPdfRasterDpi = 150;
+
     private sealed record PdfImportPlan(
         string PdfPath,
         int PageCount,
@@ -237,7 +239,7 @@ public partial class MainWindow
                         for (int pageIndex = 0; pageIndex < created.Count; pageIndex++)
                         {
                             PageInfo page = created[pageIndex];
-                            ((IProgress<string>)progress).Report($"building raster {pageIndex + 1}/{created.Count}...");
+                            ((IProgress<string>)progress).Report($"building {ImportedPdfRasterDpi}dpi raster {pageIndex + 1}/{created.Count}...");
                             RasterSheetBuildResult raster = await Task.Run(() => BuildAndWarmImportedRaster(page));
                             if (raster.Ok)
                                 rasterOk++;
@@ -262,7 +264,7 @@ public partial class MainWindow
             TxtStatus.Text =
                 $"Imported {createdPages.Count} page(s) from {plans.Count} PDF file(s). " +
                 $"PDF layers load on demand from the PDF Layers tab." +
-                (buildRasterCache ? $" Raster built: {rasterOk}, failed: {rasterFailed}." : "") +
+                (buildRasterCache ? $" Raster {ImportedPdfRasterDpi}dpi + First built: {rasterOk}, failed: {rasterFailed}." : "") +
                 skippedText;
 
             if (createdPages.Count > 0)
@@ -371,7 +373,7 @@ public partial class MainWindow
         panel.Children.Add(rasterCheck);
         panel.Children.Add(new TextBlock
         {
-            Text = "Original PDFs stay as the source for export, metadata, layers, and rebuild.",
+            Text = $"Original PDFs stay as the source. Raster First uses {ImportedPdfRasterDpi} dpi for fast sheet open.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.78,
             Margin = new Thickness(22, 0, 0, 8),
@@ -404,11 +406,21 @@ public partial class MainWindow
 
     private static RasterSheetBuildResult BuildAndWarmImportedRaster(PageInfo page)
     {
-        RasterSheetBuildResult result = RasterSheetCacheService.BuildAndEnable(page);
-        if (result.Ok && result.Source != null)
-            PdfViewport.WarmRasterSheetBitmapCache(page, result.Source);
+        float renderScale = RasterSheetCacheService.RasterDpiToRenderScale(ImportedPdfRasterDpi);
+        RasterSheetBuildResult result = RasterSheetCacheService.BuildAndEnable(page, renderScale);
+        if (!result.Ok)
+            return result;
 
-        return result;
+        PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        if (!RasterSheetCacheService.TrySetUseAsPageOpenRaster(refreshed, true, out string firstError, out _))
+            AppLog.Warn($"Raster First enable failed during import for '{page.Name}': {firstError}");
+
+        refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? refreshed;
+        RasterSheetSource? warmSource = refreshed.RasterSheet ?? result.Source;
+        if (warmSource != null)
+            PdfViewport.WarmRasterSheetBitmapCache(refreshed, warmSource);
+
+        return result with { Source = warmSource ?? result.Source };
     }
 
     private static Dictionary<int, IReadOnlyList<PdfLayerInfo>> BuildPdfLayerCache(

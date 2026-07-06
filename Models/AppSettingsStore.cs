@@ -32,7 +32,8 @@ public sealed class AppSettings
     public bool SimplifyViewportNavigation { get; set; } = false;
     public string ViewportRenderQuality { get; set; } = ViewportRenderPolicy.HighQualityMode;
     public bool PdfLayersEnabled { get; set; } = false;
-    public bool BuildRasterCacheOnPdfImport { get; set; } = false;
+    public bool BuildRasterCacheOnPdfImport { get; set; } = true;
+    public int PdfImportRasterDefaultsVersion { get; set; }
     public bool AutoCleanRasterCacheOnClose { get; set; } = true;
     public bool TakeoffSortDescending { get; set; } = false;
     public bool TakeoffAutoRouteOnImport { get; set; } = true;
@@ -165,6 +166,7 @@ public static class AppSettingsStore
             NormalizeOutputSettings(settings);
             NormalizeTakeoffDefaults(settings);
             NormalizeSimilarCountSettings(settings);
+            NormalizePdfImportRasterSettings(settings);
             return settings;
         }
         catch (Exception ex)
@@ -180,6 +182,7 @@ public static class AppSettingsStore
         NormalizeOutputSettings(settings);
         NormalizeTakeoffDefaults(settings);
         NormalizeSimilarCountSettings(settings);
+        NormalizePdfImportRasterSettings(settings);
         string? dir = Path.GetDirectoryName(SettingsPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
@@ -478,6 +481,15 @@ public static class AppSettingsStore
         settings.SimilarCountRotations = false;
         settings.SimilarCountMirrored = false;
         settings.SimilarCountAllSheets = false;
+    }
+
+    public static void NormalizePdfImportRasterSettings(AppSettings settings)
+    {
+        if (settings.PdfImportRasterDefaultsVersion < 1)
+        {
+            settings.BuildRasterCacheOnPdfImport = true;
+            settings.PdfImportRasterDefaultsVersion = 1;
+        }
     }
 
     public static void NormalizeJobsRoots(AppSettings settings)

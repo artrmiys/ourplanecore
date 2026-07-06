@@ -111,7 +111,7 @@ var tests = new List<(string Name, Action Run)>
     ("sheet overlay mouse drag is wired", TakeoffsTreeRegressionTests.SheetOverlayMouseDragIsWired),
     ("sheet overlay point edit uses pdf snap", TakeoffsTreeRegressionTests.SheetOverlayPointEditUsesPdfSnap),
     ("sheet overlay async load uses fresh page snapshot", TakeoffsTreeRegressionTests.SheetOverlayAsyncLoadUsesFreshPageSnapshot),
-    ("sheet overlay reciprocal sync is wired", TakeoffsTreeRegressionTests.SheetOverlayReciprocalSyncIsWired),
+    ("sheet overlay reciprocal cleanup is wired", TakeoffsTreeRegressionTests.SheetOverlayReciprocalCleanupIsWired),
     ("sheet overlay auto fit can auto-select overlay", TakeoffsTreeRegressionTests.SheetOverlayAutoFitCanAutoSelectOverlay),
     ("sheet overlay auto fit raster fallback is wired", TakeoffsTreeRegressionTests.SheetOverlayAutoFitRasterFallbackIsWired),
     ("job store persists measurement holes", JobStorePersistsMeasurementHoles),
@@ -376,6 +376,7 @@ var tests = new List<(string Name, Action Run)>
     ("job picker roots classify local cloud network", JobPickerRootsClassifyLocalCloudNetwork),
     ("app settings path can use env override", AppSettingsPathCanUseEnvOverride),
     ("app settings count symbol persists", AppSettingsCountSymbolPersists),
+    ("app settings pdf import raster default migrates", AppSettingsPdfImportRasterDefaultMigrates),
     ("atomic write ignores stale fixed temp path", AtomicWriteIgnoresStaleFixedTempPath),
     ("app settings recent job preserves pin and thumbnail", AppSettingsRecentPreservesPinAndThumbnail),
     ("app settings removes recent job by path", AppSettingsRemovesRecentJobByPath),
@@ -4169,6 +4170,25 @@ static void AppSettingsCountSymbolPersists()
         Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, previous);
         TryDeleteDirectory(dir);
     }
+}
+
+static void AppSettingsPdfImportRasterDefaultMigrates()
+{
+    var settings = new AppSettings
+    {
+        BuildRasterCacheOnPdfImport = false,
+        PdfImportRasterDefaultsVersion = 0,
+    };
+
+    AppSettingsStore.NormalizePdfImportRasterSettings(settings);
+
+    AssertTrue(settings.BuildRasterCacheOnPdfImport, "PDF import raster cache should default on after migration");
+    AssertEqual("1", settings.PdfImportRasterDefaultsVersion.ToString(), "PDF import raster defaults version");
+
+    settings.BuildRasterCacheOnPdfImport = false;
+    AppSettingsStore.NormalizePdfImportRasterSettings(settings);
+
+    AssertFalse(settings.BuildRasterCacheOnPdfImport, "explicit PDF import raster opt-out should be preserved after migration");
 }
 
 static void AtomicWriteIgnoresStaleFixedTempPath()

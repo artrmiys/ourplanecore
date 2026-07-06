@@ -98,7 +98,7 @@ public partial class MainWindow
             fit.OverlayScale,
             fit.OverlayRotationDegrees);
         if (OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
-            SyncReciprocalSheetOverlay(updatedTarget);
+            ClearReciprocalSheetOverlay(updatedTarget);
 
         string status = $"{statusPrefix}{BuildSheetOverlayAutoFitStatus(read, fit)}";
         AppLog.Info(

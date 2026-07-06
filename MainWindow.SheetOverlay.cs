@@ -46,13 +46,14 @@ public partial class MainWindow
             return;
         }
 
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
         OurPlaneCoreJobStore.SavePageOverlay(
             _currentPage.FolderPath,
             overlayPage.FolderPath,
             CurrentSheetOverlayColor(),
             CurrentSheetOverlayOpacity());
         OurPlaneCoreJobStore.SavePageOverlayVisibility(_currentPage.FolderPath, true);
-        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
 
         ReloadCurrentSheetOverlay($"Overlay set: {overlayPage.Name}");
     }
@@ -84,7 +85,7 @@ public partial class MainWindow
             _currentPage.OverlayPageFolder,
             color,
             CurrentSheetOverlayOpacity());
-        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
 
         ReloadCurrentSheetOverlay($"Overlay color: {color}");
     }
@@ -99,7 +100,7 @@ public partial class MainWindow
             page.OverlayPageFolder,
             color,
             page.OverlayOpacity);
-        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(page));
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(page));
         RefreshPageOverlayState(page.FolderPath, $"Overlay color: {color}");
     }
 
@@ -170,7 +171,7 @@ public partial class MainWindow
             offsetYPt,
             overlayScale,
             overlayRotationDegrees);
-        SyncReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest));
+        ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(latest));
         RefreshPageOverlayState(latest.FolderPath, status);
     }
 
@@ -241,7 +242,7 @@ public partial class MainWindow
         if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
         {
             _currentPage = updated;
-            SyncReciprocalSheetOverlay(updated);
+            ClearReciprocalSheetOverlay(updated);
             RefreshPageOverlayTreeNode(updated);
         }
 
@@ -264,15 +265,6 @@ public partial class MainWindow
         else
             RefreshPagesTakeoffIndicators();
         TxtStatus.Text = "Sheet overlay cleared.";
-    }
-
-    private void SyncReciprocalSheetOverlay(PageInfo page)
-    {
-        if (!SheetOverlayReciprocalService.TrySync(page, out string reciprocalPageFolder))
-            return;
-
-        if (OurPlaneCoreJobStore.TryReadPage(reciprocalPageFolder) is { } reciprocalPage)
-            RefreshPageOverlayTreeNode(reciprocalPage);
     }
 
     private void ClearReciprocalSheetOverlay(PageInfo page)
@@ -318,6 +310,28 @@ public partial class MainWindow
 
         OpenPageInActiveTab(overlayPage);
         TxtStatus.Text = $"Opened overlay sheet: {overlayPage.Name}.";
+    }
+
+    private void ChooseCurrentSheetOverlayCandidate()
+    {
+        if (_currentPage == null)
+        {
+            TxtStatus.Text = "Open a sheet before choosing an overlay.";
+            return;
+        }
+
+        ChooseSheetOverlayAutoSelectCandidate(_currentPage);
+    }
+
+    private void BeginCurrentSheetOverlayPointEdit()
+    {
+        if (_currentPage == null)
+        {
+            TxtStatus.Text = "Open a sheet before moving an overlay.";
+            return;
+        }
+
+        BeginSheetOverlayPointEdit(_currentPage);
     }
 
     private void RefreshPageOverlayTreeNode(PageInfo page)

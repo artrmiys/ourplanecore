@@ -29,6 +29,8 @@ public partial class MainWindow
     {
         bool hasJob = _currentJob != null;
         bool hasPage = _currentPage != null;
+        bool currentPageHasSheetOverlay = _currentPage != null &&
+                                          !string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder);
         bool hasRightTabs = _rightWorkspaceTabs != null;
         bool hasSheetTakeoffTargets = _currentPage != null && TakeoffsForPage(_currentPage.FolderPath).Any();
         int selectedMeasurementCount = _viewport.GetSelectedMeasurements().Count;
@@ -115,6 +117,8 @@ public partial class MainWindow
         Add("pages.autoScale", "Auto Scale PDF", "Pages", "", "Preview and apply PDF sheet scales.", hasJob, "Open or create a job first.");
         Add("pages.autoNameScale", "Auto Name + Scale PDF", "Pages", "", "Preview and apply PDF sheet names and scales.", hasJob, "Open or create a job first.");
         Add("pages.aiFillMetadata", "AI Fill PDF Metadata", "Pages", "", "Queue GPT fallback for missing sheet metadata.", hasJob, "Open or create a job first.");
+        Add("sheet.overlay", "Overlay", "Sheets", "", "Choose a matching sheet overlay for the active sheet.", hasJob && hasPage, "Open a job and select a sheet first.");
+        Add("sheet.overlayPoints", "Move Overlay by Points", "Sheets", "", "Align the active sheet overlay by matching points.", hasPage && currentPageHasSheetOverlay, "Set an overlay on the active sheet first.");
         Add("materials.extract", "Extract Materials", "Materials", "", "Extract material evidence and schedules from the current job PDFs.", hasJob, "Open or create a job first.");
         Add("layers.allOn", "PDF Layers All On", "PDF Layers", "", "Turn all active page PDF layers on.", BtnLayersOn.IsEnabled, "Select a PDF page with layers first.");
         Add("layers.allOff", "PDF Layers All Off", "PDF Layers", "", "Turn all active page PDF layers off.", BtnLayersOff.IsEnabled, "Select a PDF page with layers first.");
@@ -227,6 +231,8 @@ public partial class MainWindow
             case "pages.autoScale": BtnAutoScalePdf_Click(this, new RoutedEventArgs()); break;
             case "pages.autoNameScale": BtnAutoRenameScalePdf_Click(this, new RoutedEventArgs()); break;
             case "pages.aiFillMetadata": BtnQueuePdfMetadataFallback_Click(this, new RoutedEventArgs()); break;
+            case "sheet.overlay": ChooseCurrentSheetOverlayCandidate(); break;
+            case "sheet.overlayPoints": BeginCurrentSheetOverlayPointEdit(); break;
             case "materials.extract":
                 SelectWorkspaceTab("MaterialsManager");
                 BtnMaterialsExtract_Click(this, new RoutedEventArgs());
