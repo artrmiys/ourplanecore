@@ -128,6 +128,7 @@ public sealed partial class PdfViewport
         _aiMarkers.Clear();
         ClearThreeDRoofGuides();
         _annotations.Clear();
+        _sheetLegendEntries.Clear();
         ClearViewportUndoStack();
         ClearAiActionDraftPreview();
         ClearSelection();

@@ -2718,6 +2718,9 @@ internal static class TakeoffsTreeRegressionTests
             mainLayers.Contains("PDF layers not loaded. Click Load to scan this sheet.", StringComparison.Ordinal),
             "normal page opens should keep PDF layers lazy, and responsive raster-warm page opens should not start a sharp PDF render while still allowing a cheap preview fallback");
         AssertTrue(
+            loadPageMethod.Contains("_sheetLegendEntries.Clear();", StringComparison.Ordinal),
+            "viewport LoadPage should clear stale sheet legend entries before the deferred page refresh can rebuild the current sheet legend");
+        AssertTrue(
             loadPageMethod.Contains("allowDiskRead: false", StringComparison.Ordinal) &&
             loadPageMethod.Contains("QueuePersistedPreviewRenderAfterFirstRepaint(", StringComparison.Ordinal) &&
             previewApplyMethod.Contains("if (!allowDiskRead)", StringComparison.Ordinal) &&
