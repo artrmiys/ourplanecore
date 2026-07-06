@@ -69,10 +69,10 @@ public partial class MainWindow
             _currentPage.HiddenTakeoffs = hidden.ToList();
             _currentPage.HiddenMeasurements = hiddenMeasurements.ToList();
         }
+        ApplyViewportPageTakeoffVisibility(page);
         OurPlaneCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, hidden);
         OurPlaneCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, hiddenMeasurements);
         RefreshPageOverlayTreeNode(page);
-        ApplyViewportPageTakeoffVisibility(page);
         RefreshSheetLegend();
         TxtStatus.Text = nowHidden
             ? $"Hidden on {page.Name}: {takeoff.Name}."
@@ -85,6 +85,14 @@ public partial class MainWindow
             return;
 
         PageInfo visibilityPage = _currentPage;
+        ApplyViewportPageTakeoffVisibilitySnapshot(visibilityPage);
+    }
+
+    private void ApplyViewportPageTakeoffVisibilitySnapshot(PageInfo visibilityPage)
+    {
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, visibilityPage.FolderPath))
+            return;
+
         var hiddenKeys = visibilityPage.HiddenTakeoffs
             .Select(NormalizeTakeoffLegendOrderKey)
             .Where(value => !string.IsNullOrWhiteSpace(value))

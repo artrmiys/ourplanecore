@@ -124,10 +124,10 @@ public partial class MainWindow
             _currentPage.HiddenMeasurements = measurements.ToList();
         }
 
+        ApplyViewportPageTakeoffVisibility(page);
         OurPlaneCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, takeoffs);
         OurPlaneCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, measurements);
         RefreshPageTakeoffIndicatorsForFolder(page.FolderPath);
-        ApplyViewportPageTakeoffVisibility(page);
         RefreshSheetLegend();
         RefreshDetachedSheetDisplaySettings();
     }

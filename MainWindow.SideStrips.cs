@@ -96,6 +96,7 @@ public partial class MainWindow
         ["file.exportCsv"] = "CSV",
         ["file.exportTxt"] = "TXT",
         ["takeoffs.roofBase"] = "RF",
+        ["tool.pointAlongLine"] = "P/L",
     };
 
     private void BuildSideCommandStrips()

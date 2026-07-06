@@ -141,6 +141,13 @@ public partial class MainWindow
                 hasItem,
                 () => SetJoistDirectionForAllAreas(item, measurement)));
         }
+        if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line")
+        {
+            menu.Items.Add(MakeMenuItem(
+                "Create Count Points Along Line...",
+                hasItem && _currentJob != null,
+                () => CreatePointsAlongLine(measurement, item)));
+        }
         menu.Items.Add(MakeMenuItem(
             $"Rename {entryTitle}",
             hasItem,

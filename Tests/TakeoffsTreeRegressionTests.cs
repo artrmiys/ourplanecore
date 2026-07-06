@@ -72,12 +72,17 @@ internal static class TakeoffsTreeRegressionTests
             "batch tab/detached opens should refresh selected pages from source.json before passing raster metadata into viewports");
 
         int loadPage = loadMethod.IndexOf("_viewport.LoadPage(", StringComparison.Ordinal);
+        int visibilitySnapshot = loadMethod.IndexOf("ApplyViewportPageTakeoffVisibilitySnapshot(viewportPage)", StringComparison.Ordinal);
         int annotationsLoad = loadMethod.IndexOf("LoadViewportPageAnnotations(viewportPage)", StringComparison.Ordinal);
         int overlayQueue = loadMethod.IndexOf("QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView)", StringComparison.Ordinal);
         int deferred = loadMethod.IndexOf("QueueDeferredPageOpenWork", StringComparison.Ordinal);
         AssertTrue(
-            loadPage >= 0 && annotationsLoad > loadPage && overlayQueue > annotationsLoad && deferred > overlayQueue,
-            "page open should load the viewport, restore saved annotations before any page-switch autosave, queue async sheet overlay work, then schedule slower follow-up work");
+            loadPage >= 0 &&
+            visibilitySnapshot > loadPage &&
+            annotationsLoad > visibilitySnapshot &&
+            overlayQueue > annotationsLoad &&
+            deferred > overlayQueue,
+            "page open should load the viewport, apply the cheap hidden-takeoff snapshot, restore saved annotations before any page-switch autosave, queue async sheet overlay work, then schedule slower follow-up work");
         AssertTrue(
             loadMethod.Contains("_currentPageAnnotationsLoaded = false", StringComparison.Ordinal) &&
             loadAnnotationsMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
@@ -92,7 +97,7 @@ internal static class TakeoffsTreeRegressionTests
             loadMethod.Contains("ApplyScaleToCurrentPageMeasurements(", StringComparison.Ordinal) ||
             loadMethod.Contains("RefreshLoadedPageTakeoffVisuals(", StringComparison.Ordinal) ||
             loadMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
-            "page open should not run overlays, takeoff visibility, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
+            "page open should not run overlays, heavy takeoff visibility refresh, measurement scale propagation, takeoff tree refresh, or settings save in the immediate path");
         AssertFalse(
             loadMethod.Contains("TryApplyCachedSheetOverlay(viewportPage, restoreView)", StringComparison.Ordinal),
             "page open should not synchronously decode cached sheet overlays before the first viewport frame");
@@ -1622,6 +1627,7 @@ internal static class TakeoffsTreeRegressionTests
             "clicking the linked-takeoff glyph must toggle sheet visibility without starting selection or drag");
         AssertTrue(
             pageTakeoffVisibility.Contains("PageInfo visibilityPage = _currentPage;", StringComparison.Ordinal) &&
+            pageTakeoffVisibility.Contains("private void ApplyViewportPageTakeoffVisibilitySnapshot(PageInfo visibilityPage)", StringComparison.Ordinal) &&
             pageTakeoffVisibility.Contains("_viewport.SetHiddenMeasurementIds(visibilityPage.HiddenMeasurements)", StringComparison.Ordinal),
             "viewport visibility apply must use the current page state so deferred page-open work cannot restore stale hidden IDs");
         AssertTrue(
@@ -1641,6 +1647,39 @@ internal static class TakeoffsTreeRegressionTests
             pageStore.Contains("SavePageHiddenMeasurements", StringComparison.Ordinal) &&
             pageStore.Contains("HiddenMeasurements = NormalizeStringList(hiddenMeasurements)", StringComparison.Ordinal),
             "source.json persistence must keep hidden measurement IDs through page rewrites");
+    }
+
+    public static void PointAlongLineToolIsWired()
+    {
+        string xaml = ReadRepoFile("MainWindow.xaml");
+        string commandPalette = ReadRepoFile("MainWindow.CommandPalette.cs");
+        string sideStrips = ReadRepoFile("MainWindow.SideStrips.cs");
+        string viewportMenu = ReadRepoFile("MainWindow.ViewportContextMenu.cs");
+        string sections = ReadRepoFile("MainWindow.TakeoffSections.cs");
+        string tool = ReadRepoFile("MainWindow.PointAlongLine.cs");
+        string service = ReadRepoFile("Models/PointAlongLineService.cs");
+
+        AssertTrue(
+            xaml.Contains("BtnPointAlongLine", StringComparison.Ordinal) &&
+            xaml.Contains("BtnPointAlongLine_Click", StringComparison.Ordinal) &&
+            commandPalette.Contains("tool.pointAlongLine", StringComparison.Ordinal) &&
+            commandPalette.Contains("CreatePointsAlongSelectedLine()", StringComparison.Ordinal) &&
+            sideStrips.Contains("[\"tool.pointAlongLine\"] = \"P/L\"", StringComparison.Ordinal),
+            "Points Along Line should be reachable from toolbar, command palette, and configurable side strips");
+        AssertTrue(
+            viewportMenu.Contains("Create Count Points Along Line...", StringComparison.Ordinal) &&
+            viewportMenu.Contains("CreatePointsAlongLine(measurement, item)", StringComparison.Ordinal) &&
+            sections.Contains("Create Count Points Along Line...", StringComparison.Ordinal) &&
+            sections.Contains("CreatePointsAlongLine(measurement, item)", StringComparison.Ordinal),
+            "line measurement context menus should expose Count point generation");
+        AssertTrue(
+            tool.Contains("PointAlongLineService.Generate", StringComparison.Ordinal) &&
+            tool.Contains("CreateUniqueTakeoffItem(", StringComparison.Ordinal) &&
+            tool.Contains("ApplyNewCountSymbolToItemIfNeeded(pointItem, \"point\")", StringComparison.Ordinal) &&
+            tool.Contains("MType = \"point\"", StringComparison.Ordinal) &&
+            tool.Contains("CountSymbol = pointItem.CountSymbol", StringComparison.Ordinal) &&
+            service.Contains("options.SpacingInches * InchesToMeters / scaleMetersPerPt", StringComparison.Ordinal),
+            "Points Along Line should create ordinary Count measurements at scale-based spacing using the current Count symbol default");
     }
 
     private static string ReadPageTakeoffLegendSources() =>

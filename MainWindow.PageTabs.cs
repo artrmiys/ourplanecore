@@ -356,6 +356,8 @@ public partial class MainWindow
             viewportPage.RasterSheet,
             viewportPage.OverlayVisible && !string.IsNullOrWhiteSpace(viewportPage.OverlayPageFolder));
         trace?.Mark("decode");
+        ApplyViewportPageTakeoffVisibilitySnapshot(viewportPage);
+        trace?.Mark("visibility");
         LoadViewportPageAnnotations(viewportPage);
         trace?.Mark("annotations");
         QueueSheetOverlayLoadForPageOpen(viewportPage, restoreView);

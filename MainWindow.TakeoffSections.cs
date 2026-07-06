@@ -90,6 +90,13 @@ public partial class MainWindow
         bool isAreaSection =
             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+        bool isLineSection =
+            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line" &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line";
+        menu.Items.Add(MakeMenuItem(
+            "Create Count Points Along Line...",
+            isLineSection,
+            () => CreatePointsAlongLine(measurement, item)));
         menu.Items.Add(MakeMenuItem(
             "Create Line Grid...",
             isAreaSection,
