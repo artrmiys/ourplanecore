@@ -13,20 +13,32 @@ namespace OurPlaneCore;
 public partial class MainWindow
 {
     private void BtnPointAlongLine_Click(object sender, RoutedEventArgs e) =>
-        CreatePointsAlongSelectedLine();
+        CreatePointsAlongSelectedLines();
 
-    private void CreatePointsAlongSelectedLine()
+    private void CreatePointsAlongSelectedLines()
     {
         IReadOnlyList<Measurement> selectedLines = SelectedLineMeasurementsForPointAlongLine();
-        if (selectedLines.Count != 1)
+        if (selectedLines.Count == 0)
         {
-            TxtStatus.Text = selectedLines.Count == 0
-                ? "Select one Line measurement first."
-                : "Select only one Line measurement before creating Count points along it.";
+            TxtStatus.Text = "Select one or more Line measurements first.";
             return;
         }
 
-        CreatePointsAlongLine(selectedLines[0]);
+        CreatePointsAlongLines(selectedLines, ResolveCommonPointAlongLineSourceItem(selectedLines));
+    }
+
+    private void CreatePointsAlongLineTakeoffItem(TakeoffItem item)
+    {
+        IReadOnlyList<Measurement> lines = item.Measurements
+            .Where(IsPointAlongLineSource)
+            .ToList();
+        if (lines.Count == 0)
+        {
+            TxtStatus.Text = $"{item.Name} has no Line measurements to convert into Count points.";
+            return;
+        }
+
+        CreatePointsAlongLines(lines, item);
     }
 
     private IReadOnlyList<Measurement> SelectedLineMeasurementsForPointAlongLine() =>
@@ -40,6 +52,11 @@ public partial class MainWindow
 
     private void CreatePointsAlongLine(Measurement line, TakeoffItem? sourceItem = null)
     {
+        CreatePointsAlongLines([line], sourceItem);
+    }
+
+    private void CreatePointsAlongLines(IReadOnlyList<Measurement> sourceLines, TakeoffItem? sourceItem = null)
+    {
         if (_currentJob == null)
         {
             MessageBox.Show("Open or create a job first.", "Create Count Points",
@@ -47,18 +64,20 @@ public partial class MainWindow
             return;
         }
 
-        if (!IsPointAlongLineSource(line))
+        var lines = sourceLines
+            .Where(IsPointAlongLineSource)
+            .Distinct()
+            .ToList();
+        if (lines.Count == 0)
         {
-            TxtStatus.Text = "Count points can only be created from a Line measurement.";
+            TxtStatus.Text = "Count points can only be created from Line measurements.";
             return;
         }
 
-        if (sourceItem == null)
-            TryResolveTakeoffItemForMeasurement(line, out sourceItem);
-
-        double defaultSpacing = ResolvePointAlongLineSpacingInches(sourceItem, line);
+        sourceItem ??= ResolveCommonPointAlongLineSourceItem(lines);
+        double defaultSpacing = ResolvePointAlongLineSpacingInches(sourceItem, lines[0]);
         var dialog = new PointAlongLineDialog(
-            BuildPointAlongLineDefaultName(sourceItem, line),
+            BuildPointAlongLineDefaultName(sourceItem, lines),
             defaultSpacing)
         {
             Owner = this,
@@ -66,13 +85,11 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        double fallbackScale = ResolvePointAlongLineFallbackScale(line);
-        PointAlongLineResult result;
+        List<PointAlongLineSourceResult> lineResults;
         try
         {
-            result = PointAlongLineService.Generate(
-                line,
-                fallbackScale,
+            lineResults = GeneratePointAlongLineResults(
+                lines,
                 new PointAlongLineOptions(dialog.SpacingInches, dialog.IncludeEndPoint));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -83,7 +100,7 @@ public partial class MainWindow
             return;
         }
 
-        if (result.Points.Count == 0)
+        if (lineResults.Sum(result => result.Result.Points.Count) == 0)
         {
             TxtStatus.Text = "No Count points were created. Check the line length and spacing.";
             return;
@@ -98,8 +115,7 @@ public partial class MainWindow
         ApplyTakeoffFolderDefaultsToNewItem(pointItem, parentFolder);
         ApplyNewCountSymbolToItemIfNeeded(pointItem, "point");
 
-        double effectiveScale = line.ScaleMetersPerPt > 0 ? line.ScaleMetersPerPt : fallbackScale;
-        List<Measurement> generated = CreatePointAlongLineMeasurements(pointItem, line, result.Points, effectiveScale);
+        List<Measurement> generated = CreatePointAlongLineMeasurements(pointItem, lineResults);
         pointItem.Measurements.AddRange(generated);
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(pointItem);
         OurPlaneCoreJobStore.SaveTakeoffItem(pointItem);
@@ -118,11 +134,47 @@ public partial class MainWindow
         tvi.IsSelected = true;
         ApplyToolSelection("point");
 
-        RefreshPointAlongLineUi(pointItem, line.PageFolder);
+        RefreshPointAlongLineUi(pointItem, generated.Select(measurement => measurement.PageFolder));
         ShowPointAlongLineOnSheet(
-            line,
+            lines,
             generated,
-            BuildPointAlongLineStatus(pointItem, result, dialog.SpacingInches));
+            BuildPointAlongLineStatus(pointItem, lineResults, generated.Count, dialog.SpacingInches));
+    }
+
+    private TakeoffItem? ResolveCommonPointAlongLineSourceItem(IReadOnlyList<Measurement> lines)
+    {
+        TakeoffItem? common = null;
+        foreach (Measurement line in lines)
+        {
+            if (!TryResolveTakeoffItemForMeasurement(line, out TakeoffItem item))
+                return null;
+            if (common == null)
+            {
+                common = item;
+                continue;
+            }
+
+            if (!string.Equals(common.FolderPath, item.FolderPath, StringComparison.OrdinalIgnoreCase))
+                return null;
+        }
+
+        return common;
+    }
+
+    private List<PointAlongLineSourceResult> GeneratePointAlongLineResults(
+        IReadOnlyList<Measurement> lines,
+        PointAlongLineOptions options)
+    {
+        var results = new List<PointAlongLineSourceResult>(lines.Count);
+        foreach (Measurement line in lines)
+        {
+            double fallbackScale = ResolvePointAlongLineFallbackScale(line);
+            PointAlongLineResult result = PointAlongLineService.Generate(line, fallbackScale, options);
+            double effectiveScale = line.ScaleMetersPerPt > 0 ? line.ScaleMetersPerPt : fallbackScale;
+            results.Add(new PointAlongLineSourceResult(line, result, effectiveScale));
+        }
+
+        return results;
     }
 
     private static double ResolvePointAlongLineSpacingInches(TakeoffItem? sourceItem, Measurement line)
@@ -138,8 +190,12 @@ public partial class MainWindow
     {
         if (line.ScaleMetersPerPt > 0)
             return line.ScaleMetersPerPt;
-        if (_currentPage?.ScaleMetersPerPt > 0)
+        if (_currentPage?.ScaleMetersPerPt > 0 &&
+            IsSamePageFolder(_currentPage.FolderPath, line.PageFolder))
+        {
             return _currentPage.ScaleMetersPerPt;
+        }
+
         return _viewport.ScaleMetersPerPt;
     }
 
@@ -152,47 +208,79 @@ public partial class MainWindow
         return _currentJob?.TakeoffsRoot ?? NewTakeoffItemParentFolderForUserCreate();
     }
 
-    private static string BuildPointAlongLineDefaultName(TakeoffItem? sourceItem, Measurement line)
+    private static string BuildPointAlongLineDefaultName(TakeoffItem? sourceItem, IReadOnlyList<Measurement> lines)
     {
-        string baseName = sourceItem == null || string.IsNullOrWhiteSpace(sourceItem.Name)
-            ? string.IsNullOrWhiteSpace(line.Name) ? "Line" : line.Name.Trim()
-            : sourceItem.Name.Trim();
-        return $"{baseName} Count Points";
+        if (sourceItem != null && !string.IsNullOrWhiteSpace(sourceItem.Name))
+            return $"{sourceItem.Name.Trim()} Count Points";
+
+        if (lines.Count == 1 && !string.IsNullOrWhiteSpace(lines[0].Name))
+            return $"{lines[0].Name.Trim()} Count Points";
+
+        return "Line Count Points";
     }
 
     private static List<Measurement> CreatePointAlongLineMeasurements(
         TakeoffItem pointItem,
-        Measurement sourceLine,
-        IReadOnlyList<SKPoint> points,
-        double scaleMetersPerPt)
+        IReadOnlyList<PointAlongLineSourceResult> lineResults)
     {
-        var generated = new List<Measurement>(points.Count);
-        for (int i = 0; i < points.Count; i++)
+        int index = 0;
+        var generated = new List<Measurement>(lineResults.Sum(result => result.Result.Points.Count));
+        foreach (PointAlongLineSourceResult lineResult in lineResults)
         {
-            SKPoint point = points[i];
-            generated.Add(new Measurement
+            foreach (SKPoint point in lineResult.Result.Points)
             {
-                Name = $"P {i + 1}",
-                MType = "point",
-                Points = [new SKPoint(point.X, point.Y)],
-                Color = pointItem.Color,
-                CountSymbol = pointItem.CountSymbol,
-                PageFolder = sourceLine.PageFolder,
-                TakeoffFolder = pointItem.FolderPath,
-                ScaleMetersPerPt = scaleMetersPerPt,
-            });
+                if (HasGeneratedPoint(generated, lineResult.SourceLine.PageFolder, point))
+                    continue;
+
+                generated.Add(new Measurement
+                {
+                    Name = $"P {++index}",
+                    MType = "point",
+                    Points = [new SKPoint(point.X, point.Y)],
+                    Color = pointItem.Color,
+                    CountSymbol = pointItem.CountSymbol,
+                    PageFolder = lineResult.SourceLine.PageFolder,
+                    TakeoffFolder = pointItem.FolderPath,
+                    ScaleMetersPerPt = lineResult.EffectiveScaleMetersPerPt,
+                });
+            }
         }
 
         return generated;
     }
 
-    private void RefreshPointAlongLineUi(TakeoffItem pointItem, string pageFolder)
+    private static bool HasGeneratedPoint(IEnumerable<Measurement> generated, string pageFolder, SKPoint point)
+    {
+        foreach (Measurement measurement in generated)
+        {
+            if (!IsSamePageFolder(measurement.PageFolder, pageFolder))
+                continue;
+            if (measurement.Points.Count == 0)
+                continue;
+
+            SKPoint existing = measurement.Points[0];
+            if (Math.Abs(existing.X - point.X) <= 0.01f &&
+                Math.Abs(existing.Y - point.Y) <= 0.01f)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void RefreshPointAlongLineUi(TakeoffItem pointItem, IEnumerable<string> pageFolders)
     {
         RefreshTreeItem(pointItem);
         using (UsePageMeasurementLookup())
         {
             RefreshTakeoffRowVisualsForItems([pointItem]);
-            RefreshPageTakeoffIndicatorsForFolder(pageFolder);
+            foreach (string pageFolder in pageFolders
+                         .Where(page => !string.IsNullOrWhiteSpace(page))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                RefreshPageTakeoffIndicatorsForFolder(pageFolder);
+            }
             ApplyTakeoffPageHighlights();
             RefreshSheetLegend();
         }
@@ -202,7 +290,7 @@ public partial class MainWindow
     }
 
     private void ShowPointAlongLineOnSheet(
-        Measurement sourceLine,
+        IReadOnlyList<Measurement> sourceLines,
         IReadOnlyList<Measurement> generated,
         string status)
     {
@@ -214,9 +302,10 @@ public partial class MainWindow
             TxtStatus.Text = status;
         }
 
-        if (!string.IsNullOrWhiteSpace(sourceLine.PageFolder) &&
-            (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, sourceLine.PageFolder)) &&
-            OurPlaneCoreJobStore.TryReadPage(sourceLine.PageFolder) is { } page)
+        string targetPageFolder = ResolvePointAlongLineDisplayPage(sourceLines, generated);
+        if (!string.IsNullOrWhiteSpace(targetPageFolder) &&
+            (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, targetPageFolder)) &&
+            OurPlaneCoreJobStore.TryReadPage(targetPageFolder) is { } page)
         {
             OpenPageInActiveTab(page);
             Dispatcher.InvokeAsync(RefreshViewportSelection);
@@ -226,12 +315,36 @@ public partial class MainWindow
         RefreshViewportSelection();
     }
 
+    private string ResolvePointAlongLineDisplayPage(
+        IReadOnlyList<Measurement> sourceLines,
+        IReadOnlyList<Measurement> generated)
+    {
+        if (_currentPage != null &&
+            generated.Any(measurement => IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath)))
+        {
+            return _currentPage.FolderPath;
+        }
+
+        return generated.FirstOrDefault()?.PageFolder ??
+               sourceLines.FirstOrDefault()?.PageFolder ??
+               "";
+    }
+
     private string BuildPointAlongLineStatus(
         TakeoffItem item,
-        PointAlongLineResult result,
+        IReadOnlyList<PointAlongLineSourceResult> lineResults,
+        int pointCount,
         double spacingInches)
     {
-        string total = Units.FormatLength(result.TotalLengthMeters, _viewport.UnitMode);
-        return $"Count points created: {item.Name}, {result.Points.Count} @ {spacingInches:0.##} in along {total}.";
+        int lineCount = lineResults.Count;
+        double totalLengthMeters = lineResults.Sum(result => result.Result.TotalLengthMeters);
+        string total = Units.FormatLength(totalLengthMeters, _viewport.UnitMode);
+        string source = lineCount == 1 ? "1 line" : $"{lineCount} lines";
+        return $"Count points created: {item.Name}, {pointCount} @ {spacingInches:0.##} in from {source}, {total}.";
     }
+
+    private sealed record PointAlongLineSourceResult(
+        Measurement SourceLine,
+        PointAlongLineResult Result,
+        double EffectiveScaleMetersPerPt);
 }

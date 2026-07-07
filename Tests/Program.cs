@@ -120,6 +120,7 @@ var tests = new List<(string Name, Action Run)>
     ("area line grid holes split segments", AreaLineGridServiceTests.HolesSplitGridSegments),
     ("point along line creates endpoint and step points", PointAlongLineServiceTests.StraightLineCreatesEndpointAndStepPoints),
     ("point along line carries spacing across vertices", PointAlongLineServiceTests.PolylineCarriesSpacingAcrossVertices),
+    ("point along line many lines avoid duplicate shared endpoint", PointAlongLineServiceTests.ManyLinesAvoidDuplicateSharedEndpoint),
     ("point along line rejects missing scale", PointAlongLineServiceTests.MissingScaleIsRejected),
     ("takeoff item normalizes count type totals", TakeoffItemNormalizesCountTotals),
     ("measurement merge moves segment into target takeoff", MeasurementMergeMovesSegmentIntoTargetTakeoff),

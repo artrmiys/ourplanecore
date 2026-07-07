@@ -17,6 +17,7 @@ public partial class MainWindow
         int selectedCount = TakeoffSelectionCount(tvi);
         bool singleSelection = selectedCount <= 1;
         bool isArea = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        bool isLine = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line";
         int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
         string parentFolder = Path.GetDirectoryName(item.FolderPath) ?? "";
 
@@ -40,6 +41,13 @@ public partial class MainWindow
                     () => EditTakeoffItemProperties(tvi, item)),
                 MakeMenuItem("Set / Reset Joist Direction", singleSelection, () => SetJoistDirectionFromSelectedLine(tvi, item)),
                 MakeMenuItem("Set Direction for All Areas", singleSelection, () => SetJoistDirectionForAllAreasFromSelectedLine(tvi, item))));
+        }
+        if (isLine)
+        {
+            menu.Items.Add(MakeMenuItem(
+                "Create Count Points Along Lines...",
+                singleSelection,
+                () => CreatePointsAlongLineTakeoffItem(item)));
         }
         menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
         menu.Items.Add(BuildTakeoff3DMenu(tvi));

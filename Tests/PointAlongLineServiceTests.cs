@@ -36,6 +36,23 @@ internal static class PointAlongLineServiceTests
         AssertPoint(result.Points[2], 4, 2, "end");
     }
 
+    public static void ManyLinesAvoidDuplicateSharedEndpoint()
+    {
+        PointAlongLineResult result = PointAlongLineService.GenerateMany(
+            [
+                Line([new SKPoint(0, 0), new SKPoint(4, 0)]),
+                Line([new SKPoint(4, 0), new SKPoint(8, 0)]),
+            ],
+            fallbackScaleMetersPerPt: 0,
+            new PointAlongLineOptions(SpacingInches: 24));
+
+        AssertEqual(5, result.Points.Count, "two connected 4 ft lines at 24 in spacing should not double-count the shared endpoint");
+        AssertPoint(result.Points[0], 0, 0, "first");
+        AssertPoint(result.Points[2], 4, 0, "shared endpoint");
+        AssertPoint(result.Points[^1], 8, 0, "last");
+        AssertClose(8 * MetersPerFoot, result.TotalLengthMeters, "total multi-line length");
+    }
+
     public static void MissingScaleIsRejected()
     {
         Measurement line = new()

@@ -143,10 +143,19 @@ public partial class MainWindow
         }
         if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line")
         {
+            IReadOnlyList<Measurement> selectedLineSources = _viewport.GetSelectedMeasurements()
+                .Where(IsPointAlongLineSource)
+                .ToList();
+            IReadOnlyList<Measurement> pointSources =
+                selectedLineSources.Count > 1 && selectedLineSources.Contains(measurement)
+                    ? selectedLineSources
+                    : [measurement];
             menu.Items.Add(MakeMenuItem(
-                "Create Count Points Along Line...",
+                pointSources.Count == 1
+                    ? "Create Count Points Along Line..."
+                    : $"Create Count Points Along {pointSources.Count} Lines...",
                 hasItem && _currentJob != null,
-                () => CreatePointsAlongLine(measurement, item)));
+                () => CreatePointsAlongLines(pointSources, pointSources.Count == 1 ? item : null)));
         }
         menu.Items.Add(MakeMenuItem(
             $"Rename {entryTitle}",

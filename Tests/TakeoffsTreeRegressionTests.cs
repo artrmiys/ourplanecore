@@ -1656,6 +1656,7 @@ internal static class TakeoffsTreeRegressionTests
         string sideStrips = ReadRepoFile("MainWindow.SideStrips.cs");
         string viewportMenu = ReadRepoFile("MainWindow.ViewportContextMenu.cs");
         string sections = ReadRepoFile("MainWindow.TakeoffSections.cs");
+        string takeoffsMenu = ReadRepoFile("MainWindow.TakeoffsMenus.cs");
         string tool = ReadRepoFile("MainWindow.PointAlongLine.cs");
         string service = ReadRepoFile("Models/PointAlongLineService.cs");
 
@@ -1663,23 +1664,31 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("BtnPointAlongLine", StringComparison.Ordinal) &&
             xaml.Contains("BtnPointAlongLine_Click", StringComparison.Ordinal) &&
             commandPalette.Contains("tool.pointAlongLine", StringComparison.Ordinal) &&
-            commandPalette.Contains("CreatePointsAlongSelectedLine()", StringComparison.Ordinal) &&
+            commandPalette.Contains("selectedLineMeasurementCount > 0", StringComparison.Ordinal) &&
+            commandPalette.Contains("CreatePointsAlongSelectedLines()", StringComparison.Ordinal) &&
             sideStrips.Contains("[\"tool.pointAlongLine\"] = \"P/L\"", StringComparison.Ordinal),
             "Points Along Line should be reachable from toolbar, command palette, and configurable side strips");
         AssertTrue(
             viewportMenu.Contains("Create Count Points Along Line...", StringComparison.Ordinal) &&
-            viewportMenu.Contains("CreatePointsAlongLine(measurement, item)", StringComparison.Ordinal) &&
+            viewportMenu.Contains("selectedLineSources.Count > 1", StringComparison.Ordinal) &&
+            viewportMenu.Contains("CreatePointsAlongLines(pointSources", StringComparison.Ordinal) &&
             sections.Contains("Create Count Points Along Line...", StringComparison.Ordinal) &&
-            sections.Contains("CreatePointsAlongLine(measurement, item)", StringComparison.Ordinal),
-            "line measurement context menus should expose Count point generation");
+            sections.Contains("lineSectionMeasurements", StringComparison.Ordinal) &&
+            sections.Contains("CreatePointsAlongLines(lineSectionMeasurements", StringComparison.Ordinal) &&
+            takeoffsMenu.Contains("Create Count Points Along Lines...", StringComparison.Ordinal) &&
+            takeoffsMenu.Contains("CreatePointsAlongLineTakeoffItem(item)", StringComparison.Ordinal),
+            "line measurement, line section, and line item context menus should expose Count point generation for existing line(s)");
         AssertTrue(
+            tool.Contains("private void CreatePointsAlongLines(IReadOnlyList<Measurement> sourceLines", StringComparison.Ordinal) &&
+            tool.Contains(".Distinct()", StringComparison.Ordinal) &&
             tool.Contains("PointAlongLineService.Generate", StringComparison.Ordinal) &&
             tool.Contains("CreateUniqueTakeoffItem(", StringComparison.Ordinal) &&
             tool.Contains("ApplyNewCountSymbolToItemIfNeeded(pointItem, \"point\")", StringComparison.Ordinal) &&
             tool.Contains("MType = \"point\"", StringComparison.Ordinal) &&
             tool.Contains("CountSymbol = pointItem.CountSymbol", StringComparison.Ordinal) &&
+            service.Contains("public static PointAlongLineResult GenerateMany", StringComparison.Ordinal) &&
             service.Contains("options.SpacingInches * InchesToMeters / scaleMetersPerPt", StringComparison.Ordinal),
-            "Points Along Line should create ordinary Count measurements at scale-based spacing using the current Count symbol default");
+            "Points Along Line should create ordinary Count measurements from one or many existing Lines at scale-based spacing using the current Count symbol default");
     }
 
     private static string ReadPageTakeoffLegendSources() =>

@@ -51,6 +51,25 @@ public static class PointAlongLineService
         return new PointAlongLineResult(points, totalLengthPt * scaleMetersPerPt);
     }
 
+    public static PointAlongLineResult GenerateMany(
+        IEnumerable<Measurement> lines,
+        double fallbackScaleMetersPerPt,
+        PointAlongLineOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        var points = new List<SKPoint>();
+        double totalLengthMeters = 0;
+        foreach (Measurement line in lines)
+        {
+            PointAlongLineResult result = Generate(line, fallbackScaleMetersPerPt, options);
+            totalLengthMeters += result.TotalLengthMeters;
+            foreach (SKPoint point in result.Points)
+                AddDistinct(points, point);
+        }
+
+        return new PointAlongLineResult(points, totalLengthMeters);
+    }
+
     private static List<LineSegment> BuildSegments(IReadOnlyList<SKPoint> points)
     {
         var segments = new List<LineSegment>();

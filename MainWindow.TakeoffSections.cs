@@ -60,7 +60,8 @@ public partial class MainWindow
         TakeoffItem item = anchor.Item;
         Measurement measurement = anchor.Measurement;
         string title = MeasurementEntryTitle(item);
-        int selectedCount = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true).Count;
+        IReadOnlyList<TakeoffMeasurementNode> selectedNodes = SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true);
+        int selectedCount = selectedNodes.Count;
         bool singleSelection = selectedCount <= 1;
         var menu = new ContextMenu();
         menu.Items.Add(MakeMenuItem($"{title} Properties...", singleSelection, () => EditSectionProperties(item, measurement)));
@@ -90,13 +91,16 @@ public partial class MainWindow
         bool isAreaSection =
             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
             OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
-        bool isLineSection =
-            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line" &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line";
+        IReadOnlyList<Measurement> lineSectionMeasurements = selectedNodes
+            .Select(node => node.Measurement)
+            .Where(IsPointAlongLineSource)
+            .ToList();
         menu.Items.Add(MakeMenuItem(
-            "Create Count Points Along Line...",
-            isLineSection,
-            () => CreatePointsAlongLine(measurement, item)));
+            lineSectionMeasurements.Count <= 1
+                ? "Create Count Points Along Line..."
+                : $"Create Count Points Along {lineSectionMeasurements.Count} Lines...",
+            lineSectionMeasurements.Count > 0,
+            () => CreatePointsAlongLines(lineSectionMeasurements, item)));
         menu.Items.Add(MakeMenuItem(
             "Create Line Grid...",
             isAreaSection,

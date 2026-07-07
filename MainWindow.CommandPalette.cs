@@ -94,7 +94,7 @@ public partial class MainWindow
         Add("tool.note", "Note Tool", "Tools", Shortcut("n"), "Write a text note on the active sheet.", hasPage, "Select a page first.");
         Add("tool.count", "Count Tool", "Tools", Shortcut("p"), "Record count marks into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.similar", "Similar Count", "Tools", "", "Find look-alike symbols on the active sheet, name the result, and add reviewed markers as a Count item.", hasJob && hasPage, "Open a job and select a page first.");
-        Add("tool.pointAlongLine", "Points Along Line", "Tools", "", "Create Count points along the selected Line measurement at a spacing.", hasJob && hasPage && selectedLineMeasurementCount == 1, selectedLineMeasurementCount == 0 ? "Select one Line measurement first." : "Select only one Line measurement first.");
+        Add("tool.pointAlongLine", "Points Along Line(s)", "Tools", "", "Create Count points along the selected Line measurement(s) at a spacing.", hasJob && hasPage && selectedLineMeasurementCount > 0, "Select one or more Line measurements first.");
         Add("tool.line", "Line Tool", "Tools", Shortcut("l"), "Record line measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.area", "Area Tool", "Tools", Shortcut("a"), "Record area measurements into a takeoff item.", hasJob && hasPage, "Open a job and select a page first.");
         Add("tool.joistArea", "J Area Tool", "Tools", Shortcut("j"), "Create a joist area takeoff and record area measurements.", hasJob && hasPage, "Open a job and select a page first.");
@@ -206,7 +206,7 @@ public partial class MainWindow
             case "tool.note": SetTool("note"); break;
             case "tool.count": SetTool("point", forceNewTakeoff: true); break;
             case "tool.similar": BtnSimilarCount_Click(this, new RoutedEventArgs()); break;
-            case "tool.pointAlongLine": CreatePointsAlongSelectedLine(); break;
+            case "tool.pointAlongLine": CreatePointsAlongSelectedLines(); break;
             case "tool.line": SetTool("line", forceNewTakeoff: true); break;
             case "tool.area": SetTool("area", forceNewTakeoff: true); break;
             case "tool.joistArea": SetTool("joistarea", forceNewTakeoff: true); break;

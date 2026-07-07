@@ -6,13 +6,13 @@ namespace OurPlaneCore.Dialogs;
 
 public sealed class PointAlongLineDialog : Window
 {
-    public string TakeoffName { get; private set; } = "Count Points";
+    public string TakeoffName { get; private set; } = "Line Count Points";
     public double SpacingInches { get; private set; } = 16;
     public bool IncludeEndPoint { get; private set; } = true;
 
     public PointAlongLineDialog(string defaultTakeoffName, double defaultSpacingInches)
     {
-        Title = "Create Count Points Along Line";
+        Title = "Create Count Points Along Line(s)";
         Width = 340;
         Height = 210;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -24,7 +24,7 @@ public sealed class PointAlongLineDialog : Window
         panel.Children.Add(new TextBlock { Text = "Count takeoff name" });
         var nameBox = new TextBox
         {
-            Text = string.IsNullOrWhiteSpace(defaultTakeoffName) ? "Count Points" : defaultTakeoffName.Trim(),
+            Text = string.IsNullOrWhiteSpace(defaultTakeoffName) ? "Line Count Points" : defaultTakeoffName.Trim(),
             Margin = new Thickness(0, 4, 0, 10),
         };
         panel.Children.Add(nameBox);
@@ -62,7 +62,7 @@ public sealed class PointAlongLineDialog : Window
             if (!TryReadSpacing(spacingBox, out double spacing))
                 return;
 
-            TakeoffName = string.IsNullOrWhiteSpace(nameBox.Text) ? "Count Points" : nameBox.Text.Trim();
+            TakeoffName = string.IsNullOrWhiteSpace(nameBox.Text) ? "Line Count Points" : nameBox.Text.Trim();
             SpacingInches = spacing;
             IncludeEndPoint = includeEndBox.IsChecked == true;
             DialogResult = true;

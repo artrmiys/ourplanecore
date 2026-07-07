@@ -655,7 +655,7 @@
             <Button x:Name="BtnPointAlongLine"
                     Content="P Line"
                     Click="BtnPointAlongLine_Click"
-                    ToolTip="Create Count points along the selected Line with a spacing"
+                    ToolTip="Create Count points along selected Line measurement(s) with a spacing"
                     Style="{StaticResource ToolBtn}"
                     MinWidth="44"
                     Padding="4,2"/>
