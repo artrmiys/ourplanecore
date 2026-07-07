@@ -1503,14 +1503,22 @@ internal static class TakeoffsTreeRegressionTests
         string outputSettings = ReadRepoFile("MainWindow.OutputSettings.cs");
         string outputClick = SliceMethod(outputSettings, "private void OutputSetting_Click(");
         AssertTrue(
+            outputClick.Contains("SyncOutputLabelGroupToggle(sender)", StringComparison.Ordinal) &&
             !outputClick.Contains("SyncOutputLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal),
-            "PDF Output individual label toggles must not auto-enable the All label toggle");
+            "PDF Output label toggles must use group behavior instead of making All a render gate");
         AssertTrue(
             outputSettings.Contains("_settings.PdfExportShowLineLabels = _chkOutputPdfLineLabels?.IsChecked == true", StringComparison.Ordinal) &&
             outputSettings.Contains("_settings.PdfExportShowAreaLabels = _chkOutputPdfAreaLabels?.IsChecked == true", StringComparison.Ordinal) &&
             outputSettings.Contains("_settings.PdfExportShowJoistLabels = _chkOutputPdfJoistLabels?.IsChecked == true", StringComparison.Ordinal) &&
             outputSettings.Contains("_settings.PdfExportShowCountLabels = _chkOutputPdfCountLabels?.IsChecked == true", StringComparison.Ordinal),
             "Line, Area, Joist, and Count output toggles must save independently from the All label toggle");
+        AssertTrue(
+            outputSettings.Contains("private void SyncOutputLabelGroupToggle(object sender)", StringComparison.Ordinal) &&
+            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfLabels)", StringComparison.Ordinal) &&
+            outputSettings.Contains("_chkOutputPdfLineLabels.IsChecked = showAll", StringComparison.Ordinal) &&
+            outputSettings.Contains("_chkOutputPdfLabels.IsChecked =", StringComparison.Ordinal) &&
+            outputSettings.Contains("NormalizeOutputLabelGroupSettings()", StringComparison.Ordinal),
+            "Output All must check every category, and any unchecked category must turn All off");
     }
 
     public static void ViewportTakeoffPropertiesAreTypeAware()
@@ -1548,15 +1556,23 @@ internal static class TakeoffsTreeRegressionTests
         string detachedApply = SliceMethod(detachedWindow, "private void ApplyViewportDisplaySettings(");
 
         AssertTrue(
+            displayClick.Contains("SyncDisplayLabelGroupToggle(sender)", StringComparison.Ordinal) &&
             !displayClick.Contains("SyncMeasurementLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal) &&
             displayClick.Contains("RefreshDetachedSheetDisplaySettings()", StringComparison.Ordinal),
-            "Display label toggles must stay independent from All and still refresh detached sheets");
+            "Display label toggles must use group behavior without making All a render gate and still refresh detached sheets");
         AssertTrue(
             displaySettings.Contains("_settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true", StringComparison.Ordinal) &&
             displaySettings.Contains("_settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true", StringComparison.Ordinal) &&
             displaySettings.Contains("_settings.ShowJoistLabels = ChkDisplayJoistLabels.IsChecked == true", StringComparison.Ordinal) &&
             displaySettings.Contains("_settings.ShowCountLabels = ChkDisplayCountLabels.IsChecked == true", StringComparison.Ordinal),
             "Line, Area, Joist, and Count display toggles must save independently from the All label toggle");
+        AssertTrue(
+            displaySettings.Contains("private void SyncDisplayLabelGroupToggle(object sender)", StringComparison.Ordinal) &&
+            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayMeasurementLabels)", StringComparison.Ordinal) &&
+            displaySettings.Contains("ChkDisplayLineLabels.IsChecked = showAll", StringComparison.Ordinal) &&
+            displaySettings.Contains("ChkDisplayMeasurementLabels.IsChecked =", StringComparison.Ordinal) &&
+            displaySettings.Contains("NormalizeDisplayLabelGroupSettings()", StringComparison.Ordinal),
+            "Display All must check every category, and any unchecked category must turn All off");
         AssertTrue(
             detachedRefresh.Contains("ApplyViewportDisplaySettings(settings, unitMode)", StringComparison.Ordinal) &&
             detachedRefresh.Contains("_viewport.InvalidateVisual()", StringComparison.Ordinal),

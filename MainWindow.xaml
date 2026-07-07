@@ -448,7 +448,7 @@
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                             <StackPanel Orientation="Horizontal" Margin="0,1">
                                 <CheckBox x:Name="ChkDisplayMeasurementLabels" Content="All" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
-                                          ToolTip="Master toggle for all measurement value labels"/>
+                                          ToolTip="Show every measurement label category"/>
                                 <CheckBox x:Name="ChkDisplayLineLabels" Content="Line" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"
                                           ToolTip="Show length label on each line measurement"/>
                                 <CheckBox x:Name="ChkDisplayAreaLabels" Content="Area" Click="DisplaySetting_Click" Style="{StaticResource TopCommandCheckBox}"

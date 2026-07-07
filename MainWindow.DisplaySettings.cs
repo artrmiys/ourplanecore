@@ -90,11 +90,13 @@ public partial class MainWindow
         if (_isApplyingSettings)
             return;
 
+        SyncDisplayLabelGroupToggle(sender);
         _settings.ShowMeasurementLabels = ChkDisplayMeasurementLabels.IsChecked == true;
         _settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true;
         _settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true;
         _settings.ShowJoistLabels = ChkDisplayJoistLabels.IsChecked == true;
         _settings.ShowCountLabels = ChkDisplayCountLabels.IsChecked == true;
+        NormalizeDisplayLabelGroupSettings();
         _settings.ShowSheetLegend = ChkDisplayLegend.IsChecked == true;
         _settings.ScaleSheetOverlaysWithPage = ChkDisplayLegendScaleWithPage.IsChecked == true;
         _settings.ScaleMeasurementLabelsWithPage = ChkDisplayLabelsScaleWithPage.IsChecked == true;
@@ -113,6 +115,61 @@ public partial class MainWindow
         TxtStatus.Text = "Display settings saved.";
     }
 
+    private void SyncDisplayLabelGroupToggle(object sender)
+    {
+        if (!ReferenceEquals(sender, ChkDisplayMeasurementLabels) && !IsDisplayLabelTypeToggle(sender))
+            return;
+
+        bool wasApplying = _isApplyingSettings;
+        _isApplyingSettings = true;
+        try
+        {
+            if (ReferenceEquals(sender, ChkDisplayMeasurementLabels))
+            {
+                bool showAll = ChkDisplayMeasurementLabels.IsChecked == true;
+                ChkDisplayLineLabels.IsChecked = showAll;
+                ChkDisplayAreaLabels.IsChecked = showAll;
+                ChkDisplayJoistLabels.IsChecked = showAll;
+                ChkDisplayCountLabels.IsChecked = showAll;
+                return;
+            }
+
+            ChkDisplayMeasurementLabels.IsChecked =
+                ChkDisplayLineLabels.IsChecked == true &&
+                ChkDisplayAreaLabels.IsChecked == true &&
+                ChkDisplayJoistLabels.IsChecked == true &&
+                ChkDisplayCountLabels.IsChecked == true;
+        }
+        finally
+        {
+            _isApplyingSettings = wasApplying;
+        }
+    }
+
+    private bool IsDisplayLabelTypeToggle(object sender) =>
+        ReferenceEquals(sender, ChkDisplayLineLabels) ||
+        ReferenceEquals(sender, ChkDisplayAreaLabels) ||
+        ReferenceEquals(sender, ChkDisplayJoistLabels) ||
+        ReferenceEquals(sender, ChkDisplayCountLabels);
+
+    private void NormalizeDisplayLabelGroupSettings()
+    {
+        if (_settings.ShowMeasurementLabels)
+        {
+            _settings.ShowLineLabels = true;
+            _settings.ShowAreaLabels = true;
+            _settings.ShowJoistLabels = true;
+            _settings.ShowCountLabels = true;
+            return;
+        }
+
+        _settings.ShowMeasurementLabels =
+            _settings.ShowLineLabels &&
+            _settings.ShowAreaLabels &&
+            _settings.ShowJoistLabels &&
+            _settings.ShowCountLabels;
+    }
+
     private void RefreshDetachedSheetDisplaySettings()
     {
         if (_currentJob == null || _detachedSheetWindows.Count == 0)
@@ -128,6 +185,7 @@ public partial class MainWindow
     private void ApplyDisplaySettingsToViewport()
     {
         AppSettingsStore.NormalizeOutputSettings(_settings);
+        NormalizeDisplayLabelGroupSettings();
         ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
         PdfLayerRenderService.PdfLayersEnabled = _settings.PdfLayersEnabled;
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
@@ -165,6 +223,7 @@ public partial class MainWindow
         _isApplyingSettings = true;
         try
         {
+            NormalizeDisplayLabelGroupSettings();
             ChkDisplayMeasurementLabels.IsChecked = _settings.ShowMeasurementLabels;
             ChkDisplayLineLabels.IsChecked = _settings.ShowLineLabels;
             ChkDisplayAreaLabels.IsChecked = _settings.ShowAreaLabels;

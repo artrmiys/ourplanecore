@@ -66,7 +66,7 @@ public partial class MainWindow
         _chkOutputPdfMeasurements = OutputCheckBox("Meas", "Default: include measurements in PDF export.");
         _chkOutputPdfMarkups = OutputCheckBox("Markups", "Default: include markups in PDF export.");
         _chkOutputPdfLegend = OutputCheckBox("Legend", "Default: include the legend overlay in PDF export.");
-        _chkOutputPdfLabels = OutputCheckBox("All", "Master toggle for all exported measurement value labels.");
+        _chkOutputPdfLabels = OutputCheckBox("All", "Show every exported measurement label category.");
         _chkOutputPdfLineLabels = OutputCheckBox("Line", "Show exported line labels.");
         _chkOutputPdfAreaLabels = OutputCheckBox("Area", "Show exported area labels.");
         _chkOutputPdfJoistLabels = OutputCheckBox("Joist", "Show exported joist segment labels (separate from the Area label).");
@@ -304,6 +304,7 @@ public partial class MainWindow
         if (_isApplyingSettings)
             return;
 
+        SyncOutputLabelGroupToggle(sender);
         _settings.PdfExportIncludeMeasurements = _chkOutputPdfMeasurements?.IsChecked == true;
         _settings.PdfExportIncludeAnnotations = _chkOutputPdfMarkups?.IsChecked == true;
         _settings.PdfExportShowSheetLegend = _chkOutputPdfLegend?.IsChecked == true;
@@ -312,9 +313,74 @@ public partial class MainWindow
         _settings.PdfExportShowAreaLabels = _chkOutputPdfAreaLabels?.IsChecked == true;
         _settings.PdfExportShowJoistLabels = _chkOutputPdfJoistLabels?.IsChecked == true;
         _settings.PdfExportShowCountLabels = _chkOutputPdfCountLabels?.IsChecked == true;
+        NormalizeOutputLabelGroupSettings();
 
         ApplyOutputSettings();
         TxtStatus.Text = "Output settings saved.";
+    }
+
+    private void SyncOutputLabelGroupToggle(object sender)
+    {
+        if (_chkOutputPdfLabels == null ||
+            _chkOutputPdfLineLabels == null ||
+            _chkOutputPdfAreaLabels == null ||
+            _chkOutputPdfJoistLabels == null ||
+            _chkOutputPdfCountLabels == null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(sender, _chkOutputPdfLabels) && !IsOutputLabelTypeToggle(sender))
+            return;
+
+        bool wasApplying = _isApplyingSettings;
+        _isApplyingSettings = true;
+        try
+        {
+            if (ReferenceEquals(sender, _chkOutputPdfLabels))
+            {
+                bool showAll = _chkOutputPdfLabels.IsChecked == true;
+                _chkOutputPdfLineLabels.IsChecked = showAll;
+                _chkOutputPdfAreaLabels.IsChecked = showAll;
+                _chkOutputPdfJoistLabels.IsChecked = showAll;
+                _chkOutputPdfCountLabels.IsChecked = showAll;
+                return;
+            }
+
+            _chkOutputPdfLabels.IsChecked =
+                _chkOutputPdfLineLabels.IsChecked == true &&
+                _chkOutputPdfAreaLabels.IsChecked == true &&
+                _chkOutputPdfJoistLabels.IsChecked == true &&
+                _chkOutputPdfCountLabels.IsChecked == true;
+        }
+        finally
+        {
+            _isApplyingSettings = wasApplying;
+        }
+    }
+
+    private bool IsOutputLabelTypeToggle(object sender) =>
+        ReferenceEquals(sender, _chkOutputPdfLineLabels) ||
+        ReferenceEquals(sender, _chkOutputPdfAreaLabels) ||
+        ReferenceEquals(sender, _chkOutputPdfJoistLabels) ||
+        ReferenceEquals(sender, _chkOutputPdfCountLabels);
+
+    private void NormalizeOutputLabelGroupSettings()
+    {
+        if (_settings.PdfExportShowMeasurementLabels)
+        {
+            _settings.PdfExportShowLineLabels = true;
+            _settings.PdfExportShowAreaLabels = true;
+            _settings.PdfExportShowJoistLabels = true;
+            _settings.PdfExportShowCountLabels = true;
+            return;
+        }
+
+        _settings.PdfExportShowMeasurementLabels =
+            _settings.PdfExportShowLineLabels &&
+            _settings.PdfExportShowAreaLabels &&
+            _settings.PdfExportShowJoistLabels &&
+            _settings.PdfExportShowCountLabels;
     }
 
     private void OutputScaleBox_KeyDown(object sender, KeyEventArgs e)
@@ -394,6 +460,7 @@ public partial class MainWindow
     private void ApplyOutputSettings()
     {
         AppSettingsStore.NormalizeOutputSettings(_settings);
+        NormalizeOutputLabelGroupSettings();
         SyncOutputSettingsControls();
         SaveAppSettings();
     }
@@ -408,6 +475,7 @@ public partial class MainWindow
         try
         {
             AppSettingsStore.NormalizeOutputSettings(_settings);
+            NormalizeOutputLabelGroupSettings();
 
             _chkOutputPdfMeasurements.IsChecked = _settings.PdfExportIncludeMeasurements;
             _chkOutputPdfMarkups!.IsChecked = _settings.PdfExportIncludeAnnotations;
