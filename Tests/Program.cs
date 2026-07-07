@@ -32,6 +32,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
+    ("pdf export label categories work without all", PdfExportLabelCategoriesWorkWithoutAll),
     ("pdf export joist summary ignores area label toggle", PdfExportJoistSummaryIgnoresAreaLabelToggle),
     ("pdf export writes selected sheets", PdfExportWritesSelectedSheets),
     ("pdf export writes measurement lines", PdfExportWritesMeasurementLines),
@@ -208,7 +209,7 @@ var tests = new List<(string Name, Action Run)>
     ("transform scale slider label is wired", TakeoffsTreeRegressionTests.TransformScaleSliderLabelIsWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
     ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
-    ("output label toggles auto enable master", TakeoffsTreeRegressionTests.OutputLabelTogglesAutoEnableMaster),
+    ("output label toggles support independent categories", TakeoffsTreeRegressionTests.OutputLabelTogglesSupportIndependentCategories),
     ("viewport takeoff properties are type aware", TakeoffsTreeRegressionTests.ViewportTakeoffPropertiesAreTypeAware),
     ("display label toggles refresh detached sheets", TakeoffsTreeRegressionTests.DisplayLabelTogglesRefreshDetachedSheets),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
@@ -958,9 +959,9 @@ static void PdfExportJoistSummaryIgnoresAreaLabelToggle()
         BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new MissingMethodException("PdfExporter.ShouldExportJoistSummaryLabel");
 
-    AssertTrue(AllowsJoistSummaryLabel(showAll: true, showArea: false, showJoist: true), "joist summary should not require the Area output label toggle");
-    AssertFalse(AllowsJoistSummaryLabel(showAll: false, showArea: true, showJoist: true), "joist summary should still obey the All output label toggle");
-    AssertFalse(AllowsJoistSummaryLabel(showAll: true, showArea: true, showJoist: false), "joist summary should still obey the Joist output label toggle");
+    AssertTrue(AllowsJoistSummaryLabel(showAll: false, showArea: false, showJoist: true), "joist summary should work from the Joist output label toggle without requiring All or Area");
+    AssertTrue(AllowsJoistSummaryLabel(showAll: true, showArea: false, showJoist: false), "joist summary should still be included when the All output label toggle is on");
+    AssertFalse(AllowsJoistSummaryLabel(showAll: false, showArea: true, showJoist: false), "joist summary should not be included by Area alone");
 
     bool AllowsJoistSummaryLabel(bool showAll, bool showArea, bool showJoist)
     {
@@ -984,6 +985,47 @@ static void PdfExportJoistSummaryIgnoresAreaLabelToggle()
         object? result = method.Invoke(null, [options]);
         return result is bool value && value;
     }
+}
+
+static void PdfExportLabelCategoriesWorkWithoutAll()
+{
+    MethodInfo method = typeof(PdfExporter).GetMethod(
+        "ShouldExportMeasurementLabel",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfExporter.ShouldExportMeasurementLabel");
+
+    var lineAreaOnly = new PdfExportOptions(
+        IncludeMeasurements: true,
+        IncludeAnnotations: false,
+        IncludeLegend: false,
+        UnitMode: UnitMode.Imperial,
+        LegendAnchor: "TopLeft",
+        LegendScale: 1,
+        HeaderScale: 1,
+        ShowMeasurementLabels: false,
+        ShowLineLabels: true,
+        ShowAreaLabels: true,
+        ShowCountLabels: false,
+        MeasurementStrokeScale: 1,
+        PointSizeScale: 1,
+        MeasurementLabelScale: 1,
+        ShowJoistLabels: false);
+    AssertTrue(Allows("line", lineAreaOnly), "line labels should export when Line is on and All is off");
+    AssertTrue(Allows("area", lineAreaOnly), "area labels should export when Area is on and All is off");
+    AssertFalse(Allows("point", lineAreaOnly), "count labels should stay hidden when Count and All are off");
+
+    var allOnly = lineAreaOnly with
+    {
+        ShowMeasurementLabels = true,
+        ShowLineLabels = false,
+        ShowAreaLabels = false
+    };
+    AssertTrue(Allows("line", allOnly), "All should include line labels");
+    AssertTrue(Allows("area", allOnly), "All should include area labels");
+    AssertTrue(Allows("point", allOnly), "All should include count labels");
+
+    bool Allows(string measurementType, PdfExportOptions options) =>
+        (bool)(method.Invoke(null, [measurementType, options]) ?? false);
 }
 
 static void PdfExportWritesSelectedSheets()

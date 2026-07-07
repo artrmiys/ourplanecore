@@ -304,7 +304,6 @@ public partial class MainWindow
         if (_isApplyingSettings)
             return;
 
-        SyncOutputLabelMasterForIndividualToggle(sender);
         _settings.PdfExportIncludeMeasurements = _chkOutputPdfMeasurements?.IsChecked == true;
         _settings.PdfExportIncludeAnnotations = _chkOutputPdfMarkups?.IsChecked == true;
         _settings.PdfExportShowSheetLegend = _chkOutputPdfLegend?.IsChecked == true;
@@ -317,21 +316,6 @@ public partial class MainWindow
         ApplyOutputSettings();
         TxtStatus.Text = "Output settings saved.";
     }
-
-    private void SyncOutputLabelMasterForIndividualToggle(object sender)
-    {
-        if (_chkOutputPdfLabels == null || ReferenceEquals(sender, _chkOutputPdfLabels))
-            return;
-
-        if (sender is CheckBox { IsChecked: true } && IsIndividualOutputLabelToggle(sender))
-            _chkOutputPdfLabels.IsChecked = true;
-    }
-
-    private bool IsIndividualOutputLabelToggle(object sender) =>
-        ReferenceEquals(sender, _chkOutputPdfLineLabels) ||
-        ReferenceEquals(sender, _chkOutputPdfAreaLabels) ||
-        ReferenceEquals(sender, _chkOutputPdfJoistLabels) ||
-        ReferenceEquals(sender, _chkOutputPdfCountLabels);
 
     private void OutputScaleBox_KeyDown(object sender, KeyEventArgs e)
     {

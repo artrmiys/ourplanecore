@@ -147,14 +147,11 @@ public static partial class PdfExporter
 
     private static bool ShouldExportMeasurementLabel(string measurementType, PdfExportOptions options)
     {
-        if (!options.ShowMeasurementLabels)
-            return false;
-
         return OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
-            "point" => options.ShowCountLabels,
-            "area" => options.ShowAreaLabels,
-            _ => options.ShowLineLabels,
+            "point" => options.ShowMeasurementLabels || options.ShowCountLabels,
+            "area" => options.ShowMeasurementLabels || options.ShowAreaLabels,
+            _ => options.ShowMeasurementLabels || options.ShowLineLabels,
         };
     }
 
@@ -168,10 +165,10 @@ public static partial class PdfExporter
         (byte)Math.Clamp((int)Math.Round(Math.Clamp(options.AreaFillOpacity, 0.0, 1.0) * 255.0), 0, 255);
 
     private static bool ShouldExportJoistLabels(PdfExportOptions options) =>
-        options.ShowMeasurementLabels && options.ShowJoistLabels;
+        options.ShowMeasurementLabels || options.ShowJoistLabels;
 
     private static bool ShouldExportJoistSummaryLabel(PdfExportOptions options) =>
-        options.ShowMeasurementLabels && options.ShowJoistLabels;
+        options.ShowMeasurementLabels || options.ShowJoistLabels;
 
     private static float ExportPointScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);

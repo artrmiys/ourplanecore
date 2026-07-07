@@ -90,7 +90,6 @@ public partial class MainWindow
         if (_isApplyingSettings)
             return;
 
-        SyncMeasurementLabelMasterForIndividualToggle(sender);
         _settings.ShowMeasurementLabels = ChkDisplayMeasurementLabels.IsChecked == true;
         _settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true;
         _settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true;
@@ -113,21 +112,6 @@ public partial class MainWindow
         RefreshAllTotals();
         TxtStatus.Text = "Display settings saved.";
     }
-
-    private void SyncMeasurementLabelMasterForIndividualToggle(object sender)
-    {
-        if (ReferenceEquals(sender, ChkDisplayMeasurementLabels))
-            return;
-
-        if (sender is CheckBox { IsChecked: true } && IsIndividualMeasurementLabelToggle(sender))
-            ChkDisplayMeasurementLabels.IsChecked = true;
-    }
-
-    private bool IsIndividualMeasurementLabelToggle(object sender) =>
-        ReferenceEquals(sender, ChkDisplayLineLabels) ||
-        ReferenceEquals(sender, ChkDisplayAreaLabels) ||
-        ReferenceEquals(sender, ChkDisplayJoistLabels) ||
-        ReferenceEquals(sender, ChkDisplayCountLabels);
 
     private void RefreshDetachedSheetDisplaySettings()
     {

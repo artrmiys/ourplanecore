@@ -365,14 +365,11 @@ public sealed partial class PdfViewport
 
     private bool ShouldDrawMeasurementLabel(string measurementType)
     {
-        if (!ShowMeasurementLabels)
-            return false;
-
         return measurementType switch
         {
-            "point" => ShowCountLabels,
-            "area" => ShowAreaLabels,
-            _ => ShowLineLabels,
+            "point" => ShowMeasurementLabels || ShowCountLabels,
+            "area" => ShowMeasurementLabels || ShowAreaLabels,
+            _ => ShowMeasurementLabels || ShowLineLabels,
         };
     }
 
@@ -401,9 +398,9 @@ public sealed partial class PdfViewport
         (float)Math.Clamp(PointSizeScale, 0.25, 4.0);
 
     private bool ShouldDrawJoistLabels() =>
-        ShowMeasurementLabels && ShowJoistLabels;
+        ShowMeasurementLabels || ShowJoistLabels;
 
     private bool ShouldDrawJoistSummaryLabel() =>
-        ShowMeasurementLabels && ShowJoistLabels;
+        ShowMeasurementLabels || ShowJoistLabels;
 
 }

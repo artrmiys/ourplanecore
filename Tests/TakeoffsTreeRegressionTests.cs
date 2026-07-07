@@ -1476,31 +1476,41 @@ internal static class TakeoffsTreeRegressionTests
             denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "dense viewport joist summary labels must not depend on the per-joist segment label toggle");
         AssertTrue(
-            rendering.Contains("ShowMeasurementLabels && ShowJoistLabels", StringComparison.Ordinal),
-            "viewport joist summary labels must obey the All and Joist display toggles without requiring Area");
+            rendering.Contains("ShowMeasurementLabels || ShowJoistLabels", StringComparison.Ordinal),
+            "viewport joist summary labels must allow either the All or Joist display toggle without requiring Area");
+        AssertTrue(
+            rendering.Contains("\"point\" => ShowMeasurementLabels || ShowCountLabels", StringComparison.Ordinal) &&
+            rendering.Contains("\"area\" => ShowMeasurementLabels || ShowAreaLabels", StringComparison.Ordinal) &&
+            rendering.Contains("_ => ShowMeasurementLabels || ShowLineLabels", StringComparison.Ordinal),
+            "viewport line, area, and count labels must work from their own toggles when All is off");
         AssertTrue(
             joistRendering.Contains("ShouldDrawJoistSegmentLabels(measurement)", StringComparison.Ordinal) &&
             joistRendering.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "per-joist segment labels, not the joist summary label, must obey the Label each joist item toggle");
         AssertTrue(
             pdfExporter.Contains("ShouldExportJoistSummaryLabel(options)", StringComparison.Ordinal) &&
-            pdfExporter.Contains("options.ShowMeasurementLabels && options.ShowJoistLabels", StringComparison.Ordinal),
-            "PDF export joist summary labels must obey the All and Joist output toggles without requiring Area");
+            pdfExporter.Contains("options.ShowMeasurementLabels || options.ShowJoistLabels", StringComparison.Ordinal),
+            "PDF export joist summary labels must allow either the All or Joist output toggle without requiring Area");
+        AssertTrue(
+            pdfExporter.Contains("\"point\" => options.ShowMeasurementLabels || options.ShowCountLabels", StringComparison.Ordinal) &&
+            pdfExporter.Contains("\"area\" => options.ShowMeasurementLabels || options.ShowAreaLabels", StringComparison.Ordinal) &&
+            pdfExporter.Contains("_ => options.ShowMeasurementLabels || options.ShowLineLabels", StringComparison.Ordinal),
+            "PDF export line, area, and count labels must work from their own toggles when All is off");
     }
 
-    public static void OutputLabelTogglesAutoEnableMaster()
+    public static void OutputLabelTogglesSupportIndependentCategories()
     {
         string outputSettings = ReadRepoFile("MainWindow.OutputSettings.cs");
         string outputClick = SliceMethod(outputSettings, "private void OutputSetting_Click(");
         AssertTrue(
-            outputClick.Contains("SyncOutputLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal),
-            "PDF Output label toggles must auto-enable the All label master like Display toggles");
+            !outputClick.Contains("SyncOutputLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal),
+            "PDF Output individual label toggles must not auto-enable the All label toggle");
         AssertTrue(
-            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfLineLabels)", StringComparison.Ordinal) &&
-            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfAreaLabels)", StringComparison.Ordinal) &&
-            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfJoistLabels)", StringComparison.Ordinal) &&
-            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfCountLabels)", StringComparison.Ordinal),
-            "Line, Area, Joist, and Count output toggles must be treated as individual label toggles");
+            outputSettings.Contains("_settings.PdfExportShowLineLabels = _chkOutputPdfLineLabels?.IsChecked == true", StringComparison.Ordinal) &&
+            outputSettings.Contains("_settings.PdfExportShowAreaLabels = _chkOutputPdfAreaLabels?.IsChecked == true", StringComparison.Ordinal) &&
+            outputSettings.Contains("_settings.PdfExportShowJoistLabels = _chkOutputPdfJoistLabels?.IsChecked == true", StringComparison.Ordinal) &&
+            outputSettings.Contains("_settings.PdfExportShowCountLabels = _chkOutputPdfCountLabels?.IsChecked == true", StringComparison.Ordinal),
+            "Line, Area, Joist, and Count output toggles must save independently from the All label toggle");
     }
 
     public static void ViewportTakeoffPropertiesAreTypeAware()
@@ -1538,15 +1548,15 @@ internal static class TakeoffsTreeRegressionTests
         string detachedApply = SliceMethod(detachedWindow, "private void ApplyViewportDisplaySettings(");
 
         AssertTrue(
-            displayClick.Contains("SyncMeasurementLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal) &&
+            !displayClick.Contains("SyncMeasurementLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal) &&
             displayClick.Contains("RefreshDetachedSheetDisplaySettings()", StringComparison.Ordinal),
-            "Display label toggles must auto-enable the All label master when needed and refresh detached sheets");
+            "Display label toggles must stay independent from All and still refresh detached sheets");
         AssertTrue(
-            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayLineLabels)", StringComparison.Ordinal) &&
-            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayAreaLabels)", StringComparison.Ordinal) &&
-            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayJoistLabels)", StringComparison.Ordinal) &&
-            displaySettings.Contains("ReferenceEquals(sender, ChkDisplayCountLabels)", StringComparison.Ordinal),
-            "Line, Area, Joist, and Count toggles must be treated as individual label toggles");
+            displaySettings.Contains("_settings.ShowLineLabels = ChkDisplayLineLabels.IsChecked == true", StringComparison.Ordinal) &&
+            displaySettings.Contains("_settings.ShowAreaLabels = ChkDisplayAreaLabels.IsChecked == true", StringComparison.Ordinal) &&
+            displaySettings.Contains("_settings.ShowJoistLabels = ChkDisplayJoistLabels.IsChecked == true", StringComparison.Ordinal) &&
+            displaySettings.Contains("_settings.ShowCountLabels = ChkDisplayCountLabels.IsChecked == true", StringComparison.Ordinal),
+            "Line, Area, Joist, and Count display toggles must save independently from the All label toggle");
         AssertTrue(
             detachedRefresh.Contains("ApplyViewportDisplaySettings(settings, unitMode)", StringComparison.Ordinal) &&
             detachedRefresh.Contains("_viewport.InvalidateVisual()", StringComparison.Ordinal),
