@@ -171,7 +171,7 @@ public static partial class PdfExporter
         options.ShowMeasurementLabels && options.ShowJoistLabels;
 
     private static bool ShouldExportJoistSummaryLabel(PdfExportOptions options) =>
-        options.ShowMeasurementLabels && options.ShowAreaLabels && options.ShowJoistLabels;
+        options.ShowMeasurementLabels && options.ShowJoistLabels;
 
     private static float ExportPointScale(PdfExportOptions options) =>
         (float)Math.Clamp(options.PointSizeScale, 0.25, AppSettingsStore.PdfExportScaleMax);

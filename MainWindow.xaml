@@ -646,19 +646,27 @@
                          GroupName="DrawingTool" ToolTip="Create a new Count item and start recording (P). Use the active target Record button to continue an existing item"
                          Style="{StaticResource ToolRadio}"/>
             <Button x:Name="BtnSimilarCount"
-                    Content="Similar"
                     Click="BtnSimilarCount_Click"
                     ToolTip="Find similar symbols on this sheet, name the result, and add reviewed markers as a Count item"
                     Style="{StaticResource ToolBtn}"
-                    MinWidth="28"
-                    Padding="4,2"/>
+                    MinWidth="74"
+                    Padding="4,2">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSimilar}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Similar" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Button x:Name="BtnPointAlongLine"
-                    Content="P Line"
                     Click="BtnPointAlongLine_Click"
                     ToolTip="Create Count points along selected Line measurement(s) with a spacing"
                     Style="{StaticResource ToolBtn}"
-                    MinWidth="44"
-                    Padding="4,2"/>
+                    MinWidth="62"
+                    Padding="4,2">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconPointAlongLine}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="P Line" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Button x:Name="BtnCountSymbolDefault"
                     Content="O"
                     Click="BtnCountSymbolDefault_Click"

@@ -1476,16 +1476,57 @@ internal static class TakeoffsTreeRegressionTests
             denseFilter.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "dense viewport joist summary labels must not depend on the per-joist segment label toggle");
         AssertTrue(
-            rendering.Contains("ShowMeasurementLabels && ShowAreaLabels && ShowJoistLabels", StringComparison.Ordinal),
-            "viewport joist summary labels must obey the All, Area, and Joist display toggles");
+            rendering.Contains("ShowMeasurementLabels && ShowJoistLabels", StringComparison.Ordinal),
+            "viewport joist summary labels must obey the All and Joist display toggles without requiring Area");
         AssertTrue(
             joistRendering.Contains("ShouldDrawJoistSegmentLabels(measurement)", StringComparison.Ordinal) &&
             joistRendering.Contains("measurement.JoistShowLabels", StringComparison.Ordinal),
             "per-joist segment labels, not the joist summary label, must obey the Label each joist item toggle");
         AssertTrue(
             pdfExporter.Contains("ShouldExportJoistSummaryLabel(options)", StringComparison.Ordinal) &&
-            pdfExporter.Contains("options.ShowMeasurementLabels && options.ShowAreaLabels && options.ShowJoistLabels", StringComparison.Ordinal),
-            "PDF export joist summary labels must obey the All, Area, and Joist output toggles");
+            pdfExporter.Contains("options.ShowMeasurementLabels && options.ShowJoistLabels", StringComparison.Ordinal),
+            "PDF export joist summary labels must obey the All and Joist output toggles without requiring Area");
+    }
+
+    public static void OutputLabelTogglesAutoEnableMaster()
+    {
+        string outputSettings = ReadRepoFile("MainWindow.OutputSettings.cs");
+        string outputClick = SliceMethod(outputSettings, "private void OutputSetting_Click(");
+        AssertTrue(
+            outputClick.Contains("SyncOutputLabelMasterForIndividualToggle(sender)", StringComparison.Ordinal),
+            "PDF Output label toggles must auto-enable the All label master like Display toggles");
+        AssertTrue(
+            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfLineLabels)", StringComparison.Ordinal) &&
+            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfAreaLabels)", StringComparison.Ordinal) &&
+            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfJoistLabels)", StringComparison.Ordinal) &&
+            outputSettings.Contains("ReferenceEquals(sender, _chkOutputPdfCountLabels)", StringComparison.Ordinal),
+            "Line, Area, Joist, and Count output toggles must be treated as individual label toggles");
+    }
+
+    public static void ViewportTakeoffPropertiesAreTypeAware()
+    {
+        string viewportMenu = ReadRepoFile("MainWindow.ViewportContextMenu.cs");
+        string properties = ReadRepoFile("MainWindow.TakeoffsProperties.cs");
+        AssertTrue(
+            viewportMenu.Contains("\"Takeoff Properties...\"", StringComparison.Ordinal) &&
+            viewportMenu.Contains("EditViewportTakeoffProperties(item)", StringComparison.Ordinal) &&
+            viewportMenu.Contains("EditSectionProperties(item, measurement)", StringComparison.Ordinal),
+            "Viewport measurement context menu must expose item-level takeoff properties separately from section/count properties");
+        AssertTrue(
+            properties.Contains("bool isAreaTakeoff = measurementType == \"area\"", StringComparison.Ordinal) &&
+            properties.Contains("bool isLineTakeoff = measurementType == \"line\"", StringComparison.Ordinal) &&
+            properties.Contains("bool isPointTakeoff = measurementType == \"point\"", StringComparison.Ordinal),
+            "Takeoff item properties must branch by measurement type");
+        AssertTrue(
+            properties.Contains("Point O.C. spacing (in):", StringComparison.Ordinal) &&
+            properties.Contains("Default spacing used by Create Count Points Along Lines.", StringComparison.Ordinal) &&
+            properties.Contains("Count display:", StringComparison.Ordinal) &&
+            properties.Contains("CountDisplaySymbol.Title(symbol)", StringComparison.Ordinal),
+            "Line properties should expose Point by O.C. spacing, and Point properties should expose Count display");
+        AssertTrue(
+            properties.Contains("item.CountSymbol = normalizedCountSymbol", StringComparison.Ordinal) &&
+            properties.Contains("measurement.CountSymbol = item.CountSymbol", StringComparison.Ordinal),
+            "Point takeoff properties must save the Count display symbol to the item and its measurements");
     }
 
     public static void DisplayLabelTogglesRefreshDetachedSheets()
@@ -1663,6 +1704,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             xaml.Contains("BtnPointAlongLine", StringComparison.Ordinal) &&
             xaml.Contains("BtnPointAlongLine_Click", StringComparison.Ordinal) &&
+            xaml.Contains("IconPointAlongLine", StringComparison.Ordinal) &&
             commandPalette.Contains("tool.pointAlongLine", StringComparison.Ordinal) &&
             commandPalette.Contains("selectedLineMeasurementCount > 0", StringComparison.Ordinal) &&
             commandPalette.Contains("CreatePointsAlongSelectedLines()", StringComparison.Ordinal) &&

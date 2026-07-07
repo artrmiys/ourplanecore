@@ -122,6 +122,10 @@ public partial class MainWindow
         string entryTitle = hasItem ? MeasurementEntryTitle(item) : "Measurement";
 
         menu.Items.Add(MakeMenuItem(
+            "Takeoff Properties...",
+            hasItem,
+            () => EditViewportTakeoffProperties(item)));
+        menu.Items.Add(MakeMenuItem(
             $"{entryTitle} Properties...",
             hasItem,
             () => EditSectionProperties(item, measurement)));
@@ -131,7 +135,7 @@ public partial class MainWindow
             menu.Items.Add(MakeMenuItem(
                 hasItem && item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
                 hasItem,
-                () => EditViewportJoistProperties(item)));
+                () => EditViewportTakeoffProperties(item)));
             menu.Items.Add(MakeMenuItem(
                 "Set / Reset Joist Direction",
                 hasItem,
@@ -178,7 +182,7 @@ public partial class MainWindow
             () => DeleteSection(item, measurement)));
     }
 
-    private void EditViewportJoistProperties(TakeoffItem item)
+    private void EditViewportTakeoffProperties(TakeoffItem item)
     {
         if (FindTakeoffTreeItem(item) is not { } tvi)
         {

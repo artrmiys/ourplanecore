@@ -404,6 +404,6 @@ public sealed partial class PdfViewport
         ShowMeasurementLabels && ShowJoistLabels;
 
     private bool ShouldDrawJoistSummaryLabel() =>
-        ShowMeasurementLabels && ShowAreaLabels && ShowJoistLabels;
+        ShowMeasurementLabels && ShowJoistLabels;
 
 }

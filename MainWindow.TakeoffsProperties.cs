@@ -45,6 +45,7 @@ public partial class MainWindow
                 out string color,
                 out double unitPrice,
                 out string notes,
+                out string countSymbol,
                 out JoistTakeoffEdit joistEdit))
         {
             return;
@@ -74,6 +75,13 @@ public partial class MainWindow
             item.Color = color;
             item.UnitPrice = unitPrice;
             item.Notes = notes.Trim();
+            string normalizedCountSymbol = CountDisplaySymbol.Normalize(countSymbol);
+            bool countSymbolChanged =
+                IsCountTakeoffItem(item) &&
+                !string.Equals(item.CountSymbol, normalizedCountSymbol, StringComparison.OrdinalIgnoreCase);
+            if (IsCountTakeoffItem(item))
+                item.CountSymbol = normalizedCountSymbol;
+
             bool joistChanged =
                 item.IsJoistTakeoff != joistEdit.Enabled ||
                 !string.Equals(item.JoistType, joistEdit.JoistType, StringComparison.Ordinal) ||
@@ -111,7 +119,12 @@ public partial class MainWindow
                 foreach (Measurement measurement in item.Measurements)
                     measurement.Color = color;
             }
-            if (colorChanged || joistChanged)
+            if (countSymbolChanged)
+            {
+                foreach (Measurement measurement in item.Measurements.Where(IsCountMeasurement))
+                    measurement.CountSymbol = item.CountSymbol;
+            }
+            if (colorChanged || joistChanged || countSymbolChanged)
                 _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
 
             OurPlaneCoreJobStore.SaveTakeoffItem(item);
@@ -138,13 +151,18 @@ public partial class MainWindow
         out string color,
         out double unitPrice,
         out string notes,
+        out string countSymbol,
         out JoistTakeoffEdit joistEdit)
     {
         name = item.Name;
         color = NormalizeTakeoffColor(item.Color);
         unitPrice = item.UnitPrice;
         notes = item.Notes;
-        bool isAreaTakeoff = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        countSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
+        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        bool isAreaTakeoff = measurementType == "area";
+        bool isLineTakeoff = measurementType == "line";
+        bool isPointTakeoff = measurementType == "point";
         bool seedJoistEnableDefaults = isAreaTakeoff && !item.IsJoistArea;
         string initialJoistRounding = seedJoistEnableDefaults
             ? JoistTakeoffDefaults.LengthRounding
@@ -195,7 +213,8 @@ public partial class MainWindow
             IsEnabled = isAreaTakeoff,
             Margin = new Thickness(0, 10, 0, 2),
         };
-        panel.Children.Add(joistEnabledBox);
+        if (isAreaTakeoff)
+            panel.Children.Add(joistEnabledBox);
 
         var joistPanel = new Grid
         {
@@ -332,9 +351,61 @@ public partial class MainWindow
 
         joistEnabledBox.Checked += (_, _) => joistPanel.IsEnabled = isAreaTakeoff;
         joistEnabledBox.Unchecked += (_, _) => joistPanel.IsEnabled = false;
-        if (!isAreaTakeoff)
-            joistEnabledBox.ToolTip = "Joist layout is available for Area takeoff items.";
-        panel.Children.Add(joistPanel);
+        if (isAreaTakeoff)
+            panel.Children.Add(joistPanel);
+
+        TextBox? pointOcSpacingBox = null;
+        if (isLineTakeoff)
+        {
+            var pointOcPanel = new Grid
+            {
+                Margin = new Thickness(0, 10, 0, 4),
+            };
+            pointOcPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
+            pointOcPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            pointOcPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            AddLabeledTextBox(
+                pointOcPanel,
+                0,
+                "Point O.C. spacing (in):",
+                out pointOcSpacingBox,
+                (item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16).ToString("G", CultureInfo.InvariantCulture));
+            pointOcSpacingBox.ToolTip = "Default spacing used by Create Count Points Along Lines.";
+            panel.Children.Add(pointOcPanel);
+        }
+
+        ComboBox? countSymbolBox = null;
+        if (isPointTakeoff)
+        {
+            panel.Children.Add(new TextBlock { Text = "Count display:", Margin = new Thickness(0, 10, 0, 4) });
+            countSymbolBox = new ComboBox
+            {
+                MinWidth = 160,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            string selectedSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
+            foreach (string symbol in CountDisplaySymbol.All)
+            {
+                countSymbolBox.Items.Add(new ComboBoxItem
+                {
+                    Content = CountDisplaySymbol.Title(symbol),
+                    Tag = symbol,
+                });
+            }
+            for (int i = 0; i < countSymbolBox.Items.Count; i++)
+            {
+                if (countSymbolBox.Items[i] is ComboBoxItem option &&
+                    option.Tag is string optionSymbol &&
+                    string.Equals(optionSymbol, selectedSymbol, StringComparison.OrdinalIgnoreCase))
+                {
+                    countSymbolBox.SelectedIndex = i;
+                    break;
+                }
+            }
+            if (countSymbolBox.SelectedIndex < 0)
+                countSymbolBox.SelectedIndex = 0;
+            panel.Children.Add(countSymbolBox);
+        }
 
         panel.Children.Add(new TextBlock { Text = "Color:", Margin = new Thickness(0, 10, 0, 4) });
         string selectedColor = NormalizeTakeoffColor(item.Color);
@@ -413,6 +484,7 @@ public partial class MainWindow
         string resultColor = selectedColor;
         double resultPrice = item.UnitPrice;
         string resultNotes = item.Notes;
+        string resultCountSymbol = countSymbol;
         JoistTakeoffEdit resultJoist = joistEdit;
 
         ok.Click += (_, _) =>
@@ -477,10 +549,32 @@ public partial class MainWindow
                     return;
                 }
             }
+            else if (isLineTakeoff && pointOcSpacingBox != null)
+            {
+                if (!double.TryParse(pointOcSpacingBox.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out joistSpacing) ||
+                    joistSpacing <= 0)
+                {
+                    MessageBox.Show("Enter a valid positive Point O.C. spacing.", "Takeoff Item Properties",
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                joistRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
+                joistDetailedLabels = item.JoistDetailedLabels;
+            }
             else if (!item.IsJoistArea)
             {
                 joistRounding = JoistTakeoffCalculator.NormalizeLengthRounding(item.JoistLengthRounding);
                 joistDetailedLabels = item.JoistDetailedLabels;
+            }
+
+            if (isPointTakeoff &&
+                countSymbolBox?.SelectedItem is ComboBoxItem { Tag: string selectedCountSymbol })
+            {
+                resultCountSymbol = CountDisplaySymbol.Normalize(selectedCountSymbol);
+            }
+            else
+            {
+                resultCountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
             }
 
             resultName = nameBox.Text.Trim();
@@ -509,6 +603,7 @@ public partial class MainWindow
             color = resultColor;
             unitPrice = resultPrice;
             notes = resultNotes;
+            countSymbol = resultCountSymbol;
             joistEdit = resultJoist;
         }
 

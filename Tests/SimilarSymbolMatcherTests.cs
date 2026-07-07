@@ -1865,6 +1865,7 @@ internal static class SimilarSymbolMatcherTests
             "Similar Count should be exposed in the command palette as a first-class tool");
         AssertTrue(
             xaml.Contains("name the result", StringComparison.Ordinal) &&
+            xaml.Contains("IconSimilar", StringComparison.Ordinal) &&
             commandPalette.Contains("name the result", StringComparison.Ordinal),
             "Similar toolbar and command palette copy should explain that manual Similar names a new result item");
         AssertTrue(

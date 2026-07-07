@@ -32,6 +32,7 @@ var tests = new List<(string Name, Action Run)>
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
+    ("pdf export joist summary ignores area label toggle", PdfExportJoistSummaryIgnoresAreaLabelToggle),
     ("pdf export writes selected sheets", PdfExportWritesSelectedSheets),
     ("pdf export writes measurement lines", PdfExportWritesMeasurementLines),
     ("pdf export skips invalid area point artifacts", PdfExportSkipsInvalidAreaPointArtifacts),
@@ -207,6 +208,8 @@ var tests = new List<(string Name, Action Run)>
     ("transform scale slider label is wired", TakeoffsTreeRegressionTests.TransformScaleSliderLabelIsWired),
     ("page takeoff layers and alt vertex mode are wired", TakeoffsTreeRegressionTests.PageTakeoffLayersAndAltVertexModeAreWired),
     ("dense viewport labels keep joist and selected labels", TakeoffsTreeRegressionTests.DenseViewportLabelsKeepJoistAndSelectedLabels),
+    ("output label toggles auto enable master", TakeoffsTreeRegressionTests.OutputLabelTogglesAutoEnableMaster),
+    ("viewport takeoff properties are type aware", TakeoffsTreeRegressionTests.ViewportTakeoffPropertiesAreTypeAware),
     ("display label toggles refresh detached sheets", TakeoffsTreeRegressionTests.DisplayLabelTogglesRefreshDetachedSheets),
     ("page takeoff selection syncs takeoffs tree", TakeoffsTreeRegressionTests.PageTakeoffSelectionSyncsTakeoffsTree),
     ("takeoff tree section rows default hidden and setting wired", TakeoffsTreeRegressionTests.TakeoffTreeSectionRowsDefaultHiddenAndSettingWired),
@@ -946,6 +949,41 @@ static void OutputSettingsDefaultExportAppearance()
     AssertClose(10.0, settings.PdfExportMeasurementLabelScale, "PDF label should clamp at the export maximum");
     AssertClose(10.0, settings.PdfExportSheetLegendScale, "PDF legend should clamp at the export maximum");
     AssertClose(10.0, settings.PdfExportSheetHeaderScale, "PDF header should clamp at the export maximum");
+}
+
+static void PdfExportJoistSummaryIgnoresAreaLabelToggle()
+{
+    MethodInfo method = typeof(PdfExporter).GetMethod(
+        "ShouldExportJoistSummaryLabel",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException("PdfExporter.ShouldExportJoistSummaryLabel");
+
+    AssertTrue(AllowsJoistSummaryLabel(showAll: true, showArea: false, showJoist: true), "joist summary should not require the Area output label toggle");
+    AssertFalse(AllowsJoistSummaryLabel(showAll: false, showArea: true, showJoist: true), "joist summary should still obey the All output label toggle");
+    AssertFalse(AllowsJoistSummaryLabel(showAll: true, showArea: true, showJoist: false), "joist summary should still obey the Joist output label toggle");
+
+    bool AllowsJoistSummaryLabel(bool showAll, bool showArea, bool showJoist)
+    {
+        var options = new PdfExportOptions(
+            IncludeMeasurements: true,
+            IncludeAnnotations: false,
+            IncludeLegend: true,
+            UnitMode: UnitMode.Imperial,
+            LegendAnchor: "TopLeft",
+            LegendScale: 1,
+            HeaderScale: 1,
+            ShowMeasurementLabels: showAll,
+            ShowLineLabels: false,
+            ShowAreaLabels: showArea,
+            ShowCountLabels: false,
+            MeasurementStrokeScale: 1,
+            PointSizeScale: 1,
+            MeasurementLabelScale: 1,
+            ShowJoistLabels: showJoist);
+
+        object? result = method.Invoke(null, [options]);
+        return result is bool value && value;
+    }
 }
 
 static void PdfExportWritesSelectedSheets()
