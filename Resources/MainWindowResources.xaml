@@ -47,6 +47,10 @@
 <Geometry x:Key="IconBox">M3,4 L13,4 L13,12 L3,12 Z</Geometry>
 <Geometry x:Key="IconCloud">M4.5,11.5 A2.2,2.2 0 0 1 4.4,7.4 A2.6,2.6 0 0 1 8,5.4 A2.4,2.4 0 0 1 11.8,6.6 A2,2 0 0 1 11.6,11.5 Z</Geometry>
 <Geometry x:Key="IconAreaFill">M3,4 L13,4 L13,12 L3,12 Z M5,12 L13,5 M9,12 L13,8.3</Geometry>
+<Geometry x:Key="IconJoistArea">M3,4 L13,4 L13,12 L3,12 Z M5.2,4 L5.2,12 M8,4 L8,12 M10.8,4 L10.8,12</Geometry>
+<Geometry x:Key="IconBeam">M3,8 L13,8 M4.2,5.5 L4.2,10.5 M11.8,5.5 L11.8,10.5 M5.5,6 L10.5,6</Geometry>
+<Geometry x:Key="IconOpening">M3,4 L13,4 L13,12 L3,12 Z M6,4 L6,12 M10,4 L10,12 M8,8 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0</Geometry>
+<Geometry x:Key="IconCut">M3,4 L13,4 L13,12 L3,12 Z M4.2,4.2 L11.8,11.8 M11.8,4.2 L4.2,11.8</Geometry>
 <Geometry x:Key="IconNote">M4,3 L12,3 L12,9.5 L8.5,13 L4,13 Z M12,9.5 L8.5,9.5 L8.5,13 M6,6.3 L10,6.3 M6,8.3 L8,8.3</Geometry>
 
 <!-- Side command strip mini icons (16x16 stroke grid, same style as ribbon icons) -->

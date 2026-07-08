@@ -736,18 +736,38 @@
                     <TextBlock Text="Area" VerticalAlignment="Center"/>
                 </StackPanel>
             </RadioButton>
-            <RadioButton x:Name="BtnJoistArea" Content="J Area" Click="BtnTool_Click" Tag="joistarea"
+            <RadioButton x:Name="BtnJoistArea" Click="BtnTool_Click" Tag="joistarea"
                          GroupName="DrawingTool" ToolTip="Create a new Joist Area item and start recording (J)"
-                         Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnBeam" Content="Beam" Click="BtnTool_Click" Tag="beam"
+                         Style="{StaticResource ToolRadio}" MinWidth="68" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconJoistArea}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="J Area" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="BtnBeam" Click="BtnTool_Click" Tag="beam"
                          GroupName="DrawingTool" ToolTip="Measure a beam length, create a Count item, and place the first Count mark (B)"
-                         Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnOpenings" Content="Open" Click="BtnTool_Click" Tag="openings"
+                         Style="{StaticResource ToolRadio}" MinWidth="64" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconBeam}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Beam" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="BtnOpenings" Click="BtnTool_Click" Tag="openings"
                          GroupName="DrawingTool" ToolTip="Measure an opening box, create a Count item, and place the Count mark in the center (O)"
-                         Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnAreaCut" Content="Cut" Click="BtnTool_Click" Tag="areacut"
+                         Style="{StaticResource ToolRadio}" MinWidth="62" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconOpening}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Open" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="BtnAreaCut" Click="BtnTool_Click" Tag="areacut"
                          GroupName="DrawingTool" ToolTip="Cut Area holes or erase Line pieces (X, F9 toggles box)"
-                         Style="{StaticResource ToolRadio}"/>
+                         Style="{StaticResource ToolRadio}" MinWidth="54" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconCut}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Cut" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
             <Button x:Name="BtnMergeSelectedMeasurements"
                     Click="BtnMergeSelectedMeasurements_Click"
                     ToolTip="Merge selected measurement segments into another takeoff (Ctrl+M)"
