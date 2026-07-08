@@ -2218,5 +2218,32 @@
             </StackPanel>
         </Border>
     </Grid>
+    <Border x:Name="FeedbackToast"
+            Panel.ZIndex="900"
+            Visibility="Collapsed"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            MinWidth="260"
+            MaxWidth="460"
+            Margin="0,0,16,76"
+            Padding="0"
+            CornerRadius="4"
+            Background="{DynamicResource ControlBackgroundBrush}"
+            BorderBrush="{DynamicResource AccentBrush}"
+            BorderThickness="1"
+            IsHitTestVisible="False">
+        <DockPanel LastChildFill="True">
+            <Border x:Name="FeedbackToastSeverityBar"
+                    DockPanel.Dock="Left"
+                    Width="4"
+                    Background="{DynamicResource AccentBrush}"
+                    CornerRadius="3,0,0,3"/>
+            <TextBlock x:Name="FeedbackToastText"
+                       Margin="9,7,10,7"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       MaxHeight="92"/>
+        </DockPanel>
+    </Border>
     </Grid>
 </Window>
