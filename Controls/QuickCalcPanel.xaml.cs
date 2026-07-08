@@ -122,6 +122,8 @@ public partial class QuickCalcPanel : UserControl
 
     private sealed record FeetOperandBoxes(TextBox Feet, TextBox Inches, TextBox Twelfths);
 
+    private const int OperandRowsPerGroup = 3;
+
     private UIElement BuildFeetGroup(int index)
     {
         var result = new TextBlock
@@ -133,32 +135,34 @@ public partial class QuickCalcPanel : UserControl
         };
         result.SetResourceReference(TextBlock.ForegroundProperty, "ControlForegroundBrush");
 
-        var opCombo = new ComboBox
+        var operands = new List<FeetOperandBoxes>();
+        var operators = new List<ComboBox>();
+        for (int row = 0; row < OperandRowsPerGroup; row++)
         {
-            Width = 46,
-            FontSize = 12,
-            Margin = new Thickness(2, 3, 0, 3),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        foreach (string op in new[] { "+", "−", "×", "÷" })
-            opCombo.Items.Add(new ComboBoxItem { Content = op });
-        opCombo.SelectedIndex = 0;
-
-        FeetOperandBoxes first = BuildOperandBoxes();
-        FeetOperandBoxes second = BuildOperandBoxes();
+            operands.Add(BuildOperandBoxes());
+            if (row < OperandRowsPerGroup - 1)
+                operators.Add(BuildOperatorCombo());
+        }
 
         void Recalculate(object? _, EventArgs __) =>
-            result.Text = FormatGroupResult(first, second, opCombo);
+            result.Text = FormatGroupResult(operands, operators);
 
-        foreach (TextBox box in new[] { first.Feet, first.Inches, first.Twelfths, second.Feet, second.Inches, second.Twelfths })
-            box.TextChanged += (s, e) => Recalculate(s, e);
-        opCombo.SelectionChanged += (s, e) => Recalculate(s, e);
+        foreach (FeetOperandBoxes boxes in operands)
+        {
+            foreach (TextBox box in new[] { boxes.Feet, boxes.Inches, boxes.Twelfths })
+                box.TextChanged += (s, e) => Recalculate(s, e);
+        }
+        foreach (ComboBox combo in operators)
+            combo.SelectionChanged += (s, e) => Recalculate(s, e);
 
         var panel = new StackPanel { Margin = new Thickness(0, 2, 0, 8) };
         panel.Children.Add(BuildGroupHeader(index));
-        panel.Children.Add(BuildOperandRow(first));
-        panel.Children.Add(opCombo);
-        panel.Children.Add(BuildOperandRow(second));
+        for (int row = 0; row < operands.Count; row++)
+        {
+            panel.Children.Add(BuildOperandRow(operands[row]));
+            if (row < operators.Count)
+                panel.Children.Add(operators[row]);
+        }
         panel.Children.Add(result);
 
         var frame = new Border
@@ -226,31 +230,66 @@ public partial class QuickCalcPanel : UserControl
         return row;
     }
 
-    private static string FormatGroupResult(FeetOperandBoxes first, FeetOperandBoxes second, ComboBox opCombo)
+    private static ComboBox BuildOperatorCombo()
     {
-        double left = OperandFeet(first);
-        double right = OperandFeet(second);
-        string op = (opCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "+";
-
-        double value = op switch
+        var combo = new ComboBox
         {
-            "−" => left - right,
-            "×" => left * right,
-            "÷" => Math.Abs(right) < 1e-12 ? double.NaN : left / right,
-            _ => left + right,
+            Width = 46,
+            FontSize = 12,
+            Margin = new Thickness(2, 3, 0, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
         };
+        foreach (string op in new[] { "+", "−", "×", "÷" })
+            combo.Items.Add(new ComboBoxItem { Content = op });
+        combo.SelectedIndex = 0;
+        return combo;
+    }
+
+    // Folds the used rows left to right: (a op1 b) op2 c. A row whose three
+    // boxes are all blank is skipped, so two-value math just leaves row 3 empty.
+    private static string FormatGroupResult(IReadOnlyList<FeetOperandBoxes> operands, IReadOnlyList<ComboBox> operators)
+    {
+        double value = 0;
+        bool anyUsed = false;
+        bool multiplied = false;
+        for (int row = 0; row < operands.Count; row++)
+        {
+            if (IsOperandEmpty(operands[row]))
+                continue;
+
+            double operand = OperandFeet(operands[row]);
+            if (!anyUsed)
+            {
+                value = operand;
+                anyUsed = true;
+                continue;
+            }
+
+            string op = SelectedOperator(operators[row - 1]);
+            multiplied |= op is "×" or "÷";
+            value = op switch
+            {
+                "−" => value - operand,
+                "×" => value * operand,
+                "÷" => Math.Abs(operand) < 1e-12 ? double.NaN : value / operand,
+                _ => value + operand,
+            };
+        }
 
         if (double.IsNaN(value) || double.IsInfinity(value))
             return "= —";
 
-        string unit = op switch
-        {
-            "×" => " sq ft",
-            "÷" => "",
-            _ => " ft",
-        };
+        string unit = multiplied ? "" : " ft";
         return $"= {value.ToString("0.00", CultureInfo.InvariantCulture)}{unit}";
     }
+
+    private static string SelectedOperator(ComboBox combo) =>
+        (combo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "+";
+
+    private static bool IsOperandEmpty(FeetOperandBoxes boxes) =>
+        string.IsNullOrWhiteSpace(boxes.Feet.Text) &&
+        string.IsNullOrWhiteSpace(boxes.Inches.Text) &&
+        string.IsNullOrWhiteSpace(boxes.Twelfths.Text);
 
     // Inches and fractional inches are both divided by 12; the fraction box
     // takes carpenter-style input like "1/8", "3/8" or "3 3/8".
