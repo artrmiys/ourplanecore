@@ -293,6 +293,8 @@ public partial class MainWindow : Window
         };
         _viewport.StatusChanged      += SetViewportStatus;
         _viewport.ScaleChanged       += OnScaleChanged;
+        _viewport.ZoomChanged        += _ => UpdateStatusBarSegments();
+        _viewport.PointerPdfChanged  += _ => UpdateStatusBarSegments();
         _viewport.ToolChanged        += OnToolChanged;
         _viewport.SnapChanged        += OnViewportSnapChanged;
         _viewport.PdfSnapChanged     += OnViewportPdfSnapChanged;
@@ -328,6 +330,7 @@ public partial class MainWindow : Window
         _viewport.SheetOverlayTransformChanged += OnSheetOverlayTransformChanged;
         _viewport.SheetOverlayRenderScaleRefreshRequested += OnSheetOverlayRenderScaleRefreshRequested;
         ViewportSurfaceHost.Children.Add(_viewport);
+        InitializeStatusBarSegments();
 
         _toolBtns = new Dictionary<string, RadioButton>
         {

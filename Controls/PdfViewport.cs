@@ -154,6 +154,8 @@ public sealed partial class PdfViewport : SKElement
     public  string   ActiveTakeoffFolder { get; set; } = "";
     public  string   ActiveCountSymbol { get; set; } = CountDisplaySymbol.Circle;
     public  UnitMode UnitMode         { get; set; } = UnitMode.Imperial;
+    public float Zoom => _zoom;
+    public SKPoint? LastPointerPdf => _lastPointerPdf;
     private string _viewBackgroundColor = ViewportBackgroundPolicy.DefaultColor;
     public  string   ViewBackgroundColor
     {
@@ -411,6 +413,8 @@ public sealed partial class PdfViewport : SKElement
     // в”Ђв”Ђ Events в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     public event Action<string>?                          StatusChanged;
     public event Action<double>?                          ScaleChanged;
+    public event Action<float>?                           ZoomChanged;
+    public event Action<SKPoint?>?                        PointerPdfChanged;
     public event Action<string>?                          ToolChanged;
     public event Action<bool>?                            SnapChanged;
     public event Action<bool>?                            OrthoChanged;

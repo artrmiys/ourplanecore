@@ -112,6 +112,7 @@ public sealed partial class PdfViewport
         ScheduleRerenderForZoom(force: true);
         MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
+        NotifyZoomChanged();
     }
 
     public void RefreshRenderQuality()

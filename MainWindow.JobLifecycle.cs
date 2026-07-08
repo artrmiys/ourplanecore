@@ -276,6 +276,7 @@ public partial class MainWindow
 
         TxtStatusJob.Text = _currentJob.Name;
         TxtJobName.Text = _currentJob.Name;
+        UpdateStatusBarSegments();
         TxtStatusPage.Text = _currentPage?.Name ?? "—";
     }
 

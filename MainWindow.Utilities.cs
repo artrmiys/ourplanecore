@@ -377,6 +377,7 @@ public partial class MainWindow
         TxtScaleInfo.Text = string.IsNullOrWhiteSpace(scaleText) ? "" : "applied";
         if (!string.IsNullOrWhiteSpace(scaleText))
             TxtScaleRatio.Text = scaleText;
+        UpdateStatusBarSegments();
     }
 
     private string? ShowInputDialog(string prompt, string initial, string title)

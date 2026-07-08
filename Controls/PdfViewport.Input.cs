@@ -280,7 +280,10 @@ public sealed partial class PdfViewport
     {
         var pos = ViewPointToCanvas(e.GetPosition(this));
         if (_pageBitmap != null)
+        {
             _cursorGuideVisible = true;
+            SetLastPointerPdf(ScreenToPdf((float)pos.X, (float)pos.Y));
+        }
 
         if (_rightClickStart.HasValue &&
             DistanceSquared(_rightClickStart.Value, pos) > 16)

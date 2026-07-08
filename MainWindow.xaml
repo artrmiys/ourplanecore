@@ -578,16 +578,41 @@
         <StatusBar x:Name="MainStatusBar" DockPanel.Dock="Bottom" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,0,0,1">
             <StatusBarItem>
                 <TextBlock x:Name="TxtStatusJob" Text="No job"
-                           FontWeight="Normal" Margin="0,0,4,0"/>
+                           FontWeight="Normal" Margin="0,0,4,0" TextTrimming="CharacterEllipsis" MaxWidth="220"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem MinWidth="150">
-                <TextBlock x:Name="TxtStatusPage" Text="—"/>
+                <TextBlock x:Name="TxtStatusPage" Text="--" TextTrimming="CharacterEllipsis" MaxWidth="220"/>
             </StatusBarItem>
             <Separator/>
-            <StatusBarItem>
+            <StatusBarItem MinWidth="98">
+                <TextBlock x:Name="TxtStatusScale" Text="Scale: --" Typography.NumeralAlignment="Tabular"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem MinWidth="78">
+                <TextBlock x:Name="TxtStatusZoom" Text="Zoom: --" Typography.NumeralAlignment="Tabular"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem MinWidth="124">
+                <TextBlock x:Name="TxtStatusCursor" Text="X --  Y --" Typography.NumeralAlignment="Tabular"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem MinWidth="96">
+                <TextBlock x:Name="TxtStatusMode" Text="Mode: Select" TextTrimming="CharacterEllipsis"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem MinWidth="120">
+                <TextBlock x:Name="TxtStatusTakeoff" Text="Takeoff: --" TextTrimming="CharacterEllipsis" MaxWidth="180"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem MinWidth="92">
+                <TextBlock x:Name="TxtStatusSave" Text="Save: --" Typography.NumeralAlignment="Tabular"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem HorizontalContentAlignment="Stretch">
                 <TextBlock x:Name="TxtStatus"
-                           Text="Ready. Open or create a job to start."/>
+                           Text="Ready. Open or create a job to start."
+                           TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
         </StatusBar>
 

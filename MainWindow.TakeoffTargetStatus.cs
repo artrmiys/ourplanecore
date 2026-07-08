@@ -53,6 +53,7 @@ public partial class MainWindow
             $"  |  Ortho: {(_viewport.OrthoEnabled ? "On" : "Off")}" +
             $"  |  Box: {(_viewport.BoxModeEnabled ? "On" : "Off")}{item}";
         UpdateActiveTakeoffTargetBar();
+        UpdateStatusBarSegments();
     }
 
     private void UpdateActiveTakeoffTargetBar()
@@ -77,6 +78,7 @@ public partial class MainWindow
             BtnActiveTakeoffPrevious.IsEnabled = false;
             BtnActiveTakeoffNext.IsEnabled = false;
             BtnActiveTakeoffSheetNext.IsEnabled = false;
+            UpdateStatusBarSegments();
             return;
         }
 
@@ -111,6 +113,7 @@ public partial class MainWindow
         BtnActiveTakeoffSheetNext.ToolTip = sheetTargetCount > 0
             ? $"Switch through {sheetTargetCount} takeoff item(s) measured on this sheet"
             : "No takeoff items are measured on this sheet yet";
+        UpdateStatusBarSegments();
     }
 
     private string ActiveTakeoffSheetTotalText(TakeoffItem item)

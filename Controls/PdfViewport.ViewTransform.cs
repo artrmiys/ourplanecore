@@ -32,7 +32,25 @@ public sealed partial class PdfViewport
         ScheduleRerenderForZoom(force: false);
         MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
+        NotifyZoomChanged();
         PostStatus($"Zoom: {_zoom * 100:F0}%");
+    }
+
+    private void NotifyZoomChanged() =>
+        ZoomChanged?.Invoke(_zoom);
+
+    private void SetLastPointerPdf(SKPoint? point)
+    {
+        if (point.HasValue &&
+            _lastPointerPdf.HasValue &&
+            Math.Abs(point.Value.X - _lastPointerPdf.Value.X) < 0.05f &&
+            Math.Abs(point.Value.Y - _lastPointerPdf.Value.Y) < 0.05f)
+        {
+            return;
+        }
+
+        _lastPointerPdf = point;
+        PointerPdfChanged?.Invoke(_lastPointerPdf);
     }
 
     private void BeginFastNavigation()

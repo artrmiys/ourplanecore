@@ -30,6 +30,7 @@ public partial class MainWindow
         IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(scale);
         SaveCurrentPageScale();
         UpdateScaleUi(scale);
+        UpdateStatusBarSegments();
         RefreshFloatingPageSetup(_currentPage?.FolderPath);
         foreach (TakeoffItem item in scaledItems)
             RefreshTreeItem(item);
