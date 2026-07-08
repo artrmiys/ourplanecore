@@ -1,0 +1,137 @@
+using System;
+using System.Globalization;
+using System.Windows;
+using System.Windows.Controls;
+
+namespace OurPlaneCore.Controls;
+
+public sealed class WallTraceDialog : Window
+{
+    public string TakeoffName { get; private set; } = "Walls";
+    public double MinThicknessInches { get; private set; } = 3;
+    public double MaxThicknessInches { get; private set; } = 13;
+    public double MinWallLengthFeet { get; private set; } = 1;
+
+    public WallTraceDialog(string defaultTakeoffName)
+    {
+        Title = "Trace Walls Inside Area";
+        Width = 380;
+        SizeToContent = SizeToContent.Height;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ResizeMode = ResizeMode.NoResize;
+
+        var panel = new StackPanel { Margin = new Thickness(12) };
+
+        panel.Children.Add(new TextBlock { Text = "New Line takeoff:", Margin = new Thickness(0, 0, 0, 4) });
+        var nameBox = new TextBox
+        {
+            Text = string.IsNullOrWhiteSpace(defaultTakeoffName) ? "Walls" : defaultTakeoffName.Trim(),
+        };
+        panel.Children.Add(nameBox);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Wall thickness (distance between the two face lines):",
+            Margin = new Thickness(0, 12, 0, 4),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        var minBox = new TextBox { Text = "3", Width = 64, Margin = new Thickness(0, 0, 4, 0) };
+        var maxBox = new TextBox { Text = "13", Width = 64, Margin = new Thickness(0, 0, 4, 0) };
+        panel.Children.Add(BuildValueRow("Min", minBox, "in"));
+        panel.Children.Add(BuildValueRow("Max", maxBox, "in"));
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Ignore walls shorter than:",
+            Margin = new Thickness(0, 12, 0, 4),
+        });
+        var minLenBox = new TextBox { Text = "1", Width = 64, Margin = new Thickness(0, 0, 4, 0) };
+        panel.Children.Add(BuildValueRow("Length", minLenBox, "ft"));
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        var ok = new Button { Content = "Trace", Width = 70, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
+        var cancel = new Button { Content = "Cancel", Width = 70, IsCancel = true };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        panel.Children.Add(buttons);
+
+        Content = panel;
+
+        ok.Click += (_, _) =>
+        {
+            if (!TryReadValue(minBox, "Min thickness", out double min) ||
+                !TryReadValue(maxBox, "Max thickness", out double max) ||
+                !TryReadValue(minLenBox, "Minimum wall length", out double minLen))
+            {
+                return;
+            }
+
+            if (max <= min)
+            {
+                MessageBox.Show("Max thickness must be larger than min thickness.", Title,
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                maxBox.Focus();
+                maxBox.SelectAll();
+                return;
+            }
+
+            TakeoffName = string.IsNullOrWhiteSpace(nameBox.Text) ? "Walls" : nameBox.Text.Trim();
+            MinThicknessInches = min;
+            MaxThicknessInches = max;
+            MinWallLengthFeet = minLen;
+            DialogResult = true;
+        };
+
+        Loaded += (_, _) =>
+        {
+            nameBox.Focus();
+            nameBox.SelectAll();
+        };
+    }
+
+    private static FrameworkElement BuildValueRow(string label, TextBox valueBox, string unit)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 4, 0, 0), LastChildFill = false };
+        var labelBlock = new TextBlock
+        {
+            Text = label,
+            Width = 64,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(labelBlock, Dock.Left);
+        row.Children.Add(labelBlock);
+
+        DockPanel.SetDock(valueBox, Dock.Left);
+        row.Children.Add(valueBox);
+
+        row.Children.Add(new TextBlock
+        {
+            Text = unit,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(2, 0, 0, 0),
+        });
+        return row;
+    }
+
+    private static bool TryReadValue(TextBox textBox, string label, out double value)
+    {
+        string raw = textBox.Text.Trim().Replace(',', '.');
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ||
+            !double.IsFinite(value) ||
+            value <= 0)
+        {
+            MessageBox.Show($"{label} must be a positive number.", "Trace Walls Inside Area",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            textBox.Focus();
+            textBox.SelectAll();
+            return false;
+        }
+
+        return true;
+    }
+}

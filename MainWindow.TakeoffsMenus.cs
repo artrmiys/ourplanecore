@@ -33,6 +33,10 @@ public partial class MainWindow
         if (isArea)
         {
             menu.Items.Add(MakeMenuItem("Create Line Grid...", singleSelection, () => CreateLineGridFromSelectedArea(tvi, item)));
+            menu.Items.Add(MakeMenuItem(
+                "Trace Walls Inside Area...",
+                singleSelection && _currentJob != null && _currentPage != null,
+                () => TraceWallsFromSelectedArea(tvi, item)));
             menu.Items.Add(MakeSubmenu(
                 "Joist",
                 MakeMenuItem(

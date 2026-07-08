@@ -53,6 +53,40 @@ public sealed partial class PdfViewport
 
     public event Action<bool>? PdfSnapChanged;
 
+    /// <summary>
+    /// Reads the full vector segment set for the current page (visible layers
+    /// only), independent of whether PDF Snap mode is on. Prefers the raster
+    /// snap index when one exists, falling back to a live PyMuPDF read.
+    /// </summary>
+    public async Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>
+        ReadPdfVectorSegmentsForCurrentPageAsync()
+    {
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        string pageFolder = _pageFolder;
+        if (string.IsNullOrWhiteSpace(pdfPath))
+            return ([], "No PDF page is open in the viewport.");
+
+        IReadOnlyList<PdfLayerInfo>? layers = CurrentPdfSnapVisibleLayers();
+        RasterSheetSource? rasterSheet = _rasterSheetSource?.Clone();
+
+        var rasterSnap = await Task.Run(() =>
+        {
+            bool ok = RasterSheetCacheService.TryReadSnapIndex(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                out PdfGeometrySnapResult snapIndex,
+                out _);
+            return (Ok: ok, SnapIndex: snapIndex);
+        });
+        if (rasterSnap.Ok && rasterSnap.SnapIndex.Segments.Count > 0)
+            return (rasterSnap.SnapIndex.Segments, "");
+
+        var result = await PdfGeometrySnapService.TryReadSnapPointsAsync(pdfPath, pdfIndex, layers);
+        return result.Ok ? (result.Result.Segments, "") : ([], result.Error);
+    }
+
     private void ResetPdfSnapCache()
     {
         _pdfSnapIndex = PdfSnapPointIndex.Empty;

@@ -133,6 +133,10 @@ public partial class MainWindow
         if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
         {
             menu.Items.Add(MakeMenuItem(
+                "Trace Walls Inside Area...",
+                hasItem && _currentJob != null && _currentPage != null,
+                () => TraceWallsFromAreaSection(item, measurement)));
+            menu.Items.Add(MakeMenuItem(
                 hasItem && item.IsJoistArea ? "Joist Properties..." : "Use Area As Joists...",
                 hasItem,
                 () => EditViewportTakeoffProperties(item)));
