@@ -103,6 +103,224 @@ public static class MeasurementAreaBooleanService
         return TryReadSingleMeasurementGeometry(resultPath, out geometry, out error, "Merge");
     }
 
+    /// <summary>
+    /// Folds two or more area measurements with one Skia path op
+    /// (Union / Intersect / Difference / Xor). Fold order is the list order,
+    /// so for Difference the first area is the base and the rest are cutters.
+    /// </summary>
+    public static bool TryCombine(
+        IReadOnlyList<Measurement> areas,
+        SKPathOp op,
+        out List<AreaBooleanGeometry> geometries,
+        out string error)
+    {
+        geometries = [];
+        if (!ValidateCombineInput(areas, out error))
+            return false;
+
+        SKPath result = BuildMeasurementPath(areas[0]);
+        try
+        {
+            for (int i = 1; i < areas.Count; i++)
+            {
+                using SKPath other = BuildMeasurementPath(areas[i]);
+                if (!TryOp(ref result, other, op, out error))
+                    return false;
+            }
+
+            return TryReadMeasurementGeometries(result, out geometries, out error, "Combine");
+        }
+        finally
+        {
+            result.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Removes double counting between overlapping areas: the first area keeps
+    /// priority, every later area gets everything already covered by earlier
+    /// areas subtracted. Entry 0 is always null (unchanged); an empty list
+    /// means the area was completely covered and should be removed.
+    /// </summary>
+    public static bool TryRemoveOverlap(
+        IReadOnlyList<Measurement> areas,
+        out List<List<AreaBooleanGeometry>?> trimmedPerArea,
+        out string error)
+    {
+        trimmedPerArea = [];
+        if (!ValidateCombineInput(areas, out error))
+            return false;
+
+        var results = new List<List<AreaBooleanGeometry>?> { null };
+        SKPath covered = BuildMeasurementPath(areas[0]);
+        try
+        {
+            for (int i = 1; i < areas.Count; i++)
+            {
+                using SKPath current = BuildMeasurementPath(areas[i]);
+                using var trimmed = new SKPath();
+                if (!current.Op(covered, SKPathOp.Difference, trimmed))
+                {
+                    error = "Combine: area boolean failed.";
+                    return false;
+                }
+
+                if (!TryReadMeasurementGeometriesAllowEmpty(trimmed, out List<AreaBooleanGeometry> geoms, out error, "Combine"))
+                    return false;
+
+                results.Add(geoms);
+                if (!TryOp(ref covered, current, SKPathOp.Union, out error))
+                    return false;
+            }
+        }
+        finally
+        {
+            covered.Dispose();
+        }
+
+        trimmedPerArea = results;
+        return true;
+    }
+
+    /// <summary>
+    /// Splits overlapping areas into disjoint pieces: each area keeps only its
+    /// exclusive part (may be empty), and the region covered by two or more
+    /// areas is returned separately as the shared geometry.
+    /// </summary>
+    public static bool TryDivide(
+        IReadOnlyList<Measurement> areas,
+        out List<List<AreaBooleanGeometry>> exclusivePerArea,
+        out List<AreaBooleanGeometry> sharedGeometries,
+        out string error)
+    {
+        exclusivePerArea = [];
+        sharedGeometries = [];
+        if (!ValidateCombineInput(areas, out error))
+            return false;
+
+        var paths = new List<SKPath>();
+        SKPath? shared = null;
+        try
+        {
+            foreach (Measurement area in areas)
+                paths.Add(BuildMeasurementPath(area));
+
+            var exclusives = new List<List<AreaBooleanGeometry>>();
+            for (int i = 0; i < paths.Count; i++)
+            {
+                SKPath exclusive = new();
+                exclusive.AddPath(paths[i]);
+                exclusive.FillType = paths[i].FillType;
+                try
+                {
+                    for (int j = 0; j < paths.Count; j++)
+                    {
+                        if (j == i)
+                            continue;
+                        if (!TryOp(ref exclusive, paths[j], SKPathOp.Difference, out error))
+                            return false;
+                    }
+
+                    if (!TryReadMeasurementGeometriesAllowEmpty(exclusive, out List<AreaBooleanGeometry> geoms, out error, "Combine"))
+                        return false;
+                    exclusives.Add(geoms);
+                }
+                finally
+                {
+                    exclusive.Dispose();
+                }
+            }
+
+            // Shared region = every point covered by at least two areas,
+            // built as the union of all pairwise intersections.
+            shared = new SKPath();
+            for (int i = 0; i < paths.Count; i++)
+            {
+                for (int j = i + 1; j < paths.Count; j++)
+                {
+                    using var pairIntersection = new SKPath();
+                    if (!paths[i].Op(paths[j], SKPathOp.Intersect, pairIntersection))
+                    {
+                        error = "Combine: area boolean failed.";
+                        return false;
+                    }
+
+                    if (!TryOp(ref shared, pairIntersection, SKPathOp.Union, out error))
+                        return false;
+                }
+            }
+
+            if (!TryReadMeasurementGeometriesAllowEmpty(shared, out List<AreaBooleanGeometry> sharedGeoms, out error, "Combine"))
+                return false;
+
+            if (sharedGeoms.Count == 0)
+            {
+                error = "Combine: the selected areas do not overlap.";
+                return false;
+            }
+
+            exclusivePerArea = exclusives;
+            sharedGeometries = sharedGeoms;
+            return true;
+        }
+        finally
+        {
+            shared?.Dispose();
+            foreach (SKPath path in paths)
+                path.Dispose();
+        }
+    }
+
+    private static bool TryOp(ref SKPath target, SKPath other, SKPathOp op, out string error)
+    {
+        error = "";
+        var combined = new SKPath();
+        if (!target.Op(other, op, combined))
+        {
+            combined.Dispose();
+            error = "Combine: area boolean failed.";
+            return false;
+        }
+
+        target.Dispose();
+        target = combined;
+        return true;
+    }
+
+    private static bool ValidateCombineInput(IReadOnlyList<Measurement> areas, out string error)
+    {
+        error = "";
+        if (areas.Count < 2)
+        {
+            error = "Combine: select two or more Area measurements first.";
+            return false;
+        }
+
+        foreach (Measurement area in areas)
+        {
+            if (OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area" || area.Points.Count < 3)
+            {
+                error = "Combine: only Area measurements can be combined.";
+                return false;
+            }
+        }
+
+        // Same page is enough: sheet geometry lives in shared PDF points, and
+        // areas on one sheet share one calibration even though each measurement
+        // stores its own ScaleMetersPerPt copy.
+        Measurement first = areas[0];
+        for (int i = 1; i < areas.Count; i++)
+        {
+            if (!SamePage(first.PageFolder, areas[i].PageFolder))
+            {
+                error = "Combine: areas must be on the same page.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool TryReadSingleMeasurementGeometry(
         SKPath path,
         out AreaBooleanGeometry geometry,
@@ -131,6 +349,24 @@ public static class MeasurementAreaBooleanService
         out string error,
         string operation)
     {
+        if (!TryReadMeasurementGeometriesAllowEmpty(path, out geometries, out error, operation))
+            return false;
+
+        if (geometries.Count == 0)
+        {
+            error = $"{operation}: result area is empty.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryReadMeasurementGeometriesAllowEmpty(
+        SKPath path,
+        out List<AreaBooleanGeometry> geometries,
+        out string error,
+        string operation)
+    {
         geometries = [];
         error = "";
 
@@ -139,10 +375,7 @@ public static class MeasurementAreaBooleanService
             .Where(contour => contour.Count >= 3 && Math.Abs(SignedArea(contour)) > AreaEpsilon)
             .ToList();
         if (contours.Count == 0)
-        {
-            error = $"{operation}: result area is empty.";
-            return false;
-        }
+            return true;
 
         List<ContourInfo> infos = contours
             .Select((points, index) => new ContourInfo(index, points, Math.Abs(SignedArea(points)), ContainmentDepth(points, contours)))
@@ -185,7 +418,7 @@ public static class MeasurementAreaBooleanService
             .Where(item => item.Points.Count >= 3)
             .OrderByDescending(item => Math.Abs(SignedArea(item.Points)))
             .ToList();
-        return geometries.Count > 0;
+        return true;
     }
 
     private static SKPath BuildMeasurementPath(Measurement measurement)

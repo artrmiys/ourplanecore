@@ -53,6 +53,40 @@ public partial class MainWindow
         }
     }
 
+    private void SortPagesAlphabetically(bool descending)
+    {
+        if (_currentJob == null)
+        {
+            PostStatusInfo("Open or create a job before sorting pages.");
+            return;
+        }
+
+        try
+        {
+            string scopeFolder = CurrentPagesFolderTarget();
+            if (string.IsNullOrWhiteSpace(scopeFolder) ||
+                !Directory.Exists(scopeFolder) ||
+                !IsPathInsidePagesRoot(scopeFolder))
+            {
+                scopeFolder = _currentJob.PagesRoot;
+            }
+
+            OurPlaneCoreJobStore.SortChildren(scopeFolder, descending);
+            ReloadPagesTree(scopeFolder);
+            string scopeLabel = string.Equals(
+                NormalizePath(scopeFolder),
+                NormalizePath(_currentJob.PagesRoot),
+                StringComparison.OrdinalIgnoreCase)
+                    ? "Pages root"
+                    : OurPlaneCoreJobStore.DisplayName(scopeFolder);
+            TxtStatus.Text = $"Sorted {scopeLabel} {(descending ? "Z-A" : "A-Z")}.";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError(descending ? "Sort Pages Z-A" : "Sort Pages A-Z", ex);
+        }
+    }
+
     private void BtnSortPagesArchStruct_Click(object sender, RoutedEventArgs e)
     {
         SortPagesIntoArchStruct();

@@ -790,6 +790,29 @@
                     <TextBlock Text="Split" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
+            <Button x:Name="BtnCombineAreas"
+                    Click="DropdownButton_Click"
+                    ToolTip="Boolean-combine two or more selected Areas: union, subtract, intersect, remove overlap, divide"
+                    Style="{StaticResource ToolBtn}"
+                    MinWidth="76"
+                    Padding="6,2">
+                <StackPanel Orientation="Horizontal"
+                            TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconCombine}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Combine" VerticalAlignment="Center"/>
+                    <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                </StackPanel>
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Union — merge into one area" Click="BtnCombineUnion_Click"/>
+                        <MenuItem Header="Subtract — first minus the others" Click="BtnCombineSubtract_Click"/>
+                        <MenuItem Header="Intersect — keep only the overlap" Click="BtnCombineIntersect_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Remove Overlap — trim double counting" Click="BtnCombineRemoveOverlap_Click"/>
+                        <MenuItem Header="Divide — split into exclusive + overlap pieces" Click="BtnCombineDivide_Click"/>
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
             <Border Style="{StaticResource ToolDiv}"/>
             <ToggleButton x:Name="BtnSnap"
                           ToolTip="Snap to existing takeoff points (F3)"

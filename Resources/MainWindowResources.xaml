@@ -7,20 +7,20 @@
 <Geometry x:Key="IconExport">M8,9.8 L8,2.6 M5,5.8 L8,2.6 L11,5.8 M3,12.8 L13,12.8</Geometry>
 <Geometry x:Key="IconTag">M3,3.2 L8.6,3.2 L13.2,7.8 L8.6,12.4 L3,12.4 Z M5.6,5.8 A0.95,0.95 0 1 1 5.59,5.8 Z</Geometry>
 <Geometry x:Key="IconRuler">M2,6 L6,2 L14,10 L10,14 Z M4.4,5.6 L5.7,6.9 M6.2,3.8 L7.5,5.1 M8,5.6 L9.3,6.9 M9.8,3.8 L11.1,5.1</Geometry>
-<Geometry x:Key="IconPan">M5.2,8.2 L5.2,4.4 M7.1,8 L7.1,3.2 M9,8.2 L9,4.1 M10.9,8.8 L10.9,5.4 M4.1,8.1 C3.1,8.5 2.8,9.5 3.6,10.4 L5.2,12.1 C5.9,12.9 6.8,13.4 8,13.4 L9.5,13.4 C11.4,13.4 12.6,12.1 12.6,10.2 L12.6,7.3 C12.6,6.6 12.1,6.1 11.4,6.1 C11.2,6.1 11,6.1 10.9,6.2</Geometry>
-<Geometry x:Key="IconSelect">M3,2.8 L12.2,8.8 L8.3,9.5 L10.8,13.2 L8.9,14.2 L6.5,10.5 L3.8,13 Z</Geometry>
+<Geometry x:Key="IconPan">M8,2 L8,14 M2,8 L14,8 M6.2,3.8 L8,2 L9.8,3.8 M6.2,12.2 L8,14 L9.8,12.2 M3.8,6.2 L2,8 L3.8,9.8 M12.2,6.2 L14,8 L12.2,9.8</Geometry>
+<Geometry x:Key="IconSelect">M2.8,2.8 L7.2,13.2 L8.7,8.7 L13.2,7.2 Z M8.7,8.7 L13.2,13.2</Geometry>
 <Geometry x:Key="IconCount">M5,5 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0 M11,5 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0 M8,11 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0</Geometry>
 <Geometry x:Key="IconClipboard">M5.2,3.2 L4,3.2 L4,13.6 L12,13.6 L12,3.2 L10.8,3.2 M6.2,2.4 L9.8,2.4 L9.8,4.4 L6.2,4.4 Z M6,7.4 L10,7.4 M6,10 L10,10</Geometry>
 <Geometry x:Key="IconSparkle">M8,2 L9.2,6.8 L14,8 L9.2,9.2 L8,14 L6.8,9.2 L2,8 L6.8,6.8 Z</Geometry>
 <Geometry x:Key="IconCrop">M5,2 L5,11 L14,11 M2,5 L11,5 L11,14</Geometry>
 <Geometry x:Key="IconPlus">M8,2.5 L8,13.5 M2.5,8 L13.5,8</Geometry>
 <Geometry x:Key="IconMinus">M2.5,8 L13.5,8</Geometry>
-<Geometry x:Key="IconFitPage">M4,2.5 L10,2.5 L12.5,5 L12.5,13.5 L4,13.5 Z M10,2.5 L10,5 L12.5,5 M6.2,6.2 L4.6,4.6 M4.6,4.6 L6.6,4.6 M4.6,4.6 L4.6,6.6 M9.8,9.8 L11.4,11.4 M11.4,11.4 L9.4,11.4 M11.4,11.4 L11.4,9.4</Geometry>
+<Geometry x:Key="IconFitPage">M2.8,6 L2.8,2.8 L6,2.8 M10,2.8 L13.2,2.8 L13.2,6 M13.2,10 L13.2,13.2 L10,13.2 M6,13.2 L2.8,13.2 L2.8,10</Geometry>
 <Geometry x:Key="IconIsoView">M8,2.5 L13,5.4 L13,10.6 L8,13.5 L3,10.6 L3,5.4 Z M8,2.5 L8,7.8 M3,5.4 L8,7.8 L13,5.4 M8,7.8 L8,13.5</Geometry>
 <Geometry x:Key="IconTopView">M3,3 L13,3 L13,13 L3,13 Z M8,3 L8,13 M3,8 L13,8</Geometry>
 <Geometry x:Key="IconFrontView">M3,4 L13,4 L13,12 L3,12 Z M5,6 L11,6 M5,8 L11,8 M5,10 L11,10</Geometry>
 <Geometry x:Key="IconChevronDown">M4,6 L8,10 L12,6</Geometry>
-<Geometry x:Key="IconRefresh">M12.5,5.2 A4.8,4.8 0 1 0 13,9.2 M12.5,5.2 L12.5,2.6 M12.5,5.2 L9.9,5.2 M3.5,10.8 A4.8,4.8 0 1 0 3,6.8 M3.5,10.8 L3.5,13.4 M3.5,10.8 L6.1,10.8</Geometry>
+<Geometry x:Key="IconRefresh">M13.3,8 A5.3,5.3 0 1 1 11.9,4.4 L13.4,5.7 M13.4,2.5 L13.4,5.7 L10.2,5.7</Geometry>
 <Geometry x:Key="IconSimilar">M6.8,6.8 m-3.8,0 a3.8,3.8 0 1,0 7.6,0 a3.8,3.8 0 1,0 -7.6,0 M9.7,9.7 L13.5,13.5 M11.5,2.8 L12.2,4.8 M10.4,3.9 L13.1,3.9</Geometry>
 <Geometry x:Key="IconPointAlongLine">M3,12 L13,4 M4.4,10.6 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 M8,7.8 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 M11.6,5 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0</Geometry>
 <!-- Page tab icons -->
@@ -48,9 +48,9 @@
 <Geometry x:Key="IconCloud">M4.5,11.5 A2.2,2.2 0 0 1 4.4,7.4 A2.6,2.6 0 0 1 8,5.4 A2.4,2.4 0 0 1 11.8,6.6 A2,2 0 0 1 11.6,11.5 Z</Geometry>
 <Geometry x:Key="IconAreaFill">M3,4 L13,4 L13,12 L3,12 Z M5,12 L13,5 M9,12 L13,8.3</Geometry>
 <Geometry x:Key="IconJoistArea">M3,4 L13,4 L13,12 L3,12 Z M5.2,4 L5.2,12 M8,4 L8,12 M10.8,4 L10.8,12</Geometry>
-<Geometry x:Key="IconBeam">M3,8 L13,8 M4.2,5.5 L4.2,10.5 M11.8,5.5 L11.8,10.5 M5.5,6 L10.5,6</Geometry>
-<Geometry x:Key="IconOpening">M3,4 L13,4 L13,12 L3,12 Z M6,4 L6,12 M10,4 L10,12 M8,8 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0</Geometry>
-<Geometry x:Key="IconCut">M3,4 L13,4 L13,12 L3,12 Z M4.2,4.2 L11.8,11.8 M11.8,4.2 L4.2,11.8</Geometry>
+<Geometry x:Key="IconBeam">M3.5,4.2 L12.5,4.2 M3.5,11.8 L12.5,11.8 M8,4.2 L8,11.8</Geometry>
+<Geometry x:Key="IconOpening">M2,12.5 L4.8,12.5 M12,12.5 L14,12.5 M4.8,12.5 L4.8,5.3 A7.2,7.2 0 0 1 12,12.5</Geometry>
+<Geometry x:Key="IconCut">M4.3,11.6 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 M11.7,11.6 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 M5.4,10.2 L12.6,2.8 M10.6,10.2 L3.4,2.8</Geometry>
 <Geometry x:Key="IconNote">M4,3 L12,3 L12,9.5 L8.5,13 L4,13 Z M12,9.5 L8.5,9.5 L8.5,13 M6,6.3 L10,6.3 M6,8.3 L8,8.3</Geometry>
 
 <!-- Side command strip mini icons (16x16 stroke grid, same style as ribbon icons) -->
@@ -65,6 +65,7 @@
 <Geometry x:Key="IconRecordDot">M8,8 m-4.8,0 a4.8,4.8 0 1,0 9.6,0 a4.8,4.8 0 1,0 -9.6,0 M8,8 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0</Geometry>
 <Geometry x:Key="IconTarget">M8,8 m-4.6,0 a4.6,4.6 0 1,0 9.2,0 a4.6,4.6 0 1,0 -9.2,0 M8,1.6 L8,4.2 M8,11.8 L8,14.4 M1.6,8 L4.2,8 M11.8,8 L14.4,8</Geometry>
 <Geometry x:Key="IconSliders">M2.8,5 L8.6,5 M11.6,5 L13.2,5 M10.1,3.5 L10.1,6.5 M2.8,11 L4.4,11 M7.4,11 L13.2,11 M5.9,9.5 L5.9,12.5</Geometry>
+<Geometry x:Key="IconCombine">M2.6,2.6 L9.4,2.6 L9.4,9.4 L2.6,9.4 Z M6.6,6.6 L13.4,6.6 L13.4,13.4 L6.6,13.4 Z</Geometry>
 <Geometry x:Key="IconMerge">M3,3 L3,5.8 A3.4,3.4 0 0 0 6.4,9.2 L12,9.2 M3,13.2 L3,10.4 M9.8,6.8 L12.2,9.2 L9.8,11.6</Geometry>
 <Geometry x:Key="IconSplit">M2.6,8 L6.8,8 M6.8,8 L11.6,4 M6.8,8 L11.6,12 M9.5,3.8 L11.9,3.8 L11.9,6.2 M9.5,12.2 L11.9,12.2 L11.9,9.8</Geometry>
 <Geometry x:Key="IconTreeAuto">M4.2,2.6 L4.2,12.6 M4.2,5.4 L9.4,5.4 M4.2,9 L11,9 M4.2,12.6 L12.6,12.6</Geometry>

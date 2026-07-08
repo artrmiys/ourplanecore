@@ -26,6 +26,8 @@ public partial class MainWindow
         SideStripSeparatorId,
         "pages.nameScaleSetup",
         SideStripSeparatorId,
+        "pages.sortAz",
+        "pages.sortZa",
         "pages.sortArchStruct",
         "pages.sortSuffix",
         "pages.autoFolders",
@@ -45,6 +47,9 @@ public partial class MainWindow
         SideStripSeparatorId,
         "edit.mergeMeasurements",
         "edit.splitMeasurements",
+        SideStripSeparatorId,
+        "takeoffs.sortAz",
+        "takeoffs.sortZa",
         SideStripSeparatorId,
         "takeoffs.autoTree",
         "takeoffs.fromPages",
@@ -89,8 +94,12 @@ public partial class MainWindow
 
     private static readonly Dictionary<string, string> SideStripTextGlyphs = new()
     {
+        ["pages.sortAz"] = "A-Z",
+        ["pages.sortZa"] = "Z-A",
         ["pages.sortArchStruct"] = "A/S",
         ["pages.sortSuffix"] = "D/S",
+        ["takeoffs.sortAz"] = "A-Z",
+        ["takeoffs.sortZa"] = "Z-A",
         ["file.exportCurrentExcel"] = "XLS",
         ["file.exportExcel"] = "XLS",
         ["file.exportCsv"] = "CSV",

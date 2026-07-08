@@ -29,6 +29,14 @@ var tests = new List<(string Name, Action Run)>
     ("area cut concave through two holes", AreaCutConcaveThroughTwoHoles),
     ("area cut box clips at area edge", AreaCutBoxClipsAtAreaEdge),
     ("area cut through area splits into segments", AreaCutThroughAreaSplitsIntoSegments),
+    ("area combine union merges overlapping areas", AreaCombineUnionMergesOverlappingAreas),
+    ("area combine subtract cuts later areas from first", AreaCombineSubtractCutsLaterAreasFromFirst),
+    ("area combine intersect keeps only overlap", AreaCombineIntersectKeepsOnlyOverlap),
+    ("area combine intersect rejects disjoint areas", AreaCombineIntersectRejectsDisjointAreas),
+    ("area combine remove overlap trims later areas", AreaCombineRemoveOverlapTrimsLaterAreas),
+    ("area combine divide splits into exclusive and shared", AreaCombineDivideSplitsIntoExclusiveAndShared),
+    ("area combine rejects mixed pages", AreaCombineRejectsMixedPages),
+    ("area combine allows differing stored scales on one page", AreaCombineAllowsDifferingStoredScales),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
@@ -777,6 +785,133 @@ static void AreaCutThroughAreaSplitsIntoSegments()
     AssertEqual("2", geometries.Count.ToString(), "through cut should split the area into two stored area geometries");
     AssertClose(80.0, geometries.Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))), "split segments should preserve the remaining area");
     AssertTrue(geometries.All(geometry => geometry.Holes.Count == 0), "simple through cut should not create holes");
+}
+
+static void AreaCombineUnionMergesOverlappingAreas()
+{
+    // Two 10x10 squares overlapping by a 5x10 strip: union area = 100 + 100 - 50.
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+
+    bool ok = MeasurementAreaBooleanService.TryCombine(
+        [first, second], SKPathOp.Union, out List<AreaBooleanGeometry> geometries, out string error);
+
+    AssertTrue(ok, error);
+    AssertEqual("1", geometries.Count.ToString(), "union of overlapping areas should produce one geometry");
+    AssertClose(150.0, Math.Abs(SignedAreaForTest(geometries[0].Points)), "union should cover both squares once");
+}
+
+static void AreaCombineSubtractCutsLaterAreasFromFirst()
+{
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+
+    bool ok = MeasurementAreaBooleanService.TryCombine(
+        [first, second], SKPathOp.Difference, out List<AreaBooleanGeometry> geometries, out string error);
+
+    AssertTrue(ok, error);
+    AssertClose(
+        50.0,
+        geometries.Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))),
+        "subtract should leave only the exclusive part of the first area");
+}
+
+static void AreaCombineIntersectKeepsOnlyOverlap()
+{
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+
+    bool ok = MeasurementAreaBooleanService.TryCombine(
+        [first, second], SKPathOp.Intersect, out List<AreaBooleanGeometry> geometries, out string error);
+
+    AssertTrue(ok, error);
+    AssertEqual("1", geometries.Count.ToString(), "intersect of two overlapping squares should produce one geometry");
+    AssertClose(50.0, Math.Abs(SignedAreaForTest(geometries[0].Points)), "intersect should keep only the shared strip");
+}
+
+static void AreaCombineIntersectRejectsDisjointAreas()
+{
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(20, 0, 30, 10);
+
+    bool ok = MeasurementAreaBooleanService.TryCombine(
+        [first, second], SKPathOp.Intersect, out _, out string error);
+
+    AssertTrue(!ok, "intersect of disjoint areas should fail");
+    AssertTrue(error.Length > 0, "intersect failure should explain itself");
+}
+
+static void AreaCombineRemoveOverlapTrimsLaterAreas()
+{
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+    var third = SimpleAreaMeasurement(2, 2, 8, 8); // fully inside the first
+
+    bool ok = MeasurementAreaBooleanService.TryRemoveOverlap(
+        [first, second, third], out List<List<AreaBooleanGeometry>?> trimmed, out string error);
+
+    AssertTrue(ok, error);
+    AssertEqual("3", trimmed.Count.ToString(), "remove overlap should report every input area");
+    AssertTrue(trimmed[0] == null, "first-selected area keeps priority and stays unchanged");
+    AssertClose(
+        50.0,
+        trimmed[1]!.Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))),
+        "second area should lose the strip already covered by the first");
+    AssertEqual("0", trimmed[2]!.Count.ToString(), "an area fully covered by earlier areas should be removed");
+}
+
+static void AreaCombineDivideSplitsIntoExclusiveAndShared()
+{
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+
+    bool ok = MeasurementAreaBooleanService.TryDivide(
+        [first, second],
+        out List<List<AreaBooleanGeometry>> exclusive,
+        out List<AreaBooleanGeometry> shared,
+        out string error);
+
+    AssertTrue(ok, error);
+    AssertClose(
+        50.0,
+        exclusive[0].Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))),
+        "divide should keep the first area's exclusive part");
+    AssertClose(
+        50.0,
+        exclusive[1].Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))),
+        "divide should keep the second area's exclusive part");
+    AssertClose(
+        50.0,
+        shared.Sum(geometry => Math.Abs(SignedAreaForTest(geometry.Points))),
+        "divide should return the overlap as the shared geometry");
+}
+
+static void AreaCombineAllowsDifferingStoredScales()
+{
+    // Same sheet = one calibration; stale per-measurement scale copies must not
+    // block the combine.
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+    second.ScaleMetersPerPt = 2;
+
+    bool ok = MeasurementAreaBooleanService.TryCombine(
+        [first, second], SKPathOp.Union, out List<AreaBooleanGeometry> geometries, out string error);
+
+    AssertTrue(ok, error);
+    AssertClose(150.0, Math.Abs(SignedAreaForTest(geometries[0].Points)), "union should ignore stored scale differences on one page");
+}
+
+static void AreaCombineRejectsMixedPages()
+{
+    var first = SimpleAreaMeasurement(0, 0, 10, 10);
+    var second = SimpleAreaMeasurement(5, 0, 15, 10);
+    second.PageFolder = @"C:\job\Pages\A102";
+
+    bool ok = MeasurementAreaBooleanService.TryCombine(
+        [first, second], SKPathOp.Union, out _, out string error);
+
+    AssertTrue(!ok, "combine across different pages should fail");
+    AssertTrue(error.Contains("same page", StringComparison.OrdinalIgnoreCase), "mixed-page failure should mention the page requirement");
 }
 
 static AreaBooleanGeometry BuildAreaCutGeometryForTest(Measurement measurement, IReadOnlyList<SKPoint> cut)

@@ -1,5 +1,25 @@
 ﻿# Development Log
 
+## 2026-07-08 Sort A-Z, Cut ortho fix, Area Combine tool, icon polish
+
+- Added Sort A-Z / Z-A to the side command strips, command palette (`pages.sortAz/Za`, `takeoffs.sortAz/Za`): sorts children of the selected Pages/Takeoffs folder (or root) via the existing natural-order `SortChildren`.
+- Fixed ortho (Shift/F8) in the Area Cut polygon mode: `AreaCut` was missing from the ortho-anchor tool list in `PdfViewport.DigitizerSnap.cs`.
+- New Combine tool (ribbon dropdown next to Merge/Split + palette commands): boolean operations on 2+ selected Areas — Union, Subtract (first minus rest, cutters untouched), Intersect, Remove Overlap (de-duplicates overlapping quantities, first-selected wins), Divide (exclusive parts + overlap as a separate area). Same-page requirement only (one sheet = one calibration); status warns if stored scale copies differ. Full undo via the cut undo path. Service: `MeasurementAreaBooleanService.TryCombine/TryRemoveOverlap/TryDivide`; viewport: `PdfViewport.AreaCombineTools.cs`; 8 new regression tests (430 total).
+- Redrew 7 weak ribbon icons (Pan, Select, Cut, Beam, Openings, Fit Page, Refresh) to canonical single-stroke forms; added `IconCombine`.
+- Verified: build clean, 430/430 tests, Debug + published exe launch with clean logs, deployed to `Desktop\updates\OurPlaneCore\ourplanecore.exe`.
+
+## 2026-07-08 Desktop refactor and UI execution handoff
+
+Wrote detailed handoff: `docs/70-architecture-refactor/DESKTOP_REFACTOR_UI_HANDOFF_2026_07_08.md`.
+
+- Executed the desktop-first follow-up from the 2026-07-07 audit docs, keeping the web MVP work deferred.
+- Fixed and synchronized label visibility toggles across takeoff properties, Display, viewport rendering, and PDF export.
+- Removed the dead PDF layer render path, extracted page bookmarks into `PageBookmarksController`, and centralized takeoff dirty saves in `TakeoffSaveService`.
+- Expanded the production status bar with scale, zoom, cursor coordinates, active mode, active takeoff, and save-state segments.
+- Added status/toast feedback and routed many OK-only validation/workflow prompts away from modal message boxes.
+- Tightened corner radii and replaced multiple text/emoji/glyph controls with the app's single-stroke Geometry icon style.
+- Prior run verification recorded: build/tests passed, compressed single-file package deployed to `Desktop\updates\OurPlaneCore\ourplanecore.exe`, shortcut retargeted, packaged launch log clean with `ErrorsAfterStartup = 0`.
+
 ## 2026-06-28 Takeoff/Page tree visibility and Count copy cleanup
 
 Wrote detailed handoff: `docs/30-takeoffs-measurements/KB_TAKEOFF_TREE_PAGE_TREE_SELECTION_2026_06_28.md`.

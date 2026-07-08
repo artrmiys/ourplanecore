@@ -36,6 +36,7 @@ public partial class MainWindow
         IReadOnlyList<Measurement> selectedMeasurements = _viewport.GetSelectedMeasurements();
         int selectedMeasurementCount = selectedMeasurements.Count;
         int selectedLineMeasurementCount = selectedMeasurements.Count(IsPointAlongLineSource);
+        int selectedAreaMeasurementCount = selectedMeasurements.Count(m => m.MType == "area");
 
         var items = new List<CommandPaletteItem>();
         void Add(
@@ -110,7 +111,14 @@ public partial class MainWindow
         Add("edit.pasteMeasurements", "Paste Measurements", "Edit", "Ctrl+V", "Paste copied measurements to the active page.", _measurementClipboard != null && hasPage, "Copy measurements and select a page first.");
         Add("edit.mergeMeasurements", "Merge Selected Measurements", "Edit", "Ctrl+M", "Move selected measurement segments into another takeoff.", selectedMeasurementCount > 0, "Select one or more measurements first.");
         Add("edit.splitMeasurements", "Split Selected Measurements", "Edit", "Ctrl+Shift+M", "Move selected measurement segments into a new takeoff.", selectedMeasurementCount > 0, "Select one or more measurements first.");
+        Add("edit.combineUnion", "Combine Areas: Union", "Edit", "", "Merge the selected Areas into one.", selectedAreaMeasurementCount > 1, "Select two or more Area measurements first.");
+        Add("edit.combineSubtract", "Combine Areas: Subtract", "Edit", "", "Subtract the later-selected Areas from the first-selected one.", selectedAreaMeasurementCount > 1, "Select two or more Area measurements first.");
+        Add("edit.combineIntersect", "Combine Areas: Intersect", "Edit", "", "Keep only the region shared by all selected Areas.", selectedAreaMeasurementCount > 1, "Select two or more Area measurements first.");
+        Add("edit.combineRemoveOverlap", "Combine Areas: Remove Overlap", "Edit", "", "Trim overlaps between selected Areas so nothing is counted twice; the first-selected Area wins.", selectedAreaMeasurementCount > 1, "Select two or more Area measurements first.");
+        Add("edit.combineDivide", "Combine Areas: Divide", "Edit", "", "Split selected Areas into exclusive parts plus a separate overlap area.", selectedAreaMeasurementCount > 1, "Select two or more Area measurements first.");
 
+        Add("pages.sortAz", "Sort Pages A-Z", "Pages", "", "Sort children of the selected Pages folder (or root) alphabetically.", hasJob, "Open or create a job first.");
+        Add("pages.sortZa", "Sort Pages Z-A", "Pages", "", "Sort children of the selected Pages folder (or root) in reverse alphabetical order.", hasJob, "Open or create a job first.");
         Add("pages.sortArchStruct", "Sort Pages A/S", "Pages", "", "Move A sheets to Arch, S sheets to Struct, and trailing '-' sheets to others.", hasJob, "Open or create a job first.");
         Add("pages.blankSheet", "Blank Sheet", "Pages", "", "Create an empty sheet in the current job.", hasJob, "Open or create a job first.");
         Add("pages.sortSuffix", "Sort Pages D/Sec/WT", "Pages", "", "Move suffix sheets into details/sections/units and reorder v/wt/ft/sv/sw at Pages root.", hasJob, "Open or create a job first.");
@@ -136,6 +144,8 @@ public partial class MainWindow
         Add("takeoffs.activePrevious", "Previous Takeoff Target", "Takeoffs", "", "Switch the active target to the previous takeoff item.", _takeoffItems.Count > 1, "Create at least two takeoff items first.");
         Add("takeoffs.activeNext", "Next Takeoff Target", "Takeoffs", "", "Switch the active target to the next takeoff item.", _takeoffItems.Count > 1, "Create at least two takeoff items first.");
         Add("takeoffs.activeSheetNext", "Next Sheet Takeoff Target", "Takeoffs", "", "Switch to the next takeoff item measured on the active sheet.", hasSheetTakeoffTargets, "Select a sheet with measured takeoffs first.");
+        Add("takeoffs.sortAz", "Sort Takeoffs A-Z", "Takeoffs", "", "Sort children of the selected Takeoffs folder (or root) alphabetically.", hasJob, "Open or create a job first.");
+        Add("takeoffs.sortZa", "Sort Takeoffs Z-A", "Takeoffs", "", "Sort children of the selected Takeoffs folder (or root) in reverse alphabetical order.", hasJob, "Open or create a job first.");
         Add("takeoffs.autoTree", "Auto Takeoff Tree", "Takeoffs", "", "Create the standard takeoff folder tree.", hasJob, "Open or create a job first.");
         Add("takeoffs.fromPages", "Create Takeoffs From Pages", "Takeoffs", "", "Create top takeoff folders from CAPS page/folder names.", hasJob, "Open or create a job first.");
 
@@ -225,7 +235,14 @@ public partial class MainWindow
             case "edit.pasteMeasurements": PasteMeasurementsFromClipboard(); break;
             case "edit.mergeMeasurements": MergeSelectedMeasurementsToPromptedTakeoff(); break;
             case "edit.splitMeasurements": SplitSelectedMeasurementsToNewTakeoff(); break;
+            case "edit.combineUnion": _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Union); break;
+            case "edit.combineSubtract": _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Subtract); break;
+            case "edit.combineIntersect": _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Intersect); break;
+            case "edit.combineRemoveOverlap": _viewport.CombineSelectedAreas(Controls.AreaCombineMode.RemoveOverlap); break;
+            case "edit.combineDivide": _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Divide); break;
 
+            case "pages.sortAz": SortPagesAlphabetically(descending: false); break;
+            case "pages.sortZa": SortPagesAlphabetically(descending: true); break;
             case "pages.sortArchStruct": BtnSortPagesArchStruct_Click(this, new RoutedEventArgs()); break;
             case "pages.blankSheet": BtnNewBlankPage_Click(this, new RoutedEventArgs()); break;
             case "pages.sortSuffix": BtnSortPagesSuffix_Click(this, new RoutedEventArgs()); break;
@@ -254,6 +271,8 @@ public partial class MainWindow
             case "takeoffs.activePrevious": BtnActiveTakeoffPrevious_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.activeNext": BtnActiveTakeoffNext_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.activeSheetNext": MoveActiveSheetTakeoffTarget(1); break;
+            case "takeoffs.sortAz": SortTakeoffsAlphabetically(descending: false); break;
+            case "takeoffs.sortZa": SortTakeoffsAlphabetically(descending: true); break;
             case "takeoffs.autoTree": BtnAutoTakeoffTree_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.fromPages": BtnAutoTakeoffFromPages_Click(this, new RoutedEventArgs()); break;
 

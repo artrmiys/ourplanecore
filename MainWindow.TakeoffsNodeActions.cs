@@ -327,6 +327,35 @@ public partial class MainWindow
         }
     }
 
+    private void SortTakeoffsAlphabetically(bool descending)
+    {
+        if (_currentJob == null)
+        {
+            PostStatusInfo("Open or create a job before sorting takeoffs.");
+            return;
+        }
+
+        string folderPath = TakeoffsTree.SelectedItem switch
+        {
+            TreeViewItem { Tag: TakeoffFolderNode folder } when !string.IsNullOrWhiteSpace(folder.FolderPath) =>
+                folder.FolderPath,
+            TreeViewItem { Tag: TakeoffItem item } when !string.IsNullOrWhiteSpace(item.FolderPath) =>
+                Path.GetDirectoryName(item.FolderPath) ?? _currentJob.TakeoffsRoot,
+            _ => _currentJob.TakeoffsRoot,
+        };
+        if (!Directory.Exists(folderPath))
+            folderPath = _currentJob.TakeoffsRoot;
+
+        SortTakeoffChildren(folderPath, descending);
+        string scopeLabel = string.Equals(
+            folderPath.TrimEnd('\\', '/'),
+            _currentJob.TakeoffsRoot.TrimEnd('\\', '/'),
+            StringComparison.OrdinalIgnoreCase)
+                ? "Takeoffs root"
+                : OurPlaneCoreJobStore.DisplayName(folderPath);
+        TxtStatus.Text = $"Sorted {scopeLabel} {(descending ? "Z-A" : "A-Z")}.";
+    }
+
     private void SortTakeoffChildren(string folderPath, bool descending)
     {
         try
