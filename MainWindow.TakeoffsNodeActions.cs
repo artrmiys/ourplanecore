@@ -327,13 +327,10 @@ public partial class MainWindow
         }
     }
 
-    private void SortTakeoffsAlphabetically(bool descending)
+    private string SelectedTakeoffScopeFolder()
     {
         if (_currentJob == null)
-        {
-            PostStatusInfo("Open or create a job before sorting takeoffs.");
-            return;
-        }
+            return "";
 
         string folderPath = TakeoffsTree.SelectedItem switch
         {
@@ -343,18 +340,66 @@ public partial class MainWindow
                 Path.GetDirectoryName(item.FolderPath) ?? _currentJob.TakeoffsRoot,
             _ => _currentJob.TakeoffsRoot,
         };
-        if (!Directory.Exists(folderPath))
-            folderPath = _currentJob.TakeoffsRoot;
+        return Directory.Exists(folderPath) ? folderPath : _currentJob.TakeoffsRoot;
+    }
 
-        SortTakeoffChildren(folderPath, descending);
-        string scopeLabel = string.Equals(
+    private string TakeoffScopeLabel(string folderPath) =>
+        _currentJob != null &&
+        string.Equals(
             folderPath.TrimEnd('\\', '/'),
             _currentJob.TakeoffsRoot.TrimEnd('\\', '/'),
             StringComparison.OrdinalIgnoreCase)
                 ? "Takeoffs root"
                 : OurPlaneCoreJobStore.DisplayName(folderPath);
-        TxtStatus.Text = $"Sorted {scopeLabel} {(descending ? "Z-A" : "A-Z")}.";
+
+    private void SortTakeoffsAlphabetically(bool descending)
+    {
+        if (_currentJob == null)
+        {
+            PostStatusInfo("Open or create a job before sorting takeoffs.");
+            return;
+        }
+
+        string folderPath = SelectedTakeoffScopeFolder();
+        SortTakeoffChildren(folderPath, descending);
+        TxtStatus.Text = $"Sorted {TakeoffScopeLabel(folderPath)} {(descending ? "Z-A" : "A-Z")}.";
     }
+
+    // Walls / Details sorts apply to the selected folder AND every folder
+    // under it, so selecting "walls" reorders each floor folder in one click.
+    private void SortTakeoffsSpecial(Action<string> sortFolder, string label)
+    {
+        if (_currentJob == null)
+        {
+            PostStatusInfo("Open or create a job before sorting takeoffs.");
+            return;
+        }
+
+        try
+        {
+            string folderPath = SelectedTakeoffScopeFolder();
+            sortFolder(folderPath);
+            int folders = 1;
+            foreach (string child in Directory.EnumerateDirectories(folderPath, "*", SearchOption.AllDirectories))
+            {
+                sortFolder(child);
+                folders++;
+            }
+
+            LoadTakeoffsForJob();
+            TxtStatus.Text = $"Sorted {TakeoffScopeLabel(folderPath)} ({label}, {folders} folder(s)).";
+        }
+        catch (Exception ex)
+        {
+            ShowOperationError($"Sort Takeoffs {label}", ex);
+        }
+    }
+
+    private void SortTakeoffsWalls() =>
+        SortTakeoffsSpecial(OurPlaneCoreJobStore.SortTakeoffWallChildren, "walls: ext-corr-dem-2x6-2x4");
+
+    private void SortTakeoffsDetails() =>
+        SortTakeoffsSpecial(OurPlaneCoreJobStore.SortTakeoffDetailChildren, "details by sheet");
 
     private void SortTakeoffChildren(string folderPath, bool descending)
     {

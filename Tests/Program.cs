@@ -37,6 +37,8 @@ var tests = new List<(string Name, Action Run)>
     ("area combine divide splits into exclusive and shared", AreaCombineDivideSplitsIntoExclusiveAndShared),
     ("area combine rejects mixed pages", AreaCombineRejectsMixedPages),
     ("area combine allows differing stored scales on one page", AreaCombineAllowsDifferingStoredScales),
+    ("takeoff wall sort orders categories then sizes", TakeoffWallSortOrdersCategoriesThenSizes),
+    ("takeoff detail sort groups by sheet", TakeoffDetailSortGroupsBySheet),
     ("pdf export area path cuts holes", PdfExportAreaPathCutsHoles),
     ("pdf export always uses white paper", PdfExportAlwaysUsesWhitePaper),
     ("output settings default export appearance", OutputSettingsDefaultExportAppearance),
@@ -912,6 +914,43 @@ static void AreaCombineRejectsMixedPages()
 
     AssertTrue(!ok, "combine across different pages should fail");
     AssertTrue(error.Contains("same page", StringComparison.OrdinalIgnoreCase), "mixed-page failure should mention the page requirement");
+}
+
+static void TakeoffWallSortOrdersCategoriesThenSizes()
+{
+    var names = new List<string>
+    {
+        "2x4 10.3 furring",
+        "CH",
+        "dem 2x6 11.15 staggered",
+        "2x6 10.65",
+        "corr 2x6 9.09",
+        "ext 11.15",
+        "ext 9.09",
+    };
+    names.Sort(TakeoffWallNameComparer.Instance);
+    AssertEqual(
+        "ext 9.09|ext 11.15|corr 2x6 9.09|dem 2x6 11.15 staggered|2x6 10.65|2x4 10.3 furring|CH",
+        string.Join("|", names),
+        "wall sort should order ext, corr, dem, then stud sizes descending, then the rest");
+}
+
+static void TakeoffDetailSortGroupsBySheet()
+{
+    var names = new List<string>
+    {
+        "3/S501",
+        "1/A501",
+        "10/A501",
+        "notes",
+        "5_A501",
+        "2/A501",
+    };
+    names.Sort(TakeoffDetailSheetNameComparer.Instance);
+    AssertEqual(
+        "1/A501|2/A501|5_A501|10/A501|3/S501|notes",
+        string.Join("|", names),
+        "detail sort should group by sheet after the separator, then detail number, non-details last");
 }
 
 static AreaBooleanGeometry BuildAreaCutGeometryForTest(Measurement measurement, IReadOnlyList<SKPoint> cut)

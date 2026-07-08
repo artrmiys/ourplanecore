@@ -52,6 +52,8 @@ public partial class MainWindow
         SideStripSeparatorId,
         "takeoffs.sortAz",
         "takeoffs.sortZa",
+        "takeoffs.sortWalls",
+        "takeoffs.sortDetails",
         SideStripSeparatorId,
         "takeoffs.autoTree",
         "takeoffs.fromPages",
@@ -111,6 +113,8 @@ public partial class MainWindow
         ["file.exportCsv"] = "CSV",
         ["file.exportTxt"] = "TXT",
         ["takeoffs.roofBase"] = "RF",
+        ["takeoffs.sortWalls"] = "EXT",
+        ["takeoffs.sortDetails"] = "1/A",
         ["tool.pointAlongLine"] = "P/L",
     };
 

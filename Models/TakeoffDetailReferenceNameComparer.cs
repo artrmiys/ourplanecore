@@ -106,7 +106,7 @@ internal sealed class TakeoffDetailReferenceNameComparer : IComparer<string>
         return left.Count.CompareTo(right.Count);
     }
 
-    private static int NaturalCompare(string x, string y)
+    internal static int NaturalCompare(string x, string y)
     {
         int ix = 0;
         int iy = 0;

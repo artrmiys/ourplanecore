@@ -147,6 +147,8 @@ public partial class MainWindow
         Add("takeoffs.activeSheetNext", "Next Sheet Takeoff Target", "Takeoffs", "", "Switch to the next takeoff item measured on the active sheet.", hasSheetTakeoffTargets, "Select a sheet with measured takeoffs first.");
         Add("takeoffs.sortAz", "Sort Takeoffs A-Z", "Takeoffs", "", "Sort children of the selected Takeoffs folder (or root) alphabetically.", hasJob, "Open or create a job first.");
         Add("takeoffs.sortZa", "Sort Takeoffs Z-A", "Takeoffs", "", "Sort children of the selected Takeoffs folder (or root) in reverse alphabetical order.", hasJob, "Open or create a job first.");
+        Add("takeoffs.sortWalls", "Sort Takeoffs: Walls", "Takeoffs", "", "Sort wall takeoffs in the selected folder and subfolders: ext, corr, dem, then 2x6/2x4 sizes.", hasJob, "Open or create a job first.");
+        Add("takeoffs.sortDetails", "Sort Takeoffs: Details by Sheet", "Takeoffs", "", "Group detail takeoffs like 1/A501 by the sheet after the slash, ordered as in the Pages tree.", hasJob, "Open or create a job first.");
         Add("takeoffs.autoTree", "Auto Takeoff Tree", "Takeoffs", "", "Create the standard takeoff folder tree.", hasJob, "Open or create a job first.");
         Add("takeoffs.fromPages", "Create Takeoffs From Pages", "Takeoffs", "", "Create top takeoff folders from CAPS page/folder names.", hasJob, "Open or create a job first.");
 
@@ -275,6 +277,8 @@ public partial class MainWindow
             case "takeoffs.activeSheetNext": MoveActiveSheetTakeoffTarget(1); break;
             case "takeoffs.sortAz": SortTakeoffsAlphabetically(descending: false); break;
             case "takeoffs.sortZa": SortTakeoffsAlphabetically(descending: true); break;
+            case "takeoffs.sortWalls": SortTakeoffsWalls(); break;
+            case "takeoffs.sortDetails": SortTakeoffsDetails(); break;
             case "takeoffs.autoTree": BtnAutoTakeoffTree_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.fromPages": BtnAutoTakeoffFromPages_Click(this, new RoutedEventArgs()); break;
 

@@ -236,6 +236,16 @@ internal static class NodeStore
         SortChildren(parentFolder, descending, TakeoffDetailReferenceNameComparer.Instance);
     }
 
+    public static void SortTakeoffWallChildren(string parentFolder)
+    {
+        SortChildren(parentFolder, descending: false, TakeoffWallNameComparer.Instance);
+    }
+
+    public static void SortTakeoffDetailChildren(string parentFolder)
+    {
+        SortChildren(parentFolder, descending: false, TakeoffDetailSheetNameComparer.Instance);
+    }
+
     private static void SortChildren(string parentFolder, bool descending, IComparer<string> displayNameComparer)
     {
         var children = Directory.EnumerateDirectories(parentFolder)
