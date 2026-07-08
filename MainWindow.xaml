@@ -643,16 +643,31 @@
             <Border Style="{StaticResource ToolDiv}"/>
 
             <!-- Drawing tools (radio group) -->
-            <RadioButton x:Name="BtnPan"    Content="Pan"    Click="BtnTool_Click" Tag="pan"
+            <RadioButton x:Name="BtnPan" Click="BtnTool_Click" Tag="pan"
                          GroupName="DrawingTool" ToolTip="Pan (V)"
-                         Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnSelect" Content="Select" Click="BtnTool_Click" Tag="select"
+                         Style="{StaticResource ToolRadio}" MinWidth="54" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconPan}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Pan" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="BtnSelect" Click="BtnTool_Click" Tag="select"
                          GroupName="DrawingTool" IsChecked="True"
                          ToolTip="Box select measurements (E). Ctrl+C copy, Ctrl+V paste"
-                         Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnScale"  Content="Scale"  Click="BtnTool_Click" Tag="scale"
+                         Style="{StaticResource ToolRadio}" MinWidth="66" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconSelect}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Select" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="BtnScale" Click="BtnTool_Click" Tag="scale"
                          GroupName="DrawingTool" ToolTip="Set scale (S)"
-                         Style="{StaticResource ToolRadio}"/>
+                         Style="{StaticResource ToolRadio}" MinWidth="62" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconRuler}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Scale" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
             <Grid Margin="0,0,2,0">
                 <RadioButton x:Name="BtnRuler" Click="BtnTool_Click" Tag="ruler"
                              GroupName="DrawingTool" ToolTip="Place a dimension/ruler markup on the PDF (R)"
@@ -667,9 +682,14 @@
                               ToolTip="Hide all ruler markups on this sheet"/>
             </Grid>
             <Border Style="{StaticResource ToolDiv}"/>
-            <RadioButton x:Name="BtnPoint"  Content="Count"  Click="BtnTool_Click" Tag="point"
+            <RadioButton x:Name="BtnPoint" Click="BtnTool_Click" Tag="point"
                          GroupName="DrawingTool" ToolTip="Create a new Count item and start recording (P). Use the active target Record button to continue an existing item"
-                         Style="{StaticResource ToolRadio}"/>
+                         Style="{StaticResource ToolRadio}" MinWidth="64" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconCount}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Count" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
             <Button x:Name="BtnSimilarCount"
                     Click="BtnSimilarCount_Click"
                     ToolTip="Find similar symbols on this sheet, name the result, and add reviewed markers as a Count item"
@@ -700,12 +720,22 @@
                     MinWidth="28"
                     Padding="4,2"
                     Visibility="Collapsed"/>
-            <RadioButton x:Name="BtnLine"   Content="Line"   Click="BtnTool_Click" Tag="line"
+            <RadioButton x:Name="BtnLine" Click="BtnTool_Click" Tag="line"
                          GroupName="DrawingTool" ToolTip="Create a new Line item and start recording (L). Use the active target Record button to continue an existing item"
-                         Style="{StaticResource ToolRadio}"/>
-            <RadioButton x:Name="BtnArea"   Content="Area"   Click="BtnTool_Click" Tag="area"
+                         Style="{StaticResource ToolRadio}" MinWidth="56" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconDrawLine}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Line" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="BtnArea" Click="BtnTool_Click" Tag="area"
                          GroupName="DrawingTool" ToolTip="Create a new Area item and start recording (A). Use the active target Record button to continue an existing item"
-                         Style="{StaticResource ToolRadio}"/>
+                         Style="{StaticResource ToolRadio}" MinWidth="58" Padding="5,3">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconAreaFill}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Area" VerticalAlignment="Center"/>
+                </StackPanel>
+            </RadioButton>
             <RadioButton x:Name="BtnJoistArea" Content="J Area" Click="BtnTool_Click" Tag="joistarea"
                          GroupName="DrawingTool" ToolTip="Create a new Joist Area item and start recording (J)"
                          Style="{StaticResource ToolRadio}"/>
