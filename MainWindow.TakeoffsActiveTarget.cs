@@ -157,13 +157,10 @@ public partial class MainWindow
         if (_currentPage == null)
         {
             string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
-            MessageBox.Show(
+            PostStatusInfo(
                 measurementType == "point"
                     ? "Select a page before adding a count."
-                    : "Select a page before starting a new section.",
-                measurementType == "point" ? "Add Count" : "New Section",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+                    : "Select a page before starting a new section.");
             return;
         }
 

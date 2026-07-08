@@ -355,7 +355,7 @@ public partial class MainWindow
             pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         if (pages.Count == 0)
         {
-            MessageBox.Show("No PDF pages found.", "Sheet Manager", MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No PDF pages found in Sheet Manager.");
             return;
         }
 

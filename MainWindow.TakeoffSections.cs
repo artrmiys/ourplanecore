@@ -225,12 +225,10 @@ public partial class MainWindow
     {
         if (_currentPage == null)
         {
-            MessageBox.Show(
+            PostStatusInfo(
                 item.MeasurementType == "point"
                     ? "Select a page before adding a count."
-                    : "Select a page before starting a new section.",
-                item.MeasurementType == "point" ? "Add Count" : "New Section",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    : "Select a page before starting a new section.");
             return;
         }
 

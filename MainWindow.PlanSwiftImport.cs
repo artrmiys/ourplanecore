@@ -69,8 +69,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Import PlanSwift to Current Job",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before importing PlanSwift into the current job.");
             return;
         }
 
