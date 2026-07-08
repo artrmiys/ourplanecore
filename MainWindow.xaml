@@ -1250,11 +1250,11 @@
                                 Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="10"
+                                CornerRadius="4"
                                 Padding="34,30">
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Border Width="26" Height="26" CornerRadius="6"
+                                    <Border Width="26" Height="26" CornerRadius="3"
                                             Background="{DynamicResource BrandAccentBrush}" Margin="0,0,11,0"/>
                                     <TextBlock Text="OurPlaneCore" FontSize="20" FontWeight="SemiBold"
                                                VerticalAlignment="Center"
@@ -1323,7 +1323,7 @@
                         <Border HorizontalAlignment="Center" VerticalAlignment="Center"
                                 Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"
-                                BorderThickness="1" CornerRadius="10" Padding="28,22">
+                                BorderThickness="1" CornerRadius="4" Padding="28,22">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,16" LastChildFill="False">
                                     <TextBlock DockPanel.Dock="Left" Text="Keyboard shortcuts"
@@ -1711,7 +1711,7 @@
                                    FontWeight="Normal" VerticalAlignment="Center"
                                    FontSize="12"/>
                         <!-- Count badge - subtle accent pill -->
-                        <Border x:Name="InboxBadge" CornerRadius="8"
+                        <Border x:Name="InboxBadge" CornerRadius="4"
                                 Background="{DynamicResource ControlActiveBackgroundBrush}"
                                 Padding="5,1" Margin="8,0,0,0"
                                 VerticalAlignment="Center" Visibility="Collapsed">
