@@ -201,7 +201,6 @@ public partial class MainWindow
         LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
         LoadThreeDModelForCurrentJob();
-        RunSheetLegendAutoSortSweep();
         _settings.LastJobPath = _currentJob.RootPath;
         _settings.JobsRootPath = Path.GetDirectoryName(_currentJob.RootPath) ?? _settings.JobsRootPath;
         AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
@@ -213,6 +212,7 @@ public partial class MainWindow
         if (!IsTruthyEnvironment(TakeoffsMoveSmokeEnv) &&
             ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);
+        QueueSheetLegendAutoSortSweep();
         ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
         RefreshJobHeaderLabels();

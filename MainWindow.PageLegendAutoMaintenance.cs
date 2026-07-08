@@ -6,6 +6,26 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private void QueueSheetLegendAutoSortSweep()
+    {
+        if (_currentJob == null)
+            return;
+
+        string jobRoot = _currentJob.RootPath;
+        Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                if (_currentJob == null ||
+                    !string.Equals(_currentJob.RootPath, jobRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                RunSheetLegendAutoSortSweep();
+            }),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
     private void RunSheetLegendAutoSortSweep()
     {
         if (_currentJob == null)
