@@ -1887,12 +1887,12 @@
                                        FontSize="10" FontWeight="Normal"/>
                         </Border>
                         <ComboBox x:Name="ComboMarkerTypeFilter"
-                                  Width="132" Height="22" Margin="10,3,0,3"
+                                  Width="140" Margin="10,3,0,3"
                                   VerticalAlignment="Center"
                                   SelectionChanged="MarkerFilter_SelectionChanged"
                                   ToolTip="Filter AI markers by type"/>
                         <ComboBox x:Name="ComboMarkerSampleFilter"
-                                  Width="96" Height="22" Margin="6,3,0,3"
+                                  Width="124" Margin="6,3,0,3"
                                   VerticalAlignment="Center"
                                   SelectionChanged="MarkerFilter_SelectionChanged"
                                   ToolTip="Filter AI markers by sample kind"/>

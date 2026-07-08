@@ -33,7 +33,6 @@ public sealed partial class PdfViewport
         MaybeRequestSheetOverlayRenderScaleRefresh();
         RequestRepaint();
         NotifyZoomChanged();
-        PostStatus($"Zoom: {_zoom * 100:F0}%");
     }
 
     private void NotifyZoomChanged() =>
@@ -359,19 +358,6 @@ public sealed partial class PdfViewport
         _zoomRerenderForce = _zoomRerenderForce || force;
         _zoomRerenderTimer.Stop();
         _zoomRerenderTimer.Start();
-    }
-
-    private void PostPointerStatus(SKPoint p)
-    {
-        DateTime now = DateTime.UtcNow;
-        if ((now - _lastPointerStatusAt).TotalMilliseconds < 50)
-            return;
-
-        _lastPointerStatusAt = now;
-        string scaleStr = ScaleMetersPerPt > 0
-            ? $"  |  {PdfSheetMetadataService.FormatImperialScale(ScaleMetersPerPt)}"
-            : "  |  scale: not set";
-        PostStatus($"x={p.X:F1}  y={p.Y:F1} pt  |  zoom: {_zoom * 100:F0}%{scaleStr}");
     }
 
     private bool ShouldRequestLowZoomBitmapDowngrade()

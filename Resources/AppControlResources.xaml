@@ -538,7 +538,12 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
                     <Grid TextElement.Foreground="{TemplateBinding Foreground}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="22"/>
+                        </Grid.ColumnDefinitions>
                         <ToggleButton x:Name="ToggleButton"
+                                      Grid.ColumnSpan="2"
                                       Background="{TemplateBinding Background}"
                                       BorderBrush="{TemplateBinding BorderBrush}"
                                       BorderThickness="1"
@@ -580,6 +585,7 @@
                             </ToggleButton.Template>
                         </ToggleButton>
                         <ContentPresenter x:Name="ContentSite"
+                                          Grid.Column="0"
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
@@ -589,6 +595,7 @@
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Left"/>
                         <TextBox x:Name="PART_EditableTextBox"
+                                 Grid.Column="0"
                                  Background="{TemplateBinding Background}"
                                  BorderThickness="0"
                                  CaretBrush="{DynamicResource ControlForegroundBrush}"
@@ -598,6 +605,7 @@
                                  Visibility="Hidden"
                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         <Popup x:Name="PART_Popup"
+                               Grid.ColumnSpan="2"
                                AllowsTransparency="True"
                                Focusable="False"
                                IsOpen="{TemplateBinding IsDropDownOpen}"

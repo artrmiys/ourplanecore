@@ -529,8 +529,6 @@ public sealed partial class PdfViewport
 
         if (IsMissingScaleForLinearArea())
             PostScaleRequiredStatus();
-        else
-            PostPointerStatus(pointerPdf);
 
         UpdateCursor(pointerPdf);
         RequestPointerMoveRepaint();
