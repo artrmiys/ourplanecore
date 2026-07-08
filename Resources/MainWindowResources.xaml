@@ -13,6 +13,9 @@
 <Geometry x:Key="IconPlus">M8,2.5 L8,13.5 M2.5,8 L13.5,8</Geometry>
 <Geometry x:Key="IconMinus">M2.5,8 L13.5,8</Geometry>
 <Geometry x:Key="IconFitPage">M4,2.5 L10,2.5 L12.5,5 L12.5,13.5 L4,13.5 Z M10,2.5 L10,5 L12.5,5 M6.2,6.2 L4.6,4.6 M4.6,4.6 L6.6,4.6 M4.6,4.6 L4.6,6.6 M9.8,9.8 L11.4,11.4 M11.4,11.4 L9.4,11.4 M11.4,11.4 L11.4,9.4</Geometry>
+<Geometry x:Key="IconIsoView">M8,2.5 L13,5.4 L13,10.6 L8,13.5 L3,10.6 L3,5.4 Z M8,2.5 L8,7.8 M3,5.4 L8,7.8 L13,5.4 M8,7.8 L8,13.5</Geometry>
+<Geometry x:Key="IconTopView">M3,3 L13,3 L13,13 L3,13 Z M8,3 L8,13 M3,8 L13,8</Geometry>
+<Geometry x:Key="IconFrontView">M3,4 L13,4 L13,12 L3,12 Z M5,6 L11,6 M5,8 L11,8 M5,10 L11,10</Geometry>
 <Geometry x:Key="IconChevronDown">M4,6 L8,10 L12,6</Geometry>
 <Geometry x:Key="IconRefresh">M12.5,5.2 A4.8,4.8 0 1 0 13,9.2 M12.5,5.2 L12.5,2.6 M12.5,5.2 L9.9,5.2 M3.5,10.8 A4.8,4.8 0 1 0 3,6.8 M3.5,10.8 L3.5,13.4 M3.5,10.8 L6.1,10.8</Geometry>
 <Geometry x:Key="IconSimilar">M6.8,6.8 m-3.8,0 a3.8,3.8 0 1,0 7.6,0 a3.8,3.8 0 1,0 -7.6,0 M9.7,9.7 L13.5,13.5 M11.5,2.8 L12.2,4.8 M10.4,3.9 L13.1,3.9</Geometry>
