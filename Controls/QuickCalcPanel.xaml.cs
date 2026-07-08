@@ -239,9 +239,11 @@ public partial class QuickCalcPanel : UserControl
             Margin = new Thickness(2, 3, 0, 3),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        foreach (string op in new[] { "+", "−", "×", "÷" })
+        string[] ops = ["+", "−", "×", "÷"];
+        foreach (string op in ops)
             combo.Items.Add(new ComboBoxItem { Content = op });
-        combo.SelectedIndex = 0;
+        // Default to subtract — the most common feet-inch operation here.
+        combo.SelectedIndex = Array.IndexOf(ops, "−");
         return combo;
     }
 
