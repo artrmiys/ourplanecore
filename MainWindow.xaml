@@ -810,8 +810,14 @@
                      KeyDown="TxtScaleRatio_KeyDown"/>
             <Button Content="Set" Click="BtnSetScale_Click"
                     ToolTip="Apply scale" Style="{StaticResource ToolBtn}"/>
-            <Button Content="▾ Presets" Click="BtnScalePresets_Click"
-                    ToolTip="Common scale presets" Style="{StaticResource ToolBtn}"/>
+            <Button Click="BtnScalePresets_Click"
+                    ToolTip="Common scale presets" Style="{StaticResource ToolBtn}">
+                <StackPanel Orientation="Horizontal"
+                            TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                    <TextBlock Text="Presets"/>
+                    <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                </StackPanel>
+            </Button>
             <TextBlock x:Name="TxtScaleInfo" VerticalAlignment="Center"
                        FontSize="11" Margin="4,0"/>
 
@@ -886,12 +892,16 @@
                                                   ToolTip="Toggle vertical Tile M2 layout (filled = vertical)"/>
                                 </Grid>
                                 <Button x:Name="BtnPagesOpenMenu"
-                                        Content="Open  ▾"
                                         Click="DropdownButton_Click"
                                         Padding="7,2"
                                         Margin="0,0,4,0"
                                         FontSize="11"
                                         ToolTip="Open the selected Pages sheets">
+                                    <StackPanel Orientation="Horizontal"
+                                                TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                        <TextBlock Text="Open"/>
+                                        <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                                    </StackPanel>
                                     <Button.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Open as Tabs" Click="BtnPagesOpenTabs_Click"/>
@@ -969,12 +979,16 @@
                                     ToolTip="Create a new folder under the selected Pages folder"/>
                             <Button x:Name="BtnNewPageMenu"
                                     Grid.Column="2"
-                                    Content="+ New ▾"
                                     Click="DropdownButton_Click"
                                     Padding="2,3"
                                     Margin="0,0,4,0"
                                     FontSize="11"
                                     ToolTip="Create pages and folders">
+                                <StackPanel Orientation="Horizontal"
+                                            TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                    <TextBlock Text="+ New"/>
+                                    <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                                </StackPanel>
                                 <Button.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="New Folder" Click="BtnNewPageFolder_Click"/>
@@ -986,11 +1000,15 @@
                             </Button>
                             <Button x:Name="BtnPageSetupMenu"
                                     Grid.Column="3"
-                                    Content="Setup ▾"
                                     Click="DropdownButton_Click"
                                     Padding="2,3"
                                     FontSize="11"
                                     ToolTip="Page setup and sorting actions">
+                                <StackPanel Orientation="Horizontal"
+                                            TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                    <TextBlock Text="Setup"/>
+                                    <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                                </StackPanel>
                                 <Button.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="Name / Scale…" Click="BtnFloatingPageSetup_Click"/>
@@ -1579,11 +1597,15 @@
                                     ToolTip="Create a takeoff item (T)"/>
                             <Button x:Name="BtnTakeoffMoreMenu"
                                     Grid.Column="3"
-                                    Content="More  ▾"
                                     Click="DropdownButton_Click"
                                     Padding="5,3"
                                     Margin="6,0,4,0"
                                     ToolTip="More takeoff actions">
+                                <StackPanel Orientation="Horizontal"
+                                            TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                    <TextBlock Text="More"/>
+                                    <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
+                                </StackPanel>
                                 <Button.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="Roof Base from area" Click="Btn3dRfRoof_Click"/>
