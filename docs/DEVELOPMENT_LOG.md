@@ -1,5 +1,16 @@
 ﻿# Development Log
 
+## 2026-07-08 UX/UI polish pass (audit-driven)
+
+Full-pass polish after a thorough XAML audit. Light theme is unchanged; the work fixes dark-theme readability, replaces the last text-glyph "icons" with single-stroke geometry, and adds missing tooltips/accessibility.
+
+- **Dark-theme colors** (were hardcoded light): viewport backing `#FFFFFF` → `SurfaceBackgroundBrush` (no more white flash on empty/loading canvas — the PDF paper still renders white); floating Layer Trace bar `#EFFFFFFF`/`#66000000` → theme brushes; busy-spinner track `#D1D5DB` → `ControlBorderBrush`; Layer Trace status `Foreground="Gray"` → `SecondaryForegroundBrush`; Report Builder row kinds (`#E9EEF7/#D9EAD3/#F4B183/#FFF2CC`) → new themed brushes `Report{Header,TableHeader,Section,Input}RowBrush` (dark gets muted readable tints, light values identical).
+- **Glyphs → stroke icons**: MenuItem check `✓` (app-wide, `AppNavigationResources.xaml`) → stroke check `Path`; AI Inbox toggle `+`/`-` `TextBlock` → rotating `IconChevronDown` `Path` (`InboxToggleRotate` angle toggled in `MainWindow.AiInbox.cs`); Takeoffs Export filled triangle → standard `MenuChevronIcon`.
+- **Tooltips / a11y**: added ToolTips to `All On / All Off / Clear Hi / Layer Trace / Full` and the inbox toggle (+ `AutomationProperties.Name`).
+- **Consistency**: bottom tool-strip Row 2 padding matched to Row 1 (`6,3,6,2`); accidental half-point font sizes on the Start card normalized (`12.5→12`, `13.5→13`).
+- Left as separate opt-in (bigger visual churn, lower value): a formal named type-scale refactor and corner-radius unification; the Pages panel-header packing.
+- Build clean (0/0); Debug + published exe log validation clean (templates load without XAML errors); deployed compressed single-file exe (69 MB).
+
 ## 2026-07-08 Laptop window fit + placement persistence
 
 - Main window now remembers its size, position, and maximized state between launches, plus a fresh-install rescue so it can't open with the bottom command strip below the taskbar on small laptop screens. New settings fields `WindowLeft/Top/Width/Height/Maximized` (`Models/AppSettingsStore.cs`); logic in new partial `MainWindow.WindowBounds.cs` (`RestoreWindowBounds` in ctor, `SaveWindowBounds` in `OnClosing`).

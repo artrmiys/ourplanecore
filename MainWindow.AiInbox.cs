@@ -26,13 +26,13 @@ public partial class MainWindow
             _inboxExpandedHeight = InboxRow.ActualHeight > 30 ? InboxRow.ActualHeight : _inboxExpandedHeight;
             InboxRow.Height        = new GridLength(30);
             InboxSplitterRow.Height = new GridLength(0);
-            TxtInboxToggle.Text    = "+";
+            InboxToggleRotate.Angle = 180; // chevron up = expand the bottom-docked inbox
         }
         else
         {
             InboxRow.Height        = new GridLength(_inboxExpandedHeight);
             InboxSplitterRow.Height = new GridLength(4);
-            TxtInboxToggle.Text    = "-";
+            InboxToggleRotate.Angle = 0; // chevron down = collapse the inbox
         }
         _inboxExpanded = !_inboxExpanded;
     }

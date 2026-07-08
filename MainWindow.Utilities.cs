@@ -183,6 +183,13 @@ public partial class MainWindow
         UpdateAppBrush("CommitHoverBrush", dark ? Color.FromRgb(102, 214, 160) : Color.FromRgb(26, 110, 45));
         UpdateAppBrush("CommitPressedBrush", dark ? Color.FromRgb(60, 180, 120) : Color.FromRgb(21, 90, 36));
 
+        // Report Builder row kinds — keep the Excel-style semantic tint but make
+        // dark theme readable (light values unchanged so light theme is identical).
+        UpdateAppBrush("ReportHeaderRowBrush",      dark ? Color.FromRgb(42, 51, 64)  : Color.FromRgb(233, 238, 247)); // blue
+        UpdateAppBrush("ReportTableHeaderRowBrush", dark ? Color.FromRgb(42, 55, 39)  : Color.FromRgb(217, 234, 211)); // green
+        UpdateAppBrush("ReportSectionRowBrush",     dark ? Color.FromRgb(58, 46, 34)  : Color.FromRgb(244, 177, 131)); // orange
+        UpdateAppBrush("ReportInputRowBrush",       dark ? Color.FromRgb(51, 47, 31)  : Color.FromRgb(255, 242, 204)); // yellow
+
         // Tree row state — theme-aware (paired light/dark variants).
         // Semantic hues kept (amber=active, green=on-page, etc.); the active
         // takeoff stripe is bound to the sage brand signal (OurCore "чуть шире").

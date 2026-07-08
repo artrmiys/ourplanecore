@@ -857,7 +857,7 @@
         </Border>
 
         <!-- Row 2: Transform (inline), sheet scale, AI, status (centered) -->
-        <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,2,6,3">
+        <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="0,1,0,0" Padding="6,3,6,2">
             <WrapPanel Orientation="Horizontal"
                        HorizontalAlignment="Center" VerticalAlignment="Center">
 
@@ -1220,18 +1220,21 @@
                                                 Click="BtnLayersOn_Click"
                                                 Padding="3,1"
                                                 Margin="0,0,4,0"
-                                                FontSize="10"/>
+                                                FontSize="10"
+                                                ToolTip="Show all PDF layers on the active page"/>
                                         <Button x:Name="BtnLayersOff"
                                                 Content="All Off"
                                                 Click="BtnLayersOff_Click"
                                                 Padding="3,1"
-                                                FontSize="10"/>
+                                                FontSize="10"
+                                                ToolTip="Hide all PDF layers on the active page"/>
                                         <Button x:Name="BtnLayersClearHi"
                                                 Content="Clear Hi"
                                                 Click="BtnLayersClearHi_Click"
                                                 Padding="3,1"
                                                 Margin="4,0,0,0"
-                                                FontSize="10"/>
+                                                FontSize="10"
+                                                ToolTip="Clear the layer highlight overlay"/>
                                     </StackPanel>
                                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,3">
                                         <ToggleButton x:Name="BtnLayerTraceMode"
@@ -1239,13 +1242,15 @@
                                                       Click="BtnLayerTraceMode_Click"
                                                       Padding="3,1"
                                                       Margin="0,0,4,0"
-                                                      FontSize="10"/>
+                                                      FontSize="10"
+                                                      ToolTip="Isolate and trace the selected PDF layer"/>
                                         <Button x:Name="BtnLayerTraceCycle"
                                                 Content="Full"
                                                 Click="BtnLayerTraceCycle_Click"
                                                 Padding="3,1"
                                                 Margin="0,0,4,0"
-                                                FontSize="10"/>
+                                                FontSize="10"
+                                                ToolTip="Cycle the layer-trace dimming (Full / dimmed / off)"/>
                                         <Button x:Name="BtnLayerTraceApply"
                                                 Content="Apply"
                                                 Click="BtnLayerTraceApply_Click"
@@ -1256,7 +1261,7 @@
                                                DockPanel.Dock="Top"
                                                Text="Select a layer for Layer Trace."
                                                FontSize="10"
-                                               Foreground="Gray"
+                                               Foreground="{DynamicResource SecondaryForegroundBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,4"/>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1373,7 +1378,7 @@
                                 BorderBrush="{DynamicResource ControlBorderBrush}"/>
                     <Grid x:Name="ViewportSurfaceHost"
                           Grid.Row="1" Grid.Column="1"
-                          Background="#FFFFFF"
+                          Background="{DynamicResource SurfaceBackgroundBrush}"
                           AllowDrop="True"
                           DragOver="PageTabs_DragOver"
                           Drop="PageTabs_Drop"
@@ -1412,7 +1417,7 @@
                                 </StackPanel>
                                 <TextBlock Text="Construction takeoff — start by opening or creating a job."
                                            Foreground="{DynamicResource SecondaryForegroundBrush}"
-                                           FontSize="12.5" Margin="0,0,0,20"/>
+                                           FontSize="12" Margin="0,0,0,20"/>
                                 <UniformGrid Columns="2">
                                     <Button Click="StartOpenRecent_Click" Height="58" Margin="0,0,8,8" Padding="14,8"
                                             HorizontalContentAlignment="Left"
@@ -1420,7 +1425,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFolderOpen}" Width="20" Height="20" Margin="0,0,12,0"/>
                                             <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="Open a recent job" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="Open a recent job" FontSize="13" FontWeight="SemiBold"/>
                                                 <TextBlock Text="Recently used" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
                                             </StackPanel>
                                         </StackPanel>
@@ -1431,7 +1436,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconPlus}" Width="20" Height="20" Margin="0,0,12,0"/>
                                             <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="New blank job" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="New blank job" FontSize="13" FontWeight="SemiBold"/>
                                                 <TextBlock Text="Start empty" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
                                             </StackPanel>
                                         </StackPanel>
@@ -1442,7 +1447,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSheetMeasure}" Width="20" Height="20" Margin="0,0,12,0"/>
                                             <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="New job from PDFs" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="New job from PDFs" FontSize="13" FontWeight="SemiBold"/>
                                                 <TextBlock Text="Import a folder of drawings" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
                                             </StackPanel>
                                         </StackPanel>
@@ -1453,7 +1458,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSparkle}" Width="20" Height="20" Margin="0,0,12,0"/>
                                             <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="Open sample job" FontSize="13.5" FontWeight="SemiBold"/>
+                                                <TextBlock Text="Open sample job" FontSize="13" FontWeight="SemiBold"/>
                                                 <TextBlock Text="Explore a demo" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
                                             </StackPanel>
                                         </StackPanel>
@@ -1539,8 +1544,8 @@
                             VerticalAlignment="Top"
                             Margin="0,10,12,0"
                             Padding="4"
-                            Background="#EFFFFFFF"
-                            BorderBrush="#66000000"
+                            Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Panel.ZIndex="8"
@@ -1759,13 +1764,7 @@
                                     ToolTip="Save or export quantities">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <TextBlock Text="Export" VerticalAlignment="Center"/>
-                                    <Path Data="M 0 0 L 8 0 L 4 4 Z"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                          Width="8"
-                                          Height="4"
-                                          Stretch="Fill"
-                                          Margin="6,1,0,0"
-                                          VerticalAlignment="Center"/>
+                                    <Path Style="{StaticResource MenuChevronIcon}" Data="{StaticResource IconChevronDown}"/>
                                 </StackPanel>
                             </Button>
                         </Grid>
@@ -1839,8 +1838,19 @@
                         <Button x:Name="BtnToggleInbox" DockPanel.Dock="Right"
                                 Click="BtnToggleInbox_Click"
                                 Background="Transparent" BorderThickness="0"
-                                Padding="6,0" MinWidth="28" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtInboxToggle" Text="+" FontSize="13"/>
+                                Padding="6,0" MinWidth="28" VerticalAlignment="Center"
+                                ToolTip="Expand or collapse the AI Inbox"
+                                AutomationProperties.Name="Toggle AI Inbox">
+                            <Path x:Name="TxtInboxToggle" Data="{StaticResource IconChevronDown}"
+                                  Width="12" Height="12" Stretch="Uniform"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.4"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform x:Name="InboxToggleRotate" Angle="180"/>
+                                </Path.RenderTransform>
+                            </Path>
                         </Button>
                         <!-- Add observation -->
                         <Button x:Name="BtnInboxAdd" Content="+ Add"
@@ -2124,19 +2134,19 @@
                                 <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding RowKind}" Value="Header">
-                                        <Setter Property="Background" Value="#E9EEF7"/>
+                                        <Setter Property="Background" Value="{DynamicResource ReportHeaderRowBrush}"/>
                                         <Setter Property="FontWeight" Value="SemiBold"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding RowKind}" Value="TableHeader">
-                                        <Setter Property="Background" Value="#D9EAD3"/>
+                                        <Setter Property="Background" Value="{DynamicResource ReportTableHeaderRowBrush}"/>
                                         <Setter Property="FontWeight" Value="SemiBold"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding RowKind}" Value="Section">
-                                        <Setter Property="Background" Value="#F4B183"/>
+                                        <Setter Property="Background" Value="{DynamicResource ReportSectionRowBrush}"/>
                                         <Setter Property="FontWeight" Value="SemiBold"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding RowKind}" Value="InputBlock">
-                                        <Setter Property="Background" Value="#FFF2CC"/>
+                                        <Setter Property="Background" Value="{DynamicResource ReportInputRowBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -2363,7 +2373,7 @@
                 <Grid Width="48" Height="48" HorizontalAlignment="Center" Margin="0,0,0,12">
                     <Ellipse Width="42"
                              Height="42"
-                             Stroke="#D1D5DB"
+                             Stroke="{DynamicResource ControlBorderBrush}"
                              StrokeThickness="4"/>
                     <Ellipse Width="42"
                              Height="42"
