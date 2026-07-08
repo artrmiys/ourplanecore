@@ -828,12 +828,17 @@
                     Style="{StaticResource ToolBtn}"/>
 
             <Border Style="{StaticResource ToolDiv}"/>
-            <Button Content="Fit"  Click="BtnFit_Click"    ToolTip="Fit page (F)"
-                    Style="{StaticResource ToolBtn}"/>
-            <Button Content="+"    Click="BtnZoomIn_Click"  ToolTip="Zoom in (Ctrl++)"
-                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
-            <Button Content="-"    Click="BtnZoomOut_Click" ToolTip="Zoom out (Ctrl+-)"
-                    MinWidth="28" Style="{StaticResource ToolBtn}"/>
+            <Button Click="BtnFit_Click" ToolTip="Fit page (F)" Style="{StaticResource ToolBtn}">
+                <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconFitPage}"/>
+            </Button>
+            <Button Click="BtnZoomIn_Click" ToolTip="Zoom in (Ctrl++)"
+                    MinWidth="28" Style="{StaticResource ToolBtn}">
+                <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconPlus}"/>
+            </Button>
+            <Button Click="BtnZoomOut_Click" ToolTip="Zoom out (Ctrl+-)"
+                    MinWidth="28" Style="{StaticResource ToolBtn}">
+                <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconMinus}"/>
+            </Button>
 
             <Border Style="{StaticResource ToolDiv}"/>
             <TextBlock x:Name="TxtTool" VerticalAlignment="Center"
