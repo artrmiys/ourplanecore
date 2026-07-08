@@ -24,8 +24,7 @@ public partial class MainWindow
         if (!double.TryParse(raw.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double price) ||
             price < 0)
         {
-            MessageBox.Show("Enter a valid non-negative unit price.", "Set Unit Price",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter a valid non-negative unit price.");
             return;
         }
 

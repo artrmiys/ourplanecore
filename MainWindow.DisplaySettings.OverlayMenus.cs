@@ -130,7 +130,7 @@ public partial class MainWindow
             scale < 0.5 ||
             scale > 3.0)
         {
-            MessageBox.Show("Enter a value from 0.5 to 3.0.", title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter an overlay size value from 0.5 to 3.0.");
             return;
         }
 

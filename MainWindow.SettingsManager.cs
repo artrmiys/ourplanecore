@@ -341,7 +341,7 @@ public partial class MainWindow
 
     private void ApplyPageFolders()
     {
-        if (_currentJob == null) { MessageBox.Show("Open a job first.", "Page Folders"); return; }
+        if (_currentJob == null) { PostStatusInfo("Open a job before applying page folders."); return; }
         SyncPageFolders();
         InstallWorkingProviders();
         AutoCreatePageFolders(_currentJob.PagesRoot);
@@ -429,7 +429,7 @@ public partial class MainWindow
 
     private void ApplyAutoTree()
     {
-        if (_currentJob == null) { MessageBox.Show("Open a job first.", "Auto Tree"); return; }
+        if (_currentJob == null) { PostStatusInfo("Open a job before applying the auto takeoff tree."); return; }
         InstallWorkingProviders();
         AutoCreateTakeoffTree(_currentJob.TakeoffsRoot);
     }
@@ -477,9 +477,9 @@ public partial class MainWindow
 
     private void ApplyFromPages()
     {
-        if (_currentJob == null) { MessageBox.Show("Open a job first.", "From Pages"); return; }
+        if (_currentJob == null) { PostStatusInfo("Open a job before creating takeoff folders from pages."); return; }
         var top = _fpTop.Select(n => n.Name).Where(s => s.Length > 0).ToList();
-        if (top.Count == 0) { MessageBox.Show("No top folders. Reload from Pages or add some.", "From Pages"); return; }
+        if (top.Count == 0) { PostStatusInfo("No top folders. Reload from Pages or add some."); return; }
 
         var confirm = MessageBox.Show(
             $"Create {top.Count} top folder(s), each with the Auto Tree ({ModeOf(_fpMode)}, {CountNodes(_ftConfig.TreeFor(ModeOf(_fpMode)))} folders), under Takeoffs?\nExisting folders are skipped.",

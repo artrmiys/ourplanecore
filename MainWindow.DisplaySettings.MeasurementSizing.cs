@@ -486,7 +486,7 @@ public partial class MainWindow
             scale < 0.25 ||
             scale > 4.0)
         {
-            MessageBox.Show("Enter a value from 0.25 to 4.0.", "Line Thickness", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter a line thickness value from 0.25 to 4.0.");
             return;
         }
 
@@ -506,7 +506,7 @@ public partial class MainWindow
             scale < 0.25 ||
             scale > 4.0)
         {
-            MessageBox.Show("Enter a value from 0.25 to 4.0.", "Point Size", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter a point size value from 0.25 to 4.0.");
             return;
         }
 

@@ -14,8 +14,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Auto Page Folders",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before creating page folders.");
             return;
         }
 
@@ -73,8 +72,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Repair Measurement Links",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before repairing measurement links.");
             return;
         }
 
@@ -94,8 +92,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Sort A/S Pages",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before sorting A/S pages.");
             return;
         }
 
@@ -123,8 +120,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Sort A/S Pages",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before sorting A/S pages.");
             return;
         }
 
@@ -253,8 +249,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Sort D/Sec/WT Pages",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before sorting D/Sec/WT pages.");
             return;
         }
 
@@ -273,8 +268,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Sort D/Sec/WT Pages",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before sorting D/Sec/WT pages.");
             return;
         }
 
