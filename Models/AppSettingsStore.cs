@@ -74,6 +74,14 @@ public sealed class AppSettings
     public double MassingLevelSpacingFeet { get; set; } = SmartMassingDraftService.DefaultLevelSpacingFeet;
     public double LeftPanelWidth { get; set; } = 248.0;
     public double RightPanelWidth { get; set; } = 269.0;
+    // Main window placement. Width/Height == 0 means "never saved" (fresh install)
+    // so startup keeps the XAML defaults untouched. Restored on next launch,
+    // clamped to the visible desktop so the window can't open off-screen.
+    public double WindowLeft { get; set; }
+    public double WindowTop { get; set; }
+    public double WindowWidth { get; set; }
+    public double WindowHeight { get; set; }
+    public bool WindowMaximized { get; set; }
     public string OpenAiModel { get; set; } = OpenAiRequestRunner.DefaultModel;
     public string FolderTemplateMode { get; set; } = "AUTO";
     // Viewport side command strips: ordered command ids ("-" = separator).

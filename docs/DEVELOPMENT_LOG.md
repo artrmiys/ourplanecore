@@ -1,5 +1,12 @@
 ﻿# Development Log
 
+## 2026-07-08 Laptop window fit + placement persistence
+
+- Main window now remembers its size, position, and maximized state between launches, plus a fresh-install rescue so it can't open with the bottom command strip below the taskbar on small laptop screens. New settings fields `WindowLeft/Top/Width/Height/Maximized` (`Models/AppSettingsStore.cs`); logic in new partial `MainWindow.WindowBounds.cs` (`RestoreWindowBounds` in ctor, `SaveWindowBounds` in `OnClosing`).
+- Deliberately non-invasive to the current large-screen workflow: with no saved bounds AND the default 1280×780 window fitting the work area, `RestoreWindowBounds` makes zero changes (byte-for-byte identical startup). The fresh-install shrink only triggers when the default window exceeds the work area; saved bounds are clamped to the visible virtual desktop so the window can't restore off-screen. `WindowMaximized` persists via `RestoreBounds` so the normal-state size is what's saved.
+- Column widths were already persisted (`LeftPanelWidth`/`RightPanelWidth`) — untouched. The Pages panel header packing (Tile M2/Open + 3 icons crowding the title at 200px) was left as a separate opt-in change since it would alter the current default look for everyone.
+- Build clean (0/0), Debug + published exe log validation clean, deployed compressed single-file exe (69 MB).
+
 ## 2026-07-08 Quick calculator flyout + takeoff walls/details sorts
 
 - Slide-out calculator panel left of the right command strip (`Controls/QuickCalcPanel`): simple calculator on top (collapsed Expander), three feet-inches-twelfths groups below, results as decimal feet. Toggled by `view.quickCalc` (right strip + palette).

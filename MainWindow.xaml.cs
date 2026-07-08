@@ -436,6 +436,7 @@ public partial class MainWindow : Window
         BtnViewportLayerTraceCycle.IsEnabled = false;
 
         ApplyPersistedSettings();
+        RestoreWindowBounds();
         Loaded += MainWindow_Loaded;
     }
 
