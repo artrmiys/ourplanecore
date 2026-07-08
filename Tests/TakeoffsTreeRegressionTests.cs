@@ -1188,7 +1188,8 @@ internal static class TakeoffsTreeRegressionTests
     {
         string xaml = ReadRepoFile("MainWindow.xaml");
         string mainWindowResources = ReadRepoFile("Resources/MainWindowResources.xaml");
-        string bookmarks = ReadRepoFile("MainWindow.Bookmarks.cs");
+        string bookmarksShell = ReadRepoFile("MainWindow.Bookmarks.cs");
+        string bookmarksController = ReadRepoFile("PageBookmarksController.cs");
         string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
 
         AssertTrue(
@@ -1199,16 +1200,19 @@ internal static class TakeoffsTreeRegressionTests
             !xaml.Contains("x:Name=\"BtnToggleBookmarksDock\"", StringComparison.Ordinal),
             "left panel must expose Bookmarks docking as a compact circle, not a separate large button");
         AssertTrue(
-            bookmarks.Contains("ApplyBookmarksDockMode", StringComparison.Ordinal) &&
-            bookmarks.Contains("BuildBookmarksTabHeader", StringComparison.Ordinal) &&
-            bookmarks.Contains("Text = \"Bkm\"", StringComparison.Ordinal) &&
-            bookmarks.Contains("CreateBookmarkDockToggle", StringComparison.Ordinal) &&
-            bookmarks.Contains("SetBookmarksDockToggleState(docked)", StringComparison.Ordinal) &&
-            bookmarks.Contains("PagesSideTabs.Items.Remove(_bookmarksTab)", StringComparison.Ordinal) &&
-            bookmarks.Contains("BookmarksDockContentHost.Content = _bookmarkPanel", StringComparison.Ordinal) &&
-            bookmarks.Contains("PagesSideTabs.SelectedItem = _bookmarksTab", StringComparison.Ordinal) &&
-            bookmarks.Contains("Bookmarks returned to the Pages tabs.", StringComparison.Ordinal) &&
-            bookmarks.Contains("ColumnHeaderContainerStyle = BuildHiddenBookmarkColumnHeaderStyle()", StringComparison.Ordinal),
+            bookmarksShell.Contains("PageBookmarksController", StringComparison.Ordinal) &&
+            bookmarksShell.Contains("BookmarkDockToggle_Changed", StringComparison.Ordinal) &&
+            bookmarksShell.Contains("OpenPageBookmarkView", StringComparison.Ordinal) &&
+            bookmarksController.Contains("ApplyBookmarksDockMode", StringComparison.Ordinal) &&
+            bookmarksController.Contains("BuildBookmarksTabHeader", StringComparison.Ordinal) &&
+            bookmarksController.Contains("Text = \"Bkm\"", StringComparison.Ordinal) &&
+            bookmarksController.Contains("CreateBookmarkDockToggle", StringComparison.Ordinal) &&
+            bookmarksController.Contains("SetBookmarksDockToggleState(docked)", StringComparison.Ordinal) &&
+            bookmarksController.Contains("_pagesSideTabs.Items.Remove(_bookmarksTab)", StringComparison.Ordinal) &&
+            bookmarksController.Contains("_dockContentHost.Content = _bookmarkPanel", StringComparison.Ordinal) &&
+            bookmarksController.Contains("_pagesSideTabs.SelectedItem = _bookmarksTab", StringComparison.Ordinal) &&
+            bookmarksController.Contains("Bookmarks returned to the Pages tabs.", StringComparison.Ordinal) &&
+            bookmarksController.Contains("ColumnHeaderContainerStyle = BuildHiddenBookmarkColumnHeaderStyle()", StringComparison.Ordinal),
             "Bookmarks tab content must move into and back out of the docked panel without duplicating the list");
         AssertTrue(
             shortcuts.Contains("string.Equals(sequence, \"bk\"", StringComparison.Ordinal) &&
