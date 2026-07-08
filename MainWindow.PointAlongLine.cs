@@ -118,7 +118,7 @@ public partial class MainWindow
         List<Measurement> generated = CreatePointAlongLineMeasurements(pointItem, lineResults);
         pointItem.Measurements.AddRange(generated);
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(pointItem);
-        OurPlaneCoreJobStore.SaveTakeoffItem(pointItem);
+        QueueTakeoffAutosave(pointItem);
         _takeoffItems.Add(pointItem);
 
         ItemsControl treeParent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;

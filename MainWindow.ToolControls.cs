@@ -649,7 +649,7 @@ public partial class MainWindow
     private void ApplyDefaultJoistAreaSettings(TakeoffItem item)
     {
         JoistTakeoffDefaults.ApplyToNewJoistArea(item);
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
     }
 
     private string DefaultJoistAreaTakeoffNameForFolder(string parentFolder)

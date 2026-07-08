@@ -196,7 +196,7 @@ public partial class MainWindow
                      .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
                      .Select(group => group.First()))
         {
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            QueueTakeoffAutosave(item);
             RefreshTreeItem(item);
         }
 
@@ -273,7 +273,7 @@ public partial class MainWindow
             return;
 
         item.CountSymbol = CountDisplaySymbol.Normalize(_newCountSymbol);
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
     }
 
     private void UpdateDefaultCountSymbolButton()

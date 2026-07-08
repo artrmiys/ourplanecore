@@ -48,7 +48,7 @@ public partial class MainWindow
             foreach (Measurement measurement in group.Select(node => node.Measurement).Distinct())
                 group.Key.Measurements.Remove(measurement);
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(group.Key);
+            QueueTakeoffAutosave(group.Key);
             RefreshTreeItem(group.Key);
         }
 

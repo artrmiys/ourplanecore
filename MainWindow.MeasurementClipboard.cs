@@ -105,7 +105,7 @@ public partial class MainWindow
             {
                 foreach (TakeoffItem item in changedItems)
                 {
-                    OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                    QueueTakeoffAutosave(item);
                     RefreshTreeItem(item);
                 }
             }
@@ -453,52 +453,14 @@ public partial class MainWindow
     }
 
     private void QueueTakeoffAutosave(TakeoffItem item)
-    {
-        if (_currentJob == null)
-            return;
+        => _takeoffSaveService.MarkDirty(item);
 
-        _pendingTakeoffAutosaves.Add(item);
-        _takeoffAutosaveTimer.Stop();
-        _takeoffAutosaveTimer.Start();
-    }
+    private void QueueTakeoffAutosave(IEnumerable<TakeoffItem> items)
+        => _takeoffSaveService.MarkDirty(items);
 
     private void FlushTakeoffAutosaves()
-    {
-        _takeoffAutosaveTimer.Stop();
-        if (_pendingTakeoffAutosaves.Count == 0)
-            return;
-
-        var pending = _pendingTakeoffAutosaves.ToList();
-        _pendingTakeoffAutosaves.Clear();
-        foreach (var item in pending)
-            PersistTakeoffItemQuietly(item);
-    }
+        => _takeoffSaveService.Flush();
 
     internal void FlushPendingAutosave() =>
         FlushTakeoffAutosaves();
-
-    private void PersistTakeoffItemQuietly(TakeoffItem item)
-    {
-        if (_currentJob == null)
-            return;
-
-        // A deleted item can still sit in the pending-autosave set; recreating
-        // its folder here would resurrect it as a ghost next to the undo trash.
-        // Silent autosave only writes into folders that still exist.
-        if (string.IsNullOrWhiteSpace(item.FolderPath) || !System.IO.Directory.Exists(item.FolderPath))
-        {
-            AppLog.Info($"Autosave skipped for missing takeoff folder: {item.FolderPath}");
-            return;
-        }
-
-        try
-        {
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(ex, $"Autosave failed for {item.FolderPath}");
-            TxtStatus.Text = $"Autosave skipped: {ex.Message}";
-        }
-    }
 }

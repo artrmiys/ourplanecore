@@ -310,7 +310,7 @@ public partial class MainWindow
         FlushTakeoffAutosaves();
         foreach (TakeoffItem item in result.ChangedItems)
         {
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            QueueTakeoffAutosave(item);
             RefreshTreeItem(item);
         }
 

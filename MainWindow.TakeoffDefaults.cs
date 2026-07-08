@@ -297,7 +297,7 @@ public partial class MainWindow
         }
 
         if (changed)
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            QueueTakeoffAutosave(item);
     }
 
     private IEnumerable<TakeoffFolderProperties> EnumerateTakeoffFolderProperties(string folderPath)

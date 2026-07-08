@@ -25,7 +25,7 @@ public partial class MainWindow
                 item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
-                OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                QueueTakeoffAutosave(item);
                 RegisterTakeoffTreeItemSubtree(tvi);
             }
             else

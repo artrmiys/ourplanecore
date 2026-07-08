@@ -30,7 +30,7 @@ public partial class MainWindow
         }
 
         item.UnitPrice = price;
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -127,7 +127,7 @@ public partial class MainWindow
             if (colorChanged || joistChanged || countSymbolChanged)
                 _viewport.SetMeasurements(_takeoffItems.SelectMany(takeoff => takeoff.Measurements));
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            QueueTakeoffAutosave(item);
             SetTreeItemHeader(tvi, item);
             RefreshTakeoffSectionNodes(tvi, item);
             RefreshEstimateTable();

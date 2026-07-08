@@ -45,7 +45,7 @@ public partial class MainWindow
                 if (edit.ApplyNotes)
                     selectedItem.Notes = edit.Notes.Trim();
 
-                OurPlaneCoreJobStore.SaveTakeoffItem(selectedItem);
+                QueueTakeoffAutosave(selectedItem);
                 RefreshTreeItem(selectedItem);
             }
 

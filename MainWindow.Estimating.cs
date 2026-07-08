@@ -778,7 +778,7 @@ public partial class MainWindow
             return;
 
         measurement.Name = name.Trim();
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -796,7 +796,7 @@ public partial class MainWindow
 
         measurement.Name = name.Trim();
         measurement.Notes = notes.Trim();
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         RefreshTreeItem(item);
         RefreshEstimateTable();
         RefreshSheetLegend();
@@ -831,7 +831,7 @@ public partial class MainWindow
             foreach (Measurement measurement in group.Select(node => node.Measurement).Distinct())
                 measurement.Notes = notes.Trim();
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(group.Key);
+            QueueTakeoffAutosave(group.Key);
             RefreshTreeItem(group.Key);
         }
 

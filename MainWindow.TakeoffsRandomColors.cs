@@ -68,7 +68,7 @@ public partial class MainWindow
             foreach (Measurement measurement in item.Measurements)
                 measurement.Color = color;
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            QueueTakeoffAutosave(item);
             RefreshTreeItem(item);
         }
 

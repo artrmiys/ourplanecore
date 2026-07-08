@@ -102,7 +102,7 @@ public partial class MainWindow
         if (!string.IsNullOrWhiteSpace(node.Notes))
             item.Notes = node.Notes;
 
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
     }
 
     private void ActivateTemplateCreatedTakeoff(TakeoffItem item, TreeViewItem tvi, string measurementType)

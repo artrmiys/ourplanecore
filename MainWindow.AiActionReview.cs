@@ -349,7 +349,7 @@ public partial class MainWindow
 
             foreach (TakeoffItem target in touchedItems)
             {
-                OurPlaneCoreJobStore.SaveTakeoffItem(target);
+                QueueTakeoffAutosave(target);
                 RefreshTreeItem(target);
             }
 

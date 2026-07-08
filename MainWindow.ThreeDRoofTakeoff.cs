@@ -100,7 +100,7 @@ public partial class MainWindow
             });
         }
 
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         _takeoffItems.Add(item);
         AddCreatedRoofTakeoffToTree(item);
         return 1;
@@ -126,7 +126,7 @@ public partial class MainWindow
             ScaleMetersPerPt = scale,
             Points = loop,
         });
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         _takeoffItems.Add(item);
         AddCreatedRoofTakeoffToTree(item);
         return 1;

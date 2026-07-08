@@ -83,7 +83,7 @@ public partial class MainWindow
 
         item.IsJoistTakeoff = true;
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
 
         void StartCapture()
         {
@@ -206,7 +206,7 @@ public partial class MainWindow
             target.JoistDirectionLocked = true;
         }
         OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         _viewport.SelectMeasurements(updatedAreas);
         RefreshTreeItem(item);
         RefreshActiveTakeoffVisuals();

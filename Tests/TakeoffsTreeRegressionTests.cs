@@ -1377,7 +1377,7 @@ internal static class TakeoffsTreeRegressionTests
         AssertTrue(
             colors.Contains("DistinctColorableTakeoffItems(TakeoffItemsForSelection(anchor))", StringComparison.Ordinal) &&
             colors.Contains("measurement.Color = color", StringComparison.Ordinal) &&
-            colors.Contains("OurPlaneCoreJobStore.SaveTakeoffItem(item)", StringComparison.Ordinal) &&
+            colors.Contains("QueueTakeoffAutosave(item)", StringComparison.Ordinal) &&
             colors.Contains("_viewport.RefreshMeasurementDisplay()", StringComparison.Ordinal),
             "random takeoff colors must update item color, measurement colors, persisted sidecars, and viewport paint");
         AssertTrue(

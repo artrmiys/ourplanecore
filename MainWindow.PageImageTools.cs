@@ -395,7 +395,7 @@ public partial class MainWindow
             }
 
             if (changed)
-                OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                QueueTakeoffAutosave(item);
         }
 
         List<PageAnnotation> annotations = IsSamePageFolder(_currentPage?.FolderPath ?? "", pageFolder)

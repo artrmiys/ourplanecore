@@ -66,11 +66,7 @@ public partial class MainWindow : Window
     private string? _takeoffSectionRangeAnchorKey;
     private TreeViewItem? _takeoffsDragItem;
     private bool _takeoffsDragArmed;
-    private readonly HashSet<TakeoffItem> _pendingTakeoffAutosaves = [];
-    private readonly System.Windows.Threading.DispatcherTimer _takeoffAutosaveTimer = new()
-    {
-        Interval = TimeSpan.FromMilliseconds(ViewportConstants.AutosaveDebounceMs),
-    };
+    private readonly TakeoffSaveService _takeoffSaveService;
     private readonly System.Windows.Threading.DispatcherTimer _sheetLegendAutoSortTimer = new()
     {
         Interval = TimeSpan.FromMinutes(5),
@@ -280,6 +276,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        _takeoffSaveService = new TakeoffSaveService(
+            currentJob: () => _currentJob,
+            setStatus: SetViewportStatus);
         InitializeThreeDViewer();
         _newCountSymbol = CountDisplaySymbol.Normalize(_settings.DefaultCountSymbol);
 
@@ -420,7 +420,6 @@ public partial class MainWindow : Window
         InitializeMarkerFilterControls();
         InitializeRafterControls();
         BuildSideCommandStrips();
-        _takeoffAutosaveTimer.Tick += (_, _) => FlushTakeoffAutosaves();
         _sheetLegendAutoSortTimer.Tick += (_, _) => RunSheetLegendAutoSortSweep();
         _sheetLegendAutoSortTimer.Start();
         TakeoffsTree.ContextMenu = BuildTakeoffsRootContextMenu();

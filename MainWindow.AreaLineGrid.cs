@@ -102,7 +102,7 @@ public partial class MainWindow
 
         List<Measurement> generated = CreateAreaLineGridMeasurements(lineItem, area, result, effectiveScale);
         lineItem.Measurements.AddRange(generated);
-        OurPlaneCoreJobStore.SaveTakeoffItem(lineItem);
+        QueueTakeoffAutosave(lineItem);
         _takeoffItems.Add(lineItem);
 
         ItemsControl treeParent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;

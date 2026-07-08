@@ -32,7 +32,7 @@ public partial class MainWindow
             });
         }
 
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        QueueTakeoffAutosave(item);
         return companions;
     }
 

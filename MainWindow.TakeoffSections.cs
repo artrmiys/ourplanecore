@@ -210,7 +210,7 @@ public partial class MainWindow
                 offset))
             return;
 
-        OurPlaneCoreJobStore.SaveTakeoffItem(anchor.Item);
+        QueueTakeoffAutosave(anchor.Item);
         RefreshTreeItem(anchor.Item);
         RefreshEstimateTable();
         RefreshSheetLegend();
