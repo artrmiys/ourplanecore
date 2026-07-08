@@ -719,19 +719,27 @@
                          GroupName="DrawingTool" ToolTip="Cut Area holes or erase Line pieces (X, F9 toggles box)"
                          Style="{StaticResource ToolRadio}"/>
             <Button x:Name="BtnMergeSelectedMeasurements"
-                    Content="Merge"
                     Click="BtnMergeSelectedMeasurements_Click"
                     ToolTip="Merge selected measurement segments into another takeoff (Ctrl+M)"
                     Style="{StaticResource ToolBtn}"
                     MinWidth="58"
-                    Padding="6,2"/>
+                    Padding="6,2">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconMerge}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Merge" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Button x:Name="BtnSplitSelectedMeasurements"
-                    Content="Split"
                     Click="BtnSplitSelectedMeasurements_Click"
                     ToolTip="Split selected measurement segments to a new takeoff (Ctrl+Shift+M)"
                     Style="{StaticResource ToolBtn}"
                     MinWidth="52"
-                    Padding="6,2"/>
+                    Padding="6,2">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSplit}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Split" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Border Style="{StaticResource ToolDiv}"/>
             <ToggleButton x:Name="BtnSnap"
                           ToolTip="Snap to existing takeoff points (F3)"
