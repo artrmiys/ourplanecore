@@ -185,7 +185,7 @@ public partial class QuickCalcPanel : UserControl
         number.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryForegroundBrush");
         var caption = new TextBlock
         {
-            Text = "ft · in · /12",
+            Text = "ft · in · frac in",
             FontSize = 10.5,
             Margin = new Thickness(8, 0, 0, 0),
         };
@@ -196,7 +196,10 @@ public partial class QuickCalcPanel : UserControl
     }
 
     private static FeetOperandBoxes BuildOperandBoxes() =>
-        new(BuildValueBox("ft"), BuildValueBox("in"), BuildValueBox("/12"));
+        new(
+            BuildValueBox("feet"),
+            BuildValueBox("inches (3, 3.5 or 3 3/8)"),
+            BuildValueBox("fractional inches (1/8, 3/8, 3 3/8)"));
 
     private static TextBox BuildValueBox(string tip)
     {
@@ -249,14 +252,60 @@ public partial class QuickCalcPanel : UserControl
         return $"= {value.ToString("0.00", CultureInfo.InvariantCulture)}{unit}";
     }
 
+    // Inches and fractional inches are both divided by 12; the fraction box
+    // takes carpenter-style input like "1/8", "3/8" or "3 3/8".
     private static double OperandFeet(FeetOperandBoxes boxes) =>
-        ParseBox(boxes.Feet) + ParseBox(boxes.Inches) / 12.0 + ParseBox(boxes.Twelfths) / 144.0;
+        ParseLength(boxes.Feet) + (ParseLength(boxes.Inches) + ParseLength(boxes.Twelfths)) / 12.0;
 
-    private static double ParseBox(TextBox box)
+    private static double ParseLength(TextBox box)
     {
         string text = (box.Text ?? "").Trim().Replace(',', '.');
-        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
-            ? value
-            : 0;
+        if (text.Length == 0)
+            return 0;
+
+        double total = 0;
+        foreach (string token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            total += ParseLengthToken(token);
+        return total;
+    }
+
+    private static double ParseLengthToken(string token)
+    {
+        int slash = token.IndexOf('/');
+        if (slash <= 0)
+        {
+            return double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out double plain)
+                ? plain
+                : 0;
+        }
+
+        // Mixed number written with a dash: "3-3/8".
+        string whole = "";
+        string fraction = token;
+        int dash = token.IndexOf('-');
+        if (dash > 0 && dash < slash)
+        {
+            whole = token[..dash];
+            fraction = token[(dash + 1)..];
+            slash = fraction.IndexOf('/');
+        }
+
+        double result = 0;
+        if (whole.Length > 0 &&
+            double.TryParse(whole, NumberStyles.Float, CultureInfo.InvariantCulture, out double wholeValue))
+        {
+            result += wholeValue;
+        }
+
+        string numeratorText = fraction[..slash];
+        string denominatorText = fraction[(slash + 1)..];
+        if (double.TryParse(numeratorText, NumberStyles.Float, CultureInfo.InvariantCulture, out double numerator) &&
+            double.TryParse(denominatorText, NumberStyles.Float, CultureInfo.InvariantCulture, out double denominator) &&
+            Math.Abs(denominator) > 1e-12)
+        {
+            result += numerator / denominator;
+        }
+
+        return result;
     }
 }

@@ -50,7 +50,9 @@
                                      Margin="0,0,0,6"/>
                             <UniformGrid Columns="4" Rows="5">
                                 <UniformGrid.Resources>
-                                    <Style TargetType="Button">
+                                    <!-- BasedOn keeps the app-wide themed button chrome; a bare
+                                         local style would fall back to default white buttons. -->
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                         <Setter Property="Margin" Value="1.5"/>
                                         <Setter Property="Padding" Value="0,6"/>
                                         <Setter Property="FontSize" Value="13"/>
@@ -85,7 +87,7 @@
                             Background="{DynamicResource ControlBorderBrush}"
                             Margin="0,10,0,8"/>
 
-                    <TextBlock Text="Feet + inches (twelfths)"
+                    <TextBlock Text="Feet + inches + fraction"
                                FontWeight="SemiBold" FontSize="11.5"
                                Foreground="{DynamicResource ControlForegroundBrush}"
                                Margin="0,0,0,4"/>
