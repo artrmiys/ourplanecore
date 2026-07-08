@@ -68,6 +68,26 @@ public partial class MainWindow
         }
     }
 
+    private void QueueOpenedJobRecovery()
+    {
+        if (_currentJob == null)
+            return;
+
+        string jobRoot = _currentJob.RootPath;
+        Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                if (_currentJob == null ||
+                    !string.Equals(_currentJob.RootPath, jobRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                HandleOpenedJobRecovery();
+            }),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
     private static bool ShouldSuppressAutomatedRecoveryPrompt() =>
         IsTruthyEnvironment(ViewportPageStressSmokeEnv) ||
         IsTruthyEnvironment(TakeoffsMoveSmokeEnv) ||

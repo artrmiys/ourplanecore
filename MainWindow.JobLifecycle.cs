@@ -206,12 +206,12 @@ public partial class MainWindow
         AppSettingsStore.AddJobsRoot(_settings, _settings.JobsRootPath);
         AppSettingsStore.AddRecentJob(_settings, _currentJob.RootPath, _currentJob.Name);
         SaveAppSettings();
-        HandleOpenedJobRecovery();
         QueueRecentJobThumbnailGeneration(_currentJob);
         LoadPersistedMarkerVisibility();
         if (!IsTruthyEnvironment(TakeoffsMoveSmokeEnv) &&
             ResolveInitialPageToOpen(initialPageFolder) is { } pageToOpen)
             SelectPageByFolder(pageToOpen);
+        QueueOpenedJobRecovery();
         QueueSheetLegendAutoSortSweep();
         ReportCorruptJsonFiles();
         ApplyTheme(string.Equals(_settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase), persist: false);
