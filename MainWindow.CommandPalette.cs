@@ -78,6 +78,7 @@ public partial class MainWindow
         Add("view.mainView", "Show Main View", "Workspace", "", "Switch to the drawing canvas workspace.");
         Add("view.sheetManager", "Show Sheet Manager", "Workspace", "", "Switch to the sheet table / PDF metadata workspace.");
         Add("view.takeoffManager", "Show Takeoff Manager", "Workspace", "", "Switch to the takeoff item manager workspace.");
+        Add("view.quickCalc", "Quick Calculator", "View", "", "Toggle the slide-out calculator with feet-inches math.");
         Add("view.materialsManager", "Show Materials", "Workspace", "", "Switch to the material extraction workspace.");
         Add("view.aiManager", "Show AI Manager", "Workspace", "", "Switch to the AI inbox and marker manager workspace.");
         Add("view.3dManager", "Show 3D Viewer", "Workspace", "", "Switch to the clean 3D viewer workspace.");
@@ -199,6 +200,7 @@ public partial class MainWindow
             case "view.mainView": SelectWorkspaceTab("MainView"); break;
             case "view.sheetManager": SelectWorkspaceTab("SheetManager"); break;
             case "view.takeoffManager": SelectWorkspaceTab("TakeoffManager"); break;
+            case "view.quickCalc": ToggleQuickCalcPanel(); break;
             case "view.materialsManager": SelectWorkspaceTab("MaterialsManager"); break;
             case "view.aiManager": SelectWorkspaceTab("AiManager"); break;
             case "view.3dManager": SelectWorkspaceTab("3DManager"); break;

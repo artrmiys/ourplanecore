@@ -38,6 +38,8 @@ public partial class MainWindow
 
     private static readonly string[] RightStripDefaultCommands =
     [
+        "view.quickCalc",
+        SideStripSeparatorId,
         "takeoffs.newItem",
         "takeoffs.newFolder",
         SideStripSeparatorId,
@@ -55,6 +57,9 @@ public partial class MainWindow
         "takeoffs.fromPages",
         SideStripSeparatorId,
         "file.exportCurrentExcel",
+        SideStripSeparatorId,
+        "takeoffs.collapseTree",
+        "takeoffs.expandTree",
     ];
 
     private static readonly Dictionary<string, string> SideStripIconKeys = new()
@@ -84,6 +89,7 @@ public partial class MainWindow
         ["edit.copyMeasurements"] = "IconCopy",
         ["takeoffs.autoTree"] = "IconTreeAuto",
         ["takeoffs.fromPages"] = "IconPagesToTree",
+        ["view.quickCalc"] = "IconCalc",
         ["file.open"] = "IconFolderOpen",
         ["file.importPdf"] = "IconImport",
         ["file.exportPdf"] = "IconExport",
@@ -284,9 +290,32 @@ public partial class MainWindow
             case "takeoffs.collapseTree": BtnCollapseTakeoffsTree_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.expandTree": BtnExpandTakeoffsTree_Click(this, new RoutedEventArgs()); break;
             case "takeoffs.roofBase": Btn3dRfRoof_Click(this, new RoutedEventArgs()); break;
+            case "view.quickCalc": ToggleQuickCalcPanel(); break;
             default: ExecuteCommandPaletteItem(id); break;
         }
     }
+
+    private void ToggleQuickCalcPanel()
+    {
+        if (QuickCalcHost.Visibility == Visibility.Visible)
+        {
+            QuickCalcHost.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        QuickCalcHost.Visibility = Visibility.Visible;
+        var slide = new TranslateTransform(QuickCalc.Width, 0);
+        QuickCalcHost.RenderTransform = slide;
+        slide.BeginAnimation(
+            TranslateTransform.XProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(QuickCalc.Width, 0, TimeSpan.FromMilliseconds(160))
+            {
+                EasingFunction = new System.Windows.Media.Animation.QuadraticEase(),
+            });
+    }
+
+    private void QuickCalc_CloseRequested(object sender, EventArgs e) =>
+        QuickCalcHost.Visibility = Visibility.Collapsed;
 
     private void ConfigureSideStrip(bool leftSide)
     {
