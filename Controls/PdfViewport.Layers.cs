@@ -1547,26 +1547,6 @@ public sealed partial class PdfViewport
             $"pdf='{Path.GetFileName(request.PdfPath)}'; pdfPage={request.PdfIndex + 1}; scale={request.RenderScale:0.###}");
     }
 
-    private bool RenderPageWithLayers(bool resetLayerStates, float renderScale)
-    {
-        if (!PdfLayerRenderService.TryRender(
-                _pdfPath,
-                _pdfIndex,
-                Math.Clamp(renderScale, 0.20f, 4.0f),
-                _layerStates,
-                _highlightedLayers,
-                _cachedLayers,
-                out PdfLayerRenderResult render,
-                out string error))
-        {
-            if (!string.IsNullOrWhiteSpace(error))
-                PostStatus($"Layer renderer unavailable: {error}");
-            return false;
-        }
-
-        return ApplyLayerRenderResult(render, resetLayerStates);
-    }
-
     private static void TryWriteDocnetPreviewCache(DocnetRenderRequest request, DocnetRenderResult render)
     {
         if (!IsPreviewRenderScale(request.RenderScale) ||
