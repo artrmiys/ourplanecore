@@ -49,6 +49,13 @@ public partial class MainWindow
                 singleSelection,
                 () => CreatePointsAlongLineTakeoffItem(item)));
         }
+        if (item.MeasurementType == "point")
+        {
+            menu.Items.Add(MakeMenuItem(
+                "Find Similar...",
+                singleSelection && _currentJob != null && _currentPage != null,
+                () => StartFindSimilarForItem(tvi, item)));
+        }
         menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
         menu.Items.Add(BuildTakeoff3DMenu(tvi));
 

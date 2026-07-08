@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using OurPlaneCore.Controls;
 using SkiaSharp;
 
@@ -44,6 +45,10 @@ public partial class MainWindow
     private SimilarCountDialog? _similarCountDialog;
     private int _similarCountReviewStartSerial;
 
+    // Set by "Find Similar..." on an existing Count item so the interactive
+    // rubber-band adds its matches to that item instead of the active one.
+    private TakeoffItem? _pendingSimilarCountDestination;
+
     private void BtnSimilarCount_Click(object sender, RoutedEventArgs e)
     {
         if (_currentJob == null || _currentPage == null)
@@ -59,11 +64,49 @@ public partial class MainWindow
             return;
         }
 
+        _pendingSimilarCountDestination = null; // plain Similar targets the active item
         _viewport.BeginSimilarCountSelection();
     }
 
-    private void OnSimilarCountSelectionCompleted(ViewportSimilarCountRequest request) =>
+    // Re-run Similar on an already-created Count item (Beam/Opening/Count):
+    // rubber-band one symbol again, matches land back in this item.
+    private void StartFindSimilarForItem(TreeViewItem tvi, TakeoffItem item)
+    {
+        if (_currentJob == null || _currentPage == null)
+        {
+            TxtStatus.Text = "Find similar: open a job and a sheet first.";
+            return;
+        }
+
+        if (_similarCountDialog != null)
+        {
+            _similarCountDialog.Activate();
+            TxtStatus.Text = "Count similar review is already open.";
+            return;
+        }
+
+        if (CanChangeActiveTakeoffTarget(item))
+            SetActiveTakeoffTarget(tvi, item);
+
+        _pendingSimilarCountDestination = item;
+        _viewport.BeginSimilarCountSelection();
+        TxtStatus.Text = $"Find similar: box one symbol to add matches to “{item.Name}”.";
+    }
+
+    private void OnSimilarCountSelectionCompleted(ViewportSimilarCountRequest request)
+    {
+        if (_pendingSimilarCountDestination is { } dest)
+        {
+            _pendingSimilarCountDestination = null;
+            request = request with
+            {
+                DestinationTakeoffFolderPath = dest.FolderPath,
+                DefaultDestinationName = dest.Name,
+            };
+        }
+
         StartSimilarCountReview(request);
+    }
 
     private void StartSimilarCountReview(ViewportSimilarCountRequest request)
     {
