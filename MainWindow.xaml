@@ -910,32 +910,35 @@
                                     </Button.ContextMenu>
                                 </Button>
                                 <Button x:Name="BtnRefreshPagesTree"
-                                        Content="R"
                                         Click="BtnRefreshPagesTree_Click"
                                         Width="22"
                                         MinWidth="22"
                                         Padding="0"
                                         Margin="2,0,0,0"
                                         FontSize="11"
-                                        ToolTip="Refresh Pages tree"/>
+                                        ToolTip="Refresh Pages tree">
+                                    <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconRefresh}"/>
+                                </Button>
                                 <Button x:Name="BtnCollapsePagesTree"
-                                        Content="-"
                                         Click="BtnCollapsePagesTree_Click"
                                         Width="22"
                                         MinWidth="22"
                                         Padding="0"
                                         Margin="2,0,0,0"
                                         FontSize="11"
-                                        ToolTip="Collapse all Pages nodes"/>
+                                        ToolTip="Collapse all Pages nodes">
+                                    <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconCollapseAll}"/>
+                                </Button>
                                 <Button x:Name="BtnExpandPagesTree"
-                                        Content="+"
                                         Click="BtnExpandPagesTree_Click"
                                         Width="22"
                                         MinWidth="22"
                                         Padding="0"
                                         Margin="2,0,0,0"
                                         FontSize="11"
-                                        ToolTip="Expand all Pages nodes"/>
+                                        ToolTip="Expand all Pages nodes">
+                                    <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconExpandAll}"/>
+                                </Button>
                             </StackPanel>
                             <TextBlock Text="Pages"
                                        Style="{StaticResource PanelHeader}"
@@ -1444,32 +1447,35 @@
                         <DockPanel LastChildFill="True">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <Button x:Name="BtnRefreshTakeoffsTree"
-                                        Content="R"
                                         Click="BtnRefreshTakeoffsTree_Click"
                                         Width="22"
                                         MinWidth="22"
                                         Padding="0"
                                         Margin="2,0,0,0"
                                         FontSize="11"
-                                        ToolTip="Refresh Takeoffs tree"/>
+                                        ToolTip="Refresh Takeoffs tree">
+                                    <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconRefresh}"/>
+                                </Button>
                                 <Button x:Name="BtnCollapseTakeoffsTree"
-                                        Content="-"
                                         Click="BtnCollapseTakeoffsTree_Click"
                                         Width="22"
                                         MinWidth="22"
                                         Padding="0"
                                         Margin="2,0,0,0"
                                         FontSize="11"
-                                        ToolTip="Collapse all Takeoffs nodes"/>
+                                        ToolTip="Collapse all Takeoffs nodes">
+                                    <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconCollapseAll}"/>
+                                </Button>
                                 <Button x:Name="BtnExpandTakeoffsTree"
-                                        Content="+"
                                         Click="BtnExpandTakeoffsTree_Click"
                                         Width="22"
                                         MinWidth="22"
                                         Padding="0"
                                         Margin="2,0,0,0"
                                         FontSize="11"
-                                        ToolTip="Expand all Takeoffs nodes"/>
+                                        ToolTip="Expand all Takeoffs nodes">
+                                    <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconExpandAll}"/>
+                                </Button>
                             </StackPanel>
                             <TextBlock Text="Takeoffs"
                                        Style="{StaticResource PanelHeader}"
