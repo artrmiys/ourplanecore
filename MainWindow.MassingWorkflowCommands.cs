@@ -163,12 +163,7 @@ public partial class MainWindow
 
         if (draft == null)
         {
-            TxtStatus.Text = "Build a 3D draft before reviewing roof geometry.";
-            MessageBox.Show(
-                "No 3D massing draft exists yet. Run Build 3D Draft first.",
-                "Review Roof",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No 3D massing draft exists yet. Run Build 3D Draft first.");
             return;
         }
 
@@ -222,23 +217,13 @@ public partial class MainWindow
 
         if (draft == null)
         {
-            TxtStatus.Text = "Build a 3D draft before reviewing openings.";
-            MessageBox.Show(
-                "No 3D massing draft exists yet. Run Build 3D Draft first.",
-                "Review Openings",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No 3D massing draft exists yet. Run Build 3D Draft first.");
             return;
         }
 
         if (draft.Openings.Count == 0)
         {
-            TxtStatus.Text = "No projected openings are available for review.";
-            MessageBox.Show(
-                "No projected door/window/opening markers were found in the current 3D draft.",
-                "Review Openings",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No projected door/window/opening markers were found in the current 3D draft.");
             return;
         }
 

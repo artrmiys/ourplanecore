@@ -21,13 +21,7 @@ public partial class MainWindow
             SmartLearningStore.CaptureManualPageState(_currentJob, page, "End-of-project/manual learning snapshot.");
         SmartSheetLearningSummary summary = SmartLearningStore.SaveProjectSummary(_currentJob);
 
-        MessageBox.Show(
-            $"Captured {pages.Count} page state(s)." + Environment.NewLine +
-            $"Learning records in this project: {summary.RecordCount}.",
-            "Capture Final Learning Snapshot",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-        TxtStatus.Text = $"Captured final learning snapshot for {pages.Count} page(s).";
+        PostStatusInfo($"Captured final learning snapshot for {pages.Count} page(s); learning records in this project: {summary.RecordCount}.");
     }
 
     private void ReviewLearnedRules()
@@ -38,11 +32,7 @@ public partial class MainWindow
         SmartLearnedRuleSet rules = SmartLearningStore.LoadGlobalLearnedRules();
         if (rules.Rules.Count == 0)
         {
-            MessageBox.Show(
-                "No learned rules yet. Capture a final learning snapshot after reviewed projects to generate rules.",
-                "Review Learned Rules",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No learned rules yet. Capture a final learning snapshot after reviewed projects to generate rules.");
             return;
         }
 
@@ -67,11 +57,7 @@ public partial class MainWindow
         SmartLearnedRuleSet rules = SmartLearningStore.LoadProjectLearnedRules(_currentJob);
         if (rules.Rules.Count == 0)
         {
-            MessageBox.Show(
-                "No project learned rules yet. Capture a final learning snapshot for this project to generate rules.",
-                "Review Project Learned Rules",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No project learned rules yet. Capture a final learning snapshot for this project to generate rules.");
             return;
         }
 

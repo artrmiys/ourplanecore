@@ -31,12 +31,7 @@ public partial class MainWindow
         List<SmartAiMarker> markers = LoadMarkersForCurrentFilter(includeHiddenTypes: true);
         if (markers.Count == 0)
         {
-            TxtStatus.Text = "No AI markers match the current filters.";
-            MessageBox.Show(
-                "No active AI markers match the current type/sample filters.",
-                "Create Marker Set",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No active AI markers match the current type/sample filters.");
             return;
         }
 
@@ -68,12 +63,7 @@ public partial class MainWindow
         IReadOnlyList<SmartAiMarkerSet> sets = SmartContextStore.LoadAiMarkerSets(_currentJob);
         if (sets.Count == 0)
         {
-            TxtStatus.Text = "No marker sets saved yet.";
-            MessageBox.Show(
-                "Create a marker set from the current marker filters first.",
-                "Marker Sets",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("Create a marker set from the current marker filters first.");
             return;
         }
 
@@ -186,12 +176,7 @@ public partial class MainWindow
         List<SmartAiMarker> markers = LoadMarkersForCurrentFilter(includeHiddenTypes: false);
         if (markers.Count == 0)
         {
-            TxtStatus.Text = "No visible AI markers match the current filters.";
-            MessageBox.Show(
-                "No visible AI markers match the current type/sample filters.",
-                "Export Marker Context",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo("No visible AI markers match the current type/sample filters.");
             return;
         }
 

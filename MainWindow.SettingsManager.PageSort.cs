@@ -109,7 +109,7 @@ public partial class MainWindow
         var act = HBar();
         act.Children.Add(MgrButton("Apply — Sort A/S now", (_, _) =>
         {
-            if (_currentJob == null) { MessageBox.Show("Open a job first.", "Sort A/S"); return; }
+            if (_currentJob == null) { PostStatusInfo("Open a job before sorting A/S pages."); return; }
             SyncPageSortFromUi();
             InstallWorkingPageSort();
             SortPagesIntoArchStruct();
@@ -178,7 +178,7 @@ public partial class MainWindow
         var act = HBar();
         act.Children.Add(MgrButton("Apply — Sort D/Sec/WT now", (_, _) =>
         {
-            if (_currentJob == null) { MessageBox.Show("Open a job first.", "Sort D/Sec/WT"); return; }
+            if (_currentJob == null) { PostStatusInfo("Open a job before sorting D/Sec/WT pages."); return; }
             SyncPageSortFromUi();
             InstallWorkingPageSort();
             SortPagesBySuffix();

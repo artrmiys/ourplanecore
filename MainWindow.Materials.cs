@@ -65,7 +65,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Materials", MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before extracting materials.");
             return;
         }
 
@@ -73,7 +73,7 @@ public partial class MainWindow
         IReadOnlyList<string> pdfs = MaterialExtractionService.UniqueSourcePdfs(pages);
         if (pdfs.Count == 0)
         {
-            MessageBox.Show("No source PDF files were found in the current job.", "Materials", MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No source PDF files were found in the current job.");
             return;
         }
 
@@ -96,14 +96,14 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Materials", MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before creating a materials report.");
             return;
         }
 
         IReadOnlyList<PageInfo> pages = CollectPagesUnder(_currentJob.PagesRoot).ToList();
         if (MaterialExtractionService.UniqueSourcePdfs(pages).Count == 0)
         {
-            MessageBox.Show("No source PDF files were found in the current job.", "Materials", MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No source PDF files were found in the current job.");
             return;
         }
 

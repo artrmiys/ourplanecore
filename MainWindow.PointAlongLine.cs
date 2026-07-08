@@ -59,8 +59,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Create Count Points",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before creating Count points.");
             return;
         }
 
@@ -94,9 +93,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            MessageBox.Show(ex.Message, "Create Count Points",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            TxtStatus.Text = ex.Message;
+            PostStatusInfo(ex.Message);
             return;
         }
 

@@ -45,8 +45,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Create Line Grid",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before creating a line grid.");
             return;
         }
 
@@ -79,9 +78,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            MessageBox.Show(ex.Message, "Create Line Grid",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            TxtStatus.Text = ex.Message;
+            PostStatusInfo(ex.Message);
             return;
         }
 

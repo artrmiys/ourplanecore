@@ -43,8 +43,7 @@ public partial class MainWindow
             .ToArray();
         if (names.Length != pages.Count)
         {
-            MessageBox.Show($"Expected {pages.Count} names, got {names.Length}.", "Batch Rename Pages",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning($"Expected {pages.Count} names, got {names.Length}.");
             return;
         }
 
@@ -108,8 +107,7 @@ public partial class MainWindow
 
         if (!TryParseLevelDegrees(raw, out double degrees))
         {
-            MessageBox.Show("Enter a number from -45 to 45.", "Level Page",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter a number from -45 to 45.");
             return;
         }
 
@@ -235,8 +233,7 @@ public partial class MainWindow
             !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float dx) ||
             !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float dy))
         {
-            MessageBox.Show("Enter two numbers, for example: 12, -6", "Offset Origin",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter two numbers, for example: 12, -6.");
             return;
         }
 

@@ -76,18 +76,14 @@ public partial class MainWindow
 
         if (options.Mode == PdfTakeoffImportMode.ImportIntoCurrentJob && _currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Import PDF Takeoffs",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before importing PDF takeoffs into the current job.");
             return;
         }
 
         IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(options.SourceFolder);
         if (pdfPaths.Count == 0)
         {
-            MessageBox.Show("No PDF files were found in the selected folder or its subfolders.",
-                            "Import PDF Takeoffs",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+            PostStatusInfo("No PDF files were found in the selected folder or its subfolders.");
             return;
         }
 

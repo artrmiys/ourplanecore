@@ -67,7 +67,7 @@ public partial class MainWindow
         if (Directory.Exists(_currentJob.PagesRoot))
             return CreateHiddenPagesRootItem();
 
-        MessageBox.Show("No PDF pages found.", title, MessageBoxButton.OK, MessageBoxImage.Information);
+        PostStatusInfo("No PDF pages found.");
         return null;
     }
 
@@ -79,8 +79,7 @@ public partial class MainWindow
         var pages = GetPagesForMetadata(item).ToList();
         if (pages.Count == 0)
         {
-            MessageBox.Show("No PDF pages found in this selection.", "PDF Metadata",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No PDF pages found in this selection.");
             return;
         }
 

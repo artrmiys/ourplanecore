@@ -13,8 +13,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "New Page Folder",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before adding a page folder.");
             return;
         }
 
@@ -27,8 +26,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Blank Sheet",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before adding a blank sheet.");
             return;
         }
 
@@ -372,8 +370,7 @@ public partial class MainWindow
 
         if (!IsPathInsidePagesRoot(target) || OurPlaneCoreJobStore.IsPageFolder(target))
         {
-            MessageBox.Show("Choose a folder inside the current job's Pages tree.",
-                            "Move to Folder", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Choose a folder inside the current job's Pages tree.");
             return;
         }
 
