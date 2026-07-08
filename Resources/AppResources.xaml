@@ -3,5 +3,6 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="AppControlResources.xaml"/>
         <ResourceDictionary Source="AppNavigationResources.xaml"/>
+        <ResourceDictionary Source="MainWindowResources.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

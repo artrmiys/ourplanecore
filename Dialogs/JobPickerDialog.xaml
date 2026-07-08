@@ -206,7 +206,7 @@
                                        TextTrimming="CharacterEllipsis"
                                        Foreground="{DynamicResource SecondaryForegroundBrush}"/>
 
-                            <!-- Pin star (right, hover-only when not pinned) -->
+                            <!-- Pin glyph (right, hover-only when not pinned) -->
                             <Button Grid.Column="4"
                                     x:Name="StarButton"
                                     VerticalAlignment="Center"
@@ -226,20 +226,26 @@
                                         </Border>
                                     </ControlTemplate>
                                 </Button.Template>
-                                <TextBlock x:Name="StarGlyph"
-                                           FontSize="15"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Center">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="☆"/>
-                                            <Setter Property="Foreground"
+                                <Path x:Name="PinGlyph"
+                                      Width="14"
+                                      Height="14"
+                                      Data="{StaticResource IconSparkle}"
+                                      Stretch="Uniform"
+                                      StrokeThickness="1.35"
+                                      StrokeLineJoin="Round"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      Fill="Transparent"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Center">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Stroke"
                                                     Value="{DynamicResource SecondaryForegroundBrush}"/>
                                             <Setter Property="Visibility" Value="Hidden"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsPinned}" Value="True">
-                                                    <Setter Property="Text" Value="★"/>
-                                                    <Setter Property="Foreground"
+                                                    <Setter Property="Stroke"
                                                             Value="{DynamicResource AccentBrush}"/>
                                                     <Setter Property="Visibility" Value="Visible"/>
                                                 </DataTrigger>
@@ -249,8 +255,8 @@
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                    </Path.Style>
+                                </Path>
                             </Button>
                         </Grid>
                     </DataTemplate>

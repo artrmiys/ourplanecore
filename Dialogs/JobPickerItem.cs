@@ -79,15 +79,15 @@ public sealed class JobPickerItem : INotifyPropertyChanged
     public string RelativeDate => JobPickerFormatting.RelativeDate(LastOpenedUtc);
     public ImageSource? ThumbnailImage => LoadThumbnail(ThumbnailPath);
 
-    // Stable group ordering: Pinned (0) → Recent (1) → From "<root>" (2) → Unavailable (3).
+    // Stable group ordering: Pinned (0) -> Recent (1) -> From "<root>" (2) -> Unavailable (3).
     public int GroupOrder => !Exists ? 3 : IsPinned ? 0 : IsRecent ? 1 : 2;
 
     public string GroupKey => GroupOrder switch
     {
-        0 => "★ Pinned",
-        1 => "🕒 Recent",
-        3 => "⚠ Unavailable",
-        _ => $"📁 From \"{ShortRootName(RootPath)}\"",
+        0 => "Pinned",
+        1 => "Recent",
+        3 => "Unavailable",
+        _ => $"From \"{ShortRootName(RootPath)}\"",
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;
