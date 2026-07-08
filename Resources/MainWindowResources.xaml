@@ -112,6 +112,10 @@
     <Setter Property="Margin" Value="0,0,6,0"/>
 </Style>
 
+<Style x:Key="ToggleToolIcon" TargetType="Path" BasedOn="{StaticResource RibbonIcon}">
+    <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+</Style>
+
 <Style x:Key="MenuChevronIcon" TargetType="Path">
     <Setter Property="Width" Value="10"/>
     <Setter Property="Height" Value="10"/>

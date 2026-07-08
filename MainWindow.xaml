@@ -733,22 +733,42 @@
                     MinWidth="52"
                     Padding="6,2"/>
             <Border Style="{StaticResource ToolDiv}"/>
-            <ToggleButton x:Name="BtnSnap" Content="Snap"
+            <ToggleButton x:Name="BtnSnap"
                           ToolTip="Snap to existing takeoff points (F3)"
                           Checked="BtnSnap_Checked" Unchecked="BtnSnap_Unchecked"
-                          Padding="6,2" MinWidth="48"/>
-            <ToggleButton x:Name="BtnPdfSnap" Content="PDF"
+                          Padding="6,2" MinWidth="56">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconTarget}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Snap" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ToggleButton>
+            <ToggleButton x:Name="BtnPdfSnap"
                           ToolTip="Snap to PDF vector corners and points (Ctrl+F3)"
                           Checked="BtnPdfSnap_Checked" Unchecked="BtnPdfSnap_Unchecked"
-                          Padding="6,2" MinWidth="44"/>
-            <ToggleButton x:Name="BtnOrtho" Content="Ortho"
+                          Padding="6,2" MinWidth="52">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconSheetMeasure}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="PDF" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ToggleButton>
+            <ToggleButton x:Name="BtnOrtho"
                           ToolTip="Lock Line/Area to 90/45 degrees (F8, Shift temporarily toggles)"
                           Checked="BtnOrtho_Checked" Unchecked="BtnOrtho_Unchecked"
-                          Padding="6,2" MinWidth="52"/>
-            <ToggleButton x:Name="BtnBoxMode" Content="Box"
+                          Padding="6,2" MinWidth="60">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconLevel}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Ortho" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ToggleButton>
+            <ToggleButton x:Name="BtnBoxMode"
                           ToolTip="Draw Line/Area measurements by two opposite box corners (F9)"
                           Checked="BtnBoxMode_Checked" Unchecked="BtnBoxMode_Unchecked"
-                          Padding="6,2" MinWidth="44"/>
+                          Padding="6,2" MinWidth="52">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource ToggleToolIcon}" Data="{StaticResource IconBox}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Box" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ToggleButton>
 
             </WrapPanel>
             </DockPanel>
