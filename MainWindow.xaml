@@ -761,12 +761,22 @@
 
             <TextBlock Text="Transform" VerticalAlignment="Center" FontSize="11" Margin="2,0,6,0"
                        Foreground="{DynamicResource SecondaryForegroundBrush}"/>
-            <Button x:Name="BtnMirrorHorizontal" Content="Flip H" Click="BtnMirrorHorizontal_Click"
+            <Button x:Name="BtnMirrorHorizontal" Click="BtnMirrorHorizontal_Click"
                     ToolTip="Mirror selected measurements/markups horizontally"
-                    Style="{StaticResource ToolBtn}" MinWidth="52"/>
-            <Button x:Name="BtnMirrorVertical" Content="Flip V" Click="BtnMirrorVertical_Click"
+                    Style="{StaticResource ToolBtn}" MinWidth="58" Padding="4,2">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFlipH}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Flip H" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnMirrorVertical" Click="BtnMirrorVertical_Click"
                     ToolTip="Mirror selected measurements/markups vertically"
-                    Style="{StaticResource ToolBtn}" MinWidth="52"/>
+                    Style="{StaticResource ToolBtn}" MinWidth="58" Padding="4,2">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconFlipV}" Width="13" Height="13" Margin="0,0,4,0"/>
+                    <TextBlock Text="Flip V" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <TextBlock Text="Rot" VerticalAlignment="Center" FontSize="11" Margin="10,0,2,0"/>
             <Slider x:Name="SliderRotateSelection"
                     Width="110"
@@ -778,9 +788,11 @@
                     Style="{StaticResource RibbonSlider}"
                     ValueChanged="SliderRotateSelection_ValueChanged"
                     ToolTip="Rotate selected geometry around its center; hold Shift for 15 deg steps"/>
-            <Button x:Name="BtnResetRotateSelection" Content="0" Click="BtnResetRotateSelection_Click"
+            <Button x:Name="BtnResetRotateSelection" Click="BtnResetRotateSelection_Click"
                     ToolTip="Center rotate slider for another relative adjustment"
-                    Style="{StaticResource ToolBtn}" MinWidth="24"/>
+                    Style="{StaticResource ToolBtn}" MinWidth="28">
+                <Path Style="{StaticResource PanelHeaderIcon}" Data="{StaticResource IconRefresh}"/>
+            </Button>
             <TextBlock Text="Scale" VerticalAlignment="Center" FontSize="11" Margin="10,0,2,0"/>
             <Slider x:Name="SliderScaleSelection"
                     Width="100"
