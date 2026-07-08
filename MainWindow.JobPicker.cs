@@ -208,8 +208,7 @@ public partial class MainWindow
             .ToList();
         if (jobs.Count == 0)
         {
-            MessageBox.Show("No OurPlaneCore jobs found in configured job folders.", "Open Jobs Folder",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No OurPlaneCore jobs found in configured job folders.");
             return;
         }
 
@@ -238,10 +237,7 @@ public partial class MainWindow
         IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(pdfFolder);
         if (pdfPaths.Count == 0)
         {
-            MessageBox.Show("No PDF files were found in the selected folder or its subfolders.",
-                            "New Job",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+            PostStatusInfo("No PDF files were found in the selected folder or its subfolders.");
             return;
         }
 

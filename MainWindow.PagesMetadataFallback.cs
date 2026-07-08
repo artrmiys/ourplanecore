@@ -59,19 +59,13 @@ public partial class MainWindow
 
         if (pages.Count == 0)
         {
-            MessageBox.Show("No PDF pages found in Sheet Manager.", "AI Fill",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No PDF pages found in Sheet Manager.");
             return true;
         }
 
         if (string.IsNullOrWhiteSpace(ReadOpenAiApiKey()))
         {
-            MessageBox.Show(
-                "Set OPENAI_API_KEY in Windows environment or OpenAI Settings, then run AI Fill again.",
-                "AI Fill",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            TxtStatus.Text = "AI Fill needs OPENAI_API_KEY before it can run GPT metadata.";
+            PostStatusWarning("AI Fill needs OPENAI_API_KEY before it can run GPT metadata. Open OpenAI Settings, then run AI Fill again.");
             return true;
         }
 
@@ -360,8 +354,7 @@ public partial class MainWindow
 
         if (page == null)
         {
-            MessageBox.Show("Open or select a PDF sheet first.", "AI Fill Crop Hints",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or select a PDF sheet before configuring AI Fill crop hints.");
             return;
         }
 
@@ -420,7 +413,7 @@ public partial class MainWindow
 
         if (!PdfSheetMetadataCropService.TryRenderPage(page, out PdfLayerRenderResult render, out string error))
         {
-            MessageBox.Show(error, "AI Fill Crop Hints", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning(error);
             return null;
         }
 
@@ -439,11 +432,7 @@ public partial class MainWindow
         PdfSheetMetadataCropService.SaveTemplate(_currentJob, dialog.CropTemplate);
         if (showSavedMessage)
         {
-            MessageBox.Show(
-                $"Saved crop hints for AI Fill.{Environment.NewLine}{PdfSheetMetadataCropService.TemplatePath(_currentJob)}",
-                "AI Fill Crop Hints",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            PostStatusInfo($"Saved crop hints for AI Fill: {PdfSheetMetadataCropService.TemplatePath(_currentJob)}");
         }
 
         return dialog.CropTemplate;

@@ -514,15 +514,13 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Takeoff Item",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before drawing measurements.");
             return false;
         }
 
         if (_currentPage == null)
         {
-            MessageBox.Show("Select a page before drawing measurements.", "Takeoff Item",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Select a page before drawing measurements.");
             return false;
         }
 
@@ -530,11 +528,7 @@ public partial class MainWindow
         bool joistArea = IsJoistAreaTool(tool);
         if (mtype is "line" or "area" && _currentPage.ScaleMetersPerPt <= 0)
         {
-            MessageBox.Show(
-                "Set the page scale before drawing Line or Area measurements.",
-                "Scale Required",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            PostStatusWarning("Set the page scale before drawing Line or Area measurements.");
             return false;
         }
 
@@ -964,8 +958,7 @@ public partial class MainWindow
     {
         if (!PdfSheetMetadataService.TryParseScaleMetersPerPt(TxtScaleRatio.Text, out double scaleMetersPerPt))
         {
-            MessageBox.Show("Enter an imperial scale, e.g. 1/8\" = 1'0\".",
-                            "Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter an imperial scale, e.g. 1/8\" = 1'0\".");
             return;
         }
 

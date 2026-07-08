@@ -76,7 +76,7 @@ public partial class MainWindow
             levelSpacingFeet <= 0 ||
             levelSpacingFeet > 40)
         {
-            MessageBox.Show("Enter a level spacing value between 1 and 40 feet.", "3D From Takeoffs", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter a level spacing value between 1 and 40 feet.");
             return;
         }
 
@@ -115,12 +115,7 @@ public partial class MainWindow
         string apiKey = AppSettingsStore.ReadOpenAiApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            TxtStatus.Text = "OPENAI_API_KEY is missing. Open AI Settings before running AI 3D Sort.";
-            MessageBox.Show(
-                "OPENAI_API_KEY is missing. Save it in AI Settings first.",
-                "AI 3D Sort",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            PostStatusWarning("OPENAI_API_KEY is missing. Save it in AI Settings before running AI 3D Sort.");
             return;
         }
 
@@ -137,7 +132,7 @@ public partial class MainWindow
             levelSpacingFeet <= 0 ||
             levelSpacingFeet > 40)
         {
-            MessageBox.Show("Enter a level spacing value between 1 and 40 feet.", "AI 3D Sort", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Enter a level spacing value between 1 and 40 feet.");
             return;
         }
 

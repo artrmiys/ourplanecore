@@ -14,8 +14,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "New Takeoff Item",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before adding a takeoff item.");
             return;
         }
 
@@ -77,8 +76,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "New Takeoff Folder",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before adding a takeoff folder.");
             return;
         }
 
@@ -111,8 +109,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Auto Takeoff Tree",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before creating the takeoff tree.");
             return;
         }
 
@@ -123,8 +120,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Takeoff Folders From Pages",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before creating takeoff folders from pages.");
             return;
         }
 
@@ -175,8 +171,7 @@ public partial class MainWindow
         IReadOnlyList<string> groupNames = PlanSwiftFolderTemplateService.CollectCapsGroupNames(_currentJob);
         if (groupNames.Count == 0)
         {
-            MessageBox.Show("No CAPS page/folder names were found in Pages.", "Takeoff Folders From Pages",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("No CAPS page/folder names were found in Pages.");
             return;
         }
 

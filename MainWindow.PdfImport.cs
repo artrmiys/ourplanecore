@@ -42,8 +42,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before importing PDFs.");
             return;
         }
 
@@ -66,8 +65,7 @@ public partial class MainWindow
     {
         if (_currentJob == null)
         {
-            MessageBox.Show("Open or create a job first.", "Import PDF Folder",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            PostStatusInfo("Open or create a job before importing a PDF folder.");
             return;
         }
 
@@ -78,10 +76,7 @@ public partial class MainWindow
         IReadOnlyList<string> pdfPaths = PdfImportSourceFinder.FindPdfFilesRecursive(folder);
         if (pdfPaths.Count == 0)
         {
-            MessageBox.Show("No PDF files were found in the selected folder or its subfolders.",
-                            "Import PDF Folder",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+            PostStatusInfo("No PDF files were found in the selected folder or its subfolders.");
             return;
         }
 
@@ -96,8 +91,7 @@ public partial class MainWindow
         IReadOnlyList<PdfImportPlan> plans = BuildPdfImportPlans(pdfPaths, out IReadOnlyList<string> skipped);
         if (plans.Count == 0)
         {
-            MessageBox.Show("Could not read any pages from the selected PDF file(s).", "Import PDF",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning("Could not read any pages from the selected PDF file(s).");
             return;
         }
 
@@ -175,8 +169,7 @@ public partial class MainWindow
 
         if (names.Length != totalPages)
         {
-            MessageBox.Show($"Expected {totalPages} page name(s), got {names.Length}.",
-                            "Import PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PostStatusWarning($"Expected {totalPages} page name(s), got {names.Length}.");
             return false;
         }
 
