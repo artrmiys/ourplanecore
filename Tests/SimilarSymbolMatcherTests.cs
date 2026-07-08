@@ -1667,10 +1667,10 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("DefaultDestinationName: _activeItem?.Name", StringComparison.Ordinal) &&
             beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
             beamTool.Contains("TextCandidateSearchRadiusPdf: textPadding", StringComparison.Ordinal) &&
-            beamTool.Contains("IncludeTextCandidatesByDefault: false", StringComparison.Ordinal) &&
+            beamTool.Contains("IncludeTextCandidatesByDefault: true", StringComparison.Ordinal) &&
             beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal) &&
             beamTool.Contains("SimilarOpeningPadding", StringComparison.Ordinal),
-            "Beam/Openings Similar requests should mark the original measured item as already counted, target the newly created item, use auto text/raster matching tuned for measured objects, and keep unverified text-only fallback review-only");
+            "Beam/Openings Similar requests should mark the original measured item as already counted, target the newly created item, use auto text/raster matching tuned for measured objects, and pre-include text-mark candidates for review (the mark is the primary signal)");
         AssertTrue(
             similarCount.Contains("private void StartSimilarCountReview", StringComparison.Ordinal) &&
             similarCount.Contains("IsSimilarCountAlreadyCounted", StringComparison.Ordinal) &&
@@ -1848,7 +1848,7 @@ internal static class SimilarSymbolMatcherTests
             beamTool.Contains("DestinationTakeoffFolderPath:", StringComparison.Ordinal) &&
             beamTool.Contains("DefaultDestinationName:", StringComparison.Ordinal) &&
             beamTool.Contains("PreferNearestRepeatedText: true", StringComparison.Ordinal) &&
-            beamTool.Contains("IncludeTextCandidatesByDefault: false", StringComparison.Ordinal) &&
+            beamTool.Contains("IncludeTextCandidatesByDefault: true", StringComparison.Ordinal) &&
             beamTool.Contains("InitialIncludeMirrored: true", StringComparison.Ordinal),
             "Similar Count requests should carry the source PDF identity, while Beam/Openings keep geometry/raster matching, preserve marker offset, and target their named item");
     }

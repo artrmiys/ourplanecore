@@ -173,7 +173,7 @@ public partial class MainWindow
             PdfPageIndex: page.PdfPage,
             AllowExactTextMatches: false,
             UseTextCandidateRasterMatches: true,
-            IncludeTextCandidatesByDefault: false,
+            IncludeTextCandidatesByDefault: true, // trust the repeated beam mark: pre-include tag-found candidates for review
             TemplateAnchorPdf: templateCenter,
             MarkerCenterPdf: request.CountPointPdf,
             TextSearchRectPdf: PadRect(segmentRect, textPadding),
@@ -200,7 +200,7 @@ public partial class MainWindow
             PdfPageIndex: page.PdfPage,
             AllowExactTextMatches: false,
             UseTextCandidateRasterMatches: true,
-            IncludeTextCandidatesByDefault: false,
+            IncludeTextCandidatesByDefault: true, // openings almost always carry a text mark (D1/W3…): make it the primary signal, pre-included for review
             TemplateAnchorPdf: request.CountPointPdf,
             MarkerCenterPdf: request.CountPointPdf,
             TextSearchRectPdf: PadRect(openingRect, textPadding),
