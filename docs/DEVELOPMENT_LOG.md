@@ -1,5 +1,12 @@
 ﻿# Development Log
 
+## 2026-07-08 Quick calculator flyout + takeoff walls/details sorts
+
+- Slide-out calculator panel left of the right command strip (`Controls/QuickCalcPanel`): simple calculator on top (collapsed Expander), three feet-inches-twelfths groups below, results as decimal feet. Toggled by `view.quickCalc` (right strip + palette).
+- Right strip gains takeoffs collapse/expand buttons plus two special sorts: `takeoffs.sortWalls` (ext → corr/cor → dem → stud sizes descending → rest; recursive over the selected folder) and `takeoffs.sortDetails` (groups `1/A501` / `5_A501` names by the sheet after the separator, natural order, then detail number). Comparers in `Models/TakeoffSpecialSortComparers.cs`, unit-tested (432 checks total).
+- Gotcha caught by log validation: a strip command registered in BOTH the built-in side-strip catalog and the palette crashes `RebuildSideCommandStrip` (`ToDictionary` duplicate key) at startup — register palette-backed commands only once.
+- Deployed compressed single-file exe (69 MB) after Debug + publish log validation.
+
 ## 2026-07-08 Sort A-Z, Cut ortho fix, Area Combine tool, icon polish
 
 - Added Sort A-Z / Z-A to the side command strips, command palette (`pages.sortAz/Za`, `takeoffs.sortAz/Za`): sorts children of the selected Pages/Takeoffs folder (or root) via the existing natural-order `SortChildren`.
