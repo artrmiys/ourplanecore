@@ -11,6 +11,9 @@ public sealed class WallTraceDialog : Window
     public double MinThicknessInches { get; private set; } = 3;
     public double MaxThicknessInches { get; private set; } = 13;
     public double MinWallLengthFeet { get; private set; } = 1;
+    public bool IncludePerimeterWalls { get; private set; }
+    public double PerimeterOffsetFeet { get; private set; } = 1;
+    public bool DarkFillOnly { get; private set; }
 
     public WallTraceDialog(string defaultTakeoffName)
     {
@@ -48,6 +51,30 @@ public sealed class WallTraceDialog : Window
         var minLenBox = new TextBox { Text = "1", Width = 64, Margin = new Thickness(0, 0, 4, 0) };
         panel.Children.Add(BuildValueRow("Length", minLenBox, "ft"));
 
+        var darkFillBox = new CheckBox
+        {
+            Content = "Only solid (dark) filled walls — demising / corridor / rated",
+            IsChecked = false,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        panel.Children.Add(darkFillBox);
+
+        var perimeterBox = new CheckBox
+        {
+            Content = "Include perimeter walls on the area edge",
+            IsChecked = false,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        panel.Children.Add(perimeterBox);
+
+        var perimeterOffsetBox = new TextBox { Text = "1", Width = 64, Margin = new Thickness(0, 0, 4, 0) };
+        FrameworkElement perimeterOffsetRow = BuildValueRow("Edge offset", perimeterOffsetBox, "ft");
+        perimeterOffsetRow.Margin = new Thickness(18, 4, 0, 0);
+        panel.Children.Add(perimeterOffsetRow);
+        perimeterOffsetRow.IsEnabled = true;
+        perimeterBox.Checked += (_, _) => perimeterOffsetRow.IsEnabled = false;
+        perimeterBox.Unchecked += (_, _) => perimeterOffsetRow.IsEnabled = true;
+
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -66,7 +93,8 @@ public sealed class WallTraceDialog : Window
         {
             if (!TryReadValue(minBox, "Min thickness", out double min) ||
                 !TryReadValue(maxBox, "Max thickness", out double max) ||
-                !TryReadValue(minLenBox, "Minimum wall length", out double minLen))
+                !TryReadValue(minLenBox, "Minimum wall length", out double minLen) ||
+                !TryReadValue(perimeterOffsetBox, "Edge offset", out double perimeterOffset))
             {
                 return;
             }
@@ -84,6 +112,9 @@ public sealed class WallTraceDialog : Window
             MinThicknessInches = min;
             MaxThicknessInches = max;
             MinWallLengthFeet = minLen;
+            IncludePerimeterWalls = perimeterBox.IsChecked == true;
+            PerimeterOffsetFeet = perimeterOffset;
+            DarkFillOnly = darkFillBox.IsChecked == true;
             DialogResult = true;
         };
 

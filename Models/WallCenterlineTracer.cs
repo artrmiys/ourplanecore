@@ -17,6 +17,9 @@ public static class WallCenterlineTracer
 {
     public readonly record struct Segment(SKPoint A, SKPoint B);
 
+    /// <summary>A filled strip on the sheet with its fill luminance (0 = black, 1 = white).</summary>
+    public readonly record struct FillZone(SKRect Rect, float Luminance);
+
     public sealed class Options
     {
         /// <summary>Minimum wall thickness (face-to-face distance), PDF pt.</summary>
@@ -45,13 +48,32 @@ public static class WallCenterlineTracer
         public IReadOnlyList<SKRect>? ExcludedZones { get; init; }
 
         /// <summary>
-        /// Dark filled strips (wall poche boxes). When present, a candidate
-        /// centerline must run through one of them: real walls are filled,
-        /// casework outlines at wall-like spacing are hollow. Null or empty
-        /// (sheets whose walls are drawn as bare line pairs) disables the
-        /// check.
+        /// Filled strips (wall poche boxes) with their luminance. When
+        /// present, a candidate centerline must have one of them inside its
+        /// face-to-face band: real walls are filled, casework outlines at
+        /// wall-like spacing are hollow. Null or empty (sheets whose walls
+        /// are drawn as bare line pairs) disables the check.
         /// </summary>
-        public IReadOnlyList<SKRect>? WallFillZones { get; init; }
+        public IReadOnlyList<FillZone>? WallFillZones { get; init; }
+
+        /// <summary>
+        /// When true, only strips at or below <see cref="DarkLuminanceMax"/>
+        /// confirm a wall. On Revit-style sheets rated walls (demising,
+        /// corridor, exterior) carry dark poche while in-unit partitions are
+        /// light gray, so this traces just the structural wall set. Ignored
+        /// when the sheet has no dark strips at all.
+        /// </summary>
+        public bool DarkFillOnly { get; init; }
+
+        /// <summary>Luminance cutoff separating dark (rated) fill from light partition fill.</summary>
+        public float DarkLuminanceMax { get; init; } = 0.7f;
+
+        /// <summary>
+        /// Drop centerlines that run along the area polygon boundary within
+        /// this distance (perimeter/exterior walls the user usually measures
+        /// separately). 0 keeps them.
+        /// </summary>
+        public float BoundaryExclusionPt { get; init; }
     }
 
     private const float AngleBucketDeg = 4.0f;
@@ -71,10 +93,12 @@ public static class WallCenterlineTracer
         if (faces.Count < 2)
             return [];
 
-        List<Segment> rawCenterlines = PairFacesIntoCenterlines(faces, options);
+        List<RawCenterline> rawCenterlines = PairFacesIntoCenterlines(faces, options);
         FilterToFilledWalls(rawCenterlines, options);
-        List<Segment> merged = MergeCollinear(rawCenterlines, options.MaxThicknessPt);
+        List<Segment> merged = MergeCollinear(
+            rawCenterlines.Select(c => c.Seg).ToList(), options.MaxThicknessPt);
         RemoveParallelDuplicates(merged, options.MaxThicknessPt);
+        RemoveBoundaryWalls(merged, areaPolygon, holes, options.BoundaryExclusionPt);
         RemoveRareAngleNoise(merged, options.MaxThicknessPt);
 
         merged.RemoveAll(s => Length(s) < Math.Max(options.MinWallLengthPt, 1f));
@@ -119,7 +143,7 @@ public static class WallCenterlineTracer
             {
                 if (Length(clipped) < minFaceLen)
                     continue;
-                if (excludedZones != null && excludedZones.Contains(Lerp(clipped.A, clipped.B, 0.5f)))
+                if (IsMostlyInsideZones(clipped, excludedZones))
                     continue;
 
                 result.Add(clipped);
@@ -127,6 +151,29 @@ public static class WallCenterlineTracer
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// True when most of the face lies inside excluded text zones. Text
+    /// strokes and label-frame lines sit entirely inside their word box and
+    /// are dropped; a long wall face merely crossing a room tag keeps its
+    /// full length, so walls no longer break where labels touch them.
+    /// </summary>
+    private static bool IsMostlyInsideZones(Segment seg, ZoneIndex? zones)
+    {
+        if (zones == null)
+            return false;
+
+        const int samples = 9;
+        int inside = 0;
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (i + 0.5f) / samples;
+            if (zones.Contains(Lerp(seg.A, seg.B, t)))
+                inside++;
+        }
+
+        return inside >= samples * 0.6f;
     }
 
     /// <summary>Grid-hashed point-in-any-rect lookup for exclusion zones.</summary>
@@ -227,7 +274,10 @@ public static class WallCenterlineTracer
     // Stage 2: pair near-parallel faces at wall-thickness distance.
     // ------------------------------------------------------------------
 
-    private static List<Segment> PairFacesIntoCenterlines(List<Segment> faces, Options options)
+    /// <summary>A paired centerline plus the face-to-face thickness that produced it.</summary>
+    private readonly record struct RawCenterline(Segment Seg, float Thickness);
+
+    private static List<RawCenterline> PairFacesIntoCenterlines(List<Segment> faces, Options options)
     {
         // Bucket by direction so only near-parallel segments are compared, and
         // grid-hash by position so far-apart segments are skipped: keeps the
@@ -254,7 +304,7 @@ public static class WallCenterlineTracer
             list.Add(i);
         }
 
-        var centerlines = new List<Segment>();
+        var centerlines = new List<RawCenterline>();
         var seenPairs = new HashSet<(int, int)>();
         for (int i = 0; i < faces.Count; i++)
         {
@@ -278,7 +328,7 @@ public static class WallCenterlineTracer
                     if (!seenPairs.Add((i, j)))
                         continue;
 
-                    if (TryBuildCenterline(faces[i], faces[j], options, out Segment centerline))
+                    if (TryBuildCenterline(faces[i], faces[j], options, out RawCenterline centerline))
                         centerlines.Add(centerline);
                 }
             }
@@ -287,7 +337,7 @@ public static class WallCenterlineTracer
         return centerlines;
     }
 
-    private static bool TryBuildCenterline(Segment a, Segment b, Options options, out Segment centerline)
+    private static bool TryBuildCenterline(Segment a, Segment b, Options options, out RawCenterline centerline)
     {
         centerline = default;
 
@@ -323,7 +373,7 @@ public static class WallCenterlineTracer
 
         SKPoint p0 = new(a.A.X + dir.X * start + offset.X, a.A.Y + dir.Y * start + offset.Y);
         SKPoint p1 = new(a.A.X + dir.X * end + offset.X, a.A.Y + dir.Y * end + offset.Y);
-        centerline = new Segment(p0, p1);
+        centerline = new RawCenterline(new Segment(p0, p1), thickness);
         return true;
     }
 
@@ -391,23 +441,29 @@ public static class WallCenterlineTracer
     }
 
     /// <summary>
-    /// Keeps only centerlines that run through a dark filled strip. Fill
+    /// Keeps only centerlines whose wall body contains a filled strip. Fill
     /// boxes wider than a plausible wall are ignored (a big filled region
     /// would confirm everything inside it); the check is skipped entirely
-    /// when the sheet offers no wall-like fill strips.
+    /// when the sheet offers no wall-like fill strips. The strip is looked
+    /// for across the whole face-to-face band, not just on the centerline:
+    /// in a thick exterior assembly the filled stud row sits off-center.
     /// </summary>
-    private static void FilterToFilledWalls(List<Segment> centerlines, Options options)
+    private static void FilterToFilledWalls(List<RawCenterline> centerlines, Options options)
     {
         if (options.WallFillZones == null || options.WallFillZones.Count == 0)
             return;
 
         float maxStrip = options.MaxThicknessPt * 2f;
+        bool darkOnly = options.DarkFillOnly &&
+                        options.WallFillZones.Any(z => z.Luminance <= options.DarkLuminanceMax);
         var strips = new List<SKRect>();
-        foreach (SKRect zone in options.WallFillZones)
+        foreach (FillZone zone in options.WallFillZones)
         {
-            if (Math.Min(zone.Width, zone.Height) <= maxStrip)
+            if (darkOnly && zone.Luminance > options.DarkLuminanceMax)
+                continue;
+            if (Math.Min(zone.Rect.Width, zone.Rect.Height) <= maxStrip)
             {
-                SKRect inflated = zone;
+                SKRect inflated = zone.Rect;
                 inflated.Inflate(0.75f, 0.75f);
                 strips.Add(inflated);
             }
@@ -417,9 +473,93 @@ public static class WallCenterlineTracer
         if (index == null)
             return;
 
-        centerlines.RemoveAll(c =>
-            !index.Contains(Lerp(c.A, c.B, 0.5f)) &&
-            !(index.Contains(Lerp(c.A, c.B, 0.25f)) && index.Contains(Lerp(c.A, c.B, 0.75f))));
+        centerlines.RemoveAll(c => !BandTouchesFill(c, index));
+    }
+
+    /// <summary>
+    /// True when a fill strip is found at any lateral offset inside the wall
+    /// band: on the centerline itself or shifted toward either face.
+    /// </summary>
+    private static bool BandTouchesFill(RawCenterline c, ZoneIndex fill)
+    {
+        SKPoint dir = Normalize(new SKPoint(c.Seg.B.X - c.Seg.A.X, c.Seg.B.Y - c.Seg.A.Y));
+        SKPoint normal = new(-dir.Y, dir.X);
+        ReadOnlySpan<float> offsets = [0f, 0.22f, -0.22f, 0.42f, -0.42f];
+        foreach (float f in offsets)
+        {
+            float off = c.Thickness * f;
+            var shift = new SKPoint(normal.X * off, normal.Y * off);
+            SKPoint mid = Lerp(c.Seg.A, c.Seg.B, 0.5f);
+            SKPoint q1 = Lerp(c.Seg.A, c.Seg.B, 0.25f);
+            SKPoint q3 = Lerp(c.Seg.A, c.Seg.B, 0.75f);
+            if (fill.Contains(new SKPoint(mid.X + shift.X, mid.Y + shift.Y)) ||
+                (fill.Contains(new SKPoint(q1.X + shift.X, q1.Y + shift.Y)) &&
+                 fill.Contains(new SKPoint(q3.X + shift.X, q3.Y + shift.Y))))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Drops centerlines that run along the area polygon boundary (within
+    /// <paramref name="tolerancePt"/> and near-parallel to the closest edge).
+    /// These are the perimeter/exterior walls; the user usually measures
+    /// them separately, so the default trace keeps interior walls only.
+    /// </summary>
+    private static void RemoveBoundaryWalls(
+        List<Segment> segments,
+        IReadOnlyList<SKPoint> polygon,
+        IReadOnlyList<IReadOnlyList<SKPoint>>? holes,
+        float tolerancePt)
+    {
+        if (tolerancePt <= 0f)
+            return;
+
+        var rings = new List<IReadOnlyList<SKPoint>> { polygon };
+        if (holes != null)
+        {
+            foreach (IReadOnlyList<SKPoint> hole in holes)
+            {
+                if (hole.Count >= 3)
+                    rings.Add(hole);
+            }
+        }
+
+        segments.RemoveAll(seg =>
+            IsAlongBoundary(Lerp(seg.A, seg.B, 0.1f), SegmentAngleDeg(seg), rings, tolerancePt) &&
+            IsAlongBoundary(Lerp(seg.A, seg.B, 0.5f), SegmentAngleDeg(seg), rings, tolerancePt) &&
+            IsAlongBoundary(Lerp(seg.A, seg.B, 0.9f), SegmentAngleDeg(seg), rings, tolerancePt));
+    }
+
+    /// <summary>
+    /// True when the point lies within the tolerance of a ring edge that is
+    /// near-parallel to the wall: perpendicular interior walls that merely
+    /// touch the boundary must survive.
+    /// </summary>
+    private static bool IsAlongBoundary(
+        SKPoint p,
+        float wallAngleDeg,
+        List<IReadOnlyList<SKPoint>> rings,
+        float tolerancePt)
+    {
+        foreach (IReadOnlyList<SKPoint> ring in rings)
+        {
+            int n = ring.Count;
+            for (int i = 0; i < n; i++)
+            {
+                SKPoint a = ring[i];
+                SKPoint b = ring[(i + 1) % n];
+                if (DistancePointToSegment(p, a, b) > tolerancePt)
+                    continue;
+                if (AngleDeltaDeg(wallAngleDeg, SegmentAngleDeg(new Segment(a, b))) <= 15f)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -725,6 +865,17 @@ public static class WallCenterlineTracer
     {
         float vx = p.X - origin.X, vy = p.Y - origin.Y;
         return Math.Abs(vx * -dir.Y + vy * dir.X);
+    }
+
+    private static float DistancePointToSegment(SKPoint p, SKPoint a, SKPoint b)
+    {
+        float dx = b.X - a.X, dy = b.Y - a.Y;
+        float lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-9f)
+            return Distance(p, a);
+
+        float t = Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq, 0f, 1f);
+        return Distance(p, new SKPoint(a.X + dx * t, a.Y + dy * t));
     }
 
     private static bool TrySegmentIntersection(SKPoint a, SKPoint b, SKPoint c, SKPoint d, out float t)

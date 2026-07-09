@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using OurPlaneCore.Models;
 using SkiaSharp;
 
 namespace OurPlaneCore;
@@ -364,13 +365,54 @@ public static class PdfGeometrySnapService
         Task.Run(() => TryReadHelperRects("textrects", pdfPath, pageIndex));
 
     /// <summary>
-    /// Bounding boxes of dark filled path items (wall poche). Used by Wall
-    /// Trace to confirm that a centerline runs through a filled wall body.
+    /// Bounding boxes of non-white filled path items (wall poche) with their
+    /// fill luminance. Used by Wall Trace to confirm that a centerline runs
+    /// through a filled wall body and to tell dark rated walls from light
+    /// partition fill.
     /// </summary>
-    public static Task<(bool Ok, IReadOnlyList<SKRect> Rects, string Error)> TryReadWallFillRectsAsync(
+    public static Task<(bool Ok, IReadOnlyList<WallCenterlineTracer.FillZone> Zones, string Error)>
+        TryReadWallFillZonesAsync(string pdfPath, int pageIndex) =>
+        Task.Run(() =>
+        {
+            (bool ok, IReadOnlyList<(SKRect Rect, float Lum)> rects, string error) =
+                TryReadHelperFillRects(pdfPath, pageIndex);
+            IReadOnlyList<WallCenterlineTracer.FillZone> zones = rects
+                .Select(r => new WallCenterlineTracer.FillZone(r.Rect, r.Lum))
+                .ToList();
+            return (ok, zones, error);
+        });
+
+    private static (bool Ok, IReadOnlyList<(SKRect Rect, float Lum)> Rects, string Error) TryReadHelperFillRects(
         string pdfPath,
-        int pageIndex) =>
-        Task.Run(() => TryReadHelperRects("fillrects", pdfPath, pageIndex));
+        int pageIndex)
+    {
+        try
+        {
+            var request = new PdfTextRectsRequest { Pdf = pdfPath, Page = pageIndex };
+            if (!PdfLayerRenderService.TryInvokeHelper("fillrects", request, out PdfTextRectsResponse? response, out string error))
+                return (false, [], error);
+
+            if (response == null || !response.Ok)
+                return (false, [], response?.Error ?? "PyMuPDF did not return a fillrects response.");
+
+            IReadOnlyList<(SKRect, float)> rects = response.Rects
+                .Where(r => IsFinite(r.X0) && IsFinite(r.Y0) && IsFinite(r.X1) && IsFinite(r.Y1))
+                .Select(r => (
+                    new SKRect(
+                        Math.Min(r.X0, r.X1),
+                        Math.Min(r.Y0, r.Y1),
+                        Math.Max(r.X0, r.X1),
+                        Math.Max(r.Y0, r.Y1)),
+                    Math.Clamp(r.Lum, 0f, 1f)))
+                .ToList();
+            return (true, rects, "");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"TryReadHelperFillRects failed for {pdfPath} page {pageIndex}");
+            return (false, [], ex.Message);
+        }
+    }
 
     private static (bool Ok, IReadOnlyList<SKRect> Rects, string Error) TryReadHelperRects(
         string action,
@@ -462,6 +504,9 @@ public static class PdfGeometrySnapService
         public float Y0 { get; set; }
         public float X1 { get; set; }
         public float Y1 { get; set; }
+
+        /// <summary>Fill luminance for fillrects responses; textrects omit it (0).</summary>
+        public float Lum { get; set; }
     }
 
     private sealed class PdfSnapLayerDto

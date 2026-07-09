@@ -2194,7 +2194,7 @@ def fill_rects_data(req: dict) -> dict:
 
         rects: list[dict] = []
 
-        def add_rect(rect) -> None:
+        def add_rect(rect, lum: float = 0.0) -> None:
             if rect is None or len(rects) >= max_rects:
                 return
             r = fitz.Rect(rect)
@@ -2208,6 +2208,7 @@ def fill_rects_data(req: dict) -> dict:
                 "y0": float(r.y0),
                 "x1": float(r.x1),
                 "y1": float(r.y1),
+                "lum": round(float(lum), 4),
             })
 
         for drawing in page.get_drawings():
@@ -2237,9 +2238,9 @@ def fill_rects_data(req: dict) -> dict:
                         pass
             if item_rects:
                 for rect in item_rects:
-                    add_rect(rect)
+                    add_rect(rect, lum)
             else:
-                add_rect(drawing.get("rect"))
+                add_rect(drawing.get("rect"), lum)
 
         return {"ok": True, "rects": rects}
     finally:

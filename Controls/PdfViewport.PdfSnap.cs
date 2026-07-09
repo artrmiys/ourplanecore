@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using OurPlaneCore.Models;
 using SkiaSharp;
 
 namespace OurPlaneCore.Controls;
@@ -103,18 +104,19 @@ public sealed partial class PdfViewport
     }
 
     /// <summary>
-    /// Dark filled path boxes (wall poche) for the current page. Empty on
-    /// failure or when the sheet has no filled walls (best-effort data).
+    /// Filled path boxes (wall poche) with fill luminance for the current
+    /// page. Empty on failure or when the sheet has no filled walls
+    /// (best-effort data).
     /// </summary>
-    public async Task<IReadOnlyList<SKRect>> ReadPdfWallFillRectsForCurrentPageAsync()
+    public async Task<IReadOnlyList<WallCenterlineTracer.FillZone>> ReadPdfWallFillZonesForCurrentPageAsync()
     {
         string pdfPath = _pdfPath;
         int pdfIndex = _pdfIndex;
         if (string.IsNullOrWhiteSpace(pdfPath))
             return [];
 
-        var result = await PdfGeometrySnapService.TryReadWallFillRectsAsync(pdfPath, pdfIndex);
-        return result.Ok ? result.Rects : [];
+        var result = await PdfGeometrySnapService.TryReadWallFillZonesAsync(pdfPath, pdfIndex);
+        return result.Ok ? result.Zones : [];
     }
 
     private void ResetPdfSnapCache()

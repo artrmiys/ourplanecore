@@ -83,7 +83,8 @@ public partial class MainWindow
         }
 
         IReadOnlyList<SKRect> textRects = await _viewport.ReadPdfTextRectsForCurrentPageAsync();
-        IReadOnlyList<SKRect> wallFillRects = await _viewport.ReadPdfWallFillRectsForCurrentPageAsync();
+        IReadOnlyList<WallCenterlineTracer.FillZone> wallFillZones =
+            await _viewport.ReadPdfWallFillZonesForCurrentPageAsync();
 
         float minThicknessPt = (float)(dialog.MinThicknessInches * MetersPerInch / effectiveScale);
         float maxThicknessPt = (float)(dialog.MaxThicknessInches * MetersPerInch / effectiveScale);
@@ -95,7 +96,11 @@ public partial class MainWindow
             MinFaceLengthPt = minWallLengthPt * 0.5f,
             MinWallLengthPt = minWallLengthPt,
             ExcludedZones = InflateTextZones(textRects),
-            WallFillZones = wallFillRects.Count > 0 ? wallFillRects : null,
+            WallFillZones = wallFillZones.Count > 0 ? wallFillZones : null,
+            DarkFillOnly = dialog.DarkFillOnly,
+            BoundaryExclusionPt = dialog.IncludePerimeterWalls
+                ? 0f
+                : (float)(dialog.PerimeterOffsetFeet * 12 * MetersPerInch / effectiveScale),
         };
 
         List<WallCenterlineTracer.Segment> traceInput = segments

@@ -217,7 +217,7 @@ internal static class WallCenterlineTracerTests
             MaxThicknessPt = 10,
             MinFaceLengthPt = 10,
             MinWallLengthPt = 15,
-            WallFillZones = [new SKRect(0, 100, 200, 106)],
+            WallFillZones = [new WallCenterlineTracer.FillZone(new SKRect(0, 100, 200, 106), 0.5f)],
         };
 
         List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), options);
@@ -228,6 +228,134 @@ internal static class WallCenterlineTracerTests
         // Without fill zones both pairs trace (line-only sheets stay usable).
         List<SKPoint[]> unfiltered = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), DefaultOptions());
         AssertEqual(2, unfiltered.Count, "no fill data means no fill filtering");
+    }
+
+    public static void OffCenterFillStripStillConfirmsThickWall()
+    {
+        // Thick exterior assembly: faces 10pt apart, the dark stud strip sits
+        // against one face instead of the middle. The band check must find it.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 200, 100),
+            Seg(0, 110, 200, 110),
+        ];
+
+        var options = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            WallFillZones = [new WallCenterlineTracer.FillZone(new SKRect(0, 100, 200, 103), 0.5f)],
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 300), options);
+        AssertEqual(1, result.Count, "strip near one face must still confirm the wall");
+    }
+
+    public static void DarkFillOnlyDropsLightPartitions()
+    {
+        // Two walls: dark poche (rated) at y=100..106, light gray partition
+        // fill at y=300..306. DarkFillOnly keeps just the rated wall.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 200, 100),
+            Seg(0, 106, 200, 106),
+            Seg(0, 300, 200, 300),
+            Seg(0, 306, 200, 306),
+        ];
+
+        var options = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            DarkFillOnly = true,
+            WallFillZones =
+            [
+                new WallCenterlineTracer.FillZone(new SKRect(0, 100, 200, 106), 0.5f),
+                new WallCenterlineTracer.FillZone(new SKRect(0, 300, 200, 306), 0.83f),
+            ],
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), options);
+        AssertEqual(1, result.Count, "only the dark-filled wall survives DarkFillOnly");
+        AssertClose(103, result[0][0].Y, "the surviving centerline is the dark one", 1.0);
+
+        // A sheet with only light fills must ignore the dark-only switch
+        // instead of tracing nothing.
+        var lightOnly = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            DarkFillOnly = true,
+            WallFillZones =
+            [
+                new WallCenterlineTracer.FillZone(new SKRect(0, 100, 200, 106), 0.83f),
+                new WallCenterlineTracer.FillZone(new SKRect(0, 300, 200, 306), 0.83f),
+            ],
+        };
+        List<SKPoint[]> fallback = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), lightOnly);
+        AssertEqual(2, fallback.Count, "no dark strips on the sheet disables the dark-only filter");
+    }
+
+    public static void BoundaryWallsAreExcludedByTolerance()
+    {
+        // Perimeter wall runs along the area's top edge (y=50); an interior
+        // wall crosses the middle. With a boundary exclusion distance the
+        // perimeter centerline is dropped, the interior one stays.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 52, 300, 52),
+            Seg(0, 58, 300, 58),
+            Seg(0, 200, 300, 200),
+            Seg(0, 206, 300, 206),
+        ];
+
+        var options = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            BoundaryExclusionPt = 9,
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 350, 400), options);
+        AssertEqual(1, result.Count, "perimeter wall inside the edge offset must be dropped");
+        AssertClose(203, result[0][0].Y, "the interior wall survives", 1.0);
+
+        // Zero tolerance keeps both (the include-perimeter mode).
+        List<SKPoint[]> keepAll = WallCenterlineTracer.Trace(segments, Square(-50, 50, 350, 400), DefaultOptions());
+        AssertEqual(2, keepAll.Count, "no boundary exclusion keeps the perimeter wall");
+    }
+
+    public static void WallFaceCrossingTextZoneKeepsFullLength()
+    {
+        // A room tag overlaps the middle of a long wall. The face is only
+        // ~15% covered by the word box, so the wall must trace end to end
+        // without a gap under the label.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 400, 100),
+            Seg(0, 106, 400, 106),
+        ];
+
+        var options = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            ExcludedZones = [new SKRect(170, 90, 230, 116)],
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 500, 300), options);
+        AssertEqual(1, result.Count, "wall crossing a text zone still traces as one line");
+        AssertClose(400, PolylineLength(result[0]), "no gap under the label", 2.0);
     }
 
     public static void RareAngleShortNoiseIsDropped()

@@ -44,11 +44,15 @@ internal static class WallTraceHarness
             MaxThicknessPt = input.Options.MaxThicknessPt,
             MinFaceLengthPt = input.Options.MinFaceLengthPt,
             MinWallLengthPt = input.Options.MinWallLengthPt,
+            DarkFillOnly = input.Options.DarkFillOnly,
+            BoundaryExclusionPt = input.Options.BoundaryExclusionPt,
             ExcludedZones = input.Zones?.Count > 0
                 ? input.Zones.Select(z => new SKRect(z.X0, z.Y0, z.X1, z.Y1)).ToList()
                 : null,
             WallFillZones = input.FillZones?.Count > 0
-                ? input.FillZones.Select(z => new SKRect(z.X0, z.Y0, z.X1, z.Y1)).ToList()
+                ? input.FillZones
+                    .Select(z => new WallCenterlineTracer.FillZone(new SKRect(z.X0, z.Y0, z.X1, z.Y1), z.Lum))
+                    .ToList()
                 : null,
         };
 
@@ -94,6 +98,9 @@ internal static class WallTraceHarness
         public float Y0 { get; set; }
         public float X1 { get; set; }
         public float Y1 { get; set; }
+
+        /// <summary>Fill luminance for fill_zones entries; 0 (dark) when omitted.</summary>
+        public float Lum { get; set; }
     }
 
     private sealed class PointDto
@@ -108,5 +115,7 @@ internal static class WallTraceHarness
         public float MaxThicknessPt { get; set; }
         public float MinFaceLengthPt { get; set; }
         public float MinWallLengthPt { get; set; }
+        public bool DarkFillOnly { get; set; }
+        public float BoundaryExclusionPt { get; set; }
     }
 }
