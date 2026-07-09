@@ -185,6 +185,43 @@ internal static class PlanSwiftImportTests
         });
     }
 
+    public static void ImportSkipsUnusablePlanSwiftAreaSections()
+    {
+        WithTempParent(parent =>
+        {
+            string sourceJob = Path.Combine(parent, "PlanSwift Job");
+            string destinationParent = Path.Combine(parent, "imported");
+            CreateSyntheticPlanSwiftJob(sourceJob);
+            AddRoofAreaWithUnusableDividePlaceholders(sourceJob);
+
+            PlanSwiftImportResult result = PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
+            {
+                SourceJobPath = sourceJob,
+                DestinationParentPath = destinationParent,
+                ConvertPageImages = false,
+            });
+
+            AssertEqual("1", result.PagesImported.ToString(), "imported page count");
+            AssertEqual("2", result.TakeoffItemsImported.ToString(), "imported takeoff item count");
+            AssertEqual("2", result.MeasurementsImported.ToString(), "only usable roof area section should import");
+            AssertTrue(
+                result.Messages.Any(message => message.Contains("Area section 'Single Point Divide' under 'Roof Overframe' has no usable area geometry.", StringComparison.Ordinal)),
+                "single-point PlanSwift divide placeholder should be reported");
+            AssertTrue(
+                result.Messages.Any(message => message.Contains("Area section 'Degenerate Divide' under 'Roof Overframe' has no usable area geometry.", StringComparison.Ordinal)),
+                "degenerate PlanSwift divide placeholder should be reported");
+
+            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            TakeoffItem roof = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single(item => item.Name == "Roof Overframe");
+            Measurement roofMeasurement = roof.Measurements.Single();
+            AssertEqual("Valid Roof Triangle", roofMeasurement.Name, "valid roof section kept");
+            AssertEqual("3", roofMeasurement.Points.Count.ToString(), "valid roof section point count");
+            AssertTrue(
+                !roof.Measurements.Any(measurement => measurement.Points.Count < 3),
+                "unusable area placeholders should not become invisible measurements");
+        });
+    }
+
     public static void ImportPreservesSegmentsAndSourceMetadata()
     {
         WithTempParent(parent =>
@@ -499,6 +536,45 @@ internal static class PlanSwiftImportTests
             "2");
     }
 
+    private static void AddRoofAreaWithUnusableDividePlaceholders(string root)
+    {
+        string roofFolder = Path.Combine(root, "Takeoff", "Roof");
+        string itemFolder = Path.Combine(roofFolder, "Roof Overframe");
+        Directory.CreateDirectory(itemFolder);
+        WriteFolderData(roofFolder, "Roof");
+        WriteAreaData(itemFolder, "Roof Overframe", color: "6723891", orderIndex: "4");
+        WriteRawAreaSectionData(
+            Path.Combine(itemFolder, "Section"),
+            "Valid Roof Triangle",
+            "77777777-7777-7777-7777-777777777777",
+            "None",
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Points><Point X="0" Y="0" PointType="Normal"/><Point X="10" Y="0" PointType="Normal"/><Point X="5" Y="6" PointType="Normal"/></Points>
+            """,
+            "1");
+        WriteRawAreaSectionData(
+            Path.Combine(itemFolder, "Section 2"),
+            "Single Point Divide",
+            "88888888-8888-8888-8888-888888888888",
+            "None",
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Points><Point X="10" Y="0" PointType="Normal"/></Points>
+            """,
+            "2");
+        WriteRawAreaSectionData(
+            Path.Combine(itemFolder, "Section 3"),
+            "Degenerate Divide",
+            "99999999-9999-9999-9999-999999999999",
+            "4 Point",
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Points><Point X="-1" Y="-1" PointType="Normal"/><Point X="-1" Y="-1" PointType="Normal"/><Point X="-1" Y="-1" PointType="Normal"/><Point X="-1" Y="-1" PointType="Normal"/></Points>
+            """,
+            "3");
+    }
+
     private static void AddLinkedJoistSegmentsWithBlankColor(string root)
     {
         string areaItem = Path.Combine(root, "Takeoff", "Areas", "Deck Area");
@@ -555,18 +631,22 @@ internal static class PlanSwiftImportTests
                     Prop("Type", "Linear"),
                     Prop("Color", "16711680"))));
 
-    private static void WriteAreaData(string folder) =>
+    private static void WriteAreaData(
+        string folder,
+        string name = "Deck Area",
+        string color = "255",
+        string orderIndex = "2") =>
         WriteDataXml(
             folder,
             new XElement("Item",
                 new XAttribute("Class", "Area"),
-                new XAttribute("Name", "Deck Area"),
+                new XAttribute("Name", name),
                 new XAttribute("GUID", Guid.NewGuid().ToString("B").ToUpperInvariant()),
                 new XElement("Properties",
-                    Prop("Name", "Deck Area"),
+                    Prop("Name", name),
                     Prop("Type", "Area"),
-                    Prop("Color", "255"),
-                    Prop("OrderIndex", "2"))));
+                    Prop("Color", color),
+                    Prop("OrderIndex", orderIndex))));
 
     private static void WriteContainerLineData(string folder) =>
         WriteDataXml(
@@ -632,6 +712,17 @@ internal static class PlanSwiftImportTests
             <Points><Point X="{x1}" Y="{y1}" PointType="Normal"/><Point X="{x2}" Y="{y2}" PointType="Normal"/></Points>
             """;
 
+        WriteRawAreaSectionData(folder, name, guid, "4 Point", digitizerData, orderIndex);
+    }
+
+    private static void WriteRawAreaSectionData(
+        string folder,
+        string name,
+        string guid,
+        string boxMode,
+        string digitizerData,
+        string orderIndex)
+    {
         WriteDataXml(
             folder,
             new XElement("Item",
@@ -644,7 +735,7 @@ internal static class PlanSwiftImportTests
                     Prop("PageGUID", $"{{{PageGuid}}}"),
                     Prop("Visible", "True"),
                     Prop("OrderIndex", orderIndex),
-                    Prop("Box Mode", "4 Point"),
+                    Prop("Box Mode", boxMode),
                     Prop("DigitizerData", digitizerData))));
     }
 

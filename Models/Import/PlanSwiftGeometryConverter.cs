@@ -150,6 +150,37 @@ public static class PlanSwiftGeometryConverter
         string boxMode) =>
         NormalizeBoxPoints(points, "area", boxMode);
 
+    public static bool HasUsableAreaPolygon(IReadOnlyList<PlanSwiftPoint> points)
+    {
+        int pointCount = points.Count;
+        if (pointCount > 1 && SamePoint(points[0], points[^1]))
+            pointCount--;
+
+        if (pointCount < 3)
+            return false;
+
+        var uniquePoints = new List<PlanSwiftPoint>();
+        for (int i = 0; i < pointCount; i++)
+        {
+            PlanSwiftPoint point = points[i];
+            if (!uniquePoints.Any(existing => SamePoint(existing, point)))
+                uniquePoints.Add(point);
+        }
+
+        if (uniquePoints.Count < 3)
+            return false;
+
+        double twiceArea = 0;
+        for (int i = 0; i < pointCount; i++)
+        {
+            PlanSwiftPoint a = points[i];
+            PlanSwiftPoint b = points[(i + 1) % pointCount];
+            twiceArea += (a.X * b.Y) - (b.X * a.Y);
+        }
+
+        return Math.Abs(twiceArea) > 0.02;
+    }
+
     public static string ParsePlanSwiftColor(string value, string fallback = "#FF4444")
     {
         string clean = (value ?? "").Trim();

@@ -346,6 +346,12 @@ public static partial class PlanSwiftProjectScanner
                 warnings.Add($"Section '{section.Name}' under '{takeoffItem.Name}' has no DigitizerData points.");
                 continue;
             }
+            if (string.Equals(sectionMeasurementType, "area", StringComparison.OrdinalIgnoreCase) &&
+                !PlanSwiftGeometryConverter.HasUsableAreaPolygon(points))
+            {
+                warnings.Add($"Area section '{section.Name}' under '{takeoffItem.Name}' has no usable area geometry.");
+                continue;
+            }
 
             IReadOnlyList<IReadOnlyList<PlanSwiftPoint>> holes =
                 string.Equals(sectionMeasurementType, "area", StringComparison.OrdinalIgnoreCase)
@@ -400,7 +406,7 @@ public static partial class PlanSwiftProjectScanner
             IReadOnlyList<PlanSwiftPoint> points = PlanSwiftGeometryConverter.NormalizeAreaHolePoints(
                 PlanSwiftGeometryConverter.ParseDigitizerPoints(hole.Property("DigitizerData")),
                 hole.Property("Box Mode"));
-            if (points.Count < 3)
+            if (!PlanSwiftGeometryConverter.HasUsableAreaPolygon(points))
             {
                 warnings.Add($"Subtract section '{hole.Name}' under '{parentSection.Name}' has no usable area points.");
                 continue;
