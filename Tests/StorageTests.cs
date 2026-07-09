@@ -418,9 +418,15 @@ internal static class StorageTests
                 Name = "Lobby detail",
                 PageFolder = page.FolderPath,
                 PageName = page.Name,
+                Type = "crop_image",
                 Zoom = 1.75f,
                 PanX = 12.5f,
                 PanY = -3.25f,
+                CropImagePath = Path.Combine(job.RootPath, "bookmark_crops", "lobby.png"),
+                CropLeft = 1,
+                CropTop = 2,
+                CropRight = 101,
+                CropBottom = 202,
                 CreatedAtUtc = "2026-01-01T00:00:00.0000000Z",
                 UpdatedAtUtc = "2026-01-01T00:00:00.0000000Z",
             };
@@ -430,12 +436,19 @@ internal static class StorageTests
             List<PageBookmark> loaded = OurPlaneCoreJobStore.LoadPageBookmarks(job);
 
             AssertTrue(json.Contains("Pages/", StringComparison.Ordinal), "bookmark page path should be job-relative");
+            AssertTrue(json.Contains("bookmark_crops/lobby.png", StringComparison.Ordinal), "bookmark crop image path should be job-relative");
             AssertEqual("1", loaded.Count.ToString(), "loaded bookmark count");
             AssertEqual("Lobby detail", loaded[0].Name, "loaded bookmark name");
+            AssertEqual("crop_image", loaded[0].Type, "loaded bookmark type");
             AssertEqual(FullPath(page.FolderPath), FullPath(loaded[0].PageFolder), "loaded bookmark page path");
+            AssertEqual(FullPath(Path.Combine(job.RootPath, "bookmark_crops", "lobby.png")), FullPath(loaded[0].CropImagePath), "loaded crop image path");
             AssertClose(1.75, loaded[0].Zoom, "loaded bookmark zoom");
             AssertClose(12.5, loaded[0].PanX, "loaded bookmark pan x");
             AssertClose(-3.25, loaded[0].PanY, "loaded bookmark pan y");
+            AssertClose(1, loaded[0].CropLeft, "loaded crop left");
+            AssertClose(2, loaded[0].CropTop, "loaded crop top");
+            AssertClose(101, loaded[0].CropRight, "loaded crop right");
+            AssertClose(202, loaded[0].CropBottom, "loaded crop bottom");
         });
     }
 

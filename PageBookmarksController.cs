@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,6 +11,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using OurPlaneCore.Controls;
+using SkiaSharp;
 
 namespace OurPlaneCore;
 
@@ -32,6 +35,7 @@ internal sealed class PageBookmarksController
     private ListView? _bookmarkList;
     private TextBlock? _bookmarkStatusText;
     private Button? _bookmarkOpenButton;
+    private Button? _bookmarkImageButton;
     private Button? _bookmarkRenameButton;
     private Button? _bookmarkDeleteButton;
     private ToggleButton? _bookmarksTabDockToggle;
@@ -97,11 +101,13 @@ internal sealed class PageBookmarksController
         _bookmarkList.KeyDown += BookmarkList_KeyDown;
 
         var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        toolbar.Children.Add(BookmarkButton("Add", BtnBookmarkAdd_Click, "Save the current page and zoom as a bookmark"));
+        toolbar.Children.Add(BookmarkButton("Add", BtnBookmarkAdd_Click, "Save the current page view or visible crop image as a bookmark"));
         _bookmarkOpenButton = BookmarkButton("Open", BtnBookmarkOpen_Click, "Open the selected bookmark view");
+        _bookmarkImageButton = BookmarkButton("Image", BtnBookmarkImage_Click, "Open the selected bookmark crop image");
         _bookmarkRenameButton = BookmarkButton("Rename", BtnBookmarkRename_Click, "Rename the selected bookmark");
         _bookmarkDeleteButton = BookmarkButton("Delete", BtnBookmarkDelete_Click, "Delete the selected bookmark");
         toolbar.Children.Add(_bookmarkOpenButton);
+        toolbar.Children.Add(_bookmarkImageButton);
         toolbar.Children.Add(_bookmarkRenameButton);
         toolbar.Children.Add(_bookmarkDeleteButton);
         toolbar.Children.Add(BookmarkButton("Refresh", BtnBookmarkRefresh_Click, "Reload bookmarks from the job"));
@@ -325,16 +331,29 @@ internal sealed class PageBookmarksController
         return page?.Name ?? (string.IsNullOrWhiteSpace(bookmark.PageName) ? "Missing" : bookmark.PageName);
     }
 
-    private static string FormatBookmarkView(PageBookmark bookmark) =>
-        bookmark.Zoom > 0
+    private static string FormatBookmarkView(PageBookmark bookmark)
+    {
+        if (IsCropImageBookmark(bookmark))
+            return "Img";
+
+        return bookmark.Zoom > 0
             ? $"{Math.Round(bookmark.Zoom * 100).ToString(CultureInfo.InvariantCulture)}%"
             : "view";
+    }
+
+    private static bool IsCropImageBookmark(PageBookmark? bookmark) =>
+        bookmark != null &&
+        string.Equals(bookmark.Type, "crop_image", StringComparison.OrdinalIgnoreCase);
 
     private void UpdateBookmarkButtons()
     {
-        bool hasSelection = SelectedBookmark() != null;
+        PageBookmark? selection = SelectedBookmark();
+        bool hasSelection = selection != null;
         if (_bookmarkOpenButton != null)
             _bookmarkOpenButton.IsEnabled = hasSelection;
+        if (_bookmarkImageButton != null)
+            _bookmarkImageButton.IsEnabled = IsCropImageBookmark(selection) &&
+                !string.IsNullOrWhiteSpace(selection?.CropImagePath);
         if (_bookmarkRenameButton != null)
             _bookmarkRenameButton.IsEnabled = hasSelection;
         if (_bookmarkDeleteButton != null)
@@ -384,28 +403,50 @@ internal sealed class PageBookmarksController
 
         string defaultName = $"{page.Name} view";
         string name = UniqueBookmarkName(defaultName);
+        PageBookmarkSaveMode saveMode = PageBookmarkSaveMode.View;
         if (promptForName)
         {
-            var dialog = new PageBookmarkDialog("Add Bookmark", name)
+            var dialog = new PageBookmarkDialog(
+                "Add Bookmark",
+                name,
+                showSaveMode: true,
+                initialSaveMode: PageBookmarkSaveMode.View)
             {
                 Owner = _owner,
             };
             if (dialog.ShowDialog() != true)
                 return;
             name = dialog.BookmarkName;
+            saveMode = dialog.SaveMode;
         }
 
         PdfViewport.ViewState view = _viewport.CaptureViewState();
         string now = DateTime.UtcNow.ToString("O");
+        string id = Guid.NewGuid().ToString("N");
+        string cropImagePath = "";
+        SKRect cropRect = SKRect.Empty;
+        if (saveMode == PageBookmarkSaveMode.CropImage &&
+            !TrySaveBookmarkCropImage(job, page, name, id, out cropImagePath, out cropRect, out string cropError))
+        {
+            _setStatus($"Crop image bookmark failed: {cropError}");
+            return;
+        }
+
         var bookmark = new PageBookmark
         {
-            Id = Guid.NewGuid().ToString("N"),
+            Id = id,
             Name = name,
             PageFolder = page.FolderPath,
             PageName = page.Name,
+            Type = saveMode == PageBookmarkSaveMode.CropImage ? "crop_image" : "view",
             Zoom = view.Zoom,
             PanX = view.PanX,
             PanY = view.PanY,
+            CropImagePath = cropImagePath,
+            CropLeft = cropRect.Left,
+            CropTop = cropRect.Top,
+            CropRight = cropRect.Right,
+            CropBottom = cropRect.Bottom,
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
         };
@@ -413,13 +454,21 @@ internal sealed class PageBookmarksController
         _pageBookmarks.Add(bookmark);
         SavePageBookmarks(job);
         RefreshBookmarkList(bookmark.Id);
+        string kind = IsCropImageBookmark(bookmark) ? "crop image bookmark" : "bookmark";
         _setStatus(promptForName
-            ? $"Added bookmark '{bookmark.Name}'."
-            : $"Added bookmark '{bookmark.Name}' ({KeyboardShortcutKeys.DualLayoutDisplay("bk")}).");
+            ? $"Added {kind} '{bookmark.Name}'."
+            : $"Added {kind} '{bookmark.Name}' ({KeyboardShortcutKeys.DualLayoutDisplay("bk")}).");
     }
 
     private void BtnBookmarkOpen_Click(object sender, RoutedEventArgs e) =>
         OpenSelectedBookmark();
+
+    private void BtnBookmarkImage_Click(object sender, RoutedEventArgs e)
+    {
+        PageBookmark? bookmark = SelectedBookmark();
+        if (bookmark != null)
+            OpenBookmarkCropImage(bookmark);
+    }
 
     private void BtnBookmarkRename_Click(object sender, RoutedEventArgs e)
     {
@@ -491,10 +540,127 @@ internal sealed class PageBookmarksController
         if (result != MessageBoxResult.Yes)
             return;
 
+        TryDeleteBookmarkCropImage(bookmark);
         _pageBookmarks.Remove(bookmark);
         SavePageBookmarks();
         RefreshBookmarkList();
         _setStatus($"Deleted bookmark '{bookmark.Name}'.");
+    }
+
+    private bool TrySaveBookmarkCropImage(
+        OurPlaneCoreJob job,
+        PageInfo page,
+        string bookmarkName,
+        string bookmarkId,
+        out string cropImagePath,
+        out SKRect cropRect,
+        out string error)
+    {
+        cropImagePath = "";
+        cropRect = SKRect.Empty;
+        error = "";
+
+        SKRect requestedRect = _viewport.GetVisiblePdfRect();
+        if (requestedRect.Width < 1 || requestedRect.Height < 1)
+        {
+            error = "No visible PDF area is available.";
+            return false;
+        }
+
+        string outputPath = BookmarkCropImagePath(job, page, bookmarkName, bookmarkId);
+        if (!_viewport.TrySaveCropRect(requestedRect, outputPath, out cropRect, out error))
+            return false;
+
+        cropImagePath = outputPath;
+        return true;
+    }
+
+    private void OpenBookmarkCropImage(PageBookmark bookmark)
+    {
+        if (!IsCropImageBookmark(bookmark))
+        {
+            _setStatus("Selected bookmark is not a crop image.");
+            return;
+        }
+
+        string path = BookmarkCropImageFullPath(bookmark);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            _setStatus($"Crop image is missing for bookmark '{bookmark.Name}'.");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true,
+            });
+            _setStatus($"Opened crop image '{bookmark.Name}'.");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _setStatus($"Could not open crop image: {ex.Message}");
+        }
+    }
+
+    private void TryDeleteBookmarkCropImage(PageBookmark bookmark)
+    {
+        if (!IsCropImageBookmark(bookmark))
+            return;
+
+        OurPlaneCoreJob? job = _currentJob();
+        string path = BookmarkCropImageFullPath(bookmark);
+        if (job == null || string.IsNullOrWhiteSpace(path) || !OurPlaneCoreJobStore.IsSameOrDescendant(job.RootPath, path))
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Failed to delete bookmark crop image {path}");
+        }
+    }
+
+    private string BookmarkCropImageFullPath(PageBookmark bookmark)
+    {
+        string path = bookmark.CropImagePath?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(path))
+            return "";
+
+        try
+        {
+            if (Path.IsPathRooted(path))
+                return Path.GetFullPath(path);
+
+            OurPlaneCoreJob? job = _currentJob();
+            return job == null ? "" : Path.GetFullPath(Path.Combine(job.RootPath, path));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            AppLog.Warn(ex, $"Invalid bookmark crop image path {path}");
+            return "";
+        }
+    }
+
+    private static string BookmarkCropImagePath(
+        OurPlaneCoreJob job,
+        PageInfo page,
+        string bookmarkName,
+        string bookmarkId)
+    {
+        string folder = Path.Combine(job.RootPath, "bookmark_crops");
+        string pagePart = OurPlaneCoreJobStore.SanitizeName(page.Name, 48);
+        string namePart = OurPlaneCoreJobStore.SanitizeName(bookmarkName, 48);
+        string idPart = string.IsNullOrWhiteSpace(bookmarkId)
+            ? Guid.NewGuid().ToString("N")[..8]
+            : bookmarkId[..Math.Min(8, bookmarkId.Length)];
+        string fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{pagePart}_{namePart}_{idPart}.png";
+        return Path.Combine(folder, fileName);
     }
 
     private void SavePageBookmarks()

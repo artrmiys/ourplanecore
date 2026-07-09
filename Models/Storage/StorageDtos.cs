@@ -107,6 +107,9 @@ internal sealed class PageBookmarkDto
     [JsonPropertyName("page_name")]
     public string PageName { get; set; } = "";
 
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "";
+
     [JsonPropertyName("zoom")]
     public float Zoom { get; set; }
 
@@ -115,6 +118,21 @@ internal sealed class PageBookmarkDto
 
     [JsonPropertyName("pan_y")]
     public float PanY { get; set; }
+
+    [JsonPropertyName("crop_image_path")]
+    public string CropImagePath { get; set; } = "";
+
+    [JsonPropertyName("crop_left")]
+    public float CropLeft { get; set; }
+
+    [JsonPropertyName("crop_top")]
+    public float CropTop { get; set; }
+
+    [JsonPropertyName("crop_right")]
+    public float CropRight { get; set; }
+
+    [JsonPropertyName("crop_bottom")]
+    public float CropBottom { get; set; }
 
     [JsonPropertyName("created_at_utc")]
     public string CreatedAtUtc { get; set; } = "";

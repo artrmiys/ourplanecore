@@ -73,9 +73,15 @@ internal static class PageBookmarkStore
             Name = string.IsNullOrWhiteSpace(dto.Name) ? DefaultBookmarkName(pageName) : dto.Name.Trim(),
             PageFolder = pageFolder,
             PageName = pageName,
+            Type = NormalizeBookmarkType(dto.Type),
             Zoom = dto.Zoom > 0 ? dto.Zoom : 1f,
             PanX = dto.PanX,
             PanY = dto.PanY,
+            CropImagePath = ResolveJobPath(job, dto.CropImagePath),
+            CropLeft = dto.CropLeft,
+            CropTop = dto.CropTop,
+            CropRight = dto.CropRight,
+            CropBottom = dto.CropBottom,
             CreatedAtUtc = string.IsNullOrWhiteSpace(dto.CreatedAtUtc) ? DateTime.UtcNow.ToString("O") : dto.CreatedAtUtc.Trim(),
             UpdatedAtUtc = string.IsNullOrWhiteSpace(dto.UpdatedAtUtc) ? DateTime.UtcNow.ToString("O") : dto.UpdatedAtUtc.Trim(),
         };
@@ -88,15 +94,29 @@ internal static class PageBookmarkStore
             Name = bookmark.Name?.Trim() ?? "",
             PageFolder = JobRelativePath(job, bookmark.PageFolder),
             PageName = bookmark.PageName?.Trim() ?? "",
+            Type = NormalizeBookmarkType(bookmark.Type),
             Zoom = bookmark.Zoom > 0 ? bookmark.Zoom : 1f,
             PanX = bookmark.PanX,
             PanY = bookmark.PanY,
+            CropImagePath = JobRelativePath(job, bookmark.CropImagePath),
+            CropLeft = bookmark.CropLeft,
+            CropTop = bookmark.CropTop,
+            CropRight = bookmark.CropRight,
+            CropBottom = bookmark.CropBottom,
             CreatedAtUtc = bookmark.CreatedAtUtc?.Trim() ?? "",
             UpdatedAtUtc = bookmark.UpdatedAtUtc?.Trim() ?? "",
         };
 
     private static string DefaultBookmarkName(string pageName) =>
         string.IsNullOrWhiteSpace(pageName) ? "Bookmark" : $"{pageName} view";
+
+    private static string NormalizeBookmarkType(string type)
+    {
+        string clean = (type ?? "").Trim();
+        return clean.Equals("crop_image", StringComparison.OrdinalIgnoreCase)
+            ? "crop_image"
+            : "view";
+    }
 
     private static string ResolveJobPath(OurPlaneCoreJob job, string path)
     {

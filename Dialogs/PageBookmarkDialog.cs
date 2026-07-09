@@ -4,17 +4,30 @@ using System.Windows.Input;
 
 namespace OurPlaneCore;
 
+public enum PageBookmarkSaveMode
+{
+    View,
+    CropImage,
+}
+
 public sealed class PageBookmarkDialog : Window
 {
     private readonly TextBox _nameBox;
+    private readonly RadioButton? _viewMode;
+    private readonly RadioButton? _cropImageMode;
 
     public string BookmarkName { get; private set; } = "";
+    public PageBookmarkSaveMode SaveMode { get; private set; } = PageBookmarkSaveMode.View;
 
-    public PageBookmarkDialog(string title, string initialName)
+    public PageBookmarkDialog(
+        string title,
+        string initialName,
+        bool showSaveMode = false,
+        PageBookmarkSaveMode initialSaveMode = PageBookmarkSaveMode.View)
     {
         Title = title;
         Width = 360;
-        Height = 150;
+        Height = showSaveMode ? 190 : 150;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
 
@@ -72,6 +85,36 @@ public sealed class PageBookmarkDialog : Window
         };
         stack.Children.Add(_nameBox);
 
+        if (showSaveMode)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Save",
+                Margin = new Thickness(0, 10, 0, 4),
+            });
+
+            var modeRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+            };
+            _viewMode = new RadioButton
+            {
+                Content = "View",
+                GroupName = "BookmarkSaveMode",
+                Margin = new Thickness(0, 0, 16, 0),
+                IsChecked = initialSaveMode != PageBookmarkSaveMode.CropImage,
+            };
+            _cropImageMode = new RadioButton
+            {
+                Content = "Crop image",
+                GroupName = "BookmarkSaveMode",
+                IsChecked = initialSaveMode == PageBookmarkSaveMode.CropImage,
+            };
+            modeRow.Children.Add(_viewMode);
+            modeRow.Children.Add(_cropImageMode);
+            stack.Children.Add(modeRow);
+        }
+
         Loaded += (_, _) =>
         {
             _nameBox.Focus();
@@ -89,6 +132,9 @@ public sealed class PageBookmarkDialog : Window
         }
 
         BookmarkName = clean;
+        SaveMode = _cropImageMode?.IsChecked == true
+            ? PageBookmarkSaveMode.CropImage
+            : PageBookmarkSaveMode.View;
         DialogResult = true;
     }
 }
