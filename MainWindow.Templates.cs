@@ -117,7 +117,6 @@ public partial class MainWindow
         var presetCombo = new ComboBox
         {
             Width = 142,
-            Height = 21,
             Margin = new Thickness(0, 0, 4, 2),
             DisplayMemberPath = nameof(TakeoffTemplate.Name),
             SelectedValuePath = nameof(TakeoffTemplate.Id),
