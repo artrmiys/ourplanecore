@@ -132,6 +132,129 @@ internal static class WallCenterlineTracerTests
         AssertEqual(0, result.Count, "wall entirely inside a hole must be skipped");
     }
 
+    public static void FacesInsideExcludedTextZoneAreIgnored()
+    {
+        // A room-label underline pair: two short parallel lines that would
+        // otherwise read as a wall, sitting inside a word bounding box.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(100, 100, 160, 100),
+            Seg(100, 106, 160, 106),
+        ];
+
+        var options = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            ExcludedZones = [new SKRect(90, 90, 170, 116)],
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(0, 0, 400, 400), options);
+        AssertEqual(0, result.Count, "faces inside a text zone must not pair into walls");
+
+        // Same geometry without the zone still traces (sanity check).
+        List<SKPoint[]> unfiltered = WallCenterlineTracer.Trace(segments, Square(0, 0, 400, 400), DefaultOptions());
+        AssertEqual(1, unfiltered.Count, "the same pair without zones is a wall");
+    }
+
+    public static void TripleFaceWallYieldsOneCenterline()
+    {
+        // Wall drawn with three parallel lines (two faces + a finish line):
+        // pairs (1,2) and (2,3) both land in the thickness window and used to
+        // leave two offset centerlines that chained into diagonal zigzags.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 200, 100),
+            Seg(0, 105, 200, 105),
+            Seg(0, 110, 200, 110),
+        ];
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 300), DefaultOptions());
+
+        AssertEqual(1, result.Count, "a triple-line wall must yield exactly one centerline");
+        AssertClose(200, PolylineLength(result[0]), "the kept centerline spans the wall", 2.0);
+    }
+
+    public static void CornerJoinLandsOnLineIntersection()
+    {
+        // L-corner: the horizontal and vertical centerlines meet where the
+        // lines cross (200-ish, 103), not at an endpoint centroid that would
+        // bend both lines sideways.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 200, 100),
+            Seg(0, 106, 194, 106),
+            Seg(200, 100, 200, 300),
+            Seg(194, 106, 194, 300),
+        ];
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), DefaultOptions());
+
+        bool foundCorner = result
+            .SelectMany(line => line)
+            .Any(p => Math.Abs(p.X - 197) <= 1.2 && Math.Abs(p.Y - 103) <= 1.2);
+        AssertTrue(foundCorner, "chained corner vertex must sit at the centerline intersection");
+    }
+
+    public static void FillZonesKeepOnlyFilledWalls()
+    {
+        // Two identical pairs; only the first sits on a dark filled strip
+        // (wall poche). With fill zones present, the hollow pair (casework
+        // outline) must be discarded.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 200, 100),
+            Seg(0, 106, 200, 106),
+            Seg(0, 300, 200, 300),
+            Seg(0, 306, 200, 306),
+        ];
+
+        var options = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            WallFillZones = [new SKRect(0, 100, 200, 106)],
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), options);
+
+        AssertEqual(1, result.Count, "only the filled wall survives the fill check");
+        AssertClose(103, result[0][0].Y, "the surviving centerline is the filled one", 1.0);
+
+        // Without fill zones both pairs trace (line-only sheets stay usable).
+        List<SKPoint[]> unfiltered = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), DefaultOptions());
+        AssertEqual(2, unfiltered.Count, "no fill data means no fill filtering");
+    }
+
+    public static void RareAngleShortNoiseIsDropped()
+    {
+        // Two long orthogonal walls dominate the angle histogram; a short
+        // tilted pair (a plumbing symbol stroke) sits alone at ~14 degrees
+        // and must be discarded as noise.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 800, 100),
+            Seg(0, 106, 800, 106),
+            Seg(50, 0, 50, 700),
+            Seg(56, 0, 56, 700),
+            Seg(300, 300, 330, 307.5f),
+            Seg(300, 306, 330, 313.5f),
+        ];
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, -50, 900, 800), DefaultOptions());
+
+        AssertEqual(2, result.Count, "only the two dominant-direction walls survive");
+        foreach (SKPoint[] line in result)
+        {
+            foreach (SKPoint p in line)
+                AssertTrue(Math.Abs(p.X - 315) > 50 || Math.Abs(p.Y - 306) > 50, "tilted noise centerline must be gone");
+        }
+    }
+
     // ------------------------------------------------------------------
 
     private static WallCenterlineTracer.Segment Seg(float x0, float y0, float x1, float y1) =>

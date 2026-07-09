@@ -354,6 +354,55 @@ public static class PdfGeometrySnapService
         }
     }
 
+    /// <summary>
+    /// Word bounding boxes for one page in the same rotated page space as the
+    /// snap segments. Used by Wall Trace to skip label/dimension text noise.
+    /// </summary>
+    public static Task<(bool Ok, IReadOnlyList<SKRect> Rects, string Error)> TryReadTextRectsAsync(
+        string pdfPath,
+        int pageIndex) =>
+        Task.Run(() => TryReadHelperRects("textrects", pdfPath, pageIndex));
+
+    /// <summary>
+    /// Bounding boxes of dark filled path items (wall poche). Used by Wall
+    /// Trace to confirm that a centerline runs through a filled wall body.
+    /// </summary>
+    public static Task<(bool Ok, IReadOnlyList<SKRect> Rects, string Error)> TryReadWallFillRectsAsync(
+        string pdfPath,
+        int pageIndex) =>
+        Task.Run(() => TryReadHelperRects("fillrects", pdfPath, pageIndex));
+
+    private static (bool Ok, IReadOnlyList<SKRect> Rects, string Error) TryReadHelperRects(
+        string action,
+        string pdfPath,
+        int pageIndex)
+    {
+        try
+        {
+            var request = new PdfTextRectsRequest { Pdf = pdfPath, Page = pageIndex };
+            if (!PdfLayerRenderService.TryInvokeHelper(action, request, out PdfTextRectsResponse? response, out string error))
+                return (false, [], error);
+
+            if (response == null || !response.Ok)
+                return (false, [], response?.Error ?? $"PyMuPDF did not return a {action} response.");
+
+            IReadOnlyList<SKRect> rects = response.Rects
+                .Where(r => IsFinite(r.X0) && IsFinite(r.Y0) && IsFinite(r.X1) && IsFinite(r.Y1))
+                .Select(r => new SKRect(
+                    Math.Min(r.X0, r.X1),
+                    Math.Min(r.Y0, r.Y1),
+                    Math.Max(r.X0, r.X1),
+                    Math.Max(r.Y0, r.Y1)))
+                .ToList();
+            return (true, rects, "");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn(ex, $"TryReadHelperRects({action}) failed for {pdfPath} page {pageIndex}");
+            return (false, [], ex.Message);
+        }
+    }
+
     private static bool IsFinite(float value) =>
         !float.IsNaN(value) && !float.IsInfinity(value);
 
@@ -392,6 +441,27 @@ public static class PdfGeometrySnapService
         public string LayerName { get; set; } = "";
         [JsonPropertyName("stroke_width")]
         public float StrokeWidth { get; set; }
+    }
+
+    private sealed class PdfTextRectsRequest
+    {
+        public string Pdf { get; set; } = "";
+        public int Page { get; set; }
+    }
+
+    private sealed class PdfTextRectsResponse
+    {
+        public bool Ok { get; set; }
+        public string Error { get; set; } = "";
+        public List<PdfTextRectDto> Rects { get; set; } = [];
+    }
+
+    private sealed class PdfTextRectDto
+    {
+        public float X0 { get; set; }
+        public float Y0 { get; set; }
+        public float X1 { get; set; }
+        public float Y1 { get; set; }
     }
 
     private sealed class PdfSnapLayerDto

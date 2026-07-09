@@ -10,6 +10,9 @@ using System.Xml.Linq;
 if (Environment.GetEnvironmentVariable("OPC_BENCH") == "1")
     return RenderPerfBenchmark.Run();
 
+if (args.Length > 0 && args[0] == "walltrace")
+    return WallTraceHarness.Run(args);
+
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "opc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
@@ -137,6 +140,11 @@ var tests = new List<(string Name, Action Run)>
     ("wall trace merges broken face segments", WallCenterlineTracerTests.BrokenFaceSegmentsMergeIntoOneWall),
     ("wall trace chains L-shaped walls at the corner", WallCenterlineTracerTests.LShapedWallsChainAtTheCorner),
     ("wall trace skips walls inside area holes", WallCenterlineTracerTests.WallsInsideAreaHoleAreSkipped),
+    ("wall trace ignores faces inside text zones", WallCenterlineTracerTests.FacesInsideExcludedTextZoneAreIgnored),
+    ("wall trace triple-line wall yields one centerline", WallCenterlineTracerTests.TripleFaceWallYieldsOneCenterline),
+    ("wall trace corner join lands on line intersection", WallCenterlineTracerTests.CornerJoinLandsOnLineIntersection),
+    ("wall trace drops rare-angle short noise", WallCenterlineTracerTests.RareAngleShortNoiseIsDropped),
+    ("wall trace fill zones keep only filled walls", WallCenterlineTracerTests.FillZonesKeepOnlyFilledWalls),
     ("point along line creates endpoint and step points", PointAlongLineServiceTests.StraightLineCreatesEndpointAndStepPoints),
     ("point along line carries spacing across vertices", PointAlongLineServiceTests.PolylineCarriesSpacingAcrossVertices),
     ("point along line many lines avoid duplicate shared endpoint", PointAlongLineServiceTests.ManyLinesAvoidDuplicateSharedEndpoint),

@@ -82,6 +82,9 @@ public partial class MainWindow
             return;
         }
 
+        IReadOnlyList<SKRect> textRects = await _viewport.ReadPdfTextRectsForCurrentPageAsync();
+        IReadOnlyList<SKRect> wallFillRects = await _viewport.ReadPdfWallFillRectsForCurrentPageAsync();
+
         float minThicknessPt = (float)(dialog.MinThicknessInches * MetersPerInch / effectiveScale);
         float maxThicknessPt = (float)(dialog.MaxThicknessInches * MetersPerInch / effectiveScale);
         float minWallLengthPt = (float)(dialog.MinWallLengthFeet * 12 * MetersPerInch / effectiveScale);
@@ -91,9 +94,12 @@ public partial class MainWindow
             MaxThicknessPt = maxThicknessPt,
             MinFaceLengthPt = minWallLengthPt * 0.5f,
             MinWallLengthPt = minWallLengthPt,
+            ExcludedZones = InflateTextZones(textRects),
+            WallFillZones = wallFillRects.Count > 0 ? wallFillRects : null,
         };
 
         List<WallCenterlineTracer.Segment> traceInput = segments
+            .Where(s => !string.Equals(s.Kind, "pdf-curve", StringComparison.OrdinalIgnoreCase))
             .Select(s => new WallCenterlineTracer.Segment(s.Start, s.End))
             .ToList();
         IReadOnlyList<SKPoint> polygon = area.Points;
@@ -144,6 +150,27 @@ public partial class MainWindow
             $"({dialog.MinThicknessInches:0.##}-{dialog.MaxThicknessInches:0.##} in walls). " +
             "Lines stay editable: drag vertices or delete extras.";
         ShowAreaLineGridOnSheet(area, generated, status);
+    }
+
+    /// <summary>
+    /// Grows word boxes so lines hugging the text (label underlines, the
+    /// frame of a room-number tag) fall inside the exclusion zone too.
+    /// </summary>
+    private static IReadOnlyList<SKRect>? InflateTextZones(IReadOnlyList<SKRect> textRects)
+    {
+        if (textRects.Count == 0)
+            return null;
+
+        var zones = new List<SKRect>(textRects.Count);
+        foreach (SKRect rect in textRects)
+        {
+            SKRect zone = rect;
+            float grow = Math.Clamp(rect.Height * 0.6f, 2f, 8f);
+            zone.Inflate(2f, grow);
+            zones.Add(zone);
+        }
+
+        return zones;
     }
 
     private static string BuildWallTraceDefaultName(TakeoffItem item, Measurement area)

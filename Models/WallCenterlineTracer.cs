@@ -36,6 +36,22 @@ public static class WallCenterlineTracer
 
         /// <summary>Hard cap on produced centerlines (safety against hatch-heavy areas).</summary>
         public int MaxResults { get; init; } = 600;
+
+        /// <summary>
+        /// Zones (already inflated by the caller) where candidate faces are
+        /// ignored — typically word bounding boxes, so room labels and
+        /// dimension text never pair into fake walls.
+        /// </summary>
+        public IReadOnlyList<SKRect>? ExcludedZones { get; init; }
+
+        /// <summary>
+        /// Dark filled strips (wall poche boxes). When present, a candidate
+        /// centerline must run through one of them: real walls are filled,
+        /// casework outlines at wall-like spacing are hollow. Null or empty
+        /// (sheets whose walls are drawn as bare line pairs) disables the
+        /// check.
+        /// </summary>
+        public IReadOnlyList<SKRect>? WallFillZones { get; init; }
     }
 
     private const float AngleBucketDeg = 4.0f;
@@ -50,12 +66,16 @@ public static class WallCenterlineTracer
             return [];
 
         float minFaceLen = Math.Max(options.MinFaceLengthPt, options.MaxThicknessPt * 0.75f);
-        List<Segment> faces = CollectCandidateFaces(pageSegments, areaPolygon, holes, minFaceLen);
+        ZoneIndex? zones = ZoneIndex.Build(options.ExcludedZones);
+        List<Segment> faces = CollectCandidateFaces(pageSegments, areaPolygon, holes, minFaceLen, zones);
         if (faces.Count < 2)
             return [];
 
         List<Segment> rawCenterlines = PairFacesIntoCenterlines(faces, options);
+        FilterToFilledWalls(rawCenterlines, options);
         List<Segment> merged = MergeCollinear(rawCenterlines, options.MaxThicknessPt);
+        RemoveParallelDuplicates(merged, options.MaxThicknessPt);
+        RemoveRareAngleNoise(merged, options.MaxThicknessPt);
 
         merged.RemoveAll(s => Length(s) < Math.Max(options.MinWallLengthPt, 1f));
         if (merged.Count > options.MaxResults)
@@ -76,7 +96,8 @@ public static class WallCenterlineTracer
         IReadOnlyList<Segment> segments,
         IReadOnlyList<SKPoint> polygon,
         IReadOnlyList<IReadOnlyList<SKPoint>>? holes,
-        float minFaceLen)
+        float minFaceLen,
+        ZoneIndex? excludedZones)
     {
         SKRect bounds = PolygonBounds(polygon);
         var result = new List<Segment>();
@@ -96,12 +117,62 @@ public static class WallCenterlineTracer
 
             foreach (Segment clipped in ClipSegmentToPolygon(seg, polygon, holes))
             {
-                if (Length(clipped) >= minFaceLen)
-                    result.Add(clipped);
+                if (Length(clipped) < minFaceLen)
+                    continue;
+                if (excludedZones != null && excludedZones.Contains(Lerp(clipped.A, clipped.B, 0.5f)))
+                    continue;
+
+                result.Add(clipped);
             }
         }
 
         return result;
+    }
+
+    /// <summary>Grid-hashed point-in-any-rect lookup for exclusion zones.</summary>
+    private sealed class ZoneIndex
+    {
+        private const float CellSize = 48f;
+        private readonly Dictionary<(int X, int Y), List<SKRect>> _cells = [];
+
+        public static ZoneIndex? Build(IReadOnlyList<SKRect>? zones)
+        {
+            if (zones == null || zones.Count == 0)
+                return null;
+
+            var index = new ZoneIndex();
+            foreach (SKRect zone in zones)
+            {
+                if (zone.Width <= 0 || zone.Height <= 0)
+                    continue;
+
+                for (int x = Cell(zone.Left); x <= Cell(zone.Right); x++)
+                for (int y = Cell(zone.Top); y <= Cell(zone.Bottom); y++)
+                {
+                    if (!index._cells.TryGetValue((x, y), out List<SKRect>? list))
+                        index._cells[(x, y)] = list = [];
+                    list.Add(zone);
+                }
+            }
+
+            return index._cells.Count == 0 ? null : index;
+        }
+
+        public bool Contains(SKPoint p)
+        {
+            if (!_cells.TryGetValue((Cell(p.X), Cell(p.Y)), out List<SKRect>? zones))
+                return false;
+
+            foreach (SKRect zone in zones)
+            {
+                if (p.X >= zone.Left && p.X <= zone.Right && p.Y >= zone.Top && p.Y <= zone.Bottom)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static int Cell(float v) => (int)MathF.Floor(v / CellSize);
     }
 
     /// <summary>Returns the parts of the segment inside the polygon but outside its holes.</summary>
@@ -319,6 +390,130 @@ public static class WallCenterlineTracer
         return merged;
     }
 
+    /// <summary>
+    /// Keeps only centerlines that run through a dark filled strip. Fill
+    /// boxes wider than a plausible wall are ignored (a big filled region
+    /// would confirm everything inside it); the check is skipped entirely
+    /// when the sheet offers no wall-like fill strips.
+    /// </summary>
+    private static void FilterToFilledWalls(List<Segment> centerlines, Options options)
+    {
+        if (options.WallFillZones == null || options.WallFillZones.Count == 0)
+            return;
+
+        float maxStrip = options.MaxThicknessPt * 2f;
+        var strips = new List<SKRect>();
+        foreach (SKRect zone in options.WallFillZones)
+        {
+            if (Math.Min(zone.Width, zone.Height) <= maxStrip)
+            {
+                SKRect inflated = zone;
+                inflated.Inflate(0.75f, 0.75f);
+                strips.Add(inflated);
+            }
+        }
+
+        ZoneIndex? index = ZoneIndex.Build(strips);
+        if (index == null)
+            return;
+
+        centerlines.RemoveAll(c =>
+            !index.Contains(Lerp(c.A, c.B, 0.5f)) &&
+            !(index.Contains(Lerp(c.A, c.B, 0.25f)) && index.Contains(Lerp(c.A, c.B, 0.75f))));
+    }
+
+    /// <summary>
+    /// Walls drawn with three or more parallel lines (faces plus a finish or
+    /// insulation line) pair into several centerlines a few points apart.
+    /// Keep the longest of every overlapping near-parallel group so each wall
+    /// yields exactly one line; without this the offset twins chain into
+    /// diagonal zigzags at wall ends.
+    /// </summary>
+    private static void RemoveParallelDuplicates(List<Segment> segments, float maxThickness)
+    {
+        float lateralTol = Math.Max(maxThickness * 0.6f, 1f);
+        segments.Sort((x, y) => Length(y).CompareTo(Length(x)));
+
+        var removed = new bool[segments.Count];
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (removed[i])
+                continue;
+
+            Segment keeper = segments[i];
+            SKPoint dir = Normalize(new SKPoint(keeper.B.X - keeper.A.X, keeper.B.Y - keeper.A.Y));
+            float keeperAngle = SegmentAngleDeg(keeper);
+            float k1 = Dot(new SKPoint(keeper.B.X - keeper.A.X, keeper.B.Y - keeper.A.Y), dir);
+
+            for (int j = i + 1; j < segments.Count; j++)
+            {
+                if (removed[j])
+                    continue;
+
+                Segment other = segments[j];
+                if (AngleDeltaDeg(keeperAngle, SegmentAngleDeg(other)) > 4f)
+                    continue;
+                if (DistancePointToLine(other.A, keeper.A, dir) > lateralTol ||
+                    DistancePointToLine(other.B, keeper.A, dir) > lateralTol)
+                    continue;
+
+                float o0 = Dot(new SKPoint(other.A.X - keeper.A.X, other.A.Y - keeper.A.Y), dir);
+                float o1 = Dot(new SKPoint(other.B.X - keeper.A.X, other.B.Y - keeper.A.Y), dir);
+                if (o1 < o0) (o0, o1) = (o1, o0);
+
+                float overlap = Math.Min(k1, o1) - Math.Max(0f, o0);
+                if (overlap >= Length(other) * 0.6f)
+                    removed[j] = true;
+            }
+        }
+
+        for (int i = segments.Count - 1; i >= 0; i--)
+        {
+            if (removed[i])
+                segments.RemoveAt(i);
+        }
+    }
+
+    /// <summary>
+    /// Real walls run in a few dominant directions (orthogonal grid, maybe an
+    /// angled wing); slightly tilted strokes from plumbing and casework
+    /// symbols pair into short centerlines at angles no wall family uses.
+    /// Drop short centerlines whose angle family carries almost none of the
+    /// total traced length; long lines are kept at any angle so a lone
+    /// diagonal wall never disappears.
+    /// </summary>
+    private static void RemoveRareAngleNoise(List<Segment> segments, float maxThickness)
+    {
+        const float bucketDeg = 4f;
+        const float minFamilyShare = 0.05f;
+        int bucketCount = (int)MathF.Ceiling(180f / bucketDeg);
+        float longEnoughToKeep = maxThickness * 6f;
+
+        float total = 0f;
+        var weight = new float[bucketCount];
+        foreach (Segment seg in segments)
+        {
+            float len = Length(seg);
+            weight[(int)(SegmentAngleDeg(seg) / bucketDeg) % bucketCount] += len;
+            total += len;
+        }
+
+        if (total <= 0f)
+            return;
+
+        segments.RemoveAll(seg =>
+        {
+            if (Length(seg) >= longEnoughToKeep)
+                return false;
+
+            int bucket = (int)(SegmentAngleDeg(seg) / bucketDeg) % bucketCount;
+            float family = weight[bucket]
+                + weight[(bucket + 1) % bucketCount]
+                + weight[(bucket + bucketCount - 1) % bucketCount];
+            return family < total * minFamilyShare;
+        });
+    }
+
     // ------------------------------------------------------------------
     // Stage 4: snap nearby endpoints and chain segments into polylines.
     // ------------------------------------------------------------------
@@ -359,6 +554,21 @@ public static class WallCenterlineTracer
             }
 
             var snapped = new SKPoint(sx / cluster.Count, sy / cluster.Count);
+
+            // Two walls meeting at an angle should join exactly where their
+            // centerlines cross, not at the endpoint centroid: the centroid
+            // pulls both lines sideways and leaves a visible diagonal kink.
+            if (cluster.Count == 2 &&
+                TryCornerIntersection(
+                    segments[points[cluster[0]].SegIndex],
+                    segments[points[cluster[1]].SegIndex],
+                    snapped,
+                    snapTol,
+                    out SKPoint corner))
+            {
+                snapped = corner;
+            }
+
             foreach (int idx in cluster)
             {
                 assigned[idx] = true;
@@ -367,6 +577,32 @@ public static class WallCenterlineTracer
                 segments[segIndex] = isA ? new Segment(snapped, seg.B) : new Segment(seg.A, snapped);
             }
         }
+    }
+
+    private static bool TryCornerIntersection(
+        Segment a,
+        Segment b,
+        SKPoint near,
+        float snapTol,
+        out SKPoint corner)
+    {
+        corner = default;
+        if (AngleDeltaDeg(SegmentAngleDeg(a), SegmentAngleDeg(b)) < 25f)
+            return false;
+
+        float rX = a.B.X - a.A.X, rY = a.B.Y - a.A.Y;
+        float sX = b.B.X - b.A.X, sY = b.B.Y - b.A.Y;
+        float denom = rX * sY - rY * sX;
+        if (Math.Abs(denom) < 1e-6f)
+            return false;
+
+        float t = ((b.A.X - a.A.X) * sY - (b.A.Y - a.A.Y) * sX) / denom;
+        var candidate = new SKPoint(a.A.X + rX * t, a.A.Y + rY * t);
+        if (Distance(candidate, near) > snapTol * 1.5f)
+            return false;
+
+        corner = candidate;
+        return true;
     }
 
     private static List<SKPoint[]> ChainIntoPolylines(List<Segment> segments, float joinTol)
@@ -394,25 +630,29 @@ public static class WallCenterlineTracer
                         continue;
 
                     Segment seg = segments[j];
-                    if (Distance(chain.Last!.Value, seg.A) <= joinTol)
+                    if (Distance(chain.Last!.Value, seg.A) <= joinTol &&
+                        !ReversesDirection(chain.Last.Previous?.Value, chain.Last.Value, seg.B))
                     {
                         chain.AddLast(seg.B);
                         used[j] = true;
                         extended = true;
                     }
-                    else if (Distance(chain.Last!.Value, seg.B) <= joinTol)
+                    else if (Distance(chain.Last!.Value, seg.B) <= joinTol &&
+                             !ReversesDirection(chain.Last.Previous?.Value, chain.Last.Value, seg.A))
                     {
                         chain.AddLast(seg.A);
                         used[j] = true;
                         extended = true;
                     }
-                    else if (Distance(chain.First!.Value, seg.B) <= joinTol)
+                    else if (Distance(chain.First!.Value, seg.B) <= joinTol &&
+                             !ReversesDirection(chain.First.Next?.Value, chain.First.Value, seg.A))
                     {
                         chain.AddFirst(seg.A);
                         used[j] = true;
                         extended = true;
                     }
-                    else if (Distance(chain.First!.Value, seg.A) <= joinTol)
+                    else if (Distance(chain.First!.Value, seg.A) <= joinTol &&
+                             !ReversesDirection(chain.First.Next?.Value, chain.First.Value, seg.B))
                     {
                         chain.AddFirst(seg.B);
                         used[j] = true;
@@ -425,6 +665,22 @@ public static class WallCenterlineTracer
         }
 
         return polylines;
+    }
+
+    /// <summary>
+    /// True when extending the chain from <paramref name="joint"/> toward
+    /// <paramref name="next"/> folds back over the previous edge (turn beyond
+    /// ~135°). Walls turn at up to 90°; sharper folds are chained noise that
+    /// draws as a spike.
+    /// </summary>
+    private static bool ReversesDirection(SKPoint? previous, SKPoint joint, SKPoint next)
+    {
+        if (previous == null)
+            return false;
+
+        SKPoint into = Normalize(new SKPoint(joint.X - previous.Value.X, joint.Y - previous.Value.Y));
+        SKPoint outOf = Normalize(new SKPoint(next.X - joint.X, next.Y - joint.Y));
+        return Dot(into, outOf) < -0.7f;
     }
 
     // ------------------------------------------------------------------

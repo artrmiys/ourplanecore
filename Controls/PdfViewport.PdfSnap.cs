@@ -87,6 +87,36 @@ public sealed partial class PdfViewport
         return result.Ok ? (result.Result.Segments, "") : ([], result.Error);
     }
 
+    /// <summary>
+    /// Word bounding boxes for the current page, in the same PDF point space
+    /// as the vector segments. Empty on failure (best-effort helper data).
+    /// </summary>
+    public async Task<IReadOnlyList<SKRect>> ReadPdfTextRectsForCurrentPageAsync()
+    {
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        if (string.IsNullOrWhiteSpace(pdfPath))
+            return [];
+
+        var result = await PdfGeometrySnapService.TryReadTextRectsAsync(pdfPath, pdfIndex);
+        return result.Ok ? result.Rects : [];
+    }
+
+    /// <summary>
+    /// Dark filled path boxes (wall poche) for the current page. Empty on
+    /// failure or when the sheet has no filled walls (best-effort data).
+    /// </summary>
+    public async Task<IReadOnlyList<SKRect>> ReadPdfWallFillRectsForCurrentPageAsync()
+    {
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        if (string.IsNullOrWhiteSpace(pdfPath))
+            return [];
+
+        var result = await PdfGeometrySnapService.TryReadWallFillRectsAsync(pdfPath, pdfIndex);
+        return result.Ok ? result.Rects : [];
+    }
+
     private void ResetPdfSnapCache()
     {
         _pdfSnapIndex = PdfSnapPointIndex.Empty;

@@ -1975,6 +1975,7 @@ def _add_snap_segment(
     layer_name: str,
     max_segments: int,
     stroke_width: float = 0.0,
+    kind: str = "pdf-line",
 ) -> None:
     if start is None or end is None or len(segments) >= max_segments:
         return
@@ -1993,7 +1994,7 @@ def _add_snap_segment(
         "y0": start[1],
         "x1": end[0],
         "y1": end[1],
-        "kind": "pdf-line",
+        "kind": kind,
         "layer_name": layer_name,
         "stroke_width": max(0.0, float(stroke_width or 0.0)),
     }
@@ -2072,7 +2073,9 @@ def _add_snap_points_from_item(
         end = _point_xy(item[-1])
         _add_snap_point(points, start, "pdf-point", layer_name, max_points)
         _add_snap_point(points, end, "pdf-point", layer_name, max_points)
-        _add_snap_segment(segments, start, end, layer_name, max_segments, stroke_width)
+        # Chord across a Bezier: mark it so consumers that need true straight
+        # lines (Wall Trace) can skip curve-derived geometry.
+        _add_snap_segment(segments, start, end, layer_name, max_segments, stroke_width, kind="pdf-curve")
 
 
 def pdf_snap_data(req: dict) -> dict:
@@ -2139,6 +2142,106 @@ def pdf_snap_data(req: dict) -> dict:
             "points": result_points,
             "segments": result_segments,
         }
+    finally:
+        doc.close()
+
+
+def text_rects_data(req: dict) -> dict:
+    """Word bounding boxes for one page. Unlike get_cdrawings(), get_text()
+    already reports coordinates in the rotated page.rect space, so no extra
+    rotation transform is needed to match the snap segment space."""
+    pdf_path = req["pdf"]
+    page_index = int(req.get("page", 0))
+    max_rects = max(100, min(int(req.get("max_rects", 20000)), 100000))
+
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc.load_page(page_index)
+        rects = []
+        for word in page.get_text("words") or []:
+            rects.append({
+                "x0": float(word[0]),
+                "y0": float(word[1]),
+                "x1": float(word[2]),
+                "y1": float(word[3]),
+            })
+            if len(rects) >= max_rects:
+                break
+        return {"ok": True, "rects": rects}
+    finally:
+        doc.close()
+
+
+def fill_rects_data(req: dict) -> dict:
+    """Bounding boxes of non-white filled path items (wall poche and similar).
+    Wall Trace uses these to confirm that a candidate centerline runs through
+    a filled wall body, separating walls from hollow outlines drawn at
+    wall-like spacing. The default luminance cutoff keeps light-gray interior
+    partitions (walls are drawn 0.5 dark AND 0.83 light on real Revit sheets)
+    while rejecting white/near-white background fills. get_drawings() reports
+    unrotated coordinates, so the page rotation is applied to match the snap
+    segment space."""
+    pdf_path = req["pdf"]
+    page_index = int(req.get("page", 0))
+    max_lum = float(req.get("max_luminance", 0.9))
+    max_rects = max(100, min(int(req.get("max_rects", 20000)), 100000))
+
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc.load_page(page_index)
+        rotation = int(getattr(page, "rotation", 0) or 0)
+        matrix = page.rotation_matrix if rotation % 360 != 0 else None
+
+        rects: list[dict] = []
+
+        def add_rect(rect) -> None:
+            if rect is None or len(rects) >= max_rects:
+                return
+            r = fitz.Rect(rect)
+            if r.is_empty or r.is_infinite:
+                return
+            if matrix is not None:
+                r = r * matrix
+                r.normalize()
+            rects.append({
+                "x0": float(r.x0),
+                "y0": float(r.y0),
+                "x1": float(r.x1),
+                "y1": float(r.y1),
+            })
+
+        for drawing in page.get_drawings():
+            if "f" not in str(drawing.get("type") or ""):
+                continue
+            fill = drawing.get("fill")
+            if not fill:
+                continue
+            if len(fill) >= 3:
+                lum = 0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]
+            else:
+                lum = fill[0]
+            if lum > max_lum:
+                continue
+
+            # Item-level boxes are much tighter than the drawing rect for
+            # multi-piece paths; fall back to the drawing rect otherwise.
+            item_rects = []
+            for item in drawing.get("items") or []:
+                command = str(item[0]) if item else ""
+                if command == "re" and len(item) >= 2:
+                    item_rects.append(item[1])
+                elif command == "qu" and len(item) >= 2:
+                    try:
+                        item_rects.append(fitz.Quad(item[1]).rect)
+                    except Exception:
+                        pass
+            if item_rects:
+                for rect in item_rects:
+                    add_rect(rect)
+            else:
+                add_rect(drawing.get("rect"))
+
+        return {"ok": True, "rects": rects}
     finally:
         doc.close()
 
@@ -3452,6 +3555,10 @@ def worker_loop() -> int:
                 response = probe_layers_data(req)
             elif action == "pdfsnap":
                 response = pdf_snap_data(req)
+            elif action == "textrects":
+                response = text_rects_data(req)
+            elif action == "fillrects":
+                response = fill_rects_data(req)
             elif action == "layertrace":
                 response = trace_layer_data(req)
             elif action == "sheetmeta":
@@ -3482,8 +3589,8 @@ def main() -> int:
     if len(sys.argv) == 2 and sys.argv[1] == "worker":
         return worker_loop()
 
-    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "layertrace", "sheetmeta", "similartext", "pdftakeoffs", "pdftakeoffclean"}:
-        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|layertrace|sheetmeta|similartext|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
+    if len(sys.argv) != 4 or sys.argv[1] not in {"render", "layers", "layerprobe", "pdfsnap", "textrects", "fillrects", "layertrace", "sheetmeta", "similartext", "pdftakeoffs", "pdftakeoffclean"}:
+        print("usage: pdf_layers_helper.py <render|layers|layerprobe|pdfsnap|textrects|fillrects|layertrace|sheetmeta|similartext|pdftakeoffs|pdftakeoffclean|worker> input.json output.json", file=sys.stderr)
         return 2
     try:
         if sys.argv[1] == "render":
@@ -3494,6 +3601,10 @@ def main() -> int:
             _write_json(sys.argv[3], probe_layers_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "pdfsnap":
             _write_json(sys.argv[3], pdf_snap_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "textrects":
+            _write_json(sys.argv[3], text_rects_data(_load_json(sys.argv[2])))
+        elif sys.argv[1] == "fillrects":
+            _write_json(sys.argv[3], fill_rects_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "layertrace":
             _write_json(sys.argv[3], trace_layer_data(_load_json(sys.argv[2])))
         elif sys.argv[1] == "similartext":
