@@ -57,16 +57,21 @@ public static class WallCenterlineTracer
         public IReadOnlyList<FillZone>? WallFillZones { get; init; }
 
         /// <summary>
-        /// When true, only strips at or below <see cref="DarkLuminanceMax"/>
-        /// confirm a wall. On Revit-style sheets rated walls (demising,
-        /// corridor, exterior) carry dark poche while in-unit partitions are
-        /// light gray, so this traces just the structural wall set. Ignored
-        /// when the sheet has no dark strips at all.
+        /// When true, only dark-filled strips confirm a wall. On Revit-style
+        /// sheets rated walls (demising, corridor, exterior) carry dark poche
+        /// while in-unit partitions are light gray, so this traces just the
+        /// structural wall set. Ignored when the sheet's fills do not split
+        /// into a dark and a light family.
         /// </summary>
         public bool DarkFillOnly { get; init; }
 
-        /// <summary>Luminance cutoff separating dark (rated) fill from light partition fill.</summary>
-        public float DarkLuminanceMax { get; init; } = 0.7f;
+        /// <summary>
+        /// Luminance cutoff separating dark (rated) fill from light partition
+        /// fill. Null (default) picks the cutoff per sheet by clustering the
+        /// strip luminances, so plans drawn with other gray values keep
+        /// working; set a value only to override the auto split.
+        /// </summary>
+        public float? DarkLuminanceMax { get; init; }
 
         /// <summary>
         /// Drop centerlines that run along the area polygon boundary within
@@ -454,19 +459,27 @@ public static class WallCenterlineTracer
             return;
 
         float maxStrip = options.MaxThicknessPt * 2f;
-        bool darkOnly = options.DarkFillOnly &&
-                        options.WallFillZones.Any(z => z.Luminance <= options.DarkLuminanceMax);
-        var strips = new List<SKRect>();
-        foreach (FillZone zone in options.WallFillZones)
+        List<FillZone> wallLike = options.WallFillZones
+            .Where(z => Math.Min(z.Rect.Width, z.Rect.Height) <= maxStrip)
+            .ToList();
+
+        float? darkCutoff = null;
+        if (options.DarkFillOnly)
         {
-            if (darkOnly && zone.Luminance > options.DarkLuminanceMax)
+            darkCutoff = options.DarkLuminanceMax ?? AutoDarkCutoff(wallLike);
+            if (darkCutoff.HasValue && !wallLike.Any(z => z.Luminance <= darkCutoff.Value))
+                darkCutoff = null;
+        }
+
+        var strips = new List<SKRect>();
+        foreach (FillZone zone in wallLike)
+        {
+            if (darkCutoff.HasValue && zone.Luminance > darkCutoff.Value)
                 continue;
-            if (Math.Min(zone.Rect.Width, zone.Rect.Height) <= maxStrip)
-            {
-                SKRect inflated = zone.Rect;
-                inflated.Inflate(0.75f, 0.75f);
-                strips.Add(inflated);
-            }
+
+            SKRect inflated = zone.Rect;
+            inflated.Inflate(0.75f, 0.75f);
+            strips.Add(inflated);
         }
 
         ZoneIndex? index = ZoneIndex.Build(strips);
@@ -474,6 +487,67 @@ public static class WallCenterlineTracer
             return;
 
         centerlines.RemoveAll(c => !BandTouchesFill(c, index));
+    }
+
+    /// <summary>
+    /// Splits the sheet's wall-strip luminances into a dark and a light
+    /// family and returns the cutoff between them, or null when the fills
+    /// form a single family (then dark-only filtering has nothing to
+    /// separate). Sheets are not standardized on any particular gray values,
+    /// so the split is found per sheet: candidate thresholds between
+    /// luminance families are scored by between-class variance (Otsu),
+    /// weighted by strip length so long structural walls dominate over
+    /// small filled symbols. A family split needs a real luminance gap and
+    /// both sides carrying at least 10% of the total strip length.
+    /// </summary>
+    private static float? AutoDarkCutoff(List<FillZone> strips)
+    {
+        var families = new SortedDictionary<float, float>();
+        foreach (FillZone zone in strips)
+        {
+            float key = MathF.Round(zone.Luminance * 50f) / 50f;
+            float length = Math.Max(zone.Rect.Width, zone.Rect.Height);
+            families[key] = families.GetValueOrDefault(key) + length;
+        }
+
+        if (families.Count < 2)
+            return null;
+
+        float[] lums = [.. families.Keys];
+        float[] weights = [.. families.Values];
+        float total = weights.Sum();
+        if (total <= 0f)
+            return null;
+
+        float bestVariance = 0f;
+        float? best = null;
+        for (int i = 0; i + 1 < lums.Length; i++)
+        {
+            if (lums[i + 1] - lums[i] < 0.12f)
+                continue;
+
+            float weightDark = 0f, sumDark = 0f;
+            for (int k = 0; k <= i; k++)
+            {
+                weightDark += weights[k];
+                sumDark += weights[k] * lums[k];
+            }
+
+            float weightLight = total - weightDark;
+            if (weightDark < total * 0.1f || weightLight < total * 0.1f)
+                continue;
+
+            float meanDark = sumDark / weightDark;
+            float meanLight = (weights.Zip(lums, (w, l) => w * l).Sum() - sumDark) / weightLight;
+            float variance = weightDark * weightLight * (meanLight - meanDark) * (meanLight - meanDark);
+            if (variance > bestVariance)
+            {
+                bestVariance = variance;
+                best = (lums[i] + lums[i + 1]) * 0.5f;
+            }
+        }
+
+        return best;
     }
 
     /// <summary>

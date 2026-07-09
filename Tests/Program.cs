@@ -147,6 +147,7 @@ var tests = new List<(string Name, Action Run)>
     ("wall trace fill zones keep only filled walls", WallCenterlineTracerTests.FillZonesKeepOnlyFilledWalls),
     ("wall trace off-center fill strip confirms thick wall", WallCenterlineTracerTests.OffCenterFillStripStillConfirmsThickWall),
     ("wall trace dark-fill-only drops light partitions", WallCenterlineTracerTests.DarkFillOnlyDropsLightPartitions),
+    ("wall trace dark cutoff adapts to sheet luminances", WallCenterlineTracerTests.DarkFillCutoffAdaptsToSheetLuminances),
     ("wall trace boundary walls excluded by tolerance", WallCenterlineTracerTests.BoundaryWallsAreExcludedByTolerance),
     ("wall trace face crossing text zone keeps full length", WallCenterlineTracerTests.WallFaceCrossingTextZoneKeepsFullLength),
     ("point along line creates endpoint and step points", PointAlongLineServiceTests.StraightLineCreatesEndpointAndStepPoints),

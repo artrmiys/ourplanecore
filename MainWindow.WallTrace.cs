@@ -98,6 +98,7 @@ public partial class MainWindow
             ExcludedZones = InflateTextZones(textRects),
             WallFillZones = wallFillZones.Count > 0 ? wallFillZones : null,
             DarkFillOnly = dialog.DarkFillOnly,
+            DarkLuminanceMax = (float?)dialog.DarkFillCutoff,
             BoundaryExclusionPt = dialog.IncludePerimeterWalls
                 ? 0f
                 : (float)(dialog.PerimeterOffsetFeet * 12 * MetersPerInch / effectiveScale),

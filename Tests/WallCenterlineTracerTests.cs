@@ -302,6 +302,56 @@ internal static class WallCenterlineTracerTests
         AssertEqual(2, fallback.Count, "no dark strips on the sheet disables the dark-only filter");
     }
 
+    public static void DarkFillCutoffAdaptsToSheetLuminances()
+    {
+        // A plan drawn with unusual grays: rated walls at 0.15, partitions at
+        // 0.55. A fixed 0.7 cutoff would call both "dark"; the auto split
+        // must separate them relative to this sheet's own values.
+        List<WallCenterlineTracer.Segment> segments =
+        [
+            Seg(0, 100, 200, 100),
+            Seg(0, 106, 200, 106),
+            Seg(0, 300, 200, 300),
+            Seg(0, 306, 200, 306),
+        ];
+
+        var auto = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            DarkFillOnly = true,
+            WallFillZones =
+            [
+                new WallCenterlineTracer.FillZone(new SKRect(0, 100, 200, 106), 0.15f),
+                new WallCenterlineTracer.FillZone(new SKRect(0, 300, 200, 306), 0.55f),
+            ],
+        };
+
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), auto);
+        AssertEqual(1, result.Count, "auto cutoff must split this sheet's own gray families");
+        AssertClose(103, result[0][0].Y, "the darker family wins on this sheet", 1.0);
+
+        // A manual cutoff above both values keeps both walls (user override).
+        var manual = new WallCenterlineTracer.Options
+        {
+            MinThicknessPt = 4,
+            MaxThicknessPt = 10,
+            MinFaceLengthPt = 10,
+            MinWallLengthPt = 15,
+            DarkFillOnly = true,
+            DarkLuminanceMax = 0.6f,
+            WallFillZones =
+            [
+                new WallCenterlineTracer.FillZone(new SKRect(0, 100, 200, 106), 0.15f),
+                new WallCenterlineTracer.FillZone(new SKRect(0, 300, 200, 306), 0.55f),
+            ],
+        };
+        List<SKPoint[]> overridden = WallCenterlineTracer.Trace(segments, Square(-50, 50, 300, 400), manual);
+        AssertEqual(2, overridden.Count, "a manual cutoff overrides the auto split");
+    }
+
     public static void BoundaryWallsAreExcludedByTolerance()
     {
         // Perimeter wall runs along the area's top edge (y=50); an interior

@@ -45,6 +45,7 @@ internal static class WallTraceHarness
             MinFaceLengthPt = input.Options.MinFaceLengthPt,
             MinWallLengthPt = input.Options.MinWallLengthPt,
             DarkFillOnly = input.Options.DarkFillOnly,
+            DarkLuminanceMax = input.Options.DarkLuminanceMax,
             BoundaryExclusionPt = input.Options.BoundaryExclusionPt,
             ExcludedZones = input.Zones?.Count > 0
                 ? input.Zones.Select(z => new SKRect(z.X0, z.Y0, z.X1, z.Y1)).ToList()
@@ -116,6 +117,7 @@ internal static class WallTraceHarness
         public float MinFaceLengthPt { get; set; }
         public float MinWallLengthPt { get; set; }
         public bool DarkFillOnly { get; set; }
+        public float? DarkLuminanceMax { get; set; }
         public float BoundaryExclusionPt { get; set; }
     }
 }

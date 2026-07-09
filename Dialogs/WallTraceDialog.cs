@@ -15,6 +15,9 @@ public sealed class WallTraceDialog : Window
     public double PerimeterOffsetFeet { get; private set; } = 1;
     public bool DarkFillOnly { get; private set; }
 
+    /// <summary>Manual dark/light fill luminance cutoff; null lets the tracer pick it per sheet.</summary>
+    public double? DarkFillCutoff { get; private set; }
+
     public WallTraceDialog(string defaultTakeoffName)
     {
         Title = "Trace Walls Inside Area";
@@ -59,6 +62,16 @@ public sealed class WallTraceDialog : Window
         };
         panel.Children.Add(darkFillBox);
 
+        // "auto" = the tracer clusters the sheet's fill luminances itself;
+        // a number 0..1 pins the dark/light cutoff for unusual plans.
+        var darkCutoffBox = new TextBox { Text = "auto", Width = 64, Margin = new Thickness(0, 0, 4, 0) };
+        FrameworkElement darkCutoffRow = BuildValueRow("Dark cutoff", darkCutoffBox, "0-1 or auto");
+        darkCutoffRow.Margin = new Thickness(18, 4, 0, 0);
+        darkCutoffRow.IsEnabled = false;
+        panel.Children.Add(darkCutoffRow);
+        darkFillBox.Checked += (_, _) => darkCutoffRow.IsEnabled = true;
+        darkFillBox.Unchecked += (_, _) => darkCutoffRow.IsEnabled = false;
+
         var perimeterBox = new CheckBox
         {
             Content = "Include perimeter walls on the area edge",
@@ -99,6 +112,26 @@ public sealed class WallTraceDialog : Window
                 return;
             }
 
+            double? darkCutoff = null;
+            string cutoffRaw = darkCutoffBox.Text.Trim().Replace(',', '.');
+            if (darkFillBox.IsChecked == true &&
+                cutoffRaw.Length > 0 &&
+                !string.Equals(cutoffRaw, "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!double.TryParse(cutoffRaw, NumberStyles.Float, CultureInfo.InvariantCulture,
+                        out double cutoffValue) ||
+                    cutoffValue <= 0 || cutoffValue >= 1)
+                {
+                    MessageBox.Show("Dark cutoff must be a number between 0 and 1, or \"auto\".", Title,
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    darkCutoffBox.Focus();
+                    darkCutoffBox.SelectAll();
+                    return;
+                }
+
+                darkCutoff = cutoffValue;
+            }
+
             if (max <= min)
             {
                 MessageBox.Show("Max thickness must be larger than min thickness.", Title,
@@ -115,6 +148,7 @@ public sealed class WallTraceDialog : Window
             IncludePerimeterWalls = perimeterBox.IsChecked == true;
             PerimeterOffsetFeet = perimeterOffset;
             DarkFillOnly = darkFillBox.IsChecked == true;
+            DarkFillCutoff = darkCutoff;
             DialogResult = true;
         };
 
