@@ -2001,6 +2001,13 @@ internal static class TakeoffsTreeRegressionTests
             wallTrace.Contains("MessageBoxResult.No", StringComparison.Ordinal) &&
             wallTrace.Contains("nothing was added", StringComparison.Ordinal),
             "noisy raster Wall Trace results should require explicit confirmation before creating measurements");
+        AssertTrue(
+            wallTrace.Contains("AcceptRasterWallTraceResultBeforeCreate", StringComparison.Ordinal) &&
+            wallTrace.Contains("RasterWallTraceHardBlockCandidateCount", StringComparison.Ordinal) &&
+            wallTrace.Contains("RasterWallTraceImageOnlyCandidateCount", StringComparison.Ordinal) &&
+            wallTrace.Contains("textRects.Count == 0 && wallFillZones.Count == 0", StringComparison.Ordinal) &&
+            wallTrace.Contains("stopped before creating", StringComparison.Ordinal),
+            "image-only raster Wall Trace should hard-stop noisy full-sheet results before creating measurements");
     }
 
     public static void RasterSnapStrictBlackLinesOnlyIsWired()

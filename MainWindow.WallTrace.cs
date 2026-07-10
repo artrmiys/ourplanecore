@@ -15,6 +15,8 @@ public partial class MainWindow
     private const double MetersPerInch = 0.0254;
     private const int RasterWallTraceNoisyCandidateCount = 40;
     private const int RasterWallTraceNoisyComplexLineCount = 8;
+    private const int RasterWallTraceHardBlockCandidateCount = 60;
+    private const int RasterWallTraceImageOnlyCandidateCount = 12;
 
     private void TraceWallsFromSelectedArea(TreeViewItem tvi, TakeoffItem item)
     {
@@ -141,6 +143,17 @@ public partial class MainWindow
             PostWallTraceNoPairsStatus(source, rasterFallbackTried, rasterFallbackError);
             return;
         }
+        if (!AcceptRasterWallTraceResultBeforeCreate(
+                source,
+                polylines,
+                polygon,
+                textRects,
+                wallFillZones,
+                out string rasterBlockStatus))
+        {
+            TxtStatus.Text = rasterBlockStatus;
+            return;
+        }
         if (!ConfirmRasterWallTraceResultIfNoisy(source, polylines, polygon, out string noisyCancelStatus))
         {
             TxtStatus.Text = noisyCancelStatus;
@@ -243,6 +256,37 @@ public partial class MainWindow
         TxtStatus.Text = rasterFallbackTried && !string.IsNullOrWhiteSpace(rasterFallbackError)
             ? $"No wall pairs found from PDF lines, and raster fallback failed: {rasterFallbackError}"
             : "No wall pairs found inside the area. Try widening the thickness range or check the sheet scale.";
+    }
+
+    private static bool AcceptRasterWallTraceResultBeforeCreate(
+        string source,
+        IReadOnlyList<SKPoint[]> polylines,
+        IReadOnlyList<SKPoint> polygon,
+        IReadOnlyList<SKRect> textRects,
+        IReadOnlyList<WallCenterlineTracer.FillZone> wallFillZones,
+        out string status)
+    {
+        status = "";
+        if (!string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        bool lacksPdfSignals = textRects.Count == 0 && wallFillZones.Count == 0;
+        RasterWallTraceLooksNoisy(polylines, polygon, out int complexCount, out int longCount);
+        bool hardNoisy = polylines.Count > RasterWallTraceHardBlockCandidateCount ||
+                         complexCount > RasterWallTraceNoisyComplexLineCount ||
+                         longCount > 0;
+        bool unsafeImageOnly = lacksPdfSignals &&
+                               polylines.Count > RasterWallTraceImageOnlyCandidateCount;
+        if (!hardNoisy && !unsafeImageOnly)
+            return true;
+
+        string reason = lacksPdfSignals
+            ? "this sheet is image-only: no PDF text/fill/layer data is available to separate labels from wall linework"
+            : "the raster result contains too many bent or overlapping candidate lines";
+        status =
+            $"Raster wall trace stopped before creating {polylines.Count} line(s): {reason}. " +
+            "Nothing was added. Select a smaller area around one wall group, or trace the lines manually with Record Line.";
+        return false;
     }
 
     private bool ConfirmRasterWallTraceResultIfNoisy(
