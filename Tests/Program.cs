@@ -150,6 +150,7 @@ var tests = new List<(string Name, Action Run)>
     ("wall trace dark cutoff adapts to sheet luminances", WallCenterlineTracerTests.DarkFillCutoffAdaptsToSheetLuminances),
     ("wall trace boundary walls excluded by tolerance", WallCenterlineTracerTests.BoundaryWallsAreExcludedByTolerance),
     ("wall trace face crossing text zone keeps full length", WallCenterlineTracerTests.WallFaceCrossingTextZoneKeepsFullLength),
+    ("wall trace raster line features yield centerline", WallCenterlineTracerTests.RasterLineFeaturesYieldCenterline),
     ("point along line creates endpoint and step points", PointAlongLineServiceTests.StraightLineCreatesEndpointAndStepPoints),
     ("point along line carries spacing across vertices", PointAlongLineServiceTests.PolylineCarriesSpacingAcrossVertices),
     ("point along line many lines avoid duplicate shared endpoint", PointAlongLineServiceTests.ManyLinesAvoidDuplicateSharedEndpoint),

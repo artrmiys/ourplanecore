@@ -88,6 +88,206 @@ public sealed partial class PdfViewport
         return result.Ok ? (result.Result.Segments, "") : ([], result.Error);
     }
 
+    public async Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error, string Source)>
+        ReadWallTraceSegmentsForCurrentPageAsync()
+    {
+        (IReadOnlyList<PdfGeometrySnapSegment> vectorSegments, string vectorError) =
+            await ReadPdfVectorSegmentsForCurrentPageAsync();
+        if (vectorSegments.Count > 0)
+            return (vectorSegments, "", "vector");
+
+        (IReadOnlyList<PdfGeometrySnapSegment> rasterSegments, string rasterError) =
+            await ReadRasterImageSegmentsForCurrentPageAsync();
+        if (rasterSegments.Count > 0)
+            return (rasterSegments, "", "raster-image");
+
+        string error = CombineWallTraceSegmentErrors(vectorError, rasterError);
+        return ([], error, "");
+    }
+
+    private async Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>
+        ReadRasterImageSegmentsForCurrentPageAsync()
+    {
+        string pdfPath = _pdfPath;
+        int pdfIndex = _pdfIndex;
+        string pageFolder = _pageFolder;
+        RasterSheetSource? rasterSheet = _rasterSheetSource?.Clone();
+
+        if (TryCopyCurrentPageBitmapForRasterFeatures(
+                pdfPath,
+                pdfIndex,
+                pageFolder,
+                out SKBitmap pageBitmap,
+                out float widthPt,
+                out float heightPt))
+        {
+            (IReadOnlyList<PdfGeometrySnapSegment> segments, string error) =
+                await ExtractRasterImageSegmentsAsync(pageBitmap, widthPt, heightPt, "current page raster");
+            if (segments.Count > 0)
+                return (segments, "");
+
+            (IReadOnlyList<PdfGeometrySnapSegment> cachedSegments, string cachedError) =
+                await ReadCachedRasterImageSegmentsAsync(pageFolder, pdfPath, pdfIndex, rasterSheet);
+            if (cachedSegments.Count > 0)
+                return (cachedSegments, "");
+
+            return ([], CombineWallTraceSegmentErrors(error, cachedError));
+        }
+
+        return await ReadCachedRasterImageSegmentsAsync(pageFolder, pdfPath, pdfIndex, rasterSheet);
+    }
+
+    private bool TryCopyCurrentPageBitmapForRasterFeatures(
+        string pdfPath,
+        int pdfIndex,
+        string pageFolder,
+        out SKBitmap bitmap,
+        out float widthPt,
+        out float heightPt)
+    {
+        bitmap = new SKBitmap();
+        widthPt = 0;
+        heightPt = 0;
+        if (!IsPageBitmapFor(pdfPath, pdfIndex, pageFolder) ||
+            _pageBitmap == null ||
+            _pdfW <= 0 ||
+            _pdfH <= 0)
+        {
+            return false;
+        }
+
+        SKBitmap? copy = _pageBitmap.Copy();
+        if (copy == null || copy.Width <= 0 || copy.Height <= 0)
+        {
+            copy?.Dispose();
+            return false;
+        }
+
+        bitmap = copy;
+        widthPt = _pdfW;
+        heightPt = _pdfH;
+        return true;
+    }
+
+    private static Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>
+        ExtractRasterImageSegmentsAsync(
+            SKBitmap bitmap,
+            float widthPt,
+            float heightPt,
+            string source)
+    {
+        return Task.Run(() =>
+        {
+            using (bitmap)
+            {
+                if (SheetOverlayRasterFeatureService.TryExtractSnap(
+                        bitmap,
+                        widthPt,
+                        heightPt,
+                        out PdfGeometrySnapResult snap,
+                        out string error))
+                {
+                    return ((IReadOnlyList<PdfGeometrySnapSegment>)snap.Segments, "");
+                }
+
+                return ((IReadOnlyList<PdfGeometrySnapSegment>)[], $"{source}: {error}");
+            }
+        });
+    }
+
+    private static Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>
+        ReadCachedRasterImageSegmentsAsync(
+            string pageFolder,
+            string pdfPath,
+            int pdfIndex,
+            RasterSheetSource? rasterSheet)
+    {
+        return Task.Run(() =>
+        {
+            string error = "";
+            if (TryReadRasterImageSegments(pageFolder, pdfPath, rasterSheet, "ready raster", out var segments, out error))
+                return (segments, "");
+
+            PageInfo? page = string.IsNullOrWhiteSpace(pageFolder)
+                ? null
+                : OurPlaneCoreJobStore.TryReadPage(pageFolder);
+            string pageError = "";
+            if (page?.RasterSheet != null &&
+                TryReadRasterImageSegments(page.FolderPath, page.PdfPath, page.RasterSheet, "page raster", out segments, out pageError))
+            {
+                return (segments, "");
+            }
+
+            error = CombineWallTraceSegmentErrors(error, pageError);
+            if (page == null || string.IsNullOrWhiteSpace(page.PdfPath) || !File.Exists(page.PdfPath))
+                return ((IReadOnlyList<PdfGeometrySnapSegment>)[], error);
+
+            RasterSheetBuildResult build = RasterSheetCacheService.BuildCachePreservingEnabled(page);
+            if (!build.Ok || build.Source == null)
+            {
+                string buildError = string.IsNullOrWhiteSpace(build.Error)
+                    ? "raster build failed"
+                    : build.Error;
+                return ((IReadOnlyList<PdfGeometrySnapSegment>)[], CombineWallTraceSegmentErrors(error, buildError));
+            }
+
+            if (TryReadRasterImageSegments(page.FolderPath, page.PdfPath, build.Source, "built raster", out segments, out string builtError))
+                return (segments, "");
+
+            return ((IReadOnlyList<PdfGeometrySnapSegment>)[], CombineWallTraceSegmentErrors(error, builtError));
+        });
+    }
+
+    private static bool TryReadRasterImageSegments(
+        string pageFolder,
+        string pdfPath,
+        RasterSheetSource? rasterSheet,
+        string source,
+        out IReadOnlyList<PdfGeometrySnapSegment> segments,
+        out string error)
+    {
+        segments = [];
+        error = "";
+        if (!RasterSheetCacheService.TryReadReady(
+                pageFolder,
+                pdfPath,
+                rasterSheet,
+                out RasterSheetBitmapResult raster,
+                out string reason))
+        {
+            error = $"{source}: {reason}";
+            return false;
+        }
+
+        using (raster.Bitmap)
+        {
+            if (!SheetOverlayRasterFeatureService.TryExtractSnap(
+                    raster.Bitmap,
+                    raster.WidthPt,
+                    raster.HeightPt,
+                    out PdfGeometrySnapResult snap,
+                    out string extractError))
+            {
+                error = $"{source}: {extractError}";
+                return false;
+            }
+
+            segments = snap.Segments;
+            return segments.Count > 0;
+        }
+    }
+
+    private static string CombineWallTraceSegmentErrors(string first, string second)
+    {
+        first = (first ?? "").Trim();
+        second = (second ?? "").Trim();
+        if (first.Length == 0)
+            return second;
+        if (second.Length == 0)
+            return first;
+        return $"{first}; {second}";
+    }
+
     /// <summary>
     /// Word bounding boxes for the current page, in the same PDF point space
     /// as the vector segments. Empty on failure (best-effort helper data).

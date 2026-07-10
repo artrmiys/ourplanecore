@@ -1,3 +1,4 @@
+using OurPlaneCore;
 using OurPlaneCore.Models;
 using SkiaSharp;
 
@@ -433,7 +434,64 @@ internal static class WallCenterlineTracerTests
         }
     }
 
+    public static void RasterLineFeaturesYieldCenterline()
+    {
+        using SKBitmap bitmap = BuildRasterWallTraceBitmap();
+        bool ok = SheetOverlayRasterFeatureService.TryExtractSnap(
+            bitmap,
+            bitmap.Width,
+            bitmap.Height,
+            out PdfGeometrySnapResult snap,
+            out string error);
+        AssertTrue(ok, error);
+
+        List<WallCenterlineTracer.Segment> segments = snap.Segments
+            .Select(segment => new WallCenterlineTracer.Segment(segment.Start, segment.End))
+            .ToList();
+        List<SKPoint[]> result = WallCenterlineTracer.Trace(
+            segments,
+            Square(0, 80, 240, 130),
+            DefaultOptions());
+
+        AssertEqual(1, result.Count, "raster line features should trace the wall pair inside the area");
+        AssertClose(103, result[0][0].Y, "raster centerline sits midway between wall faces", 1.2);
+        AssertClose(200, PolylineLength(result[0]), "raster centerline spans the selected wall", 3.0);
+    }
+
     // ------------------------------------------------------------------
+
+    private static SKBitmap BuildRasterWallTraceBitmap()
+    {
+        var bitmap = new SKBitmap(420, 260, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+        using var paint = new SKPaint
+        {
+            Color = SKColors.Black,
+            IsAntialias = false,
+            StrokeWidth = 1,
+            Style = SKPaintStyle.Stroke,
+        };
+
+        DrawWallPair(canvas, paint, 20, 100, 220, 106);
+        DrawWallPair(canvas, paint, 20, 160, 220, 166);
+        DrawWallPair(canvas, paint, 260, 40, 266, 220);
+        DrawWallPair(canvas, paint, 320, 40, 326, 220);
+        return bitmap;
+    }
+
+    private static void DrawWallPair(SKCanvas canvas, SKPaint paint, float x0, float y0, float x1, float y1)
+    {
+        if (Math.Abs(y1 - y0) <= Math.Abs(x1 - x0))
+        {
+            canvas.DrawLine(x0, y0, x1, y0, paint);
+            canvas.DrawLine(x0, y1, x1, y1, paint);
+            return;
+        }
+
+        canvas.DrawLine(x0, y0, x0, y1, paint);
+        canvas.DrawLine(x1, y0, x1, y1, paint);
+    }
 
     private static WallCenterlineTracer.Segment Seg(float x0, float y0, float x1, float y1) =>
         new(new SKPoint(x0, y0), new SKPoint(x1, y1));

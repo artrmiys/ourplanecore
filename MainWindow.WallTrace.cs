@@ -56,6 +56,24 @@ public partial class MainWindow
             PostStatusInfo("The area needs at least 3 points to trace walls inside it.");
             return;
         }
+        if (string.IsNullOrWhiteSpace(area.PageFolder))
+        {
+            PostStatusInfo("This Area is not linked to a sheet, so walls cannot be traced from it.");
+            return;
+        }
+
+        if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, area.PageFolder))
+        {
+            PageInfo? areaPage = OurPlaneCoreJobStore.TryReadPage(area.PageFolder);
+            if (areaPage == null)
+            {
+                PostStatusInfo("Cannot open the sheet for this Area, so wall tracing was not started.");
+                return;
+            }
+
+            OpenPageInActiveTab(areaPage);
+            await Dispatcher.InvokeAsync(() => { });
+        }
 
         double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
@@ -71,13 +89,13 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        TxtStatus.Text = "Tracing walls: reading sheet vector lines...";
-        (IReadOnlyList<PdfGeometrySnapSegment> segments, string error) =
-            await _viewport.ReadPdfVectorSegmentsForCurrentPageAsync();
+        TxtStatus.Text = "Tracing walls: reading sheet vector/raster lines...";
+        (IReadOnlyList<PdfGeometrySnapSegment> segments, string error, string source) =
+            await _viewport.ReadWallTraceSegmentsForCurrentPageAsync();
         if (segments.Count == 0)
         {
             PostStatusInfo(string.IsNullOrWhiteSpace(error)
-                ? "No vector lines found on this sheet. Wall tracing needs a vector PDF (not a scan)."
+                ? "No vector or raster lines found on this sheet. Wall tracing needs visible wall linework."
                 : $"Wall tracing failed to read sheet lines: {error}");
             return;
         }
@@ -118,7 +136,9 @@ public partial class MainWindow
         if (polylines.Count == 0)
         {
             TxtStatus.Text =
-                "No wall pairs found inside the area. Try widening the thickness range or check the sheet scale.";
+                string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase)
+                    ? "Raster wall trace found line pixels, but no wall pairs matched inside the area. Try widening the thickness range or check the sheet scale."
+                    : "No wall pairs found inside the area. Try widening the thickness range or check the sheet scale.";
             return;
         }
 
@@ -151,8 +171,11 @@ public partial class MainWindow
         RefreshAreaLineGridUi(lineItem, area.PageFolder);
         double totalMeters = generated.Sum(m => m.Value(effectiveScale));
         string total = Units.FormatLength(totalMeters, _viewport.UnitMode);
+        string sourceLabel = string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase)
+            ? "raster"
+            : "vector";
         string status =
-            $"Wall trace: {generated.Count} centerline(s), {total} " +
+            $"Wall trace ({sourceLabel}): {generated.Count} centerline(s), {total} " +
             $"({dialog.MinThicknessInches:0.##}-{dialog.MaxThicknessInches:0.##} in walls). " +
             "Lines stay editable: drag vertices or delete extras.";
         ShowAreaLineGridOnSheet(area, generated, status);
