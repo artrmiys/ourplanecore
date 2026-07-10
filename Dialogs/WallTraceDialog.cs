@@ -14,6 +14,7 @@ public sealed class WallTraceDialog : Window
     public bool IncludePerimeterWalls { get; private set; }
     public double PerimeterOffsetFeet { get; private set; } = 1;
     public bool DarkFillOnly { get; private set; }
+    public bool AllowRoughImageOnlyTrace { get; private set; }
 
     /// <summary>Manual dark/light fill luminance cutoff; null lets the tracer pick it per sheet.</summary>
     public double? DarkFillCutoff { get; private set; }
@@ -88,6 +89,14 @@ public sealed class WallTraceDialog : Window
         perimeterBox.Checked += (_, _) => perimeterOffsetRow.IsEnabled = false;
         perimeterBox.Unchecked += (_, _) => perimeterOffsetRow.IsEnabled = true;
 
+        var roughImageBox = new CheckBox
+        {
+            Content = "Allow rough image-only trace (may catch text)",
+            IsChecked = false,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        panel.Children.Add(roughImageBox);
+
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -149,6 +158,7 @@ public sealed class WallTraceDialog : Window
             PerimeterOffsetFeet = perimeterOffset;
             DarkFillOnly = darkFillBox.IsChecked == true;
             DarkFillCutoff = darkCutoff;
+            AllowRoughImageOnlyTrace = roughImageBox.IsChecked == true;
             DialogResult = true;
         };
 

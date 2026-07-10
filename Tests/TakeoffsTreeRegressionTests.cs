@@ -1980,6 +1980,7 @@ internal static class TakeoffsTreeRegressionTests
     {
         string wallTrace = ReadRepoFile("MainWindow.WallTrace.cs");
         string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+        string dialog = ReadRepoFile(Path.Combine("Dialogs", "WallTraceDialog.cs"));
         int vectorTrace = wallTrace.IndexOf("TraceWallCenterlinesAsync(segments, polygon, options, holes)", StringComparison.Ordinal);
         int fallbackRead = wallTrace.IndexOf("ReadWallTraceRasterImageSegmentsForCurrentPageAsync", StringComparison.Ordinal);
 
@@ -2006,8 +2007,11 @@ internal static class TakeoffsTreeRegressionTests
             wallTrace.Contains("RasterWallTraceHardBlockCandidateCount", StringComparison.Ordinal) &&
             wallTrace.Contains("RasterWallTraceImageOnlyCandidateCount", StringComparison.Ordinal) &&
             wallTrace.Contains("textRects.Count == 0 && wallFillZones.Count == 0", StringComparison.Ordinal) &&
-            wallTrace.Contains("stopped before creating", StringComparison.Ordinal),
-            "image-only raster Wall Trace should hard-stop noisy full-sheet results before creating measurements");
+            wallTrace.Contains("stopped before creating", StringComparison.Ordinal) &&
+            wallTrace.Contains("allowRoughImageOnlyTrace && lacksPdfSignals", StringComparison.Ordinal) &&
+            dialog.Contains("AllowRoughImageOnlyTrace", StringComparison.Ordinal) &&
+            dialog.Contains("Allow rough image-only trace", StringComparison.Ordinal),
+            "image-only raster Wall Trace should hard-stop by default but allow explicit rough review mode");
     }
 
     public static void RasterSnapStrictBlackLinesOnlyIsWired()

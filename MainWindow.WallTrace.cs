@@ -149,6 +149,7 @@ public partial class MainWindow
                 polygon,
                 textRects,
                 wallFillZones,
+                dialog.AllowRoughImageOnlyTrace,
                 out string rasterBlockStatus))
         {
             TxtStatus.Text = rasterBlockStatus;
@@ -264,6 +265,7 @@ public partial class MainWindow
         IReadOnlyList<SKPoint> polygon,
         IReadOnlyList<SKRect> textRects,
         IReadOnlyList<WallCenterlineTracer.FillZone> wallFillZones,
+        bool allowRoughImageOnlyTrace,
         out string status)
     {
         status = "";
@@ -277,6 +279,9 @@ public partial class MainWindow
                          longCount > 0;
         bool unsafeImageOnly = lacksPdfSignals &&
                                polylines.Count > RasterWallTraceImageOnlyCandidateCount;
+        if (allowRoughImageOnlyTrace && lacksPdfSignals)
+            return true;
+
         if (!hardNoisy && !unsafeImageOnly)
             return true;
 
@@ -285,7 +290,8 @@ public partial class MainWindow
             : "the raster result contains too many bent or overlapping candidate lines";
         status =
             $"Raster wall trace stopped before creating {polylines.Count} line(s): {reason}. " +
-            "Nothing was added. Select a smaller area around one wall group, or trace the lines manually with Record Line.";
+            "Nothing was added. Select a smaller area around one wall group, raise the minimum wall length, " +
+            "or enable rough image-only trace in the dialog if you want to review a noisy result.";
         return false;
     }
 
