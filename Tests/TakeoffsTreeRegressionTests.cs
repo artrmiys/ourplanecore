@@ -1995,6 +1995,12 @@ internal static class TakeoffsTreeRegressionTests
             wallTrace.Contains("return (polylines, \"raster-image\", rasterError, true);", StringComparison.Ordinal) &&
             wallTrace.Contains("source = traceResult.Source;", StringComparison.Ordinal),
             "Wall Trace should retry raster image line extraction when PDF snap returns lines that produce no wall pairs");
+        AssertTrue(
+            wallTrace.Contains("ConfirmRasterWallTraceResultIfNoisy", StringComparison.Ordinal) &&
+            wallTrace.Contains("RasterWallTraceNoisyCandidateCount", StringComparison.Ordinal) &&
+            wallTrace.Contains("MessageBoxResult.No", StringComparison.Ordinal) &&
+            wallTrace.Contains("nothing was added", StringComparison.Ordinal),
+            "noisy raster Wall Trace results should require explicit confirmation before creating measurements");
     }
 
     public static void RasterSnapStrictBlackLinesOnlyIsWired()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Controls;
 using OurPlaneCore.Controls;
 using OurPlaneCore.Models;
@@ -12,6 +13,8 @@ namespace OurPlaneCore;
 public partial class MainWindow
 {
     private const double MetersPerInch = 0.0254;
+    private const int RasterWallTraceNoisyCandidateCount = 40;
+    private const int RasterWallTraceNoisyComplexLineCount = 8;
 
     private void TraceWallsFromSelectedArea(TreeViewItem tvi, TakeoffItem item)
     {
@@ -138,6 +141,11 @@ public partial class MainWindow
             PostWallTraceNoPairsStatus(source, rasterFallbackTried, rasterFallbackError);
             return;
         }
+        if (!ConfirmRasterWallTraceResultIfNoisy(source, polylines, polygon, out string noisyCancelStatus))
+        {
+            TxtStatus.Text = noisyCancelStatus;
+            return;
+        }
 
         string parentFolder = ResolveAreaLineGridParentFolder(sourceItem);
         TakeoffItem lineItem = CreateUniqueTakeoffItem(
@@ -235,6 +243,85 @@ public partial class MainWindow
         TxtStatus.Text = rasterFallbackTried && !string.IsNullOrWhiteSpace(rasterFallbackError)
             ? $"No wall pairs found from PDF lines, and raster fallback failed: {rasterFallbackError}"
             : "No wall pairs found inside the area. Try widening the thickness range or check the sheet scale.";
+    }
+
+    private bool ConfirmRasterWallTraceResultIfNoisy(
+        string source,
+        IReadOnlyList<SKPoint[]> polylines,
+        IReadOnlyList<SKPoint> polygon,
+        out string cancelStatus)
+    {
+        cancelStatus = "";
+        if (!string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase) ||
+            !RasterWallTraceLooksNoisy(polylines, polygon, out int complexCount, out int longCount))
+        {
+            return true;
+        }
+
+        string message =
+            $"Raster Wall Trace found {polylines.Count} candidate lines, including {complexCount} bent/complex lines." +
+            Environment.NewLine + Environment.NewLine +
+            "This usually means the raster scan is matching text, symbols, openings, or furniture in addition to walls." +
+            Environment.NewLine + Environment.NewLine +
+            "Nothing has been added yet. Create these lines anyway?";
+        MessageBoxResult result = MessageBox.Show(
+            this,
+            message,
+            "Review Raster Wall Trace",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (result == MessageBoxResult.Yes)
+            return true;
+
+        string extra = longCount > 0 ? $" {longCount} candidate(s) were unusually long." : "";
+        cancelStatus =
+            $"Raster wall trace found {polylines.Count} noisy candidates; nothing was added.{extra} Select a smaller area or use vector/PDF layer linework.";
+        return false;
+    }
+
+    private static bool RasterWallTraceLooksNoisy(
+        IReadOnlyList<SKPoint[]> polylines,
+        IReadOnlyList<SKPoint> polygon,
+        out int complexCount,
+        out int longCount)
+    {
+        complexCount = polylines.Count(line => line.Length > 2);
+        float diagonal = PolygonDiagonal(polygon);
+        longCount = diagonal > 0
+            ? polylines.Count(line => PolylineLength(line) > diagonal * 1.2f)
+            : 0;
+
+        return polylines.Count > RasterWallTraceNoisyCandidateCount ||
+               complexCount > RasterWallTraceNoisyComplexLineCount ||
+               longCount > 0;
+    }
+
+    private static float PolygonDiagonal(IReadOnlyList<SKPoint> polygon)
+    {
+        if (polygon.Count == 0)
+            return 0f;
+
+        float minX = polygon.Min(p => p.X);
+        float minY = polygon.Min(p => p.Y);
+        float maxX = polygon.Max(p => p.X);
+        float maxY = polygon.Max(p => p.Y);
+        float dx = maxX - minX;
+        float dy = maxY - minY;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static float PolylineLength(SKPoint[] line)
+    {
+        float total = 0f;
+        for (int i = 0; i + 1 < line.Length; i++)
+        {
+            float dx = line[i + 1].X - line[i].X;
+            float dy = line[i + 1].Y - line[i].Y;
+            total += MathF.Sqrt(dx * dx + dy * dy);
+        }
+
+        return total;
     }
 
     private static Task<List<SKPoint[]>> TraceWallCenterlinesAsync(
