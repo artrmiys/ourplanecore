@@ -122,23 +122,20 @@ public partial class MainWindow
                 : (float)(dialog.PerimeterOffsetFeet * 12 * MetersPerInch / effectiveScale),
         };
 
-        List<WallCenterlineTracer.Segment> traceInput = segments
-            .Where(s => !string.Equals(s.Kind, "pdf-curve", StringComparison.OrdinalIgnoreCase))
-            .Select(s => new WallCenterlineTracer.Segment(s.Start, s.End))
-            .ToList();
         IReadOnlyList<SKPoint> polygon = area.Points;
         IReadOnlyList<IReadOnlyList<SKPoint>>? holes = area.Holes?.Count > 0
             ? area.Holes.Select(h => (IReadOnlyList<SKPoint>)h).ToList()
             : null;
 
-        List<SKPoint[]> polylines = await Task.Run(() =>
-            WallCenterlineTracer.Trace(traceInput, polygon, options, holes));
+        var traceResult = await TraceWallCenterlinesWithRasterFallbackAsync(segments, source, polygon, options, holes);
+        List<SKPoint[]> polylines = traceResult.Polylines;
+        source = traceResult.Source;
+        string rasterFallbackError = traceResult.RasterFallbackError;
+        bool rasterFallbackTried = traceResult.RasterFallbackTried;
+
         if (polylines.Count == 0)
         {
-            TxtStatus.Text =
-                string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase)
-                    ? "Raster wall trace found line pixels, but no wall pairs matched inside the area. Try widening the thickness range or check the sheet scale."
-                    : "No wall pairs found inside the area. Try widening the thickness range or check the sheet scale.";
+            PostWallTraceNoPairsStatus(source, rasterFallbackTried, rasterFallbackError);
             return;
         }
 
@@ -200,6 +197,61 @@ public partial class MainWindow
         }
 
         return zones;
+    }
+
+    private async Task<(List<SKPoint[]> Polylines, string Source, string RasterFallbackError, bool RasterFallbackTried)>
+        TraceWallCenterlinesWithRasterFallbackAsync(
+            IReadOnlyList<PdfGeometrySnapSegment> segments,
+            string source,
+            IReadOnlyList<SKPoint> polygon,
+            WallCenterlineTracer.Options options,
+            IReadOnlyList<IReadOnlyList<SKPoint>>? holes)
+    {
+        List<SKPoint[]> polylines = await TraceWallCenterlinesAsync(segments, polygon, options, holes);
+        if (polylines.Count > 0 ||
+            string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase))
+        {
+            return (polylines, source, "", false);
+        }
+
+        TxtStatus.Text = "Tracing walls: PDF lines did not match; trying raster image...";
+        (IReadOnlyList<PdfGeometrySnapSegment> rasterSegments, string rasterError) =
+            await _viewport.ReadWallTraceRasterImageSegmentsForCurrentPageAsync();
+        if (rasterSegments.Count == 0)
+            return (polylines, source, rasterError, true);
+
+        polylines = await TraceWallCenterlinesAsync(rasterSegments, polygon, options, holes);
+        return (polylines, "raster-image", rasterError, true);
+    }
+
+    private void PostWallTraceNoPairsStatus(string source, bool rasterFallbackTried, string rasterFallbackError)
+    {
+        if (string.Equals(source, "raster-image", StringComparison.OrdinalIgnoreCase))
+        {
+            TxtStatus.Text = "Raster wall trace found line pixels, but no wall pairs matched inside the area. Try widening the thickness range or check the sheet scale.";
+            return;
+        }
+
+        TxtStatus.Text = rasterFallbackTried && !string.IsNullOrWhiteSpace(rasterFallbackError)
+            ? $"No wall pairs found from PDF lines, and raster fallback failed: {rasterFallbackError}"
+            : "No wall pairs found inside the area. Try widening the thickness range or check the sheet scale.";
+    }
+
+    private static Task<List<SKPoint[]>> TraceWallCenterlinesAsync(
+        IReadOnlyList<PdfGeometrySnapSegment> segments,
+        IReadOnlyList<SKPoint> polygon,
+        WallCenterlineTracer.Options options,
+        IReadOnlyList<IReadOnlyList<SKPoint>>? holes)
+    {
+        return Task.Run(() =>
+        {
+            List<WallCenterlineTracer.Segment> traceInput = segments
+                .Where(s => !string.Equals(s.Kind, "pdf-curve", StringComparison.OrdinalIgnoreCase))
+                .Select(s => new WallCenterlineTracer.Segment(s.Start, s.End))
+                .ToList();
+
+            return WallCenterlineTracer.Trace(traceInput, polygon, options, holes);
+        });
     }
 
     private static string BuildWallTraceDefaultName(TakeoffItem item, Measurement area)

@@ -105,6 +105,10 @@ public sealed partial class PdfViewport
         return ([], error, "");
     }
 
+    public Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>
+        ReadWallTraceRasterImageSegmentsForCurrentPageAsync() =>
+        ReadRasterImageSegmentsForCurrentPageAsync();
+
     private async Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>
         ReadRasterImageSegmentsForCurrentPageAsync()
     {

@@ -1976,6 +1976,27 @@ internal static class TakeoffsTreeRegressionTests
             "current sheet PDF Snap should keep raster snap-index reads off the synchronous page-open path");
     }
 
+    public static void WallTraceRasterFallbackAfterEmptyPdfPairsIsWired()
+    {
+        string wallTrace = ReadRepoFile("MainWindow.WallTrace.cs");
+        string pdfSnap = ReadRepoFile("Controls/PdfViewport.PdfSnap.cs");
+        int vectorTrace = wallTrace.IndexOf("TraceWallCenterlinesAsync(segments, polygon, options, holes)", StringComparison.Ordinal);
+        int fallbackRead = wallTrace.IndexOf("ReadWallTraceRasterImageSegmentsForCurrentPageAsync", StringComparison.Ordinal);
+
+        AssertTrue(
+            pdfSnap.Contains("public Task<(IReadOnlyList<PdfGeometrySnapSegment> Segments, string Error)>", StringComparison.Ordinal) &&
+            pdfSnap.Contains("ReadWallTraceRasterImageSegmentsForCurrentPageAsync()", StringComparison.Ordinal),
+            "viewport should expose a raster-only Wall Trace segment read for PDF-image sheets");
+        AssertTrue(
+            vectorTrace >= 0 &&
+            fallbackRead > vectorTrace &&
+            wallTrace.Contains("polylines.Count == 0", StringComparison.Ordinal) &&
+            wallTrace.Contains("PDF lines did not match; trying raster image", StringComparison.Ordinal) &&
+            wallTrace.Contains("return (polylines, \"raster-image\", rasterError, true);", StringComparison.Ordinal) &&
+            wallTrace.Contains("source = traceResult.Source;", StringComparison.Ordinal),
+            "Wall Trace should retry raster image line extraction when PDF snap returns lines that produce no wall pairs");
+    }
+
     public static void RasterSnapStrictBlackLinesOnlyIsWired()
     {
         string helper = ReadRepoFile(Path.Combine("Tools", "pdf_layers_helper.py"));
