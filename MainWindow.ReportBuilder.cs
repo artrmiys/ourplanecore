@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record SideStripCommandInfo(
     string Id,

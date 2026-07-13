@@ -6,14 +6,14 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
     // AI marker footprint, roof guide, and explicit guide construction.
 
     private static SmartMassingFootprint? AddFootprint(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingDraft draft,
         List<SmartAiMarker> corners,
         List<SmartAiMarker> heightMarkers,
@@ -76,7 +76,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static void AddRoof(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<SmartAiMarker> allMarkers,
         List<SmartAiMarker> roofMarkers)
@@ -118,7 +118,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static List<SmartMassingRoofGuide> BuildRoofGuides(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<SmartAiMarker> allMarkers,
         string roofType,
@@ -254,7 +254,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static List<SmartMassingRoofGuide> BuildExplicitRoofGuides(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingFootprint footprint,
         IReadOnlyList<SmartAiMarker> allMarkers,
         IReadOnlyList<SmartAiMarker> roofMarkers)

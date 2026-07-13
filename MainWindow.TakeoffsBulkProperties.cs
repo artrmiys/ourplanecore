@@ -8,7 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -81,7 +81,7 @@ public partial class MainWindow
         string firstNotes = items[0].Notes;
         bool sameNotes = items.All(item => string.Equals(item.Notes, firstNotes, StringComparison.Ordinal));
         var selectedTypes = items
-            .Select(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType))
+            .Select(item => OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         bool sameType = selectedTypes.Count == 1;

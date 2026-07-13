@@ -3,7 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class ThreeDWallSpec
 {
@@ -59,7 +59,7 @@ public static partial class ThreeDWallTakeoffBuilder
         @"(?<![A-Za-z])\d+(?:[\.,]\d+)?(?![A-Za-z])",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static ThreeDWallSpec ParseSpec(TakeoffItem item, OurPlaneCoreJob? job = null)
+    public static ThreeDWallSpec ParseSpec(TakeoffItem item, OurPlanCoreJob? job = null)
     {
         string sourceText = BuildSpecSourceText(item, job);
         Match size = FramingSizeRegex.Match(sourceText);
@@ -100,7 +100,7 @@ public static partial class ThreeDWallTakeoffBuilder
 
     public static ThreeDWallBuildResult BuildWalls(
         IEnumerable<TakeoffItem> items,
-        OurPlaneCoreJob? job,
+        OurPlanCoreJob? job,
         Func<Measurement, double> scaleResolver)
     {
         var result = new ThreeDWallBuildResult();
@@ -109,7 +109,7 @@ public static partial class ThreeDWallTakeoffBuilder
             ThreeDWallSpec spec = ParseSpec(item, job);
             foreach (Measurement measurement in item.Measurements)
             {
-                if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "line" ||
+                if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "line" ||
                     measurement.Points.Count < 2)
                 {
                     result.SkippedNonLineMeasurements++;
@@ -193,7 +193,7 @@ public static partial class ThreeDWallTakeoffBuilder
         return height;
     }
 
-    private static string BuildSpecSourceText(TakeoffItem item, OurPlaneCoreJob? job)
+    private static string BuildSpecSourceText(TakeoffItem item, OurPlanCoreJob? job)
     {
         var parts = new List<string> { item.Name, item.Notes };
         if (job != null && !string.IsNullOrWhiteSpace(item.FolderPath))

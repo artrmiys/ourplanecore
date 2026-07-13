@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Vertical quick-command strips on both sides of the PDF viewport.
 // Buttons execute command-palette ids; the gear button at the bottom of each

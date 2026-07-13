@@ -42,7 +42,7 @@ $KeyEventKeyUp = 0x0002
 $VirtualKeyControl = 0x11
 $VirtualKeyX = 0x58
 $VirtualKeyV = 0x56
-$SettingsPathEnvName = "OURPLANECORE_SETTINGS_PATH"
+$SettingsPathEnvName = "OURPLANCORE_SETTINGS_PATH"
 
 function Write-ItemDataXml {
     param(
@@ -185,7 +185,7 @@ function New-TakeoffFolder {
 }
 
 function New-SmokeJob {
-    $root = Join-Path $env:TEMP ("opc_takeoffs_ui_smoke_" + [guid]::NewGuid().ToString("N"))
+    $root = Join-Path $env:TEMP ("onc_takeoffs_ui_smoke_" + [guid]::NewGuid().ToString("N"))
     $job = Join-Path $root "TakeoffsSmokeJob"
     $pages = Join-Path $job "Pages"
     $takeoffs = Join-Path $job "Takeoffs"
@@ -196,7 +196,7 @@ function New-SmokeJob {
     Write-ItemDataXml -Folder (Join-Path $pages "--------others") -Class "Folder" -Name "--------others" -OrderIndex 3
     Write-ItemDataXml -Folder $takeoffs -Class "Folder" -Name "Takeoffs" -OrderIndex 4
     $sourcePdf = Join-Path $job "sources\smoke.pdf"
-    Set-Content -LiteralPath $sourcePdf -Encoding Ascii -Value "%PDF-1.4`n% OurPlaneCore smoke placeholder`n"
+    Set-Content -LiteralPath $sourcePdf -Encoding Ascii -Value "%PDF-1.4`n% OurPlanCore smoke placeholder`n"
 
     $pageFolders = New-Object System.Collections.Generic.List[string]
     for ($i = 1; $i -le $PageCount; $i++) {
@@ -246,15 +246,15 @@ function Set-SmokeSettings {
 
     $previous = [pscustomobject]@{
         SettingsPath = [Environment]::GetEnvironmentVariable($SettingsPathEnvName, "Process")
-        Smoke = [Environment]::GetEnvironmentVariable("OURPLANECORE_TAKEOFFS_MOVE_SMOKE", "Process")
-        Report = [Environment]::GetEnvironmentVariable("OURPLANECORE_TAKEOFFS_MOVE_SMOKE_REPORT", "Process")
+        Smoke = [Environment]::GetEnvironmentVariable("OURPLANCORE_TAKEOFFS_MOVE_SMOKE", "Process")
+        Report = [Environment]::GetEnvironmentVariable("OURPLANCORE_TAKEOFFS_MOVE_SMOKE_REPORT", "Process")
     }
     [Environment]::SetEnvironmentVariable($SettingsPathEnvName, $Job.SettingsPath, "Process")
     Set-Item -Path "Env:$SettingsPathEnvName" -Value $Job.SettingsPath
-    [Environment]::SetEnvironmentVariable("OURPLANECORE_TAKEOFFS_MOVE_SMOKE", "1", "Process")
-    Set-Item -Path "Env:OURPLANECORE_TAKEOFFS_MOVE_SMOKE" -Value "1"
-    [Environment]::SetEnvironmentVariable("OURPLANECORE_TAKEOFFS_MOVE_SMOKE_REPORT", $Job.ReportPath, "Process")
-    Set-Item -Path "Env:OURPLANECORE_TAKEOFFS_MOVE_SMOKE_REPORT" -Value $Job.ReportPath
+    [Environment]::SetEnvironmentVariable("OURPLANCORE_TAKEOFFS_MOVE_SMOKE", "1", "Process")
+    Set-Item -Path "Env:OURPLANCORE_TAKEOFFS_MOVE_SMOKE" -Value "1"
+    [Environment]::SetEnvironmentVariable("OURPLANCORE_TAKEOFFS_MOVE_SMOKE_REPORT", $Job.ReportPath, "Process")
+    Set-Item -Path "Env:OURPLANCORE_TAKEOFFS_MOVE_SMOKE_REPORT" -Value $Job.ReportPath
 
     $settings = [ordered]@{
         JobsRootPath = (Split-Path -Parent $Job.Job)
@@ -274,8 +274,8 @@ function Restore-SmokeSettings {
     param($PreviousState)
 
     Restore-ProcessEnvironment -Name $SettingsPathEnvName -Value $PreviousState.SettingsPath
-    Restore-ProcessEnvironment -Name "OURPLANECORE_TAKEOFFS_MOVE_SMOKE" -Value $PreviousState.Smoke
-    Restore-ProcessEnvironment -Name "OURPLANECORE_TAKEOFFS_MOVE_SMOKE_REPORT" -Value $PreviousState.Report
+    Restore-ProcessEnvironment -Name "OURPLANCORE_TAKEOFFS_MOVE_SMOKE" -Value $PreviousState.Smoke
+    Restore-ProcessEnvironment -Name "OURPLANCORE_TAKEOFFS_MOVE_SMOKE_REPORT" -Value $PreviousState.Report
 }
 
 function Restore-ProcessEnvironment {
@@ -651,7 +651,7 @@ function Write-SmokeDiagnostics {
         Write-Host "  Top-level windows matching smoke/app:" -ForegroundColor Yellow
         foreach ($candidate in $topWindows) {
             if ($candidate.Current.ProcessId -eq $Process.Id -or
-                $candidate.Current.Name -like "*ourplanecore*" -or
+                $candidate.Current.Name -like "*ourplancore*" -or
                 $candidate.Current.Name -like "*TakeoffsSmokeJob*") {
                 Write-Host "    pid=$($candidate.Current.ProcessId) name='$($candidate.Current.Name)' type=$($candidate.Current.ControlType.ProgrammaticName)" -ForegroundColor DarkYellow
             }
@@ -668,7 +668,7 @@ function Write-SmokeDiagnostics {
         }
     }
 
-    $appLogDir = Join-Path $env:APPDATA "OurPlaneCore\logs"
+    $appLogDir = Join-Path $env:APPDATA "OurPlanCore\logs"
     $appLog = Get-ChildItem -Path $appLogDir -File -Filter *.log -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
@@ -687,11 +687,11 @@ try {
     $job = New-SmokeJob
     $previousSettingsOverride = Set-SmokeSettings -Job $job
 
-    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
+    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplancore.dll"
     if (Test-Path -LiteralPath $appDll) {
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -RedirectStandardOutput $job.StdOutLog -RedirectStandardError $job.StdErrLog -PassThru
     } else {
-        $projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
+        $projectPath = Join-Path $ProjectRoot "ourplancore.csproj"
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--no-restore", "--project", $projectPath) -WorkingDirectory $ProjectRoot -RedirectStandardOutput $job.StdOutLog -RedirectStandardError $job.StdErrLog -PassThru
     }
     Wait-Until -TimeoutSeconds $TimeoutSeconds -Message "takeoffs move smoke report" -Condition {

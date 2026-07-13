@@ -4,11 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class PageBookmarkStore
 {
-    public static List<PageBookmark> LoadPageBookmarks(OurPlaneCoreJob job)
+    public static List<PageBookmark> LoadPageBookmarks(OurPlanCoreJob job)
     {
         string path = PageBookmarksJsonPath(job);
         if (!File.Exists(path))
@@ -18,14 +18,14 @@ internal static class PageBookmarkStore
         {
             var dtos = JsonSerializer.Deserialize<List<PageBookmarkDto>>(
                 File.ReadAllText(path),
-                OurPlaneCoreJobStore.JsonOptions) ?? [];
+                OurPlanCoreJobStore.JsonOptions) ?? [];
             return dtos.Select(dto => ToBookmark(job, dto))
                 .Where(bookmark => !string.IsNullOrWhiteSpace(bookmark.PageFolder))
                 .ToList();
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            OurPlaneCoreJobStore.QuarantineCorruptJson(path, "LoadPageBookmarks", ex);
+            OurPlanCoreJobStore.QuarantineCorruptJson(path, "LoadPageBookmarks", ex);
             return [];
         }
         catch (Exception ex)
@@ -35,7 +35,7 @@ internal static class PageBookmarkStore
         }
     }
 
-    public static void SavePageBookmarks(OurPlaneCoreJob job, IEnumerable<PageBookmark> bookmarks)
+    public static void SavePageBookmarks(OurPlanCoreJob job, IEnumerable<PageBookmark> bookmarks)
     {
         var dtos = bookmarks
             .Where(bookmark => !string.IsNullOrWhiteSpace(bookmark.PageFolder))
@@ -46,7 +46,7 @@ internal static class PageBookmarkStore
         {
             IoUtil.WriteAllTextAtomic(
                 PageBookmarksJsonPath(job),
-                JsonSerializer.Serialize(dtos, OurPlaneCoreJobStore.JsonOptions));
+                JsonSerializer.Serialize(dtos, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -54,15 +54,15 @@ internal static class PageBookmarkStore
         }
     }
 
-    public static string PageBookmarksJsonPath(OurPlaneCoreJob job) =>
+    public static string PageBookmarksJsonPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "bookmarks.json");
 
-    private static PageBookmark ToBookmark(OurPlaneCoreJob job, PageBookmarkDto dto)
+    private static PageBookmark ToBookmark(OurPlanCoreJob job, PageBookmarkDto dto)
     {
         string pageFolder = ResolveJobPath(job, dto.PageFolder);
         PageInfo? page = string.IsNullOrWhiteSpace(pageFolder)
             ? null
-            : OurPlaneCoreJobStore.TryReadPage(pageFolder);
+            : OurPlanCoreJobStore.TryReadPage(pageFolder);
         string pageName = string.IsNullOrWhiteSpace(dto.PageName)
             ? page?.Name ?? ""
             : dto.PageName.Trim();
@@ -87,7 +87,7 @@ internal static class PageBookmarkStore
         };
     }
 
-    private static PageBookmarkDto ToDto(OurPlaneCoreJob job, PageBookmark bookmark) =>
+    private static PageBookmarkDto ToDto(OurPlanCoreJob job, PageBookmark bookmark) =>
         new()
         {
             Id = string.IsNullOrWhiteSpace(bookmark.Id) ? Guid.NewGuid().ToString("N") : bookmark.Id.Trim(),
@@ -118,7 +118,7 @@ internal static class PageBookmarkStore
             : "view";
     }
 
-    private static string ResolveJobPath(OurPlaneCoreJob job, string path)
+    private static string ResolveJobPath(OurPlanCoreJob job, string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             return "";
@@ -139,7 +139,7 @@ internal static class PageBookmarkStore
         }
     }
 
-    private static string JobRelativePath(OurPlaneCoreJob job, string path)
+    private static string JobRelativePath(OurPlanCoreJob job, string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             return "";
@@ -147,7 +147,7 @@ internal static class PageBookmarkStore
         try
         {
             string full = Path.GetFullPath(path);
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(job.RootPath, full))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(job.RootPath, full))
                 return Path.GetRelativePath(job.RootPath, full).Replace('\\', '/');
         }
         catch

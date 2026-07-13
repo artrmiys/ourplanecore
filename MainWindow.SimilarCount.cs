@@ -7,10 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Offline "count similar symbols": box one symbol -> SimilarSymbolMatcher
 // finds every look-alike on the page raster -> the matches become ordinary
@@ -202,7 +202,7 @@ public partial class MainWindow
         bool textCandidateReviewFallbackActive = false;
         bool includeTextCandidateReviewMatchesByDefault = false;
         float currentThreshold = (float)AppSettingsStore.SimilarCountThresholdDefault;
-        OurPlaneCoreJob reviewJob = _currentJob;
+        OurPlanCoreJob reviewJob = _currentJob;
         PageInfo reviewPage = _currentPage;
         TakeoffItem? destinationItem = RequestedSimilarCountDestinationItem(request);
         bool canRenameDestination = destinationItem == null;
@@ -1442,7 +1442,7 @@ public partial class MainWindow
 
         foreach (Measurement measurement in generated)
             resolvedItem.Measurements.Add(measurement);
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(resolvedItem);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(resolvedItem);
         bool scannedSheetIsOpen = IsSamePageFolder(_currentPage?.FolderPath, request.PageFolder);
         if (scannedSheetIsOpen)
         {
@@ -1513,7 +1513,7 @@ public partial class MainWindow
     private TakeoffItem? ResolveSimilarCountDestinationItem(TakeoffItem? destinationItem)
     {
         if (destinationItem == null ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(destinationItem.MeasurementType) != "point")
+            OurPlanCoreJobStore.NormalizeMeasurementType(destinationItem.MeasurementType) != "point")
         {
             return null;
         }
@@ -1542,7 +1542,7 @@ public partial class MainWindow
     {
         foreach (Measurement measurement in item.Measurements)
         {
-            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "point" ||
+            if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "point" ||
                 measurement.Points.Count == 0 ||
                 !string.Equals(measurement.PageFolder ?? "", pageFolder ?? "", StringComparison.OrdinalIgnoreCase))
             {
@@ -1585,7 +1585,7 @@ public partial class MainWindow
     }
 
     private void QueueSimilarCountAiRequest(
-        OurPlaneCoreJob reviewJob,
+        OurPlanCoreJob reviewJob,
         PageInfo reviewPage,
         ViewportSimilarCountRequest request,
         int offlineCount,
@@ -1612,7 +1612,7 @@ public partial class MainWindow
 
         try
         {
-            PageInfo page = OurPlaneCoreJobStore.TryReadPage(request.PageFolder) ?? reviewPage;
+            PageInfo page = OurPlanCoreJobStore.TryReadPage(request.PageFolder) ?? reviewPage;
             var contextRequest = new ViewportContextRequest(
                 0,
                 0,

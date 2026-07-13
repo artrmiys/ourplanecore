@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class StorageSupport
 {

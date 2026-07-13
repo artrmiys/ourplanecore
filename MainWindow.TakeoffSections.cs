@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -91,8 +91,8 @@ public partial class MainWindow
                 true,
                 () => SplitSelectedMeasurementsToNewTakeoff(sectionAnchor: anchor)));
             bool isAreaSection =
-                OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+                OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
             IReadOnlyList<Measurement> lineSectionMeasurements = selectedNodes
                 .Select(node => node.Measurement)
                 .Where(IsPointAlongLineSource)

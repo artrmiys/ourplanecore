@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {

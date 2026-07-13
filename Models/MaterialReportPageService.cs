@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record MaterialReportPageResult(
     MaterialExtractionResult Extraction,
@@ -29,7 +29,7 @@ public static class MaterialReportPageService
     private const float SmallSize = 8.2f;
 
     public static async Task<MaterialReportPageResult> CreateReportPagesAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<PageInfo> sourcePages,
         string destinationFolder,
         CancellationToken cancellationToken = default)
@@ -48,7 +48,7 @@ public static class MaterialReportPageService
             .Select(index => index == 1 ? "Materials Report" : $"Materials Report {index.ToString(CultureInfo.InvariantCulture)}")
             .ToArray();
 
-        IReadOnlyList<PageInfo> reportPages = OurPlaneCoreJobStore.ImportPdf(
+        IReadOnlyList<PageInfo> reportPages = OurPlanCoreJobStore.ImportPdf(
             job,
             reportPdfPath,
             pageNames,

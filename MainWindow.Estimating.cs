@@ -7,9 +7,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -677,7 +677,7 @@ public partial class MainWindow
         var joistAreas = measurements
             .Where(measurement =>
                 measurement.JoistEnabled &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .ToList();
         if (joistAreas.Count == 0)
             return null;
@@ -725,7 +725,7 @@ public partial class MainWindow
         if (TryBlockTakeoffSwitchDuringRecord(item))
             return null;
 
-        item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;

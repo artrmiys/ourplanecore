@@ -56,7 +56,7 @@ function Write-ItemDataXml {
 }
 
 function New-SmokeJob {
-    $root = Join-Path $env:TEMP ("opc_ui_smoke_" + [guid]::NewGuid().ToString("N"))
+    $root = Join-Path $env:TEMP ("onc_ui_smoke_" + [guid]::NewGuid().ToString("N"))
     $job = Join-Path $root "UiSmokeJob"
     $pages = Join-Path $job "Pages"
     $takeoffs = Join-Path $job "Takeoffs"
@@ -81,7 +81,7 @@ function New-SmokeJob {
 function Set-SmokeSettings {
     param([Parameter(Mandatory)] [string]$JobPath)
 
-    $settingsDir = Join-Path $env:APPDATA "OurPlaneCore"
+    $settingsDir = Join-Path $env:APPDATA "OurPlanCore"
     $settingsPath = Join-Path $settingsDir "settings.json"
     $backupPath = "$settingsPath.ui-smoke.bak"
     New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
@@ -282,11 +282,11 @@ try {
     $job = New-SmokeJob
     $settingsState = Set-SmokeSettings -JobPath $job.Job
 
-    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
+    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplancore.dll"
     if (Test-Path -LiteralPath $appDll) {
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru
     } else {
-        $projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
+        $projectPath = Join-Path $ProjectRoot "ourplancore.csproj"
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--no-restore", "--project", $projectPath) -WorkingDirectory $ProjectRoot -PassThru
     }
     $window = Wait-WindowForProcess -ProcessId $proc.Id -Title "UiSmokeJob"

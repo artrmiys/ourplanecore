@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -143,9 +143,9 @@ public sealed partial class PdfViewport
 
     // Opt-in diagnostics for "the view is blurry but no detail render starts":
     // logs why each queue attempt was rejected. Env-gated so production runs
-    // pay nothing; enable with OPC_DETAIL_DIAG=1.
+    // pay nothing; enable with ONC_DETAIL_DIAG=1.
     private static readonly bool DetailRenderDiagEnabled =
-        Environment.GetEnvironmentVariable("OPC_DETAIL_DIAG") == "1";
+        Environment.GetEnvironmentVariable("ONC_DETAIL_DIAG") == "1";
 
     private void DetailRenderDiag(string reason)
     {

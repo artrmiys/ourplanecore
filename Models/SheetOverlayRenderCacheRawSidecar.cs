@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SheetOverlayRenderCache
 {

@@ -10,7 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -57,7 +57,7 @@ public partial class MainWindow
                 if (string.Equals(page.Name, names[i], StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                string renamed = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(page.FolderPath, names[i]);
+                string renamed = OurPlanCoreJobStore.RenamePageAllowDuplicateName(page.FolderPath, names[i]);
                 reloadActiveTab = UpdatePageReferencesForMovedPath(page.FolderPath, renamed) || reloadActiveTab;
                 selectAfter ??= renamed;
             }
@@ -156,7 +156,7 @@ public partial class MainWindow
             string output = PageToolOutputPdfPath(_currentPage, "crop");
             PageImageOperationService.RenderOperationToPdf(_currentPage, PageImageOperation.Crop, output, crop);
             string parent = Path.GetDirectoryName(_currentPage.FolderPath) ?? _currentJob.PagesRoot;
-            PageInfo created = OurPlaneCoreJobStore.CreatePageFromPdf(
+            PageInfo created = OurPlanCoreJobStore.CreatePageFromPdf(
                 _currentJob,
                 output,
                 $"{_currentPage.Name} Crop",
@@ -183,7 +183,7 @@ public partial class MainWindow
 
         try
         {
-            string pngPath = Path.Combine(Path.GetTempPath(), $"ourplanecore-page-{Guid.NewGuid():N}.png");
+            string pngPath = Path.Combine(Path.GetTempPath(), $"ourplancore-page-{Guid.NewGuid():N}.png");
             PageImageOperationService.RenderPageToPng(_currentPage, pngPath);
             var files = new StringCollection { pngPath };
             var data = new DataObject();
@@ -291,12 +291,12 @@ public partial class MainWindow
                 PageImageOperationResult result = PageImageOperationService.RenderOperationToPdf(page, operation, output);
                 if (operation != PageImageOperation.Invert)
                     TransformPageOverlays(page.FolderPath, operation, result.OriginalWidthPt, result.OriginalHeightPt);
-                OurPlaneCoreJobStore.ReplacePagePdf(page.FolderPath, output);
+                OurPlanCoreJobStore.ReplacePagePdf(page.FolderPath, output);
             }
 
             if (!string.IsNullOrWhiteSpace(activeFolder) &&
                 pages.Any(page => IsSamePageFolder(page.FolderPath, activeFolder)) &&
-                OurPlaneCoreJobStore.TryReadPage(activeFolder) is { } updated)
+                OurPlanCoreJobStore.TryReadPage(activeFolder) is { } updated)
             {
                 ReloadActivePageAfterPdfReplacement(updated);
             }
@@ -333,8 +333,8 @@ public partial class MainWindow
                     result.OriginalWidthPt,
                     result.OriginalHeightPt,
                     degrees));
-            OurPlaneCoreJobStore.ReplacePagePdf(page.FolderPath, output);
-            if (OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is { } updated)
+            OurPlanCoreJobStore.ReplacePagePdf(page.FolderPath, output);
+            if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } updated)
                 ReloadActivePageAfterPdfReplacement(updated);
             RefreshPagesTakeoffIndicators();
             RefreshAllTotals();
@@ -363,9 +363,9 @@ public partial class MainWindow
         string root = _currentJob?.RootPath ?? Path.GetDirectoryName(page.FolderPath) ?? ".";
         string folder = Path.Combine(root, "sources", "page_tools");
         Directory.CreateDirectory(folder);
-        string safeName = OurPlaneCoreJobStore.SanitizeName(page.Name, 80);
+        string safeName = OurPlanCoreJobStore.SanitizeName(page.Name, 80);
         string fileName = $"{safeName}_{operation}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
-        return OurPlaneCoreJobStore.UniqueFilePath(Path.Combine(folder, fileName));
+        return OurPlanCoreJobStore.UniqueFilePath(Path.Combine(folder, fileName));
     }
 
     private static string OperationSlug(PageImageOperation operation) =>
@@ -397,10 +397,10 @@ public partial class MainWindow
 
         List<PageAnnotation> annotations = IsSamePageFolder(_currentPage?.FolderPath ?? "", pageFolder)
             ? _viewport.GetPageAnnotations().ToList()
-            : OurPlaneCoreJobStore.LoadPageAnnotations(pageFolder);
+            : OurPlanCoreJobStore.LoadPageAnnotations(pageFolder);
         foreach (PageAnnotation annotation in annotations)
             TransformPointList(annotation.Points, transform);
-        OurPlaneCoreJobStore.SavePageAnnotations(pageFolder, annotations);
+        OurPlanCoreJobStore.SavePageAnnotations(pageFolder, annotations);
         TransformPageOrigin(pageFolder, transform);
     }
 
@@ -451,7 +451,7 @@ public partial class MainWindow
     {
         IoUtil.WriteAllTextAtomic(
             PageOriginPath(pageFolder),
-            JsonSerializer.Serialize(origin, OurPlaneCoreJobStore.JsonOptions));
+            JsonSerializer.Serialize(origin, OurPlanCoreJobStore.JsonOptions));
     }
 
     private static PageOriginMarker? LoadPageOrigin(string pageFolder)
@@ -460,6 +460,6 @@ public partial class MainWindow
         if (!File.Exists(path))
             return null;
 
-        return JsonSerializer.Deserialize<PageOriginMarker>(File.ReadAllText(path), OurPlaneCoreJobStore.JsonOptions);
+        return JsonSerializer.Deserialize<PageOriginMarker>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
     }
 }

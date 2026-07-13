@@ -5,9 +5,9 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -266,7 +266,7 @@ public partial class MainWindow
         sb.AppendLine($"Selected layer highlighted: {selectedLayer.IsHighlighted}");
         if (_currentJob != null && _currentPage != null)
         {
-            string manifestPath = OurPlaneCoreJobStore.PageLayersJsonPath(_currentPage.FolderPath);
+            string manifestPath = OurPlanCoreJobStore.PageLayersJsonPath(_currentPage.FolderPath);
             if (File.Exists(manifestPath))
                 sb.AppendLine($"Layer manifest: {Path.GetRelativePath(_currentJob.RootPath, manifestPath)}");
         }
@@ -305,7 +305,7 @@ public partial class MainWindow
         if (_currentPage == null)
             return [];
 
-        PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(_currentPage.FolderPath);
+        PageLayerManifest? manifest = OurPlanCoreJobStore.ReadPageLayerManifest(_currentPage.FolderPath);
         if (manifest?.Layers.Count > 0)
             return manifest.Layers;
 
@@ -319,7 +319,7 @@ public partial class MainWindow
 
         try
         {
-            OurPlaneCoreJobStore.SavePageLayerCache(_currentPage.FolderPath, layers);
+            OurPlanCoreJobStore.SavePageLayerCache(_currentPage.FolderPath, layers);
             if (layers.Count > 0)
                 TxtStatus.Text = $"Cached {layers.Count} visible PDF layer(s) and wrote layers.json for this page.";
         }

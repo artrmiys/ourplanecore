@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -70,8 +70,8 @@ public partial class MainWindow
             _currentPage.HiddenMeasurements = hiddenMeasurements.ToList();
         }
         ApplyViewportPageTakeoffVisibility(page);
-        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, hidden);
-        OurPlaneCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, hiddenMeasurements);
+        OurPlanCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, hidden);
+        OurPlanCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, hiddenMeasurements);
         RefreshPageOverlayTreeNode(page);
         RefreshSheetLegend();
         TxtStatus.Text = nowHidden
@@ -121,7 +121,7 @@ public partial class MainWindow
         if (_currentJob != null && Path.IsPathFullyQualified(clean))
         {
             string full = NormalizePath(clean);
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, full))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, full))
                 clean = Path.GetRelativePath(_currentJob.TakeoffsRoot, full);
         }
 
@@ -143,7 +143,7 @@ public partial class MainWindow
             _currentPage.LegendTakeoffOrder = order.ToList();
             _currentPage.LegendTakeoffOrderMode = "manual";
         }
-        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order, "manual");
+        OurPlanCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, order, "manual");
     }
 
     private void SavePageTakeoffLayerOrder(PageInfo page, IReadOnlyList<TakeoffItem> orderedTakeoffs)
@@ -215,7 +215,7 @@ public partial class MainWindow
                 if (changed)
                 {
                     page.LegendTakeoffOrder = updated;
-                    OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated, page.LegendTakeoffOrderMode);
+                    OurPlanCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, updated, page.LegendTakeoffOrderMode);
                     if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, page.FolderPath))
                     {
                         _currentPage.LegendTakeoffOrder = updated.ToList();

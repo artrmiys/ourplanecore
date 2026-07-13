@@ -11,11 +11,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -148,7 +148,7 @@ public partial class MainWindow
             return false;
         }
 
-        OurPlaneCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
+        OurPlanCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
         result = new PdfMetadataPageResult(page, true, metadata, "");
         return true;
     }
@@ -164,7 +164,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(request.PageFolder)
                 ? request.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, request.PageFolder));
-            page = OurPlaneCoreJobStore.TryReadPage(folder);
+            page = OurPlanCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return true;
         }

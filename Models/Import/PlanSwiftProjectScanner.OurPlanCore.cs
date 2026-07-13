@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectScanner
 {
-    private static bool TryScanExistingOurPlaneCoreJob(
+    private static bool TryScanExistingOurPlanCoreJob(
         string sourceJobPath,
         out PlanSwiftProjectManifest manifest)
     {
@@ -17,23 +17,23 @@ public static partial class PlanSwiftProjectScanner
         if (!File.Exists(Path.Combine(sourceJobPath, "Data.xml")) ||
             !Directory.Exists(pagesRoot) ||
             !Directory.Exists(takeoffsRoot) ||
-            !HasOurPlaneCoreSignals(pagesRoot, takeoffsRoot))
+            !HasOurPlanCoreSignals(pagesRoot, takeoffsRoot))
         {
             return false;
         }
 
         var warnings = new List<string>();
-        IReadOnlyList<PlanSwiftPageRecord> pages = ScanOurPlaneCorePages(pagesRoot, warnings);
-        IReadOnlyList<PlanSwiftFolderRecord> folders = ScanOurPlaneCoreFolders(takeoffsRoot);
-        IReadOnlyList<PlanSwiftTakeoffItemRecord> items = ScanOurPlaneCoreItems(sourceJobPath, takeoffsRoot, warnings);
+        IReadOnlyList<PlanSwiftPageRecord> pages = ScanOurPlanCorePages(pagesRoot, warnings);
+        IReadOnlyList<PlanSwiftFolderRecord> folders = ScanOurPlanCoreFolders(takeoffsRoot);
+        IReadOnlyList<PlanSwiftTakeoffItemRecord> items = ScanOurPlanCoreItems(sourceJobPath, takeoffsRoot, warnings);
 
         manifest = new PlanSwiftProjectManifest
         {
             SourceJobPath = Path.GetFullPath(sourceJobPath),
-            SourceFormat = PlanSwiftSourceFormats.OurPlaneCore,
-            JobName = OurPlaneCoreJobStore.ReadName(sourceJobPath) ??
+            SourceFormat = PlanSwiftSourceFormats.OurPlanCore,
+            JobName = OurPlanCoreJobStore.ReadName(sourceJobPath) ??
                 Path.GetFileName(sourceJobPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-            TakeoffClassCounts = BuildOurPlaneCoreClassCounts(folders, items),
+            TakeoffClassCounts = BuildOurPlanCoreClassCounts(folders, items),
             Pages = pages,
             TakeoffFolders = folders,
             TakeoffItems = items,
@@ -42,17 +42,17 @@ public static partial class PlanSwiftProjectScanner
         return true;
     }
 
-    private static bool HasOurPlaneCoreSignals(string pagesRoot, string takeoffsRoot) =>
+    private static bool HasOurPlanCoreSignals(string pagesRoot, string takeoffsRoot) =>
         Directory.EnumerateFiles(pagesRoot, "source.json", SearchOption.AllDirectories).Any() ||
         Directory.EnumerateFiles(takeoffsRoot, "measurements.json", SearchOption.AllDirectories).Any() ||
         Directory.EnumerateFiles(takeoffsRoot, "Data.xml", SearchOption.AllDirectories)
             .Any(path =>
             {
                 string folder = Path.GetDirectoryName(path) ?? takeoffsRoot;
-                return OurPlaneCoreJobStore.IsTakeoffItemFolder(folder);
+                return OurPlanCoreJobStore.IsTakeoffItemFolder(folder);
             });
 
-    private static IReadOnlyList<PlanSwiftPageRecord> ScanOurPlaneCorePages(
+    private static IReadOnlyList<PlanSwiftPageRecord> ScanOurPlanCorePages(
         string pagesRoot,
         List<string> warnings)
     {
@@ -66,12 +66,12 @@ public static partial class PlanSwiftProjectScanner
                 continue;
             }
 
-            SourceInfo? source = OurPlaneCoreJobStore.ReadSource(folder);
+            SourceInfo? source = OurPlanCoreJobStore.ReadSource(folder);
             string pdfPath = source == null ? "" : Path.GetFullPath(Path.Combine(folder, source.Pdf));
             if (source == null)
-                warnings.Add($"OurPlaneCore page '{item.Name}' has no source.json: {folder}");
+                warnings.Add($"OurPlanCore page '{item.Name}' has no source.json: {folder}");
             else if (!File.Exists(pdfPath))
-                warnings.Add($"OurPlaneCore page '{item.Name}' source PDF is missing: {pdfPath}");
+                warnings.Add($"OurPlanCore page '{item.Name}' source PDF is missing: {pdfPath}");
 
             pages.Add(new PlanSwiftPageRecord(
                 folder,
@@ -93,13 +93,13 @@ public static partial class PlanSwiftProjectScanner
             .ToList();
     }
 
-    private static IReadOnlyList<PlanSwiftFolderRecord> ScanOurPlaneCoreFolders(string takeoffsRoot)
+    private static IReadOnlyList<PlanSwiftFolderRecord> ScanOurPlanCoreFolders(string takeoffsRoot)
     {
         var folders = new List<PlanSwiftFolderRecord>();
         foreach (string dataPath in Directory.EnumerateFiles(takeoffsRoot, "Data.xml", SearchOption.AllDirectories))
         {
             string folder = Path.GetDirectoryName(dataPath) ?? takeoffsRoot;
-            if (SamePath(folder, takeoffsRoot) || OurPlaneCoreJobStore.IsTakeoffItemFolder(folder))
+            if (SamePath(folder, takeoffsRoot) || OurPlanCoreJobStore.IsTakeoffItemFolder(folder))
                 continue;
             if (!PlanSwiftXml.TryReadItem(folder, out PlanSwiftDataItem item))
                 continue;
@@ -119,7 +119,7 @@ public static partial class PlanSwiftProjectScanner
             .ToList();
     }
 
-    private static IReadOnlyList<PlanSwiftTakeoffItemRecord> ScanOurPlaneCoreItems(
+    private static IReadOnlyList<PlanSwiftTakeoffItemRecord> ScanOurPlanCoreItems(
         string sourceJobPath,
         string takeoffsRoot,
         List<string> warnings)
@@ -127,22 +127,22 @@ public static partial class PlanSwiftProjectScanner
         var items = new List<PlanSwiftTakeoffItemRecord>();
         foreach (string folder in Directory.EnumerateDirectories(takeoffsRoot, "*", SearchOption.AllDirectories))
         {
-            TakeoffItem? item = OurPlaneCoreJobStore.TryReadTakeoffItem(folder);
+            TakeoffItem? item = OurPlanCoreJobStore.TryReadTakeoffItem(folder);
             if (item == null)
                 continue;
 
             IReadOnlyList<PlanSwiftSectionRecord> sections =
-                BuildOurPlaneCoreSections(sourceJobPath, item, warnings);
+                BuildOurPlanCoreSections(sourceJobPath, item, warnings);
             items.Add(new PlanSwiftTakeoffItemRecord
             {
                 SourceFolder = folder,
                 RelativeFolder = RelativePathFromRoot(takeoffsRoot, folder),
                 ParentRelativeFolder = ParentRelativePathFromRoot(takeoffsRoot, folder),
                 Name = item.Name,
-                ClassName = $"OurPlaneCore {item.MeasurementType}",
+                ClassName = $"OurPlanCore {item.MeasurementType}",
                 MeasurementType = item.MeasurementType,
                 ColorHex = item.Color,
-                OrderIndex = PlanSwiftXml.ParseInt(OurPlaneCoreJobStore.ReadProperty(folder, "OrderIndex") ?? ""),
+                OrderIndex = PlanSwiftXml.ParseInt(OurPlanCoreJobStore.ReadProperty(folder, "OrderIndex") ?? ""),
                 Sections = sections,
             });
         }
@@ -154,7 +154,7 @@ public static partial class PlanSwiftProjectScanner
             .ToList();
     }
 
-    private static IReadOnlyList<PlanSwiftSectionRecord> BuildOurPlaneCoreSections(
+    private static IReadOnlyList<PlanSwiftSectionRecord> BuildOurPlanCoreSections(
         string sourceJobPath,
         TakeoffItem item,
         List<string> warnings)
@@ -163,7 +163,7 @@ public static partial class PlanSwiftProjectScanner
         for (int i = 0; i < item.Measurements.Count; i++)
         {
             Measurement measurement = item.Measurements[i];
-            string pageGuid = TryReadOurPlaneCorePageGuid(measurement.PageFolder);
+            string pageGuid = TryReadOurPlanCorePageGuid(measurement.PageFolder);
             if (string.IsNullOrWhiteSpace(pageGuid))
             {
                 warnings.Add($"Takeoff '{item.Name}' measurement {i + 1} is not linked to a readable source page.");
@@ -180,7 +180,7 @@ public static partial class PlanSwiftProjectScanner
                 string.IsNullOrWhiteSpace(measurement.Name) ? $"{item.Name} {i + 1}" : measurement.Name,
                 string.IsNullOrWhiteSpace(measurement.Id) ? Guid.NewGuid().ToString("N") : measurement.Id,
                 pageGuid,
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType),
                 true,
                 measurement.Points.Select(point => new PlanSwiftPoint(point.X, point.Y)).ToList(),
                 measurement.Holes
@@ -195,7 +195,7 @@ public static partial class PlanSwiftProjectScanner
         return sections;
     }
 
-    private static string TryReadOurPlaneCorePageGuid(string pageFolder)
+    private static string TryReadOurPlanCorePageGuid(string pageFolder)
     {
         if (string.IsNullOrWhiteSpace(pageFolder) || !Directory.Exists(pageFolder))
             return "";
@@ -205,16 +205,16 @@ public static partial class PlanSwiftProjectScanner
             : "";
     }
 
-    private static IReadOnlyList<PlanSwiftClassCount> BuildOurPlaneCoreClassCounts(
+    private static IReadOnlyList<PlanSwiftClassCount> BuildOurPlanCoreClassCounts(
         IReadOnlyList<PlanSwiftFolderRecord> folders,
         IReadOnlyList<PlanSwiftTakeoffItemRecord> items)
     {
         int measurements = items.Sum(item => item.Sections.Count);
         var counts = new List<PlanSwiftClassCount>
         {
-            new("OurPlaneCore takeoff folder", folders.Count),
-            new("OurPlaneCore takeoff item", items.Count),
-            new("OurPlaneCore measurement", measurements),
+            new("OurPlanCore takeoff folder", folders.Count),
+            new("OurPlanCore takeoff item", items.Count),
+            new("OurPlanCore measurement", measurements),
         };
         return counts.Where(count => count.Count > 0).ToList();
     }

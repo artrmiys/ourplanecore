@@ -7,10 +7,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -50,12 +50,12 @@ public partial class MainWindow
         }
 
         ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
-        OurPlaneCoreJobStore.SavePageOverlay(
+        OurPlanCoreJobStore.SavePageOverlay(
             _currentPage.FolderPath,
             overlayPage.FolderPath,
             CurrentSheetOverlayColor(),
             CurrentSheetOverlayOpacity());
-        OurPlaneCoreJobStore.SavePageOverlayVisibility(_currentPage.FolderPath, true);
+        OurPlanCoreJobStore.SavePageOverlayVisibility(_currentPage.FolderPath, true);
         ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
 
         ReloadCurrentSheetOverlay($"Overlay set: {overlayPage.Name}");
@@ -70,8 +70,8 @@ public partial class MainWindow
             return;
 
         ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(_currentPage));
-        OurPlaneCoreJobStore.ClearPageOverlay(_currentPage.FolderPath);
-        if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
+        OurPlanCoreJobStore.ClearPageOverlay(_currentPage.FolderPath);
+        if (OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
             _currentPage = updated;
         _viewport.ClearSheetOverlay();
         RefreshPageOverlayTreeNode(_currentPage);
@@ -86,7 +86,7 @@ public partial class MainWindow
             return;
         }
 
-        OurPlaneCoreJobStore.SavePageOverlay(
+        OurPlanCoreJobStore.SavePageOverlay(
             _currentPage.FolderPath,
             _currentPage.OverlayPageFolder,
             color,
@@ -101,7 +101,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
             return;
 
-        OurPlaneCoreJobStore.SavePageOverlay(
+        OurPlanCoreJobStore.SavePageOverlay(
             page.FolderPath,
             page.OverlayPageFolder,
             color,
@@ -171,7 +171,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
             return;
 
-        OurPlaneCoreJobStore.SavePageOverlayTransform(
+        OurPlanCoreJobStore.SavePageOverlayTransform(
             latest.FolderPath,
             offsetXPt,
             offsetYPt,
@@ -182,7 +182,7 @@ public partial class MainWindow
     }
 
     private static PageInfo ReadLatestSheetOverlayPage(PageInfo page) =>
-        OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
 
     private void BeginSheetOverlayPointEdit(PageInfo page)
     {
@@ -247,14 +247,14 @@ public partial class MainWindow
         if (_currentPage == null || string.IsNullOrWhiteSpace(_currentPage.OverlayPageFolder))
             return;
 
-        OurPlaneCoreJobStore.SavePageOverlayTransform(
+        OurPlanCoreJobStore.SavePageOverlayTransform(
             _currentPage.FolderPath,
             change.OffsetXPt,
             change.OffsetYPt,
             change.OverlayScale,
             change.OverlayRotationDegrees);
 
-        if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
+        if (OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
         {
             _currentPage = updated;
             ClearReciprocalSheetOverlay(updated);
@@ -267,15 +267,15 @@ public partial class MainWindow
     private void ClearPageOverlay(PageInfo page)
     {
         ClearReciprocalSheetOverlay(ReadLatestSheetOverlayPage(page));
-        OurPlaneCoreJobStore.ClearPageOverlay(page.FolderPath);
+        OurPlanCoreJobStore.ClearPageOverlay(page.FolderPath);
         if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
         {
-            if (OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is { } updated)
+            if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } updated)
                 _currentPage = updated;
             _viewport.ClearSheetOverlay();
         }
 
-        if (OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is { } refreshed)
+        if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is { } refreshed)
             RefreshPageOverlayTreeNode(refreshed);
         else
             RefreshPagesTakeoffIndicators();
@@ -287,13 +287,13 @@ public partial class MainWindow
         if (!SheetOverlayReciprocalService.TryClear(page, out string reciprocalPageFolder))
             return;
 
-        if (OurPlaneCoreJobStore.TryReadPage(reciprocalPageFolder) is { } reciprocalPage)
+        if (OurPlanCoreJobStore.TryReadPage(reciprocalPageFolder) is { } reciprocalPage)
             RefreshPageOverlayTreeNode(reciprocalPage);
     }
 
     private void RefreshPageOverlayState(string pageFolder, string status)
     {
-        PageInfo? updated = OurPlaneCoreJobStore.TryReadPage(pageFolder);
+        PageInfo? updated = OurPlanCoreJobStore.TryReadPage(pageFolder);
         if (updated == null)
             return;
 
@@ -316,7 +316,7 @@ public partial class MainWindow
             return;
         }
 
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(latest.OverlayPageFolder);
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(latest.OverlayPageFolder);
         if (overlayPage == null)
         {
             TxtStatus.Text = "Overlay sheet source is missing.";
@@ -374,7 +374,7 @@ public partial class MainWindow
         if (_currentPage == null)
             return;
 
-        if (OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
+        if (OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is { } updated)
             _currentPage = updated;
 
         LoadSheetOverlay(_currentPage);
@@ -500,7 +500,7 @@ public partial class MainWindow
             return;
         }
 
-        PageInfo? latest = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        PageInfo? latest = OurPlanCoreJobStore.TryReadPage(page.FolderPath);
         if (latest == null ||
             string.IsNullOrWhiteSpace(latest.OverlayPageFolder) ||
             !latest.OverlayVisible)
@@ -540,7 +540,7 @@ public partial class MainWindow
         string overlayName,
         float renderScale)
     {
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder);
         _viewport.SetSheetOverlay(
             bitmap,
             widthPt,
@@ -610,7 +610,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
             return (0, 0);
 
-        PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.OverlayPageFolder);
+        PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.OverlayPageFolder);
         if (metadata is not { WidthPt: > 0, HeightPt: > 0 })
             return (0, 0);
 
@@ -691,7 +691,7 @@ public partial class MainWindow
             return false;
         }
 
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder);
         if (overlayPage == null)
         {
             error = "overlay sheet source is missing.";
@@ -925,8 +925,8 @@ public partial class MainWindow
     private void TogglePageOverlayVisibility(PageInfo page)
     {
         bool visible = !page.OverlayVisible;
-        OurPlaneCoreJobStore.SavePageOverlayVisibility(page.FolderPath, visible);
-        PageInfo updated = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        OurPlanCoreJobStore.SavePageOverlayVisibility(page.FolderPath, visible);
+        PageInfo updated = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
         if (_currentPage != null && SameFolder(_currentPage.FolderPath, page.FolderPath))
         {
             _currentPage = updated;

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -88,7 +88,7 @@ public partial class MainWindow
         {
             if (entry.IsPage)
             {
-                if (OurPlaneCoreJobStore.TryReadPage(entry.SourcePath) is { } selectedPage)
+                if (OurPlanCoreJobStore.TryReadPage(entry.SourcePath) is { } selectedPage)
                     pages.Add(selectedPage);
             }
             else

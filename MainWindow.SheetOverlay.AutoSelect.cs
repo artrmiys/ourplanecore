@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -18,14 +18,14 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.SheetOverlay, "Auto Fit Sheet Overlay"))
             return;
 
-        PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        PageInfo? targetPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath);
         if (targetPage == null)
         {
             TxtStatus.Text = "Overlay auto select: sheet source is missing.";
             return;
         }
 
-        OurPlaneCoreJob? job = _currentJob;
+        OurPlanCoreJob? job = _currentJob;
         if (job == null)
         {
             TxtStatus.Text = "Overlay auto select: open a job before searching sheets.";
@@ -65,14 +65,14 @@ public partial class MainWindow
         if (!RequireModule(ModuleId.SheetOverlay, "Choose Sheet Overlay"))
             return;
 
-        PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        PageInfo? targetPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath);
         if (targetPage == null)
         {
             TxtStatus.Text = "Overlay candidate chooser: sheet source is missing.";
             return;
         }
 
-        OurPlaneCoreJob? job = _currentJob;
+        OurPlanCoreJob? job = _currentJob;
         if (job == null)
         {
             TxtStatus.Text = "Overlay candidate chooser: open a job before searching sheets.";
@@ -135,7 +135,7 @@ public partial class MainWindow
         if (action == SheetOverlayCandidateAction.UseSelected || selectedSearch.OverlayPage == null)
             return;
 
-        PageInfo latestTarget = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath) ?? targetPage;
+        PageInfo latestTarget = OurPlanCoreJobStore.TryReadPage(targetPage.FolderPath) ?? targetPage;
         if (!SameFolder(latestTarget.OverlayPageFolder, selectedSearch.OverlayPage.FolderPath))
             return;
 
@@ -187,7 +187,7 @@ public partial class MainWindow
             return;
         }
 
-        PageInfo? latestTarget = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath);
+        PageInfo? latestTarget = OurPlanCoreJobStore.TryReadPage(targetPage.FolderPath);
         if (latestTarget == null)
         {
             TxtStatus.Text = "Overlay auto fit skipped: target sheet changed while searching.";
@@ -209,14 +209,14 @@ public partial class MainWindow
             ClearReciprocalSheetOverlay(latestTarget);
         }
 
-        OurPlaneCoreJobStore.SavePageOverlay(
+        OurPlanCoreJobStore.SavePageOverlay(
             latestTarget.FolderPath,
             search.OverlayPage.FolderPath,
             SheetOverlaySaveColor(latestTarget),
             SheetOverlaySaveOpacity(latestTarget));
-        OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true);
+        OurPlanCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true);
 
-        PageInfo selectedTarget = OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) ?? latestTarget;
+        PageInfo selectedTarget = OurPlanCoreJobStore.TryReadPage(latestTarget.FolderPath) ?? latestTarget;
         ClearReciprocalSheetOverlay(selectedTarget);
         string alternatives = BuildSheetOverlayAutoSelectAlternativesSummary(search.TopMatches);
         AppLog.Info(
@@ -233,7 +233,7 @@ public partial class MainWindow
     }
 
     private static SheetOverlayAutoFitCandidateSearch FindSheetOverlayAutoFitCandidate(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo targetPage,
         string nextAfterOverlayFolder = "",
         bool includeReviewCandidates = false)
@@ -364,7 +364,7 @@ public partial class MainWindow
     }
 
     private static IEnumerable<SheetOverlayAutoFitCandidatePage> BuildSheetOverlayAutoFitCandidatePages(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo targetPage)
     {
         List<PageInfo> pages = CollectSheetOverlayAutoFitPages(job.PagesRoot).ToList();
@@ -385,13 +385,13 @@ public partial class MainWindow
         if (!Directory.Exists(folder))
             yield break;
 
-        if (OurPlaneCoreJobStore.TryReadPage(folder) is { } page)
+        if (OurPlanCoreJobStore.TryReadPage(folder) is { } page)
         {
             yield return page;
             yield break;
         }
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
             foreach (PageInfo childPage in CollectSheetOverlayAutoFitPages(child))
                 yield return childPage;

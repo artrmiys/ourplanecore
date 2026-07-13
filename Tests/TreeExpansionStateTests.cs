@@ -1,11 +1,11 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class TreeExpansionStateTests
 {
     public static void StartsCollapsedAndTracksUserOpenedPaths()
     {
         var state = new TreeExpansionState();
-        string folder = Path.Combine(Path.GetTempPath(), "opc_tree_state", "A");
+        string folder = Path.Combine(Path.GetTempPath(), "onc_tree_state", "A");
 
         AssertEqual("0", state.Count.ToString(), "new tree should start collapsed");
         AssertTrue(state.Add(folder), "first expand should add path");
@@ -19,8 +19,8 @@ internal static class TreeExpansionStateTests
 
     public static void RestoresSnapshotAcrossReload()
     {
-        string first = Path.Combine(Path.GetTempPath(), "opc_tree_state", "Reload", "A");
-        string second = Path.Combine(Path.GetTempPath(), "opc_tree_state", "Reload", "B");
+        string first = Path.Combine(Path.GetTempPath(), "onc_tree_state", "Reload", "A");
+        string second = Path.Combine(Path.GetTempPath(), "onc_tree_state", "Reload", "B");
         var state = new TreeExpansionState();
         state.Add(first);
         state.Add(second);
@@ -35,10 +35,10 @@ internal static class TreeExpansionStateTests
 
     public static void RebasesMovedDescendants()
     {
-        string oldRoot = Path.Combine(Path.GetTempPath(), "opc_tree_state", "Old");
+        string oldRoot = Path.Combine(Path.GetTempPath(), "onc_tree_state", "Old");
         string oldChild = Path.Combine(oldRoot, "Child");
-        string untouched = Path.Combine(Path.GetTempPath(), "opc_tree_state", "Other");
-        string newRoot = Path.Combine(Path.GetTempPath(), "opc_tree_state", "New");
+        string untouched = Path.Combine(Path.GetTempPath(), "onc_tree_state", "Other");
+        string newRoot = Path.Combine(Path.GetTempPath(), "onc_tree_state", "New");
         string newChild = Path.Combine(newRoot, "Child");
         var state = new TreeExpansionState();
         state.Add(oldRoot);

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record MeasurementMoveResult(
     TakeoffItem TargetItem,
@@ -36,7 +36,7 @@ public static class MeasurementMergeSplitService
         if (selected.Count == 0)
             throw new InvalidOperationException("Select one or more measurement segments first.");
 
-        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         if (string.IsNullOrWhiteSpace(targetType))
             throw new InvalidOperationException("Target takeoff type is not valid.");
 
@@ -44,7 +44,7 @@ public static class MeasurementMergeSplitService
         var sourceItems = new List<TakeoffItem>();
         foreach (Measurement measurement in selected)
         {
-            string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
+            string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType);
             if (measurementType != targetType)
             {
                 throw new InvalidOperationException(
@@ -84,7 +84,7 @@ public static class MeasurementMergeSplitService
             throw new InvalidOperationException("Selected measurement segments already belong to the target takeoff.");
 
         foreach (TakeoffItem item in changed)
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
 
         MeasurementCoalesceResult coalesce = targetType switch
         {
@@ -219,8 +219,8 @@ public static class MeasurementMergeSplitService
         out List<SKPoint> mergedPoints)
     {
         mergedPoints = [];
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(first.MType) != "line" ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(second.MType) != "line" ||
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(first.MType) != "line" ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(second.MType) != "line" ||
             !SamePage(first.PageFolder, second.PageFolder) ||
             !CompatibleScales(first.ScaleMetersPerPt, second.ScaleMetersPerPt) ||
             !TryBuildLineSpan(first, out LineSpan firstSpan) ||

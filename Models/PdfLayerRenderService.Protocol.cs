@@ -8,10 +8,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PdfLayerRenderService
 {

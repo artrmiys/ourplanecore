@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 /// <summary>
 /// Shared coordinate model for the A101 sample floor plan. Both the PDF drawing

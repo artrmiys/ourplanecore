@@ -1,7 +1,7 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -10,7 +10,7 @@ public sealed partial class PdfViewport
         if (!TryHitAnnotation(pdf, out PageAnnotation annotation))
             return false;
 
-        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         if (!string.Equals(kind, "note", StringComparison.OrdinalIgnoreCase))
             return false;
 

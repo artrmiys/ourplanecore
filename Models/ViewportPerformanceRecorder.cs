@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class ViewportPerformanceRecorder
 {

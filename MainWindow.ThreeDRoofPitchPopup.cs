@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {

@@ -1,14 +1,14 @@
 using System;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class TakeoffCreationPolicy
 {
-    public static string NewItemParentFolder(OurPlaneCoreJob? job) =>
+    public static string NewItemParentFolder(OurPlanCoreJob? job) =>
         job?.TakeoffsRoot ?? "";
 
     public static string NewFolderParentFolder(
-        OurPlaneCoreJob? job,
+        OurPlanCoreJob? job,
         string? selectedFolder,
         string? selectedItemParentFolder,
         string? activeParentFolder,

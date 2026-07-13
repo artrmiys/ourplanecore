@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Editable folder templates that drive the three auto-create features:
 //  • PageFolders  -> "Auto Page Folders" (Pages tree, flat list per mode)
@@ -57,13 +57,13 @@ public static class SettingsPresetStore
     private static string GlobalPath() =>
         Path.Combine(SmartContextStore.GlobalRoot, "presets", "folder_template.json");
 
-    private static string JobPath(OurPlaneCoreJob job) =>
+    private static string JobPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "folder_template.json");
 
     private static string GlobalPageSortPath() =>
         Path.Combine(SmartContextStore.GlobalRoot, "presets", "page_sort.json");
 
-    private static string JobPageSortPath(OurPlaneCoreJob job) =>
+    private static string JobPageSortPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "page_sort.json");
 
     private static T? LoadJson<T>(string path) where T : class
@@ -90,13 +90,13 @@ public static class SettingsPresetStore
     public static FolderTemplateConfig? LoadGlobal() => LoadJson<FolderTemplateConfig>(GlobalPath());
     public static void SaveGlobal(FolderTemplateConfig c) => SaveJson(GlobalPath(), c);
 
-    public static FolderTemplateConfig? LoadJobOverride(OurPlaneCoreJob job) =>
+    public static FolderTemplateConfig? LoadJobOverride(OurPlanCoreJob job) =>
         LoadJson<FolderTemplateConfig>(JobPath(job));
 
-    public static void SaveJobOverride(OurPlaneCoreJob job, FolderTemplateConfig c) =>
+    public static void SaveJobOverride(OurPlanCoreJob job, FolderTemplateConfig c) =>
         SaveJson(JobPath(job), c);
 
-    public static void ClearJobOverride(OurPlaneCoreJob job)
+    public static void ClearJobOverride(OurPlanCoreJob job)
     {
         try
         {
@@ -111,7 +111,7 @@ public static class SettingsPresetStore
     }
 
     // Effective config: per-job override → global → built-in defaults.
-    public static FolderTemplateConfig Resolve(OurPlaneCoreJob? job)
+    public static FolderTemplateConfig Resolve(OurPlanCoreJob? job)
     {
         if (job != null && LoadJobOverride(job) is { } j)
             return j;
@@ -121,7 +121,7 @@ public static class SettingsPresetStore
     }
 
     // Make the edited templates apply everywhere (menus, From Pages, etc.).
-    public static void InstallProviders(OurPlaneCoreJob? job)
+    public static void InstallProviders(OurPlanCoreJob? job)
     {
         FolderTemplateConfig cfg = Resolve(job);
         PlanSwiftFolderTemplateService.PageFoldersOverride = mode => cfg.PageFoldersFor(mode);
@@ -135,13 +135,13 @@ public static class SettingsPresetStore
     public static void SaveGlobalPageSort(PageSortConfig c) =>
         SaveJson(GlobalPageSortPath(), c);
 
-    public static PageSortConfig? LoadJobPageSortOverride(OurPlaneCoreJob job) =>
+    public static PageSortConfig? LoadJobPageSortOverride(OurPlanCoreJob job) =>
         LoadJson<PageSortConfig>(JobPageSortPath(job));
 
-    public static void SaveJobPageSortOverride(OurPlaneCoreJob job, PageSortConfig c) =>
+    public static void SaveJobPageSortOverride(OurPlanCoreJob job, PageSortConfig c) =>
         SaveJson(JobPageSortPath(job), c);
 
-    public static void ClearJobPageSortOverride(OurPlaneCoreJob job)
+    public static void ClearJobPageSortOverride(OurPlanCoreJob job)
     {
         try
         {
@@ -156,7 +156,7 @@ public static class SettingsPresetStore
     }
 
     // Effective page-sort config: per-job override → global → built-in defaults.
-    public static PageSortConfig ResolvePageSort(OurPlaneCoreJob? job)
+    public static PageSortConfig ResolvePageSort(OurPlanCoreJob? job)
     {
         if (job != null && LoadJobPageSortOverride(job) is { } j)
             return PageSortConfig.UpgradeForCurrentSchema(j);
@@ -165,6 +165,6 @@ public static class SettingsPresetStore
         return PageSortConfig.UpgradeForCurrentSchema(PageSortConfig.BuildDefault());
     }
 
-    public static void InstallPageSortProvider(OurPlaneCoreJob? job) =>
+    public static void InstallPageSortProvider(OurPlanCoreJob? job) =>
         PageSortRulesService.Install(ResolvePageSort(job));
 }

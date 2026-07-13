@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -35,7 +35,7 @@ public partial class MainWindow
 
         if (option.Item != null)
         {
-            string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(option.Item.MeasurementType);
+            string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(option.Item.MeasurementType);
             return string.Equals(targetType, measurementType, StringComparison.OrdinalIgnoreCase)
                 ? option.Item
                 : null;
@@ -66,7 +66,7 @@ public partial class MainWindow
     {
         if (_activeItem != null &&
             string.Equals(
-                OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType),
+                OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType),
                 measurementType,
                 StringComparison.OrdinalIgnoreCase))
         {
@@ -111,7 +111,7 @@ public partial class MainWindow
                     : "line";
         }
 
-        return OurPlaneCoreJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
+        return OurPlanCoreJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
     }
 
     private static List<SKPoint> ActionPoints(SmartAiAction action) =>

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -89,8 +89,8 @@ public partial class MainWindow
 
         foreach (PageInfo page in pages)
         {
-            PageInfo updatedPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
-            OurPlaneCoreJobStore.SavePageScale(updatedPage.FolderPath, scaleMetersPerPt);
+            PageInfo updatedPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+            OurPlanCoreJobStore.SavePageScale(updatedPage.FolderPath, scaleMetersPerPt);
             WriteFloatingPageSetupMetadata(updatedPage, updatedPage.Name, scaleMetersPerPt);
 
             page.ScaleMetersPerPt = scaleMetersPerPt;

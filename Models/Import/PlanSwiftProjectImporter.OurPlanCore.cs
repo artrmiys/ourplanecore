@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
-    private static PlanSwiftImportResult ImportExistingOurPlaneCoreJob(
+    private static PlanSwiftImportResult ImportExistingOurPlanCoreJob(
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest)
     {
@@ -19,10 +19,10 @@ public static partial class PlanSwiftProjectImporter
         string jobName = ResolveDestinationJobName(options, manifest);
         string destinationRoot = Path.Combine(destinationParent, jobName);
         CopyExistingJobDirectory(sourceRoot, destinationRoot);
-        OurPlaneCoreJobStore.UpdateItemName(destinationRoot, jobName);
+        OurPlanCoreJobStore.UpdateItemName(destinationRoot, jobName);
         RebaseExistingJobPaths(destinationRoot, sourceRoot);
 
-        OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(destinationRoot);
+        OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(destinationRoot);
         int importedPages = manifest.Pages.Count;
         int importedItems = manifest.TakeoffItems.Count;
         int importedMeasurements = manifest.TakeoffItems.Sum(item => item.Sections.Count);
@@ -87,7 +87,7 @@ public static partial class PlanSwiftProjectImporter
         foreach (string measurementsPath in Directory.EnumerateFiles(takeoffsRoot, "measurements.json", SearchOption.AllDirectories))
         {
             string folder = Path.GetDirectoryName(measurementsPath) ?? takeoffsRoot;
-            List<Measurement> measurements = OurPlaneCoreJobStore.LoadMeasurements(folder);
+            List<Measurement> measurements = OurPlanCoreJobStore.LoadMeasurements(folder);
             bool changed = false;
             foreach (Measurement measurement in measurements)
             {
@@ -100,7 +100,7 @@ public static partial class PlanSwiftProjectImporter
             }
 
             if (changed)
-                OurPlaneCoreJobStore.SaveMeasurements(folder, measurements);
+                OurPlanCoreJobStore.SaveMeasurements(folder, measurements);
         }
     }
 
@@ -113,7 +113,7 @@ public static partial class PlanSwiftProjectImporter
         foreach (string metadataPath in Directory.EnumerateFiles(pagesRoot, "source_pdf.json", SearchOption.AllDirectories))
         {
             string folder = Path.GetDirectoryName(metadataPath) ?? pagesRoot;
-            PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(folder);
+            PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(folder);
             if (metadata == null)
                 continue;
 
@@ -122,7 +122,7 @@ public static partial class PlanSwiftProjectImporter
                 continue;
 
             metadata.PdfPath = rebased;
-            OurPlaneCoreJobStore.WriteSourcePdfMetadata(folder, metadata);
+            OurPlanCoreJobStore.WriteSourcePdfMetadata(folder, metadata);
         }
     }
 

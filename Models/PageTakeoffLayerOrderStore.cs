@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class PageTakeoffLayerOrderStore
 {
@@ -21,7 +21,7 @@ public static class PageTakeoffLayerOrderStore
             string json = File.ReadAllText(path);
             PageTakeoffLayerOrderFile? file = System.Text.Json.JsonSerializer.Deserialize<PageTakeoffLayerOrderFile>(
                 json,
-                OurPlaneCoreJobStore.JsonOptions);
+                OurPlanCoreJobStore.JsonOptions);
             return Normalize(file?.Order);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
@@ -41,7 +41,7 @@ public static class PageTakeoffLayerOrderStore
 
         IoUtil.WriteAllTextAtomic(
             path,
-            System.Text.Json.JsonSerializer.Serialize(file, OurPlaneCoreJobStore.JsonOptions));
+            System.Text.Json.JsonSerializer.Serialize(file, OurPlanCoreJobStore.JsonOptions));
     }
 
     private static IReadOnlyList<string> Normalize(IEnumerable<string>? order) =>

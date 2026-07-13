@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal sealed class ProjectFile
 {
@@ -49,12 +49,15 @@ internal sealed class ProjectFile
 
     public sealed record PtDto(float X, float Y);
 
-    // ── Path convention: <pdf>.ourplanecore.json ────────────────────────────
+    // ── Path convention: <pdf>.ourplancore.json ────────────────────────────
 
     public static string PathFor(string pdfPath) =>
+        Path.ChangeExtension(pdfPath, null) + ".ourplancore.json";
+
+    private static string LegacyOurPlanCorePathFor(string pdfPath) =>
         Path.ChangeExtension(pdfPath, null) + ".ourplanecore.json";
 
-    private static string LegacyPathFor(string pdfPath) =>
+    private static string LegacyPlanSwiftPathFor(string pdfPath) =>
         Path.ChangeExtension(pdfPath, null) + ".planswift.json";
 
     // ── Write ─────────────────────────────────────────────────────────────────
@@ -69,7 +72,7 @@ internal sealed class ProjectFile
                 Id = item.Id,
                 Name = item.Name,
                 Color = item.Color,
-                MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+                MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
                 IsJoistTakeoff = item.IsJoistTakeoff,
                 JoistType = item.JoistType,
                 JoistSpacingInches = item.JoistSpacingInches,
@@ -113,22 +116,18 @@ internal sealed class ProjectFile
 
     public static (double scale, UnitMode unit, List<TakeoffItem> items) Restore(string pdfPath)
     {
-        string path = PathFor(pdfPath);
-        if (!File.Exists(path))
-        {
-            string legacyPath = LegacyPathFor(pdfPath);
-            if (!File.Exists(legacyPath)) return (0, OurPlaneCore.UnitMode.Metric, []);
-            path = legacyPath;
-        }
+        string? path = ResolveExistingPath(pdfPath);
+        if (path == null)
+            return (0, OurPlanCore.UnitMode.Metric, []);
 
         ProjectFile? pf;
         try   { pf = JsonSerializer.Deserialize<ProjectFile>(File.ReadAllText(path)); }
         catch (Exception ex)
         {
             AppLog.Warn(ex, $"Restore project file failed for {path}");
-            return (0, OurPlaneCore.UnitMode.Metric, []);
+            return (0, OurPlanCore.UnitMode.Metric, []);
         }
-        if (pf == null) return (0, OurPlaneCore.UnitMode.Metric, []);
+        if (pf == null) return (0, OurPlanCore.UnitMode.Metric, []);
 
         var items = new List<TakeoffItem>();
         foreach (var dto in pf.Items)
@@ -138,7 +137,7 @@ internal sealed class ProjectFile
                 Id = dto.Id,
                 Name = dto.Name,
                 Color = dto.Color,
-                MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(dto.MeasurementType),
+                MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(dto.MeasurementType),
                 IsJoistTakeoff = dto.IsJoistTakeoff,
                 JoistType = dto.JoistType,
                 JoistSpacingInches = dto.JoistSpacingInches > 0 ? dto.JoistSpacingInches : 16,
@@ -175,11 +174,23 @@ internal sealed class ProjectFile
                         .ToList(),
                 });
             }
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             items.Add(item);
         }
-        var unit = pf.UnitMode == "Imperial" ? OurPlaneCore.UnitMode.Imperial : OurPlaneCore.UnitMode.Metric;
+        var unit = pf.UnitMode == "Imperial" ? OurPlanCore.UnitMode.Imperial : OurPlanCore.UnitMode.Metric;
         return (pf.Scale, unit, items);
+    }
+
+    private static string? ResolveExistingPath(string pdfPath)
+    {
+        string[] candidates =
+        [
+            PathFor(pdfPath),
+            LegacyOurPlanCorePathFor(pdfPath),
+            LegacyPlanSwiftPathFor(pdfPath),
+        ];
+
+        return candidates.FirstOrDefault(File.Exists);
     }
 
     private static bool ResolveJoistShowLabels(
@@ -189,7 +200,7 @@ internal sealed class ProjectFile
         bool isJoistTakeoff)
     {
         bool isJoistArea = isJoistTakeoff &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
         if (value.HasValue)
         {
             if (value.Value || userSet)

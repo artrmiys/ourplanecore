@@ -1,8 +1,8 @@
 using System;
 using System.Windows;
-using OurPlaneCore;
+using OurPlanCore;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {

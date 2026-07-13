@@ -6,14 +6,14 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
     // Opening projection onto massing footprints.
 
     private static void AddOpenings(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<SmartAiMarker> allMarkers,
         IReadOnlyList<SmartAiMarker> openingMarkers)

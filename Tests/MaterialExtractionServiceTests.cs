@@ -1,10 +1,10 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class MaterialExtractionServiceTests
 {
     public static void WritesRowsAndSummaryCsvs()
     {
-        string outputFolder = Path.Combine(Path.GetTempPath(), "opc_material_tests", Guid.NewGuid().ToString("N"));
+        string outputFolder = Path.Combine(Path.GetTempPath(), "onc_material_tests", Guid.NewGuid().ToString("N"));
         try
         {
             var result = new MaterialExtractionResult
@@ -59,7 +59,7 @@ internal static class MaterialExtractionServiceTests
 
     public static void WritesMaterialReportPdf()
     {
-        string outputFolder = Path.Combine(Path.GetTempPath(), "opc_material_report_tests", Guid.NewGuid().ToString("N"));
+        string outputFolder = Path.Combine(Path.GetTempPath(), "onc_material_report_tests", Guid.NewGuid().ToString("N"));
         string pdfPath = Path.Combine(outputFolder, "materials_report.pdf");
         try
         {
@@ -253,7 +253,7 @@ internal static class MaterialExtractionServiceTests
 
     public static void UniqueSourcePdfsSkipsGeneratedMaterialReports()
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_material_filter_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_material_filter_tests", Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(root);
@@ -280,10 +280,10 @@ internal static class MaterialExtractionServiceTests
     public static void BundledToolResolverFindsExtractedNestedFiles()
     {
         string? previousRoot = Environment.GetEnvironmentVariable("DOTNET_BUNDLE_EXTRACT_BASE_DIR");
-        string root = Path.Combine(Path.GetTempPath(), "opc_bundle_tool_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_bundle_tool_tests", Guid.NewGuid().ToString("N"));
         try
         {
-            string extractedTools = Path.Combine(root, "ourplanecore", "bundlehash", "Tools");
+            string extractedTools = Path.Combine(root, "ourplancore", "bundlehash", "Tools");
             Directory.CreateDirectory(extractedTools);
             string helperPath = Path.Combine(extractedTools, "extracted_only_probe.py");
             File.WriteAllText(helperPath, "# test helper");
@@ -304,7 +304,7 @@ internal static class MaterialExtractionServiceTests
 
     public static void ProjectEmbedsToolsInSingleFile()
     {
-        string project = File.ReadAllText("ourplanecore.csproj");
+        string project = File.ReadAllText("ourplancore.csproj");
 
         AssertTrue(
             project.Contains("<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>", StringComparison.Ordinal) &&
@@ -341,7 +341,7 @@ internal static class MaterialExtractionServiceTests
 
     public static void BundledPythonRuntimeUsesBundledDependenciesOnly()
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_python_env_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_python_env_tests", Guid.NewGuid().ToString("N"));
         try
         {
             string pythonHome = Path.Combine(root, "Tools", "python");

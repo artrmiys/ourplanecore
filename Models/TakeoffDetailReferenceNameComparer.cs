@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal sealed class TakeoffDetailReferenceNameComparer : IComparer<string>
 {

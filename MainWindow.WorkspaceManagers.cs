@@ -10,9 +10,9 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -308,7 +308,7 @@ public partial class MainWindow
         var results = new List<PdfMetadataPageResult>();
         foreach (PageInfo page in pages)
         {
-            PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+            PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
             if (metadata != null)
                 results.Add(new PdfMetadataPageResult(page, true, metadata, ""));
         }
@@ -376,7 +376,7 @@ public partial class MainWindow
         SaveCurrentPageScale();
         TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
 
-        OurPlaneCoreJob job = _currentJob;
+        OurPlanCoreJob job = _currentJob;
         _sheetManagerAnalysisCts?.Cancel();
         using var analysisCts = new CancellationTokenSource();
         _sheetManagerAnalysisCts = analysisCts;
@@ -451,7 +451,7 @@ public partial class MainWindow
         var pages = new List<PageInfo>();
         foreach (PdfMetadataPreviewRow row in SheetManagerGrid.SelectedItems.OfType<PdfMetadataPreviewRow>())
         {
-            if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } page)
+            if (OurPlanCoreJobStore.TryReadPage(row.PageFolder) is { } page)
                 pages.Add(page);
         }
 
@@ -508,7 +508,7 @@ public partial class MainWindow
         string clean = (proposedScale ?? "").Trim();
         if (string.IsNullOrWhiteSpace(clean) ||
             string.Equals(clean, "skip", StringComparison.OrdinalIgnoreCase) ||
-            OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is not { } page ||
+            OurPlanCoreJobStore.TryReadPage(row.PageFolder) is not { } page ||
             !PdfSheetMetadataService.TryParseScaleMetersPerPt(clean, out double scaleMetersPerPt))
         {
             return false;
@@ -558,7 +558,7 @@ public partial class MainWindow
             return selected;
 
         if (SheetManagerGrid.SelectedItem is PdfMetadataPreviewRow row &&
-            OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } page)
+            OurPlanCoreJobStore.TryReadPage(row.PageFolder) is { } page)
         {
             return [page];
         }
@@ -789,7 +789,7 @@ public partial class MainWindow
 
     private PageInfo? SheetManagerPageFromRow(PdfMetadataPreviewRow row)
     {
-        if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } page)
+        if (OurPlanCoreJobStore.TryReadPage(row.PageFolder) is { } page)
             return page;
 
         TxtStatus.Text = "Sheet Manager Raster: sheet row page is not available.";
@@ -804,7 +804,7 @@ public partial class MainWindow
             return;
         }
 
-        if (OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is { } refreshedPage)
+        if (OurPlanCoreJobStore.TryReadPage(row.PageFolder) is { } refreshedPage)
             row.RasterStatus = RasterSheetCacheService.DisplayStatus(refreshedPage);
     }
 
@@ -841,7 +841,7 @@ public partial class MainWindow
         {
             string key = NormalizePathForCompare(row.PageFolder);
             if (refreshedPagesByFolder.ContainsKey(key) ||
-                OurPlaneCoreJobStore.TryReadPage(row.PageFolder) is not { } refreshedPage)
+                OurPlanCoreJobStore.TryReadPage(row.PageFolder) is not { } refreshedPage)
             {
                 continue;
             }
@@ -1470,7 +1470,7 @@ public partial class MainWindow
                     {
                         if (toggled)
                         {
-                            if (OurPlaneCoreJobStore.TryReadPage(plan.Page.FolderPath) is { } refreshedPage)
+                            if (OurPlanCoreJobStore.TryReadPage(plan.Page.FolderPath) is { } refreshedPage)
                                 PdfViewport.WarmRasterSheetBitmapCache(refreshedPage);
                             sourceCount++;
                             fastPages.Add(plan.Page);
@@ -1634,7 +1634,7 @@ public partial class MainWindow
     {
         if (_currentPage == null ||
             !changedPages.Any(page => IsSamePageFolder(page.FolderPath, _currentPage.FolderPath)) ||
-            OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is not { } refreshedPage)
+            OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is not { } refreshedPage)
         {
             return;
         }

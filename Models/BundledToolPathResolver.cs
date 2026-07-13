@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class BundledToolPathResolver
 {
@@ -66,7 +66,7 @@ public static class BundledToolPathResolver
         string processName = Path.GetFileNameWithoutExtension(
             Environment.ProcessPath ??
             Process.GetCurrentProcess().ProcessName ??
-            "ourplanecore");
+            "ourplancore");
         string appRoot = Path.Combine(tempNetRoot, processName);
         if (Directory.Exists(appRoot))
             yield return appRoot;

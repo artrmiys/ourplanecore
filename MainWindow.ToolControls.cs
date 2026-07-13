@@ -5,9 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -586,7 +586,7 @@ public partial class MainWindow
         if (joistArea)
             ApplyDefaultJoistAreaSettings(newItem);
         List<TakeoffItem> offsetCompanions =
-            OurPlaneCoreJobStore.NormalizeMeasurementType(mtype) == "line" && dlg.OffsetLines.Count > 0
+            OurPlanCoreJobStore.NormalizeMeasurementType(mtype) == "line" && dlg.OffsetLines.Count > 0
                 ? CreateMultiLineCompanions(newItem, dlg.OffsetLines)
                 : [];
         _takeoffItems.Add(newItem);
@@ -621,7 +621,7 @@ public partial class MainWindow
     private static string RecordMeasurementType(string tool) =>
         IsJoistAreaTool(tool)
             ? "area"
-            : OurPlaneCoreJobStore.NormalizeMeasurementType(tool);
+            : OurPlanCoreJobStore.NormalizeMeasurementType(tool);
 
     private static string ViewportToolName(string tool) =>
         IsJoistAreaTool(tool) ? "area" : tool;
@@ -632,7 +632,7 @@ public partial class MainWindow
     private static string ToolForTakeoffItem(TakeoffItem item) =>
         item.IsJoistArea
             ? "joistarea"
-            : OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+            : OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
 
     private string RecordToolForActiveTakeoff()
     {
@@ -644,7 +644,7 @@ public partial class MainWindow
 
     private static bool CanRecordIntoActiveTakeoff(TakeoffItem item, string measurementType, bool requiresJoistArea)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != measurementType)
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != measurementType)
             return false;
 
         return !requiresJoistArea || item.IsJoistArea;

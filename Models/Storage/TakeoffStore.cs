@@ -6,54 +6,54 @@ using System.Linq;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class TakeoffStore
 {
-    public static string CreateTakeoffFolder(OurPlaneCoreJob job, string parentFolder, string name)
+    public static string CreateTakeoffFolder(OurPlanCoreJob job, string parentFolder, string name)
     {
-        string targetParent = OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
+        string targetParent = OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
             ? parentFolder
             : job.TakeoffsRoot;
-        string folder = OurPlaneCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
-        OurPlaneCoreJobStore.SetProperty(folder, "SmartNodeKind", "folder");
+        string folder = OurPlanCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
+        OurPlanCoreJobStore.SetProperty(folder, "SmartNodeKind", "folder");
         return folder;
     }
 
-    public static TakeoffItem CreateTakeoffItem(OurPlaneCoreJob job, string name, string color) =>
+    public static TakeoffItem CreateTakeoffItem(OurPlanCoreJob job, string name, string color) =>
         CreateTakeoffItem(job, job.TakeoffsRoot, name, color, "line");
 
     public static TakeoffItem CreateTakeoffItem(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string parentFolder,
         string name,
         string color,
         string measurementType)
     {
-        string targetParent = OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
+        string targetParent = OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, parentFolder)
             ? parentFolder
             : job.TakeoffsRoot;
-        string folder = OurPlaneCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
-        OurPlaneCoreJobStore.SetProperty(folder, "SmartNodeKind", "item");
-        OurPlaneCoreJobStore.SetProperty(folder, "Color", color);
-        OurPlaneCoreJobStore.SetProperty(folder, "MeasurementType", OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType));
-        OurPlaneCoreJobStore.SetProperty(folder, "CountSymbol", CountDisplaySymbol.Circle);
+        string folder = OurPlanCoreJobStore.CreateFolderAllowDuplicateName(targetParent, name);
+        OurPlanCoreJobStore.SetProperty(folder, "SmartNodeKind", "item");
+        OurPlanCoreJobStore.SetProperty(folder, "Color", color);
+        OurPlanCoreJobStore.SetProperty(folder, "MeasurementType", OurPlanCoreJobStore.NormalizeMeasurementType(measurementType));
+        OurPlanCoreJobStore.SetProperty(folder, "CountSymbol", CountDisplaySymbol.Circle);
         return new TakeoffItem
         {
-            Name = OurPlaneCoreJobStore.DisplayName(folder),
+            Name = OurPlanCoreJobStore.DisplayName(folder),
             Color = color,
             FolderPath = folder,
-            MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType),
+            MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType),
             CountSymbol = CountDisplaySymbol.Circle,
         };
     }
 
-    public static IReadOnlyList<TakeoffItem> LoadTakeoffItems(OurPlaneCoreJob job)
+    public static IReadOnlyList<TakeoffItem> LoadTakeoffItems(OurPlanCoreJob job)
     {
         var items = new List<TakeoffItem>();
         if (!Directory.Exists(job.TakeoffsRoot)) return items;
 
-        foreach (string folder in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(job.TakeoffsRoot).Skip(1))
+        foreach (string folder in OurPlanCoreJobStore.EnumerateSelfAndDescendants(job.TakeoffsRoot).Skip(1))
             if (TryReadTakeoffItem(folder) is { } item)
                 items.Add(item);
 
@@ -65,35 +65,35 @@ internal static class TakeoffStore
         if (!IsTakeoffItemFolder(folder)) return null;
 
         var measurements = LoadMeasurements(folder);
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(
-            OurPlaneCoreJobStore.ReadProperty(folder, "MeasurementType") ??
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(
+            OurPlanCoreJobStore.ReadProperty(folder, "MeasurementType") ??
             measurements.FirstOrDefault()?.MType ??
             "line");
-        bool isJoistTakeoff = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistEnabled"));
-        string? joistShowLabels = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabels");
-        string? joistShowLabelsUserSet = OurPlaneCoreJobStore.ReadProperty(folder, "JoistShowLabelsUserSet");
+        bool isJoistTakeoff = ParseBool(OurPlanCoreJobStore.ReadProperty(folder, "JoistEnabled"));
+        string? joistShowLabels = OurPlanCoreJobStore.ReadProperty(folder, "JoistShowLabels");
+        string? joistShowLabelsUserSet = OurPlanCoreJobStore.ReadProperty(folder, "JoistShowLabelsUserSet");
 
         var item = new TakeoffItem
         {
-            Name = OurPlaneCoreJobStore.DisplayName(folder),
-            Color = OurPlaneCoreJobStore.ReadProperty(folder, "Color") ?? "#FF4444",
+            Name = OurPlanCoreJobStore.DisplayName(folder),
+            Color = OurPlanCoreJobStore.ReadProperty(folder, "Color") ?? "#FF4444",
             FolderPath = folder,
             MeasurementType = measurementType,
-            CountSymbol = CountDisplaySymbol.Normalize(OurPlaneCoreJobStore.ReadProperty(folder, "CountSymbol")),
-            UnitPrice = ParseDouble(OurPlaneCoreJobStore.ReadProperty(folder, "UnitPrice")),
-            Notes = OurPlaneCoreJobStore.ReadProperty(folder, "Notes") ?? "",
+            CountSymbol = CountDisplaySymbol.Normalize(OurPlanCoreJobStore.ReadProperty(folder, "CountSymbol")),
+            UnitPrice = ParseDouble(OurPlanCoreJobStore.ReadProperty(folder, "UnitPrice")),
+            Notes = OurPlanCoreJobStore.ReadProperty(folder, "Notes") ?? "",
             IsJoistTakeoff = isJoistTakeoff,
-            JoistType = OurPlaneCoreJobStore.ReadProperty(folder, "JoistType") ?? "",
-            JoistSpacingInches = ParsePositiveDouble(OurPlaneCoreJobStore.ReadProperty(folder, "JoistSpacingInches"), 16),
-            JoistDirectionDegrees = ParseDouble(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDirectionDegrees")),
-            JoistDirectionFollowsAreaRotation = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDirectionFollowsAreaRotation"), fallback: true),
-            JoistAddEndJoist = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistAddEndJoist"), fallback: true),
-            JoistPitch = JoistTakeoffCalculator.NormalizePitch(OurPlaneCoreJobStore.ReadProperty(folder, "JoistPitch")),
-            JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(OurPlaneCoreJobStore.ReadProperty(folder, "JoistLengthRounding")),
+            JoistType = OurPlanCoreJobStore.ReadProperty(folder, "JoistType") ?? "",
+            JoistSpacingInches = ParsePositiveDouble(OurPlanCoreJobStore.ReadProperty(folder, "JoistSpacingInches"), 16),
+            JoistDirectionDegrees = ParseDouble(OurPlanCoreJobStore.ReadProperty(folder, "JoistDirectionDegrees")),
+            JoistDirectionFollowsAreaRotation = ParseBool(OurPlanCoreJobStore.ReadProperty(folder, "JoistDirectionFollowsAreaRotation"), fallback: true),
+            JoistAddEndJoist = ParseBool(OurPlanCoreJobStore.ReadProperty(folder, "JoistAddEndJoist"), fallback: true),
+            JoistPitch = JoistTakeoffCalculator.NormalizePitch(OurPlanCoreJobStore.ReadProperty(folder, "JoistPitch")),
+            JoistLengthRounding = JoistTakeoffCalculator.NormalizeLengthRounding(OurPlanCoreJobStore.ReadProperty(folder, "JoistLengthRounding")),
             JoistShowLabels = ParseJoistShowLabels(joistShowLabels, joistShowLabelsUserSet, measurementType, isJoistTakeoff),
             JoistShowLabelsUserSet = ParseBool(joistShowLabelsUserSet),
-            JoistDetailedLabels = ParseBool(OurPlaneCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
-            MultiLineOffsets = ParseMultiLineOffsets(OurPlaneCoreJobStore.ReadProperty(folder, "MultiLineOffsets"), folder),
+            JoistDetailedLabels = ParseBool(OurPlanCoreJobStore.ReadProperty(folder, "JoistDetailedLabels"), fallback: true),
+            MultiLineOffsets = ParseMultiLineOffsets(OurPlanCoreJobStore.ReadProperty(folder, "MultiLineOffsets"), folder),
         };
         item.Measurements.AddRange(measurements);
         ApplyTakeoffPropertiesToMeasurements(item);
@@ -105,13 +105,13 @@ internal static class TakeoffStore
         if (string.IsNullOrWhiteSpace(item.FolderPath) || !Directory.Exists(item.FolderPath))
             return;
 
-        OurPlaneCoreJobStore.UpdateItemName(item.FolderPath, item.Name);
+        OurPlanCoreJobStore.UpdateItemName(item.FolderPath, item.Name);
         item.CountSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
-        OurPlaneCoreJobStore.SetProperties(item.FolderPath, new[]
+        OurPlanCoreJobStore.SetProperties(item.FolderPath, new[]
         {
             new KeyValuePair<string, string>("SmartNodeKind", "item"),
             new KeyValuePair<string, string>("Color", item.Color),
-            new KeyValuePair<string, string>("MeasurementType", OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType)),
+            new KeyValuePair<string, string>("MeasurementType", OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType)),
             new KeyValuePair<string, string>("CountSymbol", item.CountSymbol),
             new KeyValuePair<string, string>("UnitPrice", item.UnitPrice.ToString("G17", CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("Notes", item.Notes),
@@ -141,14 +141,14 @@ internal static class TakeoffStore
         foreach (Measurement measurement in item.Measurements)
         {
             measurement.TakeoffFolder = item.FolderPath;
-            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point")
+            if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point")
             {
                 measurement.CountSymbol = string.IsNullOrWhiteSpace(measurement.CountSymbol)
                     ? CountDisplaySymbol.Normalize(item.CountSymbol)
                     : CountDisplaySymbol.Normalize(measurement.CountSymbol);
             }
             measurement.JoistEnabled = joistEnabled &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
             measurement.JoistType = item.JoistType ?? "";
             measurement.JoistSpacingInches = item.JoistSpacingInches > 0 ? item.JoistSpacingInches : 16;
             if (!measurement.JoistDirectionLocked)
@@ -174,7 +174,7 @@ internal static class TakeoffStore
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            OurPlaneCoreJobStore.QuarantineCorruptJson(path, "LoadMeasurements", ex);
+            OurPlanCoreJobStore.QuarantineCorruptJson(path, "LoadMeasurements", ex);
             return [];
         }
         catch (Exception ex)
@@ -215,7 +215,7 @@ internal static class TakeoffStore
         {
             IoUtil.WriteAllTextAtomic(
                 MeasurementsJsonPath(takeoffFolder),
-                JsonSerializer.Serialize(dtos, OurPlaneCoreJobStore.JsonOptions));
+                JsonSerializer.Serialize(dtos, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -225,14 +225,14 @@ internal static class TakeoffStore
 
     public static bool IsTakeoffItemFolder(string folder)
     {
-        string? kind = OurPlaneCoreJobStore.ReadProperty(folder, "SmartNodeKind");
+        string? kind = OurPlanCoreJobStore.ReadProperty(folder, "SmartNodeKind");
         if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
             return true;
         if (string.Equals(kind, "folder", StringComparison.OrdinalIgnoreCase))
             return false;
 
         return File.Exists(MeasurementsJsonPath(folder)) ||
-            OurPlaneCoreJobStore.ReadProperty(folder, "Color") != null;
+            OurPlanCoreJobStore.ReadProperty(folder, "Color") != null;
     }
 
     internal static string MeasurementsJsonPath(string takeoffFolder) =>
@@ -311,14 +311,14 @@ internal static class TakeoffStore
         string pageFolder = ResolveJobRelativeFolder(dto.PageFolder, takeoffFolder);
         double scale = dto.ScaleMetersPerPt;
         if (scale <= 0 && !string.IsNullOrWhiteSpace(pageFolder))
-            scale = OurPlaneCoreJobStore.ReadSource(pageFolder)?.ScaleMetersPerPt ?? 0;
+            scale = OurPlanCoreJobStore.ReadSource(pageFolder)?.ScaleMetersPerPt ?? 0;
 
         return new Measurement
         {
             Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id,
             Name = dto.Name ?? "",
             Notes = dto.Notes ?? "",
-            MType = OurPlaneCoreJobStore.NormalizeMeasurementType(dto.MType),
+            MType = OurPlanCoreJobStore.NormalizeMeasurementType(dto.MType),
             Color = dto.Color,
             CountSymbol = string.IsNullOrWhiteSpace(dto.CountSymbol)
                 ? ""
@@ -344,7 +344,7 @@ internal static class TakeoffStore
             Id = measurement.Id,
             Name = measurement.Name,
             Notes = measurement.Notes,
-            MType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
+            MType = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType),
             Color = measurement.Color,
             CountSymbol = CountDisplaySymbol.Normalize(measurement.CountSymbol),
             PageFolder = ToJobRelativeFolder(measurement.PageFolder, takeoffFolder),
@@ -425,7 +425,7 @@ internal static class TakeoffStore
         bool isJoistTakeoff)
     {
         bool isJoistArea = isJoistTakeoff &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
         if (bool.TryParse(value, out bool parsed))
         {
             if (parsed || ParseBool(userSetValue))

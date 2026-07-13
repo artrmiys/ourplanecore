@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using OurPlaneCore;
+using OurPlanCore;
 
 // Rafter layout on 3D roof planes: a 6/12 gable face with known dimensions
 // must produce the textbook count, slope-corrected lengths, lumber rounding

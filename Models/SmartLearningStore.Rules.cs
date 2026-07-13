@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartLearningStore
 {
@@ -58,7 +58,7 @@ public static partial class SmartLearningStore
         return other.Any(tokens.Contains);
     }
 
-    private static void SaveLearnedRuleSets(OurPlaneCoreJob job, IReadOnlyList<SmartSheetLearningRecord> projectRecords)
+    private static void SaveLearnedRuleSets(OurPlanCoreJob job, IReadOnlyList<SmartSheetLearningRecord> projectRecords)
     {
         SmartLearnedRuleSet projectRules = BuildLearnedRuleSet(projectRecords);
         string projectRulesPath = ProjectLearnedRulesPath(job);

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record AreaLineGridOptions(
     bool IncludeHorizontal,
@@ -42,7 +42,7 @@ public static class AreaLineGridService
         double fallbackScaleMetersPerPt,
         AreaLineGridOptions options)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area" || area.Points.Count < 3)
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(area.MType) != "area" || area.Points.Count < 3)
             throw new ArgumentException("A valid Area measurement is required.", nameof(area));
         if (!options.IncludeHorizontal && !options.IncludeVertical)
             throw new ArgumentException("Select horizontal, vertical, or both directions.", nameof(options));

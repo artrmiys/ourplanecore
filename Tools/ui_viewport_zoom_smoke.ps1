@@ -139,7 +139,7 @@ function Write-ItemDataXml {
 }
 
 function New-ZoomSmokeJob {
-    $root = Join-Path $env:TEMP ("opc_viewport_zoom_smoke_" + [guid]::NewGuid().ToString("N"))
+    $root = Join-Path $env:TEMP ("onc_viewport_zoom_smoke_" + [guid]::NewGuid().ToString("N"))
     $job = Join-Path $root "ViewportZoomSmokeJob"
     $pages = Join-Path $job "Pages"
     $takeoffs = Join-Path $job "Takeoffs"
@@ -201,7 +201,7 @@ function New-ZoomSmokeJobFromExisting {
         }
     }
 
-    $root = Join-Path $env:TEMP ("opc_viewport_zoom_realjob_" + [guid]::NewGuid().ToString("N"))
+    $root = Join-Path $env:TEMP ("onc_viewport_zoom_realjob_" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $root | Out-Null
     Copy-Item -LiteralPath $resolvedJob -Destination $root -Recurse -Force
 
@@ -232,7 +232,7 @@ function Set-ZoomSmokeSettings {
         [Parameter(Mandatory)] [string]$PagePath
     )
 
-    $settingsDir = Join-Path $env:APPDATA "OurPlaneCore"
+    $settingsDir = Join-Path $env:APPDATA "OurPlanCore"
     $settingsPath = Join-Path $settingsDir "settings.json"
     $backupPath = "$settingsPath.viewport-zoom-smoke.bak"
     New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
@@ -443,11 +443,11 @@ try {
 
     $settingsState = Set-ZoomSmokeSettings -JobPath $job.Job -PagePath $job.Page
 
-    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
+    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplancore.dll"
     if (Test-Path -LiteralPath $appDll) {
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru
     } else {
-        $projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
+        $projectPath = Join-Path $ProjectRoot "ourplancore.csproj"
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--no-restore", "--project", $projectPath) -WorkingDirectory $ProjectRoot -PassThru
     }
 

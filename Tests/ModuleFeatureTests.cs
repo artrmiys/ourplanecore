@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class ModuleFeatureTests
 {
@@ -85,8 +85,8 @@ internal static class ModuleFeatureTests
     public static void ResolveUsesWholeJobThenGlobalThenDefault()
     {
         using var scope = new IsolatedGlobalStoreScope();
-        string jobRoot = Path.Combine(Path.GetTempPath(), "opc_module_tests", Guid.NewGuid().ToString("N"));
-        var job = new OurPlaneCoreJob
+        string jobRoot = Path.Combine(Path.GetTempPath(), "onc_module_tests", Guid.NewGuid().ToString("N"));
+        var job = new OurPlanCoreJob
         {
             Name = "Module Feature Test",
             RootPath = jobRoot,
@@ -220,7 +220,7 @@ internal static class ModuleFeatureTests
                 ModuleFeatureStore.GlobalRootOverrideEnvironmentVariable);
             RootPath = Path.Combine(
                 Path.GetTempPath(),
-                "opc_module_tests",
+                "onc_module_tests",
                 Guid.NewGuid().ToString("N"));
             Environment.SetEnvironmentVariable(
                 ModuleFeatureStore.GlobalRootOverrideEnvironmentVariable,
@@ -246,12 +246,12 @@ internal static class ModuleFeatureTests
         DirectoryInfo? current = new(AppContext.BaseDirectory);
         while (current != null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "ourplanecore.csproj")))
+            if (File.Exists(Path.Combine(current.FullName, "ourplancore.csproj")))
                 return current.FullName;
             current = current.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not find ourplanecore repo root.");
+        throw new DirectoryNotFoundException("Could not find ourplancore repo root.");
     }
 
     private static void TryDeleteDirectory(string path)

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartLearningStore
 {
@@ -16,22 +16,22 @@ public static partial class SmartLearningStore
 
     private static readonly JsonSerializerOptions LineJsonOptions = new();
 
-    public static string ProjectLearningRoot(OurPlaneCoreJob job) =>
+    public static string ProjectLearningRoot(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "learning");
 
-    public static string ProjectSheetFeedbackPath(OurPlaneCoreJob job) =>
+    public static string ProjectSheetFeedbackPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "sheet_feedback.jsonl");
 
-    public static string ProjectReviewsPath(OurPlaneCoreJob job) =>
+    public static string ProjectReviewsPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "project_reviews.jsonl");
 
-    public static string ProjectMarkerFeedbackPath(OurPlaneCoreJob job) =>
+    public static string ProjectMarkerFeedbackPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "marker_feedback.jsonl");
 
-    public static string ProjectLearnedRulesPath(OurPlaneCoreJob job) =>
+    public static string ProjectLearnedRulesPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "learned_rules.json");
 
-    public static string ProjectSummaryPath(OurPlaneCoreJob job) =>
+    public static string ProjectSummaryPath(OurPlanCoreJob job) =>
         Path.Combine(ProjectLearningRoot(job), "project_learning_summary.json");
 
     public static string GlobalLearningRoot =>
@@ -46,7 +46,7 @@ public static partial class SmartLearningStore
     public static string GlobalLearnedRulesPath =>
         Path.Combine(GlobalLearningRoot, "learned_rules.json");
 
-    public static void EnsureLearningStore(OurPlaneCoreJob job)
+    public static void EnsureLearningStore(OurPlanCoreJob job)
     {
         Directory.CreateDirectory(ProjectLearningRoot(job));
         Directory.CreateDirectory(GlobalLearningRoot);
@@ -60,7 +60,7 @@ public static partial class SmartLearningStore
     }
 
     public static SmartSheetLearningRecord AppendSheetFeedback(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo? page,
         SmartSheetLearningRecord record)
     {
@@ -92,7 +92,7 @@ public static partial class SmartLearningStore
     }
 
     public static SmartMarkerFeedbackRecord AppendMarkerFeedback(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMarkerFeedbackRecord record)
     {
         if (record == null)
@@ -123,7 +123,7 @@ public static partial class SmartLearningStore
     }
 
     public static SmartSheetLearningRecord CaptureManualPageState(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         string note = "")
     {
@@ -144,10 +144,10 @@ public static partial class SmartLearningStore
         return AppendSheetFeedback(job, page, record);
     }
 
-    public static IReadOnlyList<SmartSheetLearningRecord> LoadProjectSheetFeedback(OurPlaneCoreJob job) =>
+    public static IReadOnlyList<SmartSheetLearningRecord> LoadProjectSheetFeedback(OurPlanCoreJob job) =>
         LoadJsonLines<SmartSheetLearningRecord>(ProjectSheetFeedbackPath(job));
 
-    public static IReadOnlyList<SmartMarkerFeedbackRecord> LoadProjectMarkerFeedback(OurPlaneCoreJob job) =>
+    public static IReadOnlyList<SmartMarkerFeedbackRecord> LoadProjectMarkerFeedback(OurPlanCoreJob job) =>
         LoadJsonLines<SmartMarkerFeedbackRecord>(ProjectMarkerFeedbackPath(job));
 
     public static IReadOnlyList<SmartMarkerFeedbackRecord> LoadGlobalMarkerFeedback() =>
@@ -156,7 +156,7 @@ public static partial class SmartLearningStore
     public static IReadOnlyList<SmartSheetLearningRecord> LoadGlobalSheetFeedback() =>
         LoadJsonLines<SmartSheetLearningRecord>(GlobalSheetFeedbackPath);
 
-    public static SmartLearnedRuleSet LoadProjectLearnedRules(OurPlaneCoreJob job)
+    public static SmartLearnedRuleSet LoadProjectLearnedRules(OurPlanCoreJob job)
     {
         EnsureLearningStore(job);
         return LoadJson<SmartLearnedRuleSet>(ProjectLearnedRulesPath(job)) ?? new SmartLearnedRuleSet();
@@ -169,7 +169,7 @@ public static partial class SmartLearningStore
         return LoadJson<SmartLearnedRuleSet>(GlobalLearnedRulesPath) ?? new SmartLearnedRuleSet();
     }
 
-    public static void SaveProjectLearnedRules(OurPlaneCoreJob job, SmartLearnedRuleSet rules)
+    public static void SaveProjectLearnedRules(OurPlanCoreJob job, SmartLearnedRuleSet rules)
     {
         if (rules == null)
             throw new ArgumentNullException(nameof(rules));
@@ -204,7 +204,7 @@ public static partial class SmartLearningStore
         }
     }
 
-    public static SmartSheetLearningSummary SaveProjectSummary(OurPlaneCoreJob job)
+    public static SmartSheetLearningSummary SaveProjectSummary(OurPlanCoreJob job)
     {
         SmartProjectContext context = SmartContextStore.EnsureProjectContext(job.RootPath, job.Name);
         EnsureLearningStore(job);
@@ -319,7 +319,7 @@ public static partial class SmartLearningStore
         ApplyLearnedRules(metadata, LoadJson<SmartLearnedRuleSet>(GlobalLearnedRulesPath), "global");
     }
 
-    public static void ApplyProjectLearnedRules(OurPlaneCoreJob job, PdfSheetMetadata metadata)
+    public static void ApplyProjectLearnedRules(OurPlanCoreJob job, PdfSheetMetadata metadata)
     {
         ApplyLearnedRules(metadata, LoadProjectLearnedRules(job), "project");
     }
@@ -361,14 +361,14 @@ public static partial class SmartLearningStore
         }
     }
 
-    private static void FillPageContext(OurPlaneCoreJob job, PageInfo page, SmartSheetLearningRecord record)
+    private static void FillPageContext(OurPlanCoreJob job, PageInfo page, SmartSheetLearningRecord record)
     {
         record.Page = string.IsNullOrWhiteSpace(record.Page) ? page.Name : record.Page.Trim();
         record.PageFolder = string.IsNullOrWhiteSpace(record.PageFolder)
             ? Path.GetRelativePath(job.RootPath, page.FolderPath)
             : record.PageFolder.Trim();
 
-        SourceInfo? source = OurPlaneCoreJobStore.ReadSource(page.FolderPath);
+        SourceInfo? source = OurPlanCoreJobStore.ReadSource(page.FolderPath);
         record.SourcePdf = string.IsNullOrWhiteSpace(record.SourcePdf)
             ? source?.Pdf ?? page.PdfPath
             : record.SourcePdf.Trim();
@@ -378,7 +378,7 @@ public static partial class SmartLearningStore
 
         if (record.Layers.Count == 0)
         {
-            PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath);
+            PageLayerManifest? manifest = OurPlanCoreJobStore.ReadPageLayerManifest(page.FolderPath);
             IEnumerable<PdfLayerInfo> layerSource = manifest?.Layers ?? page.PdfLayers;
             record.Layers = layerSource
                 .OrderBy(layer => layer.Number)

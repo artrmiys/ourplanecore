@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -137,14 +137,14 @@ public partial class MainWindow
         if (!Directory.Exists(folderPath))
             return;
 
-        if (OurPlaneCoreJobStore.TryReadPage(folderPath) is { } page)
+        if (OurPlanCoreJobStore.TryReadPage(folderPath) is { } page)
         {
             if (File.Exists(page.PdfPath))
                 pages.Add(page);
             return;
         }
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folderPath))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folderPath))
             LoadPagesForPreviewPrefetch(child, pages);
     }
 }

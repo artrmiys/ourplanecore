@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -277,7 +277,7 @@ public partial class MainWindow
 
         after = dropOutOfTargetFolder || IsPagesPositionDropAfter(targetItem, targetPoint);
         canDrop = CanDropPagesToPosition(payload, targetPath, after);
-        string targetName = OurPlaneCoreJobStore.DisplayName(targetPath);
+        string targetName = OurPlanCoreJobStore.DisplayName(targetPath);
         string position = after ? "below" : "above";
         status = canDrop
             ? dropOutOfTargetFolder
@@ -317,7 +317,7 @@ public partial class MainWindow
             return false;
 
         if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
-            return OurPlaneCoreJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
+            return OurPlanCoreJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
 
         return CanDropInto(payload, targetParent, PagesClipboardMode.Cut);
     }
@@ -395,7 +395,7 @@ public partial class MainWindow
             bool reloadActiveTab = false;
             if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
             {
-                if (!OurPlaneCoreJobStore.MoveSiblingsToPosition(paths, targetPath, after))
+                if (!OurPlanCoreJobStore.MoveSiblingsToPosition(paths, targetPath, after))
                     return;
                 changed.AddRange(paths);
             }
@@ -416,7 +416,7 @@ public partial class MainWindow
                     moveEntries.Add(entry);
                 }
 
-                var moved = OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetParent);
+                var moved = OurPlanCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetParent);
                 foreach (var move in moved)
                 {
                     changed.Add(move.MovedPath);
@@ -425,7 +425,7 @@ public partial class MainWindow
                     moved.Select(move => (move.SourcePath, move.MovedPath)).ToList());
 
                 if (changed.Count == 0 ||
-                    !OurPlaneCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
+                    !OurPlanCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
                 {
                     return;
                 }
@@ -440,8 +440,8 @@ public partial class MainWindow
             string selectPath = changed[0];
             QueuePagesTreeDropRefresh(selectPath, reloadActiveTab);
             TxtStatus.Text = changed.Count == 1
-                ? $"Moved page/folder {(after ? "below" : "above")} {OurPlaneCoreJobStore.DisplayName(targetPath)}."
-                : $"Moved {changed.Count} page/folder items {(after ? "below" : "above")} {OurPlaneCoreJobStore.DisplayName(targetPath)}.";
+                ? $"Moved page/folder {(after ? "below" : "above")} {OurPlanCoreJobStore.DisplayName(targetPath)}."
+                : $"Moved {changed.Count} page/folder items {(after ? "below" : "above")} {OurPlanCoreJobStore.DisplayName(targetPath)}.";
         }
         catch (Exception ex)
         {
@@ -480,7 +480,7 @@ public partial class MainWindow
                 moveEntries.Add(entry);
             }
 
-            var moved = OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), root);
+            var moved = OurPlanCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), root);
             foreach (var move in moved)
             {
                 movedIntoRoot = true;
@@ -492,7 +492,7 @@ public partial class MainWindow
             if (changed.Count == 0)
                 return;
 
-            bool reordered = OurPlaneCoreJobStore.MoveSiblingsToEnd(changed, root);
+            bool reordered = OurPlanCoreJobStore.MoveSiblingsToEnd(changed, root);
             _pagesClipboard = null;
             _pagesMultiSelection.Clear();
             foreach (string path in changed)

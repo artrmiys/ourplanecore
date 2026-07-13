@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -125,8 +125,8 @@ public partial class MainWindow
             _currentPage.HiddenTakeoffs = hidden.ToList();
             _currentPage.HiddenMeasurements = hiddenMeasurements.ToList();
         }
-        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(anchor.Page.FolderPath, hidden);
-        OurPlaneCoreJobStore.SavePageHiddenMeasurements(anchor.Page.FolderPath, hiddenMeasurements);
+        OurPlanCoreJobStore.SavePageHiddenTakeoffs(anchor.Page.FolderPath, hidden);
+        OurPlanCoreJobStore.SavePageHiddenMeasurements(anchor.Page.FolderPath, hiddenMeasurements);
         RefreshPageOverlayTreeNode(anchor.Page);
         ApplyViewportPageTakeoffVisibility(anchor.Page);
         RefreshSheetLegend();

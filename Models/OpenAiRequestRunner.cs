@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class SmartAiRunResult
 {
@@ -106,7 +106,7 @@ public static class OpenAiRequestRunner
     }
 
     public static async Task<SmartAiRunResult> RunAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartAiRequest request,
         string apiKey,
         string model,
@@ -232,7 +232,7 @@ public static class OpenAiRequestRunner
     }
 
     public static async Task<SmartAiRunResult> RunStructuredJsonAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string requestId,
         string prompt,
         object jsonSchema,
@@ -400,7 +400,7 @@ public static class OpenAiRequestRunner
         });
     }
 
-    private static string BuildPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         if (string.Equals(request.Type, "pdf_sheet_metadata_fallback", StringComparison.OrdinalIgnoreCase))
             return BuildPdfSheetMetadataPrompt(job, request);
@@ -458,7 +458,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildQuickCropNotePrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildQuickCropNotePrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Read the attached construction-plan crop and create note text for a visible sheet note.");
@@ -488,7 +488,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildRoofRecognitionPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildRoofRecognitionPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Detect reviewable roof marker candidates from a construction-plan sheet crop.");
@@ -573,7 +573,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildFindSimilarMarkerPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildFindSimilarMarkerPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         SmartAiMarker? marker = FindSourceMarker(job, request);
         var sb = new StringBuilder();
@@ -674,7 +674,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static void AppendMarkerFeedbackContext(OurPlaneCoreJob job, SmartAiMarker marker, StringBuilder sb)
+    private static void AppendMarkerFeedbackContext(OurPlanCoreJob job, SmartAiMarker marker, StringBuilder sb)
     {
         IReadOnlyList<SmartMarkerFeedbackRecord> feedback = SmartLearningStore.LoadProjectMarkerFeedback(job)
             .Where(record =>
@@ -706,7 +706,7 @@ public static class OpenAiRequestRunner
         }
     }
 
-    private static string BuildCropBookmarkPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildCropBookmarkPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Analyze this bookmarked construction-plan crop.");
@@ -765,7 +765,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static string BuildPdfSheetMetadataPrompt(OurPlaneCoreJob job, SmartAiRequest request)
+    private static string BuildPdfSheetMetadataPrompt(OurPlanCoreJob job, SmartAiRequest request)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are reading a construction sheet title block for Auto Rename / Auto Scale.");
@@ -817,7 +817,7 @@ public static class OpenAiRequestRunner
         return sb.ToString();
     }
 
-    private static SmartAiMarker? FindSourceMarker(OurPlaneCoreJob job, SmartAiRequest request)
+    private static SmartAiMarker? FindSourceMarker(OurPlanCoreJob job, SmartAiRequest request)
     {
         string markerId = ExtractSourceMarkerId(request.MeasurementSummary);
         if (string.IsNullOrWhiteSpace(markerId))
@@ -877,15 +877,15 @@ public static class OpenAiRequestRunner
             : Path.GetFullPath(Path.Combine(basePath, value));
     }
 
-    private static string? ResolveContextPath(OurPlaneCoreJob job, string value, string basePath) =>
+    private static string? ResolveContextPath(OurPlanCoreJob job, string value, string basePath) =>
         ResolveContextPath(job.RootPath, value, basePath);
 
-    private static string SaveRawResponse(OurPlaneCoreJob job, SmartAiRequest request, string body)
+    private static string SaveRawResponse(OurPlanCoreJob job, SmartAiRequest request, string body)
     {
         return SaveRawResponse(job, request.Id, body);
     }
 
-    private static string SaveRawResponse(OurPlaneCoreJob job, string requestId, string body)
+    private static string SaveRawResponse(OurPlanCoreJob job, string requestId, string body)
     {
         string cleanRequestId = string.IsNullOrWhiteSpace(requestId)
             ? $"openai_{DateTime.UtcNow:yyyyMMdd_HHmmss}"

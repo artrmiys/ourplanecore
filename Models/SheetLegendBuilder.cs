@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class SheetLegendBuilder
 {
     public static IReadOnlyList<SheetLegendEntry> Build(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         IEnumerable<TakeoffItem> takeoffs,
         UnitMode unitMode)
@@ -53,7 +53,7 @@ public static class SheetLegendBuilder
         if (measurements.Count == 0)
             return null;
 
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         return new SheetLegendEntry(
             item.Color,
             item.Name,
@@ -65,7 +65,7 @@ public static class SheetLegendBuilder
     }
 
     private static IReadOnlyList<TakeoffItem> OrderedTakeoffs(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         IReadOnlyList<TakeoffItem> takeoffs)
     {
@@ -103,7 +103,7 @@ public static class SheetLegendBuilder
         IReadOnlyList<Measurement> measurements,
         UnitMode unitMode)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = page.ScaleMetersPerPt;
 
         if (measurementType == "point")
@@ -135,17 +135,17 @@ public static class SheetLegendBuilder
     }
 
     private static string MeasurementTypeTitle(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "Count",
             "area" => "Area",
             _ => "Line",
         };
 
-    private static string LegendOrderKey(OurPlaneCoreJob job, string folderPath) =>
+    private static string LegendOrderKey(OurPlanCoreJob job, string folderPath) =>
         NormalizeLegendOrderKey(job, folderPath);
 
-    private static string NormalizeLegendOrderKey(OurPlaneCoreJob job, string value)
+    private static string NormalizeLegendOrderKey(OurPlanCoreJob job, string value)
     {
         string clean = (value ?? "").Trim();
         if (string.IsNullOrWhiteSpace(clean))
@@ -154,7 +154,7 @@ public static class SheetLegendBuilder
         if (Path.IsPathFullyQualified(clean))
         {
             string full = NormalizePath(clean);
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, full))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, full))
                 clean = Path.GetRelativePath(job.TakeoffsRoot, full);
         }
 

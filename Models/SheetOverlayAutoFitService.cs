@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record SheetOverlayAutoFitResult(
     bool Ok,

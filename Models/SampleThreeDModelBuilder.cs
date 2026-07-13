@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 /// <summary>
 /// Builds and saves the sample job's 3D model headlessly so the sample opens with a finished
@@ -17,7 +17,7 @@ internal static class SampleThreeDModelBuilder
     private const double Pitch = 0.5; // 6/12
     private const double Tol = 0.6;   // feet
 
-    public static void BuildAndSave(OurPlaneCoreJob job, PageInfo page, double scaleMetersPerPt)
+    public static void BuildAndSave(OurPlanCoreJob job, PageInfo page, double scaleMetersPerPt)
     {
         double Resolver(Measurement _) => scaleMetersPerPt;
 

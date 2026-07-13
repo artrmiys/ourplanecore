@@ -7,10 +7,10 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -264,7 +264,7 @@ public partial class MainWindow
         if (!options.RemoveSupportedPdfAnnotations)
             return (sources.ToList(), "");
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "OurPlaneCorePdfTakeoffImport", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Combine(Path.GetTempPath(), "OurPlanCorePdfTakeoffImport", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         var prepared = new List<PdfTakeoffImportSource>();
         using (ShowBusyOverlay($"Creating clean PDF copies for {sources.Count} PDF file(s)..."))
@@ -274,7 +274,7 @@ public partial class MainWindow
             {
                 PdfTakeoffImportSource source = sources[index];
                 string cleanName = $"{Path.GetFileNameWithoutExtension(source.PdfPath)}.clean.pdf";
-                string cleanPath = OurPlaneCoreJobStore.UniqueFilePath(Path.Combine(tempRoot, cleanName));
+                string cleanPath = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(tempRoot, cleanName));
                 string pdfName = Path.GetFileName(source.PdfPath);
                 BusyOverlayText.Text = $"Cleaning PDF annotations {index + 1}/{sources.Count}: {pdfName}";
                 TxtStatus.Text = BusyOverlayText.Text;
@@ -306,7 +306,7 @@ public partial class MainWindow
         AppSettingsStore.AddJobsRoot(_settings, parent);
         SaveAppSettings();
 
-        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parent, jobName);
+        OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, jobName);
         OpenJob(job.RootPath);
     }
 
@@ -323,7 +323,7 @@ public partial class MainWindow
             ? SampleJobService.DefaultJobsRoot
             : options.JobsRootPath;
         string jobName = UniquePdfTakeoffJobName(parent, options.JobName);
-        string jobRoot = Path.Combine(parent, OurPlaneCoreJobStore.SanitizeName(jobName, 120));
+        string jobRoot = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(jobName, 120));
         return (
             Path.Combine(jobRoot, "Pages", PdfTakeoffImportFolderName),
             Path.Combine(jobRoot, "Takeoffs", PdfTakeoffImportFolderName));
@@ -331,13 +331,13 @@ public partial class MainWindow
 
     private static string UniquePdfTakeoffJobName(string parent, string requestedName)
     {
-        string baseName = OurPlaneCoreJobStore.NormalizeDisplayName(
+        string baseName = OurPlanCoreJobStore.NormalizeDisplayName(
             string.IsNullOrWhiteSpace(requestedName) ? "PDF Takeoffs" : requestedName,
             120);
         string candidate = baseName;
         for (int i = 2; ; i++)
         {
-            string folder = Path.Combine(parent, OurPlaneCoreJobStore.SanitizeName(candidate, 120));
+            string folder = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(candidate, 120));
             if (!Directory.Exists(folder))
                 return candidate;
             candidate = $"{baseName} ({i})";
@@ -349,10 +349,10 @@ public partial class MainWindow
         string parent = string.IsNullOrWhiteSpace(parentFolder) || !Directory.Exists(parentFolder)
             ? rootFolder
             : parentFolder;
-        if (string.Equals(OurPlaneCoreJobStore.DisplayName(parent), PdfTakeoffImportFolderName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(OurPlanCoreJobStore.DisplayName(parent), PdfTakeoffImportFolderName, StringComparison.OrdinalIgnoreCase))
             return parent;
 
-        return OurPlaneCoreJobStore.EnsureFolder(parent, PdfTakeoffImportFolderName);
+        return OurPlanCoreJobStore.EnsureFolder(parent, PdfTakeoffImportFolderName);
     }
 
     private static string PreviewPdfTakeoffImportBucketPath(string parentFolder, string rootFolder)
@@ -360,10 +360,10 @@ public partial class MainWindow
         string parent = string.IsNullOrWhiteSpace(parentFolder) || !Directory.Exists(parentFolder)
             ? rootFolder
             : parentFolder;
-        if (string.Equals(OurPlaneCoreJobStore.DisplayName(parent), PdfTakeoffImportFolderName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(OurPlanCoreJobStore.DisplayName(parent), PdfTakeoffImportFolderName, StringComparison.OrdinalIgnoreCase))
             return parent;
 
-        string folderName = OurPlaneCoreJobStore.SanitizeName(PdfTakeoffImportFolderName, 120);
+        string folderName = OurPlanCoreJobStore.SanitizeName(PdfTakeoffImportFolderName, 120);
         return Path.Combine(parent, folderName);
     }
 
@@ -476,7 +476,7 @@ public partial class MainWindow
     {
         string pdfDisplayName = Path.GetFileNameWithoutExtension(source.PdfPath);
         string importPdfPath = string.IsNullOrWhiteSpace(source.ImportPdfPath) ? source.PdfPath : source.ImportPdfPath;
-        IReadOnlyList<PageInfo> importedPages = OurPlaneCoreJobStore.ImportPdf(
+        IReadOnlyList<PageInfo> importedPages = OurPlanCoreJobStore.ImportPdf(
             _currentJob!,
             importPdfPath,
             source.PageNames,
@@ -499,7 +499,7 @@ public partial class MainWindow
             if (pageScale > 0)
             {
                 importedPage.ScaleMetersPerPt = pageScale;
-                OurPlaneCoreJobStore.SavePageScale(importedPage.FolderPath, pageScale);
+                OurPlanCoreJobStore.SavePageScale(importedPage.FolderPath, pageScale);
             }
 
             if (options.ImportDimensionsAsRulers)
@@ -512,13 +512,13 @@ public partial class MainWindow
         if (importMeasurements.Count == 0)
             return;
 
-        string pdfTakeoffFolder = OurPlaneCoreJobStore.EnsureFolder(
+        string pdfTakeoffFolder = OurPlanCoreJobStore.EnsureFolder(
             takeoffsFolder,
             string.IsNullOrWhiteSpace(pdfDisplayName) ? "PDF" : pdfDisplayName);
         foreach (var group in importMeasurements.GroupBy(m => new PdfTakeoffImportGroupKey(m.Annotation.Type, m.Annotation.Color)))
         {
             string itemName = PdfTakeoffImportItemName(group.Key.Type, group.Key.Color);
-            TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(
+            TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(
                 _currentJob!,
                 pdfTakeoffFolder,
                 itemName,
@@ -535,7 +535,7 @@ public partial class MainWindow
                     source.PdfPath));
             }
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            OurPlanCoreJobStore.SaveTakeoffItem(item);
             run.TakeoffItemsImported++;
             run.MeasurementsImported += item.Measurements.Count;
         }

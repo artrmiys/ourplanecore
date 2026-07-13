@@ -5,9 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -121,7 +121,7 @@ public partial class MainWindow
         PageInfo sourcePage = _currentPage;
         string originalPath = sourcePage.FolderPath;
         string currentPath = originalPath;
-        string originalName = OurPlaneCoreJobStore.DisplayName(originalPath);
+        string originalName = OurPlanCoreJobStore.DisplayName(originalPath);
         bool renamed = false;
         bool scaled = false;
 
@@ -134,7 +134,7 @@ public partial class MainWindow
 
             if (!string.Equals(pageName, originalName, StringComparison.OrdinalIgnoreCase))
             {
-                string renamedPath = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(currentPath, pageName);
+                string renamedPath = OurPlanCoreJobStore.RenamePageAllowDuplicateName(currentPath, pageName);
                 bool reloadActiveTab = UpdatePageReferencesForMovedPath(currentPath, renamedPath);
                 currentPath = renamedPath;
                 renamed = true;
@@ -142,7 +142,7 @@ public partial class MainWindow
                 ReloadActivePageTabAfterPathChange(reloadActiveTab);
             }
 
-            appliedPage = OurPlaneCoreJobStore.TryReadPage(currentPath) ?? _currentPage;
+            appliedPage = OurPlanCoreJobStore.TryReadPage(currentPath) ?? _currentPage;
             if (appliedPage != null)
                 WriteFloatingPageSetupMetadata(
                     appliedPage,
@@ -183,7 +183,7 @@ public partial class MainWindow
         if (_currentPage != null)
             _currentPage.ScaleMetersPerPt = scaleMetersPerPt;
         ApplyScaleToCurrentPageMeasurements(scaleMetersPerPt);
-        OurPlaneCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
+        OurPlanCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
         UpdateScaleUi(scaleMetersPerPt);
         return changed;
     }
@@ -267,7 +267,7 @@ public partial class MainWindow
         if (page.ScaleMetersPerPt <= 0)
             return "";
 
-        string metadataText = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)?.EffectiveScaleText.Trim() ?? "";
+        string metadataText = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)?.EffectiveScaleText.Trim() ?? "";
         if (!string.IsNullOrWhiteSpace(metadataText) &&
             PdfSheetMetadataService.TryParseScaleMetersPerPt(metadataText, out double metadataScale) &&
             Math.Abs(metadataScale - page.ScaleMetersPerPt) <= 0.000000001)
@@ -292,7 +292,7 @@ public partial class MainWindow
         double scaleMetersPerPt,
         string manualScaleText = "")
     {
-        PdfSheetMetadata metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
+        PdfSheetMetadata metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
             ?? CreateManualSheetMetadata(page);
 
         metadata.GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
@@ -315,6 +315,6 @@ public partial class MainWindow
             metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
         }
 
-        OurPlaneCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
+        OurPlanCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
     }
 }

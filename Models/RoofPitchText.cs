@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Single source of truth for roof pitch text <-> rise-per-foot.
 // Accepts "6/12", "6:12", "6 in 12", a bare rise over 12 ("6"), or a

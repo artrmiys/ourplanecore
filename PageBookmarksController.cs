@@ -10,10 +10,10 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal sealed class PageBookmarksController
 {
@@ -26,7 +26,7 @@ internal sealed class PageBookmarksController
     private readonly RowDefinition _dockSplitterRow;
     private readonly RowDefinition _dockRow;
     private readonly Action<string> _setStatus;
-    private readonly Func<OurPlaneCoreJob?> _currentJob;
+    private readonly Func<OurPlanCoreJob?> _currentJob;
     private readonly Func<PageInfo?> _currentPage;
     private readonly PdfViewport _viewport;
     private readonly Action<PageInfo, PdfViewport.ViewState> _openBookmarkView;
@@ -57,7 +57,7 @@ internal sealed class PageBookmarksController
         RowDefinition dockSplitterRow,
         RowDefinition dockRow,
         Action<string> setStatus,
-        Func<OurPlaneCoreJob?> currentJob,
+        Func<OurPlanCoreJob?> currentJob,
         Func<PageInfo?> currentPage,
         PdfViewport viewport,
         Action<PageInfo, PdfViewport.ViewState> openBookmarkView)
@@ -157,9 +157,9 @@ internal sealed class PageBookmarksController
             return;
         }
 
-        OurPlaneCoreJob? job = _currentJob();
+        OurPlanCoreJob? job = _currentJob();
         if (job != null)
-            _pageBookmarks.AddRange(OurPlaneCoreJobStore.LoadPageBookmarks(job));
+            _pageBookmarks.AddRange(OurPlanCoreJobStore.LoadPageBookmarks(job));
 
         RefreshBookmarkList();
     }
@@ -370,7 +370,7 @@ internal sealed class PageBookmarksController
 
     private static string BookmarkPageName(PageBookmark bookmark)
     {
-        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(bookmark.PageFolder);
+        PageInfo? page = OurPlanCoreJobStore.TryReadPage(bookmark.PageFolder);
         return page?.Name ?? (string.IsNullOrWhiteSpace(bookmark.PageName) ? "Missing" : bookmark.PageName);
     }
 
@@ -436,7 +436,7 @@ internal sealed class PageBookmarksController
 
     private void AddCurrentPageBookmark(bool promptForName)
     {
-        OurPlaneCoreJob? job = _currentJob();
+        OurPlanCoreJob? job = _currentJob();
         PageInfo? page = _currentPage();
         if (job == null || page == null)
         {
@@ -557,7 +557,7 @@ internal sealed class PageBookmarksController
             return;
         }
 
-        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(bookmark.PageFolder);
+        PageInfo? page = OurPlanCoreJobStore.TryReadPage(bookmark.PageFolder);
         if (page == null)
         {
             _setStatus($"Bookmark page is missing: {bookmark.Name}.");
@@ -591,7 +591,7 @@ internal sealed class PageBookmarksController
     }
 
     private bool TrySaveBookmarkCropImage(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         string bookmarkName,
         string bookmarkId,
@@ -653,9 +653,9 @@ internal sealed class PageBookmarksController
         if (!IsCropImageBookmark(bookmark))
             return;
 
-        OurPlaneCoreJob? job = _currentJob();
+        OurPlanCoreJob? job = _currentJob();
         string path = BookmarkCropImageFullPath(bookmark);
-        if (job == null || string.IsNullOrWhiteSpace(path) || !OurPlaneCoreJobStore.IsSameOrDescendant(job.RootPath, path))
+        if (job == null || string.IsNullOrWhiteSpace(path) || !OurPlanCoreJobStore.IsSameOrDescendant(job.RootPath, path))
             return;
 
         try
@@ -680,7 +680,7 @@ internal sealed class PageBookmarksController
             if (Path.IsPathRooted(path))
                 return Path.GetFullPath(path);
 
-            OurPlaneCoreJob? job = _currentJob();
+            OurPlanCoreJob? job = _currentJob();
             return job == null ? "" : Path.GetFullPath(Path.Combine(job.RootPath, path));
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
@@ -691,14 +691,14 @@ internal sealed class PageBookmarksController
     }
 
     private static string BookmarkCropImagePath(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         string bookmarkName,
         string bookmarkId)
     {
         string folder = Path.Combine(job.RootPath, "bookmark_crops");
-        string pagePart = OurPlaneCoreJobStore.SanitizeName(page.Name, 48);
-        string namePart = OurPlaneCoreJobStore.SanitizeName(bookmarkName, 48);
+        string pagePart = OurPlanCoreJobStore.SanitizeName(page.Name, 48);
+        string namePart = OurPlanCoreJobStore.SanitizeName(bookmarkName, 48);
         string idPart = string.IsNullOrWhiteSpace(bookmarkId)
             ? Guid.NewGuid().ToString("N")[..8]
             : bookmarkId[..Math.Min(8, bookmarkId.Length)];
@@ -708,14 +708,14 @@ internal sealed class PageBookmarksController
 
     private void SavePageBookmarks()
     {
-        OurPlaneCoreJob? job = _currentJob();
+        OurPlanCoreJob? job = _currentJob();
         if (job != null)
             SavePageBookmarks(job);
     }
 
-    private void SavePageBookmarks(OurPlaneCoreJob job)
+    private void SavePageBookmarks(OurPlanCoreJob job)
     {
-        OurPlaneCoreJobStore.SavePageBookmarks(job, _pageBookmarks);
+        OurPlanCoreJobStore.SavePageBookmarks(job, _pageBookmarks);
     }
 
     private string UniqueBookmarkName(string baseName)

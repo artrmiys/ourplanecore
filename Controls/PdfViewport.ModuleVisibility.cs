@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {

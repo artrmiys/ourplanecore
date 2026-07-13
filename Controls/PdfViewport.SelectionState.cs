@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -290,7 +290,7 @@ public sealed partial class PdfViewport
 
     private static bool IsRulerAnnotation(PageAnnotation annotation) =>
         string.Equals(
-            OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind),
+            OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind),
             "dimension",
             StringComparison.OrdinalIgnoreCase);
 

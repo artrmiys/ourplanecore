@@ -3,7 +3,7 @@ using System.IO;
 using System.Windows.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -156,7 +156,7 @@ public partial class MainWindow
 
     private double RoofTakeoffScaleForPage(string pageFolder)
     {
-        double pageScale = OurPlaneCoreJobStore.TryReadPage(pageFolder)?.ScaleMetersPerPt ?? 0;
+        double pageScale = OurPlanCoreJobStore.TryReadPage(pageFolder)?.ScaleMetersPerPt ?? 0;
         if (pageScale > 0)
             return pageScale;
         if (_currentPage?.ScaleMetersPerPt > 0)

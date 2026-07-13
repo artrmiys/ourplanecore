@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Rafter layout on 3D roof planes. Each enabled roof face gets parallel
 // rafters running up the slope: direction and pitch come straight from the

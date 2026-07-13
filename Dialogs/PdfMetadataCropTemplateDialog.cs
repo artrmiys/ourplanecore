@@ -8,7 +8,7 @@ using System.Windows.Media.Imaging;
 using SkiaSharp;
 using WpfRectangle = System.Windows.Shapes.Rectangle;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed class PdfMetadataCropTemplateDialog : Window
 {

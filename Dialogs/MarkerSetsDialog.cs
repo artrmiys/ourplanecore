@@ -5,9 +5,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using OurPlaneCore;
+using OurPlanCore;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public enum MarkerSetsDialogAction
 {

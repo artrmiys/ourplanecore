@@ -10,7 +10,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public partial class JobPickerDialog : Window
 {

@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {

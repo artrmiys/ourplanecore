@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -109,7 +109,7 @@ public partial class MainWindow
         var entries = paths
             .Where(path => IsPathInsidePagesRoot(path, allowRoot: false))
             .Where(Directory.Exists)
-            .Select(path => new PagesClipboardEntry(path, OurPlaneCoreJobStore.IsPageFolder(path)))
+            .Select(path => new PagesClipboardEntry(path, OurPlanCoreJobStore.IsPageFolder(path)))
             .ToList();
 
         return NormalizeSelectedEntries(entries);
@@ -130,7 +130,7 @@ public partial class MainWindow
         var result = new List<PagesClipboardEntry>();
         foreach (var entry in distinct)
         {
-            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
+            if (result.Any(parent => OurPlanCoreJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
                 continue;
             result.Add(entry);
         }

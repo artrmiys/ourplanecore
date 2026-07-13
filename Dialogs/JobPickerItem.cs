@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public enum JobPickerAction
 {

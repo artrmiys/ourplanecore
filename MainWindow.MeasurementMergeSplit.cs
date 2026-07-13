@@ -5,7 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -138,7 +138,7 @@ public partial class MainWindow
         }
 
         var types = selected
-            .Select(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType))
+            .Select(measurement => OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (types.Count != 1)
@@ -154,7 +154,7 @@ public partial class MainWindow
     private TakeoffItem? PromptMergeTargetTakeoff(IReadOnlyList<Measurement> selected, string measurementType)
     {
         var options = _takeoffItems
-            .Where(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == measurementType)
+            .Where(item => OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == measurementType)
             .Where(item => !selected.All(item.Measurements.Contains))
             .Select(item => new MeasurementMergeTargetOption(item, MergeTargetLabel(item)))
             .ToList();
@@ -221,7 +221,7 @@ public partial class MainWindow
         string parentName = string.IsNullOrWhiteSpace(parent) || _currentJob == null ||
                             string.Equals(parent, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase)
             ? "Takeoffs"
-            : OurPlaneCoreJobStore.DisplayName(parent);
+            : OurPlanCoreJobStore.DisplayName(parent);
         return $"{item.Name}  |  {TakeoffTypeTitle(item)}  |  {parentName}";
     }
 

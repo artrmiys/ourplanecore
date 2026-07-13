@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -51,11 +51,11 @@ public partial class MainWindow
 
     private string ResolveTakeoffFolderDefaultMeasurementType(string folderPath, string fallback)
     {
-        string fallbackType = OurPlaneCoreJobStore.NormalizeMeasurementType(fallback);
+        string fallbackType = OurPlanCoreJobStore.NormalizeMeasurementType(fallback);
         foreach (TakeoffFolderProperties properties in EnumerateTakeoffFolderProperties(folderPath))
         {
             if (!string.IsNullOrWhiteSpace(properties.DefaultMeasurementType))
-                return OurPlaneCoreJobStore.NormalizeMeasurementType(properties.DefaultMeasurementType);
+                return OurPlanCoreJobStore.NormalizeMeasurementType(properties.DefaultMeasurementType);
         }
 
         return fallbackType;
@@ -308,7 +308,7 @@ public partial class MainWindow
         string? current = folderPath;
         while (!string.IsNullOrWhiteSpace(current) &&
                Directory.Exists(current) &&
-               OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, current))
+               OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, current))
         {
             if (TakeoffFolderPropertiesStore.TryLoad(current) != null)
                 yield return TakeoffFolderPropertiesStore.Load(current);

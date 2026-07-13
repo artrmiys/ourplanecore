@@ -9,12 +9,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -43,7 +43,7 @@ public sealed partial class PdfViewport
 
     private void DrawPageAnnotation(SKCanvas canvas, PageAnnotation annotation, bool selected)
     {
-        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         SKColor color = GetCachedColor(annotation.Color, new SKColor(0x15, 0x65, 0xC0));
         using var stroke = new SKPaint
         {

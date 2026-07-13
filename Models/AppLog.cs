@@ -3,7 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class AppLog
 {
@@ -54,8 +54,7 @@ public static class AppLog
 
     private static string ResolveLogPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string directory = Path.Combine(appData, "OurPlaneCore", "logs");
+        string directory = Path.Combine(AppIdentity.RoamingRoot, "logs");
         string date = DateTime.Now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         string basePath = Path.Combine(directory, $"app-{date}.log");
         if (!File.Exists(basePath) || new FileInfo(basePath).Length <= MaxLogBytes)
@@ -76,8 +75,7 @@ public static class AppLog
     {
         try
         {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string directory = Path.Combine(appData, "OurPlaneCore", "logs");
+            string directory = Path.Combine(AppIdentity.RoamingRoot, "logs");
             if (!Directory.Exists(directory))
                 return;
 

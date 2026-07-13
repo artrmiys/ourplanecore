@@ -5,7 +5,7 @@ using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -195,7 +195,7 @@ public partial class MainWindow
         _takeoffsClipboard = new TakeoffsClipboard(entries, mode);
         string verb = mode == TakeoffsClipboardMode.Copy ? "Copied" : "Cut";
         TxtStatus.Text = entries.Count == 1
-            ? $"{verb}: {OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}"
+            ? $"{verb}: {OurPlanCoreJobStore.DisplayName(entries[0].SourcePath)}"
             : $"{verb} {entries.Count} takeoff nodes.";
     }
 
@@ -232,7 +232,7 @@ public partial class MainWindow
                     continue;
                 }
 
-                changed.Add(OurPlaneCoreJobStore.CopyNodePreserveDisplayName(entry.SourcePath, parent));
+                changed.Add(OurPlanCoreJobStore.CopyNodePreserveDisplayName(entry.SourcePath, parent));
             }
 
             if (changed.Count == 0)
@@ -245,7 +245,7 @@ public partial class MainWindow
                 SelectFirstTakeoffPath(changed);
             }
             TxtStatus.Text = changed.Count == 1
-                ? $"Duplicated: {OurPlaneCoreJobStore.DisplayName(changed[0])}"
+                ? $"Duplicated: {OurPlanCoreJobStore.DisplayName(changed[0])}"
                 : $"Duplicated {changed.Count} takeoff nodes.";
         }
         catch (Exception ex)
@@ -278,7 +278,7 @@ public partial class MainWindow
                 var moveEntries = payload.Entries
                     .Where(entry => CanDropTakeoffsInto(new TakeoffsClipboard([entry], mode), targetFolder, mode))
                     .ToList();
-                foreach (var moved in OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetFolder))
+                foreach (var moved in OurPlanCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetFolder))
                 {
                     changed.Add(moved.MovedPath);
                     rebasedLegendPaths.Add((moved.SourcePath, moved.MovedPath));
@@ -290,7 +290,7 @@ public partial class MainWindow
                     .Where(entry => CanDropTakeoffsInto(new TakeoffsClipboard([entry], mode), targetFolder, mode))
                     .Select(entry => entry.SourcePath)
                     .ToList();
-                changed.AddRange(OurPlaneCoreJobStore.CopyNodesPreserveDisplayName(copyEntries, targetFolder));
+                changed.AddRange(OurPlanCoreJobStore.CopyNodesPreserveDisplayName(copyEntries, targetFolder));
             }
             fileWatch.Stop();
             if (timings != null)
@@ -326,7 +326,7 @@ public partial class MainWindow
                 timings.UiRefreshMilliseconds = refreshWatch.ElapsedMilliseconds;
 
             TxtStatus.Text = changed.Count == 1
-                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlaneCoreJobStore.DisplayName(changed[0])}"
+                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlanCoreJobStore.DisplayName(changed[0])}"
                 : $"{(wasCut ? "Moved" : "Pasted")} {changed.Count} takeoff nodes.";
         }
         catch (Exception ex)
@@ -345,8 +345,8 @@ public partial class MainWindow
         if (!Directory.Exists(targetFolder))
             return false;
 
-        if (!OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetFolder) ||
-            OurPlaneCoreJobStore.IsTakeoffItemFolder(targetFolder))
+        if (!OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetFolder) ||
+            OurPlanCoreJobStore.IsTakeoffItemFolder(targetFolder))
             return false;
 
         bool hasMovableEntry = false;
@@ -354,11 +354,11 @@ public partial class MainWindow
         {
             if (!Directory.Exists(entry.SourcePath))
                 return false;
-            if (!OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
+            if (!OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
                 string.Equals(entry.SourcePath, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
                 return false;
 
             if (mode == TakeoffsClipboardMode.Cut)

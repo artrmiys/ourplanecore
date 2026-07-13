@@ -5,10 +5,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PdfExporter
 {
@@ -20,7 +20,7 @@ public static partial class PdfExporter
     {
         foreach (PageAnnotation annotation in annotations)
         {
-            string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+            string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
             if (annotation.Points.Count < 2)
                 continue;
 

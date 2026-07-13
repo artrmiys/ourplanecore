@@ -4,11 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
-using OurPlaneCore.Models;
+using OurPlanCore.Controls;
+using OurPlanCore.Models;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -20,7 +20,7 @@ public partial class MainWindow
 
     private void TraceWallsFromSelectedArea(TreeViewItem tvi, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
         {
             TxtStatus.Text = "Walls can only be traced inside Area takeoff items.";
             return;
@@ -38,8 +38,8 @@ public partial class MainWindow
 
     private void TraceWallsFromAreaSection(TakeoffItem item, Measurement measurement)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area")
         {
             TxtStatus.Text = "Walls can only be traced inside Area sections.";
             return;
@@ -69,7 +69,7 @@ public partial class MainWindow
 
         if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, area.PageFolder))
         {
-            PageInfo? areaPage = OurPlaneCoreJobStore.TryReadPage(area.PageFolder);
+            PageInfo? areaPage = OurPlanCoreJobStore.TryReadPage(area.PageFolder);
             if (areaPage == null)
             {
                 PostStatusInfo("Cannot open the sheet for this Area, so wall tracing was not started.");

@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectScanner
 {
@@ -25,7 +25,7 @@ public static partial class PlanSwiftProjectScanner
         if (!Directory.Exists(sourceJobPath))
             throw new DirectoryNotFoundException(sourceJobPath);
 
-        if (TryScanExistingOurPlaneCoreJob(sourceJobPath, out PlanSwiftProjectManifest existingManifest))
+        if (TryScanExistingOurPlanCoreJob(sourceJobPath, out PlanSwiftProjectManifest existingManifest))
             return existingManifest;
 
         var warnings = new List<string>();

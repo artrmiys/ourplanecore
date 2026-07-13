@@ -6,7 +6,7 @@ using Docnet.Core;
 using Docnet.Core.Models;
 using Docnet.Core.Readers;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 /// <summary>
 /// Small LRU cache of parsed Docnet documents so repeated preview renders of

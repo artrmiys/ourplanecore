@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -146,7 +146,7 @@ public partial class MainWindow
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(item =>
             {
-                string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+                string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
                 return new AiActionTargetOption
                 {
                     Id = item.Id,
@@ -183,7 +183,7 @@ public partial class MainWindow
     {
         if (_activeItem != null)
         {
-            string activeType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+            string activeType = OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
             if (string.Equals(activeType, measurementType, StringComparison.OrdinalIgnoreCase))
             {
                 AiActionTargetOption? active = targets.FirstOrDefault(target =>

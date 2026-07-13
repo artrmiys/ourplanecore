@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class SmartProjectContext
 {

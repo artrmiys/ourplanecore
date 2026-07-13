@@ -5,10 +5,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PdfExporter
 {
@@ -40,7 +40,7 @@ public static partial class PdfExporter
         SKColor color,
         PdfExportOptions options)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType);
         if (measurement.Points.Count == 0)
             return;
 
@@ -106,7 +106,7 @@ public static partial class PdfExporter
         List<SKRect> occupiedLabelBoxes,
         SKRect pageBounds)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType);
         if (measurement.Points.Count == 0)
             return;
 
@@ -147,7 +147,7 @@ public static partial class PdfExporter
 
     private static bool ShouldExportMeasurementLabel(string measurementType, PdfExportOptions options)
     {
-        return OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        return OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => options.ShowMeasurementLabels || options.ShowCountLabels,
             "area" => options.ShowMeasurementLabels || options.ShowAreaLabels,

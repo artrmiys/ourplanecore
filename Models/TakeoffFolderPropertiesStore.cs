@@ -3,7 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class TakeoffFolderProperties
 {
@@ -50,7 +50,7 @@ public static class TakeoffFolderPropertiesStore
         TakeoffFolderProperties properties = TryLoad(folderPath) ?? new TakeoffFolderProperties();
         if (string.IsNullOrWhiteSpace(properties.DisplayName))
             properties.DisplayName = Directory.Exists(folderPath)
-                ? OurPlaneCoreJobStore.DisplayName(folderPath)
+                ? OurPlanCoreJobStore.DisplayName(folderPath)
                 : Path.GetFileName(folderPath);
         properties.DefaultMeasurementType = NormalizeMeasurementType(properties.DefaultMeasurementType);
         properties.DefaultColor = NormalizeColor(properties.DefaultColor);
@@ -79,7 +79,7 @@ public static class TakeoffFolderPropertiesStore
         Directory.CreateDirectory(folderPath);
         properties.SchemaVersion = 1;
         properties.DisplayName = string.IsNullOrWhiteSpace(properties.DisplayName)
-            ? OurPlaneCoreJobStore.DisplayName(folderPath)
+            ? OurPlanCoreJobStore.DisplayName(folderPath)
             : properties.DisplayName.Trim();
         properties.Notes = properties.Notes.Trim();
         properties.DefaultColor = NormalizeColor(properties.DefaultColor);
@@ -103,7 +103,7 @@ public static class TakeoffFolderPropertiesStore
     private static string NormalizeMeasurementType(string value) =>
         string.IsNullOrWhiteSpace(value)
             ? ""
-            : OurPlaneCoreJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
+            : OurPlanCoreJobStore.NormalizeMeasurementType(value.Trim().ToLowerInvariant());
 
     private static string NormalizeColor(string value)
     {

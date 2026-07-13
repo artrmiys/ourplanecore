@@ -93,7 +93,7 @@ def _assert_points_close(actual: list[tuple[float, float]], expected: list[tuple
 
 
 def run_smoke(keep: bool = False) -> Path:
-    workdir = Path(tempfile.gettempdir()) / "opc_pdf_takeoff_import_rotation_smoke"
+    workdir = Path(tempfile.gettempdir()) / "onc_pdf_takeoff_import_rotation_smoke"
     if workdir.exists():
         shutil.rmtree(workdir)
     workdir.mkdir(parents=True, exist_ok=True)

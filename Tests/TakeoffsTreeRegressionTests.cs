@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using System.Reflection;
 
@@ -61,12 +61,12 @@ internal static class TakeoffsTreeRegressionTests
             loadMethod.Contains("TryReadPage(page.FolderPath", StringComparison.Ordinal),
             "page open must not re-read source.json after LoadPageFromTab already loaded the page");
         AssertTrue(
-            loadFromTabMethod.Contains("PageInfo? page = OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);", StringComparison.Ordinal) &&
+            loadFromTabMethod.Contains("PageInfo? page = OurPlanCoreJobStore.TryReadPage(tab.PageFolder);", StringComparison.Ordinal) &&
             loadFromTabMethod.Contains("if (page == null &&", StringComparison.Ordinal) &&
             loadFromTabMethod.Contains("page = fallbackPage;", StringComparison.Ordinal),
             "LoadPageFromTab should prefer the latest source.json page snapshot before using a stale fallback page");
         AssertTrue(
-            distinctBatchPagesMethod.Contains(".Select(page => OurPlaneCoreJobStore.TryReadPage(page.FolderPath))", StringComparison.Ordinal) &&
+            distinctBatchPagesMethod.Contains(".Select(page => OurPlanCoreJobStore.TryReadPage(page.FolderPath))", StringComparison.Ordinal) &&
             distinctBatchPagesMethod.Contains(".Where(page => page != null)", StringComparison.Ordinal) &&
             distinctBatchPagesMethod.Contains(".Cast<PageInfo>()", StringComparison.Ordinal),
             "batch tab/detached opens should refresh selected pages from source.json before passing raster metadata into viewports");
@@ -85,7 +85,7 @@ internal static class TakeoffsTreeRegressionTests
             "page open should load the viewport, apply the cheap hidden-takeoff snapshot, restore saved annotations before any page-switch autosave, queue async sheet overlay work, then schedule slower follow-up work");
         AssertTrue(
             loadMethod.Contains("_currentPageAnnotationsLoaded = false", StringComparison.Ordinal) &&
-            loadAnnotationsMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            loadAnnotationsMethod.Contains("OurPlanCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             loadAnnotationsMethod.Contains("_currentPageAnnotationsLoaded = true", StringComparison.Ordinal) &&
             loadAnnotationsMethod.Contains("ApplyRulerVisibilityToViewport()", StringComparison.Ordinal) &&
             saveAnnotationsMethod.Contains("_currentPage == null || !_currentPageAnnotationsLoaded", StringComparison.Ordinal),
@@ -122,7 +122,7 @@ internal static class TakeoffsTreeRegressionTests
             deferredMethod.Contains("QueueJobPagePreviewWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("QueueJobRasterSheetRefreshWarmupDeferred(deferredVersion, viewportPage)", StringComparison.Ordinal) &&
             deferredMethod.Contains("ApplyViewportPageTakeoffVisibility(viewportPage)", StringComparison.Ordinal) &&
-            !deferredMethod.Contains("OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
+            !deferredMethod.Contains("OurPlanCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath)", StringComparison.Ordinal) &&
             deferredMethod.Contains("IReadOnlyList<TakeoffItem> scaledItems = ApplyScaleToCurrentPageMeasurements(viewportPage.ScaleMetersPerPt)", StringComparison.Ordinal) &&
             deferredMethod.Contains("RefreshLoadedPageTakeoffVisuals(viewportPage.FolderPath, scaledItems)", StringComparison.Ordinal) &&
             deferredMethod.Contains("SaveAppSettings();", StringComparison.Ordinal),
@@ -187,7 +187,7 @@ internal static class TakeoffsTreeRegressionTests
             nearbyPrefetchQueueMethod.Contains("_lastNearbyPagePreviewPrefetchFolder = activePage.FolderPath", StringComparison.Ordinal) &&
             nearbyPrefetchQueueMethod.Contains("LoadPagesForPreviewPrefetch(pagesRoot)", StringComparison.Ordinal) &&
             loadPagesForPrefetchMethod.Contains("LoadPagesForPreviewPrefetch(pagesRoot, pages)", StringComparison.Ordinal) &&
-            pagePreviewWarmup.Contains("OurPlaneCoreJobStore.GetOrderedChildDirectories(folderPath)", StringComparison.Ordinal) &&
+            pagePreviewWarmup.Contains("OurPlanCoreJobStore.GetOrderedChildDirectories(folderPath)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("ViewportRenderPolicy.NearbyPagePreviewPrefetchRadius", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("FindPreviewPrefetchDirection(pages, activeIndex, previousPageFolder)", StringComparison.Ordinal) &&
             nearbyPrefetchMethod.Contains("DirectionalPrefetchRadius", StringComparison.Ordinal) &&
@@ -266,10 +266,10 @@ internal static class TakeoffsTreeRegressionTests
             selectMethod.Contains("OpenPageByFolder(folderPath)", StringComparison.Ordinal),
             "programmatic page selection should not rely only on TreeView SelectedItemChanged to open the viewport");
         AssertTrue(
-            selectMethod.Contains("selected || OurPlaneCoreJobStore.IsPageFolder(folderPath)", StringComparison.Ordinal),
+            selectMethod.Contains("selected || OurPlanCoreJobStore.IsPageFolder(folderPath)", StringComparison.Ordinal),
             "programmatic page selection should still open a valid page when the row is hidden or already selected");
         AssertTrue(
-            openMethod.Contains("OurPlaneCoreJobStore.TryReadPage(folderPath)", StringComparison.Ordinal) &&
+            openMethod.Contains("OurPlanCoreJobStore.TryReadPage(folderPath)", StringComparison.Ordinal) &&
             openMethod.Contains("OpenPageInActiveTab(page)", StringComparison.Ordinal),
             "direct programmatic page open should read the selected page and load it through the normal page tab path");
         AssertTrue(
@@ -818,15 +818,15 @@ internal static class TakeoffsTreeRegressionTests
     {
         WithTempJob("Nested Takeoffs", job =>
         {
-            string wallsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "Walls");
-            string firstFloorFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, wallsFolder, "1st Floor");
-            string assemblyFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "Assemblies");
+            string wallsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "Walls");
+            string firstFloorFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, wallsFolder, "1st Floor");
+            string assemblyFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "Assemblies");
 
             TakeoffItem rootItem = CreateMeasuredTakeoffItem(job, job.TakeoffsRoot, "Root Line", "line");
             TakeoffItem nestedWallItem = CreateMeasuredTakeoffItem(job, firstFloorFolder, "Exterior Walls", "line");
             TakeoffItem nestedAreaItem = CreateMeasuredTakeoffItem(job, assemblyFolder, "Deck Area", "area");
 
-            IReadOnlyList<TakeoffItem> loaded = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+            IReadOnlyList<TakeoffItem> loaded = OurPlanCoreJobStore.LoadTakeoffItems(job);
             string loadedNames = string.Join(",", loaded.Select(item => item.Name).OrderBy(name => name));
 
             AssertEqual("3", loaded.Count.ToString(), "loaded takeoff item count");
@@ -845,17 +845,17 @@ internal static class TakeoffsTreeRegressionTests
     {
         WithTempJob("Corrupt Takeoff Sibling", job =>
         {
-            string wallsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "Walls");
+            string wallsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "Walls");
             TakeoffItem goodBefore = CreateMeasuredTakeoffItem(job, wallsFolder, "Good Before", "line");
             TakeoffItem corrupt = CreateMeasuredTakeoffItem(job, wallsFolder, "Corrupt Item", "line");
             TakeoffItem goodAfter = CreateMeasuredTakeoffItem(job, wallsFolder, "Good After", "line");
 
             string corruptMeasurementsPath = Path.Combine(corrupt.FolderPath, "measurements.json");
             File.WriteAllText(corruptMeasurementsPath, "{ bad json");
-            _ = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+            _ = OurPlanCoreJobStore.DrainCorruptJsonFiles();
 
-            IReadOnlyList<TakeoffItem> loaded = OurPlaneCoreJobStore.LoadTakeoffItems(job);
-            IReadOnlyList<string> quarantined = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+            IReadOnlyList<TakeoffItem> loaded = OurPlanCoreJobStore.LoadTakeoffItems(job);
+            IReadOnlyList<string> quarantined = OurPlanCoreJobStore.DrainCorruptJsonFiles();
 
             AssertEqual("3", loaded.Count.ToString(), "corrupt item should not drop sibling items");
             AssertTrue(ContainsFolder(loaded, goodBefore.FolderPath), "first sibling should stay visible");
@@ -892,7 +892,7 @@ internal static class TakeoffsTreeRegressionTests
         string helper = SliceMethod(pagesTree, "private bool TryRefreshPageTreeItemFromStore");
 
         AssertTrue(
-            helper.Contains("OurPlaneCoreJobStore.TryReadPage(pageFolder)", StringComparison.Ordinal) &&
+            helper.Contains("OurPlanCoreJobStore.TryReadPage(pageFolder)", StringComparison.Ordinal) &&
             helper.Contains("item.Tag = refreshedPage;", StringComparison.Ordinal) &&
             helper.Contains("item.Header = BuildPageHeader(refreshedPage);", StringComparison.Ordinal) &&
             helper.Contains("RebuildPageTakeoffNodes(item, refreshedPage);", StringComparison.Ordinal),
@@ -941,9 +941,9 @@ internal static class TakeoffsTreeRegressionTests
         string flushMethod = SliceMethod(drag, "private void FlushPendingPagesTreeDropRefresh()");
 
         AssertTrue(
-            actions.Contains("OurPlaneCoreJobStore.MoveNodes(validEntries.Select(entry => entry.SourcePath), targetFolder)", StringComparison.Ordinal) &&
-            drag.Contains("OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetParent)", StringComparison.Ordinal) &&
-            drag.Contains("OurPlaneCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), root)", StringComparison.Ordinal),
+            actions.Contains("OurPlanCoreJobStore.MoveNodes(validEntries.Select(entry => entry.SourcePath), targetFolder)", StringComparison.Ordinal) &&
+            drag.Contains("OurPlanCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), targetParent)", StringComparison.Ordinal) &&
+            drag.Contains("OurPlanCoreJobStore.MoveNodes(moveEntries.Select(entry => entry.SourcePath), root)", StringComparison.Ordinal),
             "Pages cut/drop should batch filesystem moves instead of moving each selected page/folder separately");
         AssertTrue(
             references.Contains("private bool UpdatePageReferencesForMovedPaths", StringComparison.Ordinal) &&
@@ -1655,7 +1655,7 @@ internal static class TakeoffsTreeRegressionTests
         string pageTakeoffMenu = ReadRepoFile("MainWindow.PageTakeoffLegend.ContextMenu.cs");
         string viewportApi = ReadRepoFile("Controls/PdfViewport.MeasurementApi.cs");
         string viewportSelection = ReadRepoFile("Controls/PdfViewport.SelectionState.cs");
-        string models = ReadRepoFile("Models/OurPlaneCoreJobModels.cs");
+        string models = ReadRepoFile("Models/OurPlanCoreJobModels.cs");
         string pageStore = ReadRepoFile("Models/Storage/PageStore.cs");
 
         AssertTrue(
@@ -1804,7 +1804,7 @@ internal static class TakeoffsTreeRegressionTests
             !overlay.Contains("tinted.SetPixel(x, y", StringComparison.Ordinal),
             "sheet overlay tinting should use a single pixel-array pass instead of per-pixel bitmap calls");
         AssertTrue(
-            cache.Contains("OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT", StringComparison.Ordinal) &&
+            cache.Contains("OURPLANCORE_SHEET_OVERLAY_CACHE_ROOT", StringComparison.Ordinal) &&
             cache.Contains("render-cache", StringComparison.Ordinal) &&
             cache.Contains("sheet-overlay", StringComparison.Ordinal) &&
             cache.Contains("OverlayPdfFingerprint", StringComparison.Ordinal) &&
@@ -1841,7 +1841,7 @@ internal static class TakeoffsTreeRegressionTests
             importer.Contains("PdfTakeoffImportFolderName = \"from pdf\"", StringComparison.Ordinal) &&
             importer.Contains("PdfTakeoffAnnotationImportService.TryReadAsync", StringComparison.Ordinal) &&
             importer.Contains("PdfTakeoffImportGroupKey(m.Annotation.Type, m.Annotation.Color)", StringComparison.Ordinal) &&
-            importer.Contains("OurPlaneCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
+            importer.Contains("OurPlanCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
             importer.Contains("PdfSheetMetadataService.TryAnalyzePage", StringComparison.Ordinal) &&
             importer.Contains("pdf_takeoff_import_", StringComparison.Ordinal),
             "PDF takeoff import should bucket pages/takeoffs, group by type/color, preserve scale/page names, and write a markdown report");
@@ -2251,7 +2251,7 @@ internal static class TakeoffsTreeRegressionTests
             workspaceManagers.Contains("SheetManagerPageFromRow", StringComparison.Ordinal) &&
             pagesTree.Contains("private void RefreshPageTreePageSnapshots(IReadOnlyList<PageInfo> pages)", StringComparison.Ordinal) &&
             pagesTree.Contains("private bool TryRefreshPageTreeItemFromStore(TreeViewItem item, string pageFolder", StringComparison.Ordinal) &&
-            pagesTree.Contains("OurPlaneCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage", StringComparison.Ordinal) &&
+            pagesTree.Contains("OurPlanCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("item.Tag = refreshedPage", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTakeoffNodes(item, refreshedPage)", StringComparison.Ordinal) &&
             pagesTree.Contains("RebuildPageTreeItemIndex()", StringComparison.Ordinal) &&
@@ -2370,7 +2370,7 @@ internal static class TakeoffsTreeRegressionTests
             raster.Contains("TryCompactActiveRasterImage(page, source", StringComparison.Ordinal) &&
             raster.Contains("IsLegacyPngRasterImage", StringComparison.Ordinal) &&
             raster.Contains("CompactRasterImageNameForLegacyPng", StringComparison.Ordinal) &&
-            raster.Contains("OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, compacted)", StringComparison.Ordinal) &&
+            raster.Contains("OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, compacted)", StringComparison.Ordinal) &&
             raster.Contains("AddReferencedCachePath(page.FolderPath, source.Image", StringComparison.Ordinal) &&
             raster.Contains("IsCompactableCacheFile", StringComparison.Ordinal) &&
             raster.Contains("TryFindReusableReadableRaster(page, scale", StringComparison.Ordinal) &&
@@ -3577,7 +3577,7 @@ internal static class TakeoffsTreeRegressionTests
             queueMethod.Contains("TxtStatus.Text = \"Sheet overlay loading...\";", StringComparison.Ordinal),
             "page-open overlay queue should surface a loading state when no cached overlay bitmap is ready yet");
         AssertTrue(
-            asyncMethod.Contains("PageInfo? latest = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);", StringComparison.Ordinal) &&
+            asyncMethod.Contains("PageInfo? latest = OurPlanCoreJobStore.TryReadPage(page.FolderPath);", StringComparison.Ordinal) &&
             asyncMethod.Contains("string.IsNullOrWhiteSpace(latest.OverlayPageFolder)", StringComparison.Ordinal) &&
             asyncMethod.Contains("!latest.OverlayVisible", StringComparison.Ordinal) &&
             asyncMethod.Contains("!SameFolder(latest.OverlayPageFolder, page.OverlayPageFolder)", StringComparison.Ordinal) &&
@@ -3630,8 +3630,8 @@ internal static class TakeoffsTreeRegressionTests
             autoFit.Contains("ApplySheetOverlayAutoSelectedFit(targetPage, search)", StringComparison.Ordinal),
             "sheet overlay Auto Fit should invoke auto-select when no overlay is already configured");
         AssertTrue(
-            autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlay(", StringComparison.Ordinal) &&
-            autoSelect.Contains("OurPlaneCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true)", StringComparison.Ordinal) &&
+            autoSelect.Contains("OurPlanCoreJobStore.SavePageOverlay(", StringComparison.Ordinal) &&
+            autoSelect.Contains("OurPlanCoreJobStore.SavePageOverlayVisibility(latestTarget.FolderPath, true)", StringComparison.Ordinal) &&
             autoSelect.Contains("Auto-selected overlay", StringComparison.Ordinal) &&
             autoSelect.Contains("MaxSheetOverlayAutoSelectCandidates = 160", StringComparison.Ordinal) &&
             autoSelect.Contains("Take(MaxSheetOverlayAutoSelectCandidates)", StringComparison.Ordinal) &&
@@ -3770,9 +3770,9 @@ internal static class TakeoffsTreeRegressionTests
         string recovery = ReadRepoFile("MainWindow.JobRecovery.cs");
 
         AssertTrue(
-            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM", StringComparison.Ordinal) &&
-            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS", StringComparison.Ordinal) &&
-            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT", StringComparison.Ordinal) &&
+            source.Contains("OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM", StringComparison.Ordinal) &&
+            source.Contains("OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS", StringComparison.Ordinal) &&
+            source.Contains("OURPLANCORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT", StringComparison.Ordinal) &&
             source.Contains("ReadEnvironmentFloat", StringComparison.Ordinal) &&
             source.Contains("RestoreViewState(new PdfViewport.ViewState(targetZoom", StringComparison.Ordinal) &&
             source.Contains("ZoomExerciseMs", StringComparison.Ordinal) &&
@@ -3791,7 +3791,7 @@ internal static class TakeoffsTreeRegressionTests
             script.Contains("overlay checks", StringComparison.Ordinal),
             "viewport stress smoke must support hidden sampled page opens plus absolute zoom, pan, detail sharpness, sheet overlay waits, and phase timing checks for 350% regressions");
         AssertTrue(
-            source.Contains("OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS", StringComparison.Ordinal) &&
+            source.Contains("OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS", StringComparison.Ordinal) &&
             source.Contains("RunViewportTreeOpsSmoke(report)", StringComparison.Ordinal) &&
             treeOps.Contains("MovePagesDownAndRestore", StringComparison.Ordinal) &&
             treeOps.Contains("MoveTakeoffsDownAndRestore", StringComparison.Ordinal) &&
@@ -3808,7 +3808,7 @@ internal static class TakeoffsTreeRegressionTests
             treeOps.Contains("TakeoffsBulkSelectionPagesLayoutMs", StringComparison.Ordinal) &&
             treeOps.Contains("OrdersEqual(before, OrderedChildSnapshot(parent))", StringComparison.Ordinal) &&
             script.Contains("[switch]$IncludeTreeOps", StringComparison.Ordinal) &&
-            script.Contains("OURPLANECORE_SETTINGS_PATH", StringComparison.Ordinal) &&
+            script.Contains("OURPLANCORE_SETTINGS_PATH", StringComparison.Ordinal) &&
             script.Contains("tree ops takeoff drag/drop", StringComparison.Ordinal) &&
             script.Contains("jumped to measurement page", StringComparison.Ordinal) &&
             script.Contains("tree ops takeoffs detail", StringComparison.Ordinal),
@@ -3884,7 +3884,7 @@ internal static class TakeoffsTreeRegressionTests
             scale.Contains("SelectedPagesFromPagesTree(anchor)", StringComparison.Ordinal) &&
             scale.Contains("CurrentPageScaleMetersPerPt", StringComparison.Ordinal) &&
             scale.Contains("PdfSheetMetadataService.TryParseScaleMetersPerPt", StringComparison.Ordinal) &&
-            scale.Contains("OurPlaneCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
+            scale.Contains("OurPlanCoreJobStore.SavePageScale", StringComparison.Ordinal) &&
             scale.Contains("WriteFloatingPageSetupMetadata", StringComparison.Ordinal) &&
             scale.Contains("ApplyScaleToPageMeasurements", StringComparison.Ordinal) &&
             scale.Contains("FlushTakeoffAutosaves", StringComparison.Ordinal),
@@ -3971,12 +3971,12 @@ internal static class TakeoffsTreeRegressionTests
         File.ReadAllText(Path.Combine(RepoRoot(), relativePath));
 
     private static TakeoffItem CreateMeasuredTakeoffItem(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string parentFolder,
         string name,
         string measurementType)
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", measurementType);
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", measurementType);
         item.Measurements.Add(new Measurement
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -3988,7 +3988,7 @@ internal static class TakeoffsTreeRegressionTests
             ScaleMetersPerPt = 0.3048,
             Points = MeasurementPoints(measurementType),
         });
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
         return item;
     }
 
@@ -4025,13 +4025,13 @@ internal static class TakeoffsTreeRegressionTests
             Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             StringComparison.OrdinalIgnoreCase);
 
-    private static void WithTempJob(string name, Action<OurPlaneCoreJob> action)
+    private static void WithTempJob(string name, Action<OurPlanCoreJob> action)
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(root, name);
+            OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(root, name);
             action(job);
         }
         finally
@@ -4057,12 +4057,12 @@ internal static class TakeoffsTreeRegressionTests
         DirectoryInfo? current = new(AppContext.BaseDirectory);
         while (current != null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "ourplanecore.csproj")))
+            if (File.Exists(Path.Combine(current.FullName, "ourplancore.csproj")))
                 return current.FullName;
             current = current.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not find ourplanecore repo root.");
+        throw new DirectoryNotFoundException("Could not find ourplancore repo root.");
     }
 
     private static void AssertTrue(bool condition, string message)

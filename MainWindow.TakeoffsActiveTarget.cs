@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -15,7 +15,7 @@ public partial class MainWindow
             return false;
 
         CancelPendingTakeoffSelectionSync();
-        item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
@@ -156,7 +156,7 @@ public partial class MainWindow
 
         if (_currentPage == null)
         {
-            string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+            string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
             PostStatusInfo(
                 measurementType == "point"
                     ? "Select a page before adding a count."

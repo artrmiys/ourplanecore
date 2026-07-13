@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -355,7 +355,7 @@ public sealed partial class PdfViewport
         float tol = screenTolerancePx / Math.Max(_zoom, 0.01f);
         SKPoint start = annotation.Points[0];
         SKPoint end = annotation.Points[1];
-        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         if (kind is "rectangle" or "note" or "cloud" or "highlight")
         {
             IReadOnlyList<SKPoint> points = AnnotationTransformPoints(annotation);

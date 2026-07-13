@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
 internal static class RasterSheetCacheTests
@@ -15,12 +15,12 @@ internal static class RasterSheetCacheTests
         if (!File.Exists(pdfPath))
             throw new FileNotFoundException("Raster sheet test PDF is missing.", pdfPath);
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "opc_raster_sheet_tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Combine(Path.GetTempPath(), "onc_raster_sheet_tests", Guid.NewGuid().ToString("N"));
         try
         {
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(tempRoot, "Raster Test Job");
-            string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
-            PageInfo page = OurPlaneCoreJobStore.ImportPdf(job, pdfPath, ["Raster Test"], importFolder).Single();
+            OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(tempRoot, "Raster Test Job");
+            string importFolder = OurPlanCoreJobStore.DefaultImportFolder(job);
+            PageInfo page = OurPlanCoreJobStore.ImportPdf(job, pdfPath, ["Raster Test"], importFolder).Single();
 
             AssertTrue(
                 RasterSheetCacheService.TrySetEnabled(page, enabled: false, out string pdfError, out bool pdfChanged),
@@ -35,7 +35,7 @@ internal static class RasterSheetCacheTests
             AssertTrue(build.Ok, build.Error);
             AssertFalse(build.Reused, "first raster build should render a new working raster image");
 
-            PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo refreshed = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after build.");
             AssertTrue(refreshed.RasterSheet != null, "source.json should persist raster sheet metadata");
             AssertTrue(refreshed.RasterSheet!.Enabled, "raster sheet should be enabled after build");
@@ -84,13 +84,13 @@ internal static class RasterSheetCacheTests
             RasterSheetSource legacyPngActive = refreshed.RasterSheet.Clone();
             legacyPngActive.Image = Path.GetRelativePath(refreshed.FolderPath, legacyPngPath);
             legacyPngActive.Format = RasterSheetCacheService.PngRasterFormat;
-            OurPlaneCoreJobStore.SavePageRasterSheet(refreshed.FolderPath, legacyPngActive);
-            PageInfo legacyPngPage = OurPlaneCoreJobStore.TryReadPage(refreshed.FolderPath)
+            OurPlanCoreJobStore.SavePageRasterSheet(refreshed.FolderPath, legacyPngActive);
+            PageInfo legacyPngPage = OurPlanCoreJobStore.TryReadPage(refreshed.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after legacy PNG setup.");
             RasterSheetCacheCompactResult migration = RasterSheetCacheService.CompactCache(legacyPngPage);
             AssertTrue(migration.Ok, migration.Error);
             AssertTrue(migration.DeletedFiles >= 1, "raster cache compact should delete the migrated active PNG after writing WebP");
-            PageInfo migratedPage = OurPlaneCoreJobStore.TryReadPage(refreshed.FolderPath)
+            PageInfo migratedPage = OurPlanCoreJobStore.TryReadPage(refreshed.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after legacy PNG migration.");
             AssertTrue(
                 migratedPage.RasterSheet != null &&
@@ -124,7 +124,7 @@ internal static class RasterSheetCacheTests
             RasterSheetBuildResult higherDpi = RasterSheetCacheService.BuildAndEnable(refreshed, 1.0f);
             AssertTrue(higherDpi.Ok, higherDpi.Error);
             AssertFalse(higherDpi.Reused, "different raster DPI should render a separate working image the first time");
-            PageInfo higherRefreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo higherRefreshed = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after higher DPI build.");
             AssertTrue(
                 RasterSheetCacheService.BestReadyReadableRasterDpi(higherRefreshed) == 72,
@@ -144,17 +144,17 @@ internal static class RasterSheetCacheTests
                 File.GetLastWriteTimeUtc(imagePath) == variantMarkerUtc,
                 "switching back to a ready raster DPI variant should not re-render its image");
 
-            PageInfo switchedBackPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo switchedBackPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after switching back.");
             RasterSheetSource disabledForPrepare = switchedBackPage.RasterSheet!.Clone();
             disabledForPrepare.Enabled = false;
-            OurPlaneCoreJobStore.SavePageRasterSheet(switchedBackPage.FolderPath, disabledForPrepare);
-            PageInfo disabledPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            OurPlanCoreJobStore.SavePageRasterSheet(switchedBackPage.FolderPath, disabledForPrepare);
+            PageInfo disabledPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable before cache-only prepare.");
             RasterSheetBuildResult preparedOnly = RasterSheetCacheService.BuildCachePreservingEnabled(disabledPage, 1.25f);
             AssertTrue(preparedOnly.Ok, preparedOnly.Error);
             AssertFalse(preparedOnly.Reused, "cache-only prepare should render a missing DPI variant once");
-            PageInfo preparedOnlyPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo preparedOnlyPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after cache-only prepare.");
             AssertTrue(
                 preparedOnlyPage.RasterSheet != null && !preparedOnlyPage.RasterSheet.Enabled,
@@ -184,7 +184,7 @@ internal static class RasterSheetCacheTests
                     out RasterSheetBuildResult readyOnly),
                 readyOnly.Error);
             AssertTrue(readyOnly.Reused, "ready-only raster enable should report reuse instead of a new render");
-            PageInfo readyOnlyPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo readyOnlyPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after ready-only enable.");
             AssertTrue(
                 readyOnlyPage.RasterSheet is { Enabled: true } &&
@@ -194,7 +194,7 @@ internal static class RasterSheetCacheTests
             AssertTrue(compact.Ok, compact.Error);
             AssertTrue(compact.DeletedFiles >= 2, "raster cache compact should delete unused DPI raster image variants");
             AssertTrue(compact.DeletedBytes > 0, "raster cache compact should report freed disk space");
-            PageInfo compactedPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo compactedPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after compact.");
             IReadOnlyDictionary<string, IReadOnlyList<int>> compactedReadySnapshot =
                 RasterSheetCacheService.ReadyReadableRasterDpisByPageFolder([compactedPage]);
@@ -218,7 +218,7 @@ internal static class RasterSheetCacheTests
                 RasterSheetCacheService.PngRasterFormat);
             AssertTrue(explicitPng.Ok, explicitPng.Error);
             AssertFalse(explicitPng.Reused, "explicit PNG raster build should render a missing PNG DPI variant once");
-            PageInfo pngPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo pngPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after explicit PNG build.");
             AssertTrue(
                 pngPage.RasterSheet != null &&
@@ -238,7 +238,7 @@ internal static class RasterSheetCacheTests
                 RasterSheetCacheService.TrySetUseAsPageOpenRaster(pngPage, true, out string firstError, out bool firstChanged),
                 firstError);
             AssertTrue(firstChanged, "Raster First should update persisted raster metadata when enabled");
-            PageInfo firstPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+            PageInfo firstPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
                 ?? throw new InvalidOperationException("Raster page source was not readable after Raster First enable.");
             AssertTrue(
                 RasterSheetCacheService.UseAsPageOpenRaster(firstPage.RasterSheet),
@@ -279,7 +279,7 @@ internal static class RasterSheetCacheTests
 
     public static void StalePageSnapshotDoesNotCreateRasterFolder()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "opc_raster_sheet_tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Combine(Path.GetTempPath(), "onc_raster_sheet_tests", Guid.NewGuid().ToString("N"));
         try
         {
             string staleFolder = Path.Combine(tempRoot, "Pages", "B", "a9.40 d");
@@ -339,7 +339,7 @@ internal static class RasterSheetCacheTests
         string dir = Directory.GetCurrentDirectory();
         while (!string.IsNullOrWhiteSpace(dir))
         {
-            if (File.Exists(Path.Combine(dir, "ourplanecore.csproj")))
+            if (File.Exists(Path.Combine(dir, "ourplancore.csproj")))
                 return dir;
 
             string? parent = Directory.GetParent(dir)?.FullName;
@@ -348,7 +348,7 @@ internal static class RasterSheetCacheTests
             dir = parent ?? "";
         }
 
-        throw new DirectoryNotFoundException("Could not locate ourplanecore repo root.");
+        throw new DirectoryNotFoundException("Could not locate ourplancore repo root.");
     }
 
     private static void AssertTrue(bool condition, string message)

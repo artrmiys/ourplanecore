@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore.Dialogs;
+namespace OurPlanCore.Dialogs;
 
 public sealed class PointAlongLineDialog : Window
 {

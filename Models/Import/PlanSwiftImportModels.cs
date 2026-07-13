@@ -1,11 +1,16 @@
 using System.Collections.Generic;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class PlanSwiftSourceFormats
 {
     public const string PlanSwift = "PlanSwift";
-    public const string OurPlaneCore = "OurPlaneCore";
+    public const string OurPlanCore = "OurPlanCore";
+    public const string LegacyOurPlanCore = "OurPlaneCore";
+
+    public static bool IsOurPlanCore(string? value) =>
+        string.Equals(value, OurPlanCore, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, LegacyOurPlanCore, StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class PlanSwiftImportOptions

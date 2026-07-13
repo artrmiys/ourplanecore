@@ -4,9 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -37,7 +37,7 @@ public partial class MainWindow
         };
         if (dlg.ShowDialog() != true) return;
 
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(dlg.ItemType) == "point")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(dlg.ItemType) == "point")
             RememberNewCountSymbol(dlg.ItemCountSymbol);
 
         TakeoffAutoRouteResult route = TakeoffAutoRoutingService.ResolveRoute(
@@ -52,7 +52,7 @@ public partial class MainWindow
         var item = CreateUniqueTakeoffItem(dlg.ItemName, dlg.ItemColor, dlg.ItemType, parentFolder);
         ApplyTakeoffFolderDefaultsToNewItem(item, parentFolder);
         ApplyNewCountSymbolToItemIfNeeded(item, dlg.ItemType);
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(dlg.ItemType) == "line" && dlg.OffsetLines.Count > 0)
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(dlg.ItemType) == "line" && dlg.OffsetLines.Count > 0)
             CreateMultiLineCompanions(item, dlg.OffsetLines);
         LoadTakeoffsForJob();
 
@@ -86,10 +86,10 @@ public partial class MainWindow
 
         try
         {
-            string folderPath = OurPlaneCoreJobStore.CreateTakeoffFolder(_currentJob, parentFolder, name);
+            string folderPath = OurPlanCoreJobStore.CreateTakeoffFolder(_currentJob, parentFolder, name);
             var node = new TakeoffFolderNode
             {
-                Name = OurPlaneCoreJobStore.DisplayName(folderPath),
+                Name = OurPlanCoreJobStore.DisplayName(folderPath),
                 FolderPath = folderPath,
             };
             var parent = FindTakeoffTreeItemByFolder(parentFolder) ?? (ItemsControl)TakeoffsTree;
@@ -140,7 +140,7 @@ public partial class MainWindow
         string modeLabel = FolderTemplateModeLabel(mode);
         string baseName = string.Equals(baseFolder, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase)
             ? "Takeoffs"
-            : OurPlaneCoreJobStore.DisplayName(baseFolder);
+            : OurPlanCoreJobStore.DisplayName(baseFolder);
         var confirm = MessageBox.Show(
             $"Create standard {modeLabel} takeoff tree under '{baseName}'?\n\nExisting folders will be skipped.",
             "Auto Takeoff Tree",
@@ -183,7 +183,7 @@ public partial class MainWindow
 
         string baseName = string.Equals(baseFolder, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase)
             ? "Takeoffs"
-            : OurPlaneCoreJobStore.DisplayName(baseFolder);
+            : OurPlanCoreJobStore.DisplayName(baseFolder);
         string preview = PlanSwiftFolderTemplateService.PreviewNames(groupNames);
         var confirm = MessageBox.Show(
             $"Create {groupNames.Count} top takeoff folder(s) from Pages CAPS names under '{baseName}', then add the standard {modeLabel} tree?\n\n{preview}\n\nExisting folders will be skipped.",
@@ -226,7 +226,7 @@ public partial class MainWindow
 
         foreach (var measurement in item.Measurements)
             measurement.TakeoffFolder = item.FolderPath;
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
     }
 
     private TakeoffItem CreateUniqueTakeoffItem(string name, string color, string measurementType = "line", string? parentFolder = null)
@@ -236,6 +236,6 @@ public partial class MainWindow
 
         string parent = string.IsNullOrWhiteSpace(parentFolder) ? _currentJob.TakeoffsRoot : parentFolder;
         string baseName = string.IsNullOrWhiteSpace(name) ? "Item" : name.Trim();
-        return OurPlaneCoreJobStore.CreateTakeoffItem(_currentJob, parent, baseName, color, measurementType);
+        return OurPlanCoreJobStore.CreateTakeoffItem(_currentJob, parent, baseName, color, measurementType);
     }
 }

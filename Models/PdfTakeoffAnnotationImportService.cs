@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class PdfTakeoffAnnotationImportResult
 {
@@ -176,7 +176,7 @@ public static class PdfTakeoffAnnotationImportService
 
     private static PdfTakeoffAnnotationMeasurement NormalizeMeasurement(PdfTakeoffAnnotationMeasurementDto measurement)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.Type);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.Type);
         return new PdfTakeoffAnnotationMeasurement
         {
             Type = type,

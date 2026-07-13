@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class CountDisplaySymbol
 {

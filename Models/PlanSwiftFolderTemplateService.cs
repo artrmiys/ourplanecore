@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record FolderTemplateResult(int Created, int Skipped, int Errors, IReadOnlyList<string> ErrorMessages)
 {
@@ -129,7 +129,7 @@ public static partial class PlanSwiftFolderTemplateService
         ]),
     ];
 
-    public static string ResolveMode(OurPlaneCoreJob job, string requestedMode = "AUTO")
+    public static string ResolveMode(OurPlanCoreJob job, string requestedMode = "AUTO")
     {
         string mode = (requestedMode ?? "AUTO").Trim().ToUpperInvariant();
         if (mode is "COM" or "EWP")
@@ -171,21 +171,21 @@ public static partial class PlanSwiftFolderTemplateService
         return CreateTree(baseFolder, tree);
     }
 
-    public static IReadOnlyList<string> CollectCapsGroupNames(OurPlaneCoreJob job)
+    public static IReadOnlyList<string> CollectCapsGroupNames(OurPlanCoreJob job)
     {
         var candidates = new List<string>();
         string others = Path.Combine(job.PagesRoot, "--------others");
 
         foreach (PageInfo page in CollectPages(job.PagesRoot))
         {
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(others, page.FolderPath))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(others, page.FolderPath))
                 continue;
             candidates.Add(page.Name);
         }
 
         foreach (string folder in CollectFolders(job.PagesRoot))
         {
-            string name = OurPlaneCoreJobStore.DisplayName(folder).Trim();
+            string name = OurPlanCoreJobStore.DisplayName(folder).Trim();
             if (name is "Pages" or "imported" or "00. imported" or "--------others")
                 continue;
             candidates.Add(name);
@@ -199,21 +199,21 @@ public static partial class PlanSwiftFolderTemplateService
             if (string.IsNullOrWhiteSpace(group))
                 continue;
 
-            string key = OurPlaneCoreJobStore.SanitizeName(group, 120);
+            string key = OurPlanCoreJobStore.SanitizeName(group, 120);
             if (!seen.Add(key))
                 continue;
             result.Add(group);
         }
 
         result.Sort((a, b) => string.Compare(
-            OurPlaneCoreJobStore.SanitizeName(a, 120),
-            OurPlaneCoreJobStore.SanitizeName(b, 120),
+            OurPlanCoreJobStore.SanitizeName(a, 120),
+            OurPlanCoreJobStore.SanitizeName(b, 120),
             StringComparison.OrdinalIgnoreCase));
         return result;
     }
 
     public static CapsTakeoffFolderResult CreateTakeoffFoldersFromCapsPages(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string baseFolder,
         string mode)
     {
@@ -322,10 +322,10 @@ public static partial class PlanSwiftFolderTemplateService
 
     private static (bool Created, string FolderPath) EnsureFolder(string parentFolder, string name)
     {
-        string clean = OurPlaneCoreJobStore.SanitizeName(name, 120);
+        string clean = OurPlanCoreJobStore.SanitizeName(name, 120);
         string path = Path.Combine(parentFolder, clean);
         bool existed = Directory.Exists(path) && File.Exists(Path.Combine(path, "Data.xml"));
-        string ensured = OurPlaneCoreJobStore.EnsureFolder(parentFolder, name);
+        string ensured = OurPlanCoreJobStore.EnsureFolder(parentFolder, name);
         return (!existed, ensured);
     }
 
@@ -334,13 +334,13 @@ public static partial class PlanSwiftFolderTemplateService
         if (!Directory.Exists(folder))
             yield break;
 
-        if (OurPlaneCoreJobStore.TryReadPage(folder) is { } page)
+        if (OurPlanCoreJobStore.TryReadPage(folder) is { } page)
         {
             yield return page;
             yield break;
         }
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
             foreach (PageInfo childPage in CollectPages(child))
                 yield return childPage;
@@ -352,10 +352,10 @@ public static partial class PlanSwiftFolderTemplateService
         if (!Directory.Exists(folder))
             yield break;
 
-        if (!OurPlaneCoreJobStore.IsPageFolder(folder))
+        if (!OurPlanCoreJobStore.IsPageFolder(folder))
             yield return folder;
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
             foreach (string nested in CollectFolders(child))
                 yield return nested;

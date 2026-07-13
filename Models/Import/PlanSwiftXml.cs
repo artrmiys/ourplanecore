@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal sealed class PlanSwiftDataItem
 {

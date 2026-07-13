@@ -10,14 +10,14 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
-    private const string GuideScreenshotCaptureEnv = "OURPLANECORE_GUIDE_SCREENSHOT_CAPTURE";
-    private const string GuideScreenshotDirEnv = "OURPLANECORE_GUIDE_SCREENSHOT_DIR";
-    private const string GuideScreenshotManifestEnv = "OURPLANECORE_GUIDE_SCREENSHOT_MANIFEST";
-    private const string GuideScreenshotTimeoutEnv = "OURPLANECORE_GUIDE_SCREENSHOT_TIMEOUT_MS";
+    private const string GuideScreenshotCaptureEnv = "OURPLANCORE_GUIDE_SCREENSHOT_CAPTURE";
+    private const string GuideScreenshotDirEnv = "OURPLANCORE_GUIDE_SCREENSHOT_DIR";
+    private const string GuideScreenshotManifestEnv = "OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST";
+    private const string GuideScreenshotTimeoutEnv = "OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS";
 
     /// <summary>
     /// Headless-style capture driver: when the capture env var is set, the app opens the
@@ -30,9 +30,9 @@ public partial class MainWindow
         if (!IsTruthyEnvironment(GuideScreenshotCaptureEnv))
             return;
 
-        string outputDir = Environment.GetEnvironmentVariable(GuideScreenshotDirEnv) ?? "";
+        string outputDir = AppIdentity.GetEnvironmentVariable(GuideScreenshotDirEnv) ?? "";
         if (string.IsNullOrWhiteSpace(outputDir))
-            outputDir = Path.Combine(Path.GetTempPath(), "opc_guide_screenshots");
+            outputDir = Path.Combine(Path.GetTempPath(), "onc_guide_screenshots");
         Directory.CreateDirectory(outputDir);
 
         var manifest = new GuideScreenshotManifest
@@ -72,8 +72,8 @@ public partial class MainWindow
 
         // Capture is self-contained: build a fresh sample job and open it so the screenshots
         // always reflect the same deterministic content the guide ships with.
-        string sampleRoot = Path.Combine(Path.GetTempPath(), "opc_guide_capture_" + Guid.NewGuid().ToString("N"));
-        OurPlaneCoreJob sample = SampleJobService.CreateSampleJob(sampleRoot);
+        string sampleRoot = Path.Combine(Path.GetTempPath(), "onc_guide_capture_" + Guid.NewGuid().ToString("N"));
+        OurPlanCoreJob sample = SampleJobService.CreateSampleJob(sampleRoot);
         manifest.JobPath = sample.RootPath;
         OpenJob(sample.RootPath);
         await SettleFramesAsync(4);
@@ -304,7 +304,7 @@ public partial class MainWindow
 
     private static void WriteGuideScreenshotManifest(GuideScreenshotManifest manifest)
     {
-        string path = Environment.GetEnvironmentVariable(GuideScreenshotManifestEnv) ?? "";
+        string path = AppIdentity.GetEnvironmentVariable(GuideScreenshotManifestEnv) ?? "";
         if (string.IsNullOrWhiteSpace(path))
             path = Path.Combine(manifest.OutputDir, "manifest.json");
 

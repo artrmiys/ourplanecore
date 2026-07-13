@@ -12,29 +12,29 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
-public class OpcDataGrid : DataGrid
+public class OncDataGrid : DataGrid
 {
     public static readonly DependencyProperty StatusFooterTextProperty =
         DependencyProperty.Register(
             nameof(StatusFooterText),
             typeof(string),
-            typeof(OpcDataGrid),
+            typeof(OncDataGrid),
             new FrameworkPropertyMetadata("Ready"));
 
     public static readonly DependencyProperty ShowStatusFooterProperty =
         DependencyProperty.Register(
             nameof(ShowStatusFooter),
             typeof(bool),
-            typeof(OpcDataGrid),
+            typeof(OncDataGrid),
             new FrameworkPropertyMetadata(true));
 
     public static readonly DependencyProperty AggregateColumnsProperty =
         DependencyProperty.Register(
             nameof(AggregateColumns),
             typeof(string[]),
-            typeof(OpcDataGrid),
+            typeof(OncDataGrid),
             new FrameworkPropertyMetadata(
                 Array.Empty<string>(),
                 (_, e) =>
@@ -47,15 +47,15 @@ public class OpcDataGrid : DataGrid
         DependencyProperty.Register(
             nameof(FreezeFirstColumn),
             typeof(bool),
-            typeof(OpcDataGrid),
+            typeof(OncDataGrid),
             new FrameworkPropertyMetadata(
                 false,
-                (d, _) => ((OpcDataGrid)d).ApplyFrozenColumnState()));
+                (d, _) => ((OncDataGrid)d).ApplyFrozenColumnState()));
 
     private ScrollViewer? _scrollViewer;
     private StickyGroupHeaderAdorner? _stickyHeaderAdorner;
 
-    public OpcDataGrid()
+    public OncDataGrid()
     {
         EnableColumnVirtualization = true;
         EnableRowVirtualization = true;
@@ -68,10 +68,10 @@ public class OpcDataGrid : DataGrid
         if (GroupStyle.Count == 0)
             GroupStyle.Add(CreateDefaultGroupStyle());
 
-        Loaded += OpcDataGrid_Loaded;
-        Unloaded += OpcDataGrid_Unloaded;
-        SelectedCellsChanged += OpcDataGrid_SelectedCellsChanged;
-        SelectionChanged += OpcDataGrid_SelectionChanged;
+        Loaded += OncDataGrid_Loaded;
+        Unloaded += OncDataGrid_Unloaded;
+        SelectedCellsChanged += OncDataGrid_SelectedCellsChanged;
+        SelectionChanged += OncDataGrid_SelectionChanged;
     }
 
     public string StatusFooterText
@@ -402,7 +402,7 @@ public class OpcDataGrid : DataGrid
         FrozenColumnCount = FreezeFirstColumn ? 1 : 0;
     }
 
-    private void OpcDataGrid_Loaded(object sender, RoutedEventArgs e)
+    private void OncDataGrid_Loaded(object sender, RoutedEventArgs e)
     {
         EnsureStickyHeaderAdorner();
         ApplyFrozenColumnState();
@@ -410,7 +410,7 @@ public class OpcDataGrid : DataGrid
         UpdateStickyGroupHeader();
     }
 
-    private void OpcDataGrid_Unloaded(object sender, RoutedEventArgs e)
+    private void OncDataGrid_Unloaded(object sender, RoutedEventArgs e)
     {
         if (_scrollViewer != null)
             _scrollViewer.ScrollChanged -= ScrollViewer_ScrollChanged;
@@ -418,13 +418,13 @@ public class OpcDataGrid : DataGrid
         RemoveStickyHeaderAdorner();
     }
 
-    private void OpcDataGrid_SelectedCellsChanged(object sender, SelectedCellsChangedEventArgs e)
+    private void OncDataGrid_SelectedCellsChanged(object sender, SelectedCellsChangedEventArgs e)
     {
         UpdateStatusFooter();
         UpdateStickyGroupHeader();
     }
 
-    private void OpcDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OncDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateStatusFooter();
         UpdateStickyGroupHeader();

@@ -5,12 +5,12 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartContextStore
 {
     public static SmartAiMarker SaveAiMarker(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         SmartObservation observation,
         string markerType,
@@ -69,7 +69,7 @@ public static partial class SmartContextStore
 
     private static List<PdfLayerInfo> PageLayers(PageInfo page)
     {
-        PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath);
+        PageLayerManifest? manifest = OurPlanCoreJobStore.ReadPageLayerManifest(page.FolderPath);
         IEnumerable<PdfLayerInfo> layerSource = manifest?.Layers ?? page.PdfLayers;
         return layerSource
             .OrderBy(layer => layer.Number)
@@ -82,7 +82,7 @@ public static partial class SmartContextStore
             .ToList();
     }
 
-    public static SmartAiMarker? LoadAiMarker(OurPlaneCoreJob job, string markerId)
+    public static SmartAiMarker? LoadAiMarker(OurPlanCoreJob job, string markerId)
     {
         if (string.IsNullOrWhiteSpace(markerId))
             return null;
@@ -90,7 +90,7 @@ public static partial class SmartContextStore
         return LoadJson<SmartAiMarker>(AiMarkerPath(job, markerId));
     }
 
-    public static void SaveAiMarker(OurPlaneCoreJob job, SmartAiMarker marker)
+    public static void SaveAiMarker(OurPlanCoreJob job, SmartAiMarker marker)
     {
         if (string.IsNullOrWhiteSpace(marker.Id))
             throw new InvalidOperationException("AI marker id is required.");
@@ -108,7 +108,7 @@ public static partial class SmartContextStore
         }
     }
 
-    public static bool DeleteAiMarker(OurPlaneCoreJob job, string markerId)
+    public static bool DeleteAiMarker(OurPlanCoreJob job, string markerId)
     {
         if (string.IsNullOrWhiteSpace(markerId))
             return false;
@@ -128,7 +128,7 @@ public static partial class SmartContextStore
         }
     }
 
-    public static IReadOnlyList<SmartAiMarker> LoadAiMarkers(OurPlaneCoreJob job)
+    public static IReadOnlyList<SmartAiMarker> LoadAiMarkers(OurPlanCoreJob job)
     {
         string markersDir = Path.Combine(ContextRoot(job.RootPath), "markers");
         if (!Directory.Exists(markersDir))
@@ -142,11 +142,11 @@ public static partial class SmartContextStore
             .ToList();
     }
 
-    public static string AiMarkerPath(OurPlaneCoreJob job, string markerId) =>
+    public static string AiMarkerPath(OurPlanCoreJob job, string markerId) =>
         Path.Combine(ContextRoot(job.RootPath), "markers", $"{markerId}.json");
 
     public static SmartAiMarkerSet SaveAiMarkerSet(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string name,
         string description,
         string typeFilter,
@@ -192,7 +192,7 @@ public static partial class SmartContextStore
         return set;
     }
 
-    public static void SaveAiMarkerSet(OurPlaneCoreJob job, SmartAiMarkerSet set)
+    public static void SaveAiMarkerSet(OurPlanCoreJob job, SmartAiMarkerSet set)
     {
         if (string.IsNullOrWhiteSpace(set.Id))
             throw new ArgumentException("Marker set id is required.", nameof(set));
@@ -229,7 +229,7 @@ public static partial class SmartContextStore
         }
     }
 
-    public static IReadOnlyList<SmartAiMarkerSet> LoadAiMarkerSets(OurPlaneCoreJob job)
+    public static IReadOnlyList<SmartAiMarkerSet> LoadAiMarkerSets(OurPlanCoreJob job)
     {
         string setsDir = Path.Combine(ContextRoot(job.RootPath), "marker_sets");
         if (!Directory.Exists(setsDir))
@@ -244,10 +244,10 @@ public static partial class SmartContextStore
             .ToList();
     }
 
-    public static string AiMarkerSetPath(OurPlaneCoreJob job, string markerSetId) =>
+    public static string AiMarkerSetPath(OurPlanCoreJob job, string markerSetId) =>
         Path.Combine(ContextRoot(job.RootPath), "marker_sets", $"{markerSetId}.json");
 
-    public static bool DeleteAiMarkerSet(OurPlaneCoreJob job, string markerSetId)
+    public static bool DeleteAiMarkerSet(OurPlanCoreJob job, string markerSetId)
     {
         if (string.IsNullOrWhiteSpace(markerSetId))
             return false;
@@ -268,7 +268,7 @@ public static partial class SmartContextStore
     }
 
     public static string ExportAiMarkersContext(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<SmartAiMarker> markers,
         IReadOnlyList<string> hiddenMarkerTypes,
         string typeFilter,
@@ -317,7 +317,7 @@ public static partial class SmartContextStore
     }
 
     private static List<SmartMarkerFeedbackRecord> LoadRelevantMarkerFeedback(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<SmartAiMarker> markers)
     {
         if (markers.Count == 0)
@@ -385,10 +385,10 @@ public static partial class SmartContextStore
     private static string MarkerQualityKey(string type, string sampleKind) =>
         $"{type.Trim()}|{sampleKind.Trim()}";
 
-    public static string AiMarkersContextExportPath(OurPlaneCoreJob job) =>
+    public static string AiMarkersContextExportPath(OurPlanCoreJob job) =>
         Path.Combine(ContextRoot(job.RootPath), "exports", "markers_context.json");
 
-    public static SmartAiCropBookmark SaveCropBookmark(OurPlaneCoreJob job, SmartAiCropBookmark bookmark)
+    public static SmartAiCropBookmark SaveCropBookmark(OurPlanCoreJob job, SmartAiCropBookmark bookmark)
     {
         if (string.IsNullOrWhiteSpace(bookmark.CropPath))
             throw new InvalidOperationException("Crop bookmark path is required.");
@@ -420,7 +420,7 @@ public static partial class SmartContextStore
         return bookmark;
     }
 
-    public static SmartAiCropBookmark? LoadCropBookmark(OurPlaneCoreJob job, string bookmarkId)
+    public static SmartAiCropBookmark? LoadCropBookmark(OurPlanCoreJob job, string bookmarkId)
     {
         if (string.IsNullOrWhiteSpace(bookmarkId))
             return null;
@@ -428,7 +428,7 @@ public static partial class SmartContextStore
         return LoadJson<SmartAiCropBookmark>(CropBookmarkPath(job, bookmarkId));
     }
 
-    public static IReadOnlyList<SmartAiCropBookmark> LoadCropBookmarks(OurPlaneCoreJob job)
+    public static IReadOnlyList<SmartAiCropBookmark> LoadCropBookmarks(OurPlanCoreJob job)
     {
         string bookmarksDir = Path.Combine(ContextRoot(job.RootPath), "crop_bookmarks");
         if (!Directory.Exists(bookmarksDir))
@@ -442,7 +442,7 @@ public static partial class SmartContextStore
             .ToList();
     }
 
-    public static SmartAiCropBookmark? FindCropBookmarkByObservation(OurPlaneCoreJob job, string observationId)
+    public static SmartAiCropBookmark? FindCropBookmarkByObservation(OurPlanCoreJob job, string observationId)
     {
         if (string.IsNullOrWhiteSpace(observationId))
             return null;
@@ -451,6 +451,6 @@ public static partial class SmartContextStore
             string.Equals(bookmark.SourceObservationId, observationId, StringComparison.OrdinalIgnoreCase));
     }
 
-    public static string CropBookmarkPath(OurPlaneCoreJob job, string bookmarkId) =>
+    public static string CropBookmarkPath(OurPlanCoreJob job, string bookmarkId) =>
         Path.Combine(ContextRoot(job.RootPath), "crop_bookmarks", $"{bookmarkId}.json");
 }

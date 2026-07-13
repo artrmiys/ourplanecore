@@ -8,11 +8,11 @@ using System.Text;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SheetOverlayRenderCache
 {
-    public const string CacheRootEnvironmentVariable = "OURPLANECORE_SHEET_OVERLAY_CACHE_ROOT";
+    public const string CacheRootEnvironmentVariable = "OURPLANCORE_SHEET_OVERLAY_CACHE_ROOT";
     private const string TintStyleVersion = "bright-v2";
 
     private const int MaxEntries = 256;
@@ -301,12 +301,11 @@ public static partial class SheetOverlayRenderCache
 
     private static string CacheRoot()
     {
-        string? overrideRoot = Environment.GetEnvironmentVariable(CacheRootEnvironmentVariable);
+        string? overrideRoot = AppIdentity.GetEnvironmentVariable(CacheRootEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(overrideRoot))
             return overrideRoot;
 
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "OurPlaneCore", "render-cache", "sheet-overlay");
+        return Path.Combine(AppIdentity.LocalRoot, "render-cache", "sheet-overlay");
     }
 
     private static bool IsBitmapCacheable(SKBitmap bitmap) =>

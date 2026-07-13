@@ -8,10 +8,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
     public static partial class PdfLayerRenderService
     {
@@ -109,7 +109,7 @@ namespace OurPlaneCore;
         if (!preferRawFilePayload && TryGetCachedRender(cacheKey, out result))
             return true;
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlanCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
         string outputPath = Path.Combine(tempDir, "output.json");
         string imagePath = Path.Combine(tempDir, preferRawFilePayload ? "page.raw" : "page.png");
@@ -279,7 +279,7 @@ namespace OurPlaneCore;
         if (TryGetCachedRender(cacheKey, out result))
             return true;
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlaneCore", Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "OurPlanCore", Guid.NewGuid().ToString("N"));
         string inputPath = Path.Combine(tempDir, "input.json");
         string outputPath = Path.Combine(tempDir, "output.json");
         string imagePath = Path.Combine(tempDir, "page.png");

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {

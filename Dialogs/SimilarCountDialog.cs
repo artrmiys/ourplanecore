@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public readonly record struct SimilarCountScanResult(
     int Included,

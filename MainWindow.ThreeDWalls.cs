@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -120,7 +120,7 @@ public partial class MainWindow
 
         return TakeoffItemsFor3D(anchor).Any(item =>
             item.Measurements.Any(measurement =>
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
                 measurement.Points.Count >= 2));
     }
 
@@ -361,7 +361,7 @@ public partial class MainWindow
             return measurement.ScaleMetersPerPt;
 
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder))
-            return OurPlaneCoreJobStore.TryReadPage(measurement.PageFolder)?.ScaleMetersPerPt ?? 0;
+            return OurPlanCoreJobStore.TryReadPage(measurement.PageFolder)?.ScaleMetersPerPt ?? 0;
 
         return _currentPage?.ScaleMetersPerPt > 0 ? _currentPage.ScaleMetersPerPt : _viewport.ScaleMetersPerPt;
     }

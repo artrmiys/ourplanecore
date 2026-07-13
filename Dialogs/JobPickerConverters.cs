@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows.Data;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 /// <summary>
 /// Pinned and Recent groups start expanded; source-folder and unavailable groups start collapsed.

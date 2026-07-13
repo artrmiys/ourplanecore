@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
@@ -18,33 +18,33 @@ public static partial class PlanSwiftProjectImporter
         PlanSwiftProjectManifest manifest = PlanSwiftProjectScanner.Scan(options.SourceJobPath);
         if (options.ImportIntoExistingJob)
         {
-            if (string.Equals(manifest.SourceFormat, PlanSwiftSourceFormats.OurPlaneCore, StringComparison.OrdinalIgnoreCase))
+            if (PlanSwiftSourceFormats.IsOurPlanCore(manifest.SourceFormat))
                 throw new InvalidOperationException("Import into the current job supports PlanSwift source job folders only.");
 
-            OurPlaneCoreJob existingJob = OurPlaneCoreJobStore.LoadJob(options.DestinationJobPath);
+            OurPlanCoreJob existingJob = OurPlanCoreJobStore.LoadJob(options.DestinationJobPath);
             string pageImportRoot = EnsureImportRootFolder(existingJob.PagesRoot, options.ImportRootFolderName, isTakeoffRoot: false);
             string takeoffImportRoot = EnsureImportRootFolder(existingJob.TakeoffsRoot, options.ImportRootFolderName, isTakeoffRoot: true);
             return ImportManifestIntoJob(options, manifest, existingJob, pageImportRoot, takeoffImportRoot);
         }
 
-        if (string.Equals(manifest.SourceFormat, PlanSwiftSourceFormats.OurPlaneCore, StringComparison.OrdinalIgnoreCase))
-            return ImportExistingOurPlaneCoreJob(options, manifest);
+        if (PlanSwiftSourceFormats.IsOurPlanCore(manifest.SourceFormat))
+            return ImportExistingOurPlanCoreJob(options, manifest);
 
         string jobName = ResolveDestinationJobName(options, manifest);
-        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(options.DestinationParentPath, jobName);
+        OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(options.DestinationParentPath, jobName);
         return ImportManifestIntoJob(options, manifest, job, job.PagesRoot, job.TakeoffsRoot);
     }
 
     private static PlanSwiftImportResult ImportManifestIntoJob(
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string pagesRoot,
         string takeoffsRoot)
     {
         var messages = manifest.Warnings.ToList();
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "ourplanecore_planswift_import", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Combine(Path.GetTempPath(), "ourplancore_planswift_import", Guid.NewGuid().ToString("N"));
         var pageByGuid = new Dictionary<string, ImportedPlanSwiftPage>(StringComparer.OrdinalIgnoreCase);
         int importedPages = 0;
         int importedItems = 0;

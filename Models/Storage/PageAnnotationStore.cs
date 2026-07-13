@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class PageAnnotationStore
 {
@@ -36,7 +36,7 @@ internal static class PageAnnotationStore
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            OurPlaneCoreJobStore.QuarantineCorruptJson(path, "LoadPageAnnotations", ex);
+            OurPlanCoreJobStore.QuarantineCorruptJson(path, "LoadPageAnnotations", ex);
             return [];
         }
         catch (Exception ex)
@@ -70,7 +70,7 @@ internal static class PageAnnotationStore
         {
             IoUtil.WriteAllTextAtomic(
                 PageAnnotationsJsonPath(pageFolder),
-                JsonSerializer.Serialize(dtos, OurPlaneCoreJobStore.JsonOptions));
+                JsonSerializer.Serialize(dtos, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

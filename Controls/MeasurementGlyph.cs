@@ -2,11 +2,11 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using WpfShapes = System.Windows.Shapes;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 // Single source of truth for measurement-type icons.
 // Glyph is drawn filled in the takeoff color with a darker stroke around it,

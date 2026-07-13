@@ -6,9 +6,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -183,7 +183,7 @@ public partial class MainWindow
 
     private void OpenJobFromFolderDialog()
     {
-        string? folder = SelectFolder("Select OurPlaneCore job folder", _settings.JobsRootPath);
+        string? folder = SelectFolder("Select OurPlanCore job folder", _settings.JobsRootPath);
         if (folder == null)
             return;
 
@@ -195,7 +195,7 @@ public partial class MainWindow
         string initial = Directory.Exists(_settings.JobsRootPath)
             ? _settings.JobsRootPath
             : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string? root = SelectFolder("Select folder with OurPlaneCore jobs", initial);
+        string? root = SelectFolder("Select folder with OurPlanCore jobs", initial);
         if (root == null)
             return;
 
@@ -208,7 +208,7 @@ public partial class MainWindow
             .ToList();
         if (jobs.Count == 0)
         {
-            PostStatusInfo("No OurPlaneCore jobs found in configured job folders.");
+            PostStatusInfo("No OurPlanCore jobs found in configured job folders.");
             return;
         }
 
@@ -253,7 +253,7 @@ public partial class MainWindow
             _settings.JobsRootPath = parent;
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
-            var job = OurPlaneCoreJobStore.CreateJob(parent, name);
+            var job = OurPlanCoreJobStore.CreateJob(parent, name);
             OpenJob(job.RootPath);
             QueuePdfImportForNewJob(pdfPaths, pdfFolder);
         }
@@ -293,7 +293,7 @@ public partial class MainWindow
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parent, name);
+            OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, name);
             OpenJob(job.RootPath);
             TxtStatus.Text = $"Blank job created: {job.Name}. Use Blank Sheet to add an empty sheet.";
         }
@@ -378,7 +378,7 @@ public partial class MainWindow
             _settings.JobsRootPath = parent;
             AppSettingsStore.AddJobsRoot(_settings, parent);
             SaveAppSettings();
-            OurPlaneCoreJob job = SampleJobService.CreateSampleJob(parent);
+            OurPlanCoreJob job = SampleJobService.CreateSampleJob(parent);
             OpenJob(job.RootPath);
             TxtStatus.Text = $"Sample job created: {job.Name}.";
         }
@@ -405,7 +405,7 @@ public partial class MainWindow
         }
     }
 
-    private void QueueRecentJobThumbnailGeneration(OurPlaneCoreJob job)
+    private void QueueRecentJobThumbnailGeneration(OurPlanCoreJob job)
     {
         string jobRoot = job.RootPath;
         Task.Run(() =>

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
-public static class OurPlaneCoreJobStore
+public static class OurPlanCoreJobStore
 {
     internal static JsonSerializerOptions JsonOptions =>
         StorageSupport.JsonOptions;
@@ -11,10 +11,10 @@ public static class OurPlaneCoreJobStore
     public static IReadOnlyList<string> DrainCorruptJsonFiles() =>
         StorageSupport.DrainCorruptJsonFiles();
 
-    public static OurPlaneCoreJob CreateJob(string parentDir, string jobName) =>
+    public static OurPlanCoreJob CreateJob(string parentDir, string jobName) =>
         JobLayout.CreateJob(parentDir, jobName);
 
-    public static OurPlaneCoreJob LoadJob(string rootPath) =>
+    public static OurPlanCoreJob LoadJob(string rootPath) =>
         JobLayout.LoadJob(rootPath);
 
     public static string EnsureFolder(string parentFolder, string name) =>
@@ -26,11 +26,11 @@ public static class OurPlaneCoreJobStore
     internal static string CreateFolderAllowDuplicateName(string parentFolder, string name) =>
         JobLayout.CreateFolderAllowDuplicateName(parentFolder, name);
 
-    public static string DefaultImportFolder(OurPlaneCoreJob job) =>
+    public static string DefaultImportFolder(OurPlanCoreJob job) =>
         JobLayout.DefaultImportFolder(job);
 
     public static IReadOnlyList<PageInfo> ImportPdf(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string pdfSourcePath,
         IReadOnlyList<string> pageNames,
         string destinationFolder,
@@ -38,7 +38,7 @@ public static class OurPlaneCoreJobStore
         PageStore.ImportPdf(job, pdfSourcePath, pageNames, destinationFolder, pdfLayerCache);
 
     public static PageInfo CreatePageFromPdf(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string pdfSourcePath,
         string displayName,
         string destinationFolder,
@@ -47,7 +47,7 @@ public static class OurPlaneCoreJobStore
         PageStore.CreatePageFromPdf(job, pdfSourcePath, displayName, destinationFolder, pdfPage, scaleMetersPerPt);
 
     public static PageInfo CreateBlankPage(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string displayName,
         string destinationFolder) =>
         PageStore.CreateBlankPage(job, displayName, destinationFolder);
@@ -100,16 +100,16 @@ public static class OurPlaneCoreJobStore
     public static int RebasePageOverlayReferences(string pagesRoot, IReadOnlyList<(string OldPath, string NewPath)> moves) =>
         PageStore.RebasePageOverlayReferences(pagesRoot, moves);
 
-    public static string CreateTakeoffFolder(OurPlaneCoreJob job, string parentFolder, string name) =>
+    public static string CreateTakeoffFolder(OurPlanCoreJob job, string parentFolder, string name) =>
         TakeoffStore.CreateTakeoffFolder(job, parentFolder, name);
 
-    public static TakeoffItem CreateTakeoffItem(OurPlaneCoreJob job, string name, string color) =>
+    public static TakeoffItem CreateTakeoffItem(OurPlanCoreJob job, string name, string color) =>
         TakeoffStore.CreateTakeoffItem(job, name, color);
 
-    public static TakeoffItem CreateTakeoffItem(OurPlaneCoreJob job, string parentFolder, string name, string color, string measurementType) =>
+    public static TakeoffItem CreateTakeoffItem(OurPlanCoreJob job, string parentFolder, string name, string color, string measurementType) =>
         TakeoffStore.CreateTakeoffItem(job, parentFolder, name, color, measurementType);
 
-    public static IReadOnlyList<TakeoffItem> LoadTakeoffItems(OurPlaneCoreJob job) =>
+    public static IReadOnlyList<TakeoffItem> LoadTakeoffItems(OurPlanCoreJob job) =>
         TakeoffStore.LoadTakeoffItems(job);
 
     public static TakeoffItem? TryReadTakeoffItem(string folder) =>
@@ -133,10 +133,10 @@ public static class OurPlaneCoreJobStore
     public static void SavePageAnnotations(string pageFolder, IEnumerable<PageAnnotation> annotations) =>
         PageAnnotationStore.SavePageAnnotations(pageFolder, annotations);
 
-    public static List<PageBookmark> LoadPageBookmarks(OurPlaneCoreJob job) =>
+    public static List<PageBookmark> LoadPageBookmarks(OurPlanCoreJob job) =>
         PageBookmarkStore.LoadPageBookmarks(job);
 
-    public static void SavePageBookmarks(OurPlaneCoreJob job, IEnumerable<PageBookmark> bookmarks) =>
+    public static void SavePageBookmarks(OurPlanCoreJob job, IEnumerable<PageBookmark> bookmarks) =>
         PageBookmarkStore.SavePageBookmarks(job, bookmarks);
 
     public static bool IsPageFolder(string folder) =>
@@ -148,7 +148,7 @@ public static class OurPlaneCoreJobStore
     public static string PageAnnotationsJsonPath(string pageFolder) =>
         PageAnnotationStore.PageAnnotationsJsonPath(pageFolder);
 
-    public static string PageBookmarksJsonPath(OurPlaneCoreJob job) =>
+    public static string PageBookmarksJsonPath(OurPlanCoreJob job) =>
         PageBookmarkStore.PageBookmarksJsonPath(job);
 
     public static string NormalizePageAnnotationKind(string value) =>

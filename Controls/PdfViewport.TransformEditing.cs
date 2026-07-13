@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -537,7 +537,7 @@ public sealed partial class PdfViewport
         measurement.JoistEnabled &&
         measurement.JoistDirectionLocked &&
         measurement.JoistDirectionFollowsAreaRotation &&
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
 
     private static IReadOnlyList<SKPoint> AnnotationTransformPoints(PageAnnotation annotation)
     {
@@ -590,7 +590,7 @@ public sealed partial class PdfViewport
     }
 
     private static bool IsRectangularAnnotation(PageAnnotation annotation) =>
-        OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) is "rectangle" or "note" or "cloud" or "highlight";
+        OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) is "rectangle" or "note" or "cloud" or "highlight";
 
     private static IReadOnlyList<SKPoint> AnnotationRectangleCorners(IReadOnlyList<SKPoint> points)
     {

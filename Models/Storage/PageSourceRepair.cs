@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class PageSourceRepair
 {
@@ -10,12 +10,12 @@ internal static class PageSourceRepair
     {
         src = new SourceInfo();
         if (!Directory.Exists(pageFolder) ||
-            !string.Equals(OurPlaneCoreJobStore.ReadClass(pageFolder), "Page", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(OurPlanCoreJobStore.ReadClass(pageFolder), "Page", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(pageFolder);
+        PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(pageFolder);
         if (metadata == null ||
             string.IsNullOrWhiteSpace(metadata.PdfPath) ||
             !TryResolvePdfPath(pageFolder, metadata.PdfPath, out string pdfAbsPath))
@@ -29,11 +29,11 @@ internal static class PageSourceRepair
             SourceInfo repaired = BuildSource(pageFolder, pdfAbsPath, metadata, scaleMetersPerPt);
             IoUtil.WriteAllTextAtomic(
                 Path.Combine(pageFolder, "source.json"),
-                System.Text.Json.JsonSerializer.Serialize(repaired, OurPlaneCoreJobStore.JsonOptions));
+                System.Text.Json.JsonSerializer.Serialize(repaired, OurPlanCoreJobStore.JsonOptions));
             if (metadata.Layers.Count > 0)
                 TrySaveLayerCache(pageFolder, metadata.Layers);
 
-            src = OurPlaneCoreJobStore.ReadSource(pageFolder) ?? new SourceInfo();
+            src = OurPlanCoreJobStore.ReadSource(pageFolder) ?? new SourceInfo();
             bool ok = !string.IsNullOrWhiteSpace(src.Pdf);
             if (ok)
                 AppLog.Warn($"Repaired missing page source.json from source_pdf.json for '{pageFolder}'.");
@@ -50,7 +50,7 @@ internal static class PageSourceRepair
     {
         try
         {
-            OurPlaneCoreJobStore.SavePageLayerCache(pageFolder, layers);
+            OurPlanCoreJobStore.SavePageLayerCache(pageFolder, layers);
         }
         catch (Exception ex)
         {
@@ -107,15 +107,15 @@ internal static class PageSourceRepair
         if (string.IsNullOrWhiteSpace(pagesRoot) || !Directory.Exists(pagesRoot))
             return false;
 
-        foreach (string candidate in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(pagesRoot).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (string candidate in OurPlanCoreJobStore.EnumerateSelfAndDescendants(pagesRoot).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             if (SheetOverlayReciprocalService.SameFolder(candidate, pageFolder) ||
-                !string.Equals(OurPlaneCoreJobStore.ReadClass(candidate), "Page", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(OurPlanCoreJobStore.ReadClass(candidate), "Page", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            SourceInfo? source = OurPlaneCoreJobStore.ReadSource(candidate);
+            SourceInfo? source = OurPlanCoreJobStore.ReadSource(candidate);
             if (source == null || string.IsNullOrWhiteSpace(source.OverlayPageFolder))
                 continue;
 

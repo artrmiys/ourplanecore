@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class SmartMassingAiTakeoffBuildResult
 {
@@ -27,7 +27,7 @@ public static class SmartMassingTakeoffAiPlanner
     };
 
     public static async Task<SmartMassingAiTakeoffBuildResult> BuildDraftAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         double levelSpacingFeet,
         string apiKey,
         string model,
@@ -95,13 +95,13 @@ public static class SmartMassingTakeoffAiPlanner
         };
     }
 
-    public static object BuildInput(OurPlaneCoreJob job, double levelSpacingFeet)
+    public static object BuildInput(OurPlanCoreJob job, double levelSpacingFeet)
     {
         IReadOnlyList<PageInfo> pages = LoadPages(job);
         Dictionary<string, PageInfo> pageByFolder = pages
             .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+        IReadOnlyList<TakeoffItem> items = OurPlanCoreJobStore.LoadTakeoffItems(job);
 
         return new
         {
@@ -140,7 +140,7 @@ public static class SmartMassingTakeoffAiPlanner
     }
 
     private static object TakeoffInput(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         TakeoffItem item,
         IReadOnlyDictionary<string, PageInfo> pageByFolder)
     {
@@ -313,21 +313,21 @@ public static class SmartMassingTakeoffAiPlanner
             _ => "unknown",
         };
 
-    private static IReadOnlyList<PageInfo> LoadPages(OurPlaneCoreJob job)
+    private static IReadOnlyList<PageInfo> LoadPages(OurPlanCoreJob job)
     {
         if (!Directory.Exists(job.PagesRoot))
             return [];
 
         return Directory.EnumerateDirectories(job.PagesRoot, "*", SearchOption.AllDirectories)
-            .Where(OurPlaneCoreJobStore.IsPageFolder)
-            .Select(OurPlaneCoreJobStore.TryReadPage)
+            .Where(OurPlanCoreJobStore.IsPageFolder)
+            .Select(OurPlanCoreJobStore.TryReadPage)
             .Where(page => page != null)
             .Select(page => page!)
             .OrderBy(page => page.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
-    private static string SaveMassingJson(OurPlaneCoreJob job, string fileName, object value)
+    private static string SaveMassingJson(OurPlanCoreJob job, string fileName, object value)
     {
         string dir = Path.Combine(job.AIContextRoot, "3d_massing", "ai_takeoff_sort");
         Directory.CreateDirectory(dir);
@@ -348,7 +348,7 @@ public static class SmartMassingTakeoffAiPlanner
         return new SKRect(minX, minY, maxX, maxY);
     }
 
-    private static string Rel(OurPlaneCoreJob job, string path)
+    private static string Rel(OurPlanCoreJob job, string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             return "";

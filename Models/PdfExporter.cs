@@ -5,10 +5,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record PdfExportOptions(
     bool IncludeMeasurements,

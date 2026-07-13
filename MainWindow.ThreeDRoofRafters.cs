@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Rafters on 3D roof faces: pick individual faces in the viewer or rafter the
 // whole active roof at once. Settings persist per roof group in the 3D model

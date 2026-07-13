@@ -5,19 +5,19 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class PageStore
 {
     public static IReadOnlyList<PageInfo> ImportPdf(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string pdfSourcePath,
         IReadOnlyList<string> pageNames,
         string destinationFolder,
         IReadOnlyDictionary<int, IReadOnlyList<PdfLayerInfo>>? pdfLayerCache = null)
     {
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
-        string pdfDest = OurPlaneCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
+        string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
         if (!File.Exists(pdfDest))
             File.Copy(pdfSourcePath, pdfDest);
 
@@ -27,10 +27,10 @@ internal static class PageStore
             string displayName = string.IsNullOrWhiteSpace(pageNames[i])
                 ? $"Page {i + 1}"
                 : pageNames[i].Trim();
-            string pageFolder = OurPlaneCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlaneCoreJobStore.SanitizeName(displayName, 120)));
+            string pageFolder = OurPlanCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlanCoreJobStore.SanitizeName(displayName, 120)));
             Directory.CreateDirectory(pageFolder);
 
-            OurPlaneCoreJobStore.WriteItemDataXml(pageFolder, "Page", displayName, OurPlaneCoreJobStore.GetNextOrderIndex(destinationFolder));
+            OurPlanCoreJobStore.WriteItemDataXml(pageFolder, "Page", displayName, OurPlanCoreJobStore.GetNextOrderIndex(destinationFolder));
             if (pdfLayerCache != null && pdfLayerCache.TryGetValue(i, out var cachedLayers))
                 WriteSource(pageFolder, pdfDest, i, 0, cachedLayers, pdfLayersCached: true);
             else
@@ -54,7 +54,7 @@ internal static class PageStore
     }
 
     public static PageInfo CreatePageFromPdf(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string pdfSourcePath,
         string displayName,
         string destinationFolder,
@@ -62,17 +62,17 @@ internal static class PageStore
         double scaleMetersPerPt = 0)
     {
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
-        string pdfDest = OurPlaneCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
+        string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, Path.GetFileName(pdfSourcePath)));
         if (!File.Exists(pdfDest))
             File.Copy(pdfSourcePath, pdfDest);
 
         string cleanName = string.IsNullOrWhiteSpace(displayName)
             ? $"Page {pdfPage + 1}"
             : displayName.Trim();
-        string pageFolder = OurPlaneCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlaneCoreJobStore.SanitizeName(cleanName, 120)));
+        string pageFolder = OurPlanCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlanCoreJobStore.SanitizeName(cleanName, 120)));
         Directory.CreateDirectory(pageFolder);
 
-        OurPlaneCoreJobStore.WriteItemDataXml(pageFolder, "Page", cleanName, OurPlaneCoreJobStore.GetNextOrderIndex(destinationFolder));
+        OurPlanCoreJobStore.WriteItemDataXml(pageFolder, "Page", cleanName, OurPlanCoreJobStore.GetNextOrderIndex(destinationFolder));
         WriteSource(pageFolder, pdfDest, pdfPage, scaleMetersPerPt);
         return new PageInfo
         {
@@ -85,7 +85,7 @@ internal static class PageStore
     }
 
     public static PageInfo CreateBlankPage(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string displayName,
         string destinationFolder,
         float widthPt = BlankPagePdfService.DefaultWidthPt,
@@ -95,14 +95,14 @@ internal static class PageStore
             ? "Blank Sheet"
             : displayName.Trim();
         string sourcesDir = JobLayout.EnsureFolder(job.RootPath, "sources");
-        string pdfFileName = $"{OurPlaneCoreJobStore.SanitizeName(cleanName, 80)}.blank.pdf";
-        string pdfDest = OurPlaneCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, pdfFileName));
+        string pdfFileName = $"{OurPlanCoreJobStore.SanitizeName(cleanName, 80)}.blank.pdf";
+        string pdfDest = OurPlanCoreJobStore.UniqueFilePath(Path.Combine(sourcesDir, pdfFileName));
         BlankPagePdfService.WriteBlankPdf(pdfDest, widthPt, heightPt);
 
-        string pageFolder = OurPlaneCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlaneCoreJobStore.SanitizeName(cleanName, 120)));
+        string pageFolder = OurPlanCoreJobStore.UniqueDirectoryPath(Path.Combine(destinationFolder, OurPlanCoreJobStore.SanitizeName(cleanName, 120)));
         Directory.CreateDirectory(pageFolder);
 
-        OurPlaneCoreJobStore.WriteItemDataXml(pageFolder, "Page", cleanName, OurPlaneCoreJobStore.GetNextOrderIndex(destinationFolder));
+        OurPlanCoreJobStore.WriteItemDataXml(pageFolder, "Page", cleanName, OurPlanCoreJobStore.GetNextOrderIndex(destinationFolder));
         WriteSource(pageFolder, pdfDest, 0, 0);
         WriteSourcePdfMetadata(pageFolder, new PdfSheetMetadata
         {
@@ -140,7 +140,7 @@ internal static class PageStore
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            OurPlaneCoreJobStore.QuarantineCorruptJson(path, "ReadSource", ex);
+            OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadSource", ex);
             return null;
         }
         catch (Exception ex)
@@ -159,7 +159,7 @@ internal static class PageStore
         string pdfPath = Path.GetFullPath(Path.Combine(pageFolder, src.Pdf));
         return new PageInfo
         {
-            Name = OurPlaneCoreJobStore.ReadName(pageFolder) ?? Path.GetFileName(pageFolder),
+            Name = OurPlanCoreJobStore.ReadName(pageFolder) ?? Path.GetFileName(pageFolder),
             FolderPath = pageFolder,
             PdfPath = pdfPath,
             PdfPage = src.Page,
@@ -496,11 +496,11 @@ internal static class PageStore
 
         try
         {
-            return JsonSerializer.Deserialize<PdfSheetMetadata>(File.ReadAllText(path), OurPlaneCoreJobStore.JsonOptions);
+            return JsonSerializer.Deserialize<PdfSheetMetadata>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            OurPlaneCoreJobStore.QuarantineCorruptJson(path, "ReadSourcePdfMetadata", ex);
+            OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadSourcePdfMetadata", ex);
             return null;
         }
         catch (Exception ex)
@@ -517,7 +517,7 @@ internal static class PageStore
         {
             IoUtil.WriteAllTextAtomic(
                 SourcePdfMetadataPath(pageFolder),
-                JsonSerializer.Serialize(metadata, OurPlaneCoreJobStore.JsonOptions));
+                JsonSerializer.Serialize(metadata, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -532,11 +532,11 @@ internal static class PageStore
 
         try
         {
-            return JsonSerializer.Deserialize<PageLayerManifest>(File.ReadAllText(path), OurPlaneCoreJobStore.JsonOptions);
+            return JsonSerializer.Deserialize<PageLayerManifest>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            OurPlaneCoreJobStore.QuarantineCorruptJson(path, "ReadPageLayerManifest", ex);
+            OurPlanCoreJobStore.QuarantineCorruptJson(path, "ReadPageLayerManifest", ex);
             return null;
         }
         catch (Exception ex)
@@ -580,7 +580,7 @@ internal static class PageStore
         var snapshots = new List<PageSourceSnapshot>();
         if (!Directory.Exists(rootFolder)) return snapshots;
 
-        foreach (string dir in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(rootFolder))
+        foreach (string dir in OurPlanCoreJobStore.EnumerateSelfAndDescendants(rootFolder))
         {
             SourceInfo? src = ReadSource(dir);
             if (src == null) continue;
@@ -620,7 +620,7 @@ internal static class PageStore
             return 0;
 
         int changed = 0;
-        foreach (string dir in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(pagesRoot))
+        foreach (string dir in OurPlanCoreJobStore.EnumerateSelfAndDescendants(pagesRoot))
         {
             SourceInfo? src = ReadSource(dir);
             if (src == null || string.IsNullOrWhiteSpace(src.OverlayPageFolder))
@@ -709,7 +709,7 @@ internal static class PageStore
         {
             IoUtil.WriteAllTextAtomic(
                 Path.Combine(pageFolder, "source.json"),
-                JsonSerializer.Serialize(src, OurPlaneCoreJobStore.JsonOptions));
+                JsonSerializer.Serialize(src, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -748,7 +748,7 @@ internal static class PageStore
 
         try
         {
-            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(manifest, OurPlaneCoreJobStore.JsonOptions));
+            IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(manifest, OurPlanCoreJobStore.JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -790,7 +790,7 @@ internal static class PageStore
         string current = NormalizeFolderPath(path);
         foreach (var move in moves)
         {
-            if (!OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, current))
+            if (!OurPlanCoreJobStore.IsSameOrDescendant(move.OldPath, current))
                 continue;
 
             string relative = Path.GetRelativePath(move.OldPath, current);

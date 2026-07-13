@@ -5,11 +5,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Media3D;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class Massing3DWindow : Window
 {
-    private readonly OurPlaneCoreJob _job;
+    private readonly OurPlanCoreJob _job;
     private SmartMassingDraft? _draft;
     private IReadOnlyList<SmartAiMarker> _markers;
     private readonly Viewport3D _viewport;
@@ -34,7 +34,7 @@ public sealed partial class Massing3DWindow : Window
     private string _selectedMarkerId = "";
 
     public Massing3DWindow(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingDraft? draft,
         IReadOnlyList<SmartAiMarker> markers)
     {

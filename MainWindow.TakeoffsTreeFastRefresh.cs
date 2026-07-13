@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -31,7 +31,7 @@ public partial class MainWindow
             byPath[NormalizePath(path)] = item;
         }
 
-        var orderedPaths = OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
+        var orderedPaths = OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder)
             .Select(NormalizePath)
             .ToList();
         if (orderedPaths.Count != existingItems.Count ||
@@ -163,7 +163,7 @@ public partial class MainWindow
         if (!Directory.Exists(folder))
             return false;
 
-        if (OurPlaneCoreJobStore.TryReadTakeoffItem(folder) is { } item)
+        if (OurPlanCoreJobStore.TryReadTakeoffItem(folder) is { } item)
         {
             loadedItems.Add(item);
             node = CreateTakeoffTreeItem(item);
@@ -172,7 +172,7 @@ public partial class MainWindow
 
         var folderNode = new TakeoffFolderNode
         {
-            Name = OurPlaneCoreJobStore.DisplayName(folder),
+            Name = OurPlanCoreJobStore.DisplayName(folder),
             FolderPath = folder,
         };
         var folderItem = CreateTakeoffFolderTreeItem(folderNode);
@@ -242,12 +242,12 @@ public partial class MainWindow
             AttachContextMenu(item, takeoff);
         }
         else if (item.Tag is TakeoffFolderNode folder &&
-                 OurPlaneCoreJobStore.IsSameOrDescendant(oldRoot, folder.FolderPath))
+                 OurPlanCoreJobStore.IsSameOrDescendant(oldRoot, folder.FolderPath))
         {
             string folderPath = RebaseTakeoffPath(folder.FolderPath, oldRoot, newRoot);
             var updated = new TakeoffFolderNode
             {
-                Name = OurPlaneCoreJobStore.DisplayName(folderPath),
+                Name = OurPlanCoreJobStore.DisplayName(folderPath),
                 FolderPath = folderPath,
                 IsRoot = folder.IsRoot,
             };
@@ -260,7 +260,7 @@ public partial class MainWindow
             RebaseTakeoffTreeItemPath(child, oldRoot, newRoot);
 
         if (!string.IsNullOrWhiteSpace(_activeTakeoffParentFolder) &&
-            OurPlaneCoreJobStore.IsSameOrDescendant(oldRoot, _activeTakeoffParentFolder))
+            OurPlanCoreJobStore.IsSameOrDescendant(oldRoot, _activeTakeoffParentFolder))
         {
             _activeTakeoffParentFolder = RebaseTakeoffPath(_activeTakeoffParentFolder, oldRoot, newRoot);
         }
@@ -268,11 +268,11 @@ public partial class MainWindow
 
     private static void RebaseTakeoffItemPath(TakeoffItem item, string oldRoot, string newRoot)
     {
-        if (!OurPlaneCoreJobStore.IsSameOrDescendant(oldRoot, item.FolderPath))
+        if (!OurPlanCoreJobStore.IsSameOrDescendant(oldRoot, item.FolderPath))
             return;
 
         item.FolderPath = RebaseTakeoffPath(item.FolderPath, oldRoot, newRoot);
-        item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
+        item.Name = OurPlanCoreJobStore.DisplayName(item.FolderPath);
         foreach (Measurement measurement in item.Measurements)
             measurement.TakeoffFolder = item.FolderPath;
     }
@@ -280,7 +280,7 @@ public partial class MainWindow
     private void RebaseTakeoffRangeAnchorPath(string oldRoot, string newRoot)
     {
         if (string.IsNullOrWhiteSpace(_takeoffsRangeAnchorPath) ||
-            !OurPlaneCoreJobStore.IsSameOrDescendant(oldRoot, _takeoffsRangeAnchorPath))
+            !OurPlanCoreJobStore.IsSameOrDescendant(oldRoot, _takeoffsRangeAnchorPath))
         {
             return;
         }
@@ -383,7 +383,7 @@ public partial class MainWindow
 
         var pageFolders = _takeoffItems
             .Where(item => !string.IsNullOrWhiteSpace(item.FolderPath) &&
-                           roots.Any(root => OurPlaneCoreJobStore.IsSameOrDescendant(root, item.FolderPath)))
+                           roots.Any(root => OurPlanCoreJobStore.IsSameOrDescendant(root, item.FolderPath)))
             .SelectMany(item => item.Measurements.Select(measurement => measurement.PageFolder))
             .Where(pageFolder => !string.IsNullOrWhiteSpace(pageFolder))
             .Distinct(StringComparer.OrdinalIgnoreCase)

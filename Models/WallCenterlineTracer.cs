@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore.Models;
+namespace OurPlanCore.Models;
 
 /// <summary>
 /// Finds wall centerlines inside an area polygon from raw PDF vector segments.

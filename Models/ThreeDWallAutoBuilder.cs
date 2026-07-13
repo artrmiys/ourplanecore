@@ -3,7 +3,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class ThreeDWallAutoBuildResult
 {
@@ -28,10 +28,10 @@ public static class ThreeDWallAutoBuilder
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public static ThreeDWallAutoBuildResult Build(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         Func<Measurement, double> scaleResolver)
     {
-        IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+        IReadOnlyList<TakeoffItem> items = OurPlanCoreJobStore.LoadTakeoffItems(job);
         var result = new ThreeDWallAutoBuildResult
         {
             Model = new ThreeDWallModel { Source = "auto_takeoffs" },
@@ -89,7 +89,7 @@ public static class ThreeDWallAutoBuilder
 
     private static void AddSqftSlabs(
         ThreeDWallAutoBuildResult result,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         Func<Measurement, double> scaleResolver,
         Dictionary<int, double> baseByLevel,
@@ -109,7 +109,7 @@ public static class ThreeDWallAutoBuilder
                 : ResolveBaseElevation(level.Ordinal, baseByLevel, defaultHeight);
             foreach (Measurement measurement in item.Measurements)
             {
-                if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area" ||
+                if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area" ||
                     measurement.Points.Count < 3)
                 {
                     result.SkippedAreaMeasurements++;
@@ -224,12 +224,12 @@ public static class ThreeDWallAutoBuilder
     }
 
     private static bool IsLineMeasurement(Measurement measurement) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
         measurement.Points.Count >= 2;
 
-    private static bool IsWallCandidate(OurPlaneCoreJob job, TakeoffItem item)
+    private static bool IsWallCandidate(OurPlanCoreJob job, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "line")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "line")
             return false;
 
         string source = SourceText(job, item);
@@ -238,9 +238,9 @@ public static class ThreeDWallAutoBuilder
                                                   string.Equals(part, "wall", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsSqftCandidate(OurPlaneCoreJob job, TakeoffItem item)
+    private static bool IsSqftCandidate(OurPlanCoreJob job, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
             return false;
 
         foreach (string part in SourceParts(job, item))
@@ -256,9 +256,9 @@ public static class ThreeDWallAutoBuilder
                source.Contains("sqfts", StringComparison.Ordinal);
     }
 
-    private static bool IsRoofFootprintCandidate(OurPlaneCoreJob job, TakeoffItem item)
+    private static bool IsRoofFootprintCandidate(OurPlanCoreJob job, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
             return false;
 
         bool underSqfts = SourceParts(job, item).Any(part =>
@@ -269,7 +269,7 @@ public static class ThreeDWallAutoBuilder
         return exactRoofName || roofInSqfts;
     }
 
-    private static ThreeDLevelKey? ResolveLevel(OurPlaneCoreJob job, TakeoffItem item)
+    private static ThreeDLevelKey? ResolveLevel(OurPlanCoreJob job, TakeoffItem item)
     {
         foreach (string text in SourceTexts(job, item))
         {
@@ -280,7 +280,7 @@ public static class ThreeDWallAutoBuilder
         return null;
     }
 
-    private static IEnumerable<string> SourceTexts(OurPlaneCoreJob job, TakeoffItem item)
+    private static IEnumerable<string> SourceTexts(OurPlanCoreJob job, TakeoffItem item)
     {
         List<string> parts = SourceParts(job, item).ToList();
         for (int i = parts.Count - 2; i >= 0; i--)
@@ -292,7 +292,7 @@ public static class ThreeDWallAutoBuilder
             yield return parts[^1];
     }
 
-    private static IEnumerable<string> SourceParts(OurPlaneCoreJob job, TakeoffItem item)
+    private static IEnumerable<string> SourceParts(OurPlanCoreJob job, TakeoffItem item)
     {
         if (string.IsNullOrWhiteSpace(item.FolderPath))
             yield break;
@@ -313,12 +313,12 @@ public static class ThreeDWallAutoBuilder
             if (!string.IsNullOrWhiteSpace(part) && part != "." && part != "..")
             {
                 current = Path.Combine(current, part);
-                yield return OurPlaneCoreJobStore.DisplayName(current);
+                yield return OurPlanCoreJobStore.DisplayName(current);
             }
         }
     }
 
-    private static string SourceText(OurPlaneCoreJob job, TakeoffItem item) =>
+    private static string SourceText(OurPlanCoreJob job, TakeoffItem item) =>
         string.Join(" ", SourceTexts(job, item).Where(text => !string.IsNullOrWhiteSpace(text)));
 
     private static bool TryParseLevel(string text, out ThreeDLevelKey level)

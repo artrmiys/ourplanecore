@@ -1,10 +1,10 @@
 using System.Reflection;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class AppVersion
 {
-    // Single source of truth is <Version> in ourplanecore.csproj; this strips
+    // Single source of truth is <Version> in ourplancore.csproj; this strips
     // the "+commit" suffix InformationalVersion may carry.
     public static string Display { get; } = ResolveDisplay();
 

@@ -7,14 +7,14 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
     private static void ImportPages(
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string pagesRoot,
         string tempRoot,
         Dictionary<string, ImportedPlanSwiftPage> pageByGuid,
@@ -79,7 +79,7 @@ public static partial class PlanSwiftProjectImporter
             if (page.ScaleX > 0 && page.ScaleY > 0 && Math.Abs(page.ScaleX - page.ScaleY) > 0.001)
                 messages.Add($"Page '{page.Name}' has different ScaleX/ScaleY values: {page.ScaleX:G17}/{page.ScaleY:G17}.");
 
-            PageInfo imported = OurPlaneCoreJobStore.CreatePageFromPdf(
+            PageInfo imported = OurPlanCoreJobStore.CreatePageFromPdf(
                 job,
                 tempPdf,
                 page.Name,
@@ -87,7 +87,7 @@ public static partial class PlanSwiftProjectImporter
                 pdfPage: 0,
                 scaleMetersPerPt: scale);
             if (page.OrderIndex > 0)
-                OurPlaneCoreJobStore.SetOrderIndex(imported.FolderPath, page.OrderIndex);
+                OurPlanCoreJobStore.SetOrderIndex(imported.FolderPath, page.OrderIndex);
             if (options.ConvertPageImages && File.Exists(page.ImagePath))
             {
                 RasterSheetBuildResult raster = RasterSheetCacheService.BuildFromImageAndEnable(

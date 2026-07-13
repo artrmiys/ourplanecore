@@ -5,11 +5,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartContextStore
 {
-    public const string GlobalRootEnvironmentVariable = "OURPLANECORE_GLOBAL_ROOT";
+    public const string GlobalRootEnvironmentVariable = "OURPLANCORE_GLOBAL_ROOT";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -20,12 +20,11 @@ public static partial class SmartContextStore
     {
         get
         {
-            string configuredRoot = Environment.GetEnvironmentVariable(GlobalRootEnvironmentVariable) ?? "";
+            string configuredRoot = AppIdentity.GetEnvironmentVariable(GlobalRootEnvironmentVariable) ?? "";
             if (!string.IsNullOrWhiteSpace(configuredRoot))
                 return Path.GetFullPath(configuredRoot);
 
-            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(localAppData, "OurPlaneCore");
+            return AppIdentity.LocalRoot;
         }
     }
 
@@ -218,10 +217,10 @@ public static partial class SmartContextStore
         return context;
     }
 
-    public static IReadOnlyList<string> LoadHiddenMarkerTypes(OurPlaneCoreJob job) =>
+    public static IReadOnlyList<string> LoadHiddenMarkerTypes(OurPlanCoreJob job) =>
         EnsureProjectContext(job.RootPath, job.Name).HiddenMarkerTypes.ToList();
 
-    public static void SaveHiddenMarkerTypes(OurPlaneCoreJob job, IEnumerable<string> hiddenMarkerTypes)
+    public static void SaveHiddenMarkerTypes(OurPlanCoreJob job, IEnumerable<string> hiddenMarkerTypes)
     {
         SmartProjectContext context = EnsureProjectContext(job.RootPath, job.Name);
         context.HiddenMarkerTypes = NormalizeMarkerTypeList(hiddenMarkerTypes);
@@ -229,10 +228,10 @@ public static partial class SmartContextStore
         SaveProjectContext(job.RootPath, context);
     }
 
-    public static SmartObservation AddManualObservation(OurPlaneCoreJob job, PageInfo? page, string text) =>
+    public static SmartObservation AddManualObservation(OurPlanCoreJob job, PageInfo? page, string text) =>
         AddObservation(job, page, "manual", text);
 
-    public static SmartObservation AddObservation(OurPlaneCoreJob job, PageInfo? page, string type, string text)
+    public static SmartObservation AddObservation(OurPlanCoreJob job, PageInfo? page, string type, string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Observation text is required.", nameof(text));
@@ -261,7 +260,7 @@ public static partial class SmartContextStore
     }
 
     public static SmartAiRequest AddAiRequest(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo? page,
         SmartObservation observation,
         string type,
@@ -279,8 +278,8 @@ public static partial class SmartContextStore
         if (page != null)
         {
             pageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);
-            string manifestPath = OurPlaneCoreJobStore.PageLayersJsonPath(page.FolderPath);
-            PageLayerManifest? manifest = OurPlaneCoreJobStore.ReadPageLayerManifest(page.FolderPath);
+            string manifestPath = OurPlanCoreJobStore.PageLayersJsonPath(page.FolderPath);
+            PageLayerManifest? manifest = OurPlanCoreJobStore.ReadPageLayerManifest(page.FolderPath);
             if (manifest != null && File.Exists(manifestPath))
                 layerManifestPath = Path.GetRelativePath(job.RootPath, manifestPath);
 

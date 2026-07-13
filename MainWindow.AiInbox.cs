@@ -13,7 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -853,7 +853,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(bookmark.PageFolder)
                 ? bookmark.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, bookmark.PageFolder));
-            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return page;
         }

@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record TakeoffAutoRouteResult(string ParentFolder, bool Routed, string Message);
 
@@ -32,7 +32,7 @@ public static class TakeoffAutoRoutingService
     ];
 
     public static TakeoffAutoRouteResult ResolveRoute(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string requestedParentFolder,
         string itemName,
         string measurementType,
@@ -42,7 +42,7 @@ public static class TakeoffAutoRoutingService
         string parentFolder = Directory.Exists(requestedParentFolder)
             ? requestedParentFolder
             : job.TakeoffsRoot;
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType);
 
         if (type == "area" && LooksLikeSqftArea(itemName))
         {
@@ -59,7 +59,7 @@ public static class TakeoffAutoRoutingService
                 return new TakeoffAutoRouteResult(
                     wallFloor,
                     true,
-                    $"Auto routed to Takeoffs/walls/{OurPlaneCoreJobStore.DisplayName(wallFloor)}.");
+                    $"Auto routed to Takeoffs/walls/{OurPlanCoreJobStore.DisplayName(wallFloor)}.");
             }
 
             return new TakeoffAutoRouteResult(walls, true, "Auto routed to Takeoffs/walls; no sheet floor was detected.");
@@ -68,7 +68,7 @@ public static class TakeoffAutoRoutingService
         return new TakeoffAutoRouteResult(parentFolder, false, "");
     }
 
-    public static bool SortFolder(OurPlaneCoreJob job, string parentFolder)
+    public static bool SortFolder(OurPlanCoreJob job, string parentFolder)
     {
         if (string.IsNullOrWhiteSpace(parentFolder) || !Directory.Exists(parentFolder))
             return false;
@@ -76,16 +76,16 @@ public static class TakeoffAutoRoutingService
         string relative = RelativeTakeoffPath(job, parentFolder);
         Func<string, TakeoffAutoSortKey>? keySelector = null;
         if (IsSqftsFolder(relative))
-            keySelector = folder => SqftSortKey(OurPlaneCoreJobStore.DisplayName(folder));
+            keySelector = folder => SqftSortKey(OurPlanCoreJobStore.DisplayName(folder));
         else if (IsWallsRootFolder(relative))
-            keySelector = folder => WallFloorSortKey(OurPlaneCoreJobStore.DisplayName(folder));
+            keySelector = folder => WallFloorSortKey(OurPlanCoreJobStore.DisplayName(folder));
         else if (IsWallFloorFolder(relative))
-            keySelector = folder => WallItemSortKey(OurPlaneCoreJobStore.DisplayName(folder));
+            keySelector = folder => WallItemSortKey(OurPlanCoreJobStore.DisplayName(folder));
 
         if (keySelector == null)
             return false;
 
-        var current = OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder).ToList();
+        var current = OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder).ToList();
         var ordered = current
             .Select(folder => (Folder: folder, Key: keySelector(folder)))
             .OrderBy(entry => entry.Key.Category)
@@ -98,12 +98,12 @@ public static class TakeoffAutoRoutingService
 
         bool changed = !current.SequenceEqual(ordered, StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < ordered.Count; i++)
-            OurPlaneCoreJobStore.SetOrderIndex(ordered[i], i + 1);
+            OurPlanCoreJobStore.SetOrderIndex(ordered[i], i + 1);
 
         return changed;
     }
 
-    public static bool SortRouteContext(OurPlaneCoreJob job, string itemFolder)
+    public static bool SortRouteContext(OurPlanCoreJob job, string itemFolder)
     {
         string? parent = string.IsNullOrWhiteSpace(itemFolder)
             ? null
@@ -120,7 +120,7 @@ public static class TakeoffAutoRoutingService
 
     public static TakeoffAutoSortKey PageLegendSortKey(TakeoffItem item)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         if (type == "line")
         {
             TakeoffAutoSortKey key = WallItemSortKey(item.Name);
@@ -232,16 +232,16 @@ public static class TakeoffAutoRoutingService
     {
         foreach (string child in Directory.EnumerateDirectories(parentFolder))
         {
-            string display = OurPlaneCoreJobStore.DisplayName(child);
+            string display = OurPlanCoreJobStore.DisplayName(child);
             if (names.Any(name => string.Equals(display, name, StringComparison.OrdinalIgnoreCase)))
                 return child;
         }
 
-        return OurPlaneCoreJobStore.EnsureFolder(parentFolder, names[0]);
+        return OurPlanCoreJobStore.EnsureFolder(parentFolder, names[0]);
     }
 
     private static bool TryResolveFloorLevel(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string activePageName,
         string activePageFolder,
         out FloorLevel floor)
@@ -256,7 +256,7 @@ public static class TakeoffAutoRoutingService
         return false;
     }
 
-    private static IEnumerable<string> PageContextTexts(OurPlaneCoreJob job, string activePageName, string activePageFolder)
+    private static IEnumerable<string> PageContextTexts(OurPlanCoreJob job, string activePageName, string activePageFolder)
     {
         if (!string.IsNullOrWhiteSpace(activePageName))
             yield return activePageName;
@@ -264,9 +264,9 @@ public static class TakeoffAutoRoutingService
         string? current = activePageFolder;
         while (!string.IsNullOrWhiteSpace(current) &&
                Directory.Exists(current) &&
-               OurPlaneCoreJobStore.IsSameOrDescendant(job.PagesRoot, current))
+               OurPlanCoreJobStore.IsSameOrDescendant(job.PagesRoot, current))
         {
-            yield return OurPlaneCoreJobStore.DisplayName(current);
+            yield return OurPlanCoreJobStore.DisplayName(current);
             if (string.Equals(
                     Path.GetFullPath(current).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                     Path.GetFullPath(job.PagesRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
@@ -351,7 +351,7 @@ public static class TakeoffAutoRoutingService
     private static string[] RelativeParts(string relative) =>
         relative.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static string RelativeTakeoffPath(OurPlaneCoreJob job, string folder)
+    private static string RelativeTakeoffPath(OurPlanCoreJob job, string folder)
     {
         string root = NormalizePath(job.TakeoffsRoot);
         string full = NormalizePath(folder);

@@ -10,10 +10,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -701,7 +701,7 @@ public partial class MainWindow
         }
     }
 
-    private static bool MarkerBelongsToPage(SmartAiMarker marker, PageInfo page, OurPlaneCoreJob job)
+    private static bool MarkerBelongsToPage(SmartAiMarker marker, PageInfo page, OurPlanCoreJob job)
     {
         if (string.Equals(marker.Page, page.Name, StringComparison.OrdinalIgnoreCase))
             return true;

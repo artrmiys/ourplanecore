@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class PdfSheetMetadataCropTemplate
 {
@@ -78,10 +78,10 @@ public static class PdfSheetMetadataCropService
             out error);
     }
 
-    public static string TemplatePath(OurPlaneCoreJob job) =>
+    public static string TemplatePath(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "sheet_metadata_crop_template.json");
 
-    public static PdfSheetMetadataCropTemplate? LoadTemplate(OurPlaneCoreJob job)
+    public static PdfSheetMetadataCropTemplate? LoadTemplate(OurPlanCoreJob job)
     {
         string path = TemplatePath(job);
         if (!File.Exists(path))
@@ -98,7 +98,7 @@ public static class PdfSheetMetadataCropService
         }
     }
 
-    public static void SaveTemplate(OurPlaneCoreJob job, PdfSheetMetadataCropTemplate template)
+    public static void SaveTemplate(OurPlanCoreJob job, PdfSheetMetadataCropTemplate template)
     {
         string now = DateTime.UtcNow.ToString("O");
         template.SchemaVersion = 1;

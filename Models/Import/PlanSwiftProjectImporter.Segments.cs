@@ -7,14 +7,14 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
     private static void ImportSegments(
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string takeoffsRoot,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
         IReadOnlyDictionary<string, TakeoffItem> importedTakeoffsBySource,
@@ -43,7 +43,7 @@ public static partial class PlanSwiftProjectImporter
 
             string parent = EnsureRelativeFolder(takeoffsRoot, segment.ParentRelativeFolder);
             string itemName = UniqueChildDisplayName(parent, SegmentTakeoffName(segment));
-            TakeoffItem imported = OurPlaneCoreJobStore.CreateTakeoffItem(
+            TakeoffItem imported = OurPlanCoreJobStore.CreateTakeoffItem(
                 job,
                 parent,
                 itemName,
@@ -72,7 +72,7 @@ public static partial class PlanSwiftProjectImporter
                 importedMeasurements++;
             }
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(imported);
+            OurPlanCoreJobStore.SaveTakeoffItem(imported);
         }
     }
 
@@ -86,8 +86,8 @@ public static partial class PlanSwiftProjectImporter
         string sourceParentKey = NormalizeImportRelativePath(segment.SourceParentRelativeFolder);
         if (string.IsNullOrWhiteSpace(sourceParentKey) ||
             !importedTakeoffsBySource.TryGetValue(sourceParentKey, out TakeoffItem? areaItem) ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(areaItem.MeasurementType) != "area" ||
-            areaItem.Measurements.All(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area"))
+            OurPlanCoreJobStore.NormalizeMeasurementType(areaItem.MeasurementType) != "area" ||
+            areaItem.Measurements.All(measurement => OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area"))
         {
             return false;
         }
@@ -98,7 +98,7 @@ public static partial class PlanSwiftProjectImporter
             return false;
 
         IReadOnlyList<Measurement> areaMeasurements = areaItem.Measurements
-            .Where(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .Where(measurement => OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .ToList();
         Dictionary<Measurement, PlanSwiftJoistSegmentLayout> linkedLayouts =
             ResolveLinkedSegmentLayouts(segment, areaMeasurements, pageByGuid, spacingSources);
@@ -125,8 +125,8 @@ public static partial class PlanSwiftProjectImporter
             measurement.JoistAddEndJoist = false;
         }
 
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(areaItem);
-        OurPlaneCoreJobStore.SaveTakeoffItem(areaItem);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(areaItem);
+        OurPlanCoreJobStore.SaveTakeoffItem(areaItem);
         string linkedNote = linkedLayouts.Count > 0
             ? $" using {linkedLayouts.Count.ToString(CultureInfo.InvariantCulture)} linked area section direction(s)"
             : "";

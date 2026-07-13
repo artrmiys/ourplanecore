@@ -1,4 +1,4 @@
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // A queryable lower-envelope roof surface built from generated roof faces.
 // Each face lies on one slope plane (Y = a*X + b*Z + c). HeightAt returns the

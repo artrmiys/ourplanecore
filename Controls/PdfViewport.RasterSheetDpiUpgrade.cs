@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -596,7 +596,7 @@ public sealed partial class PdfViewport
             float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
             await Task.Run(() =>
             {
-                PageInfo persistPage = OurPlaneCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                PageInfo persistPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 RasterSheetCacheService.TryEnableReadyReadableRaster(persistPage, targetScale, out _);
             }).ConfigureAwait(false);
         }
@@ -712,7 +712,7 @@ public sealed partial class PdfViewport
             float targetScale = RasterSheetCacheService.RasterDpiToRenderScale(targetDpi);
             RasterSheetBuildResult result = await Task.Run(() =>
             {
-                PageInfo buildPage = OurPlaneCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 return RasterSheetCacheService.TryEnableReadyReadableRaster(buildPage, targetScale, out RasterSheetBuildResult enabled)
                     ? enabled
                     : new RasterSheetBuildResult(false, null, "", "");
@@ -828,7 +828,7 @@ public sealed partial class PdfViewport
                 if (!IsCurrentPageRasterTarget(queuedPage.PdfPath, queuedPage.PdfPage, queuedPage.FolderPath))
                     return;
 
-                PageInfo buildPage = OurPlaneCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
+                PageInfo buildPage = OurPlanCoreJobStore.TryReadPage(queuedPage.FolderPath) ?? queuedPage;
                 if (buildPage.RasterSheet?.Enabled != true)
                     return;
 

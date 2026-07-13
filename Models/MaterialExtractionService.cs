@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record MaterialExtractionRunResult(
     MaterialExtractionResult Result,
@@ -24,16 +24,16 @@ public static class MaterialExtractionService
 {
     private static readonly TimeSpan ExtractionTimeout = TimeSpan.FromMinutes(10);
 
-    public static string OutputFolder(OurPlaneCoreJob job) =>
+    public static string OutputFolder(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "materials");
 
-    public static string LatestJsonPath(OurPlaneCoreJob job) =>
+    public static string LatestJsonPath(OurPlanCoreJob job) =>
         Path.Combine(OutputFolder(job), "materials_unique_by_page.json");
 
-    public static string LatestRowsCsvPath(OurPlaneCoreJob job) =>
+    public static string LatestRowsCsvPath(OurPlanCoreJob job) =>
         Path.Combine(OutputFolder(job), "materials_rows.csv");
 
-    public static string LatestSummaryCsvPath(OurPlaneCoreJob job) =>
+    public static string LatestSummaryCsvPath(OurPlanCoreJob job) =>
         Path.Combine(OutputFolder(job), "materials_summary.csv");
 
     public static IReadOnlyList<string> UniqueSourcePdfs(IEnumerable<PageInfo> pages) =>
@@ -50,7 +50,7 @@ public static class MaterialExtractionService
         page.Name.StartsWith("Materials Report", StringComparison.OrdinalIgnoreCase) ||
         Path.GetFileName(page.PdfPath).StartsWith("materials_report", StringComparison.OrdinalIgnoreCase);
 
-    public static MaterialExtractionResult? TryLoadLatest(OurPlaneCoreJob job)
+    public static MaterialExtractionResult? TryLoadLatest(OurPlanCoreJob job)
     {
         string path = LatestJsonPath(job);
         if (!File.Exists(path))
@@ -63,12 +63,12 @@ public static class MaterialExtractionService
     {
         var result = JsonSerializer.Deserialize<MaterialExtractionResult>(
             File.ReadAllText(jsonPath, Encoding.UTF8),
-            OurPlaneCoreJobStore.JsonOptions);
+            OurPlanCoreJobStore.JsonOptions);
         return result ?? new MaterialExtractionResult();
     }
 
     public static async Task<MaterialExtractionRunResult> ExtractAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<string> pdfPaths,
         CancellationToken cancellationToken = default)
     {

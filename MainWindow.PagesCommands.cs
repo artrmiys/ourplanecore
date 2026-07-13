@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -269,7 +269,7 @@ public partial class MainWindow
                     MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
                 if (IsModuleEnabled(ModuleId.Ai))
                     pageMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
-                pageMetadataMenu.Items.Add(MakeMenuItem("Open source_pdf.json", File.Exists(OurPlaneCoreJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath)));
+                pageMetadataMenu.Items.Add(MakeMenuItem("Open source_pdf.json", File.Exists(OurPlanCoreJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath)));
                 menu.Items.Add(pageMetadataMenu);
                 menu.Items.Add(MakeSubmenu(
                     "Learning",

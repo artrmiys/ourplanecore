@@ -7,13 +7,13 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
-    private const string TakeoffsMoveSmokeEnv = "OURPLANECORE_TAKEOFFS_MOVE_SMOKE";
-    private const string TakeoffsMoveSmokeReportEnv = "OURPLANECORE_TAKEOFFS_MOVE_SMOKE_REPORT";
-    private const string TakeoffsMoveSmokeSelectionCountEnv = "OURPLANECORE_TAKEOFFS_SMOKE_SELECTION_COUNT";
+    private const string TakeoffsMoveSmokeEnv = "OURPLANCORE_TAKEOFFS_MOVE_SMOKE";
+    private const string TakeoffsMoveSmokeReportEnv = "OURPLANCORE_TAKEOFFS_MOVE_SMOKE_REPORT";
+    private const string TakeoffsMoveSmokeSelectionCountEnv = "OURPLANCORE_TAKEOFFS_SMOKE_SELECTION_COUNT";
 
     private async Task TryRunTakeoffsMoveSmokeAsync()
     {
@@ -98,10 +98,10 @@ public partial class MainWindow
             throw new InvalidOperationException("No current job is open.");
 
         var stopwatch = Stopwatch.StartNew();
-        string folderPath = OurPlaneCoreJobStore.CreateTakeoffFolder(_currentJob, root, "Smoke Created Folder");
+        string folderPath = OurPlanCoreJobStore.CreateTakeoffFolder(_currentJob, root, "Smoke Created Folder");
         var node = new TakeoffFolderNode
         {
-            Name = OurPlaneCoreJobStore.DisplayName(folderPath),
+            Name = OurPlanCoreJobStore.DisplayName(folderPath),
             FolderPath = folderPath,
         };
         var tvi = AddTakeoffFolderTreeItem(node, TakeoffsTree);
@@ -121,8 +121,8 @@ public partial class MainWindow
     private void RunTakeoffsBulkCopySmoke(TakeoffsMoveSmokeReport report, string root, string targetFolder)
     {
         var bulkSources = Directory.GetDirectories(root)
-            .Where(path => OurPlaneCoreJobStore.DisplayName(path).StartsWith("Smoke Bulk ", StringComparison.Ordinal))
-            .OrderBy(path => OurPlaneCoreJobStore.DisplayName(path), StringComparer.OrdinalIgnoreCase)
+            .Where(path => OurPlanCoreJobStore.DisplayName(path).StartsWith("Smoke Bulk ", StringComparison.Ordinal))
+            .OrderBy(path => OurPlanCoreJobStore.DisplayName(path), StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (bulkSources.Count == 0)
             throw new InvalidOperationException("No Smoke Bulk takeoffs were available for copy smoke.");
@@ -137,8 +137,8 @@ public partial class MainWindow
         stopwatch.Stop();
 
         var copied = Directory.GetDirectories(targetFolder)
-            .Where(path => OurPlaneCoreJobStore.DisplayName(path).StartsWith("Smoke Bulk ", StringComparison.Ordinal))
-            .OrderBy(path => OurPlaneCoreJobStore.DisplayName(path), StringComparer.OrdinalIgnoreCase)
+            .Where(path => OurPlanCoreJobStore.DisplayName(path).StartsWith("Smoke Bulk ", StringComparison.Ordinal))
+            .OrderBy(path => OurPlanCoreJobStore.DisplayName(path), StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         report.BulkCopyCount = bulkSources.Count;
@@ -241,7 +241,7 @@ public partial class MainWindow
 
     private static void WriteTakeoffsMoveSmokeReport(TakeoffsMoveSmokeReport report)
     {
-        string path = Environment.GetEnvironmentVariable(TakeoffsMoveSmokeReportEnv) ?? "";
+        string path = AppIdentity.GetEnvironmentVariable(TakeoffsMoveSmokeReportEnv) ?? "";
         if (string.IsNullOrWhiteSpace(path))
             return;
 

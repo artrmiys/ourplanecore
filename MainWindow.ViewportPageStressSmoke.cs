@@ -9,21 +9,21 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
-    private const string ViewportPageStressSmokeEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE";
-    private const string ViewportPageStressSmokeReportEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_REPORT";
-    private const string ViewportPageStressSmokeTimeoutEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS";
-    private const string ViewportPageStressSmokeOpenCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT";
-    private const string ViewportPageStressSmokeReturnCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT";
-    private const string ViewportPageStressSmokeTabCountEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT";
-    private const string ViewportPageStressSmokeTargetZoomEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM";
-    private const string ViewportPageStressSmokePanStepsEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS";
-    private const string ViewportPageStressTreeOpsEnv = "OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS";
+    private const string ViewportPageStressSmokeEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_SMOKE";
+    private const string ViewportPageStressSmokeReportEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_REPORT";
+    private const string ViewportPageStressSmokeTimeoutEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS";
+    private const string ViewportPageStressSmokeOpenCountEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT";
+    private const string ViewportPageStressSmokeReturnCountEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT";
+    private const string ViewportPageStressSmokeTabCountEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_TAB_COUNT";
+    private const string ViewportPageStressSmokeTargetZoomEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM";
+    private const string ViewportPageStressSmokePanStepsEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS";
+    private const string ViewportPageStressTreeOpsEnv = "OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS";
 
     private async Task TryRunViewportPageStressSmokeAsync()
     {
@@ -102,7 +102,7 @@ public partial class MainWindow
 
         foreach (PageTabState tab in _pageTabs.ToList())
         {
-            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(tab.PageFolder);
             if (page == null)
                 continue;
 
@@ -446,7 +446,7 @@ public partial class MainWindow
 
     private static bool IsTruthyEnvironment(string name)
     {
-        string value = Environment.GetEnvironmentVariable(name) ?? "";
+        string value = AppIdentity.GetEnvironmentVariable(name) ?? "";
         return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
@@ -454,13 +454,13 @@ public partial class MainWindow
 
     private static int ReadEnvironmentInt(string name, int fallback, int min, int max)
     {
-        string value = Environment.GetEnvironmentVariable(name) ?? "";
+        string value = AppIdentity.GetEnvironmentVariable(name) ?? "";
         return int.TryParse(value, out int parsed) ? Math.Clamp(parsed, min, max) : fallback;
     }
 
     private static float ReadEnvironmentFloat(string name, float fallback, float min, float max)
     {
-        string value = Environment.GetEnvironmentVariable(name) ?? "";
+        string value = AppIdentity.GetEnvironmentVariable(name) ?? "";
         return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed)
             ? Math.Clamp(parsed, min, max)
             : fallback;
@@ -468,7 +468,7 @@ public partial class MainWindow
 
     private static void WriteViewportPageStressSmokeReport(ViewportPageStressSmokeReport report)
     {
-        string path = Environment.GetEnvironmentVariable(ViewportPageStressSmokeReportEnv) ?? "";
+        string path = AppIdentity.GetEnvironmentVariable(ViewportPageStressSmokeReportEnv) ?? "";
         if (string.IsNullOrWhiteSpace(path))
             path = DefaultViewportPageStressSmokeReportPath(report);
         if (string.IsNullOrWhiteSpace(path))

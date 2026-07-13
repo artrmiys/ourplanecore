@@ -1,4 +1,4 @@
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // One offset companion of a multiline takeoff item: every line drawn on the
 // owner item also produces a parallel line in the companion item, shifted

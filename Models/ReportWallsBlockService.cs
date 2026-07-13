@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record ReportWallSourceRow(int RowNumber, string Label, string Value);
 

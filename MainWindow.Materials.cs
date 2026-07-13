@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -98,7 +98,7 @@ public partial class MainWindow
         TxtMaterialsSummary.Text = $"Extracting materials from {pdfs.Count} source PDF(s)...";
         TxtStatus.Text = "Materials: extraction running.";
         BtnMaterialsExtract.IsEnabled = false;
-        OurPlaneCoreJob job = _currentJob;
+        OurPlanCoreJob job = _currentJob;
         using CancellationTokenSource cts = StartMaterialsWork();
         try
         {
@@ -148,7 +148,7 @@ public partial class MainWindow
         if (!IsModuleEnabled(ModuleId.Materials) || _currentJob == null || sourcePages.Count == 0)
             return;
 
-        OurPlaneCoreJob job = _currentJob;
+        OurPlanCoreJob job = _currentJob;
         using CancellationTokenSource cts = StartMaterialsWork();
         try
         {
@@ -160,7 +160,7 @@ public partial class MainWindow
             if (sourcePages.Count == 0)
                 return;
 
-            string destinationFolder = OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. reports");
+            string destinationFolder = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. reports");
             using (ShowBusyOverlay("Extracting materials and creating report sheet..."))
             {
                 await WaitForBusyOverlayRenderAsync();
@@ -257,7 +257,7 @@ public partial class MainWindow
             return new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
 
         SaveCurrentPageScale();
-        OurPlaneCoreJob job = _currentJob;
+        OurPlanCoreJob job = _currentJob;
         BusyOverlayText.Text = $"{statusPrefix}: auto naming/scaling {sourcePages.Count} sheet(s)...";
         TxtStatus.Text = $"{statusPrefix}: auto naming/scaling source sheets.";
 

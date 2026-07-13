@@ -4,7 +4,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public enum PlanSwiftExportRowKind
 {
@@ -35,7 +35,7 @@ public static class PlanSwiftTakeoffExporter
     ];
 
     public static IReadOnlyList<PlanSwiftExportRow> BuildRows(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> takeoffItems,
         IReadOnlyList<string> selectedRoots,
         UnitMode unitMode)
@@ -149,7 +149,7 @@ public static class PlanSwiftTakeoffExporter
         return rows.Count(row => row.Kind != PlanSwiftExportRowKind.Blank);
     }
 
-    private static void EmitSingleItem(List<PlanSwiftExportRow> rows, OurPlaneCoreJob job, TakeoffItem item, UnitMode unitMode)
+    private static void EmitSingleItem(List<PlanSwiftExportRow> rows, OurPlanCoreJob job, TakeoffItem item, UnitMode unitMode)
     {
         string parent = Path.GetDirectoryName(item.FolderPath) ?? job.TakeoffsRoot;
         rows.Add(new PlanSwiftExportRow(PlanSwiftExportRowKind.Header, GroupTitle(job, parent)));
@@ -159,7 +159,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static void EmitSelectedItemGroups(
         List<PlanSwiftExportRow> rows,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> selectedItems,
         UnitMode unitMode)
     {
@@ -183,7 +183,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static void ProcessFolder(
         List<PlanSwiftExportRow> rows,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string folder,
         IReadOnlyDictionary<string, TakeoffItem> itemByFolder,
         UnitMode unitMode,
@@ -192,7 +192,7 @@ public static class PlanSwiftTakeoffExporter
         if (!Directory.Exists(folder) || !FolderHasMeasuredItems(folder, itemByFolder))
             return;
 
-        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(folder);
+        var children = OurPlanCoreJobStore.GetOrderedChildDirectories(folder);
         var items = children
             .Select(child => TryGetItem(itemByFolder, child, out TakeoffItem? item) ? item : null)
             .Where(item => item is { Measurements.Count: > 0 })
@@ -289,7 +289,7 @@ public static class PlanSwiftTakeoffExporter
         var lines = new List<string>();
         foreach (Measurement measurement in item.Measurements)
         {
-            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area" ||
+            if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area" ||
                 !measurement.JoistEnabled)
             {
                 continue;
@@ -318,7 +318,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static (string Value, string Unit) QuantityValueAndUnit(TakeoffItem item, UnitMode unitMode)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double totalMeters = item.Total(0);
         if (item.IsJoistArea)
             return unitMode == UnitMode.Imperial
@@ -349,7 +349,7 @@ public static class PlanSwiftTakeoffExporter
 
     private static bool FolderHasMeasuredItems(string folder, IReadOnlyDictionary<string, TakeoffItem> itemByFolder)
     {
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
             if (TryGetItem(itemByFolder, child, out TakeoffItem? item))
             {
@@ -365,13 +365,13 @@ public static class PlanSwiftTakeoffExporter
         return false;
     }
 
-    private static IReadOnlyList<string> NormalizeRoots(OurPlaneCoreJob job, IReadOnlyList<string> selectedRoots)
+    private static IReadOnlyList<string> NormalizeRoots(OurPlanCoreJob job, IReadOnlyList<string> selectedRoots)
     {
         var rawRoots = selectedRoots.Count == 0 ? [job.TakeoffsRoot] : selectedRoots;
         var valid = rawRoots
             .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
             .Select(NormalizePath)
-            .Where(path => OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, path))
+            .Where(path => OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path.Length)
             .ToList();
@@ -379,7 +379,7 @@ public static class PlanSwiftTakeoffExporter
         var result = new List<string>();
         foreach (string root in valid)
         {
-            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent, root)))
+            if (result.Any(parent => OurPlanCoreJobStore.IsSameOrDescendant(parent, root)))
                 continue;
             result.Add(root);
         }
@@ -387,7 +387,7 @@ public static class PlanSwiftTakeoffExporter
         return result.Count == 0 ? [job.TakeoffsRoot] : result;
     }
 
-    private static IEnumerable<TakeoffItem> SortItemsForFolder(OurPlaneCoreJob job, string folder, IReadOnlyList<TakeoffItem> items)
+    private static IEnumerable<TakeoffItem> SortItemsForFolder(OurPlanCoreJob job, string folder, IReadOnlyList<TakeoffItem> items)
     {
         string relative = RelativeTakeoffPath(job, folder);
         if (!IsWallFloorFolder(relative))
@@ -396,7 +396,7 @@ public static class PlanSwiftTakeoffExporter
         return items.OrderBy(WallItemSortKey).ToList();
     }
 
-    private static string GroupTitle(OurPlaneCoreJob job, string folder)
+    private static string GroupTitle(OurPlanCoreJob job, string folder)
     {
         string relative = string.IsNullOrWhiteSpace(folder) || IsSamePath(folder, job.TakeoffsRoot)
             ? ""
@@ -460,7 +460,7 @@ public static class PlanSwiftTakeoffExporter
         return matches.Count == 0 ? -1 : int.Parse(matches[^1].Value, CultureInfo.InvariantCulture);
     }
 
-    private static string RelativeTakeoffPath(OurPlaneCoreJob job, string folder)
+    private static string RelativeTakeoffPath(OurPlanCoreJob job, string folder)
     {
         try
         {
@@ -468,7 +468,7 @@ public static class PlanSwiftTakeoffExporter
         }
         catch
         {
-            return OurPlaneCoreJobStore.DisplayName(folder);
+            return OurPlanCoreJobStore.DisplayName(folder);
         }
     }
 

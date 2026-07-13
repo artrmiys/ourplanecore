@@ -7,12 +7,12 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
     private static void WriteReports(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PlanSwiftProjectManifest manifest,
         PlanSwiftImportResult result)
     {
@@ -85,7 +85,7 @@ public static partial class PlanSwiftProjectImporter
 
         File.WriteAllText(
             Path.Combine(reportRoot, "planswift_import_manifest.json"),
-            JsonSerializer.Serialize(json, OurPlaneCoreJobStore.JsonOptions));
+            JsonSerializer.Serialize(json, OurPlanCoreJobStore.JsonOptions));
 
         var sourceMetadata = new
         {
@@ -117,7 +117,7 @@ public static partial class PlanSwiftProjectImporter
 
         File.WriteAllText(
             Path.Combine(reportRoot, "planswift_source_metadata.json"),
-            JsonSerializer.Serialize(sourceMetadata, OurPlaneCoreJobStore.JsonOptions));
+            JsonSerializer.Serialize(sourceMetadata, OurPlanCoreJobStore.JsonOptions));
 
         File.WriteAllText(
             Path.Combine(reportRoot, "planswift_import_report.md"),

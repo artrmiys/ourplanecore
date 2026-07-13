@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
@@ -90,7 +90,7 @@ public static partial class SmartMassingDraftService
         (lineEnd.Y - lineStart.Y) * (point.X - lineStart.X);
 
     private static bool TryResolveMassingTransform(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingFootprint footprint,
         IReadOnlyList<SmartAiMarker> allMarkers,
         out SKPoint origin,

@@ -8,9 +8,9 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -89,7 +89,7 @@ public partial class MainWindow
         SaveCurrentPageScale();
         TxtStatus.Text = $"Analyzing PDF metadata for {pages.Count} page(s)...";
 
-        OurPlaneCoreJob job = _currentJob;
+        OurPlanCoreJob job = _currentJob;
         List<PdfMetadataPageResult> results;
         using (ShowBusyOverlay($"Analyzing PDF metadata for {pages.Count} page(s)..."))
         {
@@ -152,7 +152,7 @@ public partial class MainWindow
     }
 
     private PdfMetadataApplySummary ApplyPdfMetadataResults(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<PdfMetadataPageResult> results,
         IReadOnlyList<PdfMetadataPreviewRow> rows)
     {
@@ -175,7 +175,7 @@ public partial class MainWindow
             }
 
             resultsByFolder.TryGetValue(NormalizePath(row.PageFolder), out PdfMetadataPageResult? result);
-            PageInfo? sourcePage = result?.Page ?? OurPlaneCoreJobStore.TryReadPage(row.PageFolder);
+            PageInfo? sourcePage = result?.Page ?? OurPlanCoreJobStore.TryReadPage(row.PageFolder);
             if (sourcePage == null)
             {
                 failed++;
@@ -183,11 +183,11 @@ public partial class MainWindow
             }
 
             PdfSheetMetadata metadata = result?.Metadata
-                ?? OurPlaneCoreJobStore.ReadSourcePdfMetadata(sourcePage.FolderPath)
+                ?? OurPlanCoreJobStore.ReadSourcePdfMetadata(sourcePage.FolderPath)
                 ?? CreateManualSheetMetadata(sourcePage);
 
             string currentPath = sourcePage.FolderPath;
-            string finalName = OurPlaneCoreJobStore.DisplayName(currentPath);
+            string finalName = OurPlanCoreJobStore.DisplayName(currentPath);
             double finalScale = sourcePage.ScaleMetersPerPt;
 
             try
@@ -215,10 +215,10 @@ public partial class MainWindow
                     if (!string.IsNullOrWhiteSpace(proposedName) &&
                         !string.Equals(proposedName, finalName, StringComparison.OrdinalIgnoreCase))
                     {
-                        string renamedPath = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(currentPath, proposedName);
+                        string renamedPath = OurPlanCoreJobStore.RenamePageAllowDuplicateName(currentPath, proposedName);
                         reloadActiveTab = UpdatePageReferencesForMovedPath(currentPath, renamedPath) || reloadActiveTab;
                         currentPath = renamedPath;
-                        finalName = OurPlaneCoreJobStore.DisplayName(renamedPath);
+                        finalName = OurPlanCoreJobStore.DisplayName(renamedPath);
                         renamed++;
                     }
                 }
@@ -227,8 +227,8 @@ public partial class MainWindow
                 if (string.IsNullOrWhiteSpace(metadata.Source))
                     metadata.Source = "manual";
 
-                OurPlaneCoreJobStore.WriteSourcePdfMetadata(currentPath, metadata);
-                if (OurPlaneCoreJobStore.TryReadPage(currentPath) is { } finalPage)
+                OurPlanCoreJobStore.WriteSourcePdfMetadata(currentPath, metadata);
+                if (OurPlanCoreJobStore.TryReadPage(currentPath) is { } finalPage)
                 {
                     var finalDecision = PdfSheetMetadataService.FinalDecision(finalPage, metadata, finalName, finalScale);
                     string outcome = (row.ApplyRename && !string.Equals(row.ProposedPageName, finalName, StringComparison.OrdinalIgnoreCase))
@@ -309,7 +309,7 @@ public partial class MainWindow
         metadata.ScaleText = metadata.SelectedScaleText;
         metadata.SelectedScaleRatio = scaleMetersPerPt / ViewportConstants.PdfPointMeters;
         metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
-        OurPlaneCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
+        OurPlanCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
         return true;
     }
 
@@ -432,7 +432,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(parent))
             return false;
 
-        string target = Path.Combine(parent, OurPlaneCoreJobStore.SanitizeName(proposedName, 120));
+        string target = Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(proposedName, 120));
         return !string.Equals(NormalizePath(pageFolder), NormalizePath(target), StringComparison.OrdinalIgnoreCase) &&
                Directory.Exists(target);
     }
@@ -513,7 +513,7 @@ public partial class MainWindow
 
     private static void OpenSourcePdfMetadata(string pageFolder)
     {
-        string path = OurPlaneCoreJobStore.SourcePdfMetadataPath(pageFolder);
+        string path = OurPlanCoreJobStore.SourcePdfMetadataPath(pageFolder);
         if (!File.Exists(path))
             return;
 

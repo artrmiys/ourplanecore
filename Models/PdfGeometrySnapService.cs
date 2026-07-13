@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using OurPlaneCore.Models;
+using OurPlanCore.Models;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record PdfGeometrySnapPoint(SKPoint Point, string Kind, string LayerName = "");
 public sealed record PdfGeometrySnapSegment(SKPoint Start, SKPoint End, string Kind, string LayerName = "", float StrokeWidth = 0f);

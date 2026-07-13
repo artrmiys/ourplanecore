@@ -5,9 +5,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -626,7 +626,7 @@ public partial class MainWindow
 
     private void AddTemplateItem(TreeView? tree, string measurementType)
     {
-        string type = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+        string type = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType);
         var dialog = new NewItemDialog(
             type,
             DefaultTemplateItemName(type),
@@ -653,7 +653,7 @@ public partial class MainWindow
     }
 
     private static string DefaultTemplateItemName(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "area" => "Area Preset",
             "point" => "Count Preset",

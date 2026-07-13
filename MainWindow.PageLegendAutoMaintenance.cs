@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -96,6 +96,6 @@ public partial class MainWindow
             _currentPage.LegendTakeoffOrder = [];
             _currentPage.LegendTakeoffOrderMode = "auto";
         }
-        OurPlaneCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, [], "auto");
+        OurPlanCoreJobStore.SavePageLegendTakeoffOrder(page.FolderPath, [], "auto");
     }
 }

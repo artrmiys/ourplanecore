@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -21,7 +21,7 @@ public partial class MainWindow
             foreach (var item in _takeoffItems)
             {
                 EnsureTakeoffItemFolder(item);
-                OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                OurPlanCoreJobStore.SaveTakeoffItem(item);
             }
 
             string? snapshotPath = SaveJobRecoverySnapshot("manual_save");

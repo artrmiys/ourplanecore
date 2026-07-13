@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -177,7 +177,7 @@ public partial class MainWindow
 
     private string QuantityText(TakeoffItem item)
     {
-        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string mt = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
         if (item.IsJoistArea)
             return QuantityText("line", value);
@@ -186,7 +186,7 @@ public partial class MainWindow
 
     private string QuantityText(Measurement measurement)
     {
-        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
+        string mt = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType);
         double value = measurement.Value(_viewport.ScaleMetersPerPt);
         if (measurement.JoistEnabled)
             return QuantityText("line", value);
@@ -210,7 +210,7 @@ public partial class MainWindow
 
     private string UnitText(string measurementType)
     {
-        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+        string mt = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType);
         return mt switch
         {
             "line" => _viewport.UnitMode == UnitMode.Imperial ? "ft" : "m",
@@ -243,7 +243,7 @@ public partial class MainWindow
 
     private double EstimateQuantity(TakeoffItem item)
     {
-        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string mt = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double value = item.Total(_viewport.ScaleMetersPerPt);
         return mt switch
         {
@@ -256,7 +256,7 @@ public partial class MainWindow
 
     private double EstimateQuantity(TakeoffItem item, IReadOnlyList<Measurement> measurements)
     {
-        string mt = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string mt = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
             : _viewport.ScaleMetersPerPt;

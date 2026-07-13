@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -82,7 +82,7 @@ public partial class MainWindow
             return;
         }
 
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType);
         string typeTitle = TakeoffTypeDisplay(_activeItem);
         string total = _activeItem.Measurements.Count == 0
             ? "no measurements"
@@ -132,7 +132,7 @@ public partial class MainWindow
     {
         string title = MeasurementTypeTitle(measurementType);
         if (_activeItem != null &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != measurementType)
+            OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) != measurementType)
             return $"{_activeItem.Name} - {title}";
         if (_currentPage != null)
             return $"{_currentPage.Name} {title}";
@@ -157,7 +157,7 @@ public partial class MainWindow
     }
 
     private static string MeasurementTypeTitle(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "Count",
             "area" => "Area",
@@ -168,7 +168,7 @@ public partial class MainWindow
         item.IsJoistArea ? "Joist" : MeasurementTypeTitle(item.MeasurementType);
 
     private static string MeasurementTypeSign(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "○",
             "area" => "□",
@@ -189,7 +189,7 @@ public partial class MainWindow
         if (!IsRecordTool(_activeTool))
             return false;
 
-        if (RecordMeasurementType(_activeTool) != OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType))
+        if (RecordMeasurementType(_activeTool) != OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType))
             return false;
 
         return !item.IsJoistArea || IsJoistAreaTool(_activeTool);
@@ -204,7 +204,7 @@ public partial class MainWindow
     private static FrameworkElement CreateTakeoffTypeIcon(TakeoffItem item, double size, Thickness margin) =>
         Controls.MeasurementGlyph.CreateWpf(
             Controls.MeasurementGlyph.Parse(
-                OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+                OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
                 joist: item.IsJoistArea,
                 countSymbol: item.CountSymbol),
             BrushFromHex(item.Color, Brushes.Gray),
@@ -213,7 +213,7 @@ public partial class MainWindow
 
     private static FrameworkElement CreateMeasurementTypeIcon(string kind, Brush brush, double size, Thickness margin) =>
         Controls.MeasurementGlyph.CreateWpf(
-            Controls.MeasurementGlyph.Parse(OurPlaneCoreJobStore.NormalizeMeasurementType(kind),
+            Controls.MeasurementGlyph.Parse(OurPlanCoreJobStore.NormalizeMeasurementType(kind),
                 joist: kind.Equals("joist", StringComparison.OrdinalIgnoreCase)),
             brush,
             size,
@@ -222,7 +222,7 @@ public partial class MainWindow
     private static FrameworkElement CreateMeasurementTypeIcon(Measurement measurement, Brush brush, double size, Thickness margin) =>
         Controls.MeasurementGlyph.CreateWpf(
             Controls.MeasurementGlyph.Parse(
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType),
                 joist: measurement.JoistEnabled,
                 countSymbol: measurement.CountSymbol),
             brush,
@@ -236,5 +236,5 @@ public partial class MainWindow
         measurement.JoistEnabled ? UnitText("line") : UnitText(measurement.MType);
 
     private static string CsvMeasurementType(TakeoffItem item) =>
-        item.IsJoistArea ? "joist" : OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.IsJoistArea ? "joist" : OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
 }

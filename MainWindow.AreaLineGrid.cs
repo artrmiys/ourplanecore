@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
     private void CreateLineGridFromSelectedArea(TreeViewItem tvi, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
         {
             TxtStatus.Text = "Line grid can only be created from Area takeoff items.";
             return;
@@ -31,8 +31,8 @@ public partial class MainWindow
 
     private void CreateLineGridFromAreaSection(TakeoffItem item, Measurement measurement)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area")
         {
             TxtStatus.Text = "Line grid can only be created from Area sections.";
             return;
@@ -206,7 +206,7 @@ public partial class MainWindow
 
         if (!string.IsNullOrWhiteSpace(area.PageFolder) &&
             (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, area.PageFolder)) &&
-            OurPlaneCoreJobStore.TryReadPage(area.PageFolder) is { } page)
+            OurPlanCoreJobStore.TryReadPage(area.PageFolder) is { } page)
         {
             OpenPageInActiveTab(page);
             Dispatcher.InvokeAsync(RefreshViewportSelection);

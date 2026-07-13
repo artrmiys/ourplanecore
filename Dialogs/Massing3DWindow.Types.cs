@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Media.Media3D;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class Massing3DWindow
 {

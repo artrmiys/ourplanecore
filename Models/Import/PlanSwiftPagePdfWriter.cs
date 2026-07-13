@@ -3,7 +3,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class PlanSwiftPagePdfWriter
 {

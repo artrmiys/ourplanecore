@@ -7,14 +7,14 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
     private static void ImportTakeoffs(
         PlanSwiftImportOptions options,
         PlanSwiftProjectManifest manifest,
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string takeoffsRoot,
         IReadOnlyDictionary<string, ImportedPlanSwiftPage> pageByGuid,
         Dictionary<string, TakeoffItem> importedTakeoffsBySource,
@@ -25,10 +25,10 @@ public static partial class PlanSwiftProjectImporter
         foreach (PlanSwiftFolderRecord folder in manifest.TakeoffFolders)
         {
             string parent = EnsureRelativeFolder(takeoffsRoot, folder.ParentRelativeFolder);
-            string importedFolder = OurPlaneCoreJobStore.EnsureFolder(parent, folder.Name);
-            OurPlaneCoreJobStore.SetProperty(importedFolder, "SmartNodeKind", "folder");
+            string importedFolder = OurPlanCoreJobStore.EnsureFolder(parent, folder.Name);
+            OurPlanCoreJobStore.SetProperty(importedFolder, "SmartNodeKind", "folder");
             if (folder.OrderIndex > 0)
-                OurPlaneCoreJobStore.SetOrderIndex(importedFolder, folder.OrderIndex);
+                OurPlanCoreJobStore.SetOrderIndex(importedFolder, folder.OrderIndex);
         }
 
         IEnumerable<PlanSwiftTakeoffItemRecord> items = Limit(manifest.TakeoffItems, options.MaxTakeoffItems);
@@ -39,14 +39,14 @@ public static partial class PlanSwiftProjectImporter
 
             string parent = EnsureRelativeFolder(takeoffsRoot, item.ParentRelativeFolder);
             string itemName = UniqueChildDisplayName(parent, item.Name);
-            TakeoffItem imported = OurPlaneCoreJobStore.CreateTakeoffItem(
+            TakeoffItem imported = OurPlanCoreJobStore.CreateTakeoffItem(
                 job,
                 parent,
                 itemName,
                 item.ColorHex,
                 item.MeasurementType);
             if (item.OrderIndex > 0)
-                OurPlaneCoreJobStore.SetOrderIndex(imported.FolderPath, item.OrderIndex);
+                OurPlanCoreJobStore.SetOrderIndex(imported.FolderPath, item.OrderIndex);
             importedItems++;
             importedTakeoffsBySource[NormalizeImportRelativePath(item.RelativeFolder)] = imported;
 
@@ -70,7 +70,7 @@ public static partial class PlanSwiftProjectImporter
                 importedMeasurements++;
             }
 
-            OurPlaneCoreJobStore.SaveTakeoffItem(imported);
+            OurPlanCoreJobStore.SaveTakeoffItem(imported);
         }
     }
 

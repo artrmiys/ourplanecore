@@ -9,12 +9,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -356,7 +356,7 @@ public sealed partial class PdfViewport
         if (annotation.Points.Count < 2)
             return annotation.Points;
 
-        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         if (kind == "area")
             return annotation.Points.Append(annotation.Points[0]).ToList();
 

@@ -4,11 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
-using OurPlaneCore.Dialogs;
+using OurPlanCore.Controls;
+using OurPlanCore.Dialogs;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -47,7 +47,7 @@ public partial class MainWindow
             .ToList();
 
     private static bool IsPointAlongLineSource(Measurement measurement) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
         measurement.Points.Count >= 2;
 
     private void CreatePointsAlongLine(Measurement line, TakeoffItem? sourceItem = null)
@@ -117,7 +117,7 @@ public partial class MainWindow
 
         List<Measurement> generated = CreatePointAlongLineMeasurements(pointItem, lineResults);
         pointItem.Measurements.AddRange(generated);
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(pointItem);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(pointItem);
         QueueTakeoffAutosave(pointItem);
         _takeoffItems.Add(pointItem);
 
@@ -305,7 +305,7 @@ public partial class MainWindow
         string targetPageFolder = ResolvePointAlongLineDisplayPage(sourceLines, generated);
         if (!string.IsNullOrWhiteSpace(targetPageFolder) &&
             (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, targetPageFolder)) &&
-            OurPlaneCoreJobStore.TryReadPage(targetPageFolder) is { } page)
+            OurPlanCoreJobStore.TryReadPage(targetPageFolder) is { } page)
         {
             OpenPageInActiveTab(page);
             Dispatcher.InvokeAsync(RefreshViewportSelection);

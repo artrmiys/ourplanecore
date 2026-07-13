@@ -6,17 +6,17 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
     // Measured-takeoff draft construction, source grouping, and footprint extraction.
 
-    public static SmartMassingDraft BuildDraftFromWallTakeoffs(OurPlaneCoreJob job, double levelSpacingFeet) =>
+    public static SmartMassingDraft BuildDraftFromWallTakeoffs(OurPlanCoreJob job, double levelSpacingFeet) =>
         BuildDraftFromWallTakeoffs(job, levelSpacingFeet, null);
 
     public static SmartMassingDraft BuildDraftFromWallTakeoffs(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         double levelSpacingFeet,
         SmartMassingTakeoffAiPlan? aiPlan)
     {
@@ -29,7 +29,7 @@ public static partial class SmartMassingDraftService
             GeneratedAtUtc = DateTime.UtcNow.ToString("O"),
         };
 
-        IReadOnlyList<TakeoffItem> loadedItems = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+        IReadOnlyList<TakeoffItem> loadedItems = OurPlanCoreJobStore.LoadTakeoffItems(job);
         IReadOnlyList<TakeoffItem> allItems = ApplyAiTakeoffPlan(job, loadedItems, aiPlan, draft);
         List<string> takeoffRoots = FindMassingTakeoffRoots(job).ToList();
         bool hasAiAssignments = aiPlan != null && aiPlan.Assignments.Count > 0;
@@ -68,11 +68,11 @@ public static partial class SmartMassingDraftService
         foreach (WallFloorSource floor in levelSources)
         {
             List<TakeoffItem> areaItems = floor.Items
-                .Where(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area")
+                .Where(item => OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area")
                 .Where(item => item.Measurements.Any(measurement => measurement.Points.Count >= 3))
                 .ToList();
             List<TakeoffItem> lineItems = floor.Items
-                .Where(item => OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line")
+                .Where(item => OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line")
                 .Where(item => item.Measurements.Any(measurement => measurement.Points.Count >= 2))
                 .ToList();
             if (areaItems.Count == 0 && lineItems.Count == 0)
@@ -183,17 +183,17 @@ public static partial class SmartMassingDraftService
         return draft;
     }
 
-    private static IEnumerable<string> FindMassingTakeoffRoots(OurPlaneCoreJob job)
+    private static IEnumerable<string> FindMassingTakeoffRoots(OurPlanCoreJob job)
     {
         if (!Directory.Exists(job.TakeoffsRoot))
             yield break;
 
         foreach (string folder in Directory.EnumerateDirectories(job.TakeoffsRoot, "*", SearchOption.AllDirectories))
         {
-            if (OurPlaneCoreJobStore.IsTakeoffItemFolder(folder))
+            if (OurPlanCoreJobStore.IsTakeoffItemFolder(folder))
                 continue;
 
-            string normalized = NormalizeTakeoffName(OurPlaneCoreJobStore.DisplayName(folder));
+            string normalized = NormalizeTakeoffName(OurPlanCoreJobStore.DisplayName(folder));
             string compact = normalized.Trim();
             if (compact is "wall" or "walls" or "area" or "areas" or "floor" or "floors" or "slab" or "slabs" or "sqft" or "sqfts" or "sft" or "sf" or "sq ft" or "square feet" or "square footage")
                 yield return folder;
@@ -201,34 +201,34 @@ public static partial class SmartMassingDraftService
     }
 
     private static List<WallFloorSource> BuildWallFloorSources(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<string> wallRoots,
         IReadOnlyList<TakeoffItem> allItems)
     {
         var sources = new List<WallFloorSource>();
         foreach (string wallRoot in wallRoots)
         {
-            List<string> levelFolders = OurPlaneCoreJobStore.GetOrderedChildDirectories(wallRoot)
-                .Where(folder => !OurPlaneCoreJobStore.IsTakeoffItemFolder(folder))
-                .Where(folder => TryParseLevel(OurPlaneCoreJobStore.DisplayName(folder), out _))
+            List<string> levelFolders = OurPlanCoreJobStore.GetOrderedChildDirectories(wallRoot)
+                .Where(folder => !OurPlanCoreJobStore.IsTakeoffItemFolder(folder))
+                .Where(folder => TryParseLevel(OurPlanCoreJobStore.DisplayName(folder), out _))
                 .ToList();
 
             if (levelFolders.Count == 0)
             {
                 List<TakeoffItem> items = ItemsUnderFolder(allItems, wallRoot);
                 if (items.Count > 0)
-                    AddWallFloorSourcesFromItems(sources, wallRoot, OurPlaneCoreJobStore.DisplayName(wallRoot), items, fallbackLevel: 1);
+                    AddWallFloorSourcesFromItems(sources, wallRoot, OurPlanCoreJobStore.DisplayName(wallRoot), items, fallbackLevel: 1);
                 continue;
             }
 
             foreach (string levelFolder in levelFolders)
             {
-                int level = TryParseLevel(OurPlaneCoreJobStore.DisplayName(levelFolder), out int parsedLevel)
+                int level = TryParseLevel(OurPlanCoreJobStore.DisplayName(levelFolder), out int parsedLevel)
                     ? parsedLevel
                     : sources.Count + 1;
                 List<TakeoffItem> items = ItemsUnderFolder(allItems, levelFolder);
                 if (items.Count > 0)
-                    sources.Add(new WallFloorSource(level, levelFolder, OurPlaneCoreJobStore.DisplayName(levelFolder), items));
+                    sources.Add(new WallFloorSource(level, levelFolder, OurPlanCoreJobStore.DisplayName(levelFolder), items));
             }
         }
 
@@ -239,7 +239,7 @@ public static partial class SmartMassingDraftService
 
         static List<TakeoffItem> ItemsUnderFolder(IReadOnlyList<TakeoffItem> items, string folder) =>
             items
-                .Where(item => OurPlaneCoreJobStore.IsSameOrDescendant(folder, item.FolderPath))
+                .Where(item => OurPlanCoreJobStore.IsSameOrDescendant(folder, item.FolderPath))
                 .ToList();
     }
 
@@ -254,7 +254,7 @@ public static partial class SmartMassingDraftService
             .Select(item => new
             {
                 Item = item,
-                HasLevel = TryParseLevel($"{item.Name} {item.Notes} {OurPlaneCoreJobStore.DisplayName(item.FolderPath)}", out int level),
+                HasLevel = TryParseLevel($"{item.Name} {item.Notes} {OurPlanCoreJobStore.DisplayName(item.FolderPath)}", out int level),
                 Level = level,
             })
             .ToList();
@@ -279,7 +279,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static bool TryBuildFootprintFromTakeoffItems(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         string sourceKind,
         out List<SmartMassingPoint> footprintPoints,
@@ -295,7 +295,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static bool TryBuildFootprintFromAreaItems(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         out List<SmartMassingPoint> footprintPoints,
         out string page,
@@ -375,7 +375,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static bool TryBuildFootprintFromLineItems(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         out List<SmartMassingPoint> footprintPoints,
         out string page,
@@ -603,14 +603,14 @@ public static partial class SmartMassingDraftService
         if (measurement.ScaleMetersPerPt > 0)
             return measurement.ScaleMetersPerPt;
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder))
-            return OurPlaneCoreJobStore.TryReadPage(measurement.PageFolder)?.ScaleMetersPerPt ?? 0;
+            return OurPlanCoreJobStore.TryReadPage(measurement.PageFolder)?.ScaleMetersPerPt ?? 0;
         return 0;
     }
 
     private static string ResolveMeasurementPageName(Measurement measurement)
     {
         if (!string.IsNullOrWhiteSpace(measurement.PageFolder) &&
-            OurPlaneCoreJobStore.TryReadPage(measurement.PageFolder) is { } page)
+            OurPlanCoreJobStore.TryReadPage(measurement.PageFolder) is { } page)
         {
             return page.Name;
         }

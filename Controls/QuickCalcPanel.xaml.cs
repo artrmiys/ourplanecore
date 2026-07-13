@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 /// <summary>
 /// Slide-out calculator panel: a plain calculator on top (collapsed by default)

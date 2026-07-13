@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -76,7 +76,7 @@ public partial class MainWindow
     private static string DefaultSectionName(TakeoffItem item, Measurement measurement, int index)
     {
         string page = SectionPageName(measurement);
-        string entry = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
+        string entry = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
         return string.IsNullOrWhiteSpace(page)
             ? $"{entry} {index + 1}"
             : $"{entry} {index + 1} - {page}";
@@ -85,20 +85,20 @@ public partial class MainWindow
     private static string SectionPageName(Measurement measurement) =>
         string.IsNullOrWhiteSpace(measurement.PageFolder)
             ? ""
-            : OurPlaneCoreJobStore.DisplayName(measurement.PageFolder);
+            : OurPlanCoreJobStore.DisplayName(measurement.PageFolder);
 
     private static string SectionCountLabel(TakeoffItem item) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
+        OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
             ? item.Measurements.Count == 1 ? "1 count" : $"{item.Measurements.Count} counts"
             : item.Measurements.Count == 1 ? "1 section" : $"{item.Measurements.Count} sections";
 
     private static string MeasurementEntryTitle(TakeoffItem item) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
+        OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? "Count" : "Section";
 
     private static string MeasurementEntryTitlePlural(IEnumerable<TakeoffMeasurementNode> nodes)
     {
         var types = nodes
-            .Select(node => OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType))
+            .Select(node => OurPlanCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (types.Count == 1)
@@ -122,11 +122,11 @@ public partial class MainWindow
             Measurement m = item.Measurements[i];
             string page = string.IsNullOrWhiteSpace(m.PageFolder)
                 ? "unknown page"
-                : OurPlaneCoreJobStore.DisplayName(m.PageFolder);
+                : OurPlanCoreJobStore.DisplayName(m.PageFolder);
             string name = string.IsNullOrWhiteSpace(m.Name)
-                ? (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
+                ? (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point" ? $"Count {i + 1}" : $"Section {i + 1}")
                 : m.Name;
-            string detail = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
+            string detail = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point"
                 ? "1 count"
                 : $"{m.Points.Count} vertices";
             lines.Add($"{name}: {page}, {detail}");

@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record RasterSheetBuildResult(
     bool Ok,
@@ -135,7 +135,7 @@ public static class RasterSheetCacheService
         if (!string.IsNullOrWhiteSpace(snapError))
             AppLog.Warn($"Raster sheet snap index unavailable for '{page.Name}': {snapError}");
 
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         return new RasterSheetBuildResult(true, source, imagePath, "");
 
         static RasterSheetBuildResult Failed(string error) =>
@@ -159,7 +159,7 @@ public static class RasterSheetCacheService
 
         if (restoreOriginal)
         {
-            OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, original);
+            OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, original);
             return result with { Source = original };
         }
 
@@ -168,7 +168,7 @@ public static class RasterSheetCacheService
 
         RasterSheetSource prepared = result.Source.Clone();
         prepared.Enabled = originalEnabled;
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, prepared);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, prepared);
         return result with { Source = prepared };
     }
 
@@ -226,7 +226,7 @@ public static class RasterSheetCacheService
         }
 
         source.Enabled = true;
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         result = new RasterSheetBuildResult(true, source, imagePath, "", Reused: true);
         return true;
     }
@@ -255,7 +255,7 @@ public static class RasterSheetCacheService
         RasterSheetSource? source = page.RasterSheet?.Clone();
         if (source != null ||
             string.IsNullOrWhiteSpace(page.FolderPath) ||
-            OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { RasterSheet: not null } persistedPage)
+            OurPlanCoreJobStore.TryReadPage(page.FolderPath) is not { RasterSheet: not null } persistedPage)
         {
             return source;
         }
@@ -272,7 +272,7 @@ public static class RasterSheetCacheService
             return false;
         }
 
-        if (OurPlaneCoreJobStore.TryReadPage(page.FolderPath) is not { } persistedPage)
+        if (OurPlanCoreJobStore.TryReadPage(page.FolderPath) is not { } persistedPage)
         {
             error = "Page source is missing; raster cache skipped for stale page path.";
             return false;
@@ -424,7 +424,7 @@ public static class RasterSheetCacheService
             SnapBlackOnly = true,
         };
 
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         return new RasterSheetBuildResult(true, source, imagePath, "");
 
         static RasterSheetBuildResult Failed(string error) =>
@@ -476,7 +476,7 @@ public static class RasterSheetCacheService
 
         source.OverviewImage = overviewImage;
         source.OverviewRenderScale = overviewRenderScale;
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         string overviewPath = ResolvePagePath(page.FolderPath, overviewImage);
         return new RasterSheetBuildResult(true, source, overviewPath, "");
 
@@ -511,7 +511,7 @@ public static class RasterSheetCacheService
 
         source.Enabled = enabled;
         source.UseAsPageOpenRaster = useAsPageOpenRaster;
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         return true;
     }
 
@@ -550,7 +550,7 @@ public static class RasterSheetCacheService
 
         source.UseAsPageOpenRaster = useAsPageOpenRaster;
         source.Enabled = nextEnabled;
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, source);
         return true;
     }
 
@@ -679,7 +679,7 @@ public static class RasterSheetCacheService
         compacted.Image = Path.GetRelativePath(page.FolderPath, compactPath);
         compacted.Format = WebpRasterFormat;
         compacted.GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, compacted);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, compacted);
         compactedSource = compacted;
         return true;
     }
@@ -1020,7 +1020,7 @@ public static class RasterSheetCacheService
         {
             RasterSheetSnapFile? file = JsonSerializer.Deserialize<RasterSheetSnapFile>(
                 File.ReadAllText(snapPath),
-                OurPlaneCoreJobStore.JsonOptions);
+                OurPlanCoreJobStore.JsonOptions);
             if (file == null || !file.Ok)
             {
                 reason = file?.Error ?? "snap index file is invalid";
@@ -1619,7 +1619,7 @@ public static class RasterSheetCacheService
         };
 
         string tempPath = snapPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(tempPath, JsonSerializer.Serialize(file, OurPlaneCoreJobStore.JsonOptions));
+        File.WriteAllText(tempPath, JsonSerializer.Serialize(file, OurPlanCoreJobStore.JsonOptions));
         File.Move(tempPath, snapPath, overwrite: true);
 
         source.SnapIndex = Path.GetRelativePath(page.FolderPath, snapPath);

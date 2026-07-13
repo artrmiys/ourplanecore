@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -105,7 +105,7 @@ public partial class MainWindow
 
     private string SheetLegendQuantityText(TakeoffItem item, IReadOnlyList<Measurement> measurements)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
             : _viewport.ScaleMetersPerPt;
@@ -395,7 +395,7 @@ public partial class MainWindow
 
     private static MeasurementGlyphKind TakeoffGlyphKind(TakeoffItem item) =>
         Controls.MeasurementGlyph.Parse(
-            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+            OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
             joist: item.IsJoistArea,
             countSymbol: item.CountSymbol);
 

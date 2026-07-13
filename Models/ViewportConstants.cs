@@ -1,4 +1,4 @@
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class ViewportConstants
 {

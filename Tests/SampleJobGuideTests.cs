@@ -1,20 +1,20 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class SampleJobGuideTests
 {
     public static void CreatesGuidePagesScreenshotsAndTakeoffs()
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_sample_guide_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_sample_guide_tests", Guid.NewGuid().ToString("N"));
         try
         {
-            OurPlaneCoreJob job = SampleJobService.CreateSampleJob(root);
+            OurPlanCoreJob job = SampleJobService.CreateSampleJob(root);
             string guideFolder = Path.Combine(job.PagesRoot, "00. Guide");
             string guideReadme = Path.Combine(job.AIContextRoot, "guide", "README.md");
             string screenshots = Path.Combine(job.AIContextRoot, "guide", "screenshots");
 
             AssertTrue(Directory.Exists(guideFolder), "sample job should create a 00. Guide pages folder");
             AssertTrue(
-                Directory.EnumerateDirectories(guideFolder).Count(path => OurPlaneCoreJobStore.IsPageFolder(path)) >= 7,
+                Directory.EnumerateDirectories(guideFolder).Count(path => OurPlanCoreJobStore.IsPageFolder(path)) >= 7,
                 "sample guide should import guide pages plus A101 Sample Plan");
             AssertTrue(
                 File.Exists(guideReadme) &&
@@ -25,7 +25,7 @@ internal static class SampleJobGuideTests
                 Directory.EnumerateFiles(screenshots, "*.png").Count() >= 5,
                 "sample job should write generated screenshot PNGs");
 
-            IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+            IReadOnlyList<TakeoffItem> items = OurPlanCoreJobStore.LoadTakeoffItems(job);
             AssertTrue(items.Any(item => item.IsJoistArea), "sample job should include a joist area takeoff");
             AssertTrue(
                 items.Any(item => item.Name.Contains("Eave", StringComparison.OrdinalIgnoreCase)) &&

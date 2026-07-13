@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Offline "count similar symbols": the user boxes one symbol on the rendered
 // sheet and the matcher finds every visually similar occurrence on the page.

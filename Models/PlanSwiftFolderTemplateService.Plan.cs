@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Public, editable/serializable folder-plan surface for the Settings > From Pages
 // editor. Lets the UI show the exact folders that will be created, edit them,
@@ -56,7 +56,7 @@ public static partial class PlanSwiftFolderTemplateService
 
     // The default plan: top folders detected from Pages CAPS names + the
     // standard sub-tree for the resolved mode.
-    public static FolderPlan BuildDefaultPlan(OurPlaneCoreJob job, string requestedMode = "AUTO")
+    public static FolderPlan BuildDefaultPlan(OurPlanCoreJob job, string requestedMode = "AUTO")
     {
         string mode = ResolveMode(job, requestedMode);
         return new FolderPlan

@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -36,7 +36,7 @@ public partial class MainWindow
         int TextTemplateFallbackSkippedSheets,
         int TextRejectedSheets,
         int TextRejectedCandidates)> SweepOtherSimilarSheetsAsync(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         ViewportSimilarCountRequest request,
         PdfSimilarTextResult? textResult,
         PdfSimilarTextMatch? textAnchor,
@@ -316,7 +316,7 @@ public partial class MainWindow
         if (markers == 0)
             return (0, 0);
 
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         RefreshTreeItem(item);
         QueueTakeoffAutosave(item);
         using (UsePageMeasurementLookup())

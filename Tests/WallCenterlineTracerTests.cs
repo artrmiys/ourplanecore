@@ -1,5 +1,5 @@
-using OurPlaneCore;
-using OurPlaneCore.Models;
+using OurPlanCore;
+using OurPlanCore.Models;
 using SkiaSharp;
 
 internal static class WallCenterlineTracerTests

@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using Docnet.Core;
 using Docnet.Core.Models;
@@ -34,13 +34,13 @@ internal static class PlanSwiftImportTests
             AssertEqual("1", result.MeasurementsImported.ToString(), "imported measurement count");
             AssertTrue(File.Exists(Path.Combine(result.DestinationJobPath, "import_reports", "planswift_import_report.md")), "report written");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
             PageInfo page = CollectPages(job.PagesRoot).Single();
             AssertTrue(File.Exists(page.PdfPath), "converted page pdf exists");
             AssertPlanSwiftImageRasterCache(page, expectedWidthPt: 120, expectedHeightPt: 80, minBitmapScale: 0.99);
             AssertClose(0.03048, page.ScaleMetersPerPt, "page scale from PlanSwift ScaleX", tolerance: 0.00001);
 
-            TakeoffItem item = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single();
+            TakeoffItem item = OurPlanCoreJobStore.LoadTakeoffItems(job).Single();
             AssertEqual("Walls", item.Name, "takeoff item name");
             AssertEqual("line", item.MeasurementType, "measurement type");
             AssertEqual("#FF0000", item.Color, "PlanSwift color");
@@ -72,14 +72,14 @@ internal static class PlanSwiftImportTests
                 result.Messages.Any(message => message.Contains("normalized to 36 x 24 in", StringComparison.OrdinalIgnoreCase)),
                 "oversized default-DPI page normalization should be reported");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
             PageInfo page = CollectPages(job.PagesRoot).Single();
             (int pdfWidth, int pdfHeight) = ReadPdfPageSize(page.PdfPath);
             AssertClose(2592, pdfWidth, "normalized PDF width should be 36 in");
             AssertClose(1728, pdfHeight, "normalized PDF height should be 24 in");
             AssertPlanSwiftImageRasterCache(page, expectedWidthPt: 2592, expectedHeightPt: 1728, minBitmapScale: 2.0, expectOverview: true);
 
-            Measurement measurement = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single().Measurements.Single();
+            Measurement measurement = OurPlanCoreJobStore.LoadTakeoffItems(job).Single().Measurements.Single();
             AssertClose(4.8, measurement.Points[1].X, "measurement x coordinate should be transformed to PDF points");
             AssertClose(0.0635, measurement.ScaleMetersPerPt, "measurement scale should compensate for coordinate transform");
             AssertClose(0.3048, measurement.Value(0), "transformed one foot line should keep original measured value");
@@ -109,7 +109,7 @@ internal static class PlanSwiftImportTests
                 result.Messages.Any(message => message.Contains("with no measured takeoff geometry", StringComparison.OrdinalIgnoreCase)),
                 "unused PlanSwift page skip should be reported");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
             PageInfo page = CollectPages(job.PagesRoot).Single();
             AssertEqual("A100", page.Name, "unused page should not be created in pages tree");
         });
@@ -138,7 +138,7 @@ internal static class PlanSwiftImportTests
                 result.Messages.Any(message => message.Contains("with no measured takeoff geometry", StringComparison.OrdinalIgnoreCase)),
                 "all PlanSwift pages mode should not report unused pages as skipped");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
             IReadOnlyList<PageInfo> pages = CollectPages(job.PagesRoot);
             AssertTrue(pages.Any(page => page.Name == "A100"), "measured page should be imported");
             AssertTrue(pages.Any(page => page.Name == "A101"), "unused page should be imported");
@@ -168,8 +168,8 @@ internal static class PlanSwiftImportTests
             AssertEqual("3", result.TakeoffItemsImported.ToString(), "imported takeoff item count");
             AssertEqual("3", result.MeasurementsImported.ToString(), "imported measurement count");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
-            IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
+            IReadOnlyList<TakeoffItem> items = OurPlanCoreJobStore.LoadTakeoffItems(job);
             TakeoffItem deck = items.Single(item => item.Name == "Deck Area");
             Measurement deckMeasurement = deck.Measurements.Single();
             AssertEqual("4", deckMeasurement.Points.Count.ToString(), "area box points expanded to rectangle");
@@ -178,7 +178,7 @@ internal static class PlanSwiftImportTests
 
             string assemblyFolder = Path.Combine(job.TakeoffsRoot, "Assembly");
             AssertTrue(Directory.Exists(assemblyFolder), "item container imported as visible folder");
-            AssertTrue(OurPlaneCoreJobStore.TryReadTakeoffItem(assemblyFolder) == null, "item container should not hide nested items");
+            AssertTrue(OurPlanCoreJobStore.TryReadTakeoffItem(assemblyFolder) == null, "item container should not hide nested items");
 
             TakeoffItem nested = items.Single(item => item.Name == "Nested Line");
             AssertEqual("5", nested.Measurements.Single().Points.Count.ToString(), "closed box line appends closing point");
@@ -211,8 +211,8 @@ internal static class PlanSwiftImportTests
                 result.Messages.Any(message => message.Contains("Area section 'Degenerate Divide' under 'Roof Overframe' has no usable area geometry.", StringComparison.Ordinal)),
                 "degenerate PlanSwift divide placeholder should be reported");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
-            TakeoffItem roof = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single(item => item.Name == "Roof Overframe");
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
+            TakeoffItem roof = OurPlanCoreJobStore.LoadTakeoffItems(job).Single(item => item.Name == "Roof Overframe");
             Measurement roofMeasurement = roof.Measurements.Single();
             AssertEqual("Valid Roof Triangle", roofMeasurement.Name, "valid roof section kept");
             AssertEqual("3", roofMeasurement.Points.Count.ToString(), "valid roof section point count");
@@ -252,8 +252,8 @@ internal static class PlanSwiftImportTests
             AssertEqual("2", result.TakeoffItemsImported.ToString(), "imported takeoff item count");
             AssertEqual("2", result.MeasurementsImported.ToString(), "imported measurement count");
 
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
-            IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(job);
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
+            IReadOnlyList<TakeoffItem> items = OurPlanCoreJobStore.LoadTakeoffItems(job);
             AssertTrue(!items.Any(item => item.Name == "Deck Area - PlanSwift segments"), "segment line item should not be created");
             TakeoffItem deckArea = items.Single(item => item.Name == "Deck Area");
             AssertTrue(deckArea.IsJoistArea, "deck area becomes joist area");
@@ -296,8 +296,8 @@ internal static class PlanSwiftImportTests
             });
 
             AssertEqual("1", result.PagesImported.ToString(), "imported page count");
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
-            TakeoffItem deckArea = OurPlaneCoreJobStore.LoadTakeoffItems(job).Single(item => item.Name == "Deck Area");
+            OurPlanCoreJob job = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
+            TakeoffItem deckArea = OurPlanCoreJobStore.LoadTakeoffItems(job).Single(item => item.Name == "Deck Area");
             AssertTrue(deckArea.IsJoistArea, "deck area becomes joist area");
             AssertTrue(!string.Equals("#FFFFFF", deckArea.Color, StringComparison.OrdinalIgnoreCase), "blank segment color becomes stable import color");
             AssertFalse(deckArea.JoistAddEndJoist, "imported linked joist area skips end joist");
@@ -327,17 +327,17 @@ internal static class PlanSwiftImportTests
             string sourceJob = Path.Combine(parent, "PlanSwift Job");
             CreateSyntheticPlanSwiftJob(sourceJob);
 
-            OurPlaneCoreJob currentJob = OurPlaneCoreJobStore.CreateJob(parent, "Current OPC Job");
+            OurPlanCoreJob currentJob = OurPlanCoreJobStore.CreateJob(parent, "Current ONC Job");
             string existingPdf = Path.Combine(parent, "existing.pdf");
             WriteTestPdf(existingPdf);
-            PageInfo existingPage = OurPlaneCoreJobStore.CreatePageFromPdf(
+            PageInfo existingPage = OurPlanCoreJobStore.CreatePageFromPdf(
                 currentJob,
                 existingPdf,
                 "Existing Page",
                 currentJob.PagesRoot,
                 pdfPage: 0,
                 scaleMetersPerPt: 0.25);
-            TakeoffItem existingItem = OurPlaneCoreJobStore.CreateTakeoffItem(
+            TakeoffItem existingItem = OurPlanCoreJobStore.CreateTakeoffItem(
                 currentJob,
                 currentJob.TakeoffsRoot,
                 "Existing Walls",
@@ -351,7 +351,7 @@ internal static class PlanSwiftImportTests
                 ScaleMetersPerPt = existingPage.ScaleMetersPerPt,
                 Points = [new SKPoint(0, 0), new SKPoint(2, 0)],
             });
-            OurPlaneCoreJobStore.SaveTakeoffItem(existingItem);
+            OurPlanCoreJobStore.SaveTakeoffItem(existingItem);
 
             PlanSwiftImportResult result = PlanSwiftProjectImporter.Import(new PlanSwiftImportOptions
             {
@@ -370,13 +370,13 @@ internal static class PlanSwiftImportTests
             AssertTrue(Directory.Exists(pageBucket), "page import bucket exists");
             AssertTrue(Directory.Exists(takeoffBucket), "takeoff import bucket exists");
 
-            OurPlaneCoreJob reloaded = OurPlaneCoreJobStore.LoadJob(currentJob.RootPath);
+            OurPlanCoreJob reloaded = OurPlanCoreJobStore.LoadJob(currentJob.RootPath);
             IReadOnlyList<PageInfo> pages = CollectPages(reloaded.PagesRoot);
             AssertTrue(pages.Any(page => page.Name == "Existing Page" && !page.FolderPath.StartsWith(pageBucket, StringComparison.OrdinalIgnoreCase)), "existing page stays outside PlanSwift bucket");
             PageInfo importedPage = pages.Single(page => page.Name == "A100");
             AssertTrue(importedPage.FolderPath.StartsWith(pageBucket, StringComparison.OrdinalIgnoreCase), "imported page lives under 01. planswift page bucket");
 
-            IReadOnlyList<TakeoffItem> items = OurPlaneCoreJobStore.LoadTakeoffItems(reloaded);
+            IReadOnlyList<TakeoffItem> items = OurPlanCoreJobStore.LoadTakeoffItems(reloaded);
             AssertTrue(items.Any(item => item.Name == "Existing Walls" && !item.FolderPath.StartsWith(takeoffBucket, StringComparison.OrdinalIgnoreCase)), "existing takeoff stays outside PlanSwift bucket");
             TakeoffItem importedItem = items.Single(item => item.Name == "Walls");
             AssertTrue(importedItem.FolderPath.StartsWith(takeoffBucket, StringComparison.OrdinalIgnoreCase), "imported takeoff lives under 01. planswift takeoff bucket");
@@ -386,21 +386,21 @@ internal static class PlanSwiftImportTests
         });
     }
 
-    public static void ImportCopiesExistingOurPlaneCoreJobTakeoffs()
+    public static void ImportCopiesExistingOurPlanCoreJobTakeoffs()
     {
         WithTempParent(parent =>
         {
-            OurPlaneCoreJob sourceJob = OurPlaneCoreJobStore.CreateJob(parent, "Existing OPC Job");
+            OurPlanCoreJob sourceJob = OurPlanCoreJobStore.CreateJob(parent, "Existing ONC Job");
             string sourcePdf = Path.Combine(parent, "source.pdf");
             WriteTestPdf(sourcePdf);
-            PageInfo page = OurPlaneCoreJobStore.CreatePageFromPdf(
+            PageInfo page = OurPlanCoreJobStore.CreatePageFromPdf(
                 sourceJob,
                 sourcePdf,
                 "A100",
                 sourceJob.PagesRoot,
                 pdfPage: 0,
                 scaleMetersPerPt: 0.5);
-            TakeoffItem sourceItem = OurPlaneCoreJobStore.CreateTakeoffItem(
+            TakeoffItem sourceItem = OurPlanCoreJobStore.CreateTakeoffItem(
                 sourceJob,
                 sourceJob.TakeoffsRoot,
                 "Copied Walls",
@@ -414,10 +414,13 @@ internal static class PlanSwiftImportTests
                 ScaleMetersPerPt = page.ScaleMetersPerPt,
                 Points = [new SKPoint(1, 1), new SKPoint(5, 1)],
             });
-            OurPlaneCoreJobStore.SaveTakeoffItem(sourceItem);
+            OurPlanCoreJobStore.SaveTakeoffItem(sourceItem);
 
             PlanSwiftProjectManifest manifest = PlanSwiftProjectScanner.Scan(sourceJob.RootPath);
-            AssertEqual(PlanSwiftSourceFormats.OurPlaneCore, manifest.SourceFormat, "source format");
+            AssertEqual(PlanSwiftSourceFormats.OurPlanCore, manifest.SourceFormat, "source format");
+            AssertTrue(PlanSwiftSourceFormats.IsOurPlanCore(manifest.SourceFormat), "new source format is accepted");
+            AssertTrue(PlanSwiftSourceFormats.IsOurPlanCore(PlanSwiftSourceFormats.LegacyOurPlanCore), "legacy source format is accepted");
+            AssertFalse(PlanSwiftSourceFormats.IsOurPlanCore(PlanSwiftSourceFormats.PlanSwift), "PlanSwift source format stays distinct");
             AssertEqual("1", manifest.TakeoffItems.Count.ToString(), "existing takeoff item scan count");
             AssertEqual("1", manifest.TakeoffItems.Sum(item => item.Sections.Count).ToString(), "existing measurement scan count");
 
@@ -432,15 +435,54 @@ internal static class PlanSwiftImportTests
             AssertEqual("1", result.TakeoffItemsImported.ToString(), "copied item count");
             AssertEqual("1", result.MeasurementsImported.ToString(), "copied measurement count");
 
-            OurPlaneCoreJob importedJob = OurPlaneCoreJobStore.LoadJob(result.DestinationJobPath);
-            TakeoffItem importedItem = OurPlaneCoreJobStore.LoadTakeoffItems(importedJob).Single();
+            OurPlanCoreJob importedJob = OurPlanCoreJobStore.LoadJob(result.DestinationJobPath);
+            TakeoffItem importedItem = OurPlanCoreJobStore.LoadTakeoffItems(importedJob).Single();
             Measurement importedMeasurement = importedItem.Measurements.Single();
             PageInfo importedPage = CollectPages(importedJob.PagesRoot).Single(page => page.Name == "A100");
             AssertEqual("Copied Walls", importedItem.Name, "copied item name");
             AssertTrue(importedMeasurement.PageFolder.StartsWith(importedJob.RootPath, StringComparison.OrdinalIgnoreCase), "page binding rebased to copied job");
             AssertEqual(importedPage.FolderPath, importedMeasurement.PageFolder, "rebased measurement page");
             AssertTrue(File.Exists(importedPage.PdfPath), "copied source pdf resolves");
+            AssertProjectFileRenameCompatibility(sourcePdf);
         });
+    }
+
+    private static void AssertProjectFileRenameCompatibility(string pdfPath)
+    {
+        Type projectFileType = typeof(PlanSwiftProjectImporter).Assembly.GetType("OurPlanCore.ProjectFile")
+            ?? throw new InvalidOperationException("ProjectFile type was not found.");
+        var pathFor = projectFileType.GetMethod("PathFor", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException("ProjectFile.PathFor was not found.");
+        var restore = projectFileType.GetMethod("Restore", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException("ProjectFile.Restore was not found.");
+
+        string currentPath = (string)(pathFor.Invoke(null, [pdfPath])
+            ?? throw new InvalidOperationException("ProjectFile.PathFor returned null."));
+        string pathStem = Path.ChangeExtension(pdfPath, null);
+        string legacyOurPlanCorePath = pathStem + ".ourplanecore.json";
+        string legacyPlanSwiftPath = pathStem + ".planswift.json";
+        AssertEqual(pathStem + ".ourplancore.json", currentPath, "new project file extension");
+
+        File.WriteAllText(legacyOurPlanCorePath, ProjectFileJson(scale: 0.25));
+        AssertClose(0.25, RestoreProjectFileScale(restore, pdfPath), "legacy project file fallback");
+
+        File.Delete(legacyOurPlanCorePath);
+        File.WriteAllText(legacyPlanSwiftPath, ProjectFileJson(scale: 0.5));
+        AssertClose(0.5, RestoreProjectFileScale(restore, pdfPath), "legacy PlanSwift project file fallback");
+
+        File.WriteAllText(currentPath, ProjectFileJson(scale: 0.75));
+        AssertClose(0.75, RestoreProjectFileScale(restore, pdfPath), "new project file takes precedence");
+    }
+
+    private static string ProjectFileJson(double scale) =>
+        $$"""{"Scale":{{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)}},"UnitMode":"Metric","Items":[]}""";
+
+    private static double RestoreProjectFileScale(System.Reflection.MethodInfo restore, string pdfPath)
+    {
+        object result = restore.Invoke(null, [pdfPath])
+            ?? throw new InvalidOperationException("ProjectFile.Restore returned null.");
+        var tuple = (System.Runtime.CompilerServices.ITuple)result;
+        return (double)(tuple[0] ?? throw new InvalidOperationException("ProjectFile.Restore scale was null."));
     }
 
     private static void CreateSyntheticPlanSwiftJob(string root)
@@ -925,7 +967,7 @@ internal static class PlanSwiftImportTests
     {
         var pages = new List<PageInfo>();
         foreach (string folder in EnumerateSelfAndDescendants(root))
-            if (OurPlaneCoreJobStore.TryReadPage(folder) is { } page)
+            if (OurPlanCoreJobStore.TryReadPage(folder) is { } page)
                 pages.Add(page);
         return pages;
     }
@@ -1065,9 +1107,9 @@ internal static class PlanSwiftImportTests
         RasterSheetSource legacy = page.RasterSheet!.Clone();
         legacy.OverviewImage = "";
         legacy.OverviewRenderScale = 0;
-        OurPlaneCoreJobStore.SavePageRasterSheet(page.FolderPath, legacy);
+        OurPlanCoreJobStore.SavePageRasterSheet(page.FolderPath, legacy);
 
-        PageInfo legacyPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+        PageInfo legacyPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
             ?? throw new InvalidOperationException("Legacy raster page source was not readable.");
         AssertTrue(
             RasterSheetCacheService.ShouldBuildSourceImageOverview(
@@ -1080,7 +1122,7 @@ internal static class PlanSwiftImportTests
         RasterSheetBuildResult upgrade = RasterSheetCacheService.BuildOverviewForExistingSourceImageRaster(legacyPage);
         AssertTrue(upgrade.Ok, upgrade.Error);
 
-        PageInfo upgradedPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+        PageInfo upgradedPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
             ?? throw new InvalidOperationException("Upgraded raster page source was not readable.");
         RasterSheetSource upgraded = upgradedPage.RasterSheet!;
         AssertTrue(
@@ -1088,8 +1130,8 @@ internal static class PlanSwiftImportTests
             "existing oversized source-image raster should be upgraded with overview metadata");
         RasterSheetSource lowQualityOverview = upgraded.Clone();
         lowQualityOverview.OverviewRenderScale = upgraded.OverviewRenderScale * 0.5;
-        OurPlaneCoreJobStore.SavePageRasterSheet(upgradedPage.FolderPath, lowQualityOverview);
-        PageInfo lowQualityOverviewPage = OurPlaneCoreJobStore.TryReadPage(upgradedPage.FolderPath)
+        OurPlanCoreJobStore.SavePageRasterSheet(upgradedPage.FolderPath, lowQualityOverview);
+        PageInfo lowQualityOverviewPage = OurPlanCoreJobStore.TryReadPage(upgradedPage.FolderPath)
             ?? throw new InvalidOperationException("Low-quality overview page source was not readable.");
         AssertTrue(
             RasterSheetCacheService.ShouldBuildSourceImageOverview(
@@ -1098,7 +1140,7 @@ internal static class PlanSwiftImportTests
                 lowQualityOverviewPage.RasterSheet,
                 out string lowQualityReason),
             lowQualityReason);
-        OurPlaneCoreJobStore.SavePageRasterSheet(upgradedPage.FolderPath, upgraded);
+        OurPlanCoreJobStore.SavePageRasterSheet(upgradedPage.FolderPath, upgraded);
         AssertTrue(
             RasterSheetCacheService.TryReadOverviewReady(
                 upgradedPage.FolderPath,
@@ -1129,7 +1171,7 @@ internal static class PlanSwiftImportTests
 
     private static void WithTempParent(Action<string> action)
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
@@ -1170,7 +1212,7 @@ internal static class PlanSwiftImportTests
         string dir = Directory.GetCurrentDirectory();
         while (!string.IsNullOrWhiteSpace(dir))
         {
-            if (File.Exists(Path.Combine(dir, "ourplanecore.csproj")))
+            if (File.Exists(Path.Combine(dir, "ourplancore.csproj")))
                 return dir;
 
             string? parent = Directory.GetParent(dir)?.FullName;
@@ -1179,7 +1221,7 @@ internal static class PlanSwiftImportTests
             dir = parent ?? "";
         }
 
-        throw new DirectoryNotFoundException("Could not locate ourplanecore repo root.");
+        throw new DirectoryNotFoundException("Could not locate ourplancore repo root.");
     }
 
     private static void AssertEqual(string expected, string actual, string message)

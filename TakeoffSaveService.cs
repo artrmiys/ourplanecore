@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Threading;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal interface ITakeoffSaveService
 {
@@ -18,7 +18,7 @@ internal interface ITakeoffSaveService
 
 internal sealed class TakeoffSaveService : ITakeoffSaveService
 {
-    private readonly Func<OurPlaneCoreJob?> _currentJob;
+    private readonly Func<OurPlanCoreJob?> _currentJob;
     private readonly Action<string> _setStatus;
     private readonly HashSet<TakeoffItem> _pending = [];
     private readonly DispatcherTimer _timer = new()
@@ -26,7 +26,7 @@ internal sealed class TakeoffSaveService : ITakeoffSaveService
         Interval = TimeSpan.FromMilliseconds(ViewportConstants.AutosaveDebounceMs),
     };
 
-    public TakeoffSaveService(Func<OurPlaneCoreJob?> currentJob, Action<string> setStatus)
+    public TakeoffSaveService(Func<OurPlanCoreJob?> currentJob, Action<string> setStatus)
     {
         _currentJob = currentJob;
         _setStatus = setStatus;
@@ -101,7 +101,7 @@ internal sealed class TakeoffSaveService : ITakeoffSaveService
 
         try
         {
-            OurPlaneCoreJobStore.SaveTakeoffItem(item);
+            OurPlanCoreJobStore.SaveTakeoffItem(item);
         }
         catch (Exception ex)
         {

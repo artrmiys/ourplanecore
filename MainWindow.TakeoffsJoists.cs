@@ -3,7 +3,7 @@ using System.Linq;
 using System.Windows.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -11,7 +11,7 @@ public partial class MainWindow
 
     private void SetJoistDirectionFromSelectedLine(TreeViewItem tvi, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
         {
             TxtStatus.Text = "Joist direction can only be set on Area takeoff items.";
             return;
@@ -35,7 +35,7 @@ public partial class MainWindow
 
     private void SetJoistDirectionForAllAreasFromSelectedLine(TreeViewItem tvi, TakeoffItem item)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area")
         {
             TxtStatus.Text = "Joist direction can only be set on Area takeoff items.";
             return;
@@ -54,7 +54,7 @@ public partial class MainWindow
     private void SetJoistDirectionForAllAreas(TakeoffItem item, Measurement guideArea)
     {
         var targets = item.Measurements
-            .Where(measurement => OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            .Where(measurement => OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .Distinct()
             .ToList();
         if (targets.Count == 0)
@@ -68,8 +68,8 @@ public partial class MainWindow
 
     private void StartJoistDirectionCapture(TakeoffItem item, Measurement area, IReadOnlyList<Measurement>? applyTargets)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) != "area" ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(area.MType) != "area")
         {
             TxtStatus.Text = "Joist direction can only be set on Area measurements.";
             return;
@@ -82,7 +82,7 @@ public partial class MainWindow
         }
 
         item.IsJoistTakeoff = true;
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         QueueTakeoffAutosave(item);
 
         void StartCapture()
@@ -96,7 +96,7 @@ public partial class MainWindow
 
         if (_currentPage == null || !IsSamePageFolder(_currentPage.FolderPath, area.PageFolder))
         {
-            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(area.PageFolder);
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(area.PageFolder);
             if (page == null)
             {
                 TxtStatus.Text = "Cannot open the sheet for this Area, so joist direction was not started.";
@@ -121,7 +121,7 @@ public partial class MainWindow
         var targets = applyTargets
             .Where(measurement =>
                 item.Measurements.Contains(measurement) &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .Distinct()
             .ToList();
         return targets.Count == 0 ? null : targets;
@@ -132,7 +132,7 @@ public partial class MainWindow
         var selected = _viewport.GetSelectedMeasurements()
             .Where(measurement =>
                 item.Measurements.Contains(measurement) &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             .ToList();
         if (selected.Count == 1)
             return selected[0];
@@ -143,7 +143,7 @@ public partial class MainWindow
                 node != null &&
                 ReferenceEquals(node.Item, item) &&
                 _takeoffSectionMultiSelection.Contains(TakeoffSectionSelectionKey(node)) &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) == "area")
+                OurPlanCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) == "area")
             .Select(node => node!.Measurement)
             .Distinct()
             .ToList();
@@ -154,7 +154,7 @@ public partial class MainWindow
         {
             var pageAreas = item.Measurements
                 .Where(measurement =>
-                    OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+                    OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
                     IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath))
                 .ToList();
             if (pageAreas.Count == 1)
@@ -167,7 +167,7 @@ public partial class MainWindow
     private bool BeginJoistDirectionCapture(TakeoffItem item, Measurement area)
     {
         item.IsJoistTakeoff = true;
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         bool started = _viewport.BeginJoistDirectionCapture(area);
         if (started)
         {
@@ -205,7 +205,7 @@ public partial class MainWindow
             target.JoistDirectionDegrees = directionDegrees;
             target.JoistDirectionLocked = true;
         }
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         QueueTakeoffAutosave(item);
         _viewport.SelectMeasurements(updatedAreas);
         RefreshTreeItem(item);
@@ -236,7 +236,7 @@ public partial class MainWindow
 
         Measurement? next = item.Measurements.FirstOrDefault(measurement =>
             !ReferenceEquals(measurement, skip) &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
             IsSamePageFolder(measurement.PageFolder, _currentPage.FolderPath) &&
             !measurement.JoistDirectionLocked);
         if (next == null)
@@ -253,7 +253,7 @@ public partial class MainWindow
         directionDegrees = 0;
         Measurement? line = _viewport.GetSelectedMeasurements()
             .FirstOrDefault(measurement =>
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
                 measurement.Points.Count >= 2);
         if (line == null)
         {

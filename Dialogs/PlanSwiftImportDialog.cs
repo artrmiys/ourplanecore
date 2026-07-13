@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed class PlanSwiftImportDialog : Window
 {
@@ -90,7 +90,7 @@ public sealed class PlanSwiftImportDialog : Window
         {
             _destinationBox = CreatePathRow(
                 form,
-                "OurPlaneCore jobs root",
+                "OurPlanCore jobs root",
                 defaultDestinationRoot,
                 "Select the parent folder where the converted job will be created.",
                 "Select destination jobs folder");

@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class ThreeDRoofFootprintSource
 {
@@ -38,7 +38,7 @@ public static class ThreeDRoofFootprintBuildService
         foreach (ThreeDRoofFootprintSource source in sources)
         {
             Measurement measurement = source.Measurement;
-            if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area")
+            if (OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) != "area")
             {
                 result.SkippedNonAreaMeasurements++;
                 continue;
@@ -465,12 +465,12 @@ public static class ThreeDRoofFootprintBuildService
     }
 
     public static bool IsAreaTakeoff(TakeoffItem item) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
 
     public static bool IsLineTakeoff(TakeoffItem item) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line";
+        OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line";
 
-    public static bool IsRoofFootprintCandidate(OurPlaneCoreJob job, TakeoffItem item)
+    public static bool IsRoofFootprintCandidate(OurPlanCoreJob job, TakeoffItem item)
     {
         if (!IsAreaTakeoff(item))
             return false;
@@ -516,7 +516,7 @@ public static class ThreeDRoofFootprintBuildService
     private static string CombinedSourcePath(IReadOnlyList<ScaledRoofArea> areas) =>
         string.Join("|", areas.Select(area => area.SourcePath).Distinct(StringComparer.OrdinalIgnoreCase));
 
-    private static IEnumerable<string> SourceParts(OurPlaneCoreJob job, TakeoffItem item)
+    private static IEnumerable<string> SourceParts(OurPlanCoreJob job, TakeoffItem item)
     {
         if (string.IsNullOrWhiteSpace(item.FolderPath))
             yield break;
@@ -538,7 +538,7 @@ public static class ThreeDRoofFootprintBuildService
                 continue;
 
             current = Path.Combine(current, part);
-            yield return OurPlaneCoreJobStore.DisplayName(current);
+            yield return OurPlanCoreJobStore.DisplayName(current);
         }
     }
 

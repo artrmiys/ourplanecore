@@ -5,7 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -86,9 +86,9 @@ public partial class MainWindow
 
         try
         {
-            string created = OurPlaneCoreJobStore.CreateFolder(parentFolder, name);
+            string created = OurPlanCoreJobStore.CreateFolder(parentFolder, name);
             ReloadPagesTree(created);
-            TxtStatus.Text = $"Created folder: {OurPlaneCoreJobStore.DisplayName(created)}";
+            TxtStatus.Text = $"Created folder: {OurPlanCoreJobStore.DisplayName(created)}";
         }
         catch (Exception ex)
         {
@@ -107,7 +107,7 @@ public partial class MainWindow
 
         try
         {
-            PageInfo page = OurPlaneCoreJobStore.CreateBlankPage(_currentJob, name, parentFolder);
+            PageInfo page = OurPlanCoreJobStore.CreateBlankPage(_currentJob, name, parentFolder);
             ReloadPagesTree(page.FolderPath);
             OpenPageInActiveTab(page);
             RefreshFloatingPageSetup(page.FolderPath);
@@ -125,19 +125,19 @@ public partial class MainWindow
         string? path = GetPagesNodePath(item);
         if (path == null || !IsPathInsidePagesRoot(path, allowRoot: false)) return;
 
-        string currentName = OurPlaneCoreJobStore.DisplayName(path);
+        string currentName = OurPlanCoreJobStore.DisplayName(path);
         string? name = ShowInputDialog("New name:", currentName, item.Tag is PageInfo ? "Rename Page" : "Rename Folder");
         if (string.IsNullOrWhiteSpace(name) || name == currentName) return;
 
         try
         {
             string renamed = item.Tag is PageInfo
-                ? OurPlaneCoreJobStore.RenamePageAllowDuplicateName(path, name)
-                : OurPlaneCoreJobStore.RenameNode(path, name);
+                ? OurPlanCoreJobStore.RenamePageAllowDuplicateName(path, name)
+                : OurPlanCoreJobStore.RenameNode(path, name);
             bool reloadActiveTab = UpdatePageReferencesForMovedPath(path, renamed);
             ReloadPagesTree(renamed);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
-            TxtStatus.Text = $"Renamed to: {OurPlaneCoreJobStore.DisplayName(renamed)}";
+            TxtStatus.Text = $"Renamed to: {OurPlanCoreJobStore.DisplayName(renamed)}";
         }
         catch (Exception ex)
         {
@@ -156,7 +156,7 @@ public partial class MainWindow
             string path = entries[0].SourcePath;
             bool isPage = entries[0].IsPage;
             bool hasChildren = Directory.EnumerateFileSystemEntries(path).Any();
-            string name = OurPlaneCoreJobStore.DisplayName(path);
+            string name = OurPlanCoreJobStore.DisplayName(path);
             message = isPage
                 ? $"Delete page '{name}'?"
                 : hasChildren
@@ -171,7 +171,7 @@ public partial class MainWindow
         var result = MessageBox.Show(message, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
 
-        var deletedNames = entries.Select(e => OurPlaneCoreJobStore.DisplayName(e.SourcePath)).ToList();
+        var deletedNames = entries.Select(e => OurPlanCoreJobStore.DisplayName(e.SourcePath)).ToList();
         var parents = entries
             .Select(e => Path.GetDirectoryName(e.SourcePath) ?? _currentJob?.PagesRoot ?? "")
             .Where(Directory.Exists)
@@ -188,11 +188,11 @@ public partial class MainWindow
 
             if (_pagesClipboard != null && entries.Any(e =>
                     _pagesClipboard.Entries.Any(c =>
-                        OurPlaneCoreJobStore.IsSameOrDescendant(e.SourcePath, c.SourcePath))))
+                        OurPlanCoreJobStore.IsSameOrDescendant(e.SourcePath, c.SourcePath))))
                 _pagesClipboard = null;
 
             foreach (string parent in parents.Where(Directory.Exists))
-                OurPlaneCoreJobStore.NormalizeOrder(parent);
+                OurPlanCoreJobStore.NormalizeOrder(parent);
             _pagesMultiSelection.Clear();
             ReloadPagesTree(selectAfter);
             TxtStatus.Text = entries.Count == 1
@@ -213,7 +213,7 @@ public partial class MainWindow
         _pagesClipboard = new PagesClipboard(entries, mode);
         string verb = mode == PagesClipboardMode.Copy ? "Copied" : "Cut";
         TxtStatus.Text = entries.Count == 1
-            ? $"{verb}: {OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}"
+            ? $"{verb}: {OurPlanCoreJobStore.DisplayName(entries[0].SourcePath)}"
             : $"{verb} {entries.Count} items.";
     }
 
@@ -246,7 +246,7 @@ public partial class MainWindow
 
             if (wasCut)
             {
-                var moved = OurPlaneCoreJobStore.MoveNodes(validEntries.Select(entry => entry.SourcePath), targetFolder);
+                var moved = OurPlanCoreJobStore.MoveNodes(validEntries.Select(entry => entry.SourcePath), targetFolder);
                 foreach (var move in moved)
                 {
                     pastedItems.Add(move.MovedPath);
@@ -257,7 +257,7 @@ public partial class MainWindow
             }
             else
             {
-                pastedItems.AddRange(OurPlaneCoreJobStore.CopyNodesPreserveDisplayName(
+                pastedItems.AddRange(OurPlanCoreJobStore.CopyNodesPreserveDisplayName(
                     validEntries.Select(entry => entry.SourcePath),
                     targetFolder));
             }
@@ -272,7 +272,7 @@ public partial class MainWindow
                 _pagesMultiSelection.Add(pasted);
             QueuePagesTreeDropRefresh(pastedItems[0], reloadActiveTab);
             TxtStatus.Text = pastedItems.Count == 1
-                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlaneCoreJobStore.DisplayName(pastedItems[0])}"
+                ? $"{(wasCut ? "Moved" : "Pasted")}: {OurPlanCoreJobStore.DisplayName(pastedItems[0])}"
                 : $"{(wasCut ? "Moved" : "Pasted")} {pastedItems.Count} items.";
         }
         catch (Exception ex)
@@ -288,9 +288,9 @@ public partial class MainWindow
 
         try
         {
-            string duplicated = OurPlaneCoreJobStore.DuplicatePage(page.FolderPath);
+            string duplicated = OurPlanCoreJobStore.DuplicatePage(page.FolderPath);
             ReloadPagesTree(duplicated);
-            TxtStatus.Text = $"Duplicated page: {OurPlaneCoreJobStore.DisplayName(duplicated)}";
+            TxtStatus.Text = $"Duplicated page: {OurPlanCoreJobStore.DisplayName(duplicated)}";
         }
         catch (Exception ex)
         {
@@ -308,7 +308,7 @@ public partial class MainWindow
         var paths = GetSelectedPageEntries(item)
             .Select(entry => entry.SourcePath)
             .ToList();
-        return OurPlaneCoreJobStore.CanMoveSiblings(paths, offset);
+        return OurPlanCoreJobStore.CanMoveSiblings(paths, offset);
     }
 
     private void MovePagesNodes(TreeViewItem item, int offset)
@@ -324,7 +324,7 @@ public partial class MainWindow
 
         try
         {
-            if (OurPlaneCoreJobStore.MoveSiblings(paths, offset))
+            if (OurPlanCoreJobStore.MoveSiblings(paths, offset))
             {
                 _pagesMultiSelection.Clear();
                 foreach (string selectedPath in paths)
@@ -349,7 +349,7 @@ public partial class MainWindow
 
         try
         {
-            OurPlaneCoreJobStore.SortChildren(folder.FolderPath, descending);
+            OurPlanCoreJobStore.SortChildren(folder.FolderPath, descending);
             ReloadPagesTree(folder.FolderPath);
             TxtStatus.Text = descending ? "Sorted children Z-A." : "Sorted children A-Z.";
         }
@@ -368,7 +368,7 @@ public partial class MainWindow
         if (target == null) return;
         target = Path.GetFullPath(target);
 
-        if (!IsPathInsidePagesRoot(target) || OurPlaneCoreJobStore.IsPageFolder(target))
+        if (!IsPathInsidePagesRoot(target) || OurPlanCoreJobStore.IsPageFolder(target))
         {
             PostStatusWarning("Choose a folder inside the current job's Pages tree.");
             return;
@@ -379,11 +379,11 @@ public partial class MainWindow
 
         try
         {
-            string moved = OurPlaneCoreJobStore.MoveNode(page.FolderPath, target);
+            string moved = OurPlanCoreJobStore.MoveNode(page.FolderPath, target);
             bool reloadActiveTab = UpdatePageReferencesForMovedPath(page.FolderPath, moved);
             ReloadPagesTree(moved);
             ReloadActivePageTabAfterPathChange(reloadActiveTab);
-            TxtStatus.Text = $"Moved page to: {OurPlaneCoreJobStore.DisplayName(target)}";
+            TxtStatus.Text = $"Moved page to: {OurPlanCoreJobStore.DisplayName(target)}";
         }
         catch (Exception ex)
         {
@@ -402,7 +402,7 @@ public partial class MainWindow
             return false;
         if (payload.Entries.Count == 0 || !Directory.Exists(targetFolder))
             return false;
-        if (!IsPathInsidePagesRoot(targetFolder) || OurPlaneCoreJobStore.IsPageFolder(targetFolder))
+        if (!IsPathInsidePagesRoot(targetFolder) || OurPlanCoreJobStore.IsPageFolder(targetFolder))
             return false;
 
         bool hasMovableEntry = false;
@@ -412,7 +412,7 @@ public partial class MainWindow
                 return false;
             if (!IsPathInsidePagesRoot(entry.SourcePath, allowRoot: false))
                 return false;
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder))
                 return false;
 
             if (mode == PagesClipboardMode.Cut)

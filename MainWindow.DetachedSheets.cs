@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -87,9 +87,9 @@ public partial class MainWindow
         if (!item.Measurements.Contains(measurement))
             item.Measurements.Add(measurement);
 
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         RefreshAfterDetachedTakeoffChange(window, [item], [measurement.PageFolder], unitMode);
-        if (item.IsJoistArea && OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+        if (item.IsJoistArea && OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
             BeginDetachedJoistDirectionCapture(window, item, measurement);
     }
 
@@ -142,7 +142,7 @@ public partial class MainWindow
             measurement.TakeoffFolder = item.FolderPath;
             if (measurement.ScaleMetersPerPt <= 0)
                 measurement.ScaleMetersPerPt = window.Viewport.ScaleMetersPerPt;
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         }
 
         RefreshAfterDetachedTakeoffChange(
@@ -154,7 +154,7 @@ public partial class MainWindow
 
     private bool TryResolveDetachedTakeoffItem(PdfViewport viewport, Measurement measurement, out TakeoffItem item)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType);
         if (!string.IsNullOrWhiteSpace(viewport.ActiveTakeoffFolder))
         {
             TakeoffItem? byViewport = FindTakeoffItemByFolder(viewport.ActiveTakeoffFolder, measurementType);
@@ -178,7 +178,7 @@ public partial class MainWindow
         }
 
         if (_activeItem != null &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
+            OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
         {
             _activeItem.MeasurementType = measurementType;
             item = _activeItem;
@@ -226,7 +226,7 @@ public partial class MainWindow
     {
         try
         {
-            OurPlaneCoreJobStore.SavePageAnnotations(
+            OurPlanCoreJobStore.SavePageAnnotations(
                 window.Page.FolderPath,
                 window.Viewport.GetPageAnnotations());
         }
@@ -239,7 +239,7 @@ public partial class MainWindow
     private void BeginDetachedJoistDirectionCapture(DetachedSheetWindow window, TakeoffItem item, Measurement area)
     {
         item.IsJoistTakeoff = true;
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         if (window.Viewport.BeginJoistDirectionCapture(area))
             TxtStatus.Text = $"{window.Page.Name}: draw a two-point line parallel to joists for {item.Name}.";
     }
@@ -265,7 +265,7 @@ public partial class MainWindow
         item.JoistDirectionDegrees = directionDegrees;
         area.JoistDirectionDegrees = directionDegrees;
         area.JoistDirectionLocked = true;
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         RefreshAfterDetachedTakeoffChange(window, [item], [area.PageFolder], unitMode);
 
         JoistLayoutResult layout = JoistTakeoffCalculator.Calculate(area, window.Viewport.ScaleMetersPerPt);

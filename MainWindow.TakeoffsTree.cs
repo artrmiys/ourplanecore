@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -45,7 +45,7 @@ public partial class MainWindow
             TreeViewItem? anchor = e.NewValue as TreeViewItem;
             var selectedTakeoffs = TakeoffItemsForSelection(anchor);
             _takeoffSectionMultiSelection.Clear();
-            item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+            item.MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
             _activeItem           = item;
             _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
             _viewport.ActiveColor = item.Color;
@@ -92,7 +92,7 @@ public partial class MainWindow
             }
 
             _activeItem = node.Item;
-            node.Item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType);
+            node.Item.MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType);
             _activeTakeoffParentFolder = Path.GetDirectoryName(node.Item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
             _viewport.ActiveColor = node.Item.Color;
             _viewport.ActiveTakeoffFolder = node.Item.FolderPath;

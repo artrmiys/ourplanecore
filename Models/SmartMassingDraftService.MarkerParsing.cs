@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
@@ -121,7 +121,7 @@ public static partial class SmartMassingDraftService
         return false;
     }
 
-    private static double ResolveMarkerScale(OurPlaneCoreJob job, SmartAiMarker marker)
+    private static double ResolveMarkerScale(OurPlanCoreJob job, SmartAiMarker marker)
     {
         if (string.IsNullOrWhiteSpace(marker.PageFolder))
             return 0;
@@ -129,7 +129,7 @@ public static partial class SmartMassingDraftService
         string folder = Path.IsPathFullyQualified(marker.PageFolder)
             ? marker.PageFolder
             : Path.GetFullPath(Path.Combine(job.RootPath, marker.PageFolder));
-        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
+        PageInfo? page = OurPlanCoreJobStore.TryReadPage(folder);
         return page?.ScaleMetersPerPt ?? 0;
     }
 

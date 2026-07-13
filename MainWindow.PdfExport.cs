@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -301,7 +301,7 @@ public partial class MainWindow
                         item,
                         MeasurementsForTakeoffOnPage(item, page.FolderPath).ToList()))
                     .ToList(),
-                OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath),
+                OurPlanCoreJobStore.LoadPageAnnotations(page.FolderPath),
                 LayerOrderedTakeoffsForPage(page)
                     .Where(item => IsPageTakeoffVisible(page, item))
                     .Select(item => new PdfExportTakeoffInput(

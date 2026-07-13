@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
@@ -22,20 +22,20 @@ public static partial class SmartMassingDraftService
         WriteIndented = true,
     };
 
-    public static string ModelPath(OurPlaneCoreJob job) =>
+    public static string ModelPath(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "3d_massing", "model.json");
 
-    public static string SnapshotsRoot(OurPlaneCoreJob job) =>
+    public static string SnapshotsRoot(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "3d_massing", "snapshots");
 
-    public static SmartMassingDraft SaveDraftFromMarkers(OurPlaneCoreJob job)
+    public static SmartMassingDraft SaveDraftFromMarkers(OurPlanCoreJob job)
     {
         SmartMassingDraft draft = BuildDraftFromMarkers(job);
         SaveDraft(job, draft);
         return draft;
     }
 
-    public static SmartMassingDraft SaveDraftFromWallTakeoffs(OurPlaneCoreJob job, double levelSpacingFeet)
+    public static SmartMassingDraft SaveDraftFromWallTakeoffs(OurPlanCoreJob job, double levelSpacingFeet)
     {
         SmartMassingDraft draft = BuildDraftFromWallTakeoffs(job, levelSpacingFeet);
         SaveDraft(job, draft);
@@ -43,7 +43,7 @@ public static partial class SmartMassingDraftService
     }
 
     public static SmartMassingDraft SaveDraftFromWallTakeoffs(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         double levelSpacingFeet,
         SmartMassingTakeoffAiPlan? aiPlan)
     {
@@ -52,7 +52,7 @@ public static partial class SmartMassingDraftService
         return draft;
     }
 
-    public static void SaveDraft(OurPlaneCoreJob job, SmartMassingDraft draft)
+    public static void SaveDraft(OurPlanCoreJob job, SmartMassingDraft draft)
     {
         RefreshDerivedGeometry(draft);
         string path = ModelPath(job);
@@ -60,7 +60,7 @@ public static partial class SmartMassingDraftService
         IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(draft, JsonOptions));
     }
 
-    public static string SaveSnapshot(OurPlaneCoreJob job, SmartMassingDraft draft)
+    public static string SaveSnapshot(OurPlanCoreJob job, SmartMassingDraft draft)
     {
         RefreshDerivedGeometry(draft);
         string root = SnapshotsRoot(job);
@@ -77,7 +77,7 @@ public static partial class SmartMassingDraftService
         draft.Roof.Planes = BuildRoofPlanes(draft);
     }
 
-    public static SmartMassingDraft? LoadDraft(OurPlaneCoreJob job)
+    public static SmartMassingDraft? LoadDraft(OurPlanCoreJob job)
     {
         string path = ModelPath(job);
         if (!File.Exists(path))
@@ -86,7 +86,7 @@ public static partial class SmartMassingDraftService
         return JsonSerializer.Deserialize<SmartMassingDraft>(File.ReadAllText(path));
     }
 
-    public static SmartMassingDraft BuildDraftFromMarkers(OurPlaneCoreJob job)
+    public static SmartMassingDraft BuildDraftFromMarkers(OurPlanCoreJob job)
     {
         IReadOnlyList<SmartAiMarker> markers = SmartContextStore.LoadAiMarkers(job);
         var draft = new SmartMassingDraft

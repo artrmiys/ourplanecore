@@ -13,11 +13,11 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 using Path = System.IO.Path;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -289,7 +289,7 @@ public partial class MainWindow
             string folder = Path.IsPathFullyQualified(marker.PageFolder)
                 ? marker.PageFolder
                 : Path.GetFullPath(Path.Combine(_currentJob.RootPath, marker.PageFolder));
-            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folder);
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(folder);
             if (page != null)
                 return page;
         }

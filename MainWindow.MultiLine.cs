@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Multiline: a line takeoff item can carry up to two offset companions.
 // Drawing a line on the owner also drops a parallel line into each companion,
@@ -39,7 +39,7 @@ public partial class MainWindow
     private void GenerateMultiLineOffsets(TakeoffItem item, Measurement m)
     {
         if (item.MultiLineOffsets.Count == 0 ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(m.MType) != "line" ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(m.MType) != "line" ||
             m.Points.Count < 2)
         {
             return;
@@ -76,7 +76,7 @@ public partial class MainWindow
                 ScaleMetersPerPt = m.ScaleMetersPerPt,
             };
             companion.Measurements.Add(offset);
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(companion);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(companion);
             generated.Add(offset);
             changedItems.Add(companion);
         }

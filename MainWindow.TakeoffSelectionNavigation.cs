@@ -6,9 +6,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -113,7 +113,7 @@ public partial class MainWindow
         if (TryBlockTakeoffSwitchDuringRecord(item))
             return;
 
-        item.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        item.MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         _activeItem = item;
         _activeTakeoffParentFolder = Path.GetDirectoryName(item.FolderPath) ?? _currentJob?.TakeoffsRoot ?? "";
         _viewport.ActiveColor = item.Color;
@@ -161,7 +161,7 @@ public partial class MainWindow
         }
 
         return _takeoffItems
-            .Where(item => entries.Any(entry => OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
+            .Where(item => entries.Any(entry => OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
             .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
@@ -173,7 +173,7 @@ public partial class MainWindow
             return [];
 
         return _takeoffItems
-            .Where(item => OurPlaneCoreJobStore.IsSameOrDescendant(folderPath, item.FolderPath))
+            .Where(item => OurPlanCoreJobStore.IsSameOrDescendant(folderPath, item.FolderPath))
             .GroupBy(item => NormalizePath(item.FolderPath), StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();

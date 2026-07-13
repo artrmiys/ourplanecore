@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Name comparers behind the Takeoffs-tree "Sort Walls" and "Sort Details"
 // commands. Both fall back to natural ordering inside each bucket.

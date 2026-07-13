@@ -5,11 +5,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartContextStore
 {
-    public static SmartAiRequest? LoadAiRequest(OurPlaneCoreJob job, string requestId)
+    public static SmartAiRequest? LoadAiRequest(OurPlanCoreJob job, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
@@ -18,7 +18,7 @@ public static partial class SmartContextStore
         return LoadJson<SmartAiRequest>(path);
     }
 
-    public static SmartAiResponse? LoadAiResponse(OurPlaneCoreJob job, string requestId)
+    public static SmartAiResponse? LoadAiResponse(OurPlanCoreJob job, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
@@ -27,7 +27,7 @@ public static partial class SmartContextStore
         return LoadJson<SmartAiResponse>(path);
     }
 
-    public static SmartAiActionDraft? LoadAiActionDraft(OurPlaneCoreJob job, string requestId)
+    public static SmartAiActionDraft? LoadAiActionDraft(OurPlanCoreJob job, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             return null;
@@ -35,10 +35,10 @@ public static partial class SmartContextStore
         return LoadJson<SmartAiActionDraft>(AiActionDraftPath(job, requestId));
     }
 
-    public static string AiActionDraftPath(OurPlaneCoreJob job, string requestId) =>
+    public static string AiActionDraftPath(OurPlanCoreJob job, string requestId) =>
         Path.Combine(ContextRoot(job.RootPath), "actions", $"{requestId}.json");
 
-    public static void SaveAiActionDraft(OurPlaneCoreJob job, SmartAiActionDraft draft)
+    public static void SaveAiActionDraft(OurPlanCoreJob job, SmartAiActionDraft draft)
     {
         draft.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
         string path = AiActionDraftPath(job, draft.RequestId);
@@ -53,7 +53,7 @@ public static partial class SmartContextStore
         }
     }
 
-    public static IReadOnlyList<SmartAiRequest> LoadAiRequests(OurPlaneCoreJob job)
+    public static IReadOnlyList<SmartAiRequest> LoadAiRequests(OurPlanCoreJob job)
     {
         string requestsDir = Path.Combine(ContextRoot(job.RootPath), "requests");
         if (!Directory.Exists(requestsDir))
@@ -67,7 +67,7 @@ public static partial class SmartContextStore
             .ToList();
     }
 
-    public static void SaveAiRequest(OurPlaneCoreJob job, SmartAiRequest request)
+    public static void SaveAiRequest(OurPlanCoreJob job, SmartAiRequest request)
     {
         request.ContextCropPaths = NormalizeRelativePathList(request.ContextCropPaths);
         request.UpdatedAtUtc = DateTime.UtcNow.ToString("O");
@@ -83,7 +83,7 @@ public static partial class SmartContextStore
     }
 
     public static SmartAiResponse SaveAiResponse(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartAiRequest request,
         string status,
         string outputText,
@@ -148,7 +148,7 @@ public static partial class SmartContextStore
     }
 
     public static SmartAiActionDraft SaveAiActionDraftFromResponse(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartAiRequest request,
         SmartAiResponse response)
     {

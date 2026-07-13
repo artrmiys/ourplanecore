@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PlanSwiftProjectImporter
 {
@@ -17,7 +17,7 @@ public static partial class PlanSwiftProjectImporter
         foreach (string rawSegment in SplitRelativePath(relativePath))
         {
             string segment = PlanSwiftXml.DecodeName(rawSegment);
-            current = OurPlaneCoreJobStore.EnsureFolder(current, segment);
+            current = OurPlanCoreJobStore.EnsureFolder(current, segment);
         }
 
         return current;
@@ -28,9 +28,9 @@ public static partial class PlanSwiftProjectImporter
         string name = string.IsNullOrWhiteSpace(requestedName)
             ? PlanSwiftImportOptions.DefaultCurrentJobImportFolderName
             : requestedName.Trim();
-        string folder = OurPlaneCoreJobStore.EnsureFolder(root, name);
+        string folder = OurPlanCoreJobStore.EnsureFolder(root, name);
         if (isTakeoffRoot)
-            OurPlaneCoreJobStore.SetProperty(folder, "SmartNodeKind", "folder");
+            OurPlanCoreJobStore.SetProperty(folder, "SmartNodeKind", "folder");
         return folder;
     }
 
@@ -48,14 +48,14 @@ public static partial class PlanSwiftProjectImporter
     private static string UniqueChildDisplayName(string parent, string requestedName)
     {
         string clean = PlanSwiftXml.DecodeName(requestedName);
-        string sanitized = OurPlaneCoreJobStore.SanitizeName(clean, 120);
+        string sanitized = OurPlanCoreJobStore.SanitizeName(clean, 120);
         if (!Directory.Exists(Path.Combine(parent, sanitized)))
             return clean;
 
         for (int i = 2; ; i++)
         {
             string candidate = $"{clean} ({i})";
-            if (!Directory.Exists(Path.Combine(parent, OurPlaneCoreJobStore.SanitizeName(candidate, 120))))
+            if (!Directory.Exists(Path.Combine(parent, OurPlanCoreJobStore.SanitizeName(candidate, 120))))
                 return candidate;
         }
     }
@@ -67,13 +67,13 @@ public static partial class PlanSwiftProjectImporter
         string baseName = string.IsNullOrWhiteSpace(options.DestinationJobName)
             ? $"{manifest.JobName} - imported"
             : options.DestinationJobName.Trim();
-        string clean = OurPlaneCoreJobStore.SanitizeName(baseName, 120);
+        string clean = OurPlanCoreJobStore.SanitizeName(baseName, 120);
         if (!Directory.Exists(Path.Combine(options.DestinationParentPath, clean)))
             return clean;
 
         for (int i = 2; ; i++)
         {
-            string candidate = OurPlaneCoreJobStore.SanitizeName($"{baseName} ({i})", 120);
+            string candidate = OurPlanCoreJobStore.SanitizeName($"{baseName} ({i})", 120);
             if (!Directory.Exists(Path.Combine(options.DestinationParentPath, candidate)))
                 return candidate;
         }

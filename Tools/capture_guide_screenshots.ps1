@@ -5,7 +5,7 @@ param(
     [switch]$SkipBuild
 )
 
-# Drives OurPlaneCore in guide-screenshot capture mode: the app builds a fresh sample job,
+# Drives OurPlanCore in guide-screenshot capture mode: the app builds a fresh sample job,
 # walks every workspace surface, renders each to a real PNG, then exits. The PNGs are copied
 # into Assets\GuideScreenshots so SampleJobGuideBuilder can embed them in the guide sample.
 
@@ -20,34 +20,34 @@ New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
 # Clear stale PNGs so renamed/removed surfaces don't linger.
 Get-ChildItem -LiteralPath $assetDir -Filter *.png -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
-$captureDir = Join-Path $env:TEMP ("opc_guide_capture_out_" + [guid]::NewGuid().ToString("N"))
+$captureDir = Join-Path $env:TEMP ("onc_guide_capture_out_" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $captureDir | Out-Null
 $manifestPath = Join-Path $captureDir "manifest.json"
-$stdoutPath = Join-Path $env:TEMP ("opc_guide_capture_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
-$stderrPath = Join-Path $env:TEMP ("opc_guide_capture_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
+$stdoutPath = Join-Path $env:TEMP ("onc_guide_capture_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
+$stderrPath = Join-Path $env:TEMP ("onc_guide_capture_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
 
-$projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
+$projectPath = Join-Path $ProjectRoot "ourplancore.csproj"
 if (-not $SkipBuild) {
-    Write-Host "Building ourplanecore..." -ForegroundColor Cyan
+    Write-Host "Building ourplancore..." -ForegroundColor Cyan
     dotnet build $projectPath -nologo -clp:ErrorsOnly
     if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 }
 
-$appDll = Join-Path $ProjectRoot "bin\Debug\net9.0-windows\ourplanecore.dll"
+$appDll = Join-Path $ProjectRoot "bin\Debug\net9.0-windows\ourplancore.dll"
 if (-not (Test-Path -LiteralPath $appDll)) {
     throw "App dll not found at $appDll. Build first or omit -SkipBuild."
 }
 
-$oldCapture = $env:OURPLANECORE_GUIDE_SCREENSHOT_CAPTURE
-$oldDir = $env:OURPLANECORE_GUIDE_SCREENSHOT_DIR
-$oldManifest = $env:OURPLANECORE_GUIDE_SCREENSHOT_MANIFEST
-$oldTimeout = $env:OURPLANECORE_GUIDE_SCREENSHOT_TIMEOUT_MS
+$oldCapture = $env:OURPLANCORE_GUIDE_SCREENSHOT_CAPTURE
+$oldDir = $env:OURPLANCORE_GUIDE_SCREENSHOT_DIR
+$oldManifest = $env:OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST
+$oldTimeout = $env:OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS
 
 try {
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_CAPTURE = "1"
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_DIR = $captureDir
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_MANIFEST = $manifestPath
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_TIMEOUT_MS = [string]$CaptureTimeoutMs
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_CAPTURE = "1"
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_DIR = $captureDir
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST = $manifestPath
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS = [string]$CaptureTimeoutMs
 
     Write-Host "Running capture (output -> $captureDir)..." -ForegroundColor Cyan
     $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
@@ -92,10 +92,10 @@ try {
     }
 }
 finally {
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_CAPTURE = $oldCapture
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_DIR = $oldDir
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_MANIFEST = $oldManifest
-    $env:OURPLANECORE_GUIDE_SCREENSHOT_TIMEOUT_MS = $oldTimeout
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_CAPTURE = $oldCapture
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_DIR = $oldDir
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_MANIFEST = $oldManifest
+    $env:OURPLANCORE_GUIDE_SCREENSHOT_TIMEOUT_MS = $oldTimeout
     foreach ($p in @($stdoutPath, $stderrPath)) {
         if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
     }

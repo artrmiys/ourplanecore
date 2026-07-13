@@ -5,13 +5,13 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class PdfPreviewRenderCache
 {
-    public const string CacheRootEnvironmentVariable = "OURPLANECORE_PDF_PREVIEW_CACHE_ROOT";
+    public const string CacheRootEnvironmentVariable = "OURPLANCORE_PDF_PREVIEW_CACHE_ROOT";
     private const int MaxEntries = 1024;
     private const long MaxBytes = 1_500_000_000;
     private const float MaxPersistedRenderScale = 2.25f;
@@ -337,12 +337,11 @@ public static class PdfPreviewRenderCache
 
     private static string CacheRoot()
     {
-        string? overrideRoot = Environment.GetEnvironmentVariable(CacheRootEnvironmentVariable);
+        string? overrideRoot = AppIdentity.GetEnvironmentVariable(CacheRootEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(overrideRoot))
             return overrideRoot;
 
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "OurPlaneCore", "render-cache", "pymupdf-preview");
+        return Path.Combine(AppIdentity.LocalRoot, "render-cache", "pymupdf-preview");
     }
 
     private static float NormalizeScale(double scale) => (float)Math.Round(scale, 3);

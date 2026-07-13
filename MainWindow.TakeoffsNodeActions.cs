@@ -3,9 +3,9 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -18,11 +18,11 @@ public partial class MainWindow
             if (!string.IsNullOrWhiteSpace(item.FolderPath) && Directory.Exists(item.FolderPath))
             {
                 string oldPath = item.FolderPath;
-                string newPath = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, name);
+                string newPath = OurPlanCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, name);
                 UnregisterTakeoffTreeItemPath(oldPath, tvi);
                 item.FolderPath = newPath;
                 RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
-                item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
+                item.Name = OurPlanCoreJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
                 QueueTakeoffAutosave(item);
@@ -30,7 +30,7 @@ public partial class MainWindow
             }
             else
             {
-                item.Name = OurPlaneCoreJobStore.NormalizeDisplayName(name, 120);
+                item.Name = OurPlanCoreJobStore.NormalizeDisplayName(name, 120);
             }
 
             SetTreeItemHeader(tvi, item);
@@ -108,13 +108,13 @@ public partial class MainWindow
             if (!string.IsNullOrWhiteSpace(requestedName) &&
                 !string.Equals(requestedName, folder.Name, StringComparison.Ordinal))
             {
-                newPath = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(folder.FolderPath, requestedName);
+                newPath = OurPlanCoreJobStore.RenameNodeAllowDuplicateName(folder.FolderPath, requestedName);
                 RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
             }
 
             var updatedFolder = new TakeoffFolderNode
             {
-                Name = OurPlaneCoreJobStore.DisplayName(newPath),
+                Name = OurPlanCoreJobStore.DisplayName(newPath),
                 FolderPath = newPath,
             };
             var updatedProperties = new TakeoffFolderProperties
@@ -162,7 +162,7 @@ public partial class MainWindow
         try
         {
             string oldPath = folder.FolderPath;
-            string newPath = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(folder.FolderPath, name);
+            string newPath = OurPlanCoreJobStore.RenameNodeAllowDuplicateName(folder.FolderPath, name);
             RebasePageLegendTakeoffOrderReferences(oldPath, newPath);
             UnregisterTakeoffTreeItemSubtree(tvi);
             RebaseTakeoffTreeItemPath(tvi, oldPath, newPath);
@@ -184,7 +184,7 @@ public partial class MainWindow
         if (res != MessageBoxResult.Yes) return;
 
         var removedItems = _takeoffItems
-            .Where(i => OurPlaneCoreJobStore.IsSameOrDescendant(folder.FolderPath, i.FolderPath))
+            .Where(i => OurPlanCoreJobStore.IsSameOrDescendant(folder.FolderPath, i.FolderPath))
             .ToList();
 
         TakeoffDeleteUndoBatch? undoBatch = null;
@@ -229,7 +229,7 @@ public partial class MainWindow
             return;
 
         string message = entries.Count == 1
-            ? $"Delete \"{OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)}\" and all contained measurements?"
+            ? $"Delete \"{OurPlanCoreJobStore.DisplayName(entries[0].SourcePath)}\" and all contained measurements?"
             : $"Delete {entries.Count} selected takeoff node(s) and all contained measurements?";
         var res = MessageBox.Show(message, "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (res != MessageBoxResult.Yes)
@@ -240,7 +240,7 @@ public partial class MainWindow
             FlushTakeoffAutosaves();
             var removedItems = _takeoffItems
                 .Where(item => entries.Any(entry =>
-                    OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
+                    OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, item.FolderPath)))
                 .ToList();
 
             TakeoffDeleteUndoBatch undoBatch = MoveTakeoffEntriesToUndoTrash(entries);
@@ -254,7 +254,7 @@ public partial class MainWindow
 
             if (_takeoffsClipboard != null && entries.Any(entry =>
                     _takeoffsClipboard.Entries.Any(clip =>
-                        OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, clip.SourcePath))))
+                        OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, clip.SourcePath))))
                 _takeoffsClipboard = null;
 
             _takeoffsMultiSelection.Clear();
@@ -283,7 +283,7 @@ public partial class MainWindow
 
         try
         {
-            if (!OurPlaneCoreJobStore.MoveSibling(folderPath, offset))
+            if (!OurPlanCoreJobStore.MoveSibling(folderPath, offset))
                 return;
             LoadTakeoffsForJob();
         }
@@ -298,7 +298,7 @@ public partial class MainWindow
         var paths = GetSelectedTakeoffEntries(anchor)
             .Select(entry => entry.SourcePath)
             .ToList();
-        return OurPlaneCoreJobStore.CanMoveSiblings(paths, offset);
+        return OurPlanCoreJobStore.CanMoveSiblings(paths, offset);
     }
 
     private void MoveTakeoffNodes(TreeViewItem anchor, int offset)
@@ -311,7 +311,7 @@ public partial class MainWindow
         try
         {
             string? previousActivePath = _activeItem?.FolderPath;
-            if (!OurPlaneCoreJobStore.MoveSiblings(paths, offset))
+            if (!OurPlanCoreJobStore.MoveSiblings(paths, offset))
                 return;
 
             string parentFolder = Path.GetDirectoryName(paths[0]) ?? "";
@@ -353,7 +353,7 @@ public partial class MainWindow
             _currentJob.TakeoffsRoot.TrimEnd('\\', '/'),
             StringComparison.OrdinalIgnoreCase)
                 ? "Takeoffs root"
-                : OurPlaneCoreJobStore.DisplayName(folderPath);
+                : OurPlanCoreJobStore.DisplayName(folderPath);
 
     private void SortTakeoffsAlphabetically(bool descending)
     {
@@ -399,16 +399,16 @@ public partial class MainWindow
     }
 
     private void SortTakeoffsWalls() =>
-        SortTakeoffsSpecial(OurPlaneCoreJobStore.SortTakeoffWallChildren, "walls: ext-corr-dem-2x6-2x4");
+        SortTakeoffsSpecial(OurPlanCoreJobStore.SortTakeoffWallChildren, "walls: ext-corr-dem-2x6-2x4");
 
     private void SortTakeoffsDetails() =>
-        SortTakeoffsSpecial(OurPlaneCoreJobStore.SortTakeoffDetailChildren, "details by sheet");
+        SortTakeoffsSpecial(OurPlanCoreJobStore.SortTakeoffDetailChildren, "details by sheet");
 
     private void SortTakeoffChildren(string folderPath, bool descending)
     {
         try
         {
-            OurPlaneCoreJobStore.SortTakeoffChildren(folderPath, descending);
+            OurPlanCoreJobStore.SortTakeoffChildren(folderPath, descending);
             if (!TryRefreshTakeoffTreeParentOrderFast(folderPath, _takeoffsMultiSelection))
                 LoadTakeoffsForJob();
         }

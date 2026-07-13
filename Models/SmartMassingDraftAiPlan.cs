@@ -1,11 +1,11 @@
 using System.IO;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
     private static List<TakeoffItem> ApplyAiTakeoffPlan(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> items,
         SmartMassingTakeoffAiPlan? aiPlan,
         SmartMassingDraft draft)
@@ -42,7 +42,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static void AddAiPlanFloorSources(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         List<WallFloorSource> sources,
         IReadOnlyList<TakeoffItem> items,
         SmartMassingTakeoffAiPlan? aiPlan)
@@ -83,7 +83,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static Dictionary<string, SmartMassingTakeoffAiAssignment> AiAssignmentsByKey(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingTakeoffAiPlan aiPlan)
     {
         var assignments = new Dictionary<string, SmartMassingTakeoffAiAssignment>(StringComparer.OrdinalIgnoreCase);
@@ -99,7 +99,7 @@ public static partial class SmartMassingDraftService
         return assignments;
     }
 
-    private static IEnumerable<string> AssignmentKeys(OurPlaneCoreJob job, SmartMassingTakeoffAiAssignment assignment)
+    private static IEnumerable<string> AssignmentKeys(OurPlanCoreJob job, SmartMassingTakeoffAiAssignment assignment)
     {
         if (!string.IsNullOrWhiteSpace(assignment.TakeoffId))
             yield return $"id:{assignment.TakeoffId.Trim()}";
@@ -112,7 +112,7 @@ public static partial class SmartMassingDraftService
     }
 
     private static bool TryFindAiAssignment(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyDictionary<string, SmartMassingTakeoffAiAssignment> assignments,
         TakeoffItem item,
         out SmartMassingTakeoffAiAssignment? assignment)

@@ -4,8 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
-using OurPlaneCore;
-using OurPlaneCore.Controls;
+using OurPlanCore;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
 // Synthetic-raster checks for the offline "count similar symbols" matcher:
@@ -1596,7 +1596,7 @@ internal static class SimilarSymbolMatcherTests
             mainWindow.Contains("TakeoffItem? destinationItem = RequestedSimilarCountDestinationItem(request)", StringComparison.Ordinal) &&
             mainWindow.Contains("bool canRenameDestination = destinationItem == null", StringComparison.Ordinal) &&
             mainWindow.Contains("string destinationName = SimilarCountDestinationName(destinationItem, request, textResult)", StringComparison.Ordinal) &&
-            mainWindow.Contains("OurPlaneCoreJob reviewJob = _currentJob;", StringComparison.Ordinal) &&
+            mainWindow.Contains("OurPlanCoreJob reviewJob = _currentJob;", StringComparison.Ordinal) &&
             mainWindow.Contains("PageInfo reviewPage = _currentPage;", StringComparison.Ordinal),
             "Similar Count should capture an explicit Beam/Openings destination, while manual Similar starts a new named item");
         AssertTrue(
@@ -1686,7 +1686,7 @@ internal static class SimilarSymbolMatcherTests
 
     public static void SimilarTextQueryFindsSplitMarkTokens()
     {
-        string tempDir = Path.Combine(Path.GetTempPath(), "opc_similar_text_split", Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "onc_similar_text_split", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         string pdfPath = Path.Combine(tempDir, "split-mark.pdf");
         try

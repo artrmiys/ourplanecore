@@ -4,9 +4,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore;
+using OurPlanCore;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 // Offset companion requested in the dialog: a parallel line item created
 // alongside the main line takeoff (multiline drawing).

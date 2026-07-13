@@ -1,6 +1,6 @@
 using System;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class TransformEditConstraints
 {

@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -195,7 +195,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
             return "none";
 
-        return OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder)?.Name
-            ?? OurPlaneCoreJobStore.DisplayName(page.OverlayPageFolder);
+        return OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder)?.Name
+            ?? OurPlanCoreJobStore.DisplayName(page.OverlayPageFolder);
     }
 }

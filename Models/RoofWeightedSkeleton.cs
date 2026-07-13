@@ -1,4 +1,4 @@
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Weighted straight skeleton for footprint roofs (Revit "roof by footprint"
 // with a per-edge slope; the multiplicatively-weighted straight skeleton).

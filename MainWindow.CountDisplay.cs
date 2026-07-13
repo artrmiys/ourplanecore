@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -218,10 +218,10 @@ public partial class MainWindow
             item.Measurements.Contains(measurement));
 
     private static bool IsCountTakeoffItem(TakeoffItem item) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point";
+        OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "point";
 
     private static bool IsCountMeasurement(Measurement measurement) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point";
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "point";
 
     private static string CommonCountSymbol(IEnumerable<string> symbols)
     {
@@ -269,7 +269,7 @@ public partial class MainWindow
 
     private void ApplyNewCountSymbolToItemIfNeeded(TakeoffItem item, string measurementType)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) != "point")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) != "point")
             return;
 
         item.CountSymbol = CountDisplaySymbol.Normalize(_newCountSymbol);

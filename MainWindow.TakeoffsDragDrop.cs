@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -231,7 +231,7 @@ public partial class MainWindow
         foreach (TakeoffsClipboardEntry entry in payload.Entries)
         {
             if (!Directory.Exists(entry.SourcePath) ||
-                !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
+                !OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) ||
                 string.Equals(entry.SourcePath, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
@@ -280,7 +280,7 @@ public partial class MainWindow
                     entriesToMove.Add(entry);
             }
 
-            foreach (var moved in OurPlaneCoreJobStore.MoveNodes(entriesToMove.Select(entry => entry.SourcePath), root))
+            foreach (var moved in OurPlanCoreJobStore.MoveNodes(entriesToMove.Select(entry => entry.SourcePath), root))
             {
                 changed.Add(moved.MovedPath);
                 rebasedLegendPaths.Add((moved.SourcePath, moved.MovedPath));
@@ -289,7 +289,7 @@ public partial class MainWindow
             if (changed.Count == 0)
                 return;
 
-            bool reordered = OurPlaneCoreJobStore.MoveSiblingsToEnd(changed, root);
+            bool reordered = OurPlanCoreJobStore.MoveSiblingsToEnd(changed, root);
             _takeoffsClipboard = null;
             RebasePageLegendTakeoffOrderReferences(rebasedLegendPaths);
 
@@ -348,7 +348,7 @@ public partial class MainWindow
         after = dropOutOfTargetFolder || IsTakeoffPositionDropAfter(targetItem, targetPoint);
         var paths = payload.Entries.Select(entry => entry.SourcePath).ToList();
         canDrop = CanDropTakeoffsToPosition(payload, targetPath, after);
-        string targetName = OurPlaneCoreJobStore.DisplayName(targetPath);
+        string targetName = OurPlanCoreJobStore.DisplayName(targetPath);
         string position = after ? "after" : "before";
         status = canDrop
             ? dropOutOfTargetFolder
@@ -377,7 +377,7 @@ public partial class MainWindow
 
         string targetParent = Path.GetDirectoryName(targetPath) ?? "";
         if (string.IsNullOrWhiteSpace(targetParent) ||
-            !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetParent) ||
+            !OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, targetParent) ||
             !Directory.Exists(targetParent))
         {
             return false;
@@ -388,7 +388,7 @@ public partial class MainWindow
             return false;
 
         if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
-            return OurPlaneCoreJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
+            return OurPlanCoreJobStore.CanMoveSiblingsToPosition(paths, targetPath, after);
 
         return CanDropTakeoffsInto(payload, targetParent, TakeoffsClipboardMode.Cut);
     }
@@ -458,14 +458,14 @@ public partial class MainWindow
         string? targetFolder = GetTakeoffPasteTargetFolder(targetItem);
         string targetName = string.IsNullOrWhiteSpace(targetFolder)
             ? "Takeoffs root"
-            : OurPlaneCoreJobStore.DisplayName(targetFolder);
+            : OurPlanCoreJobStore.DisplayName(targetFolder);
         string action = copy ? "Copy" : "Move";
         if (canDrop)
             return $"{action} {payload.Entries.Count} takeoff node(s) into {targetName}.";
 
         if (!copy &&
             !string.IsNullOrWhiteSpace(targetFolder) &&
-            payload.Entries.Any(entry => OurPlaneCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder)))
+            payload.Entries.Any(entry => OurPlanCoreJobStore.IsSameOrDescendant(entry.SourcePath, targetFolder)))
         {
             return "Cannot move a takeoff folder into itself or its child.";
         }
@@ -526,7 +526,7 @@ public partial class MainWindow
             var rebasedLegendPaths = new List<(string OldPath, string NewPath)>();
             if (paths.All(path => string.Equals(Path.GetDirectoryName(path) ?? "", targetParent, StringComparison.OrdinalIgnoreCase)))
             {
-                if (!OurPlaneCoreJobStore.MoveSiblingsToPosition(paths, targetPath, after))
+                if (!OurPlanCoreJobStore.MoveSiblingsToPosition(paths, targetPath, after))
                     return;
                 changed.AddRange(paths);
             }
@@ -547,14 +547,14 @@ public partial class MainWindow
                     entriesToMove.Add(entry);
                 }
 
-                foreach (var moved in OurPlaneCoreJobStore.MoveNodes(entriesToMove.Select(entry => entry.SourcePath), targetParent))
+                foreach (var moved in OurPlanCoreJobStore.MoveNodes(entriesToMove.Select(entry => entry.SourcePath), targetParent))
                 {
                     changed.Add(moved.MovedPath);
                     rebasedLegendPaths.Add((moved.SourcePath, moved.MovedPath));
                 }
 
                 if (changed.Count == 0 ||
-                    !OurPlaneCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
+                    !OurPlanCoreJobStore.MoveSiblingsToPosition(changed, targetPath, after))
                 {
                     return;
                 }
@@ -572,8 +572,8 @@ public partial class MainWindow
             }
 
             TxtStatus.Text = changed.Count == 1
-                ? $"Moved takeoff node {(after ? "after" : "before")} {OurPlaneCoreJobStore.DisplayName(targetPath)}."
-                : $"Moved {changed.Count} takeoff nodes {(after ? "after" : "before")} {OurPlaneCoreJobStore.DisplayName(targetPath)}.";
+                ? $"Moved takeoff node {(after ? "after" : "before")} {OurPlanCoreJobStore.DisplayName(targetPath)}."
+                : $"Moved {changed.Count} takeoff nodes {(after ? "after" : "before")} {OurPlanCoreJobStore.DisplayName(targetPath)}.";
         }
         catch (Exception ex)
         {
@@ -586,14 +586,14 @@ public partial class MainWindow
         if (payload.Nodes.Count == 0 || GetTakeoffSectionDropTarget(targetItem) is not { } target)
             return false;
 
-        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         bool hasMovableNode = false;
         foreach (TakeoffMeasurementNode node in payload.Nodes)
         {
             if (!node.Item.Measurements.Contains(node.Measurement))
                 return false;
-            if (OurPlaneCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
-                OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType)
+            if (OurPlanCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
+                OurPlanCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType)
                 return false;
             if (!ReferenceEquals(node.Item, target))
                 hasMovableNode = true;
@@ -614,17 +614,17 @@ public partial class MainWindow
             return "Drop section/count rows on a takeoff item.";
 
         string action = copy ? "Copy" : "Move";
-        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         TakeoffMeasurementNode? stale = payload.Nodes.FirstOrDefault(node => !node.Item.Measurements.Contains(node.Measurement));
         if (stale != null)
             return "Selected section/count row no longer exists.";
 
         TakeoffMeasurementNode? mismatch = payload.Nodes.FirstOrDefault(node =>
-            OurPlaneCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType);
+            OurPlanCoreJobStore.NormalizeMeasurementType(node.Measurement.MType) != targetType ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(node.Item.MeasurementType) != targetType);
         if (mismatch != null)
         {
-            string sourceType = MeasurementTypeTitle(OurPlaneCoreJobStore.NormalizeMeasurementType(mismatch.Measurement.MType));
+            string sourceType = MeasurementTypeTitle(OurPlanCoreJobStore.NormalizeMeasurementType(mismatch.Measurement.MType));
             string destinationType = MeasurementTypeTitle(targetType);
             return $"{action} blocked: {sourceType} rows can only drop on {sourceType} takeoff items, not {destinationType}.";
         }
@@ -677,7 +677,7 @@ public partial class MainWindow
         }
 
         FlushTakeoffAutosaves();
-        string targetType = OurPlaneCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
+        string targetType = OurPlanCoreJobStore.NormalizeMeasurementType(target.MeasurementType);
         var changedItems = new HashSet<TakeoffItem>();
         var resultingNodes = new List<TakeoffMeasurementNode>();
 
@@ -714,7 +714,7 @@ public partial class MainWindow
 
         foreach (TakeoffItem changed in changedItems)
         {
-            OurPlaneCoreJobStore.SaveTakeoffItem(changed);
+            OurPlanCoreJobStore.SaveTakeoffItem(changed);
             RefreshTreeItem(changed);
         }
 

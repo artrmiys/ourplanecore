@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 /// <summary>
 /// A node in a saved takeoff template: either a folder (with children) or a
@@ -30,7 +30,7 @@ public sealed class TakeoffTemplateNode
             Id = string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString("N") : Id,
             Name = Name,
             IsFolder = IsFolder,
-            MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(MeasurementType),
+            MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(MeasurementType),
             Color = string.IsNullOrWhiteSpace(Color) ? "#FF4444" : Color,
             CountSymbol = CountDisplaySymbol.Normalize(CountSymbol),
             UnitPrice = UnitPrice,
@@ -423,15 +423,14 @@ public static class TakeoffTemplateStore
         WriteIndented = true,
     };
 
-    private static string Dir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OurPlaneCore");
+    private static string Dir => AppIdentity.RoamingRoot;
 
     private static string FilePath => Path.Combine(Dir, "templates.json");
 
     private static string GlobalConfigPath() =>
         Path.Combine(SmartContextStore.GlobalRoot, "presets", "takeoff_templates.json");
 
-    private static string JobConfigPath(OurPlaneCoreJob job) =>
+    private static string JobConfigPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "takeoff_templates.json");
 
     public static List<TakeoffTemplate> Load()
@@ -472,13 +471,13 @@ public static class TakeoffTemplateStore
     public static void SaveGlobalConfig(TakeoffTemplateConfig config) =>
         SaveConfig(GlobalConfigPath(), config);
 
-    public static TakeoffTemplateConfig? LoadJobOverride(OurPlaneCoreJob job) =>
+    public static TakeoffTemplateConfig? LoadJobOverride(OurPlanCoreJob job) =>
         LoadConfig(JobConfigPath(job));
 
-    public static void SaveJobOverride(OurPlaneCoreJob job, TakeoffTemplateConfig config) =>
+    public static void SaveJobOverride(OurPlanCoreJob job, TakeoffTemplateConfig config) =>
         SaveConfig(JobConfigPath(job), config);
 
-    public static void ClearJobOverride(OurPlaneCoreJob job)
+    public static void ClearJobOverride(OurPlanCoreJob job)
     {
         try
         {
@@ -492,7 +491,7 @@ public static class TakeoffTemplateStore
         }
     }
 
-    public static TakeoffTemplateConfig ResolveConfig(OurPlaneCoreJob? job)
+    public static TakeoffTemplateConfig ResolveConfig(OurPlanCoreJob? job)
     {
         if (job != null && LoadJobOverride(job) is { } jobConfig)
             return Upgrade(jobConfig);
@@ -657,7 +656,7 @@ public static class TakeoffTemplateStore
         {
             if (string.IsNullOrWhiteSpace(node.Id))
                 node.Id = Guid.NewGuid().ToString("N");
-            node.MeasurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(node.MeasurementType);
+            node.MeasurementType = OurPlanCoreJobStore.NormalizeMeasurementType(node.MeasurementType);
             node.Color = string.IsNullOrWhiteSpace(node.Color) ? "#FF4444" : node.Color;
             node.CountSymbol = CountDisplaySymbol.Normalize(node.CountSymbol);
             NormalizeNodeIds(node.Children);
@@ -693,7 +692,7 @@ public static class TakeoffTemplateStore
 public static class TakeoffTemplateRouting
 {
     public static string ResolveDestinationFolder(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<string> templateFolderPath)
     {
         if (templateFolderPath.Count == 0)
@@ -706,10 +705,10 @@ public static class TakeoffTemplateRouting
             if (clean.Length == 0)
                 return job.TakeoffsRoot;
 
-            string? next = OurPlaneCoreJobStore.GetOrderedChildDirectories(current)
-                .Where(path => !OurPlaneCoreJobStore.IsTakeoffItemFolder(path))
+            string? next = OurPlanCoreJobStore.GetOrderedChildDirectories(current)
+                .Where(path => !OurPlanCoreJobStore.IsTakeoffItemFolder(path))
                 .FirstOrDefault(path =>
-                    string.Equals(OurPlaneCoreJobStore.DisplayName(path), clean, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(OurPlanCoreJobStore.DisplayName(path), clean, StringComparison.OrdinalIgnoreCase));
 
             if (next == null)
                 return job.TakeoffsRoot;

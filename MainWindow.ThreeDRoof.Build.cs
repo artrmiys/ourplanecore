@@ -2,10 +2,10 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -179,7 +179,7 @@ public partial class MainWindow
         _takeoffItems.Any(item => ThreeDRoofFootprintBuildService.IsRoofFootprintCandidate(_currentJob, item));
 
     private static bool IsUsableRoofAreaMeasurement(Measurement measurement) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area" &&
         measurement.Points.Count >= 3;
 
     private bool CanBuildRoofBaseFromTakeoffSelection(TreeViewItem? anchor) =>

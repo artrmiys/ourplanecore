@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
 internal static class AreaLineGridServiceTests

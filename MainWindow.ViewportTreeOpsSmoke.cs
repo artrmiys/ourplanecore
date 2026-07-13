@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -52,8 +52,8 @@ public partial class MainWindow
         if (_currentJob == null)
             throw new InvalidOperationException("No current job is open.");
 
-        var single = FindMovableSiblingSet(_currentJob.TakeoffsRoot, OurPlaneCoreJobStore.IsTakeoffItemFolder, 1);
-        var bulk = FindMovableSiblingSet(_currentJob.TakeoffsRoot, OurPlaneCoreJobStore.IsTakeoffItemFolder, 3);
+        var single = FindMovableSiblingSet(_currentJob.TakeoffsRoot, OurPlanCoreJobStore.IsTakeoffItemFolder, 1);
+        var bulk = FindMovableSiblingSet(_currentJob.TakeoffsRoot, OurPlanCoreJobStore.IsTakeoffItemFolder, 3);
         if (single == null || bulk == null)
             throw new InvalidOperationException("Takeoffs tree smoke needs movable sibling takeoff items for single and bulk operations.");
 
@@ -261,7 +261,7 @@ public partial class MainWindow
         string nextPath = before[index + 1];
         string pageBefore = _currentPage?.FolderPath
             ?? throw new InvalidOperationException("Takeoffs drag/drop smoke needs an active viewport page.");
-        var payload = new TakeoffsClipboard([new TakeoffsClipboardEntry(path, OurPlaneCoreJobStore.IsTakeoffItemFolder(path))], TakeoffsClipboardMode.Cut);
+        var payload = new TakeoffsClipboard([new TakeoffsClipboardEntry(path, OurPlanCoreJobStore.IsTakeoffItemFolder(path))], TakeoffsClipboardMode.Cut);
 
         if (FindTakeoffTreeItemByFolder(nextPath) is not { } target)
             throw new InvalidOperationException($"Takeoffs drag/drop target was not found for '{nextPath}'.");
@@ -283,7 +283,7 @@ public partial class MainWindow
 
         var restore = Stopwatch.StartNew();
         DropTakeoffPosition(
-            new TakeoffsClipboard([new TakeoffsClipboardEntry(path, OurPlaneCoreJobStore.IsTakeoffItemFolder(path))], TakeoffsClipboardMode.Cut),
+            new TakeoffsClipboard([new TakeoffsClipboardEntry(path, OurPlanCoreJobStore.IsTakeoffItemFolder(path))], TakeoffsClipboardMode.Cut),
             restoreTarget,
             after: false);
         TakeoffsTree.UpdateLayout();
@@ -327,7 +327,7 @@ public partial class MainWindow
             .Select(item => new
             {
                 Item = item,
-                Type = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+                Type = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
             })
             .Where(entry => !string.IsNullOrWhiteSpace(entry.Type))
             .ToList();
@@ -335,7 +335,7 @@ public partial class MainWindow
         foreach (var source in measured)
         {
             Measurement? measurement = source.Item.Measurements.FirstOrDefault(measurement =>
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == source.Type &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == source.Type &&
                 !string.IsNullOrWhiteSpace(measurement.PageFolder));
             if (measurement == null)
                 continue;
@@ -402,14 +402,14 @@ public partial class MainWindow
 
         foreach (string parent in EnumerateTreeOpsParents(root))
         {
-            var candidates = OurPlaneCoreJobStore.GetOrderedChildDirectories(parent)
+            var candidates = OurPlanCoreJobStore.GetOrderedChildDirectories(parent)
                 .Where(include)
                 .ToList();
             for (int i = 0; i + count < candidates.Count; i++)
             {
                 var paths = candidates.Skip(i).Take(count).ToList();
-                if (OurPlaneCoreJobStore.CanMoveSiblings(paths, 1) &&
-                    OurPlaneCoreJobStore.CanMoveSiblings(paths, -1))
+                if (OurPlanCoreJobStore.CanMoveSiblings(paths, 1) &&
+                    OurPlanCoreJobStore.CanMoveSiblings(paths, -1))
                 {
                     return new MovableSiblingSet(parent, paths);
                 }
@@ -430,10 +430,10 @@ public partial class MainWindow
     }
 
     private static bool IsPageTreeSmokeSheet(string path) =>
-        OurPlaneCoreJobStore.TryReadPage(path) != null;
+        OurPlanCoreJobStore.TryReadPage(path) != null;
 
     private static IReadOnlyList<string> OrderedChildSnapshot(string parent) =>
-        OurPlaneCoreJobStore.GetOrderedChildDirectories(parent)
+        OurPlanCoreJobStore.GetOrderedChildDirectories(parent)
             .Select(NormalizePath)
             .ToList();
 

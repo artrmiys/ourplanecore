@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Editable rules that drive the two page-sort features:
 //  • ArchStruct -> "Sort A/S"      (Arch / Struct / Others by first letter + filename)

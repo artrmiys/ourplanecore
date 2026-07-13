@@ -4,9 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -51,7 +51,7 @@ public partial class MainWindow
         if (dialog.ShowDialog() != true)
             return;
 
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(dialog.ItemType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(dialog.ItemType);
         if (measurementType == "point")
             RememberNewCountSymbol(dialog.ItemCountSymbol);
 
@@ -74,7 +74,7 @@ public partial class MainWindow
 
             ActivateTemplateCreatedTakeoff(item, tvi, measurementType);
             string targetName = routedToExistingTemplateFolder
-                ? OurPlaneCoreJobStore.DisplayName(parentFolder)
+                ? OurPlanCoreJobStore.DisplayName(parentFolder)
                 : "Takeoffs root";
             TxtStatus.Text = $"Template created: {item.Name}. Target: {targetName}.";
         }
@@ -127,12 +127,12 @@ public partial class MainWindow
         if (_currentPage == null)
             return false;
 
-        string normalized = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+        string normalized = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType);
         return normalized == "point" || _currentPage.ScaleMetersPerPt > 0;
     }
 
     private static string ToolForTemplateMeasurementType(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "area" => "area",
             "point" => "point",

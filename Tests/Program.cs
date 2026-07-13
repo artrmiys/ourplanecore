@@ -1,19 +1,19 @@
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
-using OurPlaneCore.Controls;
+using OurPlanCore;
+using OurPlanCore.Controls;
 using SkiaSharp;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
-if (Environment.GetEnvironmentVariable("OPC_BENCH") == "1")
+if (Environment.GetEnvironmentVariable("ONC_BENCH") == "1")
     return RenderPerfBenchmark.Run();
 
 if (args.Length > 0 && args[0] == "walltrace")
     return WallTraceHarness.Run(args);
 
-string testGlobalRoot = Path.Combine(Path.GetTempPath(), "opc_tests_global", Guid.NewGuid().ToString("N"));
+string testGlobalRoot = Path.Combine(Path.GetTempPath(), "onc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
 var tests = new List<(string Name, Action Run)>
@@ -403,7 +403,7 @@ var tests = new List<(string Name, Action Run)>
     ("planswift import preserves segments and source metadata", PlanSwiftImportTests.ImportPreservesSegmentsAndSourceMetadata),
     ("planswift import joist segments use linked area section directions", PlanSwiftImportTests.ImportJoistSegmentsUseLinkedAreaSectionDirections),
     ("planswift import into current job uses planswift buckets", PlanSwiftImportTests.ImportIntoCurrentJobUsesPlanSwiftBuckets),
-    ("planswift import copies existing ourplanecore job takeoffs", PlanSwiftImportTests.ImportCopiesExistingOurPlaneCoreJobTakeoffs),
+    ("planswift import copies existing ourplancore job takeoffs", PlanSwiftImportTests.ImportCopiesExistingOurPlanCoreJobTakeoffs),
     ("planswift txt export writes every root item", PlanSwiftTxtExportWritesEveryRootItem),
     ("planswift export hides generated import notes", PlanSwiftExportHidesGeneratedImportNotes),
     ("planswift export hides pdf import notes", PlanSwiftExportHidesPdfImportNotes),
@@ -424,6 +424,9 @@ var tests = new List<(string Name, Action Run)>
     ("app settings removes job root by path", AppSettingsRemovesJobRootByPath),
     ("job picker roots classify local cloud network", JobPickerRootsClassifyLocalCloudNetwork),
     ("app settings path can use env override", AppSettingsPathCanUseEnvOverride),
+    ("app identity migration keeps durable data only", AppDataMigrationTests.MigratesDurableDataWithoutOverwritingOrCopyingCaches),
+    ("app identity migration protects legacy settings", AppDataMigrationTests.ProtectsLegacySettingsUntilCriticalMigrationCompletes),
+    ("app identity environment uses current then legacy", AppDataMigrationTests.EnvironmentVariableUsesCurrentThenLegacyFallback),
     ("app settings count symbol persists", AppSettingsCountSymbolPersists),
     ("app settings pdf import raster default migrates", AppSettingsPdfImportRasterDefaultMigrates),
     ("atomic write ignores stale fixed temp path", AtomicWriteIgnoresStaleFixedTempPath),
@@ -492,7 +495,7 @@ foreach ((string name, Action run) in tests)
     catch (Exception ex)
     {
         string detail = string.Equals(
-            Environment.GetEnvironmentVariable("OURPLANECORE_TEST_VERBOSE_FAILURES"),
+            Environment.GetEnvironmentVariable("OURPLANCORE_TEST_VERBOSE_FAILURES"),
             "1",
             StringComparison.Ordinal)
             ? ex.ToString()
@@ -1234,7 +1237,7 @@ static void PdfExportLabelCategoriesWorkWithoutAll()
 
 static void PdfExportWritesSelectedSheets()
 {
-    string dir = Path.Combine(Path.GetTempPath(), "opc_pdf_export_smoke", Guid.NewGuid().ToString("N"));
+    string dir = Path.Combine(Path.GetTempPath(), "onc_pdf_export_smoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(dir);
     try
     {
@@ -1299,7 +1302,7 @@ static void PdfExportWritesSelectedSheets()
 
 static void PdfExportWritesMeasurementLines()
 {
-    string dir = Path.Combine(Path.GetTempPath(), "opc_pdf_export_measurements", Guid.NewGuid().ToString("N"));
+    string dir = Path.Combine(Path.GetTempPath(), "onc_pdf_export_measurements", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(dir);
     try
     {
@@ -1370,7 +1373,7 @@ static void PdfExportWritesMeasurementLines()
 
 static void PdfExportSkipsInvalidAreaPointArtifacts()
 {
-    string dir = Path.Combine(Path.GetTempPath(), "opc_pdf_export_invalid_area", Guid.NewGuid().ToString("N"));
+    string dir = Path.Combine(Path.GetTempPath(), "onc_pdf_export_invalid_area", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(dir);
     try
     {
@@ -1474,7 +1477,7 @@ static void JobStorePersistsMeasurementHoles()
 {
     WithTempJob("Hole Job", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(
             job,
             job.TakeoffsRoot,
             "Area",
@@ -1503,8 +1506,8 @@ static void JobStorePersistsMeasurementHoles()
         };
 
         item.Measurements.Add(measurement);
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
-        List<Measurement> loaded = OurPlaneCoreJobStore.LoadMeasurements(item.FolderPath);
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
+        List<Measurement> loaded = OurPlanCoreJobStore.LoadMeasurements(item.FolderPath);
 
         AssertEqual("1", loaded.Count.ToString(), "loaded measurement count");
         AssertEqual("1", loaded[0].Holes.Count.ToString(), "loaded hole count");
@@ -1827,7 +1830,7 @@ static void OpeningDefaultNameIsSizeOnly()
 
 static void TakeoffCreationPolicyChoosesSafeParents()
 {
-    var job = new OurPlaneCoreJob
+    var job = new OurPlanCoreJob
     {
         RootPath = @"C:\tmp\job",
     };
@@ -1946,7 +1949,7 @@ static void TakeoffTreeOrderMovesSiblingUp()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C");
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSibling(items[1].FolderPath, -1), "move up should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSibling(items[1].FolderPath, -1), "move up should apply");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "B,A,C", "sibling up");
     });
 }
@@ -1957,7 +1960,7 @@ static void TakeoffTreeOrderMovesSiblingDown()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C");
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSibling(items[0].FolderPath, 1), "move down should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSibling(items[0].FolderPath, 1), "move down should apply");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "B,A,C", "sibling down");
     });
 }
@@ -1968,7 +1971,7 @@ static void TakeoffTreeOrderBlocksTopUp()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C");
 
-        AssertFalse(OurPlaneCoreJobStore.MoveSibling(items[0].FolderPath, -1), "top move up should be blocked");
+        AssertFalse(OurPlanCoreJobStore.MoveSibling(items[0].FolderPath, -1), "top move up should be blocked");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "A,B,C", "top up blocked");
     });
 }
@@ -1979,7 +1982,7 @@ static void TakeoffTreeOrderBlocksBottomDown()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C");
 
-        AssertFalse(OurPlaneCoreJobStore.MoveSibling(items[2].FolderPath, 1), "bottom move down should be blocked");
+        AssertFalse(OurPlanCoreJobStore.MoveSibling(items[2].FolderPath, 1), "bottom move down should be blocked");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "A,B,C", "bottom down blocked");
     });
 }
@@ -1990,7 +1993,7 @@ static void TakeoffTreeOrderMovesSiblingBlockUp()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C", "D");
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblings([items[1].FolderPath, items[2].FolderPath], -1), "block up should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblings([items[1].FolderPath, items[2].FolderPath], -1), "block up should apply");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "B,C,A,D", "block up");
     });
 }
@@ -2001,7 +2004,7 @@ static void TakeoffTreeOrderMovesSiblingBlockDown()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C", "D");
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblings([items[1].FolderPath, items[2].FolderPath], 1), "block down should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblings([items[1].FolderPath, items[2].FolderPath], 1), "block down should apply");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "A,D,B,C", "block down");
     });
 }
@@ -2012,7 +2015,7 @@ static void TakeoffTreeOrderMovesBeforeTarget()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C", "D");
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([items[2].FolderPath], items[0].FolderPath, after: false), "move before should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblingsToPosition([items[2].FolderPath], items[0].FolderPath, after: false), "move before should apply");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "C,A,B,D", "move before target");
     });
 }
@@ -2023,7 +2026,7 @@ static void TakeoffTreeOrderMovesAfterTarget()
     {
         var items = CreateTakeoffItems(job, "A", "B", "C", "D");
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([items[0].FolderPath], items[2].FolderPath, after: true), "move after should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblingsToPosition([items[0].FolderPath], items[2].FolderPath, after: true), "move after should apply");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "B,C,A,D", "move after target");
     });
 }
@@ -2037,9 +2040,9 @@ static void TakeoffTreeOrderAppendsMovedNodeIntoFolder()
         CreateNestedTakeoffItem(job, targetFolder, "Y");
         TakeoffItem moving = CreateRootTakeoffItem(job, "A");
 
-        string movedPath = OurPlaneCoreJobStore.MoveNode(moving.FolderPath, targetFolder);
+        string movedPath = OurPlanCoreJobStore.MoveNode(moving.FolderPath, targetFolder);
 
-        AssertTrue(OurPlaneCoreJobStore.IsSameOrDescendant(targetFolder, movedPath), "node should move into folder");
+        AssertTrue(OurPlanCoreJobStore.IsSameOrDescendant(targetFolder, movedPath), "node should move into folder");
         AssertTakeoffChildOrder(targetFolder, "X,Y,A", "moved node appended into target folder");
     });
 }
@@ -2053,10 +2056,10 @@ static void TakeoffTreeOrderMovesDirectChildrenOutBelowFolder()
         CreateNestedTakeoffItem(job, folder, "Y");
         CreateRootTakeoffItem(job, "B");
 
-        var moved = OurPlaneCoreJobStore.MoveNodes([child.FolderPath], job.TakeoffsRoot).Single();
+        var moved = OurPlanCoreJobStore.MoveNodes([child.FolderPath], job.TakeoffsRoot).Single();
 
         AssertTrue(
-            OurPlaneCoreJobStore.MoveSiblingsToPosition([moved.MovedPath], folder, after: true),
+            OurPlanCoreJobStore.MoveSiblingsToPosition([moved.MovedPath], folder, after: true),
             "moved child should reorder after its old parent folder");
         AssertTakeoffChildOrder(job.TakeoffsRoot, "Folder,X,B", "child moved out below folder");
         AssertTakeoffChildOrder(folder, "Y", "old parent keeps remaining child");
@@ -2076,7 +2079,7 @@ static void TakeoffTreeOrderStressMovesLargeSelectionToEnd()
             .Select(item => item.FolderPath)
             .ToList();
 
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToEnd(selected, job.TakeoffsRoot), "large selection should move to end");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblingsToEnd(selected, job.TakeoffsRoot), "large selection should move to end");
 
         IReadOnlyList<string> names = TakeoffChildNames(job.TakeoffsRoot);
         AssertEqual("260", names.Count.ToString(), "stress node count");
@@ -2101,7 +2104,7 @@ static void TakeoffTreeOrderStressBatchMovesIntoFolder()
             .Select(item => item.FolderPath)
             .ToList();
 
-        IReadOnlyList<(string SourcePath, string MovedPath)> moved = OurPlaneCoreJobStore.MoveNodes(selected, targetFolder);
+        IReadOnlyList<(string SourcePath, string MovedPath)> moved = OurPlanCoreJobStore.MoveNodes(selected, targetFolder);
 
         IReadOnlyList<string> targetNames = TakeoffChildNames(targetFolder);
         IReadOnlyList<string> rootNames = TakeoffChildNames(job.TakeoffsRoot);
@@ -2140,10 +2143,10 @@ static void TakeoffAutoRoutingSendsSqftAreasToSqfts()
             "");
 
         AssertTrue(baseRoute.Routed, "base area should route");
-        AssertEqual("sqfts", OurPlaneCoreJobStore.DisplayName(baseRoute.ParentFolder), "sqft parent");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, porchRoute.ParentFolder, "porch", "#FF4444", "area");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, firstRoute.ParentFolder, "1st", "#FF4444", "area");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, baseRoute.ParentFolder, "base", "#FF4444", "area");
+        AssertEqual("sqfts", OurPlanCoreJobStore.DisplayName(baseRoute.ParentFolder), "sqft parent");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, porchRoute.ParentFolder, "porch", "#FF4444", "area");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, firstRoute.ParentFolder, "1st", "#FF4444", "area");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, baseRoute.ParentFolder, "base", "#FF4444", "area");
 
         AssertTrue(TakeoffAutoRoutingService.SortFolder(job, baseRoute.ParentFolder), "sqft folder should sort");
         AssertTakeoffChildOrder(baseRoute.ParentFolder, "base,1st,porch", "sqft takeoff order");
@@ -2164,14 +2167,14 @@ static void TakeoffAutoRoutingSendsWallLinesToSheetFloorWalls()
             page.FolderPath);
 
         AssertTrue(route.Routed, "wall line should route");
-        AssertEqual("2nd floor walls", OurPlaneCoreJobStore.DisplayName(route.ParentFolder), "wall floor parent");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x4 walls", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "dem 2x4", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x8 walls", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "corners", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "corr 2x6", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x6 walls", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "ext 9.98", "#FF4444", "line");
+        AssertEqual("2nd floor walls", OurPlanCoreJobStore.DisplayName(route.ParentFolder), "wall floor parent");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x4 walls", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "dem 2x4", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x8 walls", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "corners", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "corr 2x6", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "2x6 walls", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, route.ParentFolder, "ext 9.98", "#FF4444", "line");
 
         AssertTrue(TakeoffAutoRoutingService.SortFolder(job, route.ParentFolder), "wall folder should sort");
         AssertTakeoffChildOrder(
@@ -2216,7 +2219,7 @@ static void SheetLegendHiddenMeasurementsKeepNewMeasurementsVisible()
     WithTempJob("sheet_legend_hidden_measurements", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A701");
-        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string walls = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
         TakeoffItem item = CreateMeasuredTakeoffItem(
             job,
             walls,
@@ -2323,18 +2326,18 @@ static void TakeoffDetailRefsSortBySheetThenDetail()
 
     WithTempJob("detail_ref_sort", job =>
     {
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S502", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S101", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S102", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S101", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S5.10", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S5.5", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "1/S5.5", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "4/S5.10", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "3/S5.2", "#FF4444", "line");
-        OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "8/S6.1", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S502", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S101", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S102", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "14/S101", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "13/S5.10", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2/S5.5", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "1/S5.5", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "4/S5.10", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "3/S5.2", "#FF4444", "line");
+        OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "8/S6.1", "#FF4444", "line");
 
-        OurPlaneCoreJobStore.SortTakeoffChildren(job.TakeoffsRoot, descending: false);
+        OurPlanCoreJobStore.SortTakeoffChildren(job.TakeoffsRoot, descending: false);
         AssertTakeoffChildOrder(job.TakeoffsRoot, expected, "detail refs takeoff tree order");
     });
 }
@@ -2344,7 +2347,7 @@ static void SheetLegendLiveAutoIgnoresStoredAutoOrder()
     WithTempJob("sheet_legend_live_auto", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A701");
-        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string walls = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
         TakeoffItem twoByFour = CreateMeasuredTakeoffItem(
             job,
             walls,
@@ -2384,7 +2387,7 @@ static void MassingDirectSqftsUsesFloorLabels()
     WithTempJob("massing_sqfts", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         CreateMeasuredTakeoffItem(job, sqfts, "1st", "area", page.FolderPath, RectPoints(0, 0, 10, 10));
         CreateMeasuredTakeoffItem(job, sqfts, "2nd", "area", page.FolderPath, RectPoints(20, 0, 10, 10));
 
@@ -2409,8 +2412,8 @@ static void MassingWallsParsesUpperFloorFolders()
     WithTempJob("massing_walls_4th", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A401");
-        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
-        string fourth = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "4th floor walls");
+        string walls = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string fourth = OurPlanCoreJobStore.CreateTakeoffFolder(job, walls, "4th floor walls");
         CreateMeasuredTakeoffItem(job, fourth, "ext 10", "line", page.FolderPath, RectPoints(0, 0, 10, 10));
 
         SmartMassingDraft draft = SmartMassingDraftService.BuildDraftFromWallTakeoffs(job, 10);
@@ -2429,9 +2432,9 @@ static void MassingRoofTakeoffsLinkEaveRakeGable()
     WithTempJob("massing_roof_takeoffs", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
-        string sqft = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sft");
-        string roof = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "eve rake");
-        string gables = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "gables");
+        string sqft = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sft");
+        string roof = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "eve rake");
+        string gables = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "gables");
         CreateMeasuredTakeoffItem(job, sqft, "1st", "area", page.FolderPath, RectPoints(10, 10, 30, 20));
         CreateMeasuredTakeoffItem(job, roof, "eve", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(42, 8)]);
         CreateMeasuredTakeoffItem(job, roof, "rake", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(25, 0), new SKPoint(42, 8)]);
@@ -2454,7 +2457,7 @@ static void MassingAiPlanClassifiesAmbiguousTakeoffs()
     WithTempJob("massing_ai_plan", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A601 Mixed");
-        string misc = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "misc");
+        string misc = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "misc");
         TakeoffItem plate = CreateMeasuredTakeoffItem(job, misc, "poly A", "area", page.FolderPath, RectPoints(10, 10, 30, 20));
         TakeoffItem edge = CreateMeasuredTakeoffItem(job, misc, "edge north", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(42, 8)]);
         TakeoffItem slope = CreateMeasuredTakeoffItem(job, misc, "slope side", "line", page.FolderPath, [new SKPoint(8, 8), new SKPoint(25, 0), new SKPoint(42, 8)]);
@@ -2530,9 +2533,9 @@ static void ThreeDAutoBuilderStacksFloorsByMaxWallHeight()
     WithTempJob("3d_auto_wall_levels", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
-        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
-        string first = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
-        string second = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "2nd");
+        string walls = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string first = OurPlanCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
+        string second = OurPlanCoreJobStore.CreateTakeoffFolder(job, walls, "2nd");
         CreateMeasuredTakeoffItem(job, first, "ext 2x6 9.1", "line", page.FolderPath, [new SKPoint(0, 0), new SKPoint(10, 0)]);
         CreateMeasuredTakeoffItem(job, first, "dem (2) 2x4 10.8", "line", page.FolderPath, [new SKPoint(0, 2), new SKPoint(10, 2)]);
         CreateMeasuredTakeoffItem(job, second, "ext 2x4 8.5", "line", page.FolderPath, [new SKPoint(0, 4), new SKPoint(10, 4)]);
@@ -2551,10 +2554,10 @@ static void ThreeDAutoBuilderAddsSqftSlabsAtFloorLevels()
     WithTempJob("3d_auto_sqft_slabs", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
-        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
-        string firstWalls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
+        string walls = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string firstWalls = OurPlanCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
         CreateMeasuredTakeoffItem(job, firstWalls, "ext 10", "line", page.FolderPath, [new SKPoint(0, 0), new SKPoint(10, 0)]);
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         CreateMeasuredTakeoffItem(job, sqfts, "1st", "area", page.FolderPath, RectPoints(0, 0, 10, 10));
         CreateMeasuredTakeoffItem(job, sqfts, "2nd", "area", page.FolderPath, RectPoints(20, 0, 10, 10));
 
@@ -2571,10 +2574,10 @@ static void ThreeDAutoBuilderAddsRfAreaAsRoofSlab()
     WithTempJob("3d_auto_rf_roof_slab", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A101");
-        string walls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
-        string firstWalls = OurPlaneCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
+        string walls = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string firstWalls = OurPlanCoreJobStore.CreateTakeoffFolder(job, walls, "1st");
         CreateMeasuredTakeoffItem(job, firstWalls, "ext 10", "line", page.FolderPath, [new SKPoint(0, 0), new SKPoint(10, 0)]);
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         CreateMeasuredTakeoffItem(job, sqfts, "1st", "area", page.FolderPath, RectPoints(0, 0, 10, 10));
         CreateMeasuredTakeoffItem(job, sqfts, "rf", "area", page.FolderPath, RectPoints(2, 2, 12, 8));
 
@@ -2592,7 +2595,7 @@ static void ThreeDRoofFootprintBuilderCreatesRakeEdgesFromRfAreas()
     WithTempJob("3d_rf_roof_footprint", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         TakeoffItem rfA = CreateMeasuredTakeoffItem(job, sqfts, "rf A", "area", page.FolderPath, RectPoints(0, 0, 20, 10));
         TakeoffItem rfB = CreateMeasuredTakeoffItem(job, sqfts, "rf B", "area", page.FolderPath, RectPoints(22, 0, 14, 12));
 
@@ -2640,7 +2643,7 @@ static void ThreeDAutoRoofSelectsOppositeEaves()
     WithTempJob("3d_auto_roof_eaves", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         TakeoffItem rf = CreateMeasuredTakeoffItem(job, sqfts, "rf", "area", page.FolderPath, RectPoints(0, 0, 30, 12));
 
         ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
@@ -2676,7 +2679,7 @@ static void ThreeDAutoRoofPreservesManualEaves()
     WithTempJob("3d_auto_roof_manual_eave", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         TakeoffItem rf = CreateMeasuredTakeoffItem(job, sqfts, "rf", "area", page.FolderPath, RectPoints(0, 0, 30, 12));
 
         ThreeDRoofFootprintBuildResult footprint = ThreeDRoofFootprintBuildService.Build(
@@ -2705,7 +2708,7 @@ static void ThreeDRoofBaseBuilderUnionsAdjacentRfAreas()
     WithTempJob("3d_roof_base_union", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         TakeoffItem rfA = CreateMeasuredTakeoffItem(job, sqfts, "rf A", "area", page.FolderPath, RectPoints(0, 0, 20, 10));
         TakeoffItem rfB = CreateMeasuredTakeoffItem(job, sqfts, "rf B", "area", page.FolderPath, RectPoints(20, 0, 10, 20));
 
@@ -2749,7 +2752,7 @@ static void ThreeDRoofEavePitchGeneratesComplexFootprintMesh()
     WithTempJob("3d_roof_complex_mesh", job =>
     {
         PageInfo page = CreatePageItem(job, job.PagesRoot, "A501 Roof");
-        string sqfts = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
         TakeoffItem rfA = CreateMeasuredTakeoffItem(job, sqfts, "rf A", "area", page.FolderPath, RectPoints(0, 0, 20, 10));
         TakeoffItem rfB = CreateMeasuredTakeoffItem(job, sqfts, "rf B", "area", page.FolderPath, RectPoints(20, 0, 10, 20));
 
@@ -3049,13 +3052,13 @@ static void PageTreeOrderMovesSheetBeforeFolder()
 {
     WithTempJob("page_order_sheet_before_folder", job =>
     {
-        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
-        string folderA = OurPlaneCoreJobStore.CreateFolder(parent, "Folder A");
+        string parent = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string folderA = OurPlanCoreJobStore.CreateFolder(parent, "Folder A");
         PageInfo sheetB = CreatePageItem(job, parent, "Sheet B");
-        OurPlaneCoreJobStore.CreateFolder(parent, "Folder C");
+        OurPlanCoreJobStore.CreateFolder(parent, "Folder C");
 
         AssertPageChildOrder(parent, "Folder A,Sheet B,Folder C", "initial page/folder order");
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([sheetB.FolderPath], folderA, after: false), "sheet before folder should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblingsToPosition([sheetB.FolderPath], folderA, after: false), "sheet before folder should apply");
         AssertPageChildOrder(parent, "Sheet B,Folder A,Folder C", "sheet moved before folder");
     });
 }
@@ -3064,13 +3067,13 @@ static void PageTreeOrderMovesFolderBeforeFolder()
 {
     WithTempJob("page_order_folder_before_folder", job =>
     {
-        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
-        string folderA = OurPlaneCoreJobStore.CreateFolder(parent, "Folder A");
-        string folderB = OurPlaneCoreJobStore.CreateFolder(parent, "Folder B");
+        string parent = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string folderA = OurPlanCoreJobStore.CreateFolder(parent, "Folder A");
+        string folderB = OurPlanCoreJobStore.CreateFolder(parent, "Folder B");
         CreatePageItem(job, parent, "Sheet C");
 
         AssertPageChildOrder(parent, "Folder A,Folder B,Sheet C", "initial folder/folder order");
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([folderB], folderA, after: false), "folder before folder should apply");
+        AssertTrue(OurPlanCoreJobStore.MoveSiblingsToPosition([folderB], folderA, after: false), "folder before folder should apply");
         AssertPageChildOrder(parent, "Folder B,Folder A,Sheet C", "folder moved before folder");
     });
 }
@@ -3079,7 +3082,7 @@ static void PageTreeOrderMovesSelectedItemsToEnd()
 {
     WithTempJob("page_order_selected_to_end", job =>
     {
-        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string parent = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
         PageInfo sheetA = CreatePageItem(job, parent, "Sheet A");
         PageInfo sheetB = CreatePageItem(job, parent, "Sheet B");
         PageInfo sheetC = CreatePageItem(job, parent, "Sheet C");
@@ -3087,7 +3090,7 @@ static void PageTreeOrderMovesSelectedItemsToEnd()
 
         AssertPageChildOrder(parent, "Sheet A,Sheet B,Sheet C,Sheet D", "initial page order");
         AssertTrue(
-            OurPlaneCoreJobStore.MoveSiblingsToEnd([sheetB.FolderPath, sheetD.FolderPath], parent),
+            OurPlanCoreJobStore.MoveSiblingsToEnd([sheetB.FolderPath, sheetD.FolderPath], parent),
             "selected sheets should move to end");
         AssertPageChildOrder(parent, "Sheet A,Sheet C,Sheet B,Sheet D", "selected sheets moved to end");
     });
@@ -3097,12 +3100,12 @@ static void PageTreeOrderMovesNestedFolderOutBelowParent()
 {
     WithTempJob("page_order_nested_folder_out", job =>
     {
-        string parent = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
-        string child = OurPlaneCoreJobStore.CreateFolder(parent, "Child");
-        OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, "Other");
+        string parent = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Parent");
+        string child = OurPlanCoreJobStore.CreateFolder(parent, "Child");
+        OurPlanCoreJobStore.CreateFolder(job.PagesRoot, "Other");
 
-        string moved = OurPlaneCoreJobStore.MoveNode(child, job.PagesRoot);
-        AssertTrue(OurPlaneCoreJobStore.MoveSiblingsToPosition([moved], parent, after: true), "nested folder out should apply");
+        string moved = OurPlanCoreJobStore.MoveNode(child, job.PagesRoot);
+        AssertTrue(OurPlanCoreJobStore.MoveSiblingsToPosition([moved], parent, after: true), "nested folder out should apply");
         AssertPageChildOrder(job.PagesRoot, "Parent,Child,Other", "nested folder moved out below parent");
     });
 }
@@ -3186,14 +3189,14 @@ static void PageRenameAllowsDuplicateDisplayNames()
         PageInfo first = CreatePageItem(job, job.PagesRoot, "S101");
         PageInfo second = CreatePageItem(job, job.PagesRoot, "S102");
 
-        string renamed = OurPlaneCoreJobStore.RenamePageAllowDuplicateName(second.FolderPath, "S101");
-        PageInfo? renamedPage = OurPlaneCoreJobStore.TryReadPage(renamed);
+        string renamed = OurPlanCoreJobStore.RenamePageAllowDuplicateName(second.FolderPath, "S101");
+        PageInfo? renamedPage = OurPlanCoreJobStore.TryReadPage(renamed);
 
         AssertTrue(Directory.Exists(first.FolderPath), "first duplicate-name page should remain");
         AssertTrue(Directory.Exists(renamed), "renamed duplicate-name page should exist");
         AssertFalse(string.Equals(first.FolderPath, renamed, StringComparison.OrdinalIgnoreCase), "duplicate-name pages need unique folders");
-        AssertEqual("S101", OurPlaneCoreJobStore.DisplayName(first.FolderPath), "first display name");
-        AssertEqual("S101", OurPlaneCoreJobStore.DisplayName(renamed), "renamed display name");
+        AssertEqual("S101", OurPlanCoreJobStore.DisplayName(first.FolderPath), "first display name");
+        AssertEqual("S101", OurPlanCoreJobStore.DisplayName(renamed), "renamed display name");
         AssertEqual("S101", renamedPage?.Name ?? "", "renamed page info name");
     });
 }
@@ -3202,16 +3205,16 @@ static void TakeoffCreateAllowsDuplicateDisplayNames()
 {
     WithTempJob("takeoff_create_duplicate_names", job =>
     {
-        TakeoffItem first = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
-        TakeoffItem second = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#00FF00", "area");
+        TakeoffItem first = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
+        TakeoffItem second = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#00FF00", "area");
 
         AssertTrue(Directory.Exists(first.FolderPath), "first duplicate-name takeoff should exist");
         AssertTrue(Directory.Exists(second.FolderPath), "second duplicate-name takeoff should exist");
         AssertFalse(string.Equals(first.FolderPath, second.FolderPath, StringComparison.OrdinalIgnoreCase), "duplicate-name takeoffs need unique folders");
         AssertEqual("Walls", first.Name, "first takeoff display name");
         AssertEqual("Walls", second.Name, "second takeoff display name");
-        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(first.FolderPath), "first stored display name");
-        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(second.FolderPath), "second stored display name");
+        AssertEqual("Walls", OurPlanCoreJobStore.DisplayName(first.FolderPath), "first stored display name");
+        AssertEqual("Walls", OurPlanCoreJobStore.DisplayName(second.FolderPath), "second stored display name");
     });
 }
 
@@ -3219,17 +3222,17 @@ static void TakeoffRenameAllowsDuplicateDisplayNames()
 {
     WithTempJob("takeoff_rename_duplicate_names", job =>
     {
-        TakeoffItem first = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
-        TakeoffItem second = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof", "#00FF00", "area");
+        TakeoffItem first = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
+        TakeoffItem second = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof", "#00FF00", "area");
 
-        string renamed = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(second.FolderPath, "Walls");
-        TakeoffItem? renamedItem = OurPlaneCoreJobStore.TryReadTakeoffItem(renamed);
+        string renamed = OurPlanCoreJobStore.RenameNodeAllowDuplicateName(second.FolderPath, "Walls");
+        TakeoffItem? renamedItem = OurPlanCoreJobStore.TryReadTakeoffItem(renamed);
 
         AssertTrue(Directory.Exists(first.FolderPath), "first duplicate-name takeoff should remain");
         AssertTrue(Directory.Exists(renamed), "renamed duplicate-name takeoff should exist");
         AssertFalse(string.Equals(first.FolderPath, renamed, StringComparison.OrdinalIgnoreCase), "renamed duplicate-name takeoff needs unique folder");
-        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(first.FolderPath), "first takeoff display name");
-        AssertEqual("Walls", OurPlaneCoreJobStore.DisplayName(renamed), "renamed takeoff display name");
+        AssertEqual("Walls", OurPlanCoreJobStore.DisplayName(first.FolderPath), "first takeoff display name");
+        AssertEqual("Walls", OurPlanCoreJobStore.DisplayName(renamed), "renamed takeoff display name");
         AssertEqual("Walls", renamedItem?.Name ?? "", "renamed takeoff item name");
     });
 }
@@ -3238,13 +3241,13 @@ static void TakeoffDisplayNamesPreserveSlash()
 {
     WithTempJob("takeoff_slash_names", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "ext 9.1 10/A502", "#FF0000", "line");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "ext 9.1 10/A502", "#FF0000", "line");
         AssertEqual("ext 9.1 10/A502", item.Name, "created takeoff display name preserves slash");
         AssertTrue(Path.GetFileName(item.FolderPath).Contains("_A502", StringComparison.Ordinal), "folder path still uses safe slash replacement");
 
-        string renamed = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, "corr 2x6 10.1 14/A502");
-        TakeoffItem? loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(renamed);
-        AssertEqual("corr 2x6 10.1 14/A502", OurPlaneCoreJobStore.DisplayName(renamed), "renamed takeoff display name preserves slash");
+        string renamed = OurPlanCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, "corr 2x6 10.1 14/A502");
+        TakeoffItem? loaded = OurPlanCoreJobStore.TryReadTakeoffItem(renamed);
+        AssertEqual("corr 2x6 10.1 14/A502", OurPlanCoreJobStore.DisplayName(renamed), "renamed takeoff display name preserves slash");
         AssertEqual("corr 2x6 10.1 14/A502", loaded?.Name ?? "", "loaded takeoff item preserves slash");
 
         loaded!.Measurements.Add(new Measurement
@@ -3266,19 +3269,19 @@ static void TakeoffCopyKeepsDisplayName()
 {
     WithTempJob("takeoff_copy_name", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2. 3x6", "#FF0000", "line");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "2. 3x6", "#FF0000", "line");
         string sourceGuid = ReadDataGuid(item.FolderPath);
-        string copy = OurPlaneCoreJobStore.CopyNode(item.FolderPath, job.TakeoffsRoot);
-        string secondCopy = OurPlaneCoreJobStore.CopyNode(item.FolderPath, job.TakeoffsRoot);
-        TakeoffItem? copied = OurPlaneCoreJobStore.TryReadTakeoffItem(copy);
-        TakeoffItem? secondCopied = OurPlaneCoreJobStore.TryReadTakeoffItem(secondCopy);
+        string copy = OurPlanCoreJobStore.CopyNode(item.FolderPath, job.TakeoffsRoot);
+        string secondCopy = OurPlanCoreJobStore.CopyNode(item.FolderPath, job.TakeoffsRoot);
+        TakeoffItem? copied = OurPlanCoreJobStore.TryReadTakeoffItem(copy);
+        TakeoffItem? secondCopied = OurPlanCoreJobStore.TryReadTakeoffItem(secondCopy);
         string copyGuid = ReadDataGuid(copy);
 
         AssertFalse(string.Equals(item.FolderPath, copy, StringComparison.OrdinalIgnoreCase), "copy should use a new folder");
         AssertFalse(string.Equals(copy, secondCopy, StringComparison.OrdinalIgnoreCase), "second copy should use another hidden folder");
-        AssertEqual("2. 3x6", OurPlaneCoreJobStore.DisplayName(copy), "copy display name should not include Copy");
+        AssertEqual("2. 3x6", OurPlanCoreJobStore.DisplayName(copy), "copy display name should not include Copy");
         AssertEqual("2. 3x6", copied?.Name ?? "", "copied item name should not include Copy");
-        AssertEqual("2. 3x6", OurPlaneCoreJobStore.DisplayName(secondCopy), "second copy display name should not include a number");
+        AssertEqual("2. 3x6", OurPlanCoreJobStore.DisplayName(secondCopy), "second copy display name should not include a number");
         AssertEqual("2. 3x6", secondCopied?.Name ?? "", "second copied item name should not include a number");
         AssertFalse(string.Equals(sourceGuid, copyGuid, StringComparison.OrdinalIgnoreCase), "copied takeoff should get a new hidden guid");
     });
@@ -3289,25 +3292,25 @@ static void TakeoffMoveCollisionKeepsDisplayName()
     WithTempJob("takeoff_move_collision_name", job =>
     {
         string targetFolder = CreateTakeoffFolder(job, "Target");
-        TakeoffItem existing = OurPlaneCoreJobStore.CreateTakeoffItem(job, targetFolder, "Ext Walls", "#FF0000", "line");
-        TakeoffItem moving = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Ext Walls", "#00FF00", "line");
+        TakeoffItem existing = OurPlanCoreJobStore.CreateTakeoffItem(job, targetFolder, "Ext Walls", "#FF0000", "line");
+        TakeoffItem moving = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Ext Walls", "#00FF00", "line");
 
-        string moved = OurPlaneCoreJobStore.MoveNode(moving.FolderPath, targetFolder);
-        TakeoffItem? loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(moved);
+        string moved = OurPlanCoreJobStore.MoveNode(moving.FolderPath, targetFolder);
+        TakeoffItem? loaded = OurPlanCoreJobStore.TryReadTakeoffItem(moved);
 
         AssertFalse(string.Equals(existing.FolderPath, moved, StringComparison.OrdinalIgnoreCase), "move collision should use a unique folder path");
-        AssertFalse(OurPlaneCoreJobStore.DisplayName(moved).Contains("Copy", StringComparison.OrdinalIgnoreCase), "move collision should not add Copy");
-        AssertEqual("Ext Walls", OurPlaneCoreJobStore.DisplayName(moved), "move collision preserves display name");
+        AssertFalse(OurPlanCoreJobStore.DisplayName(moved).Contains("Copy", StringComparison.OrdinalIgnoreCase), "move collision should not add Copy");
+        AssertEqual("Ext Walls", OurPlanCoreJobStore.DisplayName(moved), "move collision preserves display name");
         AssertEqual("Ext Walls", loaded?.Name ?? "", "loaded moved item preserves display name");
     });
 }
 
 static void JobStoreSanitizesUnsafeNames()
 {
-    string clean = OurPlaneCoreJobStore.SanitizeName("  bad:name?.  ", 120);
+    string clean = OurPlanCoreJobStore.SanitizeName("  bad:name?.  ", 120);
     AssertEqual("bad_name_", clean, "sanitized invalid characters");
 
-    string truncated = OurPlaneCoreJobStore.SanitizeName(new string('a', 10), 4);
+    string truncated = OurPlanCoreJobStore.SanitizeName(new string('a', 10), 4);
     AssertEqual("aaaa", truncated, "max length");
 }
 
@@ -3676,7 +3679,7 @@ static void JoistExportUsesVisibleLabelLines()
 {
     WithTempJob("Joist Export", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         item.IsJoistTakeoff = true;
         item.Measurements.Add(new Measurement
         {
@@ -3802,8 +3805,8 @@ static void PlanSwiftTxtExportWritesEveryRootItem()
 {
     WithTempJob("TXT Export", job =>
     {
-        TakeoffItem first = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "First Item", "#FF0000", "line");
-        TakeoffItem second = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Second Item", "#00FF00", "line");
+        TakeoffItem first = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "First Item", "#FF0000", "line");
+        TakeoffItem second = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Second Item", "#00FF00", "line");
 
         first.Measurements.Add(new Measurement
         {
@@ -3837,7 +3840,7 @@ static void PlanSwiftExportHidesGeneratedImportNotes()
 {
     WithTempJob("Import Notes Export", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Imported Area", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Imported Area", "#FF0000", "area");
         item.Notes = "Keep item note\nImported generated PlanSwift Segment geometry from Takeoff\\segments\\Deck";
         item.Measurements.Add(new Measurement
         {
@@ -3871,7 +3874,7 @@ static void PlanSwiftExportHidesPdfImportNotes()
 {
     WithTempJob("PDF Import Notes Export", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "PDF Imported Area", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "PDF Imported Area", "#FF0000", "area");
         item.Notes = "Imported from PDF takeoff annotations: source.pdf\nKeep item note";
         item.Measurements.Add(new Measurement
         {
@@ -3979,9 +3982,9 @@ static void LegacyJoistItemWithoutLabelFlagShowsLabels()
 {
     WithTempJob("Legacy Joist Labels", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         SetDataXmlProperty(item.FolderPath, "JoistEnabled", "True");
-        OurPlaneCoreJobStore.SaveMeasurements(item.FolderPath, new[]
+        OurPlanCoreJobStore.SaveMeasurements(item.FolderPath, new[]
         {
             new Measurement
             {
@@ -3992,7 +3995,7 @@ static void LegacyJoistItemWithoutLabelFlagShowsLabels()
             },
         });
 
-        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+        TakeoffItem loaded = OurPlanCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("legacy joist item not loaded");
 
         AssertFalse(loaded.JoistShowLabels, "legacy joist item labels default hidden");
@@ -4004,10 +4007,10 @@ static void LegacyJoistItemOldFalseLabelFlagMigratesToLabels()
 {
     WithTempJob("Legacy Joist False Labels", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         SetDataXmlProperty(item.FolderPath, "JoistEnabled", "True");
         SetDataXmlProperty(item.FolderPath, "JoistShowLabels", "False");
-        OurPlaneCoreJobStore.SaveMeasurements(item.FolderPath, new[]
+        OurPlanCoreJobStore.SaveMeasurements(item.FolderPath, new[]
         {
             new Measurement
             {
@@ -4018,7 +4021,7 @@ static void LegacyJoistItemOldFalseLabelFlagMigratesToLabels()
             },
         });
 
-        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+        TakeoffItem loaded = OurPlanCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("legacy joist item not loaded");
 
         AssertFalse(loaded.JoistShowLabels, "legacy false joist item labels stay hidden by default");
@@ -4030,11 +4033,11 @@ static void LegacyJoistItemOldExplicitFalseLabelFlagMigratesToLabels()
 {
     WithTempJob("Legacy Joist Explicit False Labels", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         SetDataXmlProperty(item.FolderPath, "JoistEnabled", "True");
         SetDataXmlProperty(item.FolderPath, "JoistShowLabels", "False");
         SetDataXmlProperty(item.FolderPath, "JoistShowLabelsExplicit", "True");
-        OurPlaneCoreJobStore.SaveMeasurements(item.FolderPath, new[]
+        OurPlanCoreJobStore.SaveMeasurements(item.FolderPath, new[]
         {
             new Measurement
             {
@@ -4045,7 +4048,7 @@ static void LegacyJoistItemOldExplicitFalseLabelFlagMigratesToLabels()
             },
         });
 
-        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+        TakeoffItem loaded = OurPlanCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("legacy explicit joist item not loaded");
 
         AssertFalse(loaded.JoistShowLabels, "legacy explicit false joist item labels stay hidden");
@@ -4058,7 +4061,7 @@ static void JoistItemExplicitFalseLabelFlagStaysHidden()
 {
     WithTempJob("Explicit Joist Hidden Labels", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         JoistTakeoffDefaults.ApplyToNewJoistArea(item);
         item.JoistShowLabels = false;
         item.JoistShowLabelsUserSet = true;
@@ -4069,9 +4072,9 @@ static void JoistItemExplicitFalseLabelFlagStaysHidden()
             ScaleMetersPerPt = 0.3048,
             Points = SimpleJoistAreaPolygon().ToList(),
         });
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
 
-        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+        TakeoffItem loaded = OurPlanCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("explicit joist item not loaded");
 
         AssertFalse(loaded.JoistShowLabels, "explicit joist item labels stay hidden");
@@ -4092,7 +4095,7 @@ static void JoistPitchPersistsOnTakeoffItem()
 {
     WithTempJob("Joist Pitch", job =>
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Roof Joists", "#FF0000", "area");
         item.IsJoistTakeoff = true;
         item.JoistPitch = "3/12";
         item.JoistSpacingInches = 120;
@@ -4108,8 +4111,8 @@ static void JoistPitchPersistsOnTakeoffItem()
             Points = SimpleJoistAreaPolygon().ToList(),
         });
 
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
-        TakeoffItem loaded = OurPlaneCoreJobStore.TryReadTakeoffItem(item.FolderPath)
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
+        TakeoffItem loaded = OurPlanCoreJobStore.TryReadTakeoffItem(item.FolderPath)
             ?? throw new InvalidOperationException("takeoff item not loaded");
 
         AssertEqual("3:12", loaded.JoistPitch, "loaded item pitch");
@@ -4140,7 +4143,7 @@ static void JoistPitchAppliesItemProperties()
         Points = SimpleJoistAreaPolygon().ToList(),
     });
 
-    OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+    OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
 
     AssertEqual("4:12", item.Measurements[0].JoistPitch, "measurement pitch copied");
     AssertFalse(item.Measurements[0].JoistDetailedLabels, "measurement label format copied");
@@ -4156,12 +4159,12 @@ static void PageOverlayPersistsThroughSourceRewrites()
         PageInfo overlayPage = CreatePageItem(job, job.PagesRoot, "S102");
         PageInfo replacementOverlayPage = CreatePageItem(job, job.PagesRoot, "S103");
 
-        OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
-        OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2, 3.75);
-        OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
-        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(basePage.FolderPath, ["Walls"]);
-        OurPlaneCoreJobStore.SavePageHiddenMeasurements(basePage.FolderPath, ["m-old-1", "m-old-2"]);
-        PageInfo loaded = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+        OurPlanCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.42);
+        OurPlanCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 12.5, -7.25, 1.2, 3.75);
+        OurPlanCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, false);
+        OurPlanCoreJobStore.SavePageHiddenTakeoffs(basePage.FolderPath, ["Walls"]);
+        OurPlanCoreJobStore.SavePageHiddenMeasurements(basePage.FolderPath, ["m-old-1", "m-old-2"]);
+        PageInfo loaded = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page missing");
         AssertEqual(overlayPage.FolderPath, loaded.OverlayPageFolder, "overlay page path");
         AssertEqual("#1E88E5", loaded.OverlayColor, "overlay color");
@@ -4174,16 +4177,16 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertEqual("Walls", string.Join(",", loaded.HiddenTakeoffs), "hidden takeoffs");
         AssertEqual("m-old-1,m-old-2", string.Join(",", loaded.HiddenMeasurements), "hidden measurements");
 
-        OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 13, -8, 1.25);
-        PageInfo afterLegacyTransform = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+        OurPlanCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 13, -8, 1.25);
+        PageInfo afterLegacyTransform = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after legacy transform missing");
         AssertClose(13, afterLegacyTransform.OverlayOffsetXPt, "overlay x after legacy transform");
         AssertClose(-8, afterLegacyTransform.OverlayOffsetYPt, "overlay y after legacy transform");
         AssertClose(1.25, afterLegacyTransform.OverlayScale, "overlay scale after legacy transform");
         AssertClose(3.75, afterLegacyTransform.OverlayRotationDegrees, "overlay rotation survives legacy transform save");
 
-        OurPlaneCoreJobStore.SavePageScale(basePage.FolderPath, 0.3048);
-        PageInfo afterScale = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+        OurPlanCoreJobStore.SavePageScale(basePage.FolderPath, 0.3048);
+        PageInfo afterScale = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after scale missing");
         AssertEqual(overlayPage.FolderPath, afterScale.OverlayPageFolder, "overlay survives scale save");
         AssertClose(13, afterScale.OverlayOffsetXPt, "overlay x survives scale save");
@@ -4194,8 +4197,8 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertEqual("Walls", string.Join(",", afterScale.HiddenTakeoffs), "hidden takeoffs survive scale save");
         AssertEqual("m-old-1,m-old-2", string.Join(",", afterScale.HiddenMeasurements), "hidden measurements survive scale save");
 
-        OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#43A047", 0.8);
-        PageInfo afterColor = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+        OurPlanCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#43A047", 0.8);
+        PageInfo afterColor = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after overlay color missing");
         AssertEqual(overlayPage.FolderPath, afterColor.OverlayPageFolder, "same overlay survives color save");
         AssertEqual("#43A047", afterColor.OverlayColor, "overlay color changes");
@@ -4204,8 +4207,8 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(1.25, afterColor.OverlayScale, "same overlay scale survives color save");
         AssertClose(3.75, afterColor.OverlayRotationDegrees, "same overlay rotation survives color save");
 
-        OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, replacementOverlayPage.FolderPath, "#E53935", 0.82);
-        PageInfo afterReplacement = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+        OurPlanCoreJobStore.SavePageOverlay(basePage.FolderPath, replacementOverlayPage.FolderPath, "#E53935", 0.82);
+        PageInfo afterReplacement = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after replacement overlay missing");
         AssertEqual(replacementOverlayPage.FolderPath, afterReplacement.OverlayPageFolder, "replacement overlay page path");
         AssertClose(0, afterReplacement.OverlayOffsetXPt, "replacement overlay x resets");
@@ -4213,8 +4216,8 @@ static void PageOverlayPersistsThroughSourceRewrites()
         AssertClose(1, afterReplacement.OverlayScale, "replacement overlay scale resets");
         AssertClose(0, afterReplacement.OverlayRotationDegrees, "replacement overlay rotation resets");
 
-        OurPlaneCoreJobStore.ClearPageOverlay(basePage.FolderPath);
-        PageInfo cleared = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+        OurPlanCoreJobStore.ClearPageOverlay(basePage.FolderPath);
+        PageInfo cleared = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
             ?? throw new InvalidOperationException("base page after clear missing");
         AssertEqual("", cleared.OverlayPageFolder, "overlay clears");
         AssertFalse(cleared.OverlayVisible, "overlay clear hides overlay");
@@ -4296,17 +4299,17 @@ static void JobRecoverySnapshotCopiesMetadataOnly()
 {
     WithTempJob("Recovery Snapshot", job =>
     {
-        string page = OurPlaneCoreJobStore.EnsureFolder(job.PagesRoot, "A100");
+        string page = OurPlanCoreJobStore.EnsureFolder(job.PagesRoot, "A100");
         File.WriteAllText(Path.Combine(page, "source.json"), "{}");
         File.WriteAllText(Path.Combine(page, "sheet.pdf"), "not a real pdf");
 
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, "Walls", "#FF0000", "line");
         item.Measurements.Add(new Measurement
         {
             MType = "line",
             Points = [new SKPoint(0, 0), new SKPoint(1, 1)],
         });
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
 
         string snapshot = JobRecoveryService.SaveSnapshot(job, "manual save", maxSnapshots: 5);
         AssertTrue(File.Exists(Path.Combine(snapshot, "snapshot_manifest.json")), "manifest copied");
@@ -4332,7 +4335,7 @@ static void JobRecoverySnapshotPruningKeepsNewest()
 static void AppSettingsJobRootsDedupe()
 {
     var settings = new AppSettings();
-    string root = Path.Combine(Path.GetTempPath(), "opc_jobs");
+    string root = Path.Combine(Path.GetTempPath(), "onc_jobs");
     AppSettingsStore.AddJobsRoot(settings, root);
     AppSettingsStore.AddJobsRoot(settings, root + Path.DirectorySeparatorChar);
 
@@ -4342,8 +4345,8 @@ static void AppSettingsJobRootsDedupe()
 static void AppSettingsRemovesJobRootByPath()
 {
     var settings = new AppSettings();
-    string root1 = Path.Combine(Path.GetTempPath(), "opc_jobs_remove_1");
-    string root2 = Path.Combine(Path.GetTempPath(), "opc_jobs_remove_2");
+    string root1 = Path.Combine(Path.GetTempPath(), "onc_jobs_remove_1");
+    string root2 = Path.Combine(Path.GetTempPath(), "onc_jobs_remove_2");
     AppSettingsStore.AddJobsRoot(settings, root1);
     AppSettingsStore.AddJobsRoot(settings, root2);
 
@@ -4360,7 +4363,7 @@ static void AppSettingsRemovesJobRootByPath()
 
 static void PdfImportSourceFinderFindsNestedPdfFiles()
 {
-    string root = Path.Combine(Path.GetTempPath(), "opc_pdf_recursive", Guid.NewGuid().ToString("N"));
+    string root = Path.Combine(Path.GetTempPath(), "onc_pdf_recursive", Guid.NewGuid().ToString("N"));
     string nested = Path.Combine(root, "Nested");
     Directory.CreateDirectory(nested);
     try
@@ -4386,7 +4389,7 @@ static void PdfImportSourceFinderFindsNestedPdfFiles()
 
 static void JobPickerRootsClassifyLocalCloudNetwork()
 {
-    string localRoot = Path.Combine(Path.GetTempPath(), "opc_local_jobs", Guid.NewGuid().ToString("N"));
+    string localRoot = Path.Combine(Path.GetTempPath(), "onc_local_jobs", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(localRoot);
     try
     {
@@ -4397,7 +4400,7 @@ static void JobPickerRootsClassifyLocalCloudNetwork()
 
         AssertEqual(
             JobRootLocationKind.Cloud.ToString(),
-            JobRootSelectorBar.ClassifyJobRootPath(@"C:\Users\User\OneDrive\OurPlaneCore Jobs").ToString(),
+            JobRootSelectorBar.ClassifyJobRootPath(@"C:\Users\User\OneDrive\OurPlanCore Jobs").ToString(),
             "OneDrive root kind");
         AssertEqual(
             JobRootLocationKind.Cloud.ToString(),
@@ -4421,7 +4424,7 @@ static void JobPickerRootsClassifyLocalCloudNetwork()
 static void AppSettingsPathCanUseEnvOverride()
 {
     string? previous = Environment.GetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable);
-    string overridePath = Path.Combine(Path.GetTempPath(), "opc_settings_override", Guid.NewGuid().ToString("N"), "settings.json");
+    string overridePath = Path.Combine(Path.GetTempPath(), "onc_settings_override", Guid.NewGuid().ToString("N"), "settings.json");
     try
     {
         Environment.SetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable, overridePath);
@@ -4436,7 +4439,7 @@ static void AppSettingsPathCanUseEnvOverride()
 static void AppSettingsCountSymbolPersists()
 {
     string? previous = Environment.GetEnvironmentVariable(AppSettingsStore.SettingsPathEnvironmentVariable);
-    string dir = Path.Combine(Path.GetTempPath(), "opc_settings_count_symbol", Guid.NewGuid().ToString("N"));
+    string dir = Path.Combine(Path.GetTempPath(), "onc_settings_count_symbol", Guid.NewGuid().ToString("N"));
     string overridePath = Path.Combine(dir, "settings.json");
     try
     {
@@ -4482,7 +4485,7 @@ static void AppSettingsPdfImportRasterDefaultMigrates()
 
 static void AtomicWriteIgnoresStaleFixedTempPath()
 {
-    string dir = Path.Combine(Path.GetTempPath(), "opc_atomic_write", Guid.NewGuid().ToString("N"));
+    string dir = Path.Combine(Path.GetTempPath(), "onc_atomic_write", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(dir);
     string path = Path.Combine(dir, "global_ai_index.jsonl");
     string staleFixedTempPath = path + ".tmp";
@@ -4505,7 +4508,7 @@ static void AtomicWriteIgnoresStaleFixedTempPath()
 static void AppSettingsRecentPreservesPinAndThumbnail()
 {
     var settings = new AppSettings();
-    string path = Path.Combine(Path.GetTempPath(), "opc_job");
+    string path = Path.Combine(Path.GetTempPath(), "onc_job");
     settings.RecentJobs.Add(new RecentJobInfo
     {
         Name = "Old",
@@ -4525,7 +4528,7 @@ static void AppSettingsRecentPreservesPinAndThumbnail()
 static void AppSettingsRemovesRecentJobByPath()
 {
     var settings = new AppSettings();
-    string path = Path.Combine(Path.GetTempPath(), "opc_job_remove");
+    string path = Path.Combine(Path.GetTempPath(), "onc_job_remove");
     AppSettingsStore.AddRecentJob(settings, path, "Remove Me");
     AppSettingsStore.RemoveRecentJob(settings, path + Path.DirectorySeparatorChar);
 
@@ -4617,7 +4620,7 @@ static void PdfMetadataSkipScaleAvoidsFallback()
 static void PdfPreviewRenderCacheRoundTrips()
 {
     string oldRoot = Environment.GetEnvironmentVariable(PdfPreviewRenderCache.CacheRootEnvironmentVariable) ?? "";
-    string root = Path.Combine(Path.GetTempPath(), "opc_preview_cache_tests", Guid.NewGuid().ToString("N"));
+    string root = Path.Combine(Path.GetTempPath(), "onc_preview_cache_tests", Guid.NewGuid().ToString("N"));
     string pdf = Path.Combine(root, "source.pdf");
     try
     {
@@ -4736,7 +4739,7 @@ static void PdfPreviewRenderCacheRoundTrips()
 static void DetailTileDiskCacheRoundTrips()
 {
     string oldRoot = Environment.GetEnvironmentVariable(DetailTileDiskCache.CacheRootEnvironmentVariable) ?? "";
-    string root = Path.Combine(Path.GetTempPath(), "opc_detail_tile_cache_tests", Guid.NewGuid().ToString("N"));
+    string root = Path.Combine(Path.GetTempPath(), "onc_detail_tile_cache_tests", Guid.NewGuid().ToString("N"));
     string pdf = Path.Combine(root, "source.pdf");
     try
     {
@@ -4808,7 +4811,7 @@ static void DetailTileDiskCacheRoundTrips()
 static void SheetOverlayRenderCacheRoundTrips()
 {
     string oldRoot = Environment.GetEnvironmentVariable(SheetOverlayRenderCache.CacheRootEnvironmentVariable) ?? "";
-    string root = Path.Combine(Path.GetTempPath(), "opc_sheet_overlay_cache_tests", Guid.NewGuid().ToString("N"));
+    string root = Path.Combine(Path.GetTempPath(), "onc_sheet_overlay_cache_tests", Guid.NewGuid().ToString("N"));
     string pdf = Path.Combine(root, "overlay.pdf");
     try
     {
@@ -5628,7 +5631,7 @@ static void ViewportPastedBatchUndoRemovesManyMeasurementsInOneCallback()
     {
         const int existingCount = 40;
         const int pastedCount = 500;
-        string pageFolder = Path.Combine(Path.GetTempPath(), "opc_batch_undo_page");
+        string pageFolder = Path.Combine(Path.GetTempPath(), "onc_batch_undo_page");
         var existing = Enumerable.Range(0, existingCount)
             .Select(index => BatchUndoLineMeasurement(index, pageFolder, @"Takeoffs\Existing"))
             .ToList();
@@ -6086,14 +6089,14 @@ static void AssertSectionOrder(string expected, IReadOnlyList<Measurement> measu
     AssertEqual(expected, string.Join(",", measurements.Select(measurement => measurement.Id)), message);
 
 static TakeoffItem CreateMeasuredTakeoffItem(
-    OurPlaneCoreJob job,
+    OurPlanCoreJob job,
     string parentFolder,
     string name,
     string measurementType,
     string pageFolder,
     IReadOnlyList<SKPoint> points)
 {
-    TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", measurementType);
+    TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", measurementType);
     item.Measurements.Add(new Measurement
     {
         Id = Guid.NewGuid().ToString("N"),
@@ -6105,12 +6108,12 @@ static TakeoffItem CreateMeasuredTakeoffItem(
         ScaleMetersPerPt = 0.3048,
         Points = points.ToList(),
     });
-    OurPlaneCoreJobStore.SaveTakeoffItem(item);
+    OurPlanCoreJobStore.SaveTakeoffItem(item);
     return item;
 }
 
 static SmartMassingTakeoffAiAssignment AiAssignment(
-    OurPlaneCoreJob job,
+    OurPlanCoreJob job,
     TakeoffItem item,
     string role,
     int level) =>
@@ -6177,25 +6180,25 @@ static ThreeDFloorSlab RoofSlab(string label, double x, double z, double width, 
         ],
     };
 
-static TakeoffItem CreateRootTakeoffItem(OurPlaneCoreJob job, string name) =>
-    OurPlaneCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, name, "#FF4444", "line");
+static TakeoffItem CreateRootTakeoffItem(OurPlanCoreJob job, string name) =>
+    OurPlanCoreJobStore.CreateTakeoffItem(job, job.TakeoffsRoot, name, "#FF4444", "line");
 
-static TakeoffItem CreateNestedTakeoffItem(OurPlaneCoreJob job, string parentFolder, string name) =>
-    OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", "line");
+static TakeoffItem CreateNestedTakeoffItem(OurPlanCoreJob job, string parentFolder, string name) =>
+    OurPlanCoreJobStore.CreateTakeoffItem(job, parentFolder, name, "#FF4444", "line");
 
-static string CreateTakeoffFolder(OurPlaneCoreJob job, string name) =>
-    OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, name);
+static string CreateTakeoffFolder(OurPlanCoreJob job, string name) =>
+    OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, name);
 
-static List<TakeoffItem> CreateTakeoffItems(OurPlaneCoreJob job, params string[] names) =>
+static List<TakeoffItem> CreateTakeoffItems(OurPlanCoreJob job, params string[] names) =>
     names.Select(name => CreateRootTakeoffItem(job, name)).ToList();
 
-static PageInfo CreatePageItem(OurPlaneCoreJob job, string parentFolder, string name)
+static PageInfo CreatePageItem(OurPlanCoreJob job, string parentFolder, string name)
 {
     string sourcePdf = Path.Combine(job.RootPath, "source.pdf");
     if (!File.Exists(sourcePdf))
         File.WriteAllText(sourcePdf, "%PDF-1.4 test");
 
-    return OurPlaneCoreJobStore.CreatePageFromPdf(job, sourcePdf, name, parentFolder);
+    return OurPlanCoreJobStore.CreatePageFromPdf(job, sourcePdf, name, parentFolder);
 }
 
 static void WithTempRasterBackedPage(
@@ -6212,16 +6215,16 @@ static void WithTempRasterBackedPage(
     if (!File.Exists(pdfPath))
         throw new FileNotFoundException("Raster-backed viewport test PDF is missing.", pdfPath);
 
-    string tempRoot = Path.Combine(Path.GetTempPath(), "opc_viewport_raster_tests", Guid.NewGuid().ToString("N"));
+    string tempRoot = Path.Combine(Path.GetTempPath(), "onc_viewport_raster_tests", Guid.NewGuid().ToString("N"));
     try
     {
-        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(tempRoot, name);
-        string importFolder = OurPlaneCoreJobStore.DefaultImportFolder(job);
-        PageInfo page = OurPlaneCoreJobStore.ImportPdf(job, pdfPath, [$"{name}_sheet"], importFolder).Single();
+        OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(tempRoot, name);
+        string importFolder = OurPlanCoreJobStore.DefaultImportFolder(job);
+        PageInfo page = OurPlanCoreJobStore.ImportPdf(job, pdfPath, [$"{name}_sheet"], importFolder).Single();
         RasterSheetBuildResult build = RasterSheetCacheService.BuildAndEnable(page, renderScale);
         AssertTrue(build.Ok, build.Error);
 
-        PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+        PageInfo refreshed = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
             ?? throw new InvalidOperationException("Raster-backed viewport test page was not readable after build.");
         AssertTrue(
             refreshed.RasterSheet is { Enabled: true },
@@ -6241,7 +6244,7 @@ static PageInfo EnableRasterFirst(PageInfo page)
         error);
     AssertTrue(changed, "Raster First should change the persisted raster sheet metadata");
 
-    PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath)
+    PageInfo refreshed = OurPlanCoreJobStore.TryReadPage(page.FolderPath)
         ?? throw new InvalidOperationException("Raster-backed viewport test page was not readable after Raster First toggle.");
     AssertTrue(
         RasterSheetCacheService.UseAsPageOpenRaster(refreshed.RasterSheet),
@@ -6254,7 +6257,7 @@ static string FindRepoRoot()
     string dir = Directory.GetCurrentDirectory();
     while (!string.IsNullOrWhiteSpace(dir))
     {
-        if (File.Exists(Path.Combine(dir, "ourplanecore.csproj")))
+        if (File.Exists(Path.Combine(dir, "ourplancore.csproj")))
             return dir;
 
         string? parent = Directory.GetParent(dir)?.FullName;
@@ -6263,7 +6266,7 @@ static string FindRepoRoot()
         dir = parent ?? "";
     }
 
-    throw new DirectoryNotFoundException("Could not locate ourplanecore repo root.");
+    throw new DirectoryNotFoundException("Could not locate ourplancore repo root.");
 }
 
 static void AssertTakeoffChildOrder(string parentFolder, string expected, string message)
@@ -6273,15 +6276,15 @@ static void AssertTakeoffChildOrder(string parentFolder, string expected, string
 }
 
 static IReadOnlyList<string> TakeoffChildNames(string parentFolder) =>
-    OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
-        .Select(OurPlaneCoreJobStore.DisplayName)
+    OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder)
+        .Select(OurPlanCoreJobStore.DisplayName)
         .ToList();
 
 static void AssertPageChildOrder(string parentFolder, string expected, string message)
 {
     string actual = string.Join(",",
-        OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder)
-            .Select(OurPlaneCoreJobStore.DisplayName));
+        OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder)
+            .Select(OurPlanCoreJobStore.DisplayName));
     AssertEqual(expected, actual, message);
 }
 
@@ -6352,16 +6355,16 @@ static IReadOnlyList<SKPoint> SimpleJoistAreaPolygon() =>
     new SKPoint(0, 10),
 ];
 
-static void WithTempJob(string name, Action<OurPlaneCoreJob> action)
+static void WithTempJob(string name, Action<OurPlanCoreJob> action)
 {
-    string root = Path.Combine(Path.GetTempPath(), "opc_tests", Guid.NewGuid().ToString("N"));
+    string root = Path.Combine(Path.GetTempPath(), "onc_tests", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(root);
     try
     {
         File.WriteAllText(Path.Combine(root, "Data.xml"), $"<Item Class=\"Folder\" Name=\"{name}\" />");
-        OurPlaneCoreJobStore.EnsureFolder(root, "Pages");
-        OurPlaneCoreJobStore.EnsureFolder(root, "Takeoffs");
-        var job = new OurPlaneCoreJob
+        OurPlanCoreJobStore.EnsureFolder(root, "Pages");
+        OurPlanCoreJobStore.EnsureFolder(root, "Takeoffs");
+        var job = new OurPlanCoreJob
         {
             Name = name,
             RootPath = root,

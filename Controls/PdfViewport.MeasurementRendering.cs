@@ -9,12 +9,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -202,7 +202,7 @@ public sealed partial class PdfViewport
     }
 
     private static int DefaultMeasurementLayerRank(Measurement measurement) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) switch
         {
             "area" => 0,
             "line" => 1,

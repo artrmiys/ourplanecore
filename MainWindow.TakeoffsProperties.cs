@@ -8,7 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -60,18 +60,18 @@ public partial class MainWindow
                 !string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
             {
                 string oldPath = item.FolderPath;
-                string newPath = OurPlaneCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, name);
+                string newPath = OurPlanCoreJobStore.RenameNodeAllowDuplicateName(item.FolderPath, name);
                 UnregisterTakeoffTreeItemPath(oldPath, tvi);
                 item.FolderPath = newPath;
                 RebasePageLegendTakeoffOrderReferences(oldPath, item.FolderPath);
-                item.Name = OurPlaneCoreJobStore.DisplayName(item.FolderPath);
+                item.Name = OurPlanCoreJobStore.DisplayName(item.FolderPath);
                 foreach (var measurement in item.Measurements)
                     measurement.TakeoffFolder = item.FolderPath;
                 RegisterTakeoffTreeItemSubtree(tvi);
             }
             else
             {
-                item.Name = OurPlaneCoreJobStore.NormalizeDisplayName(name, 120);
+                item.Name = OurPlanCoreJobStore.NormalizeDisplayName(name, 120);
             }
 
             item.Color = color;
@@ -103,7 +103,7 @@ public partial class MainWindow
                 item.JoistDetailedLabels != joistEdit.DetailedLabels;
             bool wasJoistArea = item.IsJoistArea;
             bool joistShowLabelsChangedByDialog = item.JoistShowLabels != joistEdit.ShowLabels;
-            item.IsJoistTakeoff = joistEdit.Enabled && OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+            item.IsJoistTakeoff = joistEdit.Enabled && OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
             item.JoistType = joistEdit.JoistType.Trim();
             item.JoistSpacingInches = joistEdit.SpacingInches > 0 ? joistEdit.SpacingInches : 16;
             item.JoistDirectionDegrees = joistEdit.DirectionDegrees;
@@ -115,7 +115,7 @@ public partial class MainWindow
             if (item.IsJoistArea && joistShowLabelsChangedByDialog)
                 item.JoistShowLabelsUserSet = true;
             item.JoistDetailedLabels = joistEdit.DetailedLabels;
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             if (colorChanged)
             {
                 foreach (Measurement measurement in item.Measurements)
@@ -161,7 +161,7 @@ public partial class MainWindow
         unitPrice = item.UnitPrice;
         notes = item.Notes;
         countSymbol = CountDisplaySymbol.Normalize(item.CountSymbol);
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         bool isAreaTakeoff = measurementType == "area";
         bool isLineTakeoff = measurementType == "line";
         bool isPointTakeoff = measurementType == "point";

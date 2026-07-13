@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -125,8 +125,8 @@ public partial class MainWindow
         }
 
         ApplyViewportPageTakeoffVisibility(page);
-        OurPlaneCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, takeoffs);
-        OurPlaneCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, measurements);
+        OurPlanCoreJobStore.SavePageHiddenTakeoffs(page.FolderPath, takeoffs);
+        OurPlanCoreJobStore.SavePageHiddenMeasurements(page.FolderPath, measurements);
         RefreshPageTakeoffIndicatorsForFolder(page.FolderPath);
         RefreshSheetLegend();
         RefreshDetachedSheetDisplaySettings();

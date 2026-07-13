@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -134,7 +134,7 @@ public partial class MainWindow
             () => EditSectionProperties(item, measurement)));
         AddViewportCountDisplayMenuItem(menu, request);
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
         {
             menu.Items.Add(MakeMenuItem(
                 "Trace Walls Inside Area...",
@@ -154,7 +154,7 @@ public partial class MainWindow
                 () => SetJoistDirectionForAllAreas(item, measurement)));
         }
         if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line")
+            OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line")
         {
             IReadOnlyList<Measurement> selectedLineSources = _viewport.GetSelectedMeasurements()
                 .Where(IsPointAlongLineSource)
@@ -206,7 +206,7 @@ public partial class MainWindow
     {
         PageAnnotation annotation = request.Annotation!;
         string title = MarkupTitle(annotation);
-        if (OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) == "note")
+        if (OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind) == "note")
         {
             menu.Items.Add(MakeMenuItem(
                 "Edit Note...",
@@ -236,7 +236,7 @@ public partial class MainWindow
 
     private static string MarkupTitle(PageAnnotation annotation)
     {
-        string kind = OurPlaneCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
+        string kind = OurPlanCoreJobStore.NormalizePageAnnotationKind(annotation.Kind);
         return kind switch
         {
             "note" => "Note Markup",

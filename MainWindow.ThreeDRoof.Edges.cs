@@ -2,10 +2,10 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -355,7 +355,7 @@ public partial class MainWindow
 
         try
         {
-            return OurPlaneCoreJobStore.DisplayName(item.FolderPath);
+            return OurPlanCoreJobStore.DisplayName(item.FolderPath);
         }
         catch
         {
@@ -364,7 +364,7 @@ public partial class MainWindow
     }
 
     private static bool IsUsableRoofLineMeasurement(Measurement measurement) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
         measurement.Points.Count >= 2;
 
     private static bool IsEaveNamedSource(string? value)

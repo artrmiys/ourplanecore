@@ -2,7 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -16,8 +16,8 @@ public partial class MainWindow
         var menu = new ContextMenu();
         int selectedCount = TakeoffSelectionCount(tvi);
         bool singleSelection = selectedCount <= 1;
-        bool isArea = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
-        bool isLine = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line";
+        bool isArea = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area";
+        bool isLine = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "line";
         int selectedItemsCount = TakeoffItemsForSelection(tvi).Count;
         string parentFolder = Path.GetDirectoryName(item.FolderPath) ?? "";
 

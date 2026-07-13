@@ -1,73 +1,73 @@
 using System.IO;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class JobLayout
 {
-    public static OurPlaneCoreJob CreateJob(string parentDir, string jobName)
+    public static OurPlanCoreJob CreateJob(string parentDir, string jobName)
     {
-        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(jobName, 120);
-        string root = Path.Combine(parentDir, OurPlaneCoreJobStore.SanitizeName(displayName, 120));
+        string displayName = OurPlanCoreJobStore.NormalizeDisplayName(jobName, 120);
+        string root = Path.Combine(parentDir, OurPlanCoreJobStore.SanitizeName(displayName, 120));
         Directory.CreateDirectory(root);
-        OurPlaneCoreJobStore.WriteItemDataXml(root, "Folder", displayName, 0);
+        OurPlanCoreJobStore.WriteItemDataXml(root, "Folder", displayName, 0);
 
         EnsureBaseFolders(root, displayName);
         return LoadJob(root);
     }
 
-    public static OurPlaneCoreJob LoadJob(string rootPath)
+    public static OurPlanCoreJob LoadJob(string rootPath)
     {
         if (!Directory.Exists(rootPath))
             throw new DirectoryNotFoundException(rootPath);
 
         // Drop any cached Data.xml from a previously-open job so stale paths
         // don't accumulate (and a job folder changed on disk re-reads cleanly).
-        OurPlaneCoreJobStore.ClearMetadataCache();
+        OurPlanCoreJobStore.ClearMetadataCache();
 
         if (!File.Exists(Path.Combine(rootPath, "Data.xml")))
-            OurPlaneCoreJobStore.WriteItemDataXml(rootPath, "Folder", Path.GetFileName(rootPath), 0);
+            OurPlanCoreJobStore.WriteItemDataXml(rootPath, "Folder", Path.GetFileName(rootPath), 0);
 
-        string name = OurPlaneCoreJobStore.ReadName(rootPath) ?? Path.GetFileName(rootPath);
-        var job = new OurPlaneCoreJob { Name = name, RootPath = rootPath };
+        string name = OurPlanCoreJobStore.ReadName(rootPath) ?? Path.GetFileName(rootPath);
+        var job = new OurPlanCoreJob { Name = name, RootPath = rootPath };
         EnsureBaseFolders(rootPath, name);
         return job;
     }
 
     public static string EnsureFolder(string parentFolder, string name)
     {
-        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(name, 120);
-        string path = Path.Combine(parentFolder, OurPlaneCoreJobStore.SanitizeName(displayName, 120));
+        string displayName = OurPlanCoreJobStore.NormalizeDisplayName(name, 120);
+        string path = Path.Combine(parentFolder, OurPlanCoreJobStore.SanitizeName(displayName, 120));
         Directory.CreateDirectory(path);
         string dataXml = Path.Combine(path, "Data.xml");
         if (!File.Exists(dataXml))
-            OurPlaneCoreJobStore.WriteItemDataXml(path, "Folder", displayName, OurPlaneCoreJobStore.GetNextOrderIndex(parentFolder));
+            OurPlanCoreJobStore.WriteItemDataXml(path, "Folder", displayName, OurPlanCoreJobStore.GetNextOrderIndex(parentFolder));
         return path;
     }
 
     public static string CreateFolder(string parentFolder, string name)
     {
-        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(name, 120);
-        string folderName = OurPlaneCoreJobStore.SanitizeName(displayName, 120);
+        string displayName = OurPlanCoreJobStore.NormalizeDisplayName(name, 120);
+        string folderName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
         string path = Path.Combine(parentFolder, folderName);
         if (Directory.Exists(path))
             throw new IOException($"'{displayName}' already exists in this folder.");
 
         Directory.CreateDirectory(path);
-        OurPlaneCoreJobStore.WriteItemDataXml(path, "Folder", displayName, OurPlaneCoreJobStore.GetNextOrderIndex(parentFolder));
+        OurPlanCoreJobStore.WriteItemDataXml(path, "Folder", displayName, OurPlanCoreJobStore.GetNextOrderIndex(parentFolder));
         return path;
     }
 
     public static string CreateFolderAllowDuplicateName(string parentFolder, string name)
     {
-        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(name, 120);
-        string folderName = OurPlaneCoreJobStore.SanitizeName(displayName, 120);
-        string path = OurPlaneCoreJobStore.UniqueDirectoryPath(Path.Combine(parentFolder, folderName));
+        string displayName = OurPlanCoreJobStore.NormalizeDisplayName(name, 120);
+        string folderName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
+        string path = OurPlanCoreJobStore.UniqueDirectoryPath(Path.Combine(parentFolder, folderName));
         Directory.CreateDirectory(path);
-        OurPlaneCoreJobStore.WriteItemDataXml(path, "Folder", displayName, OurPlaneCoreJobStore.GetNextOrderIndex(parentFolder));
+        OurPlanCoreJobStore.WriteItemDataXml(path, "Folder", displayName, OurPlanCoreJobStore.GetNextOrderIndex(parentFolder));
         return path;
     }
 
-    public static string DefaultImportFolder(OurPlaneCoreJob job)
+    public static string DefaultImportFolder(OurPlanCoreJob job)
     {
         return EnsureFolder(job.PagesRoot, "00. imported");
     }

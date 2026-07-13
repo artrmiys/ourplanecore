@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed class PdfTakeoffImportDialog : Window
 {
@@ -92,8 +92,8 @@ public sealed class PdfTakeoffImportDialog : Window
             form,
             "New job parent folder",
             defaultJobsRoot,
-            "Select where the new OurPlaneCore job folder will be created.",
-            "Select OurPlaneCore jobs root folder");
+            "Select where the new OurPlanCore job folder will be created.",
+            "Select OurPlanCore jobs root folder");
 
         form.Children.Add(new TextBlock { Text = "New job name", Margin = new Thickness(0, 7, 0, 3) });
         _jobNameBox = new TextBox
@@ -129,7 +129,7 @@ public sealed class PdfTakeoffImportDialog : Window
 
         var hint = new TextBlock
         {
-            Text = "The source PDFs remain unchanged. When cleanup is enabled, OurPlaneCore imports a clean copy so dimensions and takeoff lines appear only as editable app objects.",
+            Text = "The source PDFs remain unchanged. When cleanup is enabled, OurPlanCore imports a clean copy so dimensions and takeoff lines appear only as editable app objects.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 10, 0, 0),
         };

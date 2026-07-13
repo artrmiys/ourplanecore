@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class AppSettings
 {
@@ -115,7 +115,8 @@ public sealed class OpenAiModelStatus
 
 public static class AppSettingsStore
 {
-    public const string SettingsPathEnvironmentVariable = "OURPLANECORE_SETTINGS_PATH";
+    public const string SettingsPathEnvironmentVariable = AppIdentity.EnvironmentPrefix + "_SETTINGS_PATH";
+    public const string OpenAiModelEnvironmentVariable = AppIdentity.EnvironmentPrefix + "_OPENAI_MODEL";
     public const double PdfExportScaleMax = 10.0;
     public const double ViewportPdfSnapBridgeToleranceDefaultPx = 36.0;
     public const double ViewportPdfSnapBridgeToleranceMinPx = 4.0;
@@ -151,23 +152,64 @@ public static class AppSettingsStore
     {
         get
         {
-            string? overridePath = Environment.GetEnvironmentVariable(SettingsPathEnvironmentVariable);
+            string? overridePath = AppIdentity.GetEnvironmentVariable("SETTINGS_PATH");
             if (!string.IsNullOrWhiteSpace(overridePath))
                 return Path.GetFullPath(overridePath.Trim());
 
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            return Path.Combine(appData, "OurPlaneCore", "settings.json");
+            return Path.Combine(AppIdentity.RoamingRoot, "settings.json");
         }
     }
 
     public static AppSettings Load()
     {
+        string settingsPath = SettingsPath;
+        if (TryLoad(settingsPath, out AppSettings settings))
+            return settings;
+
+        string currentDefaultPath = Path.Combine(AppIdentity.RoamingRoot, "settings.json");
+        if (PathsEqual(settingsPath, currentDefaultPath) && !File.Exists(settingsPath))
+        {
+            string legacyPath = Path.Combine(AppIdentity.LegacyRoamingRoot, "settings.json");
+            if (TryLoad(legacyPath, out settings))
+            {
+                AppLog.Info($"Loaded legacy app settings fallback from {legacyPath}.");
+                return settings;
+            }
+        }
+
+        return new AppSettings();
+    }
+
+    public static void Save(AppSettings settings)
+    {
+        string settingsPath = SettingsPath;
+        if (AppDataMigration.ShouldProtectLegacySettingsSave(settingsPath))
+        {
+            AppLog.Warn($"Skipped settings save because legacy settings migration is still pending: {settingsPath}");
+            return;
+        }
+
+        NormalizeJobsRoots(settings);
+        NormalizeOutputSettings(settings);
+        NormalizeTakeoffDefaults(settings);
+        NormalizeSimilarCountSettings(settings);
+        NormalizePdfImportRasterSettings(settings);
+        string? dir = Path.GetDirectoryName(settingsPath);
+        if (!string.IsNullOrWhiteSpace(dir))
+            Directory.CreateDirectory(dir);
+
+        IoUtil.WriteAllTextAtomic(settingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    private static bool TryLoad(string path, out AppSettings settings)
+    {
+        settings = new AppSettings();
+        if (!File.Exists(path))
+            return false;
+
         try
         {
-            if (!File.Exists(SettingsPath))
-                return new AppSettings();
-
-            var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
+            settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path))
                 ?? new AppSettings();
             NormalizeJobsRoots(settings);
             NormalizeRecentJobs(settings);
@@ -175,27 +217,29 @@ public static class AppSettingsStore
             NormalizeTakeoffDefaults(settings);
             NormalizeSimilarCountSettings(settings);
             NormalizePdfImportRasterSettings(settings);
-            return settings;
+            return true;
         }
         catch (Exception ex)
         {
-            AppLog.Warn(ex, $"Load app settings failed for {SettingsPath}");
-            return new AppSettings();
+            AppLog.Warn(ex, $"Load app settings failed for {path}");
+            settings = new AppSettings();
+            return false;
         }
     }
 
-    public static void Save(AppSettings settings)
+    private static bool PathsEqual(string left, string right)
     {
-        NormalizeJobsRoots(settings);
-        NormalizeOutputSettings(settings);
-        NormalizeTakeoffDefaults(settings);
-        NormalizeSimilarCountSettings(settings);
-        NormalizePdfImportRasterSettings(settings);
-        string? dir = Path.GetDirectoryName(SettingsPath);
-        if (!string.IsNullOrWhiteSpace(dir))
-            Directory.CreateDirectory(dir);
-
-        IoUtil.WriteAllTextAtomic(SettingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left),
+                Path.GetFullPath(right),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static IReadOnlyList<string> CurrentJobsRootPaths(AppSettings settings)
@@ -652,13 +696,13 @@ public static class AppSettingsStore
 
     public static OpenAiModelStatus GetOpenAiModelStatus(AppSettings settings)
     {
-        string? envModel = Environment.GetEnvironmentVariable("OURPLANECORE_OPENAI_MODEL", EnvironmentVariableTarget.Process);
+        string? envModel = AppIdentity.GetEnvironmentVariable("OPENAI_MODEL", EnvironmentVariableTarget.Process);
         if (!string.IsNullOrWhiteSpace(envModel))
         {
             return new OpenAiModelStatus
             {
                 Model = NormalizeOpenAiModel(envModel),
-                Source = "OURPLANECORE_OPENAI_MODEL process environment",
+                Source = $"{OpenAiModelEnvironmentVariable} process environment",
             };
         }
 

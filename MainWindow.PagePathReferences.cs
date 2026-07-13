@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -13,7 +13,7 @@ public partial class MainWindow
         for (int i = _pageTabs.Count - 1; i >= 0; i--)
         {
             PageTabState tab = _pageTabs[i];
-            if (!OurPlaneCoreJobStore.IsSameOrDescendant(affectedPath, tab.PageFolder))
+            if (!OurPlanCoreJobStore.IsSameOrDescendant(affectedPath, tab.PageFolder))
                 continue;
 
             if (ReferenceEquals(tab, _activePageTab))
@@ -42,7 +42,7 @@ public partial class MainWindow
             RebaseExpandedTreePaths(_expandedPageTreePaths, move.OldPath, move.NewPath);
 
         bool activeAffected = _currentPage != null &&
-                              normalizedMoves.Any(move => OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, _currentPage.FolderPath));
+                              normalizedMoves.Any(move => OurPlanCoreJobStore.IsSameOrDescendant(move.OldPath, _currentPage.FolderPath));
         bool tabsChanged = false;
         bool measurementsChanged = RebaseMeasurementPageFolderReferences(normalizedMoves);
         bool overlaysChanged = RebasePageOverlayReferences(normalizedMoves);
@@ -53,7 +53,7 @@ public partial class MainWindow
                 continue;
 
             tab.PageFolder = rebasedTabFolder;
-            if (OurPlaneCoreJobStore.TryReadPage(tab.PageFolder) is { } page)
+            if (OurPlanCoreJobStore.TryReadPage(tab.PageFolder) is { } page)
                 tab.PageName = page.Name;
             tabsChanged = true;
         }
@@ -94,7 +94,7 @@ public partial class MainWindow
         if (_currentJob == null || moves.Count == 0)
             return false;
 
-        int changed = OurPlaneCoreJobStore.RebasePageOverlayReferences(_currentJob.PagesRoot, moves);
+        int changed = OurPlanCoreJobStore.RebasePageOverlayReferences(_currentJob.PagesRoot, moves);
         if (changed > 0)
             AppLog.Info($"Rebased {changed} sheet overlay page reference(s) after page path change.");
         return changed > 0;
@@ -103,7 +103,7 @@ public partial class MainWindow
     private void RefreshCurrentPageOverlayAfterPathRebase()
     {
         if (_currentPage == null ||
-            OurPlaneCoreJobStore.TryReadPage(_currentPage.FolderPath) is not { } refreshedPage)
+            OurPlanCoreJobStore.TryReadPage(_currentPage.FolderPath) is not { } refreshedPage)
         {
             return;
         }
@@ -119,7 +119,7 @@ public partial class MainWindow
     {
         if (_currentPage == null ||
             !TryRebaseMovedPagePath(moves, _currentPage.FolderPath, out string rebasedCurrentFolder) ||
-            OurPlaneCoreJobStore.TryReadPage(rebasedCurrentFolder) is not { } rebasedPage ||
+            OurPlanCoreJobStore.TryReadPage(rebasedCurrentFolder) is not { } rebasedPage ||
             !_viewport.TryRebindCurrentPageFolder(
                 _currentPage.FolderPath,
                 rebasedPage.FolderPath,
@@ -162,7 +162,7 @@ public partial class MainWindow
             }
 
             if (itemChanged)
-                OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                OurPlanCoreJobStore.SaveTakeoffItem(item);
         }
 
         return changed;
@@ -176,7 +176,7 @@ public partial class MainWindow
         string current = NormalizePageReferencePath(path);
         foreach (var move in moves)
         {
-            if (!OurPlaneCoreJobStore.IsSameOrDescendant(move.OldPath, current))
+            if (!OurPlanCoreJobStore.IsSameOrDescendant(move.OldPath, current))
                 continue;
 
             rebased = RebaseDescendantPath(move.OldPath, move.NewPath, current);

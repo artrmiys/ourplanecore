@@ -5,10 +5,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class PdfExporter
 {
@@ -100,7 +100,7 @@ public static partial class PdfExporter
         PageInfo page,
         UnitMode unitMode)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType);
         double fallbackScale = page.ScaleMetersPerPt;
 
         if (measurementType == "point")
@@ -139,7 +139,7 @@ public static partial class PdfExporter
 
     private static MeasurementGlyphKind TakeoffGlyphKind(TakeoffItem item) =>
         MeasurementGlyph.Parse(
-            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
+            OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType),
             joist: item.IsJoistArea,
             countSymbol: item.CountSymbol);
 
@@ -147,7 +147,7 @@ public static partial class PdfExporter
         item.IsJoistArea ? "Joist" : MeasurementTypeTitle(item.MeasurementType);
 
     private static string MeasurementTypeTitle(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "Count",
             "area" => "Area",
@@ -158,7 +158,7 @@ public static partial class PdfExporter
         item.IsJoistArea ? "РІвЂ“РЋРІвЂўВ±" : MeasurementTypeSign(item.MeasurementType);
 
     private static string MeasurementTypeSign(string measurementType) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) switch
         {
             "point" => "РІвЂ”вЂ№",
             "area" => "РІвЂ“РЋ",

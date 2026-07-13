@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -220,7 +220,7 @@ public partial class MainWindow
                     ((IProgress<string>)progress).Report("copying pages...");
                     Dictionary<int, IReadOnlyList<PdfLayerInfo>> pdfLayerCache = [];
 
-                    IReadOnlyList<PageInfo> created = OurPlaneCoreJobStore.ImportPdf(
+                    IReadOnlyList<PageInfo> created = OurPlanCoreJobStore.ImportPdf(
                         _currentJob!,
                         plan.PdfPath,
                         plan.PageNames,
@@ -404,11 +404,11 @@ public partial class MainWindow
         if (!result.Ok)
             return result;
 
-        PageInfo refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? page;
+        PageInfo refreshed = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? page;
         if (!RasterSheetCacheService.TrySetUseAsPageOpenRaster(refreshed, true, out string firstError, out _))
             AppLog.Warn($"Raster First enable failed during import for '{page.Name}': {firstError}");
 
-        refreshed = OurPlaneCoreJobStore.TryReadPage(page.FolderPath) ?? refreshed;
+        refreshed = OurPlanCoreJobStore.TryReadPage(page.FolderPath) ?? refreshed;
         RasterSheetSource? warmSource = refreshed.RasterSheet ?? result.Source;
         if (warmSource != null)
             PdfViewport.WarmRasterSheetBitmapCache(refreshed, warmSource);

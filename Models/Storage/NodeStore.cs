@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class NodeStore
 {
@@ -15,23 +15,23 @@ internal static class NodeStore
         if (!Directory.Exists(parentFolder)) return [];
         return Directory.EnumerateDirectories(parentFolder)
             .OrderBy(GetOrderIndex)
-            .ThenBy(OurPlaneCoreJobStore.DisplayName, NaturalNameComparer)
+            .ThenBy(OurPlanCoreJobStore.DisplayName, NaturalNameComparer)
             .ToList();
     }
 
     public static int GetOrderIndex(string folder)
     {
-        string? raw = OurPlaneCoreJobStore.ReadProperty(folder, "OrderIndex");
+        string? raw = OurPlanCoreJobStore.ReadProperty(folder, "OrderIndex");
         return int.TryParse(raw, out int order) ? order : int.MaxValue;
     }
 
     public static void SetOrderIndex(string folder, int orderIndex) =>
-        OurPlaneCoreJobStore.SetProperty(folder, "OrderIndex", orderIndex.ToString());
+        OurPlanCoreJobStore.SetProperty(folder, "OrderIndex", orderIndex.ToString());
 
     public static string RenameNode(string folder, string requestedName)
     {
-        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(requestedName, 120);
-        string folderName = OurPlaneCoreJobStore.SanitizeName(displayName, 120);
+        string displayName = OurPlanCoreJobStore.NormalizeDisplayName(requestedName, 120);
+        string folderName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
         string parent = Path.GetDirectoryName(folder)
             ?? throw new InvalidOperationException("Cannot rename a root folder.");
         string target = Path.Combine(parent, folderName);
@@ -45,7 +45,7 @@ internal static class NodeStore
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
             Directory.Move(folder, target);
 
-        OurPlaneCoreJobStore.UpdateItemName(target, displayName);
+        OurPlanCoreJobStore.UpdateItemName(target, displayName);
         return target;
     }
 
@@ -56,19 +56,19 @@ internal static class NodeStore
 
     public static string RenameNodeAllowDuplicateName(string folder, string requestedName)
     {
-        string displayName = OurPlaneCoreJobStore.NormalizeDisplayName(requestedName, 120);
-        string folderName = OurPlaneCoreJobStore.SanitizeName(displayName, 120);
+        string displayName = OurPlanCoreJobStore.NormalizeDisplayName(requestedName, 120);
+        string folderName = OurPlanCoreJobStore.SanitizeName(displayName, 120);
         string parent = Path.GetDirectoryName(folder)
             ?? throw new InvalidOperationException("Cannot rename a root folder.");
         string desiredTarget = Path.Combine(parent, folderName);
         string target = string.Equals(folder, desiredTarget, StringComparison.OrdinalIgnoreCase)
             ? folder
-            : OurPlaneCoreJobStore.UniqueDirectoryPath(desiredTarget);
+            : OurPlanCoreJobStore.UniqueDirectoryPath(desiredTarget);
 
         if (!string.Equals(folder, target, StringComparison.OrdinalIgnoreCase))
             Directory.Move(folder, target);
 
-        OurPlaneCoreJobStore.UpdateItemName(target, displayName);
+        OurPlanCoreJobStore.UpdateItemName(target, displayName);
         return target;
     }
 
@@ -79,7 +79,7 @@ internal static class NodeStore
 
     public static string CopyNodePreserveDisplayName(string sourcePath, string targetFolder)
     {
-        string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
+        string displayName = OurPlanCoreJobStore.DisplayName(sourcePath);
         string destPath = UniqueDestinationPath(targetFolder, displayName);
         return CopyNodeCore(sourcePath, destPath, displayName, GetNextOrderIndex(targetFolder));
     }
@@ -98,7 +98,7 @@ internal static class NodeStore
         int nextOrder = GetNextOrderIndex(targetFolder);
         foreach (string sourcePath in sources)
         {
-            string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
+            string displayName = OurPlanCoreJobStore.DisplayName(sourcePath);
             string destPath = UniqueDestinationPath(targetFolder, displayName);
             results.Add(CopyNodeCore(sourcePath, destPath, displayName, nextOrder++));
         }
@@ -114,7 +114,7 @@ internal static class NodeStore
         PageStore.RewritePageSources(destPath, pageSources);
         RegenerateGuidsRecursively(destPath);
         RegenerateMeasurementIdsRecursively(destPath);
-        OurPlaneCoreJobStore.UpdateItemName(destPath, displayName);
+        OurPlanCoreJobStore.UpdateItemName(destPath, displayName);
         SetOrderIndex(destPath, orderIndex);
         return destPath;
     }
@@ -173,7 +173,7 @@ internal static class NodeStore
 
     public static string DuplicatePage(string pageFolder)
     {
-        if (!OurPlaneCoreJobStore.IsPageFolder(pageFolder))
+        if (!OurPlanCoreJobStore.IsPageFolder(pageFolder))
             throw new InvalidOperationException("Only page nodes can be duplicated.");
         string parent = Path.GetDirectoryName(pageFolder)
             ?? throw new InvalidOperationException("Cannot duplicate this page.");
@@ -249,7 +249,7 @@ internal static class NodeStore
     private static void SortChildren(string parentFolder, bool descending, IComparer<string> displayNameComparer)
     {
         var children = Directory.EnumerateDirectories(parentFolder)
-            .OrderBy(OurPlaneCoreJobStore.DisplayName, displayNameComparer)
+            .OrderBy(OurPlanCoreJobStore.DisplayName, displayNameComparer)
             .ToList();
         if (descending) children.Reverse();
         ApplySiblingOrder(children);
@@ -268,7 +268,7 @@ internal static class NodeStore
         int max = 0;
         foreach (string dir in Directory.EnumerateDirectories(parentFolder))
         {
-            string? raw = OurPlaneCoreJobStore.ReadProperty(dir, "OrderIndex");
+            string? raw = OurPlanCoreJobStore.ReadProperty(dir, "OrderIndex");
             if (int.TryParse(raw, out int order))
                 max = Math.Max(max, order);
         }
@@ -277,13 +277,13 @@ internal static class NodeStore
 
     private static string MoveNodeCore(string sourcePath, string targetFolder, ref int nextOrder)
     {
-        string displayName = OurPlaneCoreJobStore.DisplayName(sourcePath);
+        string displayName = OurPlanCoreJobStore.DisplayName(sourcePath);
         string destPath = UniqueDestinationPath(targetFolder, displayName);
         var pageSources = PageStore.CollectPageSources(sourcePath);
 
         Directory.Move(sourcePath, destPath);
         PageStore.RewritePageSources(destPath, pageSources);
-        OurPlaneCoreJobStore.UpdateItemName(destPath, displayName);
+        OurPlanCoreJobStore.UpdateItemName(destPath, displayName);
         SetOrderIndex(destPath, nextOrder++);
         return destPath;
     }
@@ -448,23 +448,23 @@ internal static class NodeStore
 
     private static void RegenerateGuidsRecursively(string folder)
     {
-        foreach (string dir in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(folder))
+        foreach (string dir in OurPlanCoreJobStore.EnumerateSelfAndDescendants(folder))
             RegenerateDataXmlGuid(dir);
     }
 
     private static void RegenerateMeasurementIdsRecursively(string folder)
     {
-        foreach (string dir in OurPlaneCoreJobStore.EnumerateSelfAndDescendants(folder))
+        foreach (string dir in OurPlanCoreJobStore.EnumerateSelfAndDescendants(folder))
         {
             string path = TakeoffStore.MeasurementsJsonPath(dir);
             if (!File.Exists(path)) continue;
 
             try
             {
-                var measurements = OurPlaneCoreJobStore.LoadMeasurements(dir);
+                var measurements = OurPlanCoreJobStore.LoadMeasurements(dir);
                 foreach (var measurement in measurements)
                     measurement.Id = Guid.NewGuid().ToString();
-                OurPlaneCoreJobStore.SaveMeasurements(dir, measurements);
+                OurPlanCoreJobStore.SaveMeasurements(dir, measurements);
             }
             catch
             {
@@ -488,7 +488,7 @@ internal static class NodeStore
         StorageSupport.SaveDataXmlAtomic(folder, doc);
         // This path loads/saves Data.xml directly; drop the cached copy so the
         // next read picks up the regenerated GUID.
-        OurPlaneCoreJobStore.InvalidateMetadataCache(folder);
+        OurPlanCoreJobStore.InvalidateMetadataCache(folder);
     }
 
     private static void SetProperty(XElement root, string propertyName, string value)
@@ -509,8 +509,8 @@ internal static class NodeStore
     }
 
     private static string UniqueDestinationPath(string targetFolder, string displayName) =>
-        OurPlaneCoreJobStore.UniqueDirectoryPath(
-            Path.Combine(targetFolder, OurPlaneCoreJobStore.SanitizeName(displayName, 120)));
+        OurPlanCoreJobStore.UniqueDirectoryPath(
+            Path.Combine(targetFolder, OurPlanCoreJobStore.SanitizeName(displayName, 120)));
 
     private static void CopyDirectory(string sourceDir, string destDir)
     {

@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -34,7 +34,7 @@ public partial class MainWindow
         string modeLabel = FolderTemplateModeLabel(mode);
         string preview = PlanSwiftFolderTemplateService.PreviewNames(
             PlanSwiftFolderTemplateService.PageFolderNames(mode));
-        string baseName = OurPlaneCoreJobStore.DisplayName(baseFolder);
+        string baseName = OurPlanCoreJobStore.DisplayName(baseFolder);
         var confirm = MessageBox.Show(
             $"Create standard {modeLabel} page folders under '{baseName}'?\n\n{preview}\n\nExisting folders will be skipped.",
             "Auto Page Folders",
@@ -74,14 +74,14 @@ public partial class MainWindow
                 scopeFolder = _currentJob.PagesRoot;
             }
 
-            OurPlaneCoreJobStore.SortChildren(scopeFolder, descending);
+            OurPlanCoreJobStore.SortChildren(scopeFolder, descending);
             ReloadPagesTree(scopeFolder);
             string scopeLabel = string.Equals(
                 NormalizePath(scopeFolder),
                 NormalizePath(_currentJob.PagesRoot),
                 StringComparison.OrdinalIgnoreCase)
                     ? "Pages root"
-                    : OurPlaneCoreJobStore.DisplayName(scopeFolder);
+                    : OurPlanCoreJobStore.DisplayName(scopeFolder);
             TxtStatus.Text = $"Sorted {scopeLabel} {(descending ? "Z-A" : "A-Z")}.";
         }
         catch (Exception ex)
@@ -135,10 +135,10 @@ public partial class MainWindow
 
         try
         {
-            string imported = OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. imported");
-            string arch = OurPlaneCoreJobStore.EnsureFolder(imported, "Arch");
-            string struc = OurPlaneCoreJobStore.EnsureFolder(imported, "Struct");
-            string others = OurPlaneCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "--------others");
+            string imported = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. imported");
+            string arch = OurPlanCoreJobStore.EnsureFolder(imported, "Arch");
+            string struc = OurPlanCoreJobStore.EnsureFolder(imported, "Struct");
+            string others = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "--------others");
             SortPagesIntoArchStructScope(
                 _currentJob.PagesRoot,
                 arch,
@@ -173,7 +173,7 @@ public partial class MainWindow
             string arch = EnsurePagesChildFolder(scopeFolder, "Arch");
             string struc = EnsurePagesChildFolder(scopeFolder, "Struct");
             string others = EnsurePagesChildFolder(scopeFolder, "--------others");
-            string scopeLabel = $" in {OurPlaneCoreJobStore.DisplayName(scopeFolder)}";
+            string scopeLabel = $" in {OurPlanCoreJobStore.DisplayName(scopeFolder)}";
             SortPagesIntoArchStructScope(
                 scopeFolder,
                 arch,
@@ -225,7 +225,7 @@ public partial class MainWindow
             }
 
             string oldPath = page.FolderPath;
-            string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
+            string movedPath = OurPlanCoreJobStore.MoveNode(oldPath, target);
             reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
             selectAfter ??= movedPath;
 
@@ -237,9 +237,9 @@ public partial class MainWindow
                 movedOthers++;
         }
 
-        OurPlaneCoreJobStore.SortChildren(arch, descending: false);
-        OurPlaneCoreJobStore.SortChildren(struc, descending: false);
-        OurPlaneCoreJobStore.SortChildren(others, descending: false);
+        OurPlanCoreJobStore.SortChildren(arch, descending: false);
+        OurPlanCoreJobStore.SortChildren(struc, descending: false);
+        OurPlanCoreJobStore.SortChildren(others, descending: false);
         ReloadPagesTree(selectAfter ?? fallbackSelection);
         ReloadActivePageTabAfterPathChange(reloadActiveTab);
         TxtStatus.Text = $"Sort A/S{statusScopeLabel}: Arch {movedArch}, Struct {movedStruct}, Others {movedOthers}, skipped {skipped}.";
@@ -373,7 +373,7 @@ public partial class MainWindow
             }
 
             string oldPath = page.FolderPath;
-            string movedPath = OurPlaneCoreJobStore.MoveNode(oldPath, target);
+            string movedPath = OurPlanCoreJobStore.MoveNode(oldPath, target);
             reloadActiveTab = UpdatePageReferencesForMovedPath(oldPath, movedPath) || reloadActiveTab;
             selectAfter ??= movedPath;
 
@@ -384,17 +384,17 @@ public partial class MainWindow
         }
 
         foreach (string folder in targets.Values.Where(v => !string.IsNullOrEmpty(v)).Distinct(StringComparer.OrdinalIgnoreCase))
-            OurPlaneCoreJobStore.SortChildren(folder, descending: false);
+            OurPlanCoreJobStore.SortChildren(folder, descending: false);
         int reorderedTop = ReorderSuffixPagesToTop(scopeFolder);
 
         ReloadPagesTree(selectAfter ?? scopeFolder);
         ReloadActivePageTabAfterPathChange(reloadActiveTab);
         string scopeLabel = scopedToSelectedFolder
-            ? $" in {OurPlaneCoreJobStore.DisplayName(scopeFolder)}"
+            ? $" in {OurPlanCoreJobStore.DisplayName(scopeFolder)}"
             : "";
         string perFolder = string.Join(", ", movedByFolder
-            .OrderBy(kv => OurPlaneCoreJobStore.DisplayName(kv.Key), StringComparer.OrdinalIgnoreCase)
-            .Select(kv => $"{OurPlaneCoreJobStore.DisplayName(kv.Key)} {kv.Value}"));
+            .OrderBy(kv => OurPlanCoreJobStore.DisplayName(kv.Key), StringComparer.OrdinalIgnoreCase)
+            .Select(kv => $"{OurPlanCoreJobStore.DisplayName(kv.Key)} {kv.Value}"));
         TxtStatus.Text =
             $"Sort D/Sec/WT{scopeLabel}: top {movedTop}" +
             (perFolder.Length > 0 ? $", {perFolder}" : "") +
@@ -428,16 +428,16 @@ public partial class MainWindow
             return "";
         }
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder))
         {
-            if (!OurPlaneCoreJobStore.IsPageFolder(child) &&
-                string.Equals(OurPlaneCoreJobStore.DisplayName(child), displayName, StringComparison.OrdinalIgnoreCase))
+            if (!OurPlanCoreJobStore.IsPageFolder(child) &&
+                string.Equals(OurPlanCoreJobStore.DisplayName(child), displayName, StringComparison.OrdinalIgnoreCase))
             {
                 return child;
             }
         }
 
-        return OurPlaneCoreJobStore.EnsureFolder(parentFolder, displayName);
+        return OurPlanCoreJobStore.EnsureFolder(parentFolder, displayName);
     }
 
     private string ClassifySuffixPageTarget(
@@ -479,7 +479,7 @@ public partial class MainWindow
 
         if (string.IsNullOrWhiteSpace(suffix) || first is not ('a' or 's'))
         {
-            metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+            metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
         }
 
         if (string.IsNullOrWhiteSpace(suffix) && !string.IsNullOrWhiteSpace(metadata?.Suffix))
@@ -496,12 +496,12 @@ public partial class MainWindow
 
     private int ReorderSuffixPagesToTop(string parentFolder)
     {
-        var children = OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder).ToList();
+        var children = OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder).ToList();
         var topPages = new List<string>();
         foreach (string suffix in PageSortRulesService.Active.SuffixTopOrder)
         {
             topPages.AddRange(children.Where(child =>
-                OurPlaneCoreJobStore.TryReadPage(child) is { } childPage &&
+                OurPlanCoreJobStore.TryReadPage(child) is { } childPage &&
                 string.Equals(DetectPageSuffixSortInfo(childPage).Suffix, suffix, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -516,7 +516,7 @@ public partial class MainWindow
             .ToList();
 
         for (int i = 0; i < ordered.Count; i++)
-            OurPlaneCoreJobStore.SetOrderIndex(ordered[i], i);
+            OurPlanCoreJobStore.SetOrderIndex(ordered[i], i);
         return topPages.Count;
     }
 

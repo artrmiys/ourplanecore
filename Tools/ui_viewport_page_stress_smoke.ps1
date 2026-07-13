@@ -32,7 +32,7 @@ function Get-PageFolders {
 function Copy-SmokeJob {
     param([Parameter(Mandatory)] [string]$SourceJob)
 
-    $root = Join-Path $env:TEMP ("opc_viewport_page_stress_" + [guid]::NewGuid().ToString("N"))
+    $root = Join-Path $env:TEMP ("onc_viewport_page_stress_" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $root | Out-Null
     Copy-Item -LiteralPath $SourceJob -Destination $root -Recurse -Force
     $copied = Join-Path $root (Split-Path -Leaf $SourceJob)
@@ -53,9 +53,9 @@ function Set-SmokeSettings {
         [Parameter(Mandatory)] [string]$FirstPagePath
     )
 
-    $settingsPath = $env:OURPLANECORE_SETTINGS_PATH
+    $settingsPath = $env:OURPLANCORE_SETTINGS_PATH
     if ([string]::IsNullOrWhiteSpace($settingsPath)) {
-        $settingsPath = Join-Path (Join-Path $env:APPDATA "OurPlaneCore") "settings.json"
+        $settingsPath = Join-Path (Join-Path $env:APPDATA "OurPlanCore") "settings.json"
     }
     $settingsDir = Split-Path -Parent $settingsPath
     $backupPath = "$settingsPath.viewport-page-stress-smoke.bak"
@@ -160,18 +160,18 @@ $jobState = $null
 $settingsState = $null
 $proc = $null
 $reportPathWasProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
-$reportPath = if ($reportPathWasProvided) { $ReportPath } else { Join-Path $env:TEMP ("opc_viewport_page_stress_report_" + [guid]::NewGuid().ToString("N") + ".json") }
-$oldSmoke = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE
-$oldReport = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_REPORT
-$oldTimeout = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS
-$oldReturn = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT
-$oldTabs = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT
-$oldOpen = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT
-$oldZoom = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM
-$oldPan = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS
-$oldTreeOps = $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS
-$stdoutPath = Join-Path $env:TEMP ("opc_viewport_page_stress_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
-$stderrPath = Join-Path $env:TEMP ("opc_viewport_page_stress_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
+$reportPath = if ($reportPathWasProvided) { $ReportPath } else { Join-Path $env:TEMP ("onc_viewport_page_stress_report_" + [guid]::NewGuid().ToString("N") + ".json") }
+$oldSmoke = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_SMOKE
+$oldReport = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_REPORT
+$oldTimeout = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS
+$oldReturn = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT
+$oldTabs = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TAB_COUNT
+$oldOpen = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT
+$oldZoom = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM
+$oldPan = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS
+$oldTreeOps = $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS
+$stdoutPath = Join-Path $env:TEMP ("onc_viewport_page_stress_stdout_" + [guid]::NewGuid().ToString("N") + ".txt")
+$stderrPath = Join-Path $env:TEMP ("onc_viewport_page_stress_stderr_" + [guid]::NewGuid().ToString("N") + ".txt")
 
 try {
     if ($CopyJob) {
@@ -187,29 +187,29 @@ try {
     }
 
     $settingsState = Set-SmokeSettings -SmokeJobPath $smokeJob -FirstPagePath $pages[0]
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE = "1"
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_REPORT = $reportPath
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = [string]$PageTimeoutMs
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT = [string]$ReturnCount
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT = [string]$TabCount
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_SMOKE = "1"
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_REPORT = $reportPath
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = [string]$PageTimeoutMs
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT = [string]$ReturnCount
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TAB_COUNT = [string]$TabCount
     if ($OpenCount -gt 0) {
-        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT = [string]$OpenCount
+        $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT = [string]$OpenCount
     }
     if ($TargetZoom -gt 0) {
-        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM = [string]$TargetZoom
+        $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM = [string]$TargetZoom
     }
     if ($PanSteps -ge 0) {
-        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = [string]$PanSteps
+        $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = [string]$PanSteps
     }
     if ($IncludeTreeOps) {
-        $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS = "1"
+        $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS = "1"
     }
 
-    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplanecore.dll"
+    $appDll = Join-Path $ProjectRoot "cache\verify_build\ourplancore.dll"
     if ($UseVerifyBuild -and (Test-Path -LiteralPath $appDll)) {
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @($appDll) -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     } else {
-        $projectPath = Join-Path $ProjectRoot "ourplanecore.csproj"
+        $projectPath = Join-Path $ProjectRoot "ourplancore.csproj"
         $proc = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--no-restore", "--project", $projectPath) -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     }
 
@@ -256,15 +256,15 @@ try {
     }
 }
 finally {
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_SMOKE = $oldSmoke
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_REPORT = $oldReport
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = $oldTimeout
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT = $oldReturn
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TAB_COUNT = $oldTabs
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT = $oldOpen
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM = $oldZoom
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = $oldPan
-    $env:OURPLANECORE_VIEWPORT_PAGE_STRESS_TREE_OPS = $oldTreeOps
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_SMOKE = $oldSmoke
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_REPORT = $oldReport
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TIMEOUT_MS = $oldTimeout
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_RETURN_COUNT = $oldReturn
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TAB_COUNT = $oldTabs
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_OPEN_COUNT = $oldOpen
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TARGET_ZOOM = $oldZoom
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_PAN_STEPS = $oldPan
+    $env:OURPLANCORE_VIEWPORT_PAGE_STRESS_TREE_OPS = $oldTreeOps
     Restore-SmokeSettings $settingsState
     if ($jobState -ne $null -and -not $KeepAppOpen) {
         Remove-Item -LiteralPath $jobState.Root -Recurse -Force -ErrorAction SilentlyContinue

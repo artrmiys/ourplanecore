@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 int exitCode = Run(args);
 return exitCode;
@@ -141,7 +141,7 @@ static void PrintUsage()
     Console.WriteLine("  PlanSwiftImportTool scan --source \"C:\\Path\\To\\PlanSwiftJob\"");
     Console.WriteLine();
     Console.WriteLine("Import:");
-    Console.WriteLine("  PlanSwiftImportTool import --source \"C:\\Path\\To\\PlanSwiftJob\" --dest \"C:\\Path\\To\\OurPlaneCoreJobs\" [--name \"Job Name\"]");
+    Console.WriteLine("  PlanSwiftImportTool import --source \"C:\\Path\\To\\PlanSwiftJob\" --dest \"C:\\Path\\To\\OurPlanCoreJobs\" [--name \"Job Name\"]");
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --no-images            Create blank page PDFs instead of converting PlanSwift images");

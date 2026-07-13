@@ -8,12 +8,12 @@ using System.Windows;
 using System.Windows.Input;
 using Docnet.Core;
 using Docnet.Core.Models;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -70,7 +70,7 @@ public sealed partial class PdfViewport
 
     public bool BeginJoistDirectionCapture(Measurement areaMeasurement)
     {
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(areaMeasurement.MType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(areaMeasurement.MType) != "area")
         {
             PostStatus("Joist direction can only be set on Area measurements.");
             return false;

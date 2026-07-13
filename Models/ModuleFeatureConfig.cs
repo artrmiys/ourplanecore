@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public enum ModuleId
 {

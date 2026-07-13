@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -10,13 +10,13 @@ public partial class MainWindow
         if (!Directory.Exists(path))
             yield break;
 
-        if (OurPlaneCoreJobStore.TryReadPage(path) is { } page)
+        if (OurPlanCoreJobStore.TryReadPage(path) is { } page)
         {
             yield return page;
             yield break;
         }
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(path))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(path))
         {
             foreach (PageInfo pageInfo in CollectPagesUnder(child))
                 yield return pageInfo;

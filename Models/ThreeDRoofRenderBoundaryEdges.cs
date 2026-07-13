@@ -1,4 +1,4 @@
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal sealed class ThreeDRoofRenderBoundaryEdges
 {

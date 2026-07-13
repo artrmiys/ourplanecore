@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class BlankPagePdfService
 {

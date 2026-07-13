@@ -1,4 +1,4 @@
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Roof takeoff numbers derived from generated geometry: true sloped surface
 // area (3D), flat plan area, and ridge/hip/valley/eave run lengths. Read-only;

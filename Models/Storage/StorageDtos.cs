@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 // Envelope for measurements.json. The file has historically been a bare JSON
 // array of MeasurementDto, which leaves nowhere to record a format version.

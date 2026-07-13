@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
-public sealed class OurPlaneCoreJob
+public sealed class OurPlanCoreJob
 {
     public string Name { get; init; } = "";
     public string RootPath { get; init; } = "";

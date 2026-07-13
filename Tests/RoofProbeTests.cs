@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class RoofProbeTests
 {

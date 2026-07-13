@@ -3,12 +3,13 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        AppDataMigration.RunCritical();
         base.OnStartup(e);
 
         DispatcherUnhandledException += App_DispatcherUnhandledException;
@@ -17,6 +18,7 @@ public partial class App : Application
         AppLog.Info("Application startup.");
         AppLog.Info($"Version {AppVersion.Display}.");
         Task.Run(() => AppLog.PruneOldLogs());
+        Task.Run(AppDataMigration.RunDeferred);
         _ = PdfLayerRenderService.PrewarmWorkersAsync();
     }
 
@@ -32,7 +34,7 @@ public partial class App : Application
         AppLog.Error(e.Exception, "Unhandled UI exception.");
         MessageBox.Show(
             "An unexpected error was logged. The app will try to keep running.",
-            "OurPlaneCore",
+            AppIdentity.ProductName,
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         e.Handled = true;

@@ -1,7 +1,7 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public static class AnnotationGlyphRenderer
 {

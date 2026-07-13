@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class JobThumbnailService
 {
@@ -18,8 +18,7 @@ public static class JobThumbnailService
     {
         get
         {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            return Path.Combine(appData, "OurPlaneCore", "thumbnails");
+            return Path.Combine(AppIdentity.RoamingRoot, "thumbnails");
         }
     }
 
@@ -32,7 +31,7 @@ public static class JobThumbnailService
         return File.Exists(path) ? path : "";
     }
 
-    public static bool TryCreateThumbnail(OurPlaneCoreJob job, out string thumbnailPath, out string error)
+    public static bool TryCreateThumbnail(OurPlanCoreJob job, out string thumbnailPath, out string error)
     {
         thumbnailPath = "";
         error = "";
@@ -117,10 +116,10 @@ public static class JobThumbnailService
         if (!Directory.Exists(folder))
             return null;
 
-        if (OurPlaneCoreJobStore.TryReadPage(folder) is { } page && File.Exists(page.PdfPath))
+        if (OurPlanCoreJobStore.TryReadPage(folder) is { } page && File.Exists(page.PdfPath))
             return page;
 
-        foreach (string child in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string child in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
             PageInfo? childPage = FindFirstRenderablePage(child);
             if (childPage != null)

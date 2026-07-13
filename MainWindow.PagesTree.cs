@@ -16,10 +16,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.VisualBasic.FileIO;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -71,9 +71,9 @@ public partial class MainWindow
             return 0;
 
         int pageCount = 0;
-        foreach (string dir in OurPlaneCoreJobStore.GetOrderedChildDirectories(folder))
+        foreach (string dir in OurPlanCoreJobStore.GetOrderedChildDirectories(folder))
         {
-            PageInfo? page = OurPlaneCoreJobStore.TryReadPage(dir);
+            PageInfo? page = OurPlanCoreJobStore.TryReadPage(dir);
             if (page != null)
             {
                 var pageItem = new TreeViewItem
@@ -89,7 +89,7 @@ public partial class MainWindow
                 continue;
             }
 
-            string name = OurPlaneCoreJobStore.ReadName(dir) ?? Path.GetFileName(dir);
+            string name = OurPlanCoreJobStore.ReadName(dir) ?? Path.GetFileName(dir);
             var folderNode = new PageFolderNode { Name = name, FolderPath = dir };
             var tvi = new TreeViewItem
             {
@@ -348,7 +348,7 @@ public partial class MainWindow
     private bool TryRefreshPageTreeItemFromStore(TreeViewItem item, string pageFolder, out string refreshedKey)
     {
         refreshedKey = "";
-        if (OurPlaneCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage)
+        if (OurPlanCoreJobStore.TryReadPage(pageFolder) is not { } refreshedPage)
             return false;
 
         bool wasExpanded = item.IsExpanded;
@@ -465,7 +465,7 @@ public partial class MainWindow
         if (_currentJob == null)
             throw new InvalidOperationException("No job is open.");
 
-        return OurPlaneCoreJobStore.DefaultImportFolder(_currentJob);
+        return OurPlanCoreJobStore.DefaultImportFolder(_currentJob);
     }
 
     private void SelectNodeByFolder(string folderPath)
@@ -499,7 +499,7 @@ public partial class MainWindow
             }
         });
 
-        if (selected || OurPlaneCoreJobStore.IsPageFolder(folderPath))
+        if (selected || OurPlanCoreJobStore.IsPageFolder(folderPath))
             OpenPageByFolder(folderPath);
     }
 

@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -58,7 +58,7 @@ public partial class MainWindow
         if (page == null)
             return false;
 
-        path = OurPlaneCoreJobStore.PageLayersJsonPath(page.FolderPath);
+        path = OurPlanCoreJobStore.PageLayersJsonPath(page.FolderPath);
         return File.Exists(path);
     }
 

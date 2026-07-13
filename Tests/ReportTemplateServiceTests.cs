@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 using System.IO.Compression;
 using System.Xml.Linq;
 
@@ -68,7 +68,7 @@ internal static class ReportTemplateServiceTests
 
     private static string CreateWorkbook()
     {
-        string path = Path.Combine(Path.GetTempPath(), "opc_report_template_" + Guid.NewGuid().ToString("N") + ".xlsx");
+        string path = Path.Combine(Path.GetTempPath(), "onc_report_template_" + Guid.NewGuid().ToString("N") + ".xlsx");
         using ZipArchive archive = ZipFile.Open(path, ZipArchiveMode.Create);
         WriteXml(archive, "xl/workbook.xml", WorkbookXml());
         WriteXml(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml());

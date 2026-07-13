@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record SheetOverlayAutoFitCandidateInput(
     PageInfo Page,

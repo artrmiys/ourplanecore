@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using SkiaSharp;
 
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class SmartMassingDraft
 {

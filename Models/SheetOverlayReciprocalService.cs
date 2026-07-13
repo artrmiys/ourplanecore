@@ -1,6 +1,6 @@
 using System;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record SheetOverlayTransformValues(
     double OffsetXPt,
@@ -16,7 +16,7 @@ public static class SheetOverlayReciprocalService
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
             return false;
 
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder);
         if (overlayPage == null || !ShouldWriteReciprocal(overlayPage, page.FolderPath))
             return false;
 
@@ -26,13 +26,13 @@ public static class SheetOverlayReciprocalService
             page.OverlayScale,
             page.OverlayRotationDegrees);
 
-        OurPlaneCoreJobStore.SavePageOverlay(
+        OurPlanCoreJobStore.SavePageOverlay(
             overlayPage.FolderPath,
             page.FolderPath,
             page.OverlayColor,
             page.OverlayOpacity);
-        OurPlaneCoreJobStore.SavePageOverlayVisibility(overlayPage.FolderPath, page.OverlayVisible);
-        OurPlaneCoreJobStore.SavePageOverlayTransform(
+        OurPlanCoreJobStore.SavePageOverlayVisibility(overlayPage.FolderPath, page.OverlayVisible);
+        OurPlanCoreJobStore.SavePageOverlayTransform(
             overlayPage.FolderPath,
             reciprocal.OffsetXPt,
             reciprocal.OffsetYPt,
@@ -49,11 +49,11 @@ public static class SheetOverlayReciprocalService
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
             return false;
 
-        PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(page.OverlayPageFolder);
+        PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(page.OverlayPageFolder);
         if (overlayPage == null || !IsReciprocalOf(overlayPage, page.FolderPath))
             return false;
 
-        OurPlaneCoreJobStore.ClearPageOverlay(overlayPage.FolderPath);
+        OurPlanCoreJobStore.ClearPageOverlay(overlayPage.FolderPath);
         reciprocalPageFolder = overlayPage.FolderPath;
         return true;
     }

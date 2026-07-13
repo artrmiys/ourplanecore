@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {

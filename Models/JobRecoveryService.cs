@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class JobRecoveryLockInfo
 {
@@ -46,10 +46,10 @@ public static class JobRecoveryService
         "folder_properties.json",
     };
 
-    public static string SnapshotRoot(OurPlaneCoreJob job) =>
+    public static string SnapshotRoot(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, ".snapshots");
 
-    public static string LockPath(OurPlaneCoreJob job) =>
+    public static string LockPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, ".~lock");
 
     public static string NormalizeSnapshotReason(string? reason)
@@ -66,7 +66,7 @@ public static class JobRecoveryService
         SnapshotFileNames.Contains(Path.GetFileName(path));
 
     public static string SaveSnapshot(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string reason,
         int maxSnapshots = DefaultMaxSnapshots)
     {
@@ -85,7 +85,7 @@ public static class JobRecoveryService
         return snapshotPath;
     }
 
-    public static void WriteLock(OurPlaneCoreJob job)
+    public static void WriteLock(OurPlanCoreJob job)
     {
         var info = new JobRecoveryLockInfo
         {
@@ -98,7 +98,7 @@ public static class JobRecoveryService
         IoUtil.WriteAllTextAtomic(LockPath(job), JsonSerializer.Serialize(info, JsonOptions));
     }
 
-    public static bool TryReadLock(OurPlaneCoreJob job, out JobRecoveryLockInfo info)
+    public static bool TryReadLock(OurPlanCoreJob job, out JobRecoveryLockInfo info)
     {
         info = new JobRecoveryLockInfo();
         string path = LockPath(job);
@@ -128,7 +128,7 @@ public static class JobRecoveryService
     public static bool IsStaleLock(JobRecoveryLockInfo info) =>
         info.ProcessId <= 0 || !IsProcessRunning(info.ProcessId);
 
-    public static bool TryClearLockForCurrentProcess(OurPlaneCoreJob job)
+    public static bool TryClearLockForCurrentProcess(OurPlanCoreJob job)
     {
         if (!TryReadLock(job, out JobRecoveryLockInfo info))
             return false;
@@ -140,14 +140,14 @@ public static class JobRecoveryService
         return true;
     }
 
-    public static void ClearLock(OurPlaneCoreJob job)
+    public static void ClearLock(OurPlanCoreJob job)
     {
         string path = LockPath(job);
         if (File.Exists(path))
             File.Delete(path);
     }
 
-    private static void WriteManifest(OurPlaneCoreJob job, string snapshotPath, string reason)
+    private static void WriteManifest(OurPlanCoreJob job, string snapshotPath, string reason)
     {
         var manifest = new
         {
@@ -202,7 +202,7 @@ public static class JobRecoveryService
         File.Copy(source, destination, overwrite: true);
     }
 
-    private static void PruneSnapshots(OurPlaneCoreJob job, int maxSnapshots)
+    private static void PruneSnapshots(OurPlanCoreJob job, int maxSnapshots)
     {
         if (maxSnapshots <= 0)
             return;

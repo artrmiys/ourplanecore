@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.CSharp.RuntimeBinder;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record ActiveExcelExportResult(
     bool Success,

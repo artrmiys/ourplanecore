@@ -17,10 +17,10 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using Microsoft.VisualBasic.FileIO;
 using Microsoft.Win32;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow : Window
 {
@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     private double _lastTransformRotateSliderValue;
     private double _lastTransformScaleSliderValue = 1.0;
 
-    private OurPlaneCoreJob? _currentJob;
+    private OurPlanCoreJob? _currentJob;
     private PageInfo? _currentPage;
     private string _currentPdfPath = "";
     private bool _currentPageAnnotationsLoaded;

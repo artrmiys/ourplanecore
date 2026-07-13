@@ -3,7 +3,7 @@ using System.Globalization;
 using System.IO;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class SampleJobService
 {
@@ -15,23 +15,23 @@ public static class SampleJobService
         {
             string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             return string.IsNullOrWhiteSpace(documents)
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "OurPlaneCore Jobs")
-                : Path.Combine(documents, "OurPlaneCore Jobs");
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "OurPlanCore Jobs")
+                : Path.Combine(documents, "OurPlanCore Jobs");
         }
     }
 
-    public static OurPlaneCoreJob CreateSampleJob(string parentDir)
+    public static OurPlanCoreJob CreateSampleJob(string parentDir)
     {
         Directory.CreateDirectory(parentDir);
-        string jobName = UniqueJobName(parentDir, "OurPlaneCore Guide Sample");
-        OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parentDir, jobName);
+        string jobName = UniqueJobName(parentDir, "OurPlanCore Guide Sample");
+        OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parentDir, jobName);
 
-        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplanecore_guide_sample_{Guid.NewGuid():N}.pdf");
+        string tempPdf = Path.Combine(Path.GetTempPath(), $"ourplancore_guide_sample_{Guid.NewGuid():N}.pdf");
         try
         {
             SampleJobGuideBuilder.WriteGuidePdf(tempPdf);
-            string guideFolder = OurPlaneCoreJobStore.CreateFolder(job.PagesRoot, SampleJobGuideBuilder.GuideFolderName);
-            IReadOnlyList<PageInfo> pages = OurPlaneCoreJobStore.ImportPdf(
+            string guideFolder = OurPlanCoreJobStore.CreateFolder(job.PagesRoot, SampleJobGuideBuilder.GuideFolderName);
+            IReadOnlyList<PageInfo> pages = OurPlanCoreJobStore.ImportPdf(
                 job,
                 tempPdf,
                 SampleJobGuideBuilder.PageNames,
@@ -39,7 +39,7 @@ public static class SampleJobService
 
             PageInfo planPage = pages[^1];
             planPage.ScaleMetersPerPt = SampleScaleMetersPerPt;
-            OurPlaneCoreJobStore.SavePageScale(planPage.FolderPath, SampleScaleMetersPerPt);
+            OurPlanCoreJobStore.SavePageScale(planPage.FolderPath, SampleScaleMetersPerPt);
 
             CreateSampleTakeoffs(job, planPage);
             CreateSampleAnnotations(planPage);
@@ -60,22 +60,22 @@ public static class SampleJobService
             }
         }
 
-        return OurPlaneCoreJobStore.LoadJob(job.RootPath);
+        return OurPlanCoreJobStore.LoadJob(job.RootPath);
     }
 
-    private static void CreateSampleTakeoffs(OurPlaneCoreJob job, PageInfo page)
+    private static void CreateSampleTakeoffs(OurPlanCoreJob job, PageInfo page)
     {
         var g = SamplePlanGeometry.Instance;
 
         // Folders. "1st" levels under sqfts/walls let the 3D Auto builder lift walls and slabs.
-        string sqftsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
-        string sqfts1st = OurPlaneCoreJobStore.CreateTakeoffFolder(job, sqftsFolder, "1st");
-        string wallsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
-        string walls1st = OurPlaneCoreJobStore.CreateTakeoffFolder(job, wallsFolder, "1st");
-        string openingsFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "openings");
-        string framingFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "framing");
-        string areasFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "areas");
-        string roofFolder = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "rf");
+        string sqftsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "sqfts");
+        string sqfts1st = OurPlanCoreJobStore.CreateTakeoffFolder(job, sqftsFolder, "1st");
+        string wallsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "walls");
+        string walls1st = OurPlanCoreJobStore.CreateTakeoffFolder(job, wallsFolder, "1st");
+        string openingsFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "openings");
+        string framingFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "framing");
+        string areasFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "areas");
+        string roofFolder = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "rf");
 
         // AREA - whole floor footprint (feeds the 3D 1st-floor slab).
         CreateMeasuredTakeoff(
@@ -173,7 +173,7 @@ public static class SampleJobService
         new() { Name = name, Points = [new SKPoint(x1, y1), new SKPoint(x2, y2)] };
 
     private static TakeoffItem CreateMeasuredTakeoff(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         string parentFolder,
         PageInfo page,
         string name,
@@ -184,7 +184,7 @@ public static class SampleJobService
         Action<TakeoffItem>? configure,
         params Measurement[] measurements)
     {
-        TakeoffItem item = OurPlaneCoreJobStore.CreateTakeoffItem(job, parentFolder, name, color, measurementType);
+        TakeoffItem item = OurPlanCoreJobStore.CreateTakeoffItem(job, parentFolder, name, color, measurementType);
         item.UnitPrice = unitPrice;
         item.Notes = notes;
         configure?.Invoke(item);
@@ -200,8 +200,8 @@ public static class SampleJobService
             item.Measurements.Add(measurement);
         }
 
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
-        OurPlaneCoreJobStore.SaveTakeoffItem(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.SaveTakeoffItem(item);
         return item;
     }
 
@@ -209,7 +209,7 @@ public static class SampleJobService
     {
         // One clean note demonstrating the Annotation tool, pinned in the left margin so it
         // does not overlap the drawing or the takeoff overlays.
-        OurPlaneCoreJobStore.SavePageAnnotations(
+        OurPlanCoreJobStore.SavePageAnnotations(
             page.FolderPath,
             [
                 new PageAnnotation
@@ -224,7 +224,7 @@ public static class SampleJobService
             ]);
     }
 
-    private static void AddSampleObservations(OurPlaneCoreJob job, PageInfo page)
+    private static void AddSampleObservations(OurPlanCoreJob job, PageInfo page)
     {
         // Preloaded AI observations so the AI Manager grid and the AI Inbox are not empty -
         // they show what the model produces without requiring a network call or API key.
@@ -238,7 +238,7 @@ public static class SampleJobService
             "Exterior wall perimeter looks like a clean rectangle - good candidate for Auto 3D walls.");
     }
 
-    private static void WriteSampleMaterials(OurPlaneCoreJob job, PageInfo page)
+    private static void WriteSampleMaterials(OurPlanCoreJob job, PageInfo page)
     {
         // Preloaded material extraction example so the Materials tab shows a realistic summary
         // for the sample house without running the Python extractor.
@@ -301,7 +301,7 @@ public static class SampleJobService
         Directory.CreateDirectory(outputFolder);
         File.WriteAllText(
             MaterialExtractionService.LatestJsonPath(job),
-            System.Text.Json.JsonSerializer.Serialize(result, OurPlaneCoreJobStore.JsonOptions));
+            System.Text.Json.JsonSerializer.Serialize(result, OurPlanCoreJobStore.JsonOptions));
         try
         {
             MaterialExtractionService.WriteReviewCsvs(result, outputFolder);
@@ -316,7 +316,7 @@ public static class SampleJobService
     {
         string candidate = baseName;
         int index = 2;
-        while (Directory.Exists(Path.Combine(parentDir, OurPlaneCoreJobStore.SanitizeName(candidate, 120))))
+        while (Directory.Exists(Path.Combine(parentDir, OurPlanCoreJobStore.SanitizeName(candidate, 120))))
         {
             candidate = $"{baseName} {index.ToString(CultureInfo.InvariantCulture)}";
             index++;

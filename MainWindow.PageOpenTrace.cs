@@ -2,18 +2,18 @@ using System;
 using System.Diagnostics;
 using System.Text;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
     // Page-open stage timing. Off by default (no behavior change, no cost).
-    // Set OURPLANECORE_PAGE_OPEN_TRACE=1 to log a per-stage breakdown of every
+    // Set OURPLANCORE_PAGE_OPEN_TRACE=1 to log a per-stage breakdown of every
     // page open to the app log, so the next render optimization is driven by
     // measured stage costs instead of guesswork (see
     // docs/PERFORMANCE_RENDER_AND_LAYERS_HANDOFF_2026_05_16.md, "Next
     // Performance Work" item 5).
     private static readonly bool PageOpenTraceEnabled =
-        Environment.GetEnvironmentVariable("OURPLANECORE_PAGE_OPEN_TRACE") == "1";
+        AppIdentity.GetEnvironmentVariable("OURPLANCORE_PAGE_OPEN_TRACE") == "1";
 
     private PageOpenTrace? BeginPageOpenTrace(string pageName) =>
         PageOpenTraceEnabled ? new PageOpenTrace(pageName) : null;

@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
 // Real-engine render benchmark for the "instant sheets" strategy.
-// Opt-in: runs only when OPC_BENCH=1 so it never slows the normal test suite.
+// Opt-in: runs only when ONC_BENCH=1 so it never slows the normal test suite.
 // Measures the actual production render path (PdfLayerRenderService → PyMuPDF worker)
 // to produce concrete before/after numbers for the +30% goal:
 //   FULL  = render the WHOLE sheet (current base / raster-sheet path, PNG transport)
@@ -130,13 +130,13 @@ internal static class RenderPerfBenchmark
         string dir = Directory.GetCurrentDirectory();
         while (!string.IsNullOrWhiteSpace(dir))
         {
-            if (File.Exists(Path.Combine(dir, "ourplanecore.csproj")))
+            if (File.Exists(Path.Combine(dir, "ourplancore.csproj")))
                 return dir;
             string? parent = Directory.GetParent(dir)?.FullName;
             if (string.Equals(parent, dir, StringComparison.OrdinalIgnoreCase))
                 break;
             dir = parent ?? "";
         }
-        throw new DirectoryNotFoundException("Could not locate ourplanecore repo root.");
+        throw new DirectoryNotFoundException("Could not locate ourplancore repo root.");
     }
 }

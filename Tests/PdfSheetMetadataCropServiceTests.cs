@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
 internal static class PdfSheetMetadataCropServiceTests
@@ -47,13 +47,13 @@ internal static class PdfSheetMetadataCropServiceTests
         AssertTrue(PdfSheetMetadataCropService.HasUsableTemplate(scaleOnly), "scale region should be usable");
     }
 
-    private static void WithTempJob(string name, Action<OurPlaneCoreJob> action)
+    private static void WithTempJob(string name, Action<OurPlanCoreJob> action)
     {
-        string parent = Path.Combine(Path.GetTempPath(), $"ourplanecore-tests-{Guid.NewGuid():N}");
+        string parent = Path.Combine(Path.GetTempPath(), $"ourplancore-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(parent);
         try
         {
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(parent, name);
+            OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(parent, name);
             action(job);
         }
         finally

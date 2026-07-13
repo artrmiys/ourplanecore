@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class TakeoffTemplateTests
 {
@@ -305,22 +305,22 @@ internal static class TakeoffTemplateTests
 
     public static void RoutingUsesExistingFolderOrRootFallback()
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_takeoff_template_tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_takeoff_template_tests", Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(root);
             Directory.CreateDirectory(Path.Combine(root, "Pages"));
             Directory.CreateDirectory(Path.Combine(root, "Takeoffs"));
             File.WriteAllText(Path.Combine(root, "Data.xml"), "<Item Class=\"Folder\" Name=\"Template Test\" />");
-            var job = new OurPlaneCoreJob
+            var job = new OurPlanCoreJob
             {
                 Name = "Template Test",
                 RootPath = root,
             };
 
-            string framing = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "framing");
-            string evesRakes = OurPlaneCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "eves rakes");
-            string eves = OurPlaneCoreJobStore.CreateTakeoffFolder(job, evesRakes, "eves");
+            string framing = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "framing");
+            string evesRakes = OurPlanCoreJobStore.CreateTakeoffFolder(job, job.TakeoffsRoot, "eves rakes");
+            string eves = OurPlanCoreJobStore.CreateTakeoffFolder(job, evesRakes, "eves");
 
             AssertEqual(
                 framing,

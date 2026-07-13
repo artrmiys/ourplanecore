@@ -4,9 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class DetachedSheetWindow : Window
 {
@@ -15,7 +15,7 @@ public sealed class DetachedSheetWindow : Window
     public PageInfo Page { get; }
 
     public DetachedSheetWindow(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         IReadOnlyList<TakeoffItem> takeoffItems,
         AppSettings settings,
@@ -34,12 +34,12 @@ public sealed class DetachedSheetWindow : Window
     }
 
     public void RefreshTakeoffDisplay(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<TakeoffItem> takeoffItems,
         AppSettings settings,
         UnitMode unitMode)
     {
-        PageInfo page = OurPlaneCoreJobStore.TryReadPage(Page.FolderPath) ?? Page;
+        PageInfo page = OurPlanCoreJobStore.TryReadPage(Page.FolderPath) ?? Page;
         ApplyViewportDisplaySettings(settings, unitMode);
         _viewport.SetMeasurements(takeoffItems.SelectMany(takeoff => takeoff.Measurements));
         _viewport.SetHiddenTakeoffFolders(HiddenTakeoffFolders(job, page, takeoffItems));
@@ -51,7 +51,7 @@ public sealed class DetachedSheetWindow : Window
     }
 
     private void ConfigureViewport(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         IReadOnlyList<TakeoffItem> takeoffItems,
         AppSettings settings,
@@ -72,7 +72,7 @@ public sealed class DetachedSheetWindow : Window
             page.FolderPath,
             page.PdfLayersCached ? page.PdfLayers : null,
             rasterSheet: page.RasterSheet);
-        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(page.FolderPath));
+        _viewport.SetPageAnnotations(OurPlanCoreJobStore.LoadPageAnnotations(page.FolderPath));
         _viewport.SetSheetLegend(settings.ShowSheetLegend
             ? SheetLegendBuilder.Build(job, page, takeoffItems, unitMode)
             : []);
@@ -102,7 +102,7 @@ public sealed class DetachedSheetWindow : Window
     }
 
     private static IReadOnlyList<string> HiddenTakeoffFolders(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         PageInfo page,
         IReadOnlyList<TakeoffItem> takeoffItems)
     {
@@ -120,7 +120,7 @@ public sealed class DetachedSheetWindow : Window
             .ToList();
     }
 
-    private static string NormalizeLegendOrderKey(OurPlaneCoreJob job, string value)
+    private static string NormalizeLegendOrderKey(OurPlanCoreJob job, string value)
     {
         string clean = (value ?? "").Trim();
         if (string.IsNullOrWhiteSpace(clean))
@@ -129,7 +129,7 @@ public sealed class DetachedSheetWindow : Window
         if (Path.IsPathFullyQualified(clean))
         {
             string full = NormalizePath(clean);
-            if (OurPlaneCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, full))
+            if (OurPlanCoreJobStore.IsSameOrDescendant(job.TakeoffsRoot, full))
                 clean = Path.GetRelativePath(job.TakeoffsRoot, full);
         }
 

@@ -5,7 +5,7 @@ using Docnet.Core;
 using Docnet.Core.Models;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal enum PageImageOperation
 {

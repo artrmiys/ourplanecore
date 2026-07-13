@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {

@@ -8,9 +8,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -73,10 +73,10 @@ public partial class MainWindow
             return;
         }
 
-        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(folderPath);
+        PageInfo? page = OurPlanCoreJobStore.TryReadPage(folderPath);
         if (page == null)
         {
-            TxtStatus.Text = $"Page no longer exists: {OurPlaneCoreJobStore.DisplayName(folderPath)}.";
+            TxtStatus.Text = $"Page no longer exists: {OurPlanCoreJobStore.DisplayName(folderPath)}.";
             return;
         }
 
@@ -163,7 +163,7 @@ public partial class MainWindow
     private IReadOnlyList<PageInfo> SelectedPagesFromPagesTree(TreeViewItem anchor) =>
         GetSelectedPageEntries(anchor)
             .Where(entry => entry.IsPage)
-            .Select(entry => OurPlaneCoreJobStore.TryReadPage(entry.SourcePath))
+            .Select(entry => OurPlanCoreJobStore.TryReadPage(entry.SourcePath))
             .Where(page => page != null)
             .Cast<PageInfo>()
             .ToList();
@@ -285,7 +285,7 @@ public partial class MainWindow
     private static PageInfo? TryReadPageTabPage(PageTabState tab) =>
         string.IsNullOrWhiteSpace(tab.PageFolder)
             ? null
-            : OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);
+            : OurPlanCoreJobStore.TryReadPage(tab.PageFolder);
 
     private static IReadOnlyList<PageInfo> DistinctBatchPages(
         IEnumerable<PageInfo> candidatePages,
@@ -299,7 +299,7 @@ public partial class MainWindow
 
         totalDistinct = distinct.Count;
         return distinct
-            .Select(page => OurPlaneCoreJobStore.TryReadPage(page.FolderPath))
+            .Select(page => OurPlanCoreJobStore.TryReadPage(page.FolderPath))
             .Where(page => page != null)
             .Cast<PageInfo>()
             .Take(MaxBatchSheetOpenCount)
@@ -323,7 +323,7 @@ public partial class MainWindow
 
     private void LoadPageFromTab(PageTabState tab, PageInfo? fallbackPage = null)
     {
-        PageInfo? page = OurPlaneCoreJobStore.TryReadPage(tab.PageFolder);
+        PageInfo? page = OurPlanCoreJobStore.TryReadPage(tab.PageFolder);
         if (page == null &&
             fallbackPage != null &&
             string.Equals(fallbackPage.FolderPath, tab.PageFolder, StringComparison.OrdinalIgnoreCase))
@@ -502,7 +502,7 @@ public partial class MainWindow
 
     private void LoadViewportPageAnnotations(PageInfo viewportPage)
     {
-        _viewport.SetPageAnnotations(OurPlaneCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
+        _viewport.SetPageAnnotations(OurPlanCoreJobStore.LoadPageAnnotations(viewportPage.FolderPath));
         _currentPageAnnotationsLoaded = true;
         ApplyRulerVisibilityToViewport();
     }
@@ -649,7 +649,7 @@ public partial class MainWindow
     private string RelativePagePath(string pageFolder)
     {
         if (_currentJob == null)
-            return OurPlaneCoreJobStore.DisplayName(pageFolder);
+            return OurPlanCoreJobStore.DisplayName(pageFolder);
 
         try
         {
@@ -657,7 +657,7 @@ public partial class MainWindow
         }
         catch
         {
-            return OurPlaneCoreJobStore.DisplayName(pageFolder);
+            return OurPlanCoreJobStore.DisplayName(pageFolder);
         }
     }
 

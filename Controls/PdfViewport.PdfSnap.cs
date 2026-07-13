@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using OurPlaneCore.Models;
+using OurPlanCore.Models;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -214,7 +214,7 @@ public sealed partial class PdfViewport
 
             PageInfo? page = string.IsNullOrWhiteSpace(pageFolder)
                 ? null
-                : OurPlaneCoreJobStore.TryReadPage(pageFolder);
+                : OurPlanCoreJobStore.TryReadPage(pageFolder);
             string pageError = "";
             if (page?.RasterSheet != null &&
                 TryReadRasterImageSegments(page.FolderPath, page.PdfPath, page.RasterSheet, "page raster", out segments, out pageError))

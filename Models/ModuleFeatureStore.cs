@@ -2,12 +2,12 @@ using System;
 using System.IO;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class ModuleFeatureStore
 {
     private const string FileName = "modules.json";
-    public const string GlobalRootOverrideEnvironmentVariable = "OURPLANECORE_MODULE_SETTINGS_ROOT";
+    public const string GlobalRootOverrideEnvironmentVariable = "OURPLANCORE_MODULE_SETTINGS_ROOT";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,7 +19,7 @@ public static class ModuleFeatureStore
     {
         get
         {
-            string? overrideRoot = Environment.GetEnvironmentVariable(GlobalRootOverrideEnvironmentVariable);
+            string? overrideRoot = AppIdentity.GetEnvironmentVariable(GlobalRootOverrideEnvironmentVariable);
             string root = string.IsNullOrWhiteSpace(overrideRoot)
                 ? SmartContextStore.GlobalRoot
                 : Path.GetFullPath(overrideRoot);
@@ -27,7 +27,7 @@ public static class ModuleFeatureStore
         }
     }
 
-    public static string GetJobConfigPath(OurPlaneCoreJob job)
+    public static string GetJobConfigPath(OurPlanCoreJob job)
     {
         ArgumentNullException.ThrowIfNull(job);
         if (string.IsNullOrWhiteSpace(job.RootPath))
@@ -42,13 +42,13 @@ public static class ModuleFeatureStore
     public static void SaveGlobal(ModuleFeatureConfig config) =>
         Save(GlobalConfigPath, config);
 
-    public static ModuleFeatureConfig? LoadJobOverride(OurPlaneCoreJob job) =>
+    public static ModuleFeatureConfig? LoadJobOverride(OurPlanCoreJob job) =>
         Load(GetJobConfigPath(job));
 
-    public static void SaveJobOverride(OurPlaneCoreJob job, ModuleFeatureConfig config) =>
+    public static void SaveJobOverride(OurPlanCoreJob job, ModuleFeatureConfig config) =>
         Save(GetJobConfigPath(job), config);
 
-    public static void ClearJobOverride(OurPlaneCoreJob job)
+    public static void ClearJobOverride(OurPlanCoreJob job)
     {
         string path = GetJobConfigPath(job);
         try
@@ -63,7 +63,7 @@ public static class ModuleFeatureStore
         }
     }
 
-    public static ModuleFeatureConfig Resolve(OurPlaneCoreJob? job)
+    public static ModuleFeatureConfig Resolve(OurPlanCoreJob? job)
     {
         if (job != null && LoadJobOverride(job) is { } jobConfig)
             return jobConfig;

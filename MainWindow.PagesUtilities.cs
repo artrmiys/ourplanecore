@@ -7,7 +7,7 @@ using System.Windows;
 using System.Windows.Media;
 using Microsoft.VisualBasic.FileIO;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -16,7 +16,7 @@ public partial class MainWindow
         RemovePageTabsForAffectedPath(affectedPath);
 
         if (_currentPage == null) return;
-        if (!OurPlaneCoreJobStore.IsSameOrDescendant(affectedPath, _currentPage.FolderPath))
+        if (!OurPlanCoreJobStore.IsSameOrDescendant(affectedPath, _currentPage.FolderPath))
             return;
 
         _currentPage = null;

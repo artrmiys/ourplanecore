@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record PointAlongLineOptions(
     double SpacingInches,
@@ -21,7 +21,7 @@ public static class PointAlongLineService
         PointAlongLineOptions options)
     {
         ArgumentNullException.ThrowIfNull(line);
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(line.MType) != "line" || line.Points.Count < 2)
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(line.MType) != "line" || line.Points.Count < 2)
             throw new ArgumentException("Point spacing requires a Line measurement with at least two points.", nameof(line));
         if (!double.IsFinite(options.SpacingInches) || options.SpacingInches <= 0)
             throw new ArgumentException("Point spacing must be a positive number of inches.", nameof(options));

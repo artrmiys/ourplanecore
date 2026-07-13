@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Windows.Input;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -233,7 +233,7 @@ public sealed partial class PdfViewport
         float nudgePt = fine ? 1f : 6f;
         float scaleFactor = fine ? 1.01f : 1.05f;
         float rotationStep = fine ? 0.25f : 1f;
-        Key key = OurPlaneCore.KeyboardShortcutKeys.EffectiveKey(e);
+        Key key = OurPlanCore.KeyboardShortcutKeys.EffectiveKey(e);
 
         switch (key)
         {

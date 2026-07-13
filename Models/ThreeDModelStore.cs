@@ -2,7 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed class ThreeDPoint
 {
@@ -69,10 +69,10 @@ public sealed class ThreeDWallModel
 
 public static class ThreeDModelStore
 {
-    public static string ModelPath(OurPlaneCoreJob job) =>
+    public static string ModelPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "3D_Context", "walls_model.json");
 
-    public static ThreeDWallModel? Load(OurPlaneCoreJob job)
+    public static ThreeDWallModel? Load(OurPlanCoreJob job)
     {
         string path = ModelPath(job);
         if (!File.Exists(path))
@@ -80,7 +80,7 @@ public static class ThreeDModelStore
 
         try
         {
-            ThreeDWallModel? model = JsonSerializer.Deserialize<ThreeDWallModel>(File.ReadAllText(path), OurPlaneCoreJobStore.JsonOptions);
+            ThreeDWallModel? model = JsonSerializer.Deserialize<ThreeDWallModel>(File.ReadAllText(path), OurPlanCoreJobStore.JsonOptions);
             if (model != null)
             {
                 NormalizeLegacyRoofGuides(model);
@@ -210,11 +210,11 @@ public static class ThreeDModelStore
             issue.RoofGroupLabel = label;
     }
 
-    public static void Save(OurPlaneCoreJob job, ThreeDWallModel model)
+    public static void Save(OurPlanCoreJob job, ThreeDWallModel model)
     {
         string path = ModelPath(job);
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? job.RootPath);
         model.UpdatedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(model, OurPlaneCoreJobStore.JsonOptions));
+        IoUtil.WriteAllTextAtomic(path, JsonSerializer.Serialize(model, OurPlanCoreJobStore.JsonOptions));
     }
 }

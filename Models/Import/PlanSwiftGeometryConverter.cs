@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static class PlanSwiftGeometryConverter
 {

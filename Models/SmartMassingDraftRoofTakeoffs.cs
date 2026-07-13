@@ -1,12 +1,12 @@
 using System.IO;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public static partial class SmartMassingDraftService
 {
     private static void AddTakeoffRoofGuides(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartMassingDraft draft,
         IReadOnlyList<TakeoffItem> allItems,
         IReadOnlyDictionary<int, MassingTakeoffTransform> footprintTransforms)
@@ -189,7 +189,7 @@ public static partial class SmartMassingDraftService
         if (ContainsRakeTerm(labelText))
             return "rake";
         if (ContainsGableTerm(labelText))
-            return OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area"
+            return OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area"
                 ? "gable_area"
                 : "gable";
         if (ContainsEaveTerm(labelText))
@@ -199,7 +199,7 @@ public static partial class SmartMassingDraftService
         if (ContainsRakeTerm(fullText))
             return "rake";
         if (ContainsGableTerm(fullText))
-            return OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area"
+            return OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area"
                 ? "gable_area"
                 : "gable";
         return "eave";

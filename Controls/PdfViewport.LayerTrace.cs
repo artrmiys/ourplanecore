@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {
@@ -447,7 +447,7 @@ public sealed partial class PdfViewport
         var added = new List<Measurement>();
         foreach (PdfLayerTraceMeasurement item in trace.Measurements)
         {
-            string mType = OurPlaneCoreJobStore.NormalizeMeasurementType(item.MType);
+            string mType = OurPlanCoreJobStore.NormalizeMeasurementType(item.MType);
             if (mType == "line" && item.Points.Count < 2)
                 continue;
             if (mType == "area" && item.Points.Count < 3)

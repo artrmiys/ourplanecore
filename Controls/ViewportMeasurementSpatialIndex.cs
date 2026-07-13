@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using OurPlaneCore;
+using OurPlanCore;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed class ViewportMeasurementSpatialIndex
 {

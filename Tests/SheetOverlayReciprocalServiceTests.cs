@@ -1,4 +1,4 @@
-using OurPlaneCore;
+using OurPlanCore;
 
 internal static class SheetOverlayReciprocalServiceTests
 {
@@ -50,14 +50,14 @@ internal static class SheetOverlayReciprocalServiceTests
         {
             PageInfo basePage = CreatePageItem(job, "S101");
             PageInfo overlayPage = CreatePageItem(job, "S102");
-            OurPlaneCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.73);
-            OurPlaneCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 42.5, -18.25, 1.35, 7.5);
-            OurPlaneCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, true);
+            OurPlanCoreJobStore.SavePageOverlay(basePage.FolderPath, overlayPage.FolderPath, "#1E88E5", 0.73);
+            OurPlanCoreJobStore.SavePageOverlayTransform(basePage.FolderPath, 42.5, -18.25, 1.35, 7.5);
+            OurPlanCoreJobStore.SavePageOverlayVisibility(basePage.FolderPath, true);
 
-            PageInfo latestBase = OurPlaneCoreJobStore.TryReadPage(basePage.FolderPath)
+            PageInfo latestBase = OurPlanCoreJobStore.TryReadPage(basePage.FolderPath)
                 ?? throw new InvalidOperationException("base page missing");
             bool synced = SheetOverlayReciprocalService.TrySync(latestBase, out string reciprocalFolder);
-            PageInfo reciprocalPage = OurPlaneCoreJobStore.TryReadPage(overlayPage.FolderPath)
+            PageInfo reciprocalPage = OurPlanCoreJobStore.TryReadPage(overlayPage.FolderPath)
                 ?? throw new InvalidOperationException("reciprocal page missing");
             SheetOverlayTransformValues expected = SheetOverlayReciprocalService.Invert(
                 latestBase.OverlayOffsetXPt,
@@ -76,7 +76,7 @@ internal static class SheetOverlayReciprocalServiceTests
             AssertClose(expected.OverlayRotationDegrees, reciprocalPage.OverlayRotationDegrees, "reciprocal rotation");
 
             bool cleared = SheetOverlayReciprocalService.TryClear(latestBase, out string clearedFolder);
-            PageInfo clearedPage = OurPlaneCoreJobStore.TryReadPage(overlayPage.FolderPath)
+            PageInfo clearedPage = OurPlanCoreJobStore.TryReadPage(overlayPage.FolderPath)
                 ?? throw new InvalidOperationException("cleared reciprocal page missing");
 
             AssertTrue(cleared, "reciprocal clear should remove the target that points back to the base page");
@@ -94,7 +94,7 @@ internal static class SheetOverlayReciprocalServiceTests
         };
 
     private static string TestPath(string leaf) =>
-        Path.Combine(Path.GetTempPath(), "opc_overlay_reciprocal_tests", leaf);
+        Path.Combine(Path.GetTempPath(), "onc_overlay_reciprocal_tests", leaf);
 
     private static (double X, double Y) Transform(
         double x,
@@ -135,10 +135,10 @@ internal static class SheetOverlayReciprocalServiceTests
             throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
     }
 
-    private static PageInfo CreatePageItem(OurPlaneCoreJob job, string name) =>
-        OurPlaneCoreJobStore.CreatePageFromPdf(job, CreateSourcePdf(job), name, job.PagesRoot);
+    private static PageInfo CreatePageItem(OurPlanCoreJob job, string name) =>
+        OurPlanCoreJobStore.CreatePageFromPdf(job, CreateSourcePdf(job), name, job.PagesRoot);
 
-    private static string CreateSourcePdf(OurPlaneCoreJob job)
+    private static string CreateSourcePdf(OurPlanCoreJob job)
     {
         string sourcePdf = Path.Combine(job.RootPath, "source.pdf");
         if (!File.Exists(sourcePdf))
@@ -146,13 +146,13 @@ internal static class SheetOverlayReciprocalServiceTests
         return sourcePdf;
     }
 
-    private static void WithTempJob(string name, Action<OurPlaneCoreJob> action)
+    private static void WithTempJob(string name, Action<OurPlanCoreJob> action)
     {
-        string root = Path.Combine(Path.GetTempPath(), "opc_overlay_reciprocal_jobs", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "onc_overlay_reciprocal_jobs", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            OurPlaneCoreJob job = OurPlaneCoreJobStore.CreateJob(root, name);
+            OurPlanCoreJob job = OurPlanCoreJobStore.CreateJob(root, name);
             action(job);
         }
         finally

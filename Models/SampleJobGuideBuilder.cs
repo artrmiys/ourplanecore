@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 internal static class SampleJobGuideBuilder
 {
@@ -38,7 +38,7 @@ internal static class SampleJobGuideBuilder
     private static readonly IReadOnlyList<GuideSection> Sections =
     [
         new("00 Start Here - Workspace Map",
-            "OurPlaneCore is a local-first construction takeoff app. This sample project is a guided tour of every surface.",
+            "OurPlanCore is a local-first construction takeoff app. This sample project is a guided tour of every surface.",
             "01-main-workspace",
             [
                 new("Three-panel shell", [
@@ -61,7 +61,7 @@ internal static class SampleJobGuideBuilder
             [
                 new("Job group", [
                     "Open / Import: open a job, pick a recent job, create a new job, create this Sample Job, or import PDFs.",
-                    "PlanSwift: convert an existing PlanSwift job folder into an OurPlaneCore job.",
+                    "PlanSwift: convert an existing PlanSwift job folder into an OurPlanCore job.",
                 ]),
                 new("PDF group", [
                     "Export: write the selected or all sheets back out to PDF.",
@@ -301,7 +301,7 @@ internal static class SampleJobGuideBuilder
         writer.Write();
     }
 
-    public static void WriteGuideFiles(OurPlaneCoreJob job)
+    public static void WriteGuideFiles(OurPlanCoreJob job)
     {
         string guideRoot = GuideRoot(job);
         string screenshots = GuideScreenshotsFolder(job);
@@ -323,10 +323,10 @@ internal static class SampleJobGuideBuilder
         File.WriteAllText(Path.Combine(guideRoot, "README.md"), BuildGuideMarkdown(), Encoding.UTF8);
     }
 
-    private static string GuideRoot(OurPlaneCoreJob job) =>
+    private static string GuideRoot(OurPlanCoreJob job) =>
         Path.Combine(job.AIContextRoot, "guide");
 
-    private static string GuideScreenshotsFolder(OurPlaneCoreJob job) =>
+    private static string GuideScreenshotsFolder(OurPlanCoreJob job) =>
         Path.Combine(GuideRoot(job), "screenshots");
 
     private static byte[]? ResolveScreenshot(string key)
@@ -346,7 +346,7 @@ internal static class SampleJobGuideBuilder
     private static string BuildGuideMarkdown()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# OurPlaneCore Guide Sample");
+        sb.AppendLine("# OurPlanCore Guide Sample");
         sb.AppendLine();
         sb.AppendLine("Open Pages > 00. Guide for a screen-by-screen tour, then open A101 Sample Plan to see live takeoffs.");
         sb.AppendLine("The screenshots below are real captures of every workspace surface.");

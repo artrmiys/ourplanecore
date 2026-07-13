@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -21,11 +21,11 @@ public partial class MainWindow
         var entries = paths
             .Where(Directory.Exists)
             .Where(candidate => _currentJob != null &&
-                                OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, candidate) &&
+                                OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, candidate) &&
                                 !string.Equals(candidate, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase))
             .Select(candidate => new TakeoffsClipboardEntry(
                 candidate,
-                OurPlaneCoreJobStore.IsTakeoffItemFolder(candidate)))
+                OurPlanCoreJobStore.IsTakeoffItemFolder(candidate)))
             .ToList();
 
         return NormalizeSelectedTakeoffEntries(entries);
@@ -40,7 +40,7 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(path) || Directory.Exists(path))
             return false;
 
-        if (!OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path))
+        if (!OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path))
             return false;
 
         AppLog.Warn($"Takeoffs tree row referenced missing path '{path}'. Reloading tree from disk.");
@@ -193,7 +193,7 @@ public partial class MainWindow
         var result = new List<TakeoffsClipboardEntry>();
         foreach (var entry in distinct)
         {
-            if (result.Any(parent => OurPlaneCoreJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
+            if (result.Any(parent => OurPlanCoreJobStore.IsSameOrDescendant(parent.SourcePath, entry.SourcePath)))
                 continue;
             result.Add(entry);
         }
@@ -333,7 +333,7 @@ public partial class MainWindow
 
         _takeoffsMultiSelection.RemoveWhere(path =>
             !Directory.Exists(path) ||
-            !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path) ||
+            !OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, path) ||
             string.Equals(path, _currentJob.TakeoffsRoot, StringComparison.OrdinalIgnoreCase));
     }
 

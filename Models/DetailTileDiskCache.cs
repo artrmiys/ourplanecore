@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 /// <summary>
 /// Disk cache for deep-zoom detail tiles. The RAM tile list is cleared on every
@@ -20,7 +20,7 @@ namespace OurPlaneCore;
 /// </summary>
 public static class DetailTileDiskCache
 {
-    public const string CacheRootEnvironmentVariable = "OURPLANECORE_DETAIL_TILE_CACHE_ROOT";
+    public const string CacheRootEnvironmentVariable = "OURPLANCORE_DETAIL_TILE_CACHE_ROOT";
     private const int MaxEntries = 384;
     private const long MaxBytes = 1_200_000_000;
     private const long MaxEntryBytes = 48_000_000;
@@ -239,12 +239,11 @@ public static class DetailTileDiskCache
 
     private static string CacheRoot()
     {
-        string? overrideRoot = Environment.GetEnvironmentVariable(CacheRootEnvironmentVariable);
+        string? overrideRoot = AppIdentity.GetEnvironmentVariable(CacheRootEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(overrideRoot))
             return overrideRoot;
 
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "OurPlaneCore", "render-cache", "detail-tiles");
+        return Path.Combine(AppIdentity.LocalRoot, "render-cache", "detail-tiles");
     }
 
     private static string Hash(string value)

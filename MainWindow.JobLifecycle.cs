@@ -8,9 +8,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -165,7 +165,7 @@ public partial class MainWindow
     private void OpenJob(string rootPath, string? initialPageFolder = null)
     {
         PrepareCurrentJobForSwitch();
-        _currentJob = OurPlaneCoreJobStore.LoadJob(rootPath);
+        _currentJob = OurPlanCoreJobStore.LoadJob(rootPath);
         ApplyFolderTemplateProviders();
         _currentPage = null;
         _currentPdfPath = "";
@@ -196,7 +196,7 @@ public partial class MainWindow
         _viewport.ClearPage();
         ApplyRulerVisibilityToViewport();
         RefreshJobHeaderLabels();
-        Title = $"OurPlaneCore {AppVersion.Display} — {_currentJob.Name}";
+        Title = $"OurPlanCore {AppVersion.Display} — {_currentJob.Name}";
         ReloadPagesTree(_currentJob.PagesRoot);
         LoadPageBookmarksForJob();
         LoadTakeoffsForJob();
@@ -246,7 +246,7 @@ public partial class MainWindow
 
     private void ReportCorruptJsonFiles()
     {
-        IReadOnlyList<string> corruptFiles = OurPlaneCoreJobStore.DrainCorruptJsonFiles();
+        IReadOnlyList<string> corruptFiles = OurPlanCoreJobStore.DrainCorruptJsonFiles();
         if (corruptFiles.Count == 0)
             return;
 
@@ -296,7 +296,7 @@ public partial class MainWindow
 
         if (!string.IsNullOrWhiteSpace(_settings.LastPageFolder) &&
             Directory.Exists(_settings.LastPageFolder) &&
-            OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, _settings.LastPageFolder))
+            OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.PagesRoot, _settings.LastPageFolder))
         {
             return _settings.LastPageFolder;
         }
@@ -537,7 +537,7 @@ public partial class MainWindow
             }
 
             if (itemChanged)
-                OurPlaneCoreJobStore.SaveTakeoffItem(item);
+                OurPlanCoreJobStore.SaveTakeoffItem(item);
         }
 
         _lastMeasurementPageFolderUnresolvedCount = unresolved;
@@ -692,9 +692,9 @@ public partial class MainWindow
     private List<TreeViewItem> BuildTakeoffChildren(string parentFolder, List<TakeoffItem> loadedItems)
     {
         var nodes = new List<TreeViewItem>();
-        foreach (string folder in OurPlaneCoreJobStore.GetOrderedChildDirectories(parentFolder))
+        foreach (string folder in OurPlanCoreJobStore.GetOrderedChildDirectories(parentFolder))
         {
-            if (OurPlaneCoreJobStore.TryReadTakeoffItem(folder) is { } item)
+            if (OurPlanCoreJobStore.TryReadTakeoffItem(folder) is { } item)
             {
                 loadedItems.Add(item);
                 nodes.Add(CreateTakeoffTreeItem(item));
@@ -703,7 +703,7 @@ public partial class MainWindow
             {
                 var node = new TakeoffFolderNode
                 {
-                    Name = OurPlaneCoreJobStore.DisplayName(folder),
+                    Name = OurPlanCoreJobStore.DisplayName(folder),
                     FolderPath = folder,
                 };
                 var tvi = CreateTakeoffFolderTreeItem(node);

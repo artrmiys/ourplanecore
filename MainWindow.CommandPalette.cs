@@ -4,9 +4,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -53,10 +53,10 @@ public partial class MainWindow
         Add("file.open", "Open / Import", "File", "Ctrl+O", "Open the job picker. The top toolbar button also contains PDF import.");
         Add("file.openRecent", "Open Recent Job", "File", "Ctrl+Shift+O", "Open the Recent Jobs picker.");
         Add("file.openJobsFolder", "Open Jobs Folder", "File", "", "Open a root folder that contains multiple jobs.");
-        Add("file.newJob", "New PDF Job", "File", "", "Create a new OurPlaneCore job from a folder of PDFs.");
-        Add("file.blankJob", "Blank Job", "File", "", "Create an empty OurPlaneCore job without selecting PDFs.");
+        Add("file.newJob", "New PDF Job", "File", "", "Create a new OurPlanCore job from a folder of PDFs.");
+        Add("file.blankJob", "Blank Job", "File", "", "Create an empty OurPlanCore job without selecting PDFs.");
         Add("file.sampleJob", "Create Sample Job", "File", "", "Create and open a guided local sample project.");
-        Add("file.importPlanSwift", "Import PlanSwift Job", "File", "", "Convert a read-only PlanSwift job into a new OurPlaneCore job.");
+        Add("file.importPlanSwift", "Import PlanSwift Job", "File", "", "Convert a read-only PlanSwift job into a new OurPlanCore job.");
         Add("file.importPlanSwiftCurrent", "Import PlanSwift to Current Job", "File", "", "Import a read-only PlanSwift job under 01. planswift in the current job.", hasJob, "Open or create a job first.");
         Add("file.importPdf", "Import PDF(s)", "File", "", "Import one or many PDF files into the current job.", hasJob, "Open or create a job first.");
         Add("file.importPdfFolder", "Import PDF Folder", "File", "", "Recursively import every PDF file from a selected folder into the current job.", hasJob, "Open or create a job first.");

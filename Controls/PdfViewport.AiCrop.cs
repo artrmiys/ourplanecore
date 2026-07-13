@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using SkiaSharp;
 
-namespace OurPlaneCore.Controls;
+namespace OurPlanCore.Controls;
 
 public sealed partial class PdfViewport
 {

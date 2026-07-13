@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -13,7 +13,7 @@ public partial class MainWindow
 
     private async void AutoFitSheetOverlay(PageInfo page)
     {
-        PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
+        PageInfo? targetPage = OurPlanCoreJobStore.TryReadPage(page.FolderPath);
         if (targetPage == null)
         {
             TxtStatus.Text = "Overlay auto fit: sheet source is missing.";
@@ -24,13 +24,13 @@ public partial class MainWindow
         {
             if (!string.IsNullOrWhiteSpace(targetPage.OverlayPageFolder) && !targetPage.OverlayVisible)
             {
-                OurPlaneCoreJobStore.SavePageOverlayVisibility(targetPage.FolderPath, true);
-                targetPage = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath) ?? targetPage;
+                OurPlanCoreJobStore.SavePageOverlayVisibility(targetPage.FolderPath, true);
+                targetPage = OurPlanCoreJobStore.TryReadPage(targetPage.FolderPath) ?? targetPage;
             }
 
             if (string.IsNullOrWhiteSpace(targetPage.OverlayPageFolder))
             {
-                OurPlaneCoreJob? job = _currentJob;
+                OurPlanCoreJob? job = _currentJob;
                 if (job == null)
                 {
                     TxtStatus.Text = "Overlay auto fit: open a job before auto-selecting an overlay.";
@@ -50,7 +50,7 @@ public partial class MainWindow
                 return;
             }
 
-            PageInfo? overlayPage = OurPlaneCoreJobStore.TryReadPage(targetPage.OverlayPageFolder);
+            PageInfo? overlayPage = OurPlanCoreJobStore.TryReadPage(targetPage.OverlayPageFolder);
             if (overlayPage == null)
             {
                 TxtStatus.Text = "Overlay auto fit: overlay sheet source is missing.";
@@ -82,7 +82,7 @@ public partial class MainWindow
         SheetOverlayAutoFitResult fit,
         string statusPrefix = "")
     {
-        PageInfo? latestTarget = OurPlaneCoreJobStore.TryReadPage(targetPage.FolderPath);
+        PageInfo? latestTarget = OurPlanCoreJobStore.TryReadPage(targetPage.FolderPath);
         if (latestTarget == null ||
             string.IsNullOrWhiteSpace(latestTarget.OverlayPageFolder) ||
             !SameFolder(latestTarget.OverlayPageFolder, overlayPage.FolderPath))
@@ -91,13 +91,13 @@ public partial class MainWindow
             return;
         }
 
-        OurPlaneCoreJobStore.SavePageOverlayTransform(
+        OurPlanCoreJobStore.SavePageOverlayTransform(
             latestTarget.FolderPath,
             fit.OffsetXPt,
             fit.OffsetYPt,
             fit.OverlayScale,
             fit.OverlayRotationDegrees);
-        if (OurPlaneCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
+        if (OurPlanCoreJobStore.TryReadPage(latestTarget.FolderPath) is { } updatedTarget)
             ClearReciprocalSheetOverlay(updatedTarget);
 
         string status = $"{statusPrefix}{BuildSheetOverlayAutoFitStatus(read, fit)}";

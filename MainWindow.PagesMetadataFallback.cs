@@ -7,10 +7,10 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -120,7 +120,7 @@ public partial class MainWindow
             return pages;
 
         return SheetManagerRows()
-            .Select(row => OurPlaneCoreJobStore.TryReadPage(row.PageFolder))
+            .Select(row => OurPlanCoreJobStore.TryReadPage(row.PageFolder))
             .Where(page => page != null)
             .Cast<PageInfo>()
             .GroupBy(page => NormalizePath(page.FolderPath), StringComparer.OrdinalIgnoreCase)
@@ -129,7 +129,7 @@ public partial class MainWindow
     }
 
     private static IReadOnlyList<SmartAiRequest> RunnableMetadataFallbackRequests(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<PageInfo> pages) =>
         MetadataFallbackRequestsForPages(job, pages)
             .Where(request => MetadataFallbackRequestStillNeeded(job, request, pages))
@@ -158,7 +158,7 @@ public partial class MainWindow
         int ran = 0;
         int saved = 0;
         var errors = new List<string>(initialErrors);
-        OurPlaneCoreJob job = _currentJob!;
+        OurPlanCoreJob job = _currentJob!;
 
         foreach (SmartAiRequest request in requests)
         {
@@ -242,7 +242,7 @@ public partial class MainWindow
         {
             try
             {
-                PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+                PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
                 if (metadata == null)
                 {
                     PdfSheetMetadataService.TryAnalyzeAndSave(_currentJob, page, out metadata, out _);
@@ -427,7 +427,7 @@ public partial class MainWindow
         if (_currentJob == null)
             return false;
 
-        PdfSheetMetadata? metadata = OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
+        PdfSheetMetadata? metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath);
         if (metadata == null)
             PdfSheetMetadataService.TryAnalyzeAndSave(_currentJob, page, out metadata, out _);
 
@@ -488,7 +488,7 @@ public partial class MainWindow
     }
 
     private static IReadOnlyList<SmartAiRequest> MetadataFallbackRequestsForPages(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         IReadOnlyList<PageInfo> pages) =>
         SmartContextStore.LoadAiRequests(job)
             .Where(request => string.Equals(request.Type, "pdf_sheet_metadata_fallback", StringComparison.OrdinalIgnoreCase))
@@ -496,7 +496,7 @@ public partial class MainWindow
             .OrderBy(request => request.CreatedAtUtc, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static bool HasDoneAiResponse(OurPlaneCoreJob job, SmartAiRequest request)
+    private static bool HasDoneAiResponse(OurPlanCoreJob job, SmartAiRequest request)
     {
         SmartAiResponse? response = SmartContextStore.LoadAiResponse(job, request.Id);
         return response != null &&
@@ -505,14 +505,14 @@ public partial class MainWindow
     }
 
     private static bool MetadataFallbackRequestStillNeeded(
-        OurPlaneCoreJob job,
+        OurPlanCoreJob job,
         SmartAiRequest request,
         IReadOnlyList<PageInfo> pages) =>
         pages.Any(page =>
             MetadataFallbackRequestMatchesPage(job, request, page) &&
-            PdfSheetMetadataService.NeedsFallback(OurPlaneCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)));
+            PdfSheetMetadataService.NeedsFallback(OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)));
 
-    private static bool MetadataFallbackRequestMatchesPage(OurPlaneCoreJob job, SmartAiRequest request, PageInfo page)
+    private static bool MetadataFallbackRequestMatchesPage(OurPlanCoreJob job, SmartAiRequest request, PageInfo page)
     {
         string pageFolder = NormalizePath(page.FolderPath);
         string relativePageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);
@@ -532,7 +532,7 @@ public partial class MainWindow
         return string.Equals(request.Page, page.Name, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool HasExistingMetadataFallbackRequest(OurPlaneCoreJob job, PageInfo page)
+    private static bool HasExistingMetadataFallbackRequest(OurPlanCoreJob job, PageInfo page)
     {
         string pageFolder = NormalizePath(page.FolderPath);
         string relativePageFolder = Path.GetRelativePath(job.RootPath, page.FolderPath);

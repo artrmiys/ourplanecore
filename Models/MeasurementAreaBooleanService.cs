@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record AreaBooleanGeometry(
     List<SKPoint> Points,
@@ -21,7 +21,7 @@ public static class MeasurementAreaBooleanService
     {
         geometry = new AreaBooleanGeometry([], []);
         error = "";
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area" ||
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(area.MType) != "area" ||
             area.Points.Count < 3 ||
             cutter.Count < 3)
         {
@@ -49,7 +49,7 @@ public static class MeasurementAreaBooleanService
     {
         geometries = [];
         error = "";
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area" ||
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(area.MType) != "area" ||
             area.Points.Count < 3 ||
             cutter.Count < 3)
         {
@@ -77,8 +77,8 @@ public static class MeasurementAreaBooleanService
     {
         geometry = new AreaBooleanGeometry([], []);
         error = "";
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(first.MType) != "area" ||
-            OurPlaneCoreJobStore.NormalizeMeasurementType(second.MType) != "area")
+        if (OurPlanCoreJobStore.NormalizeMeasurementType(first.MType) != "area" ||
+            OurPlanCoreJobStore.NormalizeMeasurementType(second.MType) != "area")
         {
             error = "Merge: Area union needs Area measurements.";
             return false;
@@ -298,7 +298,7 @@ public static class MeasurementAreaBooleanService
 
         foreach (Measurement area in areas)
         {
-            if (OurPlaneCoreJobStore.NormalizeMeasurementType(area.MType) != "area" || area.Points.Count < 3)
+            if (OurPlanCoreJobStore.NormalizeMeasurementType(area.MType) != "area" || area.Points.Count < 3)
             {
                 error = "Combine: only Area measurements can be combined.";
                 return false;

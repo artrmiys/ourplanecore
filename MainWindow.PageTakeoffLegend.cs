@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -339,7 +339,7 @@ public partial class MainWindow
             .Select(entry => entry.Takeoff);
 
     private static int DefaultTakeoffLayerRank(TakeoffItem takeoff) =>
-        OurPlaneCoreJobStore.NormalizeMeasurementType(takeoff.MeasurementType) switch
+        OurPlanCoreJobStore.NormalizeMeasurementType(takeoff.MeasurementType) switch
         {
             "area" => 0,
             "line" => 1,

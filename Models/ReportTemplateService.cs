@@ -7,7 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record ReportTemplateColumn(string Letter, string BindingPath, string Header, double Width);
 

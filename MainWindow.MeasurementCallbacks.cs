@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -21,7 +21,7 @@ public partial class MainWindow
         if (m.ScaleMetersPerPt <= 0)
             m.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
         item.Measurements.Add(m);
-        OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+        OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
         RefreshTreeItem(item);
         using (UsePageMeasurementLookup())
         {
@@ -32,7 +32,7 @@ public partial class MainWindow
         QueueTakeoffAutosave(item);
         UpdateTotalDisplay();
         GenerateMultiLineOffsets(item, m);
-        if (item.IsJoistArea && OurPlaneCoreJobStore.NormalizeMeasurementType(m.MType) == "area")
+        if (item.IsJoistArea && OurPlanCoreJobStore.NormalizeMeasurementType(m.MType) == "area")
             BeginJoistDirectionCapture(item, m);
     }
 
@@ -70,7 +70,7 @@ public partial class MainWindow
 
         foreach (TakeoffItem item in changedItems)
         {
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             RefreshTreeItem(item);
             QueueTakeoffAutosave(item);
         }
@@ -94,14 +94,14 @@ public partial class MainWindow
 
     private bool TryResolveTakeoffItemForMeasurement(Measurement m, out TakeoffItem item)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(m.MType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(m.MType);
 
         if (!string.IsNullOrWhiteSpace(m.TakeoffFolder))
         {
             // Fast path: nearly every drawn measurement targets the active item,
             // so check it before scanning the full item list.
             if (_activeItem != null &&
-                OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType &&
                 string.Equals(_activeItem.FolderPath, m.TakeoffFolder, StringComparison.OrdinalIgnoreCase))
             {
                 _activeItem.MeasurementType = measurementType;
@@ -110,7 +110,7 @@ public partial class MainWindow
             }
 
             var byFolder = _takeoffItems.FirstOrDefault(i =>
-                OurPlaneCoreJobStore.NormalizeMeasurementType(i.MeasurementType) == measurementType &&
+                OurPlanCoreJobStore.NormalizeMeasurementType(i.MeasurementType) == measurementType &&
                 string.Equals(i.FolderPath, m.TakeoffFolder, StringComparison.OrdinalIgnoreCase));
             if (byFolder != null)
             {
@@ -121,7 +121,7 @@ public partial class MainWindow
         }
 
         if (_activeItem != null &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
+            OurPlanCoreJobStore.NormalizeMeasurementType(_activeItem.MeasurementType) == measurementType)
         {
             _activeItem.MeasurementType = measurementType;
             item = _activeItem;
@@ -198,7 +198,7 @@ public partial class MainWindow
                 m.TakeoffFolder = item.FolderPath;
             if (m.ScaleMetersPerPt <= 0)
                 m.ScaleMetersPerPt = _viewport.ScaleMetersPerPt;
-            OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+            OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
             bool previousSuppressFocus = _suppressCanvasFocusFromTakeoffSelection;
             _suppressCanvasFocusFromTakeoffSelection = true;
             try
@@ -249,7 +249,7 @@ public partial class MainWindow
         {
             foreach (TakeoffItem item in changedItems)
             {
-                OurPlaneCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
+                OurPlanCoreJobStore.ApplyTakeoffPropertiesToMeasurements(item);
                 RefreshTreeItem(item);
                 QueueTakeoffAutosave(item);
             }
@@ -279,7 +279,7 @@ public partial class MainWindow
 
         try
         {
-            OurPlaneCoreJobStore.SavePageAnnotations(
+            OurPlanCoreJobStore.SavePageAnnotations(
                 _currentPage.FolderPath,
                 _viewport.GetPageAnnotations());
         }

@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using OurPlaneCore.Controls;
+using OurPlanCore.Controls;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -32,7 +32,7 @@ public partial class MainWindow
             itemByMeasurement.TryGetValue(measurement, out TakeoffItem? item);
             item ??= FindTakeoffItemByFolder(measurement.TakeoffFolder, measurement.MType);
             entries.Add(new MeasurementClipboardEntry(
-                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType),
+                OurPlanCoreJobStore.NormalizeMeasurementType(measurement.MType),
                 measurement.Name,
                 measurement.Notes,
                 measurement.Color,
@@ -168,7 +168,7 @@ public partial class MainWindow
 
     private static bool MeasurementTypeRequiresScale(string measurementType)
     {
-        string normalized = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+        string normalized = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType);
         return normalized is "line" or "area";
     }
 
@@ -196,7 +196,7 @@ public partial class MainWindow
         MeasurementPasteMode mode,
         Dictionary<string, TakeoffItem> createdTargets)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
         if (mode == MeasurementPasteMode.SameTakeoffs)
         {
             TakeoffItem? sourceItem = FindTakeoffItemByFolder(entry.SourceTakeoffFolder, measurementType);
@@ -236,7 +236,7 @@ public partial class MainWindow
 
     private Measurement CloneClipboardMeasurement(MeasurementClipboardEntry entry, TakeoffItem target, SKPoint pasteOffset)
     {
-        string measurementType = OurPlaneCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
+        string measurementType = OurPlanCoreJobStore.NormalizeMeasurementType(entry.MeasurementType);
         double scale = _currentPage?.ScaleMetersPerPt > 0
             ? _currentPage.ScaleMetersPerPt
             : entry.ScaleMetersPerPt;
@@ -406,7 +406,7 @@ public partial class MainWindow
         TakeoffJoistClipboard joist,
         string measurementType)
     {
-        bool canBeJoist = OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
+        bool canBeJoist = OurPlanCoreJobStore.NormalizeMeasurementType(measurementType) == "area";
         target.IsJoistTakeoff = canBeJoist && joist.Enabled;
         target.JoistType = joist.JoistType;
         target.JoistSpacingInches = joist.SpacingInches > 0 ? joist.SpacingInches : 16;
@@ -444,12 +444,12 @@ public partial class MainWindow
 
         string normalizedType = string.IsNullOrWhiteSpace(measurementType)
             ? ""
-            : OurPlaneCoreJobStore.NormalizeMeasurementType(measurementType);
+            : OurPlanCoreJobStore.NormalizeMeasurementType(measurementType);
 
         return _takeoffItems.FirstOrDefault(item =>
             string.Equals(item.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase) &&
             (string.IsNullOrWhiteSpace(normalizedType) ||
-             OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == normalizedType));
+             OurPlanCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == normalizedType));
     }
 
     private void QueueTakeoffAutosave(TakeoffItem item)

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using SkiaSharp;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public sealed record PdfSimilarTextMatch(string Text, SKRect Rect, SKPoint Center);
 

@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 
-namespace OurPlaneCore;
+namespace OurPlanCore;
 
 public partial class MainWindow
 {
@@ -25,7 +25,7 @@ public partial class MainWindow
             .Select(entry => entry with { SourcePath = NormalizePath(entry.SourcePath) })
             .Where(entry => Directory.Exists(entry.SourcePath))
             .Where(entry =>
-                OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) &&
+                OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, entry.SourcePath) &&
                 !string.Equals(NormalizePath(entry.SourcePath), NormalizePath(_currentJob.TakeoffsRoot), StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (validEntries.Count == 0)
@@ -38,7 +38,7 @@ public partial class MainWindow
             for (int i = 0; i < validEntries.Count; i++)
             {
                 string sourcePath = validEntries[i].SourcePath;
-                int orderIndex = OurPlaneCoreJobStore.GetOrderIndex(sourcePath);
+                int orderIndex = OurPlanCoreJobStore.GetOrderIndex(sourcePath);
                 string trashPath = UniqueTakeoffUndoTrashPath(trashRoot, sourcePath, i);
                 Directory.Move(sourcePath, trashPath);
                 moved.Add(new TakeoffDeleteUndoEntry(sourcePath, trashPath, orderIndex));
@@ -100,7 +100,7 @@ public partial class MainWindow
 
                 RefreshAfterTakeoffDeleteUndo(restoredPaths);
                 TxtStatus.Text = restoredPaths.Count == 1
-                    ? $"Restored: {OurPlaneCoreJobStore.DisplayName(restoredPaths[0])}."
+                    ? $"Restored: {OurPlanCoreJobStore.DisplayName(restoredPaths[0])}."
                     : $"Restored {restoredPaths.Count} takeoff nodes.";
                 return true;
             }
@@ -130,7 +130,7 @@ public partial class MainWindow
 
             Directory.Move(entry.TrashPath, targetPath);
             if (entry.OrderIndex != int.MaxValue)
-                OurPlaneCoreJobStore.SetOrderIndex(targetPath, entry.OrderIndex);
+                OurPlanCoreJobStore.SetOrderIndex(targetPath, entry.OrderIndex);
             restoredPaths.Add(targetPath);
         }
 
@@ -159,18 +159,18 @@ public partial class MainWindow
         string? parent = Path.GetDirectoryName(targetPath);
         if (string.IsNullOrWhiteSpace(parent) ||
             !Directory.Exists(parent) ||
-            !OurPlaneCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, parent))
+            !OurPlanCoreJobStore.IsSameOrDescendant(_currentJob.TakeoffsRoot, parent))
         {
             string leaf = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
             targetPath = Path.Combine(_currentJob.TakeoffsRoot, string.IsNullOrWhiteSpace(leaf) ? "Restored Takeoff" : leaf);
         }
 
         return Directory.Exists(targetPath)
-            ? OurPlaneCoreJobStore.UniqueDirectoryPath(targetPath)
+            ? OurPlanCoreJobStore.UniqueDirectoryPath(targetPath)
             : targetPath;
     }
 
-    private static string CreateTakeoffUndoTrashRoot(OurPlaneCoreJob job)
+    private static string CreateTakeoffUndoTrashRoot(OurPlanCoreJob job)
     {
         string stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmssfff", CultureInfo.InvariantCulture);
         string suffix = Guid.NewGuid().ToString("N")[..8];
@@ -185,13 +185,13 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(leaf))
             leaf = "takeoff";
 
-        string name = $"{index + 1:D3}_{OurPlaneCoreJobStore.SanitizeName(leaf, 80)}";
-        return OurPlaneCoreJobStore.UniqueDirectoryPath(Path.Combine(trashRoot, name));
+        string name = $"{index + 1:D3}_{OurPlanCoreJobStore.SanitizeName(leaf, 80)}";
+        return OurPlanCoreJobStore.UniqueDirectoryPath(Path.Combine(trashRoot, name));
     }
 
     private static string TakeoffUndoStatusName(IReadOnlyList<TakeoffsClipboardEntry> entries) =>
         entries.Count == 1
-            ? OurPlaneCoreJobStore.DisplayName(entries[0].SourcePath)
+            ? OurPlanCoreJobStore.DisplayName(entries[0].SourcePath)
             : $"{entries.Count} takeoff nodes";
 
     private static void RestoreMovedTakeoffUndoEntries(IEnumerable<TakeoffDeleteUndoEntry> moved)
