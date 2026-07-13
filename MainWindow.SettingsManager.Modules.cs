@@ -23,7 +23,7 @@ public partial class MainWindow
         {
             Width = 150,
             Margin = new Thickness(0, 0, 6, 4),
-            ItemsSource = new[] { "Full (current)", "No AI / 3D", "Takeoff Only", "Minimal" },
+            ItemsSource = new[] { "Current default", "All modules on", "Takeoff Only", "Minimal" },
             SelectedIndex = 0,
         };
         actions.Children.Add(_modulePresetBox);
@@ -126,15 +126,15 @@ public partial class MainWindow
 
     private void LoadSelectedModulePreset()
     {
-        string preset = _modulePresetBox?.SelectedItem?.ToString() ?? "Full (current)";
+        string preset = _modulePresetBox?.SelectedItem?.ToString() ?? "Current default";
         _moduleDraft = ModuleFeatureConfig.BuildDefault();
-        if (preset == "No AI / 3D")
+        if (preset == "All modules on")
         {
-            _moduleDraft.SetEnabled(ModuleId.Ai, false);
-            _moduleDraft.SetEnabled(ModuleId.ThreeD, false);
+            SetAllModuleDraft(enabled: true);
         }
         else if (preset == "Takeoff Only")
         {
+            SetAllModuleDraft(enabled: true);
             DisableModuleDraft(
                 ModuleId.Annotations, ModuleId.SheetOverlay, ModuleId.ReportBuilder,
                 ModuleId.Materials, ModuleId.Ai, ModuleId.ThreeD,
@@ -142,8 +142,7 @@ public partial class MainWindow
         }
         else if (preset == "Minimal")
         {
-            foreach (ModuleFeatureDefinition definition in ModuleFeatureCatalog.All)
-                _moduleDraft.SetEnabled(definition.Id, false);
+            SetAllModuleDraft(enabled: false);
         }
         SyncModuleCheckBoxes();
         TxtStatus.Text = $"Loaded module preset: {preset}; press Apply or Save.";
@@ -153,6 +152,12 @@ public partial class MainWindow
     {
         foreach (ModuleId module in modules)
             _moduleDraft.SetEnabled(module, false);
+    }
+
+    private void SetAllModuleDraft(bool enabled)
+    {
+        foreach (ModuleFeatureDefinition definition in ModuleFeatureCatalog.All)
+            _moduleDraft.SetEnabled(definition.Id, enabled);
     }
 
     private void ApplyModuleDraft()

@@ -302,14 +302,15 @@ internal static class MaterialExtractionServiceTests
         }
     }
 
-    public static void ProjectPublishesToolsAsSidecarContent()
+    public static void ProjectEmbedsToolsInSingleFile()
     {
         string project = File.ReadAllText("ourplanecore.csproj");
 
         AssertTrue(
-            project.Contains("Update=\"Tools\\**\\*\"", StringComparison.Ordinal) &&
-            project.Contains("ExcludeFromSingleFile=\"true\"", StringComparison.Ordinal),
-            "published package must keep PyMuPDF helper/python files as sidecar content next to the compressed exe");
+            project.Contains("<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>", StringComparison.Ordinal) &&
+            project.Contains("<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>", StringComparison.Ordinal) &&
+            !project.Contains("ExcludeFromSingleFile=\"true\"", StringComparison.Ordinal),
+            "published package must embed and self-extract PyMuPDF, Python, and Tesseract Tools from one exe");
     }
 
     public static void BundledToolResolverPrefersExecutableSidecars()
@@ -336,6 +337,35 @@ internal static class MaterialExtractionServiceTests
         AssertTrue(
             pythonExecutable.Equals("python", StringComparison.OrdinalIgnoreCase) || File.Exists(pythonExecutable),
             "python runtime should resolve to packaged python or system fallback");
+    }
+
+    public static void BundledPythonRuntimeUsesBundledDependenciesOnly()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "opc_python_env_tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string pythonHome = Path.Combine(root, "Tools", "python");
+            string dependencies = Path.Combine(root, "Tools", "python_deps");
+            Directory.CreateDirectory(pythonHome);
+            Directory.CreateDirectory(dependencies);
+            string executable = Path.Combine(pythonHome, "python.exe");
+            File.WriteAllBytes(executable, []);
+            var startInfo = new System.Diagnostics.ProcessStartInfo();
+
+            BundledPythonRuntime.ConfigureEnvironment(startInfo, executable);
+
+            AssertTrue(
+                string.Equals(startInfo.Environment["PYTHONHOME"], pythonHome, StringComparison.OrdinalIgnoreCase),
+                "bundled Python home");
+            AssertTrue(
+                string.Equals(startInfo.Environment["PYTHONPATH"], dependencies, StringComparison.OrdinalIgnoreCase),
+                "bundled Python dependency path");
+            AssertTrue(startInfo.Environment["PYTHONNOUSERSITE"] == "1", "user site packages must be disabled");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
     }
 
     private static void AssertTrue(bool condition, string message)

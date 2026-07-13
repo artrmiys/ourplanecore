@@ -24,7 +24,15 @@ public static class BundledPythonRuntime
             return;
 
         processStartInfo.Environment["PYTHONHOME"] = pythonHome;
-        processStartInfo.Environment.Remove("PYTHONPATH");
+        string? toolsRoot = Directory.GetParent(pythonHome)?.FullName;
+        string bundledDependencies = string.IsNullOrWhiteSpace(toolsRoot)
+            ? ""
+            : Path.Combine(toolsRoot, "python_deps");
+        if (Directory.Exists(bundledDependencies))
+            processStartInfo.Environment["PYTHONPATH"] = bundledDependencies;
+        else
+            processStartInfo.Environment.Remove("PYTHONPATH");
+        processStartInfo.Environment["PYTHONNOUSERSITE"] = "1";
         processStartInfo.Environment["PYTHONUTF8"] = "1";
     }
 }

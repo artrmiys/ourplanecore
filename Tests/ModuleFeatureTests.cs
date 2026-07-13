@@ -2,8 +2,17 @@ using OurPlaneCore;
 
 internal static class ModuleFeatureTests
 {
-    public static void CatalogContainsEveryModuleEnabledByDefault()
+    public static void CatalogMatchesDistributableDefaults()
     {
+        var disabledByDefault = new HashSet<ModuleId>
+        {
+            ModuleId.SheetManager,
+            ModuleId.TakeoffManager,
+            ModuleId.ReportBuilder,
+            ModuleId.Materials,
+            ModuleId.Ai,
+            ModuleId.ThreeD,
+        };
         ModuleId[] ids = Enum.GetValues<ModuleId>();
         AssertEqual(ids.Length, ModuleFeatureCatalog.All.Count, "module catalog count");
         AssertEqual(ids.Length, ModuleFeatureCatalog.All.Select(definition => definition.Id).Distinct().Count(), "unique module ids");
@@ -13,7 +22,10 @@ internal static class ModuleFeatureTests
             AssertTrue(!string.IsNullOrWhiteSpace(definition.Group), $"{definition.Id} group");
             AssertTrue(!string.IsNullOrWhiteSpace(definition.Name), $"{definition.Id} name");
             AssertTrue(!string.IsNullOrWhiteSpace(definition.Description), $"{definition.Id} description");
-            AssertTrue(definition.DefaultEnabled, $"{definition.Id} default should remain enabled");
+            AssertEqual(
+                !disabledByDefault.Contains(definition.Id),
+                definition.DefaultEnabled,
+                $"{definition.Id} distributable default");
         }
 
         AssertEqual("Sheet Manager", ModuleFeatureCatalog.Get(ModuleId.SheetManager).Name, "sheet manager catalog name");
@@ -36,7 +48,7 @@ internal static class ModuleFeatureTests
 
         AssertEqual(ModuleFeatureConfig.CurrentSchemaVersion, upgraded.SchemaVersion, "upgraded schema");
         AssertFalse(upgraded.IsEnabled(ModuleId.Ai), "upgraded AI edit");
-        AssertTrue(upgraded.IsEnabled(ModuleId.SheetManager), "missing sheet manager default");
+        AssertFalse(upgraded.IsEnabled(ModuleId.SheetManager), "missing sheet manager default");
         AssertTrue(upgraded.IsEnabled(ModuleId.ExcelIntegration), "missing excel integration default");
         AssertTrue(upgraded.States.TryGetValue("FutureModule", out bool futureEnabled) && !futureEnabled, "unknown future state preservation");
         AssertEqual(ModuleFeatureCatalog.All.Count + 1, upgraded.States.Count, "upgraded state count");
@@ -64,7 +76,7 @@ internal static class ModuleFeatureTests
         ModuleFeatureConfig loaded = ModuleFeatureStore.LoadGlobal()
             ?? throw new InvalidOperationException("global module config was not loaded");
         AssertFalse(loaded.IsEnabled(ModuleId.ExcelIntegration), "global Excel state round trip");
-        AssertTrue(loaded.IsEnabled(ModuleId.SheetManager), "global sheet manager state round trip");
+        AssertFalse(loaded.IsEnabled(ModuleId.SheetManager), "global sheet manager state round trip");
 
         string directory = Path.GetDirectoryName(expectedPath)!;
         AssertEqual(0, Directory.EnumerateFiles(directory, ".modules.json.*.tmp").Count(), "atomic temp cleanup");
@@ -83,11 +95,11 @@ internal static class ModuleFeatureTests
         try
         {
             ModuleFeatureConfig global = ModuleFeatureConfig.BuildDefault();
-            global.SetEnabled(ModuleId.Ai, false);
+            global.SetEnabled(ModuleId.Bookmarks, false);
             ModuleFeatureStore.SaveGlobal(global);
 
             ModuleFeatureConfig jobOverride = ModuleFeatureConfig.BuildDefault();
-            jobOverride.SetEnabled(ModuleId.SheetManager, false);
+            jobOverride.SetEnabled(ModuleId.SheetManager, true);
             ModuleFeatureStore.SaveJobOverride(job, jobOverride);
 
             string expectedJobPath = Path.Combine(jobRoot, "AI_Context", "settings", "modules.json");
@@ -95,18 +107,21 @@ internal static class ModuleFeatureTests
             AssertTrue(File.Exists(expectedJobPath), "job module file");
 
             ModuleFeatureConfig resolvedJob = ModuleFeatureStore.Resolve(job);
-            AssertFalse(resolvedJob.IsEnabled(ModuleId.SheetManager), "job override sheet manager state");
-            AssertTrue(resolvedJob.IsEnabled(ModuleId.Ai), "job config should replace rather than merge global config");
+            AssertTrue(resolvedJob.IsEnabled(ModuleId.SheetManager), "job override sheet manager state");
+            AssertTrue(resolvedJob.IsEnabled(ModuleId.Bookmarks), "job config should replace rather than merge global config");
 
             ModuleFeatureStore.ClearJobOverride(job);
             AssertFalse(File.Exists(expectedJobPath), "cleared job override");
             ModuleFeatureConfig resolvedGlobal = ModuleFeatureStore.Resolve(job);
-            AssertFalse(resolvedGlobal.IsEnabled(ModuleId.Ai), "global AI state after job clear");
-            AssertTrue(resolvedGlobal.IsEnabled(ModuleId.SheetManager), "global sheet manager state after job clear");
+            AssertFalse(resolvedGlobal.IsEnabled(ModuleId.Bookmarks), "global bookmark state after job clear");
+            AssertFalse(resolvedGlobal.IsEnabled(ModuleId.SheetManager), "global sheet manager state after job clear");
 
             File.Delete(ModuleFeatureStore.GlobalConfigPath);
             ModuleFeatureConfig resolvedDefault = ModuleFeatureStore.Resolve(null);
-            AssertTrue(ModuleFeatureCatalog.All.All(definition => resolvedDefault.IsEnabled(definition.Id)), "default fallback states");
+            AssertTrue(
+                ModuleFeatureCatalog.All.All(definition =>
+                    resolvedDefault.IsEnabled(definition.Id) == definition.DefaultEnabled),
+                "default fallback states");
         }
         finally
         {
@@ -122,9 +137,10 @@ internal static class ModuleFeatureTests
 
         AssertTrue(ModuleFeatureStore.LoadGlobal() == null, "malformed global config should not load");
         ModuleFeatureConfig fallback = ModuleFeatureStore.Resolve(null);
-        AssertTrue(fallback.IsEnabled(ModuleId.Ai), "malformed config AI fallback");
-        AssertTrue(fallback.IsEnabled(ModuleId.ThreeD), "malformed config 3D fallback");
-        AssertTrue(fallback.IsEnabled(ModuleId.SheetManager), "malformed config sheet manager fallback");
+        AssertFalse(fallback.IsEnabled(ModuleId.Ai), "malformed config AI fallback");
+        AssertFalse(fallback.IsEnabled(ModuleId.ThreeD), "malformed config 3D fallback");
+        AssertFalse(fallback.IsEnabled(ModuleId.SheetManager), "malformed config sheet manager fallback");
+        AssertTrue(fallback.IsEnabled(ModuleId.Annotations), "malformed config annotation fallback");
     }
 
     public static void RequiredSurfacesAreWiredThroughTheModuleGate()
