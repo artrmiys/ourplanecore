@@ -18,24 +18,33 @@ public partial class MainWindow
         SplitSelectedMeasurementsToNewTakeoff();
 
     private void BtnCombineUnion_Click(object sender, RoutedEventArgs e) =>
-        _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Union);
+        CombineSelectedAreasIfEnabled(Controls.AreaCombineMode.Union);
 
     private void BtnCombineSubtract_Click(object sender, RoutedEventArgs e) =>
-        _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Subtract);
+        CombineSelectedAreasIfEnabled(Controls.AreaCombineMode.Subtract);
 
     private void BtnCombineIntersect_Click(object sender, RoutedEventArgs e) =>
-        _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Intersect);
+        CombineSelectedAreasIfEnabled(Controls.AreaCombineMode.Intersect);
 
     private void BtnCombineRemoveOverlap_Click(object sender, RoutedEventArgs e) =>
-        _viewport.CombineSelectedAreas(Controls.AreaCombineMode.RemoveOverlap);
+        CombineSelectedAreasIfEnabled(Controls.AreaCombineMode.RemoveOverlap);
 
     private void BtnCombineDivide_Click(object sender, RoutedEventArgs e) =>
-        _viewport.CombineSelectedAreas(Controls.AreaCombineMode.Divide);
+        CombineSelectedAreasIfEnabled(Controls.AreaCombineMode.Divide);
+
+    private void CombineSelectedAreasIfEnabled(Controls.AreaCombineMode mode)
+    {
+        if (RequireModule(ModuleId.AdvancedTakeoffTools, "Combine Areas"))
+            _viewport.CombineSelectedAreas(mode);
+    }
 
     private void MergeSelectedMeasurementsToPromptedTakeoff(
         IReadOnlyList<Measurement>? explicitSelection = null,
         TakeoffMeasurementNode? sectionAnchor = null)
     {
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Merge Measurements"))
+            return;
+
         IReadOnlyList<Measurement> selected = SelectedMeasurementsForMergeSplit(explicitSelection, sectionAnchor);
         if (!ValidateMergeSplitSelection(selected, out string measurementType))
             return;
@@ -54,6 +63,9 @@ public partial class MainWindow
         IReadOnlyList<Measurement>? explicitSelection = null,
         TakeoffMeasurementNode? sectionAnchor = null)
     {
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Split Measurements"))
+            return;
+
         IReadOnlyList<Measurement> selected = SelectedMeasurementsForMergeSplit(explicitSelection, sectionAnchor);
         if (!ValidateMergeSplitSelection(selected, out string measurementType))
             return;

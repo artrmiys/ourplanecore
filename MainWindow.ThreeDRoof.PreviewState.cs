@@ -46,11 +46,15 @@ public partial class MainWindow
     }
 
     private bool CanBuildThreeDRoofPreview() =>
+        IsModuleEnabled(ModuleId.ThreeD) &&
         _currentJob != null &&
         (_threeDRoofGuides.Count > 0 || _threeDFloorSlabs.Count > 0 || _threeDWallElements.Count > 0);
 
     private void BuildThreeDRoofPreview()
     {
+        if (!RequireModule(ModuleId.ThreeD, "Generate 3D roof"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "3D Roof: open a job first.";

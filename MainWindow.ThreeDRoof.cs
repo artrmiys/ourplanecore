@@ -23,6 +23,9 @@ public partial class MainWindow
 
     private void GenerateThreeDRoofFromUi()
     {
+        if (!RequireModule(ModuleId.ThreeD, "Generate 3D roof"))
+            return;
+
         if (!TryApplyPendingThreeDRoofEdgePropertiesFromPanel(showStatus: false))
             return;
 
@@ -35,14 +38,22 @@ public partial class MainWindow
     private void Btn3dAutoRoof_Click(object sender, RoutedEventArgs e) =>
         BuildAutoThreeDRoof(TakeoffsTree.SelectedItem as TreeViewItem, switchTo3DTab: true);
 
-    private void Btn3dClearRoof_Click(object sender, RoutedEventArgs e) =>
+    private void Btn3dClearRoof_Click(object sender, RoutedEventArgs e)
+    {
+        if (!RequireModule(ModuleId.ThreeD, "Clear 3D roof"))
+            return;
+
         ClearThreeDRoof();
+    }
 
     private void Btn3dRoofEdges_Click(object sender, RoutedEventArgs e) =>
         ToggleThreeDRoofEdgeSelectMode();
 
     private void AddViewportThreeDMenuItems(ContextMenu menu, ViewportContextRequest request)
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+            return;
+
         var roofMenu = new MenuItem { Header = "3D" };
         if (TryFindThreeDRoofGuideAt(request.PdfX, request.PdfY, out ThreeDRoofGuide? roofGuide) &&
             roofGuide != null)
@@ -69,8 +80,16 @@ public partial class MainWindow
         _ = request;
     }
 
-    private void ToggleThreeDRoofEdgeSelectMode() =>
+    private void ToggleThreeDRoofEdgeSelectMode()
+    {
+        if (!_threeDRoofEdgeSelectModeEnabled &&
+            !RequireModule(ModuleId.ThreeD, "Select 3D roof edges"))
+        {
+            return;
+        }
+
         SetThreeDRoofEdgeSelectMode(!_threeDRoofEdgeSelectModeEnabled);
+    }
 
     private void SetThreeDRoofEdgeSelectMode(bool enabled)
     {
@@ -91,6 +110,9 @@ public partial class MainWindow
 
     private void OnThreeDRoofGuideSelectionRequested(string guideId, bool additive)
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+            return;
+
         if (string.IsNullOrWhiteSpace(guideId))
         {
             ClearThreeDRoofGuideSelection();

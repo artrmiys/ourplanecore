@@ -21,6 +21,9 @@ public partial class MainWindow
 
     private void BtnToggleInbox_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "AI Inbox"))
+            return;
+
         if (_inboxExpanded)
         {
             _inboxExpandedHeight = InboxRow.ActualHeight > 30 ? InboxRow.ActualHeight : _inboxExpandedHeight;
@@ -39,6 +42,9 @@ public partial class MainWindow
 
     private void BtnInboxMore_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "AI Inbox actions"))
+            return;
+
         if (sender is not UIElement target)
             return;
 
@@ -62,7 +68,7 @@ public partial class MainWindow
     {
         ObservationsListView.Items.Clear();
 
-        if (_currentJob == null)
+        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null)
         {
             TxtInboxCount.Text    = "0";
             InboxBadge.Visibility = Visibility.Collapsed;
@@ -183,6 +189,9 @@ public partial class MainWindow
         menu.Opened += (_, _) =>
         {
             menu.Items.Clear();
+            if (!IsModuleEnabled(ModuleId.Ai))
+                return;
+
             ObservationDisplayItem? selected = SelectedObservationDisplayItem();
             if (selected == null)
             {
@@ -235,6 +244,9 @@ public partial class MainWindow
 
     private void ObservationsListView_KeyDown(object sender, KeyEventArgs e)
     {
+        if (!IsModuleEnabled(ModuleId.Ai))
+            return;
+
         if (e.Key == Key.Enter)
         {
             OpenSelectedInboxObservation();
@@ -252,12 +264,18 @@ public partial class MainWindow
 
     private void OpenSelectedInboxObservation()
     {
+        if (!RequireModule(ModuleId.Ai, "Open AI Inbox entry"))
+            return;
+
         if (SelectedObservationDisplayItem() is { } selected)
             ShowObservationDetailsDialog(selected.Observation);
     }
 
     private async void BtnRunAi_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI request"))
+            return;
+
         await RunAsyncUiHandler(
             RunSelectedOrNextAiRequestAsync,
             "AI request failed.",
@@ -266,6 +284,9 @@ public partial class MainWindow
 
     private async void BtnRunNewBookmarks_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI crop bookmarks"))
+            return;
+
         await RunAsyncUiHandler(
             RunNewCropBookmarksAsync,
             "AI bookmark run failed.",
@@ -274,6 +295,9 @@ public partial class MainWindow
 
     private async void BtnRetryFailedBookmarks_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Retry AI crop bookmarks"))
+            return;
+
         await RunAsyncUiHandler(
             RetryFailedCropBookmarksAsync,
             "AI bookmark retry failed.",
@@ -282,7 +306,7 @@ public partial class MainWindow
 
     private bool CanBookmarkObservationCrop(ObservationDisplayItem item)
     {
-        if (_currentJob == null || !CanOpenObservationCrop(item))
+        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null || !CanOpenObservationCrop(item))
             return false;
 
         return SmartContextStore.FindCropBookmarkByObservation(_currentJob, item.Observation.Id) == null;
@@ -290,6 +314,9 @@ public partial class MainWindow
 
     private void BookmarkObservationCrop(ObservationDisplayItem item)
     {
+        if (!RequireModule(ModuleId.Ai, "Bookmark crop for AI"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -344,6 +371,9 @@ public partial class MainWindow
 
     private async Task RunCropBookmarksAsync(string statusFilter, string emptyMessage, string operationLabel)
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI crop bookmarks"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before running crop bookmarks.";
@@ -379,6 +409,9 @@ public partial class MainWindow
         int skippedCandidates = 0;
         foreach (SmartAiCropBookmark bookmark in bookmarks)
         {
+            if (!IsModuleEnabled(ModuleId.Ai))
+                break;
+
             if (!CropBookmarkFileExists(bookmark))
             {
                 bookmark.Status = "failed";
@@ -422,6 +455,15 @@ public partial class MainWindow
             }
             bookmark.ProcessedAtUtc = DateTime.UtcNow.ToString("O");
             SmartContextStore.SaveCropBookmark(_currentJob, bookmark);
+
+            if (!IsModuleEnabled(ModuleId.Ai))
+                break;
+        }
+
+        if (!IsModuleEnabled(ModuleId.Ai))
+        {
+            TxtStatus.Text = "AI bookmark batch cancelled because the AI module was disabled.";
+            return;
         }
 
         LoadObservationsInbox();
@@ -878,16 +920,25 @@ public partial class MainWindow
 
     private void BtnCreateMarkerSet_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Create AI marker set"))
+            return;
+
         CreateMarkerSetFromCurrentFilter();
     }
 
     private void BtnManageMarkerSets_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Manage AI marker sets"))
+            return;
+
         ManageMarkerSets();
     }
 
     private void BtnExportMarkers_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "Export AI marker context"))
+            return;
+
         ExportMarkersContext(openAfterExport: true);
     }
 }

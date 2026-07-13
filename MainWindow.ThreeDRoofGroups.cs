@@ -429,7 +429,8 @@ public partial class MainWindow
 
     private void ThreeDRoofSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_updatingThreeDRoofMoveUi ||
+        if (!IsModuleEnabled(ModuleId.ThreeD) ||
+            _updatingThreeDRoofMoveUi ||
             _threeDRoofSelector?.SelectedItem is not ComboBoxItem item ||
             item.Tag is not string groupId)
         {
@@ -478,7 +479,7 @@ public partial class MainWindow
 
     private void ThreeDRoofMoveSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_updatingThreeDRoofMoveUi)
+        if (!IsModuleEnabled(ModuleId.ThreeD) || _updatingThreeDRoofMoveUi)
             return;
 
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
@@ -499,6 +500,9 @@ public partial class MainWindow
 
     private void ThreeDRoofMoveSlider_Commit(object sender, RoutedEventArgs e)
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+            return;
+
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
         if (placement == null)
             return;
@@ -549,6 +553,9 @@ public partial class MainWindow
 
     private void DeleteActiveThreeDRoof()
     {
+        if (!RequireModule(ModuleId.ThreeD, "Delete 3D roof"))
+            return;
+
         string groupId = ActiveThreeDRoofGroupId();
         if (string.IsNullOrWhiteSpace(groupId))
         {

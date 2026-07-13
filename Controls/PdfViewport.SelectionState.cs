@@ -284,6 +284,7 @@ public sealed partial class PdfViewport
         IsSamePageFolder(annotation.PageFolder, _pageFolder);
 
     private bool IsAnnotationVisibleOnActivePage(PageAnnotation annotation) =>
+        _annotationsModuleEnabled &&
         IsAnnotationOnActivePage(annotation) &&
         (!_hideRulerAnnotations || !IsRulerAnnotation(annotation) || !annotation.Hidden);
 

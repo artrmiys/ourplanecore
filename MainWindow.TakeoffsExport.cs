@@ -64,11 +64,16 @@ public partial class MainWindow
 
     private async void BtnExportExcel_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ExcelIntegration, "Export Excel"))
+            return;
         await ExportPlanSwiftTakeoffsAsync("xlsx", exportWholeJob: false);
     }
 
     private async void BtnExportCurrentExcel_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ExcelIntegration, "Export to Current Excel"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open or create a job before exporting to Excel.";

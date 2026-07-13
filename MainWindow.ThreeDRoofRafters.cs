@@ -100,7 +100,7 @@ public partial class MainWindow
 
     private bool TryToggleRafterFaceAt(System.Windows.Controls.Viewport3D viewport, Point point)
     {
-        if (!_threeDRafterFaceMode)
+        if (!IsModuleEnabled(ModuleId.ThreeD) || !_threeDRafterFaceMode)
             return false;
 
         HitTestResult? hit = VisualTreeHelper.HitTest(viewport, point);
@@ -155,6 +155,9 @@ public partial class MainWindow
 
     private void Btn3dRafterFaces_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Pick 3D roof faces"))
+            return;
+
         if (_threeDRoofPlanes.Count == 0)
         {
             TxtStatus.Text = "Rafters: generate the roof first (Roof Base -> Select Edge -> Generate Roof).";
@@ -169,6 +172,9 @@ public partial class MainWindow
 
     private void Btn3dRafterAll_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Build 3D roof rafters"))
+            return;
+
         var groupIds = _threeDRoofPlanes
             .Where(ThreeDRoofRafterService.IsEnvelopeFace)
             .Select(plane => plane.RoofGroupId)
@@ -200,6 +206,9 @@ public partial class MainWindow
 
     private void Btn3dRafterClear_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Clear 3D roof rafters"))
+            return;
+
         if (_threeDRoofRafterSettings.All(settings => !settings.IsActive))
         {
             TxtStatus.Text = "Rafters: nothing to clear.";
@@ -220,7 +229,9 @@ public partial class MainWindow
 
     private void CmbRafter_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsInitialized || _threeDRoofRafterSettings.Count == 0)
+        if (!IsInitialized ||
+            !IsModuleEnabled(ModuleId.ThreeD) ||
+            _threeDRoofRafterSettings.Count == 0)
             return;
 
         ThreeDRoofRafterSettings? last = null;

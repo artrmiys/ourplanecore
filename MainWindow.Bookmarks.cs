@@ -29,6 +29,9 @@ public partial class MainWindow
         _bookmarksController.Initialize();
     }
 
+    private void ApplyBookmarksModuleAvailability() =>
+        _bookmarksController?.SetModuleEnabled(IsModuleEnabled(ModuleId.Bookmarks));
+
     private void BookmarkDockToggle_Changed(object sender, RoutedEventArgs e) =>
         _bookmarksController?.BookmarkDockToggleChanged(sender);
 

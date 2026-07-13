@@ -17,6 +17,9 @@ public partial class MainWindow
 
     private void BtnReportBuilderApplyWalls_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ReportBuilder, "Report Builder"))
+            return;
+
         IReadOnlyList<ReportBuilderRow> allRows = ReportBuilderRows();
         if (allRows.Count == 0)
         {
@@ -48,6 +51,9 @@ public partial class MainWindow
 
     private void RefreshReportBuilder(bool forceReload = false)
     {
+        if (!IsModuleEnabled(ModuleId.ReportBuilder))
+            return;
+
         if (!forceReload && ReportBuilderGrid.ItemsSource != null)
             return;
 

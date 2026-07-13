@@ -15,6 +15,9 @@ public partial class MainWindow
         bool replaceExistingOverlay,
         bool skipCurrentOverlay = false)
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Auto Fit Sheet Overlay"))
+            return;
+
         PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
         if (targetPage == null)
         {
@@ -59,6 +62,9 @@ public partial class MainWindow
 
     private async void ChooseSheetOverlayAutoSelectCandidate(PageInfo page)
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Choose Sheet Overlay"))
+            return;
+
         PageInfo? targetPage = OurPlaneCoreJobStore.TryReadPage(page.FolderPath);
         if (targetPage == null)
         {

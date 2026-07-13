@@ -108,11 +108,19 @@ public partial class MainWindow
     // Revit-style: save only the side-panel fields onto every selected edge.
     // Blank fields stay unchanged so mixed selections are safe; Generate Roof
     // rebuilds after the user finishes assigning all edge pitches.
-    private void ApplyThreeDRoofEdgePropertiesFromPanel() =>
+    private void ApplyThreeDRoofEdgePropertiesFromPanel()
+    {
+        if (!RequireModule(ModuleId.ThreeD, "Edit 3D roof edges"))
+            return;
+
         TryApplyPendingThreeDRoofEdgePropertiesFromPanel(showStatus: true);
+    }
 
     private bool TryApplyPendingThreeDRoofEdgePropertiesFromPanel(bool showStatus)
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+            return false;
+
         IReadOnlyList<ThreeDRoofGuide> guides = SelectedThreeDRoofGuides();
         if (guides.Count == 0)
         {

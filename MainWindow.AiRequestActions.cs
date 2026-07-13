@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,15 +21,19 @@ public partial class MainWindow
 {
     // AI request execution and sheet-metadata response application.
 
+    private CancellationTokenSource? _activeAiRequestCts;
+
     private bool CanOpenAiRequestFile(ObservationDisplayItem item) =>
-        _currentJob != null && File.Exists(AiRequestPath(item));
+        IsModuleEnabled(ModuleId.Ai) && _currentJob != null && File.Exists(AiRequestPath(item));
 
     private bool CanAddManualAiResponse(ObservationDisplayItem item) =>
-        _currentJob != null && SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id) != null;
+        IsModuleEnabled(ModuleId.Ai) &&
+        _currentJob != null &&
+        SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id) != null;
 
     private bool CanRunAiRequest(ObservationDisplayItem item)
     {
-        if (_currentJob == null || _isRunningAiRequest)
+        if (!IsModuleEnabled(ModuleId.Ai) || _currentJob == null || _isRunningAiRequest)
             return false;
 
         SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
@@ -37,7 +42,9 @@ public partial class MainWindow
 
     private bool CanApplySheetMetadataResponse(ObservationDisplayItem item)
     {
-        if (_currentJob == null)
+        if (!IsModuleEnabled(ModuleId.Ai) ||
+            !IsModuleEnabled(ModuleId.SheetManager) ||
+            _currentJob == null)
             return false;
 
         SmartAiRequest? request = SmartContextStore.LoadAiRequest(_currentJob, item.Observation.Id);
@@ -56,6 +63,10 @@ public partial class MainWindow
 
     private void ApplySheetMetadataResponse(ObservationDisplayItem item)
     {
+        if (!RequireModule(ModuleId.Ai, "Apply AI sheet metadata response") ||
+            !RequireModule(ModuleId.SheetManager, "Apply AI sheet metadata response"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -91,6 +102,12 @@ public partial class MainWindow
     {
         result = null;
         error = "";
+
+        if (!IsModuleEnabled(ModuleId.Ai) || !IsModuleEnabled(ModuleId.SheetManager))
+        {
+            error = "AI or Sheet Manager is disabled in Settings.";
+            return false;
+        }
 
         if (_currentJob == null)
         {
@@ -158,6 +175,9 @@ public partial class MainWindow
 
     private async Task RunSelectedOrNextAiRequestAsync()
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI request"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before running AI.";
@@ -192,6 +212,9 @@ public partial class MainWindow
 
     private async Task RunAiRequestAsync(ObservationDisplayItem item)
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI request"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -207,6 +230,9 @@ public partial class MainWindow
 
     private async Task RunAiRequestAsync(SmartAiRequest request)
     {
+        if (!RequireModule(ModuleId.Ai, "Run AI request"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -227,6 +253,8 @@ public partial class MainWindow
         }
 
         string model = AppSettingsStore.ResolveOpenAiModel(_settings);
+        var runCts = new CancellationTokenSource();
+        _activeAiRequestCts = runCts;
         _isRunningAiRequest = true;
         try
         {
@@ -244,8 +272,10 @@ public partial class MainWindow
                     request,
                     apiKey,
                     model,
-                    CancellationToken.None);
+                    runCts.Token);
             }
+
+            runCts.Token.ThrowIfCancellationRequested();
 
             if (result.Success)
             {
@@ -278,6 +308,20 @@ public partial class MainWindow
                 ReportAiRequestFailure(result.Error);
             }
         }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            SmartContextStore.SaveAiResponse(
+                _currentJob,
+                request,
+                "cancelled",
+                "",
+                "AI request cancelled because the AI module was disabled.",
+                "openai",
+                model,
+                "",
+                "");
+            TxtStatus.Text = $"AI request {request.Id} cancelled.";
+        }
         catch (Exception ex)
         {
             SmartAiResponse response = SmartContextStore.SaveAiResponse(
@@ -295,9 +339,21 @@ public partial class MainWindow
         }
         finally
         {
+            if (ReferenceEquals(_activeAiRequestCts, runCts))
+                _activeAiRequestCts = null;
+            runCts.Dispose();
             _isRunningAiRequest = false;
             LoadObservationsInbox();
         }
+    }
+
+    private void CancelActiveAiWorkForModuleDisable()
+    {
+        _activeAiRequestCts?.Cancel();
+        _viewport.ClearAiMarkers();
+        _viewport.ClearAiActionDraftPreview();
+        if (_isRunningAiRequest)
+            TxtStatus.Text = "Cancelling active AI work...";
     }
 
     // A failed AI run used to surface only in the status bar, which is easy
@@ -320,5 +376,6 @@ public partial class MainWindow
     private static bool IsRunnableAiStatus(string status) =>
         string.IsNullOrWhiteSpace(status) ||
         status.Equals("pending", StringComparison.OrdinalIgnoreCase) ||
-        status.Equals("failed", StringComparison.OrdinalIgnoreCase);
+        status.Equals("failed", StringComparison.OrdinalIgnoreCase) ||
+        status.Equals("cancelled", StringComparison.OrdinalIgnoreCase);
 }

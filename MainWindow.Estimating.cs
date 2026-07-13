@@ -174,6 +174,9 @@ public partial class MainWindow
 
     private void OpenEstimatingWindow()
     {
+        if (!RequireModule(ModuleId.Estimating, "Open Estimating"))
+            return;
+
         if (_estimatingWindow != null)
         {
             _estimatingWindow.RefreshRows();

@@ -46,7 +46,10 @@ public sealed class TakeoffFolderPropertiesDialog : Window
         new("Count", "point"),
     ];
 
-    public TakeoffFolderPropertiesDialog(string folderName, TakeoffFolderProperties properties)
+    public TakeoffFolderPropertiesDialog(
+        string folderName,
+        TakeoffFolderProperties properties,
+        bool showEstimatingFields = true)
     {
         FolderName = folderName;
         Notes = properties.Notes;
@@ -97,7 +100,6 @@ public sealed class TakeoffFolderPropertiesDialog : Window
         };
         panel.Children.Add(prefixBox);
 
-        panel.Children.Add(new TextBlock { Text = "Default unit price:", Margin = new Thickness(0, 10, 0, 4) });
         var unitPriceBox = new TextBox
         {
             Text = properties.DefaultUnitPrice is >= 0
@@ -105,7 +107,11 @@ public sealed class TakeoffFolderPropertiesDialog : Window
                 : "",
             ToolTip = "Leave blank to inherit from a parent folder or use no default.",
         };
-        panel.Children.Add(unitPriceBox);
+        if (showEstimatingFields)
+        {
+            panel.Children.Add(new TextBlock { Text = "Default unit price:", Margin = new Thickness(0, 10, 0, 4) });
+            panel.Children.Add(unitPriceBox);
+        }
 
         panel.Children.Add(new TextBlock { Text = "Default notes for new items:", Margin = new Thickness(0, 10, 0, 4) });
         var defaultItemNotesBox = new TextBox
@@ -202,7 +208,11 @@ public sealed class TakeoffFolderPropertiesDialog : Window
             Notes = notesBox.Text.Trim();
             DefaultColor = selectedHex;
             DefaultMeasurementType = typeBox.SelectedValue?.ToString() ?? "";
-            if (string.IsNullOrWhiteSpace(unitPriceBox.Text))
+            if (!showEstimatingFields)
+            {
+                DefaultUnitPrice = properties.DefaultUnitPrice is >= 0 ? properties.DefaultUnitPrice : null;
+            }
+            else if (string.IsNullOrWhiteSpace(unitPriceBox.Text))
             {
                 DefaultUnitPrice = null;
             }

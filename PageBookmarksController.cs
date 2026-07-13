@@ -44,6 +44,8 @@ internal sealed class PageBookmarksController
     private GridLength _dockRowHeight = new(190);
     private bool _syncingBookmarkSelection;
     private bool _syncingBookmarkDockToggle;
+    private bool _moduleEnabled = true;
+    private bool _wasDockedBeforeModuleDisable;
 
     public PageBookmarksController(
         Window owner,
@@ -149,6 +151,12 @@ internal sealed class PageBookmarksController
     public void LoadForJob()
     {
         _pageBookmarks.Clear();
+        if (!_moduleEnabled)
+        {
+            RefreshBookmarkList();
+            return;
+        }
+
         OurPlaneCoreJob? job = _currentJob();
         if (job != null)
             _pageBookmarks.AddRange(OurPlaneCoreJobStore.LoadPageBookmarks(job));
@@ -158,7 +166,42 @@ internal sealed class PageBookmarksController
 
     public void AddFromShortcut()
     {
+        if (!_moduleEnabled)
+        {
+            _setStatus("Bookmarks module is disabled in Settings > Modules.");
+            return;
+        }
+
         AddCurrentPageBookmark(promptForName: true);
+    }
+
+    public void SetModuleEnabled(bool enabled)
+    {
+        if (_moduleEnabled == enabled)
+            return;
+
+        _moduleEnabled = enabled;
+        if (_bookmarksTab == null)
+            return;
+
+        if (!enabled)
+        {
+            _wasDockedBeforeModuleDisable = _dockPanel.Visibility == Visibility.Visible;
+            if (ReferenceEquals(_pagesSideTabs.SelectedItem, _bookmarksTab))
+                _pagesSideTabs.SelectedIndex = 0;
+            _bookmarksTab.Visibility = Visibility.Collapsed;
+            _dockPanel.Visibility = Visibility.Collapsed;
+            _dockSplitter.Visibility = Visibility.Collapsed;
+            _dockSplitterRow.Height = new GridLength(0);
+            _dockRow.MinHeight = 0;
+            _dockRow.Height = new GridLength(0);
+            return;
+        }
+
+        _bookmarksTab.Visibility = Visibility.Visible;
+        if (_wasDockedBeforeModuleDisable)
+            ApplyBookmarksDockMode(docked: true);
+        LoadForJob();
     }
 
     private FrameworkElement BuildBookmarksTabHeader()

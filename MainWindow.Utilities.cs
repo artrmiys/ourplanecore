@@ -265,6 +265,7 @@ public partial class MainWindow
     {
         if (sender is System.Windows.Controls.Button b && b.ContextMenu is ContextMenu menu)
         {
+            ApplyModuleAvailabilityToMenu(menu);
             menu.PlacementTarget = b;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             menu.IsOpen = true;

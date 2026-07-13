@@ -70,6 +70,13 @@ public partial class MainWindow
 
     private void SetTool(string tool, bool forceNewTakeoff = false)
     {
+        if (!IsToolAllowedByModules(tool))
+        {
+            TxtStatus.Text = $"Tool '{tool}' is disabled in Settings > Modules.";
+            SyncToolButtonsToActiveTool();
+            return;
+        }
+
         if (IsRecordTool(tool) && !EnsureDrawingTakeoff(tool, forceNewTakeoff))
         {
             SyncToolButtonsToActiveTool();
@@ -103,6 +110,9 @@ public partial class MainWindow
 
     private void BtnAnnotationMenu_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Annotations, "Annotation tools"))
+            return;
+
         var menu = new ContextMenu
         {
             PlacementTarget = BtnAnnotationMenu,

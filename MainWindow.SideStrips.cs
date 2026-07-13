@@ -134,14 +134,25 @@ public partial class MainWindow
             .ToDictionary(info => info.Id, info => info, StringComparer.OrdinalIgnoreCase);
 
         var stack = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+        bool hasVisibleCommand = false;
+        bool separatorPending = false;
         foreach (string id in GetSideStripCommandIds(leftSide))
         {
             if (id == SideStripSeparatorId)
             {
+                separatorPending = hasVisibleCommand;
+                continue;
+            }
+
+            if (!IsCommandAvailableForModules(id))
+                continue;
+
+            if (separatorPending)
+            {
                 var separator = new Border { Height = 1, Margin = new Thickness(8, 5, 8, 5) };
                 separator.SetResourceReference(Border.BackgroundProperty, "ControlBorderBrush");
                 stack.Children.Add(separator);
-                continue;
+                separatorPending = false;
             }
 
             catalog.TryGetValue(id, out var info);
@@ -164,6 +175,7 @@ public partial class MainWindow
             string commandId = id;
             button.Click += (_, _) => ExecuteSideStripCommand(commandId);
             stack.Children.Add(button);
+            hasVisibleCommand = true;
         }
 
         var gear = new Button
@@ -255,16 +267,24 @@ public partial class MainWindow
         var items = new List<SideStripCommandInfo>
         {
             new("pages.openTabs", "Open Selected in Tabs", "Pages", "", "Open the selected Pages sheets as tabs."),
-            new("pages.detach", "Detach to Windows", "Pages", "", "Open the selected Pages sheets in detached windows."),
-            new("pages.tileM2", "Tile on Monitor 2", "Pages", "", "Tile the selected sheets on monitor 2."),
-            new("pages.nameScaleSetup", "Name / Scale Setup", "Pages", "", "Open the floating page name / scale setup window."),
-            new("pages.newFolder", "New Page Folder", "Pages", "", "Create a new folder under the selected Pages folder."),
-            new("pages.collapseTree", "Collapse Pages Tree", "Pages", "", "Collapse all Pages nodes."),
-            new("pages.expandTree", "Expand Pages Tree", "Pages", "", "Expand all Pages nodes."),
-            new("takeoffs.collapseTree", "Collapse Takeoffs Tree", "Takeoffs", "", "Collapse all Takeoffs nodes."),
-            new("takeoffs.expandTree", "Expand Takeoffs Tree", "Takeoffs", "", "Expand all Takeoffs nodes."),
-            new("takeoffs.roofBase", "Roof Base from Area", "Takeoffs", "", "Create a 3D roof base from the selected area takeoff."),
         };
+        if (IsModuleEnabled(ModuleId.DetachedSheets))
+        {
+            items.Add(new SideStripCommandInfo("pages.detach", "Detach to Windows", "Pages", "", "Open the selected Pages sheets in detached windows."));
+            items.Add(new SideStripCommandInfo("pages.tileM2", "Tile on Monitor 2", "Pages", "", "Tile the selected sheets on monitor 2."));
+        }
+        if (IsModuleEnabled(ModuleId.SheetManager))
+            items.Add(new SideStripCommandInfo("pages.nameScaleSetup", "Name / Scale Setup", "Pages", "", "Open the floating page name / scale setup window."));
+        items.AddRange(
+        [
+            new SideStripCommandInfo("pages.newFolder", "New Page Folder", "Pages", "", "Create a new folder under the selected Pages folder."),
+            new SideStripCommandInfo("pages.collapseTree", "Collapse Pages Tree", "Pages", "", "Collapse all Pages nodes."),
+            new SideStripCommandInfo("pages.expandTree", "Expand Pages Tree", "Pages", "", "Expand all Pages nodes."),
+            new SideStripCommandInfo("takeoffs.collapseTree", "Collapse Takeoffs Tree", "Takeoffs", "", "Collapse all Takeoffs nodes."),
+            new SideStripCommandInfo("takeoffs.expandTree", "Expand Takeoffs Tree", "Takeoffs", "", "Expand all Takeoffs nodes."),
+        ]);
+        if (IsModuleEnabled(ModuleId.ThreeD))
+            items.Add(new SideStripCommandInfo("takeoffs.roofBase", "Roof Base from Area", "Takeoffs", "", "Create a 3D roof base from the selected area takeoff."));
 
         try
         {
@@ -282,6 +302,14 @@ public partial class MainWindow
 
     private void ExecuteSideStripCommand(string id)
     {
+        if (TryGetCommandModule(id, out ModuleId module) && !RequireModule(module, $"Side command '{id}'"))
+            return;
+        if (id == "pages.aiFillMetadata" &&
+            !RequireModule(ModuleId.SheetManager, "AI Fill PDF Metadata"))
+        {
+            return;
+        }
+
         switch (id)
         {
             case "pages.openTabs": BtnPagesOpenTabs_Click(this, new RoutedEventArgs()); break;
@@ -301,6 +329,9 @@ public partial class MainWindow
 
     private void ToggleQuickCalcPanel()
     {
+        if (!RequireModule(ModuleId.QuickCalculator, "Quick Calculator"))
+            return;
+
         if (QuickCalcHost.Visibility == Visibility.Visible)
         {
             QuickCalcHost.Visibility = Visibility.Collapsed;

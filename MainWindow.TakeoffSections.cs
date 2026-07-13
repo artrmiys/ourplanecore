@@ -80,39 +80,42 @@ public partial class MainWindow
             selectedCount > 1 ? $"Select {selectedCount} on Canvas" : "Select on Canvas",
             true,
             () => SelectTakeoffSectionMeasurementsOnCanvas(SelectedTakeoffSectionNodes(anchor, fallbackToAnchor: true), anchor)));
-        menu.Items.Add(MakeMenuItem(
-            selectedCount > 1 ? $"Merge {selectedCount} Segments..." : "Merge Segment...",
-            true,
-            () => MergeSelectedMeasurementsToPromptedTakeoff(sectionAnchor: anchor)));
-        menu.Items.Add(MakeMenuItem(
-            selectedCount > 1 ? $"Split {selectedCount} Segments..." : "Split Segment...",
-            true,
-            () => SplitSelectedMeasurementsToNewTakeoff(sectionAnchor: anchor)));
-        bool isAreaSection =
-            OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
-            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
-        IReadOnlyList<Measurement> lineSectionMeasurements = selectedNodes
-            .Select(node => node.Measurement)
-            .Where(IsPointAlongLineSource)
-            .ToList();
-        menu.Items.Add(MakeMenuItem(
-            lineSectionMeasurements.Count <= 1
-                ? "Create Count Points Along Line..."
-                : $"Create Count Points Along {lineSectionMeasurements.Count} Lines...",
-            lineSectionMeasurements.Count > 0,
-            () => CreatePointsAlongLines(lineSectionMeasurements, item)));
-        menu.Items.Add(MakeMenuItem(
-            "Create Line Grid...",
-            isAreaSection,
-            () => CreateLineGridFromAreaSection(item, measurement)));
-        menu.Items.Add(MakeMenuItem(
-            "Set / Reset Joist Direction",
-            isAreaSection,
-            () => SetJoistDirectionForSection(item, measurement)));
-        menu.Items.Add(MakeMenuItem(
-            "Set Direction for All Areas",
-            isAreaSection,
-            () => SetJoistDirectionForAllAreas(item, measurement)));
+        if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
+        {
+            menu.Items.Add(MakeMenuItem(
+                selectedCount > 1 ? $"Merge {selectedCount} Segments..." : "Merge Segment...",
+                true,
+                () => MergeSelectedMeasurementsToPromptedTakeoff(sectionAnchor: anchor)));
+            menu.Items.Add(MakeMenuItem(
+                selectedCount > 1 ? $"Split {selectedCount} Segments..." : "Split Segment...",
+                true,
+                () => SplitSelectedMeasurementsToNewTakeoff(sectionAnchor: anchor)));
+            bool isAreaSection =
+                OurPlaneCoreJobStore.NormalizeMeasurementType(item.MeasurementType) == "area" &&
+                OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area";
+            IReadOnlyList<Measurement> lineSectionMeasurements = selectedNodes
+                .Select(node => node.Measurement)
+                .Where(IsPointAlongLineSource)
+                .ToList();
+            menu.Items.Add(MakeMenuItem(
+                lineSectionMeasurements.Count <= 1
+                    ? "Create Count Points Along Line..."
+                    : $"Create Count Points Along {lineSectionMeasurements.Count} Lines...",
+                lineSectionMeasurements.Count > 0,
+                () => CreatePointsAlongLines(lineSectionMeasurements, item)));
+            menu.Items.Add(MakeMenuItem(
+                "Create Line Grid...",
+                isAreaSection,
+                () => CreateLineGridFromAreaSection(item, measurement)));
+            menu.Items.Add(MakeMenuItem(
+                "Set / Reset Joist Direction",
+                isAreaSection,
+                () => SetJoistDirectionForSection(item, measurement)));
+            menu.Items.Add(MakeMenuItem(
+                "Set Direction for All Areas",
+                isAreaSection,
+                () => SetJoistDirectionForAllAreas(item, measurement)));
+        }
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem(
             selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",

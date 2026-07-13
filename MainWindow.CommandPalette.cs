@@ -78,6 +78,7 @@ public partial class MainWindow
         Add("view.mainView", "Show Main View", "Workspace", "", "Switch to the drawing canvas workspace.");
         Add("view.sheetManager", "Show Sheet Manager", "Workspace", "", "Switch to the sheet table / PDF metadata workspace.");
         Add("view.takeoffManager", "Show Takeoff Manager", "Workspace", "", "Switch to the takeoff item manager workspace.");
+        Add("view.reportBuilder", "Show Report Builder", "Workspace", "", "Switch to the spreadsheet-style report builder workspace.");
         Add("view.quickCalc", "Quick Calculator", "View", "", "Toggle the slide-out calculator with feet-inches math.");
         Add("view.materialsManager", "Show Materials", "Workspace", "", "Switch to the material extraction workspace.");
         Add("view.aiManager", "Show AI Manager", "Workspace", "", "Switch to the AI inbox and marker manager workspace.");
@@ -161,11 +162,24 @@ public partial class MainWindow
         Add("ai.manageMarkerSets", "Manage Marker Sets", "AI", "", "Open marker set management.", hasJob, "Open a job first.");
         Add("ai.exportMarkers", "Export Marker Context", "AI", "", "Export visible marker context JSON.", hasJob, "Open a job first.");
 
-        return items;
+        return items
+            .Where(item => IsCommandAvailableForModules(item.Id))
+            .ToList();
     }
 
     private void ExecuteCommandPaletteItem(string id)
     {
+        if (TryGetCommandModule(id, out ModuleId requiredModule) &&
+            !RequireModule(requiredModule, $"Command '{id}'"))
+        {
+            return;
+        }
+        if (id == "pages.aiFillMetadata" &&
+            !RequireModule(ModuleId.SheetManager, "AI Fill PDF Metadata"))
+        {
+            return;
+        }
+
         switch (id)
         {
             case "file.open": BtnOpen_Click(this, new RoutedEventArgs()); break;
@@ -202,6 +216,7 @@ public partial class MainWindow
             case "view.mainView": SelectWorkspaceTab("MainView"); break;
             case "view.sheetManager": SelectWorkspaceTab("SheetManager"); break;
             case "view.takeoffManager": SelectWorkspaceTab("TakeoffManager"); break;
+            case "view.reportBuilder": SelectWorkspaceTab("ReportBuilder"); break;
             case "view.quickCalc": ToggleQuickCalcPanel(); break;
             case "view.materialsManager": SelectWorkspaceTab("MaterialsManager"); break;
             case "view.aiManager": SelectWorkspaceTab("AiManager"); break;
@@ -314,6 +329,9 @@ public partial class MainWindow
 
     private void SelectWorkspaceTab(string key)
     {
+        if (TryGetWorkspaceModule(key, out ModuleId module) && !RequireModule(module, $"Open {key}"))
+            return;
+
         foreach (TabItem item in WorkspaceTabs.Items.OfType<TabItem>())
         {
             if (!string.Equals(item.Tag?.ToString(), key, StringComparison.OrdinalIgnoreCase) &&

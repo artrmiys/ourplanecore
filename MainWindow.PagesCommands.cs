@@ -164,18 +164,23 @@ public partial class MainWindow
                 MakeMenuItem("Sort A/S in This Folder", true, () => SortPagesIntoArchStruct(folder.FolderPath)),
                 MakeMenuItem("Sort D/Sec/WT in This Folder", true, () => SortPagesBySuffix(folder.FolderPath)),
                 MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
-            menu.Items.Add(MakeSubmenu(
-                "PDF Metadata",
-                MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
-                MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
-                MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
-                MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)),
-                MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item))));
-            menu.Items.Add(MakeSubmenu(
-                "Learning",
-                MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
-                MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
-                MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
+            if (IsModuleEnabled(ModuleId.SheetManager))
+            {
+                var folderMetadataMenu = MakeSubmenu(
+                    "PDF Metadata",
+                    MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
+                    MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
+                    MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
+                    MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
+                if (IsModuleEnabled(ModuleId.Ai))
+                    folderMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
+                menu.Items.Add(folderMetadataMenu);
+                menu.Items.Add(MakeSubmenu(
+                    "Learning",
+                    MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
+                    MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
+                    MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
+            }
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open in Explorer", true, () => OpenFolderInExplorer(folder.FolderPath)));
         }
@@ -192,15 +197,19 @@ public partial class MainWindow
                 selectedPageCount > 1 ? $"Open {selectedPageCount} Selected in New Tabs" : "Open Selected in New Tabs",
                 selectedPageCount > 1,
                 () => OpenSelectedPagesInNewTabs(item)));
-            menu.Items.Add(MakeMenuItem(
-                selectedPageCount > 1 ? $"Detach {selectedPageCount} Selected to Windows" : "Detach Sheet to Window",
-                selectedPageCount >= 1,
-                () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: false)));
-            menu.Items.Add(MakeMenuItem(
-                selectedPageCount > 1 ? $"Tile {Math.Min(64, selectedPageCount)} Selected on Monitor 2" : "Tile Sheet on Monitor 2",
-                selectedPageCount >= 1,
-                () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: true)));
-            menu.Items.Add(BuildSheetOverlayMenu(page));
+            if (IsModuleEnabled(ModuleId.DetachedSheets))
+            {
+                menu.Items.Add(MakeMenuItem(
+                    selectedPageCount > 1 ? $"Detach {selectedPageCount} Selected to Windows" : "Detach Sheet to Window",
+                    selectedPageCount >= 1,
+                    () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: false)));
+                menu.Items.Add(MakeMenuItem(
+                    selectedPageCount > 1 ? $"Tile {Math.Min(64, selectedPageCount)} Selected on Monitor 2" : "Tile Sheet on Monitor 2",
+                    selectedPageCount >= 1,
+                    () => OpenSelectedPagesInDetachedWindows(item, tileOnSecondMonitor: true)));
+            }
+            if (IsModuleEnabled(ModuleId.SheetOverlay))
+                menu.Items.Add(BuildSheetOverlayMenu(page));
             menu.Items.Add(MakeMenuItem(
                 selectedPageCount > 1 ? $"Set Scale for {selectedPageCount} Selected..." : "Set Scale...",
                 selectedPageCount >= 1,
@@ -209,13 +218,16 @@ public partial class MainWindow
                 selectedPageCount > 1 ? $"Apply Current Sheet Scale to {selectedPageCount} Selected" : "Apply Current Sheet Scale",
                 selectedPageCount >= 1 && CurrentPageScaleMetersPerPt() > 0,
                 () => ApplyCurrentScaleToSelectedPagesFromContext(item)));
-            menu.Items.Add(MakeMenuItem(
-                selectedPageCount > 1 ? $"Export {selectedPageCount} Selected to PDF..." : "Export Sheet to PDF...",
-                selectedPageCount >= 1,
-                async () => await RunAsyncUiHandler(
-                    () => ExportSheetsFromPagesTreeAsync(item),
-                    "PDF export failed.",
-                    "Export PDF")));
+            if (IsModuleEnabled(ModuleId.PdfOutput))
+            {
+                menu.Items.Add(MakeMenuItem(
+                    selectedPageCount > 1 ? $"Export {selectedPageCount} Selected to PDF..." : "Export Sheet to PDF...",
+                    selectedPageCount >= 1,
+                    async () => await RunAsyncUiHandler(
+                        () => ExportSheetsFromPagesTreeAsync(item),
+                        "PDF export failed.",
+                        "Export PDF")));
+            }
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Rename Page", selectedCount <= 1, () => RenamePagesNode(item)));
             menu.Items.Add(MakeMenuItem(selectedCount > 1 ? "Delete Selected" : "Delete Page", true, () => DeletePagesNode(item)));
@@ -247,19 +259,24 @@ public partial class MainWindow
                 MakeMenuItem("Sort A/S into Arch/Struct", true, SortPagesIntoArchStruct),
                 MakeMenuItem("Sort D/Sec/WT by Suffix", true, SortPagesBySuffix),
                 MakeMenuItem("Repair Measurement Links", true, RepairMeasurementPageLinks)));
-            menu.Items.Add(MakeSubmenu(
-                "PDF Metadata",
-                MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
-                MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
-                MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
-                MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)),
-                MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)),
-                MakeMenuItem("Open source_pdf.json", File.Exists(OurPlaneCoreJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath))));
-            menu.Items.Add(MakeSubmenu(
-                "Learning",
-                MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
-                MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
-                MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
+            if (IsModuleEnabled(ModuleId.SheetManager))
+            {
+                var pageMetadataMenu = MakeSubmenu(
+                    "PDF Metadata",
+                    MakeMenuItem("Analyze PDF Metadata", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: false)),
+                    MakeMenuItem("Auto Rename from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: false)),
+                    MakeMenuItem("Auto Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: false, applyScale: true)),
+                    MakeMenuItem("Auto Rename + Scale from PDF...", true, async () => await AnalyzePdfMetadataAsync(item, applyRename: true, applyScale: true)));
+                if (IsModuleEnabled(ModuleId.Ai))
+                    pageMetadataMenu.Items.Add(MakeMenuItem("Queue GPT Metadata Fallback", true, () => QueuePdfMetadataFallback(item)));
+                pageMetadataMenu.Items.Add(MakeMenuItem("Open source_pdf.json", File.Exists(OurPlaneCoreJobStore.SourcePdfMetadataPath(page.FolderPath)), () => OpenSourcePdfMetadata(page.FolderPath)));
+                menu.Items.Add(pageMetadataMenu);
+                menu.Items.Add(MakeSubmenu(
+                    "Learning",
+                    MakeMenuItem("Capture Final Learning Snapshot", true, () => CaptureFinalLearningSnapshot(item)),
+                    MakeMenuItem("Review Project Learned Rules...", true, ReviewProjectLearnedRules),
+                    MakeMenuItem("Review Global Learned Rules...", true, ReviewLearnedRules)));
+            }
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeMenuItem("Open Page Folder in Explorer", true, () => OpenFolderInExplorer(page.FolderPath)));
         }
@@ -267,11 +284,12 @@ public partial class MainWindow
         {
             menu = BuildPageTakeoffContextMenu(node);
         }
-        else if (item.Tag is PageOverlayNode overlay)
+        else if (item.Tag is PageOverlayNode overlay && IsModuleEnabled(ModuleId.SheetOverlay))
         {
             menu = BuildPageOverlayContextMenu(overlay);
         }
 
+        ApplyModuleAvailabilityToMenu(menu);
         return menu;
     }
 }

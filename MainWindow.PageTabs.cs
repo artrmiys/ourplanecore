@@ -96,6 +96,9 @@ public partial class MainWindow
         bool tileOnSecondMonitor,
         bool verticalStack = false)
     {
+        if (!RequireModule(ModuleId.DetachedSheets, "Detached Sheets"))
+            return;
+
         OpenPagesInDetachedWindows(
             SelectedPagesFromPagesTree(anchor),
             tileOnSecondMonitor,
@@ -216,6 +219,9 @@ public partial class MainWindow
         string sourceLabel,
         bool verticalStack = false)
     {
+        if (!RequireModule(ModuleId.DetachedSheets, sourceLabel))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = $"{sourceLabel}: open a job before detaching sheets.";
@@ -258,6 +264,12 @@ public partial class MainWindow
 
     private static string TileLayoutStatus(bool verticalStack) =>
         verticalStack ? " vertically" : "";
+
+    private void CloseDetachedSheetsForModuleDisable()
+    {
+        foreach (DetachedSheetWindow window in _detachedSheetWindows.ToList())
+            window.Close();
+    }
 
     private void OpenPageTabsInDetachedWindows(IEnumerable<PageTabState> tabs, bool tileOnSecondMonitor)
     {
@@ -1144,6 +1156,9 @@ public partial class MainWindow
 
     private void DetachPageTabFromDrag(PageTabState tab)
     {
+        if (!RequireModule(ModuleId.DetachedSheets, "Detach Sheet"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Page tabs: open a job before detaching sheets.";
@@ -1202,15 +1217,18 @@ public partial class MainWindow
     private ContextMenu BuildPageTabContextMenu(PageTabState tab)
     {
         var menu = new ContextMenu();
-        menu.Items.Add(MakeMenuItem("Detach Tab to Window", _currentJob != null, () => OpenPageTabsInDetachedWindows([tab], tileOnSecondMonitor: false)));
-        menu.Items.Add(MakeMenuItem("Tile Tab on Monitor 2", _currentJob != null, () => OpenPageTabsInDetachedWindows([tab], tileOnSecondMonitor: true)));
+        if (IsModuleEnabled(ModuleId.DetachedSheets))
+        {
+            menu.Items.Add(MakeMenuItem("Detach Tab to Window", _currentJob != null, () => OpenPageTabsInDetachedWindows([tab], tileOnSecondMonitor: false)));
+            menu.Items.Add(MakeMenuItem("Tile Tab on Monitor 2", _currentJob != null, () => OpenPageTabsInDetachedWindows([tab], tileOnSecondMonitor: true)));
 
-        int tabCount = Math.Min(MaxBatchSheetOpenCount, _pageTabs.Count);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem($"Detach All {tabCount} Tabs to Windows", _currentJob != null && _pageTabs.Count > 0, () => OpenPageTabsInDetachedWindows(_pageTabs.ToList(), tileOnSecondMonitor: false)));
-        menu.Items.Add(MakeMenuItem($"Tile All {tabCount} Tabs on Monitor 2", _currentJob != null && _pageTabs.Count > 0, () => OpenPageTabsInDetachedWindows(_pageTabs.ToList(), tileOnSecondMonitor: true)));
+            int tabCount = Math.Min(MaxBatchSheetOpenCount, _pageTabs.Count);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MakeMenuItem($"Detach All {tabCount} Tabs to Windows", _currentJob != null && _pageTabs.Count > 0, () => OpenPageTabsInDetachedWindows(_pageTabs.ToList(), tileOnSecondMonitor: false)));
+            menu.Items.Add(MakeMenuItem($"Tile All {tabCount} Tabs on Monitor 2", _currentJob != null && _pageTabs.Count > 0, () => OpenPageTabsInDetachedWindows(_pageTabs.ToList(), tileOnSecondMonitor: true)));
+            menu.Items.Add(new Separator());
+        }
 
-        menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Close Tab", true, () => ClosePageTab(tab)));
         return menu;
     }

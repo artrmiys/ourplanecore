@@ -14,6 +14,17 @@ public partial class MainWindow
     private void OnLayersChanged(IReadOnlyList<PdfLayer> layers)
     {
         LayersPanel.Children.Clear();
+        if (!IsModuleEnabled(ModuleId.PdfLayers))
+        {
+            BtnLayersLoad.IsEnabled = false;
+            BtnLayersOn.IsEnabled = false;
+            BtnLayersOff.IsEnabled = false;
+            BtnLayersClearHi.IsEnabled = false;
+            BtnLayerTraceMode.IsEnabled = false;
+            ViewportLayerTraceBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         BtnLayersLoad.IsEnabled = _currentPage != null;
         BtnLayersOn.IsEnabled = layers.Count > 0;
         BtnLayersOff.IsEnabled = layers.Count > 0;
@@ -117,11 +128,14 @@ public partial class MainWindow
             IsEnabled = false,
         });
         menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Save Layer Info for AI", _currentJob != null && _currentPage != null, () =>
-            SavePdfLayerAiContext(layer, createRequest: false)));
-        menu.Items.Add(MakeMenuItem("Queue AI Request for This Layer", _currentJob != null && _currentPage != null, () =>
-            SavePdfLayerAiContext(layer, createRequest: true)));
-        menu.Items.Add(new Separator());
+        if (IsModuleEnabled(ModuleId.Ai))
+        {
+            menu.Items.Add(MakeMenuItem("Save Layer Info for AI", _currentJob != null && _currentPage != null, () =>
+                SavePdfLayerAiContext(layer, createRequest: false)));
+            menu.Items.Add(MakeMenuItem("Queue AI Request for This Layer", _currentJob != null && _currentPage != null, () =>
+                SavePdfLayerAiContext(layer, createRequest: true)));
+            menu.Items.Add(new Separator());
+        }
         menu.Items.Add(MakeMenuItem("Use for Layer Trace", true, () => SelectPdfLayerForTrace(layer)));
         menu.Items.Add(MakeMenuItem("Trace Full Layer to Takeoff", true, () => TracePdfLayer(layer, PdfLayerTraceMode.Full)));
         menu.Items.Add(MakeMenuItem("Trace Nearest Edge to Takeoff", true, () => TracePdfLayer(layer, PdfLayerTraceMode.Edge)));
@@ -137,6 +151,8 @@ public partial class MainWindow
 
     private void TracePdfLayer(PdfLayer layer, PdfLayerTraceMode mode)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layer Trace"))
+            return;
         SelectPdfLayerForTrace(layer);
         _viewport.SetPdfLayerTraceMode(mode);
         _viewport.SetPdfLayerTraceEnabled(true);
@@ -145,6 +161,8 @@ public partial class MainWindow
 
     private void BtnLayerTraceMode_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layer Trace"))
+            return;
         if (_updatingLayerTraceUi)
             return;
 
@@ -158,6 +176,8 @@ public partial class MainWindow
 
     private void BtnLayerTraceApply_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "Apply PDF Layer Trace"))
+            return;
         _viewport.ApplyActivePdfLayerTraceFromCurrentPointer();
     }
 
@@ -178,18 +198,25 @@ public partial class MainWindow
 
     private void SetPdfLayerTraceEnabledFromUi(bool enabled)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layer Trace"))
+            return;
         _viewport.SetPdfLayerTraceEnabled(enabled);
         RefreshPdfLayerTraceControls();
     }
 
     private void CyclePdfLayerTraceModeFromUi()
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layer Trace"))
+            return;
         _viewport.CyclePdfLayerTraceMode();
         RefreshPdfLayerTraceControls();
     }
 
     private void SavePdfLayerAiContext(PdfLayer layer, bool createRequest)
     {
+        if (!RequireModule(ModuleId.Ai, createRequest ? "Queue PDF layer AI request" : "Save PDF layer AI context"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
         {
             TxtStatus.Text = "Open a job and page before saving PDF layer context.";
@@ -304,21 +331,29 @@ public partial class MainWindow
 
     private void BtnLayersOn_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layers"))
+            return;
         _viewport.SetAllLayers(true);
     }
 
     private void BtnLayersLoad_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "Load PDF Layers"))
+            return;
         _viewport.DiscoverPdfLayersOnDemand();
     }
 
     private void BtnLayersOff_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layers"))
+            return;
         _viewport.SetAllLayers(false);
     }
 
     private void BtnLayersClearHi_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfLayers, "PDF Layer Highlights"))
+            return;
         _viewport.ClearLayerHighlights();
     }
 }

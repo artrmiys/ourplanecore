@@ -14,6 +14,9 @@ public partial class MainWindow
 {
     private void SetUnitPrice(TakeoffItem item)
     {
+        if (!RequireModule(ModuleId.Estimating, "Set Unit Price"))
+            return;
+
         string? raw = ShowInputDialog(
             $"Unit price per {TakeoffUnitText(item)}:",
             item.UnitPrice > 0 ? item.UnitPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
@@ -162,6 +165,7 @@ public partial class MainWindow
         bool isAreaTakeoff = measurementType == "area";
         bool isLineTakeoff = measurementType == "line";
         bool isPointTakeoff = measurementType == "point";
+        bool estimatingEnabled = IsModuleEnabled(ModuleId.Estimating);
         bool seedJoistEnableDefaults = isAreaTakeoff && !item.IsJoistArea;
         string initialJoistRounding = seedJoistEnableDefaults
             ? JoistTakeoffDefaults.LengthRounding
@@ -446,14 +450,17 @@ public partial class MainWindow
             Text = $"Unit price per {TakeoffUnitText(item)}:",
             Margin = new Thickness(0, 10, 0, 4),
         };
-        panel.Children.Add(unitPriceLabel);
-        joistEnabledBox.Checked += (_, _) => unitPriceLabel.Text = $"Unit price per {UnitText("line")}:";
-        joistEnabledBox.Unchecked += (_, _) => unitPriceLabel.Text = $"Unit price per {UnitText(item.MeasurementType)}:";
         var priceBox = new TextBox
         {
             Text = item.UnitPrice > 0 ? item.UnitPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
         };
-        panel.Children.Add(priceBox);
+        if (estimatingEnabled)
+        {
+            panel.Children.Add(unitPriceLabel);
+            panel.Children.Add(priceBox);
+            joistEnabledBox.Checked += (_, _) => unitPriceLabel.Text = $"Unit price per {UnitText("line")}:";
+            joistEnabledBox.Unchecked += (_, _) => unitPriceLabel.Text = $"Unit price per {UnitText(item.MeasurementType)}:";
+        }
 
         panel.Children.Add(new TextBlock { Text = "Notes:", Margin = new Thickness(0, 10, 0, 4) });
         var notesBox = new TextBox
@@ -503,8 +510,10 @@ public partial class MainWindow
                 return;
             }
 
-            if (!double.TryParse(priceBox.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double parsedPrice) ||
-                parsedPrice < 0)
+            double parsedPrice = item.UnitPrice;
+            if (estimatingEnabled &&
+                (!double.TryParse(priceBox.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out parsedPrice) ||
+                 parsedPrice < 0))
             {
                 MessageBox.Show("Enter a valid non-negative unit price.", "Takeoff Item Properties",
                                 MessageBoxButton.OK, MessageBoxImage.Information);

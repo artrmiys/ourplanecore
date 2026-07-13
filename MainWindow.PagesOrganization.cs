@@ -24,6 +24,9 @@ public partial class MainWindow
 
     private void AutoCreatePageFolders(string baseFolder)
     {
+        if (!RequireModule(ModuleId.TakeoffAutomation, "Auto Page Folders"))
+            return;
+
         if (_currentJob == null || string.IsNullOrWhiteSpace(baseFolder) || !Directory.Exists(baseFolder))
             return;
 

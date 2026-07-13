@@ -24,6 +24,8 @@ public partial class MainWindow
     private FrameworkElement? _templatePanel;
     private GridLength _templatesDockRowHeight = new(190);
     private bool _syncingTemplatesDockToggle;
+    private bool _templatesModuleWasDocked;
+    private bool _templatesModuleEnabled = true;
 
     private Grid? _templatesRightHostGrid;
     private GridSplitter? _templatesRightSplitter;
@@ -48,6 +50,41 @@ public partial class MainWindow
 
         InstallTemplatesRightDock();
         ReloadTakeoffTemplateConfig();
+    }
+
+    private void ApplyTemplatesModuleAvailability()
+    {
+        if (_templatesTab == null || _rightWorkspaceTabs == null)
+            return;
+
+        bool enabled = IsModuleEnabled(ModuleId.TakeoffTemplates);
+        if (_templatesModuleEnabled == enabled)
+            return;
+
+        _templatesModuleEnabled = enabled;
+        if (!enabled)
+        {
+            _templatesModuleWasDocked = _templatesRightDock?.Visibility == Visibility.Visible;
+            if (ReferenceEquals(_rightWorkspaceTabs.SelectedItem, _templatesTab))
+                _rightWorkspaceTabs.SelectedIndex = 0;
+            _templatesTab.Visibility = Visibility.Collapsed;
+            if (_templatesRightDock != null)
+                _templatesRightDock.Visibility = Visibility.Collapsed;
+            if (_templatesRightSplitter != null)
+                _templatesRightSplitter.Visibility = Visibility.Collapsed;
+            if (_templatesRightSplitterRow != null)
+                _templatesRightSplitterRow.Height = new GridLength(0);
+            if (_templatesRightDockRow != null)
+            {
+                _templatesRightDockRow.MinHeight = 0;
+                _templatesRightDockRow.Height = new GridLength(0);
+            }
+            return;
+        }
+
+        _templatesTab.Visibility = Visibility.Visible;
+        if (_templatesModuleWasDocked)
+            ApplyTemplatesDockMode(docked: true);
     }
 
     private void ReloadTakeoffTemplateConfig()

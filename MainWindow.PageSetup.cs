@@ -13,6 +13,9 @@ public partial class MainWindow
 {
     private void BtnFloatingPageSetup_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.SheetManager, "Name / Scale Setup"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open or create a job before Page Setup.";

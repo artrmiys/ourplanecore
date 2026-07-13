@@ -36,15 +36,18 @@ public partial class MainWindow
             : clickedMeasurement == null
                 ? Array.Empty<Measurement>()
                 : [clickedMeasurement];
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem(
-            selection.Count > 1 ? $"Merge {selection.Count} Segment(s)..." : "Merge Segment...",
-            selection.Count > 0,
-            () => MergeSelectedMeasurementsToPromptedTakeoff(selection)));
-        menu.Items.Add(MakeMenuItem(
-            selection.Count > 1 ? $"Split {selection.Count} Segment(s)..." : "Split Segment...",
-            selection.Count > 0,
-            () => SplitSelectedMeasurementsToNewTakeoff(selection)));
+        if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MakeMenuItem(
+                selection.Count > 1 ? $"Merge {selection.Count} Segment(s)..." : "Merge Segment...",
+                selection.Count > 0,
+                () => MergeSelectedMeasurementsToPromptedTakeoff(selection)));
+            menu.Items.Add(MakeMenuItem(
+                selection.Count > 1 ? $"Split {selection.Count} Segment(s)..." : "Split Segment...",
+                selection.Count > 0,
+                () => SplitSelectedMeasurementsToNewTakeoff(selection)));
+        }
     }
 
     private void AddPdfAiMenuItems(ItemsControl menu, ViewportContextRequest request)
@@ -130,7 +133,8 @@ public partial class MainWindow
             hasItem,
             () => EditSectionProperties(item, measurement)));
         AddViewportCountDisplayMenuItem(menu, request);
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
+        if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "area")
         {
             menu.Items.Add(MakeMenuItem(
                 "Trace Walls Inside Area...",
@@ -149,7 +153,8 @@ public partial class MainWindow
                 hasItem,
                 () => SetJoistDirectionForAllAreas(item, measurement)));
         }
-        if (OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line")
+        if (IsModuleEnabled(ModuleId.AdvancedTakeoffTools) &&
+            OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line")
         {
             IReadOnlyList<Measurement> selectedLineSources = _viewport.GetSelectedMeasurements()
                 .Where(IsPointAlongLineSource)

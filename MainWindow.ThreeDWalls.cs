@@ -29,6 +29,12 @@ public partial class MainWindow
 
     private void ToggleThreeDRoofMoveMode()
     {
+        if (!_threeDRoofMoveModeEnabled &&
+            !RequireModule(ModuleId.ThreeD, "Move 3D roof"))
+        {
+            return;
+        }
+
         _threeDRoofMoveModeEnabled = !_threeDRoofMoveModeEnabled;
         TxtStatus.Text = _threeDRoofMoveModeEnabled
             ? "3D Move Roof: drag in the viewer to slide the roof over the walls. Toggle off when aligned."
@@ -38,6 +44,9 @@ public partial class MainWindow
 
     private void ResetThreeDRoofOffset()
     {
+        if (!RequireModule(ModuleId.ThreeD, "Reset 3D roof position"))
+            return;
+
         ThreeDRoofPlacement? placement = ActiveThreeDRoofPlacement();
         if (placement == null)
         {
@@ -106,6 +115,9 @@ public partial class MainWindow
 
     private bool CanBuild3DWallsFromTakeoffSelection(TreeViewItem? anchor)
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+            return false;
+
         return TakeoffItemsFor3D(anchor).Any(item =>
             item.Measurements.Any(measurement =>
                 OurPlaneCoreJobStore.NormalizeMeasurementType(measurement.MType) == "line" &&
@@ -114,6 +126,9 @@ public partial class MainWindow
 
     private void Build3DWallsFromTakeoffSelection(TreeViewItem? anchor, bool switchTo3DTab)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Build 3D walls"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before building 3D walls.";
@@ -162,6 +177,9 @@ public partial class MainWindow
 
     private void BuildAuto3DWallsFromTakeoffs(bool switchTo3DTab)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Auto-build 3D model"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before auto-building 3D walls.";
@@ -203,6 +221,13 @@ public partial class MainWindow
 
     private void LoadThreeDModelForCurrentJob()
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+        {
+            ApplyThreeDModel(null);
+            BuildCleanThreeDViewerScene();
+            return;
+        }
+
         if (_currentJob == null)
         {
             ApplyThreeDModel(null);

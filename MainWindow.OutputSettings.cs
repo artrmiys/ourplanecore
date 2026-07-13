@@ -34,10 +34,12 @@ public partial class MainWindow
     private Slider? _sldOutputPdfAreaFill;
     private bool _outputUiReady;
     private bool _outputScaleDirty;
+    private TabItem? _outputSettingsTab;
 
     private void InstallOutputSettingsTab()
     {
         var tab = new TabItem { Header = "PDF Output" };
+        _outputSettingsTab = tab;
         var scroll = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -56,6 +58,18 @@ public partial class MainWindow
         TopMainTabs.Items.Insert(Math.Min(TopMainTabs.Items.Count, 3), tab);
         SyncOutputSettingsControls();
         _outputUiReady = true;
+    }
+
+    private void ApplyOutputSettingsModuleAvailability()
+    {
+        if (_outputSettingsTab == null)
+            return;
+
+        _outputSettingsTab.Visibility = IsModuleEnabled(ModuleId.PdfOutput)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (!IsModuleEnabled(ModuleId.PdfOutput) && ReferenceEquals(TopMainTabs.SelectedItem, _outputSettingsTab))
+            TopMainTabs.SelectedIndex = 0;
     }
 
     private FrameworkElement BuildPdfOutputGroup()

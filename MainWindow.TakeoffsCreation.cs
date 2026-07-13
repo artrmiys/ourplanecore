@@ -129,6 +129,9 @@ public partial class MainWindow
 
     private void AutoCreateTakeoffTree(string baseFolder)
     {
+        if (!RequireModule(ModuleId.TakeoffAutomation, "Auto Takeoff Tree"))
+            return;
+
         if (_currentJob == null || string.IsNullOrWhiteSpace(baseFolder) || !Directory.Exists(baseFolder))
             return;
 
@@ -162,6 +165,9 @@ public partial class MainWindow
 
     private void AutoCreateTakeoffFoldersFromPages(string baseFolder)
     {
+        if (!RequireModule(ModuleId.TakeoffAutomation, "Takeoffs From Pages"))
+            return;
+
         if (_currentJob == null || string.IsNullOrWhiteSpace(baseFolder) || !Directory.Exists(baseFolder))
             return;
 

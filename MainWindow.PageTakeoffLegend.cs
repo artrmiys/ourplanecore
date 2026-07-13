@@ -46,7 +46,8 @@ public partial class MainWindow
             RegisterPageTreeItemSubtree(child);
         }
 
-        if (!string.IsNullOrWhiteSpace(page.OverlayPageFolder))
+        if (IsModuleEnabled(ModuleId.SheetOverlay) &&
+            !string.IsNullOrWhiteSpace(page.OverlayPageFolder))
         {
             TreeViewItem overlayItem = CreatePageOverlayTreeItem(page);
             pageItem.Items.Add(overlayItem);

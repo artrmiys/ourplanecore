@@ -34,6 +34,9 @@ public partial class MainWindow
 
     private void SetCurrentSheetOverlay(PageInfo overlayPage)
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Set Sheet Overlay"))
+            return;
+
         if (_currentPage == null)
         {
             TxtStatus.Text = "Open a sheet before setting an overlay.";
@@ -60,6 +63,9 @@ public partial class MainWindow
 
     private void ClearCurrentSheetOverlay()
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Clear Sheet Overlay"))
+            return;
+
         if (_currentPage == null)
             return;
 
@@ -180,6 +186,9 @@ public partial class MainWindow
 
     private void BeginSheetOverlayPointEdit(PageInfo page)
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Edit Sheet Overlay"))
+            return;
+
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder))
         {
             TxtStatus.Text = "Set a sheet overlay before editing it.";
@@ -200,6 +209,9 @@ public partial class MainWindow
 
     private async void BeginSheetOverlayPointEditWhenReady(PageInfo page)
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Edit Sheet Overlay"))
+            return;
+
         PageInfo latest = ReadLatestSheetOverlayPage(page);
         if (string.IsNullOrWhiteSpace(latest.OverlayPageFolder))
         {
@@ -212,6 +224,9 @@ public partial class MainWindow
 
         for (int attempt = 0; attempt < 20; attempt++)
         {
+            if (!IsModuleEnabled(ModuleId.SheetOverlay))
+                return;
+
             PageInfo? current = _currentPage;
             if (current != null &&
                 SameFolder(current.FolderPath, latest.FolderPath) &&
@@ -325,6 +340,9 @@ public partial class MainWindow
 
     private void BeginCurrentSheetOverlayPointEdit()
     {
+        if (!RequireModule(ModuleId.SheetOverlay, "Edit Sheet Overlay"))
+            return;
+
         if (_currentPage == null)
         {
             TxtStatus.Text = "Open a sheet before moving an overlay.";
@@ -370,6 +388,12 @@ public partial class MainWindow
         float? requestedRenderScale = null,
         bool keepExistingUntilReady = false)
     {
+        if (!IsModuleEnabled(ModuleId.SheetOverlay))
+        {
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
         int version = ++_sheetOverlayLoadVersion;
         if (!keepExistingUntilReady)
             _viewport.ClearSheetOverlay();
@@ -400,6 +424,12 @@ public partial class MainWindow
 
     private void QueueSheetOverlayLoadForPageOpen(PageInfo page, PdfViewport.ViewState? restoreView = null)
     {
+        if (!IsModuleEnabled(ModuleId.SheetOverlay))
+        {
+            _viewport.ClearSheetOverlay();
+            return;
+        }
+
         int version = ++_sheetOverlayLoadVersion;
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
         {
@@ -461,7 +491,8 @@ public partial class MainWindow
             return new SheetOverlayBuildResult(ok, bitmap, widthPt, heightPt, overlayName, error);
         });
 
-        if (version != _sheetOverlayLoadVersion ||
+        if (!IsModuleEnabled(ModuleId.SheetOverlay) ||
+            version != _sheetOverlayLoadVersion ||
             _currentPage == null ||
             !SameFolder(_currentPage.FolderPath, page.FolderPath))
         {
@@ -592,6 +623,9 @@ public partial class MainWindow
         float pageWidthPt,
         float pageHeightPt)
     {
+        if (!IsModuleEnabled(ModuleId.SheetOverlay))
+            return (true, "");
+
         if (string.IsNullOrWhiteSpace(page.OverlayPageFolder) || !page.OverlayVisible)
             return (true, "");
 

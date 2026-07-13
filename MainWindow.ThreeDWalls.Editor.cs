@@ -118,6 +118,9 @@ public partial class MainWindow
 
     private void ShowThreeDRoofQuantities()
     {
+        if (!RequireModule(ModuleId.ThreeD, "Show 3D roof quantities"))
+            return;
+
         string groupId = ActiveThreeDRoofGroupId();
         ThreeDRoofQuantities q = CurrentThreeDRoofQuantities(groupId);
         if (!q.HasRoof)
@@ -134,6 +137,9 @@ public partial class MainWindow
 
     private void ApplyThreeDWallEditor(bool applyGroup)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Edit 3D walls"))
+            return;
+
         if (_selectedThreeDWall == null)
             return;
 

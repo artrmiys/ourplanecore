@@ -85,6 +85,7 @@ public partial class MainWindow
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         bool sameType = selectedTypes.Count == 1;
+        bool estimatingEnabled = IsModuleEnabled(ModuleId.Estimating);
         string typeText = sameType ? MeasurementTypeTitle(selectedTypes[0]) : "mixed Line/Area/Count";
 
         edit = new BulkTakeoffPropertiesEdit(false, firstColor, false, firstPrice, false, firstNotes);
@@ -168,7 +169,6 @@ public partial class MainWindow
             IsEnabled = sameType,
             Margin = new Thickness(0, 12, 0, 4),
         };
-        panel.Children.Add(applyPriceBox);
         var priceBox = new TextBox
         {
             Text = samePrice && firstPrice > 0 ? firstPrice.ToString("G", CultureInfo.InvariantCulture) : "0",
@@ -176,7 +176,11 @@ public partial class MainWindow
         };
         if (sameType)
             priceBox.TextChanged += (_, _) => applyPriceBox.IsChecked = true;
-        panel.Children.Add(priceBox);
+        if (estimatingEnabled)
+        {
+            panel.Children.Add(applyPriceBox);
+            panel.Children.Add(priceBox);
+        }
 
         var applyNotesBox = new CheckBox
         {
@@ -201,7 +205,7 @@ public partial class MainWindow
             bool applyColor = applyColorBox.IsChecked == true;
             colorPanel.IsEnabled = applyColor;
             colorBox.IsEnabled = applyColor;
-            priceBox.IsEnabled = sameType && applyPriceBox.IsChecked == true;
+            priceBox.IsEnabled = estimatingEnabled && sameType && applyPriceBox.IsChecked == true;
             notesBox.IsEnabled = applyNotesBox.IsChecked == true;
         }
 
@@ -229,7 +233,7 @@ public partial class MainWindow
         ok.Click += (_, _) =>
         {
             bool applyColor = applyColorBox.IsChecked == true;
-            bool applyPrice = sameType && applyPriceBox.IsChecked == true;
+            bool applyPrice = estimatingEnabled && sameType && applyPriceBox.IsChecked == true;
             bool applyNotes = applyNotesBox.IsChecked == true;
             if (!applyColor && !applyPrice && !applyNotes)
             {

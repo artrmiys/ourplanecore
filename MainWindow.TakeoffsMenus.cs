@@ -30,7 +30,7 @@ public partial class MainWindow
             item.MeasurementType == "point" ? "Add Count" : "New Section",
             singleSelection,
             () => StartNewSection(tvi, item)));
-        if (isArea)
+        if (isArea && IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
             menu.Items.Add(MakeMenuItem("Create Line Grid...", singleSelection, () => CreateLineGridFromSelectedArea(tvi, item)));
             menu.Items.Add(MakeMenuItem(
@@ -46,14 +46,14 @@ public partial class MainWindow
                 MakeMenuItem("Set / Reset Joist Direction", singleSelection, () => SetJoistDirectionFromSelectedLine(tvi, item)),
                 MakeMenuItem("Set Direction for All Areas", singleSelection, () => SetJoistDirectionForAllAreasFromSelectedLine(tvi, item))));
         }
-        if (isLine)
+        if (isLine && IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
             menu.Items.Add(MakeMenuItem(
                 "Create Count Points Along Lines...",
                 singleSelection,
                 () => CreatePointsAlongLineTakeoffItem(item)));
         }
-        if (item.MeasurementType == "point")
+        if (item.MeasurementType == "point" && IsModuleEnabled(ModuleId.AdvancedTakeoffTools))
         {
             menu.Items.Add(MakeMenuItem(
                 "Find Similar...",
@@ -61,7 +61,8 @@ public partial class MainWindow
                 () => StartFindSimilarForItem(tvi, item)));
         }
         menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
-        menu.Items.Add(BuildTakeoff3DMenu(tvi));
+        if (IsModuleEnabled(ModuleId.ThreeD))
+            menu.Items.Add(BuildTakeoff3DMenu(tvi));
 
         menu.Items.Add(new Separator());
 
@@ -84,7 +85,8 @@ public partial class MainWindow
             selectedItemsCount > 1 ? $"Bulk Properties ({selectedItemsCount} Items)..." : "Bulk Properties...",
             selectedItemsCount > 1,
             () => EditSelectedTakeoffProperties(tvi)));
-        menu.Items.Add(MakeMenuItem("Set Unit Price", singleSelection, () => SetUnitPrice(item)));
+        if (IsModuleEnabled(ModuleId.Estimating))
+            menu.Items.Add(MakeMenuItem("Set Unit Price", singleSelection, () => SetUnitPrice(item)));
 
         menu.Items.Add(new Separator());
 
@@ -151,7 +153,8 @@ public partial class MainWindow
             nestedTakeoffCount > 0,
             () => RandomizeTakeoffItemColors(tvi)));
         menu.Items.Add(BuildTakeoffCountDisplayMenu(tvi));
-        menu.Items.Add(BuildTakeoff3DMenu(tvi));
+        if (IsModuleEnabled(ModuleId.ThreeD))
+            menu.Items.Add(BuildTakeoff3DMenu(tvi));
 
         menu.Items.Add(new Separator());
 
@@ -162,20 +165,23 @@ public partial class MainWindow
             MakeMenuItem(selectedCount > 1 ? "Cut Selected" : "Cut Folder", !folder.IsRoot, () => CopyCutTakeoffNode(tvi, TakeoffsClipboardMode.Cut)),
             MakeMenuItem("Paste Into Folder", CanPasteTakeoffsInto(folder.FolderPath), () => PasteIntoSelectedTakeoffTarget(tvi)),
             MakeMenuItem(selectedCount > 1 ? "Duplicate Selected" : "Duplicate Folder", !folder.IsRoot, () => DuplicateTakeoffNode(tvi))));
-        menu.Items.Add(MakeSubmenu(
-            "Organize",
-            MakeMenuItem("Auto Create Tree", true, () => AutoCreateTakeoffTree(folder.FolderPath)),
-            MakeMenuItem("Create Folders From Pages", true, () => AutoCreateTakeoffFoldersFromPages(folder.FolderPath)),
-            MakeMenuItem(
+        var organize = MakeSubmenu("Organize");
+        if (IsModuleEnabled(ModuleId.TakeoffAutomation))
+        {
+            organize.Items.Add(MakeMenuItem("Auto Create Tree", true, () => AutoCreateTakeoffTree(folder.FolderPath)));
+            organize.Items.Add(MakeMenuItem("Create Folders From Pages", true, () => AutoCreateTakeoffFoldersFromPages(folder.FolderPath)));
+        }
+        organize.Items.Add(MakeMenuItem(
                 selectedCount > 1 ? $"Move {selectedCount} Up" : "Move Up",
                 CanMoveTakeoffNodes(tvi, -1),
-                () => MoveTakeoffNodes(tvi, -1)),
-            MakeMenuItem(
+                () => MoveTakeoffNodes(tvi, -1)));
+        organize.Items.Add(MakeMenuItem(
                 selectedCount > 1 ? $"Move {selectedCount} Down" : "Move Down",
                 CanMoveTakeoffNodes(tvi, 1),
-                () => MoveTakeoffNodes(tvi, 1)),
-            MakeMenuItem("Sort Children A-Z", true, () => SortTakeoffChildren(folder.FolderPath, descending: false)),
-            MakeMenuItem("Sort Children Z-A", true, () => SortTakeoffChildren(folder.FolderPath, descending: true))));
+                () => MoveTakeoffNodes(tvi, 1)));
+        organize.Items.Add(MakeMenuItem("Sort Children A-Z", true, () => SortTakeoffChildren(folder.FolderPath, descending: false)));
+        organize.Items.Add(MakeMenuItem("Sort Children Z-A", true, () => SortTakeoffChildren(folder.FolderPath, descending: true)));
+        menu.Items.Add(organize);
 
         menu.Items.Add(new Separator());
 
@@ -189,24 +195,26 @@ public partial class MainWindow
     {
         var menu = new ContextMenu();
 
-        menu.Items.Add(MakeMenuItem(
-            "Auto Create Tree",
-            _currentJob != null,
-            () =>
-            {
-                if (_currentJob != null)
-                    AutoCreateTakeoffTree(_currentJob.TakeoffsRoot);
-            }));
-        menu.Items.Add(MakeMenuItem(
-            "Create Folders From Pages",
-            _currentJob != null,
-            () =>
-            {
-                if (_currentJob != null)
-                    AutoCreateTakeoffFoldersFromPages(_currentJob.TakeoffsRoot);
-            }));
-
-        menu.Items.Add(new Separator());
+        if (IsModuleEnabled(ModuleId.TakeoffAutomation))
+        {
+            menu.Items.Add(MakeMenuItem(
+                "Auto Create Tree",
+                _currentJob != null,
+                () =>
+                {
+                    if (_currentJob != null)
+                        AutoCreateTakeoffTree(_currentJob.TakeoffsRoot);
+                }));
+            menu.Items.Add(MakeMenuItem(
+                "Create Folders From Pages",
+                _currentJob != null,
+                () =>
+                {
+                    if (_currentJob != null)
+                        AutoCreateTakeoffFoldersFromPages(_currentJob.TakeoffsRoot);
+                }));
+            menu.Items.Add(new Separator());
+        }
 
         menu.Items.Add(MakeMenuItem(
             "Paste Into Root",

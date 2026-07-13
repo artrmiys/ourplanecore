@@ -187,7 +187,8 @@ public partial class MainWindow
         AppSettingsStore.NormalizeOutputSettings(_settings);
         NormalizeDisplayLabelGroupSettings();
         ViewportRenderPolicy.ApplyQualityMode(_settings.ViewportRenderQuality);
-        PdfLayerRenderService.PdfLayersEnabled = _settings.PdfLayersEnabled;
+        PdfLayerRenderService.PdfLayersEnabled =
+            IsModuleEnabled(ModuleId.PdfLayers) && _settings.PdfLayersEnabled;
         _settings.MeasurementLabelScale = NormalizeOverlayScale(_settings.MeasurementLabelScale);
         _settings.ViewportMeasurementStrokeScale = NormalizeStrokeScale(_settings.ViewportMeasurementStrokeScale);
         _settings.ViewportRulerStrokeWidth = NormalizeRulerStrokeWidth(_settings.ViewportRulerStrokeWidth);

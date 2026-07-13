@@ -21,6 +21,7 @@ public partial class MainWindow
     private bool _updatingSheetManagerBulkEdit;
     private bool _sheetManagerRefreshPendingAfterEdit;
     private CancellationTokenSource? _sheetManagerRasterPrepareCts;
+    private CancellationTokenSource? _sheetManagerAnalysisCts;
     private string _sheetManagerRasterBackgroundLabel = "Prepare";
 
     private sealed record SheetManagerRasterReadyBatch(
@@ -43,6 +44,13 @@ public partial class MainWindow
     {
         if (WorkspaceTabs.SelectedItem is not TabItem tab)
             return;
+
+        if (TryGetWorkspaceModule(tab.Tag?.ToString(), out ModuleId module) && !IsModuleEnabled(module))
+        {
+            WorkspaceTabs.SelectedItem = MainViewWorkspaceTab;
+            TxtStatus.Text = $"{ModuleFeatureCatalog.Definition(module).Name} is disabled in Settings > Modules.";
+            return;
+        }
 
         switch (tab.Tag?.ToString())
         {
@@ -275,6 +283,9 @@ public partial class MainWindow
 
     private void RefreshSheetManager()
     {
+        if (!IsModuleEnabled(ModuleId.SheetManager))
+            return;
+
         ConfigureSheetManagerEditableColumns();
 
         if (IsSheetManagerTextEditActive())
@@ -345,6 +356,9 @@ public partial class MainWindow
 
     private async Task AnalyzeSheetManagerAsync(bool defaultRename, bool defaultScale)
     {
+        if (!IsModuleEnabled(ModuleId.SheetManager))
+            return;
+
         ConfigureSheetManagerEditableColumns();
 
         if (_currentJob == null)
@@ -363,24 +377,44 @@ public partial class MainWindow
         TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
 
         OurPlaneCoreJob job = _currentJob;
+        _sheetManagerAnalysisCts?.Cancel();
+        using var analysisCts = new CancellationTokenSource();
+        _sheetManagerAnalysisCts = analysisCts;
         List<PdfMetadataPageResult> results;
-        using (ShowBusyOverlay($"Sheet Manager analyzing {pages.Count} sheet(s)..."))
+        try
         {
-            await WaitForBusyOverlayRenderAsync();
-            results = await Task.Run(() =>
+            using (ShowBusyOverlay($"Sheet Manager analyzing {pages.Count} sheet(s)..."))
             {
-                var analyzed = new List<PdfMetadataPageResult>();
-                foreach (PageInfo page in pages)
+                await WaitForBusyOverlayRenderAsync();
+                results = await Task.Run(() =>
                 {
-                    if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
-                        analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                    else
-                        analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-                }
+                    var analyzed = new List<PdfMetadataPageResult>();
+                    foreach (PageInfo page in pages)
+                    {
+                        analysisCts.Token.ThrowIfCancellationRequested();
+                        if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
+                            analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
+                        else
+                            analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
+                    }
 
-                return analyzed;
-            });
+                    return analyzed;
+                }, analysisCts.Token);
+            }
         }
+        catch (OperationCanceledException) when (analysisCts.IsCancellationRequested)
+        {
+            TxtStatus.Text = "Sheet Manager analysis cancelled.";
+            return;
+        }
+        finally
+        {
+            if (ReferenceEquals(_sheetManagerAnalysisCts, analysisCts))
+                _sheetManagerAnalysisCts = null;
+        }
+
+        if (!IsModuleEnabled(ModuleId.SheetManager))
+            return;
 
         _sheetManagerMetadataResults = results;
         IReadOnlyDictionary<string, IReadOnlyList<int>> readyRasterDpisByPageFolder =
@@ -404,6 +438,12 @@ public partial class MainWindow
 
         SheetManagerGrid.ItemsSource = rows;
         TxtStatus.Text = $"Sheet Manager analyzed: {results.Count(result => result.Ok)} OK, {results.Count(result => !result.Ok)} failed.";
+    }
+
+    private void CancelActiveSheetManagerWorkForModuleDisable()
+    {
+        _sheetManagerAnalysisCts?.Cancel();
+        _sheetManagerRasterPrepareCts?.Cancel();
     }
 
     private IReadOnlyList<PageInfo> SelectedSheetManagerPages()
@@ -499,11 +539,15 @@ public partial class MainWindow
 
     private void BtnSheetManagerDetach_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.DetachedSheets, "Detach sheets"))
+            return;
         OpenPagesInDetachedWindows(SelectedSheetManagerPagesForOpen(), false, "Sheet Manager");
     }
 
     private void BtnSheetManagerTileSecondMonitor_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.DetachedSheets, "Tile sheets"))
+            return;
         OpenPagesInDetachedWindows(SelectedSheetManagerPagesForOpen(), true, "Sheet Manager");
     }
 
@@ -1622,6 +1666,9 @@ public partial class MainWindow
 
     private void RefreshTakeoffManager()
     {
+        if (!IsModuleEnabled(ModuleId.TakeoffManager))
+            return;
+
         TakeoffManagerGrid.ItemsSource = _takeoffItems
             .Select(item => new TakeoffManagerRow(
                 item.Name,
@@ -1666,6 +1713,9 @@ public partial class MainWindow
 
     private void RefreshAiManager()
     {
+        if (!IsModuleEnabled(ModuleId.Ai))
+            return;
+
         LoadObservationsInbox();
         AiManagerGrid.ItemsSource = ObservationsListView.Items.OfType<ObservationDisplayItem>().ToList();
         TxtStatus.Text = $"AI Manager: {AiManagerGrid.Items.Count} item(s).";

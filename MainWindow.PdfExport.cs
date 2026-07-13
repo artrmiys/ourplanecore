@@ -13,6 +13,9 @@ public partial class MainWindow
 {
     private async void BtnExportPdf_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.PdfOutput, "Export PDF"))
+            return;
+
         await RunAsyncUiHandler(
             () => ExportPdfAsync(sender),
             "PDF export failed.",
@@ -79,6 +82,9 @@ public partial class MainWindow
     // options come from the last saved export settings.
     private async Task ExportSheetsFromPagesTreeAsync(TreeViewItem item)
     {
+        if (!RequireModule(ModuleId.PdfOutput, "Export PDF"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open or create a job before PDF export.";
@@ -100,7 +106,7 @@ public partial class MainWindow
             includeMeasurements = _settings.PdfExportIncludeMeasurements || pages.Any(PageHasVisibleExportMeasurements);
         var options = BuildPdfExportOptions(
             includeMeasurements,
-            _settings.PdfExportIncludeAnnotations,
+            _settings.PdfExportIncludeAnnotations && IsModuleEnabled(ModuleId.Annotations),
             _settings.PdfExportShowSheetLegend,
             _settings.PdfExportMeasurementStrokeScale);
         string defaultFileName = pages.Count == 1
@@ -116,7 +122,7 @@ public partial class MainWindow
         double measurementStrokeScale) =>
         new(
             includeMeasurements,
-            includeAnnotations,
+            includeAnnotations && IsModuleEnabled(ModuleId.Annotations),
             includeLegend,
             _viewport.UnitMode,
             _settings.SheetLegendAnchor,
@@ -140,6 +146,9 @@ public partial class MainWindow
         PdfExportOptions options,
         Button? button)
     {
+        if (!RequireModule(ModuleId.PdfOutput, "Export PDF"))
+            return;
+
         if (_currentJob == null)
             return;
 

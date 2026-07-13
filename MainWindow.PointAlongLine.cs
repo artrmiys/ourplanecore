@@ -57,6 +57,9 @@ public partial class MainWindow
 
     private void CreatePointsAlongLines(IReadOnlyList<Measurement> sourceLines, TakeoffItem? sourceItem = null)
     {
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Points Along Line"))
+            return;
+
         if (_currentJob == null)
         {
             PostStatusInfo("Open or create a job before creating Count points.");

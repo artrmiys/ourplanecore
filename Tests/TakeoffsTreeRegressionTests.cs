@@ -445,10 +445,9 @@ internal static class TakeoffsTreeRegressionTests
     public static void JoistDirectionCanBeResetFromSectionMenu()
     {
         string sections = ReadRepoFile("MainWindow.TakeoffSections.cs");
-        string normalizedSections = sections.Replace("\r\n", "\n");
         AssertTrue(
             sections.Contains("\"Set / Reset Joist Direction\"", StringComparison.Ordinal) &&
-            normalizedSections.Contains("\"Set / Reset Joist Direction\",\n            isAreaSection", StringComparison.Ordinal) &&
+            sections.Contains("IsModuleEnabled(ModuleId.AdvancedTakeoffTools)", StringComparison.Ordinal) &&
             sections.Contains("SetJoistDirectionForSection(item, measurement)", StringComparison.Ordinal) &&
             sections.Contains("\"Set Direction for All Areas\"", StringComparison.Ordinal) &&
             sections.Contains("SetJoistDirectionForAllAreas(item, measurement)", StringComparison.Ordinal),
@@ -1302,7 +1301,7 @@ internal static class TakeoffsTreeRegressionTests
         string exporter = ReadRepoFile("Models/PdfExporter.Annotations.cs");
 
         AssertTrue(
-            xaml.Contains("<TabItem Header=\"Annotation\">", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"AnnotationCommandTab\" Header=\"Annotation\"", StringComparison.Ordinal) &&
             xaml.Contains("x:Name=\"BtnHighlight\"", StringComparison.Ordinal) &&
             xaml.Contains("Tag=\"drawhighlight\"", StringComparison.Ordinal),
             "Annotation ribbon tab should expose a visible Highlighter tool");

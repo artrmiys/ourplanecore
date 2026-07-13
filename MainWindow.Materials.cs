@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -11,8 +12,12 @@ namespace OurPlaneCore;
 
 public partial class MainWindow
 {
+    private CancellationTokenSource? _materialsWorkCts;
+
     private async void BtnMaterialsExtract_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Materials, "Extract Materials"))
+            return;
         await RunAsyncUiHandler(
             ExtractMaterialsAsync,
             "Material extraction failed.",
@@ -21,6 +26,8 @@ public partial class MainWindow
 
     private async void BtnMaterialsCreateReport_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Materials, "Create Materials Report"))
+            return;
         await RunAsyncUiHandler(
             CreateMaterialsReportForCurrentJobAsync,
             "Material report failed.",
@@ -31,6 +38,8 @@ public partial class MainWindow
 
     private void BtnMaterialsOpenJson_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Materials, "Open Materials JSON"))
+            return;
         if (_currentJob == null)
             return;
 
@@ -39,6 +48,8 @@ public partial class MainWindow
 
     private void BtnMaterialsOpenRowsCsv_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Materials, "Open Materials CSV"))
+            return;
         if (_currentJob == null)
             return;
 
@@ -47,6 +58,8 @@ public partial class MainWindow
 
     private void BtnMaterialsOpenSummaryCsv_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Materials, "Open Materials Summary"))
+            return;
         if (_currentJob == null)
             return;
 
@@ -55,6 +68,8 @@ public partial class MainWindow
 
     private void BtnMaterialsOpenFolder_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Materials, "Open Materials Folder"))
+            return;
         if (_currentJob == null)
             return;
 
@@ -63,6 +78,9 @@ public partial class MainWindow
 
     private async Task ExtractMaterialsAsync()
     {
+        if (!IsModuleEnabled(ModuleId.Materials))
+            return;
+
         if (_currentJob == null)
         {
             PostStatusInfo("Open or create a job before extracting materials.");
@@ -80,20 +98,32 @@ public partial class MainWindow
         TxtMaterialsSummary.Text = $"Extracting materials from {pdfs.Count} source PDF(s)...";
         TxtStatus.Text = "Materials: extraction running.";
         BtnMaterialsExtract.IsEnabled = false;
+        OurPlaneCoreJob job = _currentJob;
+        using CancellationTokenSource cts = StartMaterialsWork();
         try
         {
-            MaterialExtractionRunResult run = await MaterialExtractionService.ExtractAsync(_currentJob, pdfs);
+            MaterialExtractionRunResult run = await MaterialExtractionService.ExtractAsync(job, pdfs, cts.Token);
+            if (!IsModuleEnabled(ModuleId.Materials))
+                return;
             ApplyMaterialsResult(run.Result);
             TxtStatus.Text = $"Materials: {run.Result.Rows.Count} row(s), {run.Result.Schedules.Count} schedule(s).";
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            TxtStatus.Text = "Materials: extraction cancelled.";
+        }
         finally
         {
+            FinishMaterialsWork(cts);
             BtnMaterialsExtract.IsEnabled = true;
         }
     }
 
     private async Task CreateMaterialsReportForCurrentJobAsync()
     {
+        if (!IsModuleEnabled(ModuleId.Materials))
+            return;
+
         if (_currentJob == null)
         {
             PostStatusInfo("Open or create a job before creating a materials report.");
@@ -115,9 +145,11 @@ public partial class MainWindow
         string sourceLabel,
         bool applySheetMetadata = true)
     {
-        if (_currentJob == null || sourcePages.Count == 0)
+        if (!IsModuleEnabled(ModuleId.Materials) || _currentJob == null || sourcePages.Count == 0)
             return;
 
+        OurPlaneCoreJob job = _currentJob;
+        using CancellationTokenSource cts = StartMaterialsWork();
         try
         {
             sourcePages = sourcePages
@@ -135,13 +167,16 @@ public partial class MainWindow
                 MaterialReportSheetMetadataSummary metadataSummary = applySheetMetadata
                     ? await AnalyzeAndApplySheetMetadataAsync(sourcePages, "Materials")
                     : new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
+                cts.Token.ThrowIfCancellationRequested();
 
                 BusyOverlayText.Text = "Materials: reading source PDFs, schedules, and OCR pages...";
                 TxtStatus.Text = "Materials: creating report sheet.";
                 MaterialReportPageResult result = await MaterialReportPageService.CreateReportPagesAsync(
-                    _currentJob,
+                    job,
                     sourcePages,
-                    destinationFolder);
+                    destinationFolder,
+                    cts.Token);
+                cts.Token.ThrowIfCancellationRequested();
 
                 ReloadPagesTree();
                 if (result.ReportPages.Count > 0)
@@ -156,12 +191,37 @@ public partial class MainWindow
 
             RefreshMaterialsManager();
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            TxtStatus.Text = "Materials: report creation cancelled.";
+        }
         catch (Exception ex)
         {
             AppLog.Warn(ex, $"Materials report for {sourceLabel} failed");
             TxtStatus.Text = $"Materials report failed for {sourceLabel}: {ex.Message}";
         }
+        finally
+        {
+            FinishMaterialsWork(cts);
+        }
     }
+
+    private CancellationTokenSource StartMaterialsWork()
+    {
+        _materialsWorkCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _materialsWorkCts = cts;
+        return cts;
+    }
+
+    private void FinishMaterialsWork(CancellationTokenSource cts)
+    {
+        if (ReferenceEquals(_materialsWorkCts, cts))
+            _materialsWorkCts = null;
+    }
+
+    private void CancelActiveMaterialsWorkForModuleDisable() =>
+        _materialsWorkCts?.Cancel();
 
     private async Task<MaterialReportSheetMetadataSummary> TryApplySheetMetadataAfterPdfImportAsync(
         IReadOnlyList<PageInfo> sourcePages)
@@ -233,6 +293,9 @@ public partial class MainWindow
 
     private void RefreshMaterialsManager()
     {
+        if (!IsModuleEnabled(ModuleId.Materials))
+            return;
+
         if (_currentJob == null)
         {
             MaterialsGrid.ItemsSource = Array.Empty<MaterialManagerRow>();

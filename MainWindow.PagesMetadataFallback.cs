@@ -16,6 +16,10 @@ public partial class MainWindow
 {
     private async void BtnQueuePdfMetadataFallback_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "AI Fill") ||
+            !RequireModule(ModuleId.SheetManager, "AI Fill PDF Metadata"))
+            return;
+
         await RunAsyncUiHandler(
             async () =>
             {
@@ -31,6 +35,10 @@ public partial class MainWindow
 
     private async void BtnPdfMetadataCropHints_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.Ai, "AI Fill crop hints") ||
+            !RequireModule(ModuleId.SheetManager, "AI Fill crop hints"))
+            return;
+
         await RunAsyncUiHandler(
             () =>
             {
@@ -43,6 +51,10 @@ public partial class MainWindow
 
     private async Task<bool> TryRunSheetManagerPdfMetadataFallbackAsync()
     {
+        if (!RequireModule(ModuleId.Ai, "AI Fill") ||
+            !RequireModule(ModuleId.SheetManager, "AI Fill PDF Metadata"))
+            return true;
+
         if (WorkspaceTabs.SelectedItem is not TabItem tab ||
             !string.Equals(tab.Tag?.ToString(), "SheetManager", StringComparison.OrdinalIgnoreCase))
         {
@@ -150,11 +162,16 @@ public partial class MainWindow
 
         foreach (SmartAiRequest request in requests)
         {
+            if (!IsModuleEnabled(ModuleId.Ai) || !IsModuleEnabled(ModuleId.SheetManager))
+                break;
+
             SmartAiRequest current = SmartContextStore.LoadAiRequest(job, request.Id) ?? request;
             if (IsRunnableAiStatus(current.Status))
             {
                 string statusBeforeRun = current.Status;
                 await RunAiRequestAsync(current);
+                if (!IsModuleEnabled(ModuleId.SheetManager))
+                    break;
                 current = SmartContextStore.LoadAiRequest(job, request.Id) ?? current;
                 if (!string.Equals(statusBeforeRun, current.Status, StringComparison.OrdinalIgnoreCase) ||
                     HasDoneAiResponse(job, current))
@@ -195,6 +212,10 @@ public partial class MainWindow
 
     private void QueuePdfMetadataFallback(TreeViewItem item)
     {
+        if (!RequireModule(ModuleId.Ai, "Queue GPT metadata fallback") ||
+            !RequireModule(ModuleId.SheetManager, "Queue GPT metadata fallback"))
+            return;
+
         if (_currentJob == null)
             return;
 
@@ -208,6 +229,10 @@ public partial class MainWindow
     private PdfMetadataFallbackQueueResult QueuePdfMetadataFallback(IReadOnlyList<PageInfo> pages, bool showMessage = true)
     {
         var result = new PdfMetadataFallbackQueueResult();
+        if (!RequireModule(ModuleId.Ai, "Queue GPT metadata fallback") ||
+            !RequireModule(ModuleId.SheetManager, "Queue GPT metadata fallback"))
+            return result;
+
         if (_currentJob == null || pages.Count == 0)
             return result;
 
@@ -342,6 +367,9 @@ public partial class MainWindow
 
     private void ConfigurePdfMetadataCropHints()
     {
+        if (!RequireModule(ModuleId.Ai, "AI Fill crop hints"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "Open a job before AI Fill crop hints.";

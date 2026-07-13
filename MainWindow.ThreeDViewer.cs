@@ -71,6 +71,9 @@ public partial class MainWindow
 
     private void RefreshThreeDViewer()
     {
+        if (!IsModuleEnabled(ModuleId.ThreeD))
+            return;
+
         if (_threeDWallElements.Count > 0 ||
             _threeDFloorSlabs.Count > 0 ||
             _threeDRoofGuides.Count > 0 ||
@@ -92,15 +95,35 @@ public partial class MainWindow
 
     private void Btn3dViewerFit_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Use 3D viewer"))
+            return;
+
         _threeDViewerTarget = new Point3D(0, _threeDViewerPivotY, 0);
         SetThreeDViewerView(_threeDViewerYaw, _threeDViewerPitch, ThreeDViewerFitDistance());
     }
-    private void Btn3dViewerIso_Click(object sender, RoutedEventArgs e) => SetThreeDViewerView(-38, 28, ThreeDViewerFitDistance());
-    private void Btn3dViewerTop_Click(object sender, RoutedEventArgs e) => SetThreeDViewerView(0, 86, ThreeDViewerFitDistance());
-    private void Btn3dViewerFront_Click(object sender, RoutedEventArgs e) => SetThreeDViewerView(0, 12, ThreeDViewerFitDistance());
+    private void Btn3dViewerIso_Click(object sender, RoutedEventArgs e)
+    {
+        if (RequireModule(ModuleId.ThreeD, "Use 3D viewer"))
+            SetThreeDViewerView(-38, 28, ThreeDViewerFitDistance());
+    }
+
+    private void Btn3dViewerTop_Click(object sender, RoutedEventArgs e)
+    {
+        if (RequireModule(ModuleId.ThreeD, "Use 3D viewer"))
+            SetThreeDViewerView(0, 86, ThreeDViewerFitDistance());
+    }
+
+    private void Btn3dViewerFront_Click(object sender, RoutedEventArgs e)
+    {
+        if (RequireModule(ModuleId.ThreeD, "Use 3D viewer"))
+            SetThreeDViewerView(0, 12, ThreeDViewerFitDistance());
+    }
 
     private void Btn3dViewerReset_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Reset 3D viewer"))
+            return;
+
         if (_threeDWallElements.Count > 0 || _threeDFloorSlabs.Count > 0)
         {
             RenderThreeDWallModel(fitCamera: true);

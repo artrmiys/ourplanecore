@@ -90,7 +90,10 @@ public partial class MainWindow
             return;
 
         TakeoffFolderProperties properties = TakeoffFolderPropertiesStore.Load(folder.FolderPath);
-        var dialog = new TakeoffFolderPropertiesDialog(folder.Name, properties)
+        var dialog = new TakeoffFolderPropertiesDialog(
+            folder.Name,
+            properties,
+            showEstimatingFields: IsModuleEnabled(ModuleId.Estimating))
         {
             Owner = this,
         };

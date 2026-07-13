@@ -51,6 +51,9 @@ public partial class MainWindow
 
     private void BtnSimilarCount_Click(object sender, RoutedEventArgs e)
     {
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Similar Count"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
         {
             TxtStatus.Text = "Count similar: open a job and a sheet first.";
@@ -72,6 +75,9 @@ public partial class MainWindow
     // rubber-band one symbol again, matches land back in this item.
     private void StartFindSimilarForItem(TreeViewItem tvi, TakeoffItem item)
     {
+        if (!RequireModule(ModuleId.AdvancedTakeoffTools, "Find Similar"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
         {
             TxtStatus.Text = "Find similar: open a job and a sheet first.";
@@ -788,7 +794,7 @@ public partial class MainWindow
             initialMirrored: request.InitialIncludeMirrored,
             initialAllSheets: false,
             destinationName: destinationName,
-            aiAvailable: !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
+            aiAvailable: IsModuleEnabled(ModuleId.Ai) && !string.IsNullOrWhiteSpace(ReadOpenAiApiKey()),
             templateWarning: templateWarning,
             allowDestinationNameEdit: canRenameDestination)
         {
@@ -1585,6 +1591,9 @@ public partial class MainWindow
         int offlineCount,
         string destinationName)
     {
+        if (!RequireModule(ModuleId.Ai, "Similar Count AI double-check"))
+            return;
+
         if (_currentJob == null ||
             _currentPage == null ||
             !string.Equals(

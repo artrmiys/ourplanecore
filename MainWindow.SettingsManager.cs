@@ -52,6 +52,7 @@ public partial class MainWindow
 
     private static readonly string[] SettingsCategories =
     [
+        "Modules",
         "Page Folders",
         "Auto Tree",
         "From Pages",
@@ -71,6 +72,7 @@ public partial class MainWindow
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
         _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
         RefreshTakeoffTemplateEditors();
+        ReloadModuleFeatures();
     }
 
     private void RefreshSettingsManager()
@@ -132,6 +134,7 @@ public partial class MainWindow
         {
             panel = category switch
             {
+                "Modules" => BuildModulesPanel(),
                 "Page Folders" => BuildPageFoldersPanel(),
                 "Auto Tree" => BuildAutoTreePanel(),
                 "From Pages" => BuildFromPagesPanel(),
@@ -148,6 +151,7 @@ public partial class MainWindow
 
         switch (category)
         {
+            case "Modules": BindModulesSettings(); break;
             case "Page Folders": BindPageFolders(); break;
             case "Auto Tree": BindAutoTree(); break;
             case "From Pages": BindFromPages(); break;
@@ -477,6 +481,9 @@ public partial class MainWindow
 
     private void ApplyFromPages()
     {
+        if (!RequireModule(ModuleId.TakeoffAutomation, "Create Takeoffs From Pages"))
+            return;
+
         if (_currentJob == null) { PostStatusInfo("Open a job before creating takeoff folders from pages."); return; }
         var top = _fpTop.Select(n => n.Name).Where(s => s.Length > 0).ToList();
         if (top.Count == 0) { PostStatusInfo("No top folders. Reload from Pages or add some."); return; }

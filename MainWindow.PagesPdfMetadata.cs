@@ -73,6 +73,9 @@ public partial class MainWindow
 
     private async Task AnalyzePdfMetadataAsync(TreeViewItem item, bool applyRename, bool applyScale)
     {
+        if (!RequireModule(ModuleId.SheetManager, "PDF metadata analysis"))
+            return;
+
         if (_currentJob == null)
             return;
 

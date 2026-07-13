@@ -22,8 +22,11 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
         menu.Items.Add(MakeMenuItem("Export CSV", hasJob, () => BtnExportCsv_Click(this, new RoutedEventArgs())));
         menu.Items.Add(MakeMenuItem("Export TXT", hasJob, () => BtnExportTxt_Click(this, new RoutedEventArgs())));
-        menu.Items.Add(MakeMenuItem("Export Excel", hasJob, () => BtnExportExcel_Click(this, new RoutedEventArgs())));
-        menu.Items.Add(MakeMenuItem("Export to Current Excel", hasJob, () => BtnExportCurrentExcel_Click(this, new RoutedEventArgs())));
+        if (IsModuleEnabled(ModuleId.ExcelIntegration))
+        {
+            menu.Items.Add(MakeMenuItem("Export Excel", hasJob, () => BtnExportExcel_Click(this, new RoutedEventArgs())));
+            menu.Items.Add(MakeMenuItem("Export to Current Excel", hasJob, () => BtnExportCurrentExcel_Click(this, new RoutedEventArgs())));
+        }
         menu.IsOpen = true;
     }
 }

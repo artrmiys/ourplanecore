@@ -71,28 +71,28 @@
                         <StackPanel Style="{StaticResource RibbonGroup}">
                             <StackPanel Style="{StaticResource RibbonGroupBody}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
+                                    <Button x:Name="BtnMainExportPdf" Click="BtnExportPdf_Click" Style="{StaticResource TopCommandButton}"
                                             ToolTip="Export selected/all sheets to a PDF">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconExport}"/>
                                             <TextBlock Text="Export" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Button>
-                                    <Button Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
+                                    <Button x:Name="BtnMainAutoRenamePdf" Click="BtnAutoRenamePdf_Click" Style="{StaticResource TopCommandButton}"
                                             ToolTip="Preview and apply PDF sheet names">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconTag}"/>
                                             <TextBlock Text="Name" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Button>
-                                    <Button Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                    <Button x:Name="BtnMainAutoScalePdf" Click="BtnAutoScalePdf_Click" Style="{StaticResource TopCommandButton}"
                                             ToolTip="Preview and apply PDF sheet scale">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconRuler}"/>
                                             <TextBlock Text="Scale" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Button>
-                                    <Button Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
+                                    <Button x:Name="BtnMainAutoRenameScalePdf" Click="BtnAutoRenameScalePdf_Click" Style="{StaticResource TopCommandButton}"
                                             ToolTip="Preview and apply PDF sheet names and scale">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconClipboard}"/>
@@ -101,14 +101,14 @@
                                     </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <Button Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
+                                    <Button x:Name="BtnMainAiFill" Click="BtnQueuePdfMetadataFallback_Click" Style="{StaticResource TopCommandButton}"
                                             ToolTip="Queue GPT fallback for missing PDF sheet metadata">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconSparkle}"/>
                                             <TextBlock Text="AI Fill" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Button>
-                                    <Button Click="BtnPdfMetadataCropHints_Click" Style="{StaticResource TopCommandButton}"
+                                    <Button x:Name="BtnMainAiCropHints" Click="BtnPdfMetadataCropHints_Click" Style="{StaticResource TopCommandButton}"
                                             ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource RibbonIcon}" Data="{StaticResource IconCrop}"/>
@@ -257,7 +257,7 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-            <TabItem Header="Annotation">
+            <TabItem x:Name="AnnotationCommandTab" Header="Annotation">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled">
                     <StackPanel Orientation="Horizontal" Margin="6,1">
@@ -969,7 +969,7 @@
                     Background="{DynamicResource PanelBackgroundBrush}"
                     Foreground="{DynamicResource ControlForegroundBrush}"
                     BorderBrush="{DynamicResource ControlBorderBrush}">
-            <TabItem Header="Main View" Tag="MainView">
+            <TabItem x:Name="MainViewWorkspaceTab" Header="Main View" Tag="MainView">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="280"/>
@@ -1205,7 +1205,7 @@
                                               Margin="2"/>
                                 </DockPanel>
                             </TabItem>
-                            <TabItem Header="PDF Layers">
+                            <TabItem x:Name="PdfLayersSideTab" Header="PDF Layers">
                                 <DockPanel Margin="4">
                                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,3">
                                         <Button x:Name="BtnLayersLoad"
@@ -1933,7 +1933,7 @@
         </Grid>
             </TabItem>
 
-            <TabItem Header="Sheet Manager" Tag="SheetManager">
+            <TabItem x:Name="SheetManagerWorkspaceTab" Header="Sheet Manager" Tag="SheetManager">
                 <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
                     <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
                     <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
@@ -1943,7 +1943,7 @@
                         <TextBlock Text="PDF" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Import PDF(s)" Click="BtnImport_Click" ToolTip="Add one or many PDF files to the current job"/>
                         <Button Content="PDF Takeoffs" Click="BtnImportPdfTakeoffs_Click" ToolTip="Import PDF measurement annotations into takeoff items"/>
-                        <Button Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
+                        <Button x:Name="BtnSheetManagerExportPdf" Content="Export PDF" Click="BtnExportPdf_Click" Margin="0,0,12,4" ToolTip="Export selected or all sheets to PDF"/>
                         <TextBlock Text="Raster" Style="{StaticResource ManagerGroupLabel}"/>
                         <ComboBox x:Name="SheetManagerRasterDpiBox"
                                   Width="88"
@@ -1981,20 +1981,20 @@
                         <Button Content="Auto Name" Click="BtnSheetManagerAutoName_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview automatic sheet names"/>
                         <Button Content="Auto Scale" Click="BtnSheetManagerAutoScale_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview automatic sheet scales"/>
                         <Button Content="Name+Scale" Click="BtnSheetManagerAutoNameScale_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Preview names and scales together"/>
-                        <Button Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Margin="0,0,12,4" ToolTip="Queue GPT fallback for missing sheet metadata"/>
-                        <Button Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Margin="0,0,12,4" ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale"/>
+                        <Button x:Name="BtnSheetManagerAiFill" Content="AI Fill" Click="BtnQueuePdfMetadataFallback_Click" Margin="0,0,12,4" ToolTip="Queue GPT fallback for missing sheet metadata"/>
+                        <Button x:Name="BtnSheetManagerAiCropHints" Content="Crop Hints" Click="BtnPdfMetadataCropHints_Click" Margin="0,0,12,4" ToolTip="Draw reusable AI Fill crop boxes for sheet number and scale"/>
                         <Button Content="Apply Checked" Click="BtnSheetManagerApplyChecked_Click" Style="{StaticResource ManagerCommitButton}" ToolTip="Apply checked rename/scale rows to the job"/>
                         <TextBlock Text="Open" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Open Sheet" Click="BtnSheetManagerOpenSheet_Click" ToolTip="Switch to the selected sheet in Main View"/>
                         <Button Content="Open Tabs" Click="BtnSheetManagerOpenTabs_Click" ToolTip="Open the selected sheets as viewport tabs"/>
-                        <Button Content="Detach" Click="BtnSheetManagerDetach_Click" ToolTip="Open the selected sheets in detached windows"/>
-                        <Button Content="Tile M2" Click="BtnSheetManagerTileSecondMonitor_Click" ToolTip="Open selected sheets in detached windows and tile them on monitor 2"/>
+                        <Button x:Name="BtnSheetManagerDetach" Content="Detach" Click="BtnSheetManagerDetach_Click" ToolTip="Open the selected sheets in detached windows"/>
+                        <Button x:Name="BtnSheetManagerTileM2" Content="Tile M2" Click="BtnSheetManagerTileSecondMonitor_Click" ToolTip="Open selected sheets in detached windows and tile them on monitor 2"/>
                         <Button Content="Open JSON" Click="BtnSheetManagerOpenJson_Click" Margin="0,0,12,4" ToolTip="Open the PDF metadata JSON for inspection"/>
                         <TextBlock Text="Organize" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Sort A/S" Click="BtnSortPagesArchStruct_Click" ToolTip="Sort A sheets into Arch and S sheets into Struct"/>
                         <Button Content="D/Sec/WT" Click="BtnSortPagesSuffix_Click" ToolTip="Sort suffix sheets inside the selected Pages folder; if no folder is selected, sort all Pages"/>
                         <Button Content="Repair Links" Click="BtnRepairMeasurementPageLinks_Click" ToolTip="Reconnect saved measurements to current page folders"/>
-                        <Button Content="Auto Folders" Click="BtnAutoPageFolders_Click" ToolTip="Create standard page folders under the selected Pages folder"/>
+                        <Button x:Name="BtnSheetManagerAutoFolders" Content="Auto Folders" Click="BtnAutoPageFolders_Click" ToolTip="Create standard page folders under the selected Pages folder"/>
                     </WrapPanel>
                     </Border>
                     <DataGrid x:Name="SheetManagerGrid"
@@ -2042,7 +2042,7 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Takeoff Manager" Tag="TakeoffManager">
+            <TabItem x:Name="TakeoffManagerWorkspaceTab" Header="Takeoff Manager" Tag="TakeoffManager">
                 <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
                     <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
                     <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
@@ -2055,17 +2055,17 @@
                         <Button Content="Refresh" Click="BtnTakeoffManagerRefresh_Click" ToolTip="Reload the takeoff manager table"/>
                         <Button Content="Set Active" Click="BtnTakeoffManagerSetActive_Click" Style="{StaticResource ManagerPrimaryButton}" ToolTip="Make the selected takeoff item the active drawing target"/>
                         <Button Content="Properties" Click="BtnTakeoffManagerProperties_Click" ToolTip="Edit the selected takeoff item's properties"/>
-                        <Button Content="Open Estimating" Click="BtnTakeoffManagerOpenEstimating_Click" Margin="0,0,12,4" ToolTip="Open the full estimating table window"/>
+                        <Button x:Name="BtnTakeoffManagerOpenEstimating" Content="Open Estimating" Click="BtnTakeoffManagerOpenEstimating_Click" Margin="0,0,12,4" ToolTip="Open the full estimating table window"/>
                         <Button Content="New Folder" Click="BtnNewTakeoffFolder_Click" ToolTip="Create a takeoff folder"/>
                         <Button Content="New Item" Click="BtnNewItem_Click" ToolTip="Create a takeoff item"/>
                         <TextBlock Text="Tree" Style="{StaticResource ManagerGroupLabel}"/>
-                        <Button Content="Auto Tree" Click="BtnAutoTakeoffTree_Click" ToolTip="Create a standard takeoff tree"/>
-                        <Button Content="From Pages" Click="BtnAutoTakeoffFromPages_Click" Margin="0,0,12,4" ToolTip="Create takeoff folders/items from the page structure"/>
+                        <Button x:Name="BtnTakeoffManagerAutoTree" Content="Auto Tree" Click="BtnAutoTakeoffTree_Click" ToolTip="Create a standard takeoff tree"/>
+                        <Button x:Name="BtnTakeoffManagerFromPages" Content="From Pages" Click="BtnAutoTakeoffFromPages_Click" Margin="0,0,12,4" ToolTip="Create takeoff folders/items from the page structure"/>
                         <TextBlock Text="Export" Style="{StaticResource ManagerGroupLabel}"/>
                         <Button Content="Export CSV" Click="BtnExportCsv_Click" ToolTip="Export quantities to CSV"/>
                         <Button Content="TXT" Click="BtnExportTxt_Click" ToolTip="Export quantities to text"/>
-                        <Button Content="Excel" Click="BtnExportExcel_Click" ToolTip="Export quantities to Excel"/>
-                        <Button Content="Current Excel" Click="BtnExportCurrentExcel_Click" ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
+                        <Button x:Name="BtnTakeoffManagerExportExcel" Content="Excel" Click="BtnExportExcel_Click" ToolTip="Export quantities to Excel"/>
+                        <Button x:Name="BtnTakeoffManagerCurrentExcel" Content="Current Excel" Click="BtnExportCurrentExcel_Click" ToolTip="Write the selected takeoff folder/item to the active cell in an already open Excel workbook"/>
                     </WrapPanel>
                     </Border>
                     <DataGrid x:Name="TakeoffManagerGrid"
@@ -2084,8 +2084,8 @@
                             <DataGridTextColumn Header="Sections" Binding="{Binding Sections}" Width="80"/>
                             <DataGridTextColumn Header="Total" Binding="{Binding Total}" Width="140"/>
                             <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="70"/>
-                            <DataGridTextColumn Header="Price" Binding="{Binding UnitPrice}" Width="80"/>
-                            <DataGridTextColumn Header="Cost" Binding="{Binding Cost}" Width="90"/>
+                            <DataGridTextColumn x:Name="TakeoffManagerPriceColumn" Header="Price" Binding="{Binding UnitPrice}" Width="80"/>
+                            <DataGridTextColumn x:Name="TakeoffManagerCostColumn" Header="Cost" Binding="{Binding Cost}" Width="90"/>
                             <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="260"/>
                             <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="320"/>
                         </DataGrid.Columns>
@@ -2093,7 +2093,7 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Report Builder" Tag="ReportBuilder">
+            <TabItem x:Name="ReportBuilderWorkspaceTab" Header="Report Builder" Tag="ReportBuilder">
                 <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
                     <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
                     <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
@@ -2155,7 +2155,7 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Materials" Tag="MaterialsManager">
+            <TabItem x:Name="MaterialsWorkspaceTab" Header="Materials" Tag="MaterialsManager">
                 <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
                     <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
                     <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
@@ -2216,7 +2216,7 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="AI Manager" Tag="AiManager">
+            <TabItem x:Name="AiManagerWorkspaceTab" Header="AI Manager" Tag="AiManager">
                 <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
                     <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
                     <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
@@ -2261,7 +2261,7 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="3D" Tag="3DManager">
+            <TabItem x:Name="ThreeDManagerWorkspaceTab" Header="3D" Tag="3DManager">
                 <DockPanel Margin="8" Style="{StaticResource ManagerSurface}">
                     <Border DockPanel.Dock="Top" Style="{StaticResource ManagerToolbarBand}">
                     <WrapPanel Orientation="Horizontal" Style="{StaticResource ManagerToolbar}">
@@ -2349,7 +2349,7 @@
                     </Grid>
                 </DockPanel>
             </TabItem>
-            <TabItem Header="Settings" Tag="SettingsManager">
+            <TabItem x:Name="SettingsManagerWorkspaceTab" Header="Settings" Tag="SettingsManager">
                 <DockPanel x:Name="SettingsManagerRoot" Margin="8" Style="{StaticResource ManagerSurface}"/>
             </TabItem>
         </TabControl>

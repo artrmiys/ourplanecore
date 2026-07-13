@@ -13,6 +13,9 @@ public partial class MainWindow
 
     private void BuildRoofFromRfAreas(TreeViewItem? anchor, bool switchTo3DTab)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Build 3D roof base"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "3D Roof Base: open a job first.";
@@ -56,6 +59,9 @@ public partial class MainWindow
 
     private void BuildAutoThreeDRoof(TreeViewItem? anchor, bool switchTo3DTab)
     {
+        if (!RequireModule(ModuleId.ThreeD, "Auto-build 3D roof"))
+            return;
+
         if (_currentJob == null)
         {
             TxtStatus.Text = "3D Auto Roof: open a job first.";
@@ -168,6 +174,7 @@ public partial class MainWindow
     }
 
     private bool HasAutoRoofSourceForCurrentJob() =>
+        IsModuleEnabled(ModuleId.ThreeD) &&
         _currentJob != null &&
         _takeoffItems.Any(item => ThreeDRoofFootprintBuildService.IsRoofFootprintCandidate(_currentJob, item));
 
@@ -176,6 +183,7 @@ public partial class MainWindow
         measurement.Points.Count >= 3;
 
     private bool CanBuildRoofBaseFromTakeoffSelection(TreeViewItem? anchor) =>
+        IsModuleEnabled(ModuleId.ThreeD) &&
         _currentJob != null &&
         anchor != null &&
         TakeoffItemsForSelection(anchor).Any(item => ThreeDRoofFootprintBuildService.IsAreaTakeoff(item));

@@ -102,7 +102,7 @@ public partial class MainWindow
     {
         if (_currentJob == null || _currentPage == null)
         {
-            TxtStatus.Text = "Open a job and page before using AI Assist.";
+            TxtStatus.Text = "Open a job and page before using the canvas context menu.";
             return;
         }
 
@@ -120,53 +120,57 @@ public partial class MainWindow
         });
         menu.Items.Add(new Separator());
 
-        if (request.OverlayHit != ViewportOverlayHitKind.None)
+        if (IsModuleEnabled(ModuleId.SheetOverlay) && request.OverlayHit != ViewportOverlayHitKind.None)
         {
             AddSheetOverlayMenuItems(menu);
             menu.Items.Add(new Separator());
         }
 
-        if (AddCurrentSheetOverlayAdjustmentMenuItems(menu))
+        if (IsModuleEnabled(ModuleId.SheetOverlay) && AddCurrentSheetOverlayAdjustmentMenuItems(menu))
             menu.Items.Add(new Separator());
 
-        AddViewportThreeDMenuItems(menu, request);
-        menu.Items.Add(new Separator());
+        if (IsModuleEnabled(ModuleId.ThreeD))
+        {
+            AddViewportThreeDMenuItems(menu, request);
+            menu.Items.Add(new Separator());
+        }
 
         AddMeasurementClipboardMenuItems(menu, request);
-        menu.Items.Add(new Separator());
 
         // AI actions are numerous; keep them in one "AI Assist ▸" submenu so the
         // canvas right-click stays scannable instead of a ~12-item flat dump.
         if (request.Measurement != null)
         {
+            menu.Items.Add(new Separator());
             AddMeasurementEditMenuItems(menu, request);
-            menu.Items.Add(new Separator());
-            var aiMenu = new MenuItem { Header = "AI Assist" };
-            AddMeasurementAiMenuItems(aiMenu, request);
-            menu.Items.Add(aiMenu);
         }
-        else if (request.Annotation != null)
+        else if (request.Annotation != null && IsModuleEnabled(ModuleId.Annotations))
         {
+            menu.Items.Add(new Separator());
             AddAnnotationEditMenuItems(menu, request);
-            menu.Items.Add(new Separator());
-            var aiMenu = new MenuItem { Header = "AI Assist" };
-            AddPdfAiMenuItems(aiMenu, request);
-            menu.Items.Add(aiMenu);
-        }
-        else
-        {
-            var aiMenu = new MenuItem { Header = "AI Assist" };
-            AddPdfAiMenuItems(aiMenu, request);
-            menu.Items.Add(aiMenu);
         }
 
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Open Project Context", true, OpenProjectContextMarkdown));
+        if (IsModuleEnabled(ModuleId.Ai))
+        {
+            menu.Items.Add(new Separator());
+            var aiMenu = new MenuItem { Header = "AI Assist" };
+            if (request.Measurement != null)
+                AddMeasurementAiMenuItems(aiMenu, request);
+            else
+                AddPdfAiMenuItems(aiMenu, request);
+            menu.Items.Add(aiMenu);
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MakeMenuItem("Open Project Context", true, OpenProjectContextMarkdown));
+        }
         menu.IsOpen = true;
     }
 
     private async void OnAiCropNoteSelectionCompleted(ViewportAiCropSelectionRequest selection)
     {
+        if (!RequireModule(ModuleId.Ai, "AI crop note"))
+            return;
+
         var request = new ViewportContextRequest(
             0,
             0,
@@ -183,14 +187,17 @@ public partial class MainWindow
             ViewportOverlayHitKind.SheetLegend => $"Sheet Legend @ {point}",
             ViewportOverlayHitKind.SheetHeader => $"Scale / Sheet Size Label @ {point}",
             _ => request.Measurement != null
-                ? $"Measurement AI - {request.Measurement.MType} @ {point}"
+                ? $"Measurement{(IsModuleEnabled(ModuleId.Ai) ? " AI" : "")} - {request.Measurement.MType} @ {point}"
                 : request.Annotation != null
                     ? $"Markup - {MarkupTitle(request.Annotation)} @ {point}"
-                    : $"AI Assist - {_currentPage?.Name ?? "Sheet"} @ {point}",
+                    : $"{(IsModuleEnabled(ModuleId.Ai) ? "AI Assist" : "Sheet")} - {_currentPage?.Name ?? "Sheet"} @ {point}",
         };
 
     private void SaveViewportObservation(ViewportContextRequest request, string type, string title, string initialText)
     {
+        if (!RequireModule(ModuleId.Ai, title))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -232,6 +239,9 @@ public partial class MainWindow
 
     private void SaveAiCropObservation(ViewportContextRequest request)
     {
+        if (!RequireModule(ModuleId.Ai, "Save AI crop"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -256,6 +266,9 @@ public partial class MainWindow
 
     private async Task ReadAiCropIntoNoteAsync(ViewportContextRequest request, SKRect? selectedCropRect = null)
     {
+        if (!RequireModule(ModuleId.Ai, "AI crop note"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -312,6 +325,8 @@ public partial class MainWindow
             return;
         }
 
+        var runCts = new CancellationTokenSource();
+        _activeAiRequestCts = runCts;
         _isRunningAiRequest = true;
         try
         {
@@ -329,8 +344,10 @@ public partial class MainWindow
                     aiRequest,
                     apiKey,
                     OpenAiRequestRunner.QuickCropNoteModel,
-                    CancellationToken.None);
+                    runCts.Token);
             }
+
+            runCts.Token.ThrowIfCancellationRequested();
 
             if (!result.Success)
             {
@@ -366,6 +383,20 @@ public partial class MainWindow
             _viewport.AddNoteAnnotationAt(noteOrigin, noteText, "#F9A825", 380f, height);
             TxtStatus.Text = $"AI crop note added on {_currentPage.Name}.";
         }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            SmartContextStore.SaveAiResponse(
+                _currentJob,
+                aiRequest,
+                "cancelled",
+                "",
+                "AI crop note cancelled because the AI module was disabled.",
+                "openai",
+                OpenAiRequestRunner.QuickCropNoteModel,
+                "",
+                "");
+            TxtStatus.Text = $"AI crop note {aiRequest.Id} cancelled.";
+        }
         catch (Exception ex)
         {
             SmartContextStore.SaveAiResponse(
@@ -382,6 +413,9 @@ public partial class MainWindow
         }
         finally
         {
+            if (ReferenceEquals(_activeAiRequestCts, runCts))
+                _activeAiRequestCts = null;
+            runCts.Dispose();
             _isRunningAiRequest = false;
             LoadObservationsInbox();
         }
@@ -431,6 +465,9 @@ public partial class MainWindow
 
     private void SaveAiMarker(ViewportContextRequest request)
     {
+        if (!RequireModule(ModuleId.Ai, "Save AI marker"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -637,6 +674,13 @@ public partial class MainWindow
 
     private void RefreshAiMarkersOverlay()
     {
+        if (!IsModuleEnabled(ModuleId.Ai))
+        {
+            _viewport.ClearAiMarkers();
+            _viewport.ClearAiActionDraftPreview();
+            return;
+        }
+
         if (_currentJob == null || _currentPage == null)
         {
             _viewport.ClearAiMarkers();
@@ -716,6 +760,12 @@ public partial class MainWindow
         cropRect = SKRect.Empty;
         error = "";
 
+        if (!IsModuleEnabled(ModuleId.Ai))
+        {
+            error = "The AI module is disabled in Settings.";
+            return false;
+        }
+
         if (_currentJob == null || _currentPage == null)
         {
             error = "No current job/page.";
@@ -792,6 +842,9 @@ public partial class MainWindow
 
     private void SuggestTakeoffItemFromContext(ViewportContextRequest request)
     {
+        if (!RequireModule(ModuleId.Ai, "Suggest takeoff item"))
+            return;
+
         if (_currentJob == null || _currentPage == null)
             return;
 
@@ -834,6 +887,9 @@ public partial class MainWindow
 
     private void OpenProjectContextMarkdown()
     {
+        if (!RequireModule(ModuleId.Ai, "Open AI project context"))
+            return;
+
         if (_currentJob == null)
             return;
 
