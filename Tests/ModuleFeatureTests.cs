@@ -163,6 +163,8 @@ internal static class ModuleFeatureTests
         string materials = ReadRepoFile("MainWindow.Materials.cs");
         string viewportModules = ReadRepoFile(Path.Combine("Controls", "PdfViewport.ModuleVisibility.cs"));
         string takeoffProperties = ReadRepoFile("MainWindow.TakeoffsProperties.cs");
+        string pageMetadata = ReadRepoFile("MainWindow.PagesPdfMetadata.cs");
+        string pageSetup = ReadRepoFile("MainWindow.PageSetup.cs");
 
         string[] namedWorkspaces =
         [
@@ -200,6 +202,10 @@ internal static class ModuleFeatureTests
         AssertTrue(materials.Contains("CancelActiveMaterialsWorkForModuleDisable", StringComparison.Ordinal), "materials active-work cancellation");
         AssertTrue(viewportModules.Contains("SetAnnotationsModuleEnabled", StringComparison.Ordinal), "annotation viewport visibility gate");
         AssertTrue(takeoffProperties.Contains("RequireModule(ModuleId.Estimating", StringComparison.Ordinal), "estimating price execution gate");
+        AssertFalse(pageMetadata.Contains("RequireModule(ModuleId.SheetManager", StringComparison.Ordinal), "Pages metadata actions stay available when the Sheet Manager workspace is hidden");
+        AssertFalse(pageSetup.Contains("RequireModule(ModuleId.SheetManager", StringComparison.Ordinal), "manual Name / Scale stays available when the Sheet Manager workspace is hidden");
+        AssertFalse(modules.Contains("\"pages.autoName\" or \"pages.autoScale\" or \"pages.autoNameScale\"", StringComparison.Ordinal), "Pages metadata commands are not gated by Sheet Manager workspace visibility");
+        AssertFalse(modules.Contains("\"pages.nameScaleSetup\" => ModuleId.SheetManager", StringComparison.Ordinal), "manual Name / Scale command is not gated by Sheet Manager workspace visibility");
 
         string allModuleSurfaces = string.Join(
             Environment.NewLine,

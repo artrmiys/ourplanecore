@@ -30,9 +30,6 @@ public partial class MainWindow
         SetPagesScaleFromPrompt(DistinctScalePages(PageToolTargetPages()));
     }
 
-    private void BtnSetSelectedPagesScale_Click(object sender, RoutedEventArgs e) =>
-        SetSelectedPagesScaleFromShortcut();
-
     private void SetPagesScaleFromPrompt(IReadOnlyList<PageInfo> pages)
     {
         if (pages.Count == 0)

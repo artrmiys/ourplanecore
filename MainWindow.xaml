@@ -1140,6 +1140,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Button x:Name="BtnNewPageFolderDirect"
@@ -1151,15 +1152,21 @@
                                     ToolTip="Create a new folder under the selected Pages folder"/>
                             <Button Grid.Column="1"
                                     Content="Name"
-                                    Click="BtnFloatingPageSetup_Click"
+                                    Click="BtnAutoRenamePdf_Click"
                                     Padding="5,3"
                                     Margin="0,0,4,0"
-                                    ToolTip="Open the Name / Scale window for the active sheet (F5)"/>
+                                    ToolTip="Preview automatic names for the selected sheet or folder"/>
                             <Button Grid.Column="2"
                                     Content="Scale"
-                                    Click="BtnSetSelectedPagesScale_Click"
+                                    Click="BtnAutoScalePdf_Click"
                                     Padding="5,3"
-                                    ToolTip="Set scale for the selected sheets (F4)"/>
+                                    Margin="0,0,4,0"
+                                    ToolTip="Preview automatic scales for the selected sheet or folder"/>
+                            <Button Grid.Column="3"
+                                    Content="Name+Scale"
+                                    Click="BtnAutoRenameScalePdf_Click"
+                                    Padding="5,3"
+                                    ToolTip="Preview automatic names and scales for the selected sheet or folder"/>
                         </Grid>
                     </StackPanel>
                     <Grid x:Name="PagesAndBookmarksHost" Margin="2,0,2,2">

@@ -3903,12 +3903,15 @@ internal static class TakeoffsTreeRegressionTests
             xaml.Contains("Content=\"New Folder\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Name\"", StringComparison.Ordinal) &&
             xaml.Contains("Content=\"Scale\"", StringComparison.Ordinal) &&
-            xaml.Contains("Click=\"BtnSetSelectedPagesScale_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnAutoRenamePdf_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnAutoScalePdf_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Name+Scale\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnAutoRenameScalePdf_Click\"", StringComparison.Ordinal) &&
             xaml.Contains("Text=\"F4\"", StringComparison.Ordinal) &&
             xaml.Contains("Text=\"F5\"", StringComparison.Ordinal) &&
             palette.Contains("\"pages.setScale\", \"Set Scale\", \"Pages\", \"F4\"", StringComparison.Ordinal) &&
             palette.Contains("\"pages.nameScaleSetup\", \"Name / Scale Setup\", \"Pages\", \"F5\"", StringComparison.Ordinal),
-            "Pages must expose the aligned bottom Name and Scale buttons and document F4/F5 in the shortcut surfaces");
+            "Pages must expose the aligned bottom Name, Scale, and Name+Scale buttons and document F4/F5 in the shortcut surfaces");
         AssertTrue(
             callbacks.Contains("private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements", StringComparison.Ordinal),
             "page-scale updates should reuse a page-scoped measurement scale helper");

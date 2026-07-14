@@ -37,7 +37,7 @@ public partial class MainWindow
         {
             "view.addBookmark" => ModuleId.Bookmarks,
             "view.toggleInbox" or "view.aiManager" or "pages.aiFillMetadata" => ModuleId.Ai,
-            "view.sheetManager" or "pages.autoName" or "pages.autoScale" or "pages.autoNameScale" => ModuleId.SheetManager,
+            "view.sheetManager" => ModuleId.SheetManager,
             "view.takeoffManager" => ModuleId.TakeoffManager,
             "view.reportBuilder" => ModuleId.ReportBuilder,
             "view.materialsManager" or "materials.extract" => ModuleId.Materials,
@@ -45,7 +45,6 @@ public partial class MainWindow
             "view.estimatingTab" => ModuleId.Estimating,
             "view.quickCalc" => ModuleId.QuickCalculator,
             "pages.detach" or "pages.tileM2" => ModuleId.DetachedSheets,
-            "pages.nameScaleSetup" => ModuleId.SheetManager,
             "sheet.overlay" or "sheet.overlayPoints" => ModuleId.SheetOverlay,
             "layers.allOn" or "layers.allOff" or "layers.clearHighlight" => ModuleId.PdfLayers,
             "tool.ruler" or "tool.highlight" or "tool.drawLine" or "tool.drawBox" or "tool.note" => ModuleId.Annotations,
@@ -62,11 +61,11 @@ public partial class MainWindow
 
         return id.StartsWith("ai.", StringComparison.OrdinalIgnoreCase) || id is
             "view.addBookmark" or "view.toggleInbox" or "view.aiManager" or "pages.aiFillMetadata" or
-            "view.sheetManager" or "pages.autoName" or "pages.autoScale" or "pages.autoNameScale" or
+            "view.sheetManager" or
             "view.takeoffManager" or "view.reportBuilder" or "view.materialsManager" or "materials.extract" or
             "view.3dManager" or "view.3dTab" or "takeoffs.roofBase" or "view.estimatingTab" or
             "view.quickCalc" or "sheet.overlay" or "sheet.overlayPoints" or
-            "pages.detach" or "pages.tileM2" or "pages.nameScaleSetup" or
+            "pages.detach" or "pages.tileM2" or
             "layers.allOn" or "layers.allOff" or "layers.clearHighlight" or
             "tool.ruler" or "tool.highlight" or "tool.drawLine" or "tool.drawBox" or "tool.note" or
             "tool.similar" or "tool.pointAlongLine" or "tool.joistArea" or "tool.beam" or
@@ -140,10 +139,7 @@ public partial class MainWindow
         }
 
         if (!IsModuleEnabled(ModuleId.SheetManager))
-        {
             CancelActiveSheetManagerWorkForModuleDisable();
-            _pageSetupWindow?.Close();
-        }
 
         ApplyAiModuleShell(aiEnabled);
         ApplyToolModuleShell();
