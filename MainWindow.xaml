@@ -1991,7 +1991,7 @@
                         <Button x:Name="BtnSheetManagerTileM2" Content="Tile M2" Click="BtnSheetManagerTileSecondMonitor_Click" ToolTip="Open selected sheets in detached windows and tile them on monitor 2"/>
                         <Button Content="Open JSON" Click="BtnSheetManagerOpenJson_Click" Margin="0,0,12,4" ToolTip="Open the PDF metadata JSON for inspection"/>
                         <TextBlock Text="Organize" Style="{StaticResource ManagerGroupLabel}"/>
-                        <Button Content="Sort A/S" Click="BtnSortPagesArchStruct_Click" ToolTip="Sort A sheets into Arch and S sheets into Struct"/>
+                        <Button Content="Sort A/S" Click="BtnSortPagesArchStruct_Click" ToolTip="Sort A/S sheets inside the selected Pages folder; if no folder is selected, sort all Pages"/>
                         <Button Content="D/Sec/WT" Click="BtnSortPagesSuffix_Click" ToolTip="Sort suffix sheets inside the selected Pages folder; if no folder is selected, sort all Pages"/>
                         <Button Content="Repair Links" Click="BtnRepairMeasurementPageLinks_Click" ToolTip="Reconnect saved measurements to current page folders"/>
                         <Button x:Name="BtnSheetManagerAutoFolders" Content="Auto Folders" Click="BtnAutoPageFolders_Click" ToolTip="Create standard page folders under the selected Pages folder"/>

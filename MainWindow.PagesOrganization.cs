@@ -133,6 +133,13 @@ public partial class MainWindow
             return;
         }
 
+        string scopeFolder = CurrentSelectedPagesFolderOrRoot(out bool scopedToSelectedFolder);
+        if (scopedToSelectedFolder)
+        {
+            SortPagesIntoArchStruct(scopeFolder);
+            return;
+        }
+
         try
         {
             string imported = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. imported");
