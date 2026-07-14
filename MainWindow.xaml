@@ -1078,7 +1078,6 @@
                                 <ColumnDefinition Width="58"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <ComboBox x:Name="ComboFolderTemplateMode"
                                       Grid.Column="0"
@@ -1091,16 +1090,8 @@
                                 <ComboBoxItem Content="COM"/>
                                 <ComboBoxItem Content="EWP"/>
                             </ComboBox>
-                            <Button x:Name="BtnNewPageFolderDirect"
-                                    Grid.Column="1"
-                                    Content="Folder"
-                                    Click="BtnNewPageFolder_Click"
-                                    Padding="2,3"
-                                    Margin="0,0,4,0"
-                                    FontSize="11"
-                                    ToolTip="Create a new folder under the selected Pages folder"/>
                             <Button x:Name="BtnNewPageMenu"
-                                    Grid.Column="2"
+                                    Grid.Column="1"
                                     Click="DropdownButton_Click"
                                     Padding="2,3"
                                     Margin="0,0,4,0"
@@ -1121,7 +1112,7 @@
                                 </Button.ContextMenu>
                             </Button>
                             <Button x:Name="BtnPageSetupMenu"
-                                    Grid.Column="3"
+                                    Grid.Column="2"
                                     Click="DropdownButton_Click"
                                     Padding="2,3"
                                     FontSize="11"
@@ -1143,6 +1134,34 @@
                             </Button>
                         </Grid>
                     </Border>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="4,4">
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BtnNewPageFolderDirect"
+                                    Grid.Column="0"
+                                    Content="New Folder"
+                                    Click="BtnNewPageFolder_Click"
+                                    Padding="5,3"
+                                    Margin="0,0,4,0"
+                                    ToolTip="Create a new folder under the selected Pages folder"/>
+                            <Button Grid.Column="1"
+                                    Content="Name"
+                                    Click="BtnFloatingPageSetup_Click"
+                                    Padding="5,3"
+                                    Margin="0,0,4,0"
+                                    ToolTip="Open the Name / Scale window for the active sheet (F5)"/>
+                            <Button Grid.Column="2"
+                                    Content="Scale"
+                                    Click="BtnSetSelectedPagesScale_Click"
+                                    Padding="5,3"
+                                    ToolTip="Set scale for the selected sheets (F4)"/>
+                        </Grid>
+                    </StackPanel>
                     <Grid x:Name="PagesAndBookmarksHost" Margin="2,0,2,2">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
@@ -1515,6 +1534,8 @@
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="C"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Complete drawing"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Fit page"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F3"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Snap to points"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F4"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Set selected sheet scale"/></DockPanel>
+                                        <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F5"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Name / Scale window"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F8"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Ortho"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="F9"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Box mode"/></DockPanel>
                                         <DockPanel Style="{StaticResource KbdRow}"><Border Style="{StaticResource KbdKey}"><TextBlock Style="{StaticResource KbdText}" Text="Esc"/></Border><TextBlock Style="{StaticResource KbdAction}" Text="Cancel current action"/></DockPanel>

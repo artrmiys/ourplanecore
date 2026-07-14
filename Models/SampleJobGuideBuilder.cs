@@ -277,7 +277,7 @@ internal static class SampleJobGuideBuilder
                     "V Pan, E Select, S Scale, R Ruler, D line, N note, P Count, L Line, A Area, J Joist, B Beam, O Openings, X Cut.",
                 ]),
                 new("Viewport", [
-                    "F Fit, F3 snap, Ctrl+F3 PDF snap, F8 Ortho, F9 Box, C complete shape, Backspace undo point.",
+                    "F Fit, F3 snap, Ctrl+F3 PDF snap, F4 set selected sheet scale, F5 Name / Scale, F8 Ortho, F9 Box.",
                     "Ctrl+Z undo, Ctrl+A select all, Ctrl+C copy, Ctrl+V paste, Delete remove selection.",
                 ]),
                 new("Try this on the sample", [

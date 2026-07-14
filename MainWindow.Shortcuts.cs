@@ -58,6 +58,14 @@ public partial class MainWindow
 
         switch (key)
         {
+            case Key.F4:
+                SetSelectedPagesScaleFromShortcut();
+                e.Handled = true;
+                break;
+            case Key.F5:
+                BtnFloatingPageSetup_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+                break;
             case Key.Subtract:
             case Key.OemMinus:
                 CollapseProjectTreeDisplaysWithStatus();

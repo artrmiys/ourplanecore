@@ -3869,6 +3869,9 @@ internal static class TakeoffsTreeRegressionTests
         string scale = ReadRepoFile("MainWindow.PagesScale.cs");
         string callbacks = ReadRepoFile("MainWindow.ViewportCallbacks.cs");
         string pageSetup = ReadRepoFile("MainWindow.PageSetup.cs");
+        string shortcuts = ReadRepoFile("MainWindow.Shortcuts.cs");
+        string palette = ReadRepoFile("MainWindow.CommandPalette.cs");
+        string xaml = ReadRepoFile("MainWindow.xaml");
         string pageSetupWindow = ReadRepoFile("Dialogs/PageSetupWindow.cs");
         string setPage = SliceMethod(pageSetupWindow, "public void SetPage(");
         string selectPageNameText = SliceMethod(pageSetupWindow, "private void SelectPageNameText(");
@@ -3889,6 +3892,23 @@ internal static class TakeoffsTreeRegressionTests
             scale.Contains("ApplyScaleToPageMeasurements", StringComparison.Ordinal) &&
             scale.Contains("FlushTakeoffAutosaves", StringComparison.Ordinal),
             "scale menu must parse, persist metadata, update measurements, and flush changed takeoffs");
+        AssertTrue(
+            shortcuts.Contains("case Key.F4:", StringComparison.Ordinal) &&
+            shortcuts.Contains("SetSelectedPagesScaleFromShortcut();", StringComparison.Ordinal) &&
+            shortcuts.Contains("case Key.F5:", StringComparison.Ordinal) &&
+            shortcuts.Contains("BtnFloatingPageSetup_Click(this, new RoutedEventArgs());", StringComparison.Ordinal) &&
+            scale.Contains("DistinctScalePages(PageToolTargetPages())", StringComparison.Ordinal),
+            "F4 must set scale on the Pages multi-selection or active sheet, while F5 opens manual Name / Scale");
+        AssertTrue(
+            xaml.Contains("Content=\"New Folder\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Name\"", StringComparison.Ordinal) &&
+            xaml.Contains("Content=\"Scale\"", StringComparison.Ordinal) &&
+            xaml.Contains("Click=\"BtnSetSelectedPagesScale_Click\"", StringComparison.Ordinal) &&
+            xaml.Contains("Text=\"F4\"", StringComparison.Ordinal) &&
+            xaml.Contains("Text=\"F5\"", StringComparison.Ordinal) &&
+            palette.Contains("\"pages.setScale\", \"Set Scale\", \"Pages\", \"F4\"", StringComparison.Ordinal) &&
+            palette.Contains("\"pages.nameScaleSetup\", \"Name / Scale Setup\", \"Pages\", \"F5\"", StringComparison.Ordinal),
+            "Pages must expose the aligned bottom Name and Scale buttons and document F4/F5 in the shortcut surfaces");
         AssertTrue(
             callbacks.Contains("private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements", StringComparison.Ordinal),
             "page-scale updates should reuse a page-scoped measurement scale helper");

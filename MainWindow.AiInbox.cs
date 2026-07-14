@@ -252,11 +252,6 @@ public partial class MainWindow
             OpenSelectedInboxObservation();
             e.Handled = true;
         }
-        else if (e.Key == Key.F5)
-        {
-            LoadObservationsInbox();
-            e.Handled = true;
-        }
     }
 
     private ObservationDisplayItem? SelectedObservationDisplayItem() =>

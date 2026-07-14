@@ -129,6 +129,8 @@ public partial class MainWindow
         Add("pages.autoName", "Auto Name PDF", "Pages", "", "Preview and apply PDF sheet names.", hasJob, "Open or create a job first.");
         Add("pages.autoScale", "Auto Scale PDF", "Pages", "", "Preview and apply PDF sheet scales.", hasJob, "Open or create a job first.");
         Add("pages.autoNameScale", "Auto Name + Scale PDF", "Pages", "", "Preview and apply PDF sheet names and scales.", hasJob, "Open or create a job first.");
+        Add("pages.setScale", "Set Scale", "Pages", "F4", "Set one scale on the selected sheets, or on the active sheet when there is no Pages selection.", hasJob && hasPage, "Open a job and select a sheet first.");
+        Add("pages.nameScaleSetup", "Name / Scale Setup", "Pages", "F5", "Open the manual Name / Scale window for the active sheet.", hasJob && hasPage, "Open a job and select a sheet first.");
         Add("pages.aiFillMetadata", "AI Fill PDF Metadata", "Pages", "", "Queue GPT fallback for missing sheet metadata.", hasJob, "Open or create a job first.");
         Add("sheet.overlay", "Overlay", "Sheets", "", "Choose a matching sheet overlay for the active sheet.", hasJob && hasPage, "Open a job and select a sheet first.");
         Add("sheet.overlayPoints", "Move Overlay by Points", "Sheets", "", "Align the active sheet overlay by matching points.", hasPage && currentPageHasSheetOverlay, "Set an overlay on the active sheet first.");
@@ -270,6 +272,8 @@ public partial class MainWindow
             case "pages.autoName": BtnAutoRenamePdf_Click(this, new RoutedEventArgs()); break;
             case "pages.autoScale": BtnAutoScalePdf_Click(this, new RoutedEventArgs()); break;
             case "pages.autoNameScale": BtnAutoRenameScalePdf_Click(this, new RoutedEventArgs()); break;
+            case "pages.setScale": SetSelectedPagesScaleFromShortcut(); break;
+            case "pages.nameScaleSetup": BtnFloatingPageSetup_Click(this, new RoutedEventArgs()); break;
             case "pages.aiFillMetadata": BtnQueuePdfMetadataFallback_Click(this, new RoutedEventArgs()); break;
             case "sheet.overlay": ChooseCurrentSheetOverlayCandidate(); break;
             case "sheet.overlayPoints": BeginCurrentSheetOverlayPointEdit(); break;

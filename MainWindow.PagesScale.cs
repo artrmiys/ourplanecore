@@ -16,7 +16,25 @@ public partial class MainWindow
             return;
         }
 
-        IReadOnlyList<PageInfo> pages = DistinctScalePages(SelectedPagesFromPagesTree(anchor));
+        SetPagesScaleFromPrompt(DistinctScalePages(SelectedPagesFromPagesTree(anchor)));
+    }
+
+    private void SetSelectedPagesScaleFromShortcut()
+    {
+        if (_currentJob == null)
+        {
+            TxtStatus.Text = "Open a job before setting sheet scale.";
+            return;
+        }
+
+        SetPagesScaleFromPrompt(DistinctScalePages(PageToolTargetPages()));
+    }
+
+    private void BtnSetSelectedPagesScale_Click(object sender, RoutedEventArgs e) =>
+        SetSelectedPagesScaleFromShortcut();
+
+    private void SetPagesScaleFromPrompt(IReadOnlyList<PageInfo> pages)
+    {
         if (pages.Count == 0)
         {
             TxtStatus.Text = "Pages tree: select one or more sheets first.";
