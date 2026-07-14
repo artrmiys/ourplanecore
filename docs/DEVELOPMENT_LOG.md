@@ -1,5 +1,27 @@
 ﻿# Development Log
 
+## 2026-07-14 Pages sort recovery, metadata buttons, and scale shortcuts
+
+Detailed handoff:
+`docs/30-takeoffs-measurements/KB_PAGES_SORT_METADATA_SHORTCUTS_2026_07_14.md`.
+
+- Restored the current job after an accidental global Sort A/S, rebased
+  measurement page links, and validated PDFs/references against a safety
+  snapshot.
+- Changed Sort A/S so a selected Pages folder is the operation scope; Pages
+  root remains the fallback when no folder is selected.
+- Consolidated all `95` sheets imported on 2026-07-14 under `Pages\new` with a
+  pre-move snapshot and clean link validation.
+- Kept `F3` as Snap; added `F4` for one/many selected-sheet Set Scale and `F5`
+  for the manual Name / Scale window.
+- Moved `New Folder` to the lower Pages action row and added the reviewed PDF
+  metadata actions `Name`, `Scale`, and `Name+Scale`.
+- Decoupled these base Pages actions from hidden Sheet Manager workspace
+  visibility. Bulk metadata still opens preview before apply.
+- Verified build `0/0`, tests `462/462`, compressed single-file publish/deploy,
+  shortcut target, and packaged startup log with no errors.
+- Commits: `ca1dd94`, `861e5a8`, `ae10bd2`.
+
 ## 2026-07-08 UX/UI polish pass (audit-driven)
 
 Full-pass polish after a thorough XAML audit. Light theme is unchanged; the work fixes dark-theme readability, replaces the last text-glyph "icons" with single-stroke geometry, and adds missing tooltips/accessibility.
