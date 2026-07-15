@@ -1,5 +1,24 @@
 ﻿# Development Log
 
+## 2026-07-14 Sheet Metadata Precise v2
+
+Detailed handoff:
+`docs/20-import-pages-metadata/SHEET_METADATA_PRECISE_V2_HANDOFF_2026_07_14.md`.
+
+- Reworked Auto Name, Auto Scale, and suffix detection around one editable
+  `SheetMetadataConfig` with global/job precedence and Legacy compatibility.
+- Added deterministic `Precise v2` evidence scoring, Drawing List support,
+  typed suffix rules, exact overrides, per-field provenance/confidence, and
+  independent `Keep / Set / Clear` scale review.
+- Preserved manual names/suffixes/scales, explicit NTS decisions, uncommon
+  exact scales, and Preview cancellation without metadata writes.
+- Added reviewed-only, deduplicated learning with protected exact evidence and
+  synchronized learned scale text/numeric values.
+- Verified build `0 warnings / 0 errors`, C# tests `488/488`, Python detector
+  tests `24/24`, and four real PDF sets (`125` pages, `0` golden failures).
+- Packaged publish/deploy and startup-log evidence are recorded in the detailed
+  handoff after release validation.
+
 ## 2026-07-14 Pages sort recovery, metadata buttons, and scale shortcuts
 
 Detailed handoff:

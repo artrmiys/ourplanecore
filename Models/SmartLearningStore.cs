@@ -127,18 +127,53 @@ public static partial class SmartLearningStore
         PageInfo page,
         string note = "")
     {
+        PdfSheetMetadata metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
+            ?? new PdfSheetMetadata
+            {
+                Source = "manual",
+                DetectorVersion = "manual",
+                PdfPath = page.PdfPath,
+                PageIndex = page.PdfPage,
+                PageNumber = page.PdfPage + 1,
+                SheetLabel = page.Name,
+                SheetKey = PdfSheetMetadataPolicy.ExtractSheetKey(page.Name),
+                RenameCandidate = page.Name,
+                Confidence = "manual",
+            };
+        SmartSheetLearningDecision final = PdfSheetMetadataService.FinalDecision(
+            page,
+            metadata,
+            page.Name,
+            page.ScaleMetersPerPt);
+        string fingerprint = PdfSheetMetadataService.BuildPdfFingerprint(
+            string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath);
+        string detectorVersion = string.IsNullOrWhiteSpace(metadata.DetectorVersion)
+            ? "manual"
+            : metadata.DetectorVersion;
+        string detectorConfigFingerprint = string.IsNullOrWhiteSpace(metadata.DetectorConfigFingerprint)
+            ? PdfSheetMetadataPolicy.ConfigFingerprint(SheetMetadataRulesService.Active)
+            : metadata.DetectorConfigFingerprint;
         var record = new SmartSheetLearningRecord
         {
             EventType = "manual_page_state",
             Source = "manual",
             UserOutcome = "manual_final",
+            Reviewed = true,
+            NameOutcome = "manual_final",
+            SuffixOutcome = "manual_final",
+            ScaleOutcome = "manual_final",
+            DetectorVersion = detectorVersion,
+            DetectorConfigFingerprint = detectorConfigFingerprint,
+            PdfFingerprint = fingerprint,
+            ObservationKey = PdfSheetMetadataPolicy.BuildObservationKey(
+                fingerprint,
+                page.PdfPage,
+                detectorVersion,
+                detectorConfigFingerprint),
             Note = note.Trim(),
-            Final = new SmartSheetLearningDecision
-            {
-                PageName = page.Name,
-                ScaleMetersPerPt = page.ScaleMetersPerPt,
-                Confidence = "manual",
-            },
+            SourcePdf = string.IsNullOrWhiteSpace(metadata.PdfPath) ? page.PdfPath : metadata.PdfPath,
+            PdfPage = page.PdfPage,
+            Final = final,
         };
 
         return AppendSheetFeedback(job, page, record);
@@ -208,7 +243,8 @@ public static partial class SmartLearningStore
     {
         SmartProjectContext context = SmartContextStore.EnsureProjectContext(job.RootPath, job.Name);
         EnsureLearningStore(job);
-        IReadOnlyList<SmartSheetLearningRecord> records = LoadProjectSheetFeedback(job);
+        IReadOnlyList<SmartSheetLearningRecord> records = LatestSheetObservations(
+            LoadProjectSheetFeedback(job));
 
         var summary = new SmartSheetLearningSummary
         {
@@ -221,8 +257,12 @@ public static partial class SmartLearningStore
             CorrectedCount = records.Count(record => IsOutcome(record, "corrected", "overrode")),
             RejectedCount = records.Count(record => IsOutcome(record, "rejected")),
             ManualFinalCount = records.Count(record => IsOutcome(record, "manual_final")),
-            SuffixCounts = CountValues(records.Select(record => record.Final.Suffix)),
-            ScaleCounts = CountValues(records.Select(record => record.Final.ScaleText)),
+            SuffixCounts = CountValues(records
+                .Where(record => IsReviewedField(record, record.SuffixOutcome))
+                .Select(record => record.Final.Suffix)),
+            ScaleCounts = CountValues(records
+                .Where(record => IsReviewedField(record, record.ScaleOutcome))
+                .Select(record => record.Final.ScaleText)),
         };
 
         string path = ProjectSummaryPath(job);
@@ -240,7 +280,8 @@ public static partial class SmartLearningStore
 
     public static SmartSheetLearningSignal BuildSheetMetadataSignal(PdfSheetMetadata metadata)
     {
-        IReadOnlyList<SmartSheetLearningRecord> records = LoadGlobalSheetFeedback();
+        IReadOnlyList<SmartSheetLearningRecord> records = LatestSheetObservations(
+            LoadGlobalSheetFeedback());
         if (records.Count == 0)
             return new SmartSheetLearningSignal { Confidence = metadata.Confidence };
 
@@ -254,7 +295,8 @@ public static partial class SmartLearningStore
         int conflicting = 0;
         foreach (SmartSheetLearningRecord record in records)
         {
-            if (!IsUsefulLearningOutcome(record))
+            if (!IsUsefulLearningOutcome(record) ||
+                !IsReviewedField(record, record.SuffixOutcome))
                 continue;
 
             bool sameSuffix = !string.IsNullOrWhiteSpace(suffix) &&
@@ -328,6 +370,12 @@ public static partial class SmartLearningStore
     {
         if (rules == null || rules.Rules.Count == 0 || string.IsNullOrWhiteSpace(metadata.SheetTitle))
             return;
+        if (string.Equals(scope, "global", StringComparison.OrdinalIgnoreCase) &&
+            (metadata.SuffixSource.StartsWith("project-learned", StringComparison.OrdinalIgnoreCase) ||
+             metadata.ScaleSource.StartsWith("project-learned", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
 
         HashSet<string> titleTokens = TitleTokens(metadata.SheetTitle);
         SmartLearnedRule? rule = rules.Rules
@@ -337,20 +385,69 @@ public static partial class SmartLearningStore
         if (rule == null)
             return;
 
+        SheetMetadataConfig config = SheetMetadataRulesService.Active;
+        bool projectScope = string.Equals(scope, "project", StringComparison.OrdinalIgnoreCase);
+        bool precise = config.DetectorMode == SheetMetadataDetectorMode.PreciseV2;
+        bool protectedSuffix = IsProtectedSheetMetadataEvidence(metadata.SuffixSource);
+        bool protectedScale = IsProtectedSheetMetadataEvidence(metadata.ScaleSource);
+        bool strongerSuffix = PdfSheetMetadataPolicy.ConfidenceLevel(rule.Confidence) >
+                              PdfSheetMetadataPolicy.ConfidenceLevel(metadata.SuffixConfidence);
+        bool canReplaceSuffix = projectScope && precise && strongerSuffix &&
+                                !protectedSuffix;
+        bool strongerScale = PdfSheetMetadataPolicy.ConfidenceLevel(rule.Confidence) >
+                             PdfSheetMetadataPolicy.ConfidenceLevel(metadata.ScaleConfidence);
+        bool canReplaceScale = projectScope && precise && strongerScale &&
+                               !protectedScale;
+        bool canFillSuffix = string.IsNullOrWhiteSpace(metadata.Suffix) &&
+                             (!precise || !protectedSuffix);
+        bool canFillScale = string.IsNullOrWhiteSpace(metadata.SelectedScaleText) &&
+                            (!precise || !protectedScale);
         bool applied = false;
-        if (string.IsNullOrWhiteSpace(metadata.Suffix) && !string.IsNullOrWhiteSpace(rule.Suffix))
+        if ((canFillSuffix || canReplaceSuffix) &&
+            !string.IsNullOrWhiteSpace(rule.Suffix))
         {
             metadata.Suffix = rule.Suffix;
-            metadata.SkipScale = rule.SkipScale;
+            metadata.SuffixSource = $"{scope}-learned";
+            metadata.SuffixConfidence = rule.Confidence;
+            metadata.SuffixEvidence =
+                $"title token '{rule.TitleToken}', support {rule.Support}, conflicts {rule.ConflictCount}";
+            if (protectedScale && metadata.SelectedScaleMetersPerPt > 0)
+                metadata.SuffixScalePolicy = "allow";
             applied = true;
         }
 
-        if (string.IsNullOrWhiteSpace(metadata.SelectedScaleText) &&
-            !rule.SkipScale &&
-            !string.IsNullOrWhiteSpace(rule.ScaleText))
+        if (rule.SkipScale && (canFillScale || canReplaceScale))
+        {
+            metadata.SkipScale = true;
+            metadata.SkipReason = $"{scope}-learned no-scale rule";
+            metadata.SelectedScaleText = "";
+            metadata.ScaleText = "";
+            metadata.SelectedScaleRatio = 0;
+            metadata.SelectedScaleMetersPerPt = 0;
+            metadata.ScaleSource = $"{scope}-learned";
+            metadata.ScaleConfidence = rule.Confidence;
+            metadata.ScaleEvidence =
+                $"title token '{rule.TitleToken}', support {rule.Support}, conflicts {rule.ConflictCount}";
+            applied = true;
+        }
+        else if (!rule.SkipScale &&
+                 !string.IsNullOrWhiteSpace(rule.ScaleText) &&
+                 (canFillScale || canReplaceScale) &&
+                 PdfSheetMetadataService.TryParseScaleMetersPerPt(
+                     rule.ScaleText,
+                     out double learnedScaleMetersPerPt))
         {
             metadata.SelectedScaleText = rule.ScaleText;
             metadata.ScaleText = rule.ScaleText;
+            metadata.SelectedScaleMetersPerPt = learnedScaleMetersPerPt;
+            metadata.SelectedScaleRatio = learnedScaleMetersPerPt / ViewportConstants.PdfPointMeters;
+            metadata.SkipScale = false;
+            metadata.SkipReason = "";
+            metadata.SuffixScalePolicy = "allow";
+            metadata.ScaleSource = $"{scope}-learned";
+            metadata.ScaleConfidence = rule.Confidence;
+            metadata.ScaleEvidence =
+                $"title token '{rule.TitleToken}', support {rule.Support}, conflicts {rule.ConflictCount}";
             applied = true;
         }
 
@@ -359,6 +456,20 @@ public static partial class SmartLearningStore
             metadata.Warnings.Add(
                 $"{scope} learned rule applied: token '{rule.TitleToken}', suffix '{rule.Suffix}', support {rule.Support}");
         }
+    }
+
+    private static bool IsProtectedSheetMetadataEvidence(string source)
+    {
+        string clean = (source ?? "")
+            .Trim()
+            .ToLowerInvariant()
+            .Replace('_', '-');
+        return clean.Contains("manual-review", StringComparison.Ordinal) ||
+               clean.Contains("sheet-override", StringComparison.Ordinal) ||
+               clean.Contains("configured-rule", StringComparison.Ordinal) ||
+               clean.Contains("sheet-index", StringComparison.Ordinal) ||
+               clean.Contains("drawing-index", StringComparison.Ordinal) ||
+               clean.Contains("title-block", StringComparison.Ordinal);
     }
 
     private static void FillPageContext(OurPlanCoreJob job, PageInfo page, SmartSheetLearningRecord record)

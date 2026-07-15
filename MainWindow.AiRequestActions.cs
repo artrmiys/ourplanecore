@@ -77,7 +77,7 @@ public partial class MainWindow
             return;
         }
 
-        if (!TrySaveSheetMetadataFromFallbackResponse(request, out PdfMetadataPageResult? result, out string error) ||
+        if (!TryBuildSheetMetadataFromFallbackResponse(request, out PdfMetadataPageResult? result, out string error) ||
             result?.Metadata == null)
         {
             MessageBox.Show(error, "Apply Sheet Metadata Response", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -96,6 +96,21 @@ public partial class MainWindow
     }
 
     private bool TrySaveSheetMetadataFromFallbackResponse(
+        SmartAiRequest request,
+        out PdfMetadataPageResult? result,
+        out string error)
+    {
+        if (!TryBuildSheetMetadataFromFallbackResponse(request, out result, out error) ||
+            result?.Metadata == null)
+        {
+            return false;
+        }
+
+        OurPlanCoreJobStore.WriteSourcePdfMetadata(result.Page.FolderPath, result.Metadata);
+        return true;
+    }
+
+    private bool TryBuildSheetMetadataFromFallbackResponse(
         SmartAiRequest request,
         out PdfMetadataPageResult? result,
         out string error)
@@ -148,7 +163,6 @@ public partial class MainWindow
             return false;
         }
 
-        OurPlanCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);
         result = new PdfMetadataPageResult(page, true, metadata, "");
         return true;
     }

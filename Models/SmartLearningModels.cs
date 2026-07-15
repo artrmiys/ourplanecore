@@ -10,7 +10,7 @@ namespace OurPlanCore;
 public sealed class SmartSheetLearningRecord
 {
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     [JsonPropertyName("id")]
     public string Id { get; set; } = "";
@@ -38,6 +38,30 @@ public sealed class SmartSheetLearningRecord
 
     [JsonPropertyName("user_outcome")]
     public string UserOutcome { get; set; } = "";
+
+    [JsonPropertyName("reviewed")]
+    public bool Reviewed { get; set; }
+
+    [JsonPropertyName("name_outcome")]
+    public string NameOutcome { get; set; } = "not_reviewed";
+
+    [JsonPropertyName("suffix_outcome")]
+    public string SuffixOutcome { get; set; } = "not_reviewed";
+
+    [JsonPropertyName("scale_outcome")]
+    public string ScaleOutcome { get; set; } = "not_reviewed";
+
+    [JsonPropertyName("detector_version")]
+    public string DetectorVersion { get; set; } = "";
+
+    [JsonPropertyName("detector_config_fingerprint")]
+    public string DetectorConfigFingerprint { get; set; } = "";
+
+    [JsonPropertyName("pdf_fingerprint")]
+    public string PdfFingerprint { get; set; } = "";
+
+    [JsonPropertyName("observation_key")]
+    public string ObservationKey { get; set; } = "";
 
     [JsonPropertyName("source_pdf")]
     public string SourcePdf { get; set; } = "";
@@ -257,6 +281,12 @@ public sealed class SmartLearnedRule
 
     [JsonPropertyName("support")]
     public int Support { get; set; }
+
+    [JsonPropertyName("conflict_count")]
+    public int ConflictCount { get; set; }
+
+    [JsonPropertyName("dominance")]
+    public double Dominance { get; set; }
 
     [JsonPropertyName("confidence")]
     public string Confidence { get; set; } = "";

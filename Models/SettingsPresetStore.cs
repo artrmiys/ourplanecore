@@ -66,6 +66,12 @@ public static class SettingsPresetStore
     private static string JobPageSortPath(OurPlanCoreJob job) =>
         Path.Combine(job.RootPath, "AI_Context", "settings", "page_sort.json");
 
+    private static string GlobalSheetMetadataPath() =>
+        Path.Combine(SmartContextStore.GlobalRoot, "presets", "sheet_metadata.json");
+
+    private static string JobSheetMetadataPath(OurPlanCoreJob job) =>
+        Path.Combine(job.RootPath, "AI_Context", "settings", "sheet_metadata.json");
+
     private static T? LoadJson<T>(string path) where T : class
     {
         try
@@ -167,4 +173,50 @@ public static class SettingsPresetStore
 
     public static void InstallPageSortProvider(OurPlanCoreJob? job) =>
         PageSortRulesService.Install(ResolvePageSort(job));
+
+    // Sheet metadata policy: per-job override → global → legacy-compatible defaults.
+    public static SheetMetadataConfig? LoadGlobalSheetMetadata() =>
+        LoadJson<SheetMetadataConfig>(GlobalSheetMetadataPath());
+
+    public static void SaveGlobalSheetMetadata(SheetMetadataConfig config) =>
+        SaveJson(
+            GlobalSheetMetadataPath(),
+            SheetMetadataConfig.UpgradeForCurrentSchema(config));
+
+    public static SheetMetadataConfig? LoadJobSheetMetadataOverride(OurPlanCoreJob job) =>
+        LoadJson<SheetMetadataConfig>(JobSheetMetadataPath(job));
+
+    public static void SaveJobSheetMetadataOverride(
+        OurPlanCoreJob job,
+        SheetMetadataConfig config) =>
+        SaveJson(
+            JobSheetMetadataPath(job),
+            SheetMetadataConfig.UpgradeForCurrentSchema(config));
+
+    public static bool ClearJobSheetMetadataOverride(OurPlanCoreJob job)
+    {
+        try
+        {
+            string path = JobSheetMetadataPath(job);
+            if (File.Exists(path))
+                File.Delete(path);
+            return !File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static SheetMetadataConfig ResolveSheetMetadata(OurPlanCoreJob? job)
+    {
+        if (job != null && LoadJobSheetMetadataOverride(job) is { } jobConfig)
+            return SheetMetadataConfig.UpgradeForCurrentSchema(jobConfig);
+        if (LoadGlobalSheetMetadata() is { } globalConfig)
+            return SheetMetadataConfig.UpgradeForCurrentSchema(globalConfig);
+        return SheetMetadataConfig.BuildDefault();
+    }
+
+    public static void InstallSheetMetadataProvider(OurPlanCoreJob? job) =>
+        SheetMetadataRulesService.Install(ResolveSheetMetadata(job));
 }

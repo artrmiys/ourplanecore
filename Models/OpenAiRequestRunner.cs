@@ -784,20 +784,9 @@ public static class OpenAiRequestRunner
         sb.AppendLine("  \"warnings\": []");
         sb.AppendLine("}");
         sb.AppendLine();
-        sb.AppendLine("Suffix rules:");
-        sb.AppendLine("- GENERAL NOTES / NOTES -> n, skip scale");
-        sb.AppendLine("- SCHEDULE / SCHEDULES -> sc, skip scale");
-        sb.AppendLine("- S-sheet DETAILS / DETAIL / DEATIL / S500-S699 typical details -> d, skip scale, even when the title also says SECTION");
-        sb.AppendLine("- A-sheet FINISH / FINISHES / INTERIOR -> f");
-        sb.AppendLine("- Title/filename saying SHEAR / SHEAR WALL -> shw; BRACING PLAN with visible shear wall callouts -> shw; do not infer shw from roof/framing/foundation notes alone");
-        sb.AppendLine("- FIRST/1ST FLOOR -> 1st; SECOND/2ND -> 2nd; THIRD/3RD -> 3rd; FOURTH/4TH -> 4th");
-        sb.AppendLine("- ROOF / ROOF FRAMING -> rf");
-        sb.AppendLine("- SECTION / SECTIONS -> sec and scale eligible");
-        sb.AppendLine("- UNIT PLANS -> u; WALL/PARTITION TYPES -> wt; FLOOR TYPES/FLOOR-CEILING -> ft");
-        sb.AppendLine();
-        sb.AppendLine("Allowed scales:");
-        sb.AppendLine("1/32\" = 1'0\", 3/64\" = 1'0\", 1/16\" = 1'0\", 3/32\" = 1'0\", 1/10\" = 1'0\", 1/8\" = 1'0\", 3/16\" = 1'0\", 1/4\" = 1'0\", 3/8\" = 1'0\", 1/2\" = 1'0\", 3/4\" = 1'0\", 1\" = 1'0\", 1-1/2\" = 1'0\", 3\" = 1'0\", 1\" = 1\".");
-        sb.AppendLine("If the title block says AS NOTED and no body scale is visible in the crop, leave selected_scale_text empty and add a warning.");
+        sb.AppendLine("Active naming and scale policy:");
+        foreach (string policyLine in SheetMetadataPromptPolicy.BuildPromptLines())
+            sb.AppendLine(policyLine);
         sb.AppendLine("If unreadable, leave uncertain fields empty and set confidence to gpt-image-low.");
         sb.AppendLine();
         sb.AppendLine("Request prompt:");

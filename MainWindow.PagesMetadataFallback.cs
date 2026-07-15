@@ -582,10 +582,9 @@ public partial class MainWindow
         sb.AppendLine("  \"warnings\": []");
         sb.AppendLine("}");
         sb.AppendLine();
-        sb.AppendLine("Naming suffix rules:");
-        sb.AppendLine("notes=n skip, schedules=sc skip, details=d skip, foundation=f, first=1st, second=2nd, third=3rd, fourth=4th, roof=rf, sections=sec, unit plans=u, wall/partition types=wt, floor types=ft.");
-        sb.AppendLine("Sections must be scale eligible. Details/notes/schedules must skip scale.");
-        sb.AppendLine("Allowed scales: 1/32\", 3/64\", 1/16\", 3/32\", 1/10\", 1/8\", 3/16\", 1/4\", 3/8\", 1/2\", 3/4\", 1\", 1-1/2\", 3\" = 1'0\", and 1\" = 1\".");
+        sb.AppendLine("Active naming and scale policy:");
+        foreach (string policyLine in SheetMetadataPromptPolicy.BuildPromptLines())
+            sb.AppendLine(policyLine);
         sb.AppendLine("If unsure, leave fields empty and add a warning.");
         sb.AppendLine();
         if (crops.Count > 0)

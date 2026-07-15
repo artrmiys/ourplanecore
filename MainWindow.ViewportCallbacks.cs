@@ -52,8 +52,14 @@ public partial class MainWindow
     }
 
     private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements(string pageFolder, double scale)
+        => ApplyScaleToPageMeasurements(pageFolder, scale, allowClear: false);
+
+    private IReadOnlyList<TakeoffItem> ApplyScaleToPageMeasurements(
+        string pageFolder,
+        double scale,
+        bool allowClear)
     {
-        if (string.IsNullOrWhiteSpace(pageFolder) || scale <= 0)
+        if (string.IsNullOrWhiteSpace(pageFolder) || scale < 0 || (!allowClear && scale <= 0))
             return [];
 
         var changedItems = new HashSet<TakeoffItem>();

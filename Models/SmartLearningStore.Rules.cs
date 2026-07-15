@@ -35,6 +35,46 @@ public static partial class SmartLearningStore
         (!string.IsNullOrWhiteSpace(record.Final.Suffix) ||
          !string.IsNullOrWhiteSpace(record.Final.SheetTitle));
 
+    private static bool IsReviewedField(SmartSheetLearningRecord record, string fieldOutcome) =>
+        record.SchemaVersion < 2 ||
+        string.Equals(fieldOutcome, "accepted", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fieldOutcome, "corrected", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fieldOutcome, "manual_final", StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<SmartSheetLearningRecord> LatestSheetObservations(
+        IReadOnlyList<SmartSheetLearningRecord> records) =>
+        records
+            .Select((record, index) => new
+            {
+                Record = record,
+                Index = index,
+                Key = ObservationKey(record, index),
+            })
+            .GroupBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderByDescending(entry => entry.Record.CreatedAtUtc, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(entry => entry.Index)
+                .First()
+                .Record)
+            .ToList();
+
+    private static string ObservationKey(SmartSheetLearningRecord record, int fallbackIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(record.ObservationKey))
+            return record.ObservationKey.Trim();
+
+        string fingerprint = !string.IsNullOrWhiteSpace(record.PdfFingerprint)
+            ? record.PdfFingerprint.Trim()
+            : !string.IsNullOrWhiteSpace(record.SourcePdf)
+                ? record.SourcePdf.Trim().ToLowerInvariant()
+                : $"legacy-record-{fallbackIndex}";
+        return PdfSheetMetadataPolicy.BuildObservationKey(
+            fingerprint,
+            record.PdfPage,
+            record.DetectorVersion,
+            record.DetectorConfigFingerprint);
+    }
+
     private static HashSet<string> TitleTokens(string title)
     {
         string[] stop =
@@ -60,7 +100,8 @@ public static partial class SmartLearningStore
 
     private static void SaveLearnedRuleSets(OurPlanCoreJob job, IReadOnlyList<SmartSheetLearningRecord> projectRecords)
     {
-        SmartLearnedRuleSet projectRules = BuildLearnedRuleSet(projectRecords);
+        SmartLearnedRuleSet projectRules = BuildLearnedRuleSet(
+            LatestSheetObservations(projectRecords));
         string projectRulesPath = ProjectLearnedRulesPath(job);
         PreserveRuleEnabledStates(projectRulesPath, projectRules);
         try
@@ -72,7 +113,8 @@ public static partial class SmartLearningStore
             throw new InvalidOperationException($"Failed to save '{Path.GetFileName(projectRulesPath)}': {ex.Message}", ex);
         }
 
-        IReadOnlyList<SmartSheetLearningRecord> globalRecords = LoadGlobalSheetFeedback();
+        IReadOnlyList<SmartSheetLearningRecord> globalRecords = LatestSheetObservations(
+            LoadGlobalSheetFeedback());
         SmartLearnedRuleSet globalRules = BuildLearnedRuleSet(globalRecords);
         PreserveRuleEnabledStates(GlobalLearnedRulesPath, globalRules);
         try
@@ -87,47 +129,76 @@ public static partial class SmartLearningStore
 
     private static SmartLearnedRuleSet BuildLearnedRuleSet(IReadOnlyList<SmartSheetLearningRecord> records)
     {
-        var candidates = new Dictionary<string, LearnedRuleAccumulator>(StringComparer.OrdinalIgnoreCase);
-        foreach (SmartSheetLearningRecord record in records.Where(IsUsefulLearningOutcome))
+        var candidatesByToken = new Dictionary<string, Dictionary<string, LearnedRuleAccumulator>>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (SmartSheetLearningRecord record in records.Where(record =>
+                     IsUsefulLearningOutcome(record) &&
+                     IsReviewedField(record, record.SuffixOutcome)))
         {
             if (string.IsNullOrWhiteSpace(record.Final.Suffix))
                 continue;
 
             foreach (string token in TitleTokens(record.Final.SheetTitle))
             {
-                string key = $"{token}|{record.Final.Suffix}";
-                if (!candidates.TryGetValue(key, out LearnedRuleAccumulator? acc))
+                if (!candidatesByToken.TryGetValue(token, out Dictionary<string, LearnedRuleAccumulator>? bySuffix))
+                {
+                    bySuffix = new Dictionary<string, LearnedRuleAccumulator>(StringComparer.OrdinalIgnoreCase);
+                    candidatesByToken[token] = bySuffix;
+                }
+
+                if (!bySuffix.TryGetValue(record.Final.Suffix, out LearnedRuleAccumulator? acc))
                 {
                     acc = new LearnedRuleAccumulator(token, record.Final.Suffix);
-                    candidates[key] = acc;
+                    bySuffix[record.Final.Suffix] = acc;
                 }
 
                 acc.Support++;
-                if (record.Final.SkipScale)
-                    acc.SkipScaleVotes++;
-                if (!string.IsNullOrWhiteSpace(record.Final.ScaleText))
-                    acc.ScaleCounts[record.Final.ScaleText] = acc.ScaleCounts.GetValueOrDefault(record.Final.ScaleText) + 1;
+                if (IsReviewedField(record, record.ScaleOutcome))
+                {
+                    acc.ScaleReviewCount++;
+                    if (record.Final.SkipScale)
+                        acc.SkipScaleVotes++;
+                    if (!string.IsNullOrWhiteSpace(record.Final.ScaleText))
+                        acc.ScaleCounts[record.Final.ScaleText] =
+                            acc.ScaleCounts.GetValueOrDefault(record.Final.ScaleText) + 1;
+                }
             }
         }
 
-        List<SmartLearnedRule> rules = candidates.Values
-            .Where(acc => acc.Support >= 3)
-            .OrderByDescending(acc => acc.Support)
-            .ThenBy(acc => acc.TitleToken, StringComparer.OrdinalIgnoreCase)
-            .Select(acc => new SmartLearnedRule
+        var rules = new List<SmartLearnedRule>();
+        foreach ((string token, Dictionary<string, LearnedRuleAccumulator> bySuffix) in candidatesByToken)
+        {
+            int total = bySuffix.Values.Sum(candidate => candidate.Support);
+            LearnedRuleAccumulator winner = bySuffix.Values
+                .OrderByDescending(candidate => candidate.Support)
+                .ThenBy(candidate => candidate.Suffix, StringComparer.OrdinalIgnoreCase)
+                .First();
+            double dominance = total > 0 ? winner.Support / (double)total : 0;
+            if (winner.Support < 3 || dominance < 0.80)
+                continue;
+
+            rules.Add(new SmartLearnedRule
             {
                 Enabled = true,
-                Id = $"rule_{SafeRulePart(acc.TitleToken)}_{SafeRulePart(acc.Suffix)}",
-                TitleToken = acc.TitleToken,
-                Suffix = acc.Suffix,
-                SkipScale = acc.SkipScaleVotes > acc.Support / 2,
-                ScaleText = acc.ScaleCounts
+                Id = $"rule_{SafeRulePart(token)}_{SafeRulePart(winner.Suffix)}",
+                TitleToken = token,
+                Suffix = winner.Suffix,
+                SkipScale = winner.ScaleReviewCount > 0 &&
+                            winner.SkipScaleVotes > winner.ScaleReviewCount / 2,
+                ScaleText = winner.ScaleCounts
                     .OrderByDescending(kvp => kvp.Value)
                     .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
                     .FirstOrDefault().Key ?? "",
-                Support = acc.Support,
-                Confidence = acc.Support >= 8 ? "high" : "medium",
-            })
+                Support = winner.Support,
+                ConflictCount = total - winner.Support,
+                Dominance = dominance,
+                Confidence = winner.Support >= 8 && dominance >= 0.90 ? "high" : "medium",
+            });
+        }
+
+        rules = rules
+            .OrderByDescending(rule => rule.Support)
+            .ThenBy(rule => rule.TitleToken, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return new SmartLearnedRuleSet
@@ -171,6 +242,7 @@ public static partial class SmartLearningStore
         public string Suffix { get; } = suffix;
         public int Support { get; set; }
         public int SkipScaleVotes { get; set; }
+        public int ScaleReviewCount { get; set; }
         public Dictionary<string, int> ScaleCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

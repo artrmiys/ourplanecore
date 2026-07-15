@@ -13,6 +13,12 @@ if (Environment.GetEnvironmentVariable("ONC_BENCH") == "1")
 if (args.Length > 0 && args[0] == "walltrace")
     return WallTraceHarness.Run(args);
 
+if (args.Length > 0 && args[0] == "sheetmetadata-golden")
+    return SheetMetadataGoldenHarness.Run(args);
+
+if (args.Length > 0 && args[0] == "sheetmetadata-install-global")
+    return SheetMetadataConfigHarness.InstallGlobalPrecise();
+
 string testGlobalRoot = Path.Combine(Path.GetTempPath(), "onc_tests_global", Guid.NewGuid().ToString("N"));
 Environment.SetEnvironmentVariable(SmartContextStore.GlobalRootEnvironmentVariable, testGlobalRoot);
 
@@ -229,6 +235,32 @@ var tests = new List<(string Name, Action Run)>
     ("takeoff tree regression pages drop batches and refreshes silently", TakeoffsTreeRegressionTests.PagesDropUsesBatchMoveAndSilentRefresh),
     ("takeoff tree regression moved active sheet rebinds viewport", TakeoffsTreeRegressionTests.PagesMovedActiveSheetRebindsViewportWithoutReload),
     ("pdf sheet metadata layer discovery restores states", TakeoffsTreeRegressionTests.PdfSheetMetadataLayerDiscoveryRestoresLayerStates),
+    ("pdf metadata precise policy preserves compound suffix", PdfSheetMetadataWorkflowTests.PrecisePolicyPreservesExistingCompoundSuffix),
+    ("pdf metadata exact scale gate rejects unsafe sources", PdfSheetMetadataWorkflowTests.ExactScaleGateRejectsUnsafeSourcesAndExistingScale),
+    ("pdf metadata scale action clear is explicit", PdfSheetMetadataWorkflowTests.ScaleActionDefaultsToKeepAndClearIsExplicit),
+    ("pdf metadata learning keeps immutable detection", PdfSheetMetadataWorkflowTests.LearningRecordKeepsImmutableDetectedDecision),
+    ("pdf metadata learning deduplicates observations", PdfSheetMetadataWorkflowTests.LearningSummaryDeduplicatesPdfPageDetectorObservation),
+    ("pdf metadata project learning protects exact evidence", PdfSheetMetadataWorkflowTests.ProjectLearningReplacesOnlyLowConfidenceEvidence),
+    ("pdf metadata learning rejects conflicting token", PdfSheetMetadataWorkflowTests.LearnedRuleDistillationRejectsConflictingToken),
+    ("pdf metadata explicit suffix scale allow wins", PdfSheetMetadataWorkflowTests.ExplicitSuffixScaleAllowOverridesTerminalNoScaleToken),
+    ("pdf metadata reviewed scale clear survives analysis", PdfSheetMetadataWorkflowTests.ReviewedScaleClearSurvivesLaterAnalysis),
+    ("pdf metadata explicit suffix clear beats preservation", PdfSheetMetadataWorkflowTests.ExplicitSuffixClearBeatsPreservation),
+    ("pdf metadata exact rename override beats preservation", PdfSheetMetadataWorkflowTests.ExactRenameOverrideBeatsManualPreservationAndLowConfidence),
+    ("pdf metadata exact scale override actions survive contract", PdfSheetMetadataWorkflowTests.ExactScaleOverrideActionsSurviveCSharpNormalizationContract),
+    ("pdf metadata exact scale set beats reviewed clear", PdfSheetMetadataWorkflowTests.ExactScaleSetBeatsPreviouslyReviewedClear),
+    ("pdf metadata fallback build does not write before preview", PdfSheetMetadataWorkflowTests.FallbackBuildDoesNotWriteBeforePreviewApproval),
+    ("pdf metadata uncommon exact scale round trips without snap", PdfSheetMetadataWorkflowTests.UncommonExactScaleRoundTripsWithoutPresetSnap),
+    ("pdf metadata kept no-scale remains no-scale", PdfSheetMetadataWorkflowTests.KeptNoScaleDecisionRemainsNoScale),
+    ("pdf metadata project learned scale keeps text numeric sync", PdfSheetMetadataWorkflowTests.ProjectLearnedScaleUpdatesTextAndNumericValueTogether),
+    ("pdf metadata learned suffix leaves protected scale unchanged", PdfSheetMetadataWorkflowTests.LearnedSuffixDoesNotMutateProtectedScaleDecision),
+    ("sheet metadata legacy preview keeps legacy detector", SheetMetadataConfigTests.LegacyPreviewDoesNotSwitchDetector),
+    ("sheet metadata schema one restores precise collections", SheetMetadataConfigTests.SchemaOnePreciseMigrationRestoresCollections),
+    ("sheet metadata schema two empty rules stay authoritative", SheetMetadataConfigTests.SchemaTwoEmptyRulesRemainAuthoritative),
+    ("sheet metadata null rule rows resolve safely", SheetMetadataConfigTests.NullRuleRowsDoNotCrashUpgradeOrResolve),
+    ("sheet metadata resolves job global default precedence", SheetMetadataConfigTests.ResolveUsesJobThenGlobalThenDefault),
+    ("sheet metadata terminal policy and clone are editable", SheetMetadataConfigTests.TerminalPolicyAndCloneAreEditableAndDeep),
+    ("sheet metadata precise catalog keeps structural cases", SheetMetadataConfigTests.PreciseCatalogKeepsProvenStructuralCases),
+    ("sheet metadata override actions and fingerprint persist", SheetMetadataConfigTests.OverrideActionsDefaultToKeepAndFingerprintChanges),
     ("sheet manager name edits stay checked", TakeoffsTreeRegressionTests.SheetManagerNameEditsStayCheckedAndDoNotSelectAllOnFocus),
     ("takeoff tree regression page repair moved job suffix", TakeoffsTreeRegressionTests.PageRepairUsesMovedJobSuffixForNonEmptyReferences),
     ("takeoff tree regression drag uses mouse down anchor", TakeoffsTreeRegressionTests.TreeDragUsesMouseDownAnchor),

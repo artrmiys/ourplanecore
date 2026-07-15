@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using OurPlanCore.Controls;
 
 namespace OurPlanCore;
 
@@ -160,15 +161,15 @@ public partial class MainWindow
             if (sourcePages.Count == 0)
                 return;
 
+            MaterialReportSheetMetadataSummary metadataSummary = applySheetMetadata
+                ? await AnalyzeAndApplySheetMetadataAsync(sourcePages, "Materials")
+                : new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
+            cts.Token.ThrowIfCancellationRequested();
+
             string destinationFolder = OurPlanCoreJobStore.EnsureFolder(_currentJob.PagesRoot, "00. reports");
             using (ShowBusyOverlay("Extracting materials and creating report sheet..."))
             {
                 await WaitForBusyOverlayRenderAsync();
-                MaterialReportSheetMetadataSummary metadataSummary = applySheetMetadata
-                    ? await AnalyzeAndApplySheetMetadataAsync(sourcePages, "Materials")
-                    : new MaterialReportSheetMetadataSummary(0, 0, 0, 0);
-                cts.Token.ThrowIfCancellationRequested();
-
                 BusyOverlayText.Text = "Materials: reading source PDFs, schedules, and OCR pages...";
                 TxtStatus.Text = "Materials: creating report sheet.";
                 MaterialReportPageResult result = await MaterialReportPageService.CreateReportPagesAsync(
@@ -231,15 +232,13 @@ public partial class MainWindow
 
         try
         {
-            using (ShowBusyOverlay("Auto naming/scaling imported sheets..."))
-            {
-                await WaitForBusyOverlayRenderAsync();
-                MaterialReportSheetMetadataSummary summary = await AnalyzeAndApplySheetMetadataAsync(sourcePages, "PDF import");
-                TxtStatus.Text =
-                    $"PDF import complete. Metadata: {summary.Renamed} renamed/" +
-                    $"{summary.Scaled} scaled/{summary.Failed} failed.";
-                return summary;
-            }
+            MaterialReportSheetMetadataSummary summary = await AnalyzeAndApplySheetMetadataAsync(
+                sourcePages,
+                "PDF import");
+            TxtStatus.Text =
+                $"PDF import complete. Metadata: {summary.Renamed} renamed/" +
+                $"{summary.Scaled} scaled/{summary.Failed} failed.";
+            return summary;
         }
         catch (Exception ex)
         {
@@ -258,24 +257,50 @@ public partial class MainWindow
 
         SaveCurrentPageScale();
         OurPlanCoreJob job = _currentJob;
-        BusyOverlayText.Text = $"{statusPrefix}: auto naming/scaling {sourcePages.Count} sheet(s)...";
+        SheetMetadataImportPolicy policy = SheetMetadataRulesService.Active.ImportPolicy;
+        bool persistDuringAnalysis = policy == SheetMetadataImportPolicy.LegacyAutoApply;
         TxtStatus.Text = $"{statusPrefix}: auto naming/scaling source sheets.";
 
-        List<PdfMetadataPageResult> results = await Task.Run(() =>
+        List<PdfMetadataPageResult> results;
+        using (ShowBusyOverlay($"{statusPrefix}: analyzing {sourcePages.Count} sheet(s)..."))
         {
-            var analyzed = new List<PdfMetadataPageResult>();
-            foreach (PageInfo page in sourcePages)
+            await WaitForBusyOverlayRenderAsync();
+            results = await Task.Run(() =>
             {
-                if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out PdfSheetMetadata metadata, out string error))
-                    analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
-                else
-                    analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
-            }
+                var analyzed = new List<PdfMetadataPageResult>();
+                foreach (PageInfo page in sourcePages)
+                {
+                    bool ok = persistDuringAnalysis
+                        ? PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out PdfSheetMetadata metadata, out string error)
+                        : PdfSheetMetadataService.TryAnalyzePage(job, page, out metadata, out error);
+                    if (ok)
+                        analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
+                    else
+                        analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
+                }
 
-            return analyzed;
-        });
+                return analyzed;
+            });
+        }
 
-        var rows = BuildPdfMetadataPreviewRows(results, defaultRename: true, defaultScale: true).ToList();
+        if (policy == SheetMetadataImportPolicy.AnalyzeOnly)
+        {
+            foreach (PdfMetadataPageResult result in results.Where(result => result.Ok && result.Metadata != null))
+                OurPlanCoreJobStore.WriteSourcePdfMetadata(result.Page.FolderPath, result.Metadata!);
+
+            return new MaterialReportSheetMetadataSummary(
+                results.Count,
+                0,
+                0,
+                results.Count(result => !result.Ok));
+        }
+
+        var rows = BuildPdfMetadataPreviewRows(
+                results,
+                defaultRename: true,
+                defaultScale: true,
+                highConfidenceOnly: policy == SheetMetadataImportPolicy.AutoApplyHighConfidence)
+            .ToList();
         if (rows.Count == 0)
             return new MaterialReportSheetMetadataSummary(
                 results.Count,
@@ -283,7 +308,31 @@ public partial class MainWindow
                 0,
                 results.Count(result => !result.Ok));
 
-        PdfMetadataApplySummary applied = ApplyPdfMetadataResults(job, results, rows);
+        bool reviewedByUser = policy == SheetMetadataImportPolicy.Preview;
+        if (reviewedByUser)
+        {
+            var dialog = new PdfMetadataPreviewDialog(rows, $"{statusPrefix}: Name + Scale Review")
+            {
+                Owner = this,
+            };
+            if (dialog.ShowDialog() != true)
+            {
+                TxtStatus.Text = $"{statusPrefix}: metadata review cancelled; sheets were not changed.";
+                return new MaterialReportSheetMetadataSummary(
+                    results.Count,
+                    0,
+                    0,
+                    results.Count(result => !result.Ok));
+            }
+
+            rows = dialog.Rows.ToList();
+        }
+
+        PdfMetadataApplySummary applied = ApplyPdfMetadataResults(
+            job,
+            results,
+            rows,
+            reviewedByUser);
         return new MaterialReportSheetMetadataSummary(
             results.Count,
             applied.Renamed,

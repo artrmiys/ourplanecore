@@ -87,6 +87,8 @@ public partial class MainWindow
         TxtStatus.Text = $"Analyzing PDF metadata for {pages.Count} page(s)...";
 
         OurPlanCoreJob job = _currentJob;
+        bool persistBeforeReview = (!applyRename && !applyScale) ||
+                                   SheetMetadataRulesService.Active.ImportPolicy == SheetMetadataImportPolicy.LegacyAutoApply;
         List<PdfMetadataPageResult> results;
         using (ShowBusyOverlay($"Analyzing PDF metadata for {pages.Count} page(s)..."))
         {
@@ -96,7 +98,10 @@ public partial class MainWindow
                 var analyzed = new List<PdfMetadataPageResult>();
                 foreach (PageInfo page in pages)
                 {
-                    if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
+                    bool ok = persistBeforeReview
+                        ? PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error)
+                        : PdfSheetMetadataService.TryAnalyzePage(job, page, out metadata, out error);
+                    if (ok)
                         analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
                     else
                         analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
@@ -151,7 +156,8 @@ public partial class MainWindow
     private PdfMetadataApplySummary ApplyPdfMetadataResults(
         OurPlanCoreJob job,
         IReadOnlyList<PdfMetadataPageResult> results,
-        IReadOnlyList<PdfMetadataPreviewRow> rows)
+        IReadOnlyList<PdfMetadataPreviewRow> rows,
+        bool reviewedByUser = true)
     {
         int renamed = 0;
         int scaled = 0;
@@ -163,7 +169,10 @@ public partial class MainWindow
             .GroupBy(result => NormalizePath(result.Page.FolderPath), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (PdfMetadataPreviewRow row in rows.Where(row => row.ApplyRename || row.ApplyScale))
+        foreach (PdfMetadataPreviewRow row in rows.Where(row =>
+                     row.ApplyRename ||
+                     row.ScaleAction != PdfMetadataScaleAction.Keep ||
+                     (reviewedByUser && row.ReviewScale)))
         {
             if (string.IsNullOrWhiteSpace(row.PageFolder))
             {
@@ -186,20 +195,49 @@ public partial class MainWindow
             string currentPath = sourcePage.FolderPath;
             string finalName = OurPlanCoreJobStore.DisplayName(currentPath);
             double finalScale = sourcePage.ScaleMetersPerPt;
+            SmartSheetLearningDecision detected = PdfSheetMetadataService.DetectedDecision(metadata);
 
             try
             {
-                if (row.ApplyScale)
+                if (row.ScaleAction == PdfMetadataScaleAction.Set)
                 {
-                    if (TryApplySheetManagerScale(currentPath, metadata, row.ProposedScale, out finalScale))
+                    if (TryApplySheetManagerScale(sourcePage, metadata, row.ProposedScale, clear: false, out finalScale))
                     {
                         scaled++;
+                        if (reviewedByUser &&
+                            !PdfSheetMetadataPolicy.SameScale(detected.ScaleMetersPerPt, finalScale))
+                        {
+                            metadata.ScaleSource = "manual-review";
+                            metadata.ScaleConfidence = "high";
+                            metadata.ScaleEvidence = $"reviewed value '{row.ProposedScale.Trim()}'";
+                            metadata.SuffixScalePolicy = "allow";
+                        }
                     }
                     else
                     {
                         failed++;
                         metadata.Warnings.Add($"scale not applied: '{row.ProposedScale}'");
                     }
+                }
+                else if (row.ScaleAction == PdfMetadataScaleAction.Clear)
+                {
+                    if (TryApplySheetManagerScale(sourcePage, metadata, "", clear: true, out finalScale))
+                    {
+                        scaled++;
+                        if (reviewedByUser)
+                        {
+                            metadata.ScaleSource = "manual-review";
+                            metadata.ScaleConfidence = "high";
+                            metadata.ScaleEvidence = "scale explicitly cleared in metadata review";
+                            metadata.SuffixScalePolicy = "skip";
+                        }
+                    }
+                    else
+                        failed++;
+                }
+                else if (reviewedByUser && row.ReviewScale)
+                {
+                    PdfSheetMetadataPolicy.PersistKeptScaleDecision(metadata, finalScale);
                 }
 
                 if (row.ApplyRename)
@@ -218,6 +256,36 @@ public partial class MainWindow
                         finalName = OurPlanCoreJobStore.DisplayName(renamedPath);
                         renamed++;
                     }
+
+                    SmartSheetLearningDecision reviewedName = PdfSheetMetadataService.FinalDecision(
+                        sourcePage,
+                        metadata,
+                        finalName,
+                        finalScale);
+                    metadata.RenameCandidate = finalName;
+                    metadata.Suffix = reviewedName.Suffix;
+                    if (!string.Equals(detected.Suffix, reviewedName.Suffix, StringComparison.OrdinalIgnoreCase))
+                        metadata.SuffixScalePolicy = "";
+                    if (reviewedByUser &&
+                        !string.Equals(detected.PageName, finalName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        metadata.TitleSource = "manual-review";
+                        metadata.TitleConfidence = "high";
+                        metadata.TitleEvidence = $"reviewed page name '{finalName}'";
+                        metadata.SuffixSource = "manual-review";
+                        metadata.SuffixConfidence = "high";
+                        metadata.SuffixEvidence = $"reviewed suffix '{reviewedName.Suffix}'";
+                    }
+                }
+                else if (SheetMetadataRulesService.Active.PreserveExistingManualSuffix)
+                {
+                    string safeName = PdfSheetMetadataPolicy.BuildSafeProposedPageName(
+                        finalName,
+                        metadata,
+                        SheetMetadataRulesService.Active);
+                    string safeSuffix = PdfSheetMetadataPolicy.ExtractSuffix(safeName, metadata.EffectiveSheetKey);
+                    if (!string.IsNullOrWhiteSpace(safeSuffix))
+                        metadata.Suffix = safeSuffix;
                 }
 
                 metadata.GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
@@ -225,10 +293,24 @@ public partial class MainWindow
                     metadata.Source = "manual";
 
                 OurPlanCoreJobStore.WriteSourcePdfMetadata(currentPath, metadata);
-                if (OurPlanCoreJobStore.TryReadPage(currentPath) is { } finalPage)
+                if (reviewedByUser && OurPlanCoreJobStore.TryReadPage(currentPath) is { } finalPage)
                 {
                     var finalDecision = PdfSheetMetadataService.FinalDecision(finalPage, metadata, finalName, finalScale);
-                    string outcome = (row.ApplyRename && !string.Equals(row.ProposedPageName, finalName, StringComparison.OrdinalIgnoreCase))
+                    string nameOutcome = LearningTextOutcome(
+                        row.ApplyRename,
+                        detected.PageName,
+                        finalDecision.PageName);
+                    string suffixOutcome = LearningTextOutcome(
+                        row.ApplyRename,
+                        detected.Suffix,
+                        finalDecision.Suffix);
+                    string scaleOutcome = LearningScaleOutcome(
+                        row.ReviewScale || row.ScaleAction != PdfMetadataScaleAction.Keep,
+                        detected.ScaleMetersPerPt,
+                        finalDecision.ScaleMetersPerPt);
+                    string outcome = nameOutcome == "corrected" ||
+                                     suffixOutcome == "corrected" ||
+                                     scaleOutcome == "corrected"
                         ? "corrected"
                         : "accepted";
                     SmartLearningStore.AppendSheetFeedback(
@@ -239,7 +321,11 @@ public partial class MainWindow
                             metadata,
                             outcome,
                             "User applied PDF metadata preview.",
-                            finalDecision));
+                            finalDecision,
+                            detected,
+                            nameOutcome,
+                            suffixOutcome,
+                            scaleOutcome));
                 }
 
                 selectAfter ??= currentPath;
@@ -247,14 +333,18 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 failed++;
-                SmartLearningStore.AppendSheetFeedback(
-                    job,
-                    sourcePage,
-                    PdfSheetMetadataService.BuildLearningRecord(
+                if (reviewedByUser)
+                {
+                    SmartLearningStore.AppendSheetFeedback(
+                        job,
                         sourcePage,
-                        metadata,
-                        "failed_apply",
-                        ex.Message));
+                        PdfSheetMetadataService.BuildLearningRecord(
+                            sourcePage,
+                            metadata,
+                            "failed_apply",
+                            ex.Message,
+                            detected: detected));
+                }
             }
         }
 
@@ -285,44 +375,82 @@ public partial class MainWindow
             Confidence = "manual",
         };
 
-    private static bool TryApplySheetManagerScale(
-        string pageFolder,
+    private bool TryApplySheetManagerScale(
+        PageInfo page,
         PdfSheetMetadata metadata,
         string scaleText,
+        bool clear,
         out double scaleMetersPerPt)
     {
         scaleMetersPerPt = 0;
         string cleanScale = (scaleText ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(cleanScale) ||
-            string.Equals(cleanScale, "skip", StringComparison.OrdinalIgnoreCase) ||
-            !PdfSheetMetadataService.TryParseScaleMetersPerPt(cleanScale, out scaleMetersPerPt))
+        if (!clear &&
+            (string.IsNullOrWhiteSpace(cleanScale) ||
+             string.Equals(cleanScale, "skip", StringComparison.OrdinalIgnoreCase) ||
+             !PdfSheetMetadataService.TryParseScaleMetersPerPt(cleanScale, out scaleMetersPerPt)))
         {
             return false;
         }
 
-        string displayScale = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
-        metadata.SkipScale = false;
+        if (!ApplyMetadataScaleToPage(page, scaleMetersPerPt, clear))
+            return false;
+
+        string displayScale = clear
+            ? ""
+            : PdfSheetMetadataPolicy.AppliedScaleText(cleanScale, scaleMetersPerPt);
+        metadata.SkipScale = clear;
+        metadata.SkipReason = clear ? "manual-review: scale cleared" : "";
         metadata.SelectedScaleText = string.IsNullOrWhiteSpace(displayScale) ? cleanScale : displayScale;
         metadata.ScaleText = metadata.SelectedScaleText;
-        metadata.SelectedScaleRatio = scaleMetersPerPt / ViewportConstants.PdfPointMeters;
+        metadata.SelectedScaleRatio = scaleMetersPerPt > 0
+            ? scaleMetersPerPt / ViewportConstants.PdfPointMeters
+            : 0;
         metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
-        OurPlanCoreJobStore.SavePageScale(pageFolder, scaleMetersPerPt);
         return true;
     }
+
+    private static string LearningTextOutcome(bool reviewed, string detected, string final) =>
+        !reviewed
+            ? "not_reviewed"
+            : string.Equals(
+                PdfSheetMetadataService.VisibleSheetDisplayName(detected),
+                PdfSheetMetadataService.VisibleSheetDisplayName(final),
+                StringComparison.OrdinalIgnoreCase)
+                ? "accepted"
+                : "corrected";
+
+    private static string LearningScaleOutcome(
+        bool reviewed,
+        double detected,
+        double final) =>
+        !reviewed
+            ? "not_reviewed"
+            : PdfSheetMetadataPolicy.SameScale(detected, final)
+                ? "accepted"
+                : "corrected";
+
 
     private IEnumerable<PdfMetadataPreviewRow> BuildPdfMetadataPreviewRows(
         IReadOnlyList<PdfMetadataPageResult> results,
         bool defaultRename,
         bool defaultScale,
-        IReadOnlyDictionary<string, IReadOnlyList<int>>? readyRasterDpisByPageFolder = null)
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? readyRasterDpisByPageFolder = null,
+        bool highConfidenceOnly = false)
     {
+        SheetMetadataConfig config = SheetMetadataRulesService.Active;
+        bool legacyDefaults = config.ImportPolicy == SheetMetadataImportPolicy.LegacyAutoApply &&
+                              !highConfidenceOnly;
         var candidates = results
             .Where(result => result.Ok && result.Metadata != null)
             .Select(result => new
             {
                 Result = result,
                 Metadata = result.Metadata!,
-                ProposedName = result.Metadata!.ProposedPageName(),
+                ProposedName = PdfSheetMetadataPolicy.BuildSafeProposedPageName(
+                    result.Page.Name,
+                    result.Metadata!,
+                    config,
+                    PdfSheetMetadataPolicy.IsExistingNameMarkedManual(result.Page)),
             })
             .ToList();
         var duplicateNames = candidates
@@ -349,6 +477,23 @@ public partial class MainWindow
                                  StringComparison.OrdinalIgnoreCase);
             bool nameConflict = HasPageNameConflict(result.Page.FolderPath, proposedName);
             bool canScale = metadata.CanApplyScale();
+            bool exactScaleSet = PdfSheetMetadataPolicy.IsExactScaleOverrideSet(metadata);
+            bool exactScaleClear = PdfSheetMetadataPolicy.IsExactScaleOverrideClear(metadata);
+            bool renameMeetsPolicy = PdfSheetMetadataPolicy.CanAutoRename(
+                result.Page,
+                metadata,
+                config,
+                proposedName);
+            bool scaleMeetsPolicy = exactScaleSet || exactScaleClear || (legacyDefaults
+                ? canScale && (!config.PreserveExistingManualScale || result.Page.ScaleMetersPerPt <= 0)
+                : PdfSheetMetadataPolicy.IsExactScaleAutoApplyCandidate(result.Page, metadata, config));
+            if (highConfidenceOnly)
+            {
+                renameMeetsPolicy = renameMeetsPolicy &&
+                                    PdfSheetMetadataPolicy.IsTrustedHighConfidenceRename(metadata);
+                scaleMeetsPolicy = scaleMeetsPolicy &&
+                                   PdfSheetMetadataPolicy.IsTrustedHighConfidenceScale(metadata);
+            }
             SmartSheetLearningSignal learning = SmartLearningStore.BuildSheetMetadataSignal(metadata);
             bool learnedConflict = string.Equals(learning.Confidence, "learned-conflict", StringComparison.OrdinalIgnoreCase);
             var warnings = metadata.Warnings.ToList();
@@ -356,25 +501,53 @@ public partial class MainWindow
                 warnings.Add("same page name allowed; folder path will be uniqued");
             if (!string.IsNullOrWhiteSpace(learning.Warning))
                 warnings.Add(learning.Warning);
+            if (defaultScale && canScale && !scaleMeetsPolicy)
+                warnings.Add(result.Page.ScaleMetersPerPt > 0 && config.PreserveExistingManualScale
+                    ? "existing scale preserved; choose Set explicitly to replace it"
+                    : "scale requires explicit review; only high-confidence title-block/index scales are preselected");
+
+            string displayedSuffix = PdfSheetMetadataPolicy.ExtractSuffix(
+                proposedName,
+                metadata.EffectiveSheetKey);
 
             yield return new PdfMetadataPreviewRow
             {
                 PageFolder = result.Page.FolderPath,
                 CurrentPageName = PdfSheetMetadataService.VisibleSheetDisplayName(result.Page.Name),
+                CurrentScale = PdfSheetMetadataPolicy.ScaleDisplay(result.Page.ScaleMetersPerPt),
                 SheetLabel = metadata.SheetLabel,
                 SheetTitle = metadata.SheetTitle,
                 ProposedPageName = proposedName,
-                Suffix = metadata.Suffix,
+                Suffix = displayedSuffix,
                 ProposedScale = canScale
-                    ? PdfSheetMetadataService.FormatImperialScale(metadata.SelectedScaleMetersPerPt)
+                    ? PdfSheetMetadataPolicy.ReviewScaleText(metadata)
                     : metadata.SkipScale ? "skip" : "",
                 Source = metadata.Source,
                 Confidence = learning.Confidence,
+                TitleSource = metadata.TitleSource,
+                TitleConfidence = metadata.TitleConfidence,
+                TitleEvidence = metadata.TitleEvidence,
+                SuffixSource = metadata.SuffixSource,
+                SuffixConfidence = metadata.SuffixConfidence,
+                SuffixEvidence = metadata.SuffixEvidence,
+                ScaleSource = metadata.ScaleSource,
+                ScaleConfidence = metadata.ScaleConfidence,
+                ScaleEvidence = string.IsNullOrWhiteSpace(metadata.ScaleEvidence)
+                    ? metadata.SkipReason
+                    : metadata.ScaleEvidence,
+                CanSetScale = canScale,
+                ReviewScale = defaultScale,
                 RasterStatus = RasterSheetCacheService.DisplayStatus(result.Page, readyRasterDpisByPageFolder),
                 Reason = PdfMetadataDecisionReason(metadata, learning, canRename, canScale, nameConflict, learnedConflict),
                 Warnings = string.Join("; ", warnings),
-                ApplyRename = defaultRename && canRename && !learnedConflict,
-                ApplyScale = defaultScale && canScale && !learnedConflict,
+                ApplyRename = defaultRename && canRename && renameMeetsPolicy &&
+                              (!learnedConflict ||
+                               PdfSheetMetadataPolicy.IsExactRenameOverride(metadata) ||
+                               PdfSheetMetadataPolicy.IsExactSuffixOverride(metadata)),
+                ScaleAction = defaultScale && scaleMeetsPolicy &&
+                              (!learnedConflict || exactScaleSet || exactScaleClear)
+                    ? exactScaleClear ? PdfMetadataScaleAction.Clear : PdfMetadataScaleAction.Set
+                    : PdfMetadataScaleAction.Keep,
             };
         }
     }

@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Media;
 using OurPlanCore.Controls;
 
@@ -17,6 +16,7 @@ public partial class MainWindow
     private ListBox? _settingsCategoryList;
     private ContentControl _settingsHost = new();
     private readonly Dictionary<string, FrameworkElement> _settingsPanels = new();
+    private string? _activeSettingsCategory;
 
     // Defaults panel: live mouse-wheel zoom step control.
     private Slider? _defaultsZoomSlider;
@@ -27,6 +27,7 @@ public partial class MainWindow
 
     private FolderTemplateConfig _ftConfig = FolderTemplateConfig.BuildDefault();
     private PageSortConfig _psConfig = PageSortConfig.BuildDefault();
+    private SheetMetadataConfig _sheetMetadataConfig = SheetMetadataConfig.BuildDefault();
 
     // Page Folders editor
     private ComboBox? _pfMode;
@@ -44,11 +45,6 @@ public partial class MainWindow
     private readonly ObservableCollection<FolderPlanNode> _fpTop = [];
     private ListBox? _fpTopBox;
     private TextBlock? _fpStatus;
-
-    // Auto rename/scale
-    private ComboBox? _rulesScope;
-    private readonly ObservableCollection<LearnedRuleRow> _ruleRows = [];
-    private DataGrid? _rulesGrid;
 
     private static readonly string[] SettingsCategories =
     [
@@ -68,8 +64,10 @@ public partial class MainWindow
     {
         SettingsPresetStore.InstallProviders(_currentJob);
         SettingsPresetStore.InstallPageSortProvider(_currentJob);
+        SettingsPresetStore.InstallSheetMetadataProvider(_currentJob);
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
+        _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         _takeoffTemplateConfig = TakeoffTemplateStore.ResolveConfig(_currentJob).Clone();
         RefreshTakeoffTemplateEditors();
         ReloadModuleFeatures();
@@ -81,6 +79,7 @@ public partial class MainWindow
             BuildSettingsManager();
         _ftConfig = SettingsPresetStore.Resolve(_currentJob).Clone();
         _psConfig = SettingsPresetStore.ResolvePageSort(_currentJob).Clone();
+        _sheetMetadataConfig = SettingsPresetStore.ResolveSheetMetadata(_currentJob).Clone();
         string cat = (_settingsCategoryList?.SelectedItem as string) ?? SettingsCategories[0];
         ShowSettingsCategory(cat);
     }
@@ -130,6 +129,13 @@ public partial class MainWindow
 
     private void ShowSettingsCategory(string category)
     {
+        if (string.Equals(_activeSettingsCategory, "Auto Rename / Scale", StringComparison.Ordinal) &&
+            !string.Equals(category, _activeSettingsCategory, StringComparison.Ordinal))
+        {
+            // Preserve the in-memory draft when the user inspects another category.
+            SyncSheetMetadataFromUi();
+        }
+
         if (!_settingsPanels.TryGetValue(category, out FrameworkElement? panel))
         {
             panel = category switch
@@ -148,6 +154,7 @@ public partial class MainWindow
         }
 
         _settingsHost.Content = panel;
+        _activeSettingsCategory = category;
 
         switch (category)
         {
@@ -158,7 +165,7 @@ public partial class MainWindow
             case "Takeoff Templates": BindTakeoffTemplatesSettings(); break;
             case "Sort A/S": BindArchStruct(); break;
             case "Sort D/Sec/WT": BindSuffixSort(); break;
-            case "Auto Rename / Scale": LoadRuleRows(); break;
+            case "Auto Rename / Scale": BindSheetMetadataSettings(); break;
             case "Defaults": SyncDefaultsZoomControl(); break;
         }
     }
@@ -525,96 +532,6 @@ public partial class MainWindow
     }
 
     // ── Auto Rename / Scale ──────────────────────────────────────────────
-    private FrameworkElement BuildRulesPanel()
-    {
-        var root = new DockPanel();
-        var top = HBar();
-        top.Children.Add(new TextBlock { Text = "Scope:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-        _rulesScope = new ComboBox { Width = 150, VerticalAlignment = VerticalAlignment.Center };
-        _rulesScope.Items.Add("Global");
-        _rulesScope.Items.Add("This job");
-        _rulesScope.SelectedIndex = 0;
-        _rulesScope.SelectionChanged += (_, _) => LoadRuleRows();
-        top.Children.Add(_rulesScope);
-        top.Children.Add(MgrButton("Enable all", (_, _) => { foreach (var r in _ruleRows) r.Enabled = true; _rulesGrid?.Items.Refresh(); }));
-        top.Children.Add(MgrButton("Disable selected", (_, _) => SetSelRules(false)));
-        top.Children.Add(MgrButton("Enable selected", (_, _) => SetSelRules(true)));
-        top.Children.Add(MgrButton("Delete selected", (_, _) => DeleteSelRules()));
-        top.Children.Add(MgrButton("Save", (_, _) => SaveRuleRows(), primary: true));
-        DockPanel.SetDock(top, Dock.Top);
-        root.Children.Add(top);
-
-        _rulesGrid = new DataGrid
-        {
-            AutoGenerateColumns = false,
-            CanUserAddRows = false,
-            CanUserDeleteRows = false,
-            ItemsSource = _ruleRows,
-            SelectionMode = DataGridSelectionMode.Extended,
-            SelectionUnit = DataGridSelectionUnit.FullRow,
-        };
-        _rulesGrid.Columns.Add(new DataGridCheckBoxColumn
-        {
-            Header = "On",
-            Binding = new Binding(nameof(LearnedRuleRow.Enabled)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged },
-        });
-        void Col(string h, string p, double w) => _rulesGrid.Columns.Add(new DataGridTextColumn { Header = h, Binding = new Binding(p), Width = w, IsReadOnly = true });
-        Col("Token", nameof(LearnedRuleRow.TitleToken), 150);
-        Col("Suffix (rename)", nameof(LearnedRuleRow.Suffix), 90);
-        Col("Skip scale", nameof(LearnedRuleRow.SkipScale), 70);
-        Col("Scale", nameof(LearnedRuleRow.ScaleText), 120);
-        Col("Support", nameof(LearnedRuleRow.Support), 70);
-        Col("Confidence", nameof(LearnedRuleRow.Confidence), 90);
-        Col("Kind", nameof(LearnedRuleRow.Kind), 150);
-        root.Children.Add(_rulesGrid);
-        return root;
-    }
-
-    private void LoadRuleRows()
-    {
-        _ruleRows.Clear();
-        bool job = _rulesScope?.SelectedIndex == 1;
-        SmartLearnedRuleSet set = job && _currentJob != null
-            ? SmartLearningStore.LoadProjectLearnedRules(_currentJob)
-            : SmartLearningStore.LoadGlobalLearnedRules();
-        foreach (var r in set.Rules.OrderByDescending(r => r.Enabled).ThenByDescending(r => r.Support).ThenBy(r => r.TitleToken))
-            _ruleRows.Add(LearnedRuleRow.FromRule(r));
-        _rulesGrid?.Items.Refresh();
-    }
-
-    private void SetSelRules(bool enabled)
-    {
-        if (_rulesGrid == null) return;
-        foreach (var r in _rulesGrid.SelectedItems.OfType<LearnedRuleRow>())
-            r.Enabled = enabled;
-        _rulesGrid.Items.Refresh();
-    }
-
-    private void DeleteSelRules()
-    {
-        if (_rulesGrid == null) return;
-        foreach (var r in _rulesGrid.SelectedItems.OfType<LearnedRuleRow>().ToList())
-            _ruleRows.Remove(r);
-        _rulesGrid.Items.Refresh();
-    }
-
-    private void SaveRuleRows()
-    {
-        var set = new SmartLearnedRuleSet { Rules = _ruleRows.Select(r => r.ToRule()).ToList() };
-        bool job = _rulesScope?.SelectedIndex == 1;
-        if (job)
-        {
-            if (_currentJob == null) { TxtStatus.Text = "Open a job to save job rules."; return; }
-            SmartLearningStore.SaveProjectLearnedRules(_currentJob, set);
-            TxtStatus.Text = "Saved job Auto Rename/Scale rules.";
-        }
-        else
-        {
-            SmartLearningStore.SaveGlobalLearnedRules(set);
-            TxtStatus.Text = "Saved global Auto Rename/Scale rules.";
-        }
-    }
-
     // ── Defaults ─────────────────────────────────────────────────────────
     private FrameworkElement BuildDefaultsPanel()
     {

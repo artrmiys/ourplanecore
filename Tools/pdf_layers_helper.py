@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import re
 import sys
@@ -13,6 +14,8 @@ import fitz
 _DOC_CACHE: "OrderedDict[tuple[str, int, int, str], fitz.Document]" = OrderedDict()
 _DOC_LAYER_STATES: dict[tuple[str, int, int, str], dict[int, bool]] = {}
 _MAX_DOC_CACHE = 8
+_SHEET_INDEX_CACHE: "OrderedDict[tuple[str, int, int], dict[str, dict]]" = OrderedDict()
+_MAX_SHEET_INDEX_CACHE = 8
 # Display lists bake in the OCG visibility active when they were built, so the
 # cache key includes the doc's effective layer-state signature.
 _DL_CACHE: "OrderedDict[tuple, fitz.DisplayList]" = OrderedDict()
@@ -50,6 +53,15 @@ AI_SCALE_SUFFIXES = {
     "fr n", "df", "wt pl", "fl pl", "u sc", "elev sec", "str sec", "d sec",
 }
 AI_NO_SCALE_SUFFIXES = {"d", "n", "sc", "t", "w d sc", "f d", "wd d", "jamb d"}
+PRECISE_DEFAULT_SCALE_SUFFIXES = AI_SCALE_SUFFIXES | {
+    "b rcp", "rf rcp", "1st rcp", "2nd rcp", "3rd rcp", "4th rcp", "5th rcp", "6th rcp", "7th rcp", "8th rcp",
+}
+PRECISE_DEFAULT_NO_SCALE_SUFFIXES = AI_NO_SCALE_SUFFIXES | {"fr n", "u sc"}
+PRECISE_DEFAULT_COMPOUND_SUFFIXES = {
+    "fr n", "wt pl", "fl pl", "u sc", "elev sec", "str sec", "d sec",
+    "w d sc", "f d", "wd d", "jamb d",
+    "b rcp", "rf rcp", "1st rcp", "2nd rcp", "3rd rcp", "4th rcp", "5th rcp", "6th rcp", "7th rcp", "8th rcp",
+}
 SHEET_PREFIXES = {
     "a", "ar", "s", "t", "v", "sp", "cs", "c", "m", "e", "p", "g", "r", "l",
     "id", "fp", "fa", "fs",
@@ -119,6 +131,7 @@ def _clean_scale_text(text: str | None) -> str:
         .replace("вЂі", '"')
         .replace("вЂ™", "'")
         .replace("вЂІ", "'")
+        .replace(",", ".")
         .strip()
     )
 
@@ -202,14 +215,35 @@ def _parse_general_scale(scale_text: str | None) -> tuple[float, float] | None:
 
 
 def _scale_ratio(scale_text: str | None) -> float | None:
-    parsed = _parse_general_scale(scale_text)
+    source = _clean_scale_text(scale_text)
+    ratio_match = re.fullmatch(
+        r"\s*(\d+(?:\.\d+)?)\s*(?::|k|r|к|to)\s*(\d+(?:\.\d+)?)\s*",
+        source,
+        flags=re.IGNORECASE,
+    )
+    if ratio_match:
+        left = float(ratio_match.group(1))
+        right = float(ratio_match.group(2))
+        if left > 0 and left < 1.0 and abs(right - 1.0) <= 0.000001:
+            return 12.0 / left
+        return right / left if left > 0 and right > 0 else None
+    bare_decimal = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*", source)
+    if bare_decimal:
+        value = float(bare_decimal.group(1))
+        if value <= 0:
+            return None
+        return 12.0 / value if value < 1.0 else value
+    parsed = _parse_general_scale(source)
     if not parsed:
         return None
     left_inches, right_inches = parsed
+    right = source.split("=", 1)[1].replace('"', "").strip() if "=" in source else ""
+    if left_inches < 1.0 and right == "1":
+        return 12.0 / left_inches
     return right_inches / left_inches if left_inches > 0 else None
 
 
-def _normalize_scale_candidate(text: str) -> str | None:
+def _normalize_scale_candidate(text: str, allow_any: bool = False) -> str | None:
     source = _clean_scale_text(text)
     source = (
         source.replace("''", '"')
@@ -221,6 +255,32 @@ def _normalize_scale_candidate(text: str) -> str | None:
     )
     allowed = {_scale_key(s): s for s in AI_ALLOWED_SCALES}
 
+    ratio_match = re.fullmatch(
+        r"\s*(\d+(?:\.\d+)?)\s*(?::|k|r|к|to)\s*(\d+(?:\.\d+)?)\s*",
+        source,
+        flags=re.IGNORECASE,
+    )
+    if ratio_match:
+        left = float(ratio_match.group(1))
+        right = float(ratio_match.group(2))
+        if allow_any and left > 0 and right > 0:
+            if left < 1.0 and abs(right - 1.0) <= 0.000001:
+                return _format_scale(left, 12.0)
+            return f"{left:g}:{right:g}"
+        return None
+
+    bare_decimal = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*", source)
+    if bare_decimal and allow_any:
+        value = float(bare_decimal.group(1))
+        if value <= 0:
+            return None
+        return _format_scale(value, 12.0) if value < 1.0 else f"1:{value:g}"
+
+    if allow_any and "=" not in source:
+        bare_inches = _parse_inches(source)
+        if bare_inches and bare_inches > 0:
+            return _format_scale(bare_inches, 12.0)
+
     if re.search(r'\b1\s*"\s*=\s*1\s*"', source, flags=re.IGNORECASE):
         return allowed.get(_scale_key('1" = 1"'), '1" = 1"')
 
@@ -228,13 +288,16 @@ def _normalize_scale_candidate(text: str) -> str | None:
     if not parsed:
         return None
     left_inches, right_inches = parsed
+    right = source.split("=", 1)[1].replace('"', "").strip()
+    if left_inches < 1.0 and right == "1":
+        right_inches = 12.0
     candidate = _format_scale(left_inches, right_inches)
     if not candidate:
         return None
-    return allowed.get(_scale_key(candidate))
+    return allowed.get(_scale_key(candidate), candidate if allow_any else None)
 
 
-def _find_scales_in_text(text: str) -> list[str]:
+def _find_scales_in_text(text: str, allow_any: bool = False) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
     source = (text or "").replace("”", '"').replace("“", '"').replace("″", '"').replace("’", "'").replace("′", "'")
@@ -243,7 +306,7 @@ def _find_scales_in_text(text: str) -> list[str]:
         source,
         flags=re.IGNORECASE,
     ):
-        scale = _normalize_scale_candidate(match.group(0))
+        scale = _normalize_scale_candidate(match.group(0), allow_any=allow_any)
         key = _scale_key(scale or "")
         if scale and key not in seen:
             seen.add(key)
@@ -255,13 +318,20 @@ def _find_scales_in_text(text: str) -> list[str]:
         flags=re.IGNORECASE,
     )
     for match in general_pattern.finditer(_clean_scale_text(text)):
-        scale = _normalize_scale_candidate(match.group(0))
+        scale = _normalize_scale_candidate(match.group(0), allow_any=allow_any)
         key = _scale_key(scale or "")
         if scale and key not in seen:
             seen.add(key)
             found.append(scale)
     if re.search(r'\b1\s*"\s*=\s*1\s*"', source, flags=re.IGNORECASE) and _scale_key('1" = 1"') not in seen:
         found.append('1" = 1"')
+    if allow_any:
+        for match in re.finditer(r"(?<![\d.])(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)(?![\d.])", source):
+            scale = _normalize_scale_candidate(match.group(0), allow_any=True)
+            key = _scale_key(scale or "")
+            if scale and key not in seen:
+                seen.add(key)
+                found.append(scale)
     return found
 
 
@@ -3131,7 +3201,7 @@ def pdf_takeoff_clean_copy(input_path: str, output_path: str) -> None:
     _write_json(output_path, pdf_takeoff_clean_copy_data(_load_json(input_path)))
 
 
-def sheetmeta_data(req: dict) -> dict:
+def _sheetmeta_data_legacy(req: dict) -> dict:
     pdf_path = req["pdf"]
     page_index = int(req.get("page", 0))
     doc, doc_key = _get_doc(pdf_path, "discover")
@@ -3289,6 +3359,1308 @@ def sheetmeta_data(req: dict) -> dict:
         "warnings": warnings,
     }
     return {"ok": True, "metadata": metadata}
+
+
+_CONFIG_MISSING = object()
+_INDEX_LABEL_LINE_RE = re.compile(
+    r"^[A-Z]{1,4}-?\d{1,4}(?:\.(?:R\d+[A-Z]?|[0-9]?U\d+[A-Z]?|\d+[A-Z]{0,2}))?[A-Z]{0,3}$",
+    flags=re.IGNORECASE,
+)
+
+
+def _config_value(config: dict | None, *names: str, default=None):
+    if not isinstance(config, dict):
+        return default
+    wanted = {re.sub(r"[^a-z0-9]+", "", name.lower()) for name in names}
+    for key, value in config.items():
+        normalized = re.sub(r"[^a-z0-9]+", "", str(key).lower())
+        if normalized in wanted:
+            return value
+    return default
+
+
+def _config_has(config: dict | None, *names: str) -> bool:
+    if not isinstance(config, dict):
+        return False
+    wanted = {re.sub(r"[^a-z0-9]+", "", name.lower()) for name in names}
+    return any(
+        re.sub(r"[^a-z0-9]+", "", str(key).lower()) in wanted
+        for key in config
+    )
+
+
+def _config_bool(config: dict | None, name: str, default: bool) -> bool:
+    value = _config_value(config, name, default=_CONFIG_MISSING)
+    if value is _CONFIG_MISSING:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() not in {"", "0", "false", "no", "off"}
+    return bool(value)
+
+
+def _normalized_mode(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _uses_precise_sheet_metadata(req: dict) -> bool:
+    config = req.get("sheet_metadata_config")
+    if not isinstance(config, dict):
+        return False
+    if _config_has(config, "detector_mode"):
+        detector_mode = _normalized_mode(_config_value(config, "detector_mode", default="legacy"))
+        return detector_mode in {"precisev2", "v2", "precise"}
+    preset = _config_value(config, "preset_name", "preset", "mode", default="")
+    normalized = _normalized_mode(preset)
+    if normalized == "legacy":
+        return False
+    if normalized in {"precisev2", "v2", "precise"}:
+        return True
+    # A serialized settings object without an explicit preset is a v2 request.
+    # Requests without the object remain byte-for-byte on the legacy path.
+    return True
+
+
+def _normalize_suffix(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def _config_suffix_set(config: dict, key: str, defaults: set[str]) -> set[str]:
+    raw = _config_value(config, key, default=_CONFIG_MISSING)
+    if raw is _CONFIG_MISSING:
+        return set(defaults)
+    if isinstance(raw, str):
+        values = re.split(r"[,;\r\n]+", raw)
+    elif isinstance(raw, (list, tuple, set)):
+        values = raw
+    else:
+        return set(defaults)
+    return {suffix for suffix in (_normalize_suffix(value) for value in values) if suffix}
+
+
+def _normalize_confidence(value: object, default: str = "low") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"high", "medium", "low"}:
+        return normalized
+    return default
+
+
+def _sheet_metadata_config_fingerprint(config: dict) -> str:
+    canonical = json.dumps(
+        config,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _sheet_index_key(label: str | None) -> str:
+    key = re.sub(r"[\s-]+", "", (label or "").strip().lower())
+    if key.endswith(".00"):
+        key = key[:-3]
+    return key
+
+
+def _precise_sheet_number_code(sheet_label: str | None) -> int | None:
+    label = re.sub(r"\.00$", "", (sheet_label or "").strip(), flags=re.IGNORECASE)
+    return _sheet_number_code(label)
+
+
+def _index_label_from_line(line: str | None) -> str | None:
+    clean = re.sub(r"\s+", "", (line or "").strip()).strip("|:;")
+    return clean if _INDEX_LABEL_LINE_RE.fullmatch(clean) else None
+
+
+def _index_scale_from_line(line: str | None) -> tuple[str, str, str] | None:
+    raw = re.sub(r"\s+", " ", _clean_scale_text(line)).strip(" |:;")
+    if not raw:
+        return None
+    if re.fullmatch(r"(?:NTS|NOT\s+TO\s+SCALE)", raw, flags=re.IGNORECASE):
+        return "", "NTS", "nts"
+    if re.fullmatch(r"AS\s+NOTED", raw, flags=re.IGNORECASE):
+        return "", "AS NOTED", "as_noted"
+    if re.fullmatch(r"AS\s+(?:SHOWN|INDICATED)", raw, flags=re.IGNORECASE):
+        return "", raw.upper(), "as_shown"
+    scale = _normalize_scale_candidate(raw, allow_any=True)
+    if scale:
+        return scale, raw, "scale"
+    return None
+
+
+def _clean_index_title(lines: list[str]) -> str:
+    ignored = {
+        "sheet no", "sheet no.", "description", "scale",
+        "architectural", "structural", "mechanical", "electrical", "plumbing", "civil",
+        "landscape", "fire protection", "low voltage", "luminaire", "geotechnical",
+    }
+    cleaned: list[str] = []
+    for line in lines:
+        value = re.sub(r"\s+", " ", line or "").strip(" |:;")
+        if not value or value.lower() in ignored or re.fullmatch(r"[●•xX]+", value):
+            continue
+        if re.fullmatch(r"\d+", value) or re.fullmatch(r"\d{1,2}[./-]\d{1,2}[./-]\d{2,4}", value):
+            continue
+        cleaned.append(value)
+    return re.sub(r"\s+", " ", " ".join(cleaned)).strip(" -:|")
+
+
+def _sheet_index_header_end(lines: list[str]) -> int:
+    for index, line in enumerate(lines):
+        normalized = re.sub(r"[^a-z]+", " ", line.lower()).strip()
+        if normalized not in {"sheet no", "sheet number", "drawing no", "drawing number"}:
+            continue
+        nearby = " ".join(lines[index:index + 5]).lower()
+        if "description" in nearby:
+            return index + 1
+    return -1
+
+
+def _parse_sheet_index_page(text: str, page_number: int) -> list[dict]:
+    if not re.search(r"\b(?:DRAWING\s+LIST|SHEET\s+INDEX)\b", text or "", flags=re.IGNORECASE):
+        return []
+    lines = [re.sub(r"\s+", " ", line).strip() for line in (text or "").splitlines()]
+    lines = [line for line in lines if line]
+    start = _sheet_index_header_end(lines)
+    if start < 0:
+        return []
+
+    rows: list[dict] = []
+    index = start
+    while index < len(lines):
+        label = _index_label_from_line(lines[index])
+        if not label:
+            index += 1
+            continue
+
+        title_lines: list[str] = []
+        scale_info: tuple[str, str, str] | None = None
+        cursor = index + 1
+        while cursor < min(len(lines), index + 8):
+            if _index_label_from_line(lines[cursor]):
+                break
+            scale_info = _index_scale_from_line(lines[cursor])
+            if scale_info:
+                break
+            title_lines.append(lines[cursor])
+            cursor += 1
+
+        title = _clean_index_title(title_lines)
+        if title:
+            scale_text, scale_raw, scale_kind = scale_info or ("", "", "")
+            rows.append({
+                "label": label,
+                "title": title,
+                "scale_text": scale_text,
+                "scale_raw": scale_raw,
+                "scale_kind": scale_kind,
+                "page_number": page_number,
+            })
+            index = cursor + 1 if scale_info else cursor
+        else:
+            index += 1
+    return rows
+
+
+def _document_sheet_index(doc: fitz.Document, doc_key: tuple[str, int, int, str]) -> dict[str, dict]:
+    cache_key = (doc_key[0], doc_key[1], doc_key[2])
+    cached = _SHEET_INDEX_CACHE.get(cache_key)
+    if cached is not None:
+        _SHEET_INDEX_CACHE.move_to_end(cache_key)
+        return cached
+
+    grouped: dict[str, list[dict]] = {}
+    for page_index in range(doc.page_count):
+        try:
+            text = doc.load_page(page_index).get_text("text") or ""
+        except Exception:
+            continue
+        for row in _parse_sheet_index_page(text, page_index + 1):
+            grouped.setdefault(_sheet_index_key(row["label"]), []).append(row)
+
+    result: dict[str, dict] = {}
+    for key, rows in grouped.items():
+        unique: dict[tuple[str, str, str], dict] = {}
+        for row in rows:
+            signature = (
+                re.sub(r"\s+", " ", row["title"]).strip().casefold(),
+                _scale_key(row["scale_text"]),
+                row["scale_kind"],
+            )
+            unique.setdefault(signature, row)
+        if len(unique) == 1:
+            result[key] = next(iter(unique.values()))
+        else:
+            # Duplicate labels with conflicting rows (for example D-1 in two
+            # disciplines) are intentionally withheld instead of guessed.
+            result[key] = {"ambiguous": True, "rows": list(unique.values())}
+
+    _SHEET_INDEX_CACHE[cache_key] = result
+    _SHEET_INDEX_CACHE.move_to_end(cache_key)
+    while len(_SHEET_INDEX_CACHE) > _MAX_SHEET_INDEX_CACHE:
+        _SHEET_INDEX_CACHE.popitem(last=False)
+    return result
+
+
+def _source_pdf_pattern_matches(pattern: str | None, pdf_path: str) -> bool:
+    value = (pattern or "").strip()
+    if not value:
+        return True
+    target_path = str(Path(pdf_path)).replace("\\", "/").casefold()
+    target_name = Path(pdf_path).name.casefold()
+    normalized = value.replace("\\", "/").casefold()
+    if "*" in normalized or "?" in normalized:
+        expression = "^" + re.escape(normalized).replace(r"\*", ".*").replace(r"\?", ".") + "$"
+        return re.search(expression, target_path) is not None or re.search(expression, target_name) is not None
+    return normalized in target_path or normalized in target_name
+
+
+def _sheet_override(config: dict, sheet_label: str | None, pdf_path: str) -> dict | None:
+    raw = _config_value(config, "sheet_overrides", "sheet_label_overrides", default=None)
+    target = _sheet_index_key(sheet_label)
+    if not target:
+        return None
+    if isinstance(raw, dict):
+        for label, value in raw.items():
+            if _sheet_index_key(str(label)) != target:
+                continue
+            if isinstance(value, dict):
+                if not _config_bool(value, "enabled", True):
+                    continue
+                source_pattern = str(_config_value(value, "source_pdf_pattern", default="") or "")
+                if _source_pdf_pattern_matches(source_pattern, pdf_path):
+                    return value
+                continue
+            return {"suffix": value}
+        return None
+    if not isinstance(raw, list):
+        return None
+    matches: list[tuple[tuple[int, int], dict]] = []
+    for item in raw:
+        if not isinstance(item, dict) or not _config_bool(item, "enabled", True):
+            continue
+        label = _config_value(item, "sheet_label", "sheet_key", "label", default="")
+        source_pattern = str(_config_value(item, "source_pdf_pattern", default="") or "")
+        if _sheet_index_key(str(label)) == target and _source_pdf_pattern_matches(source_pattern, pdf_path):
+            clean = source_pattern.strip()
+            specificity = 0 if not clean else 1 if ("*" in clean or "?" in clean) else 2
+            matches.append(((specificity, len(clean)), item))
+    return max(matches, key=lambda match: match[0])[1] if matches else None
+
+
+def _precise_sheet_label_from_index_words(
+    words: list,
+    max_x: float,
+    max_y: float,
+    index_map: dict[str, dict],
+    allow_unindexed: bool = True,
+) -> tuple[str | None, object | None]:
+    candidates: list[tuple[float, str, object]] = []
+    for word in words:
+        token = _index_label_from_line(str(word[4]))
+        if not token:
+            continue
+        entry = index_map.get(_sheet_index_key(token))
+        if (not entry or entry.get("ambiguous")) and not (allow_unindexed and _valid_sheet_label(token)):
+            continue
+        x0, y0, _, _ = _word_box(word)
+        size = _word_size(word)
+        in_title_region = x0 >= max_x * 0.82 or y0 >= max_y * 0.82
+        if not in_title_region or size < 18.0:
+            continue
+        if y0 >= max_y * 0.92 and size < 80.0:
+            continue
+        score = min(size, 180.0) * 4.0
+        if x0 >= max_x * 0.86:
+            score += 500.0
+        if y0 >= max_y * 0.82:
+            score += 300.0
+        candidates.append((score, token, word))
+    if not candidates:
+        return None, None
+    _, label, word = max(candidates, key=lambda item: item[0])
+    return label, word
+
+
+def _title_quality(value: str | None, sheet_label: str | None) -> float:
+    title = _clean_sheet_title(value)
+    if len(title) < 3 or _sheet_index_key(title) == _sheet_index_key(sheet_label):
+        return -1000.0
+    if _is_title_block_noise_line(title, sheet_label):
+        return -1000.0
+    words = re.findall(r"[A-Za-z0-9]+", title)
+    score = min(len(words), 8) * 8.0
+    if _looks_like_view_title(title):
+        score += 80.0
+    if len(words) == 1:
+        score -= 110.0
+    if len(title) > 120:
+        score -= 350.0
+    if re.search(r"\b(?:telephone|consultant|developer|engineer|project no|address|suite|avenue)\b", title, flags=re.IGNORECASE):
+        score -= 240.0
+    return score
+
+
+def _add_title_candidate(
+    candidates: list[dict],
+    title: str | None,
+    source: str,
+    confidence: str,
+    base_score: float,
+    evidence: str,
+    sheet_label: str | None,
+) -> None:
+    clean = _clean_sheet_title(title)
+    quality = _title_quality(clean, sheet_label)
+    if quality <= -900:
+        return
+    candidates.append({
+        "title": clean,
+        "source": source,
+        "confidence": confidence,
+        "score": base_score + quality,
+        "evidence": evidence or clean,
+    })
+
+
+def _extract_standalone_title_field(words: list, sheet_label: str | None, max_x: float, max_y: float) -> str:
+    title_labels = [
+        word for word in words
+        if str(word[4]).strip().lower().rstrip(":") == "title"
+        and (float(word[0]) >= max_x * TITLE_BLOCK_RIGHT_X or float(word[1]) >= max_y * TITLE_BLOCK_BOTTOM_Y)
+    ]
+    candidates: list[tuple[float, str]] = []
+    for label in title_labels:
+        x0, y0, _, _ = _word_box(label)
+        stop_y = min(max_y, y0 + 150.0)
+        for word in words:
+            token = str(word[4]).strip().lower().rstrip(":")
+            wx0, wy0, _, _ = _word_box(word)
+            line_text = _line_text_near_word(words, word).lower()
+            is_stop = token in {"scale", "revisions", "address"}
+            if token in {"project", "sheet", "drawing"}:
+                is_stop = bool(re.search(rf"\b{token}\s+(?:no\.?|number)\b", line_text))
+            if is_stop and wy0 > y0 + 4 and wx0 >= x0 - 35:
+                stop_y = min(stop_y, wy0 - 2)
+
+        content = _words_in_rect(words, max(0.0, x0 - 35.0), y0 + 4.0, max_x, stop_y)
+        cleaned = []
+        for word in content:
+            token = str(word[4]).strip()
+            if token.lower().rstrip(":") in {"title", "sheet", "drawing", "number", "no", "scale"}:
+                continue
+            if sheet_label and _sheet_index_key(token) == _sheet_index_key(sheet_label):
+                continue
+            cleaned.append(word)
+        title = _clean_sheet_title(_words_text(cleaned))
+        quality = _title_quality(title, sheet_label)
+        if quality > -900:
+            candidates.append((quality, title))
+    return max(candidates, key=lambda item: item[0])[1] if candidates else ""
+
+
+def _precise_title_decision(
+    req: dict,
+    config: dict,
+    override: dict | None,
+    doc: fitz.Document,
+    doc_key: tuple[str, int, int, str],
+    page: fitz.Page,
+    text: str,
+    words: list,
+    sheet_label: str | None,
+    prominent_label_word: object | None,
+    max_x: float,
+    max_y: float,
+) -> tuple[dict, dict | None]:
+    candidates: list[dict] = []
+    index_row: dict | None = None
+    override_title = _config_value(override, "title", "sheet_title", "output_title", default="")
+    if override_title:
+        _add_title_candidate(
+            candidates, str(override_title), "sheet_override", "high", 2000.0,
+            f"Exact-sheet override for {sheet_label}", sheet_label,
+        )
+
+    if _config_bool(config, "enable_sheet_index_evidence", True):
+        entry = _document_sheet_index(doc, doc_key).get(_sheet_index_key(sheet_label))
+        if entry and not entry.get("ambiguous"):
+            index_row = entry
+            _add_title_candidate(
+                candidates, entry.get("title"), "sheet_index", "high", 1100.0,
+                f"Drawing list p.{entry['page_number']}: {entry['label']} | {entry['title']}", sheet_label,
+            )
+
+    if _config_bool(config, "enable_title_block_evidence", True):
+        standalone_title = _extract_standalone_title_field(words, sheet_label, max_x, max_y)
+        _add_title_candidate(
+            candidates, standalone_title, "title_block", "high", 1260.0,
+            f"Standalone TITLE field: {standalone_title}", sheet_label,
+        )
+        explicit = _extract_title_from_sheet_no_lines(text, sheet_label)
+        # The legacy "Sheet No./Description" line walk can collect unrelated
+        # footer text. It is useful evidence, but a mapped drawing-list row is
+        # stronger unless a real labelled Sheet/Drawing Title field exists.
+        _add_title_candidate(candidates, explicit, "title_block", "medium", 1060.0, explicit, sheet_label)
+        explicit_field = _extract_title_from_title_block(words, sheet_label, max_x, max_y)
+        _add_title_candidate(candidates, explicit_field, "title_block", "high", 1210.0, explicit_field, sheet_label)
+        near = _extract_title_near_sheet_label(words, prominent_label_word, max_x, max_y)
+        _add_title_candidate(candidates, near, "prominent_title", "high", 1010.0, near, sheet_label)
+        right = _extract_right_title_block_title(words, sheet_label, max_x, max_y)
+        _add_title_candidate(candidates, right, "right_title_block", "high", 1000.0, right, sheet_label)
+        bottom_title, _, _ = _extract_bottom_view_title_and_scale(words, sheet_label, max_x, max_y)
+        _add_title_candidate(candidates, bottom_title, "prominent_title", "medium", 850.0, bottom_title, sheet_label)
+
+    if _config_bool(config, "enable_body_evidence", True):
+        body_title = _title_from_lines(text, sheet_label)
+        _add_title_candidate(candidates, body_title, "body", "low", 430.0, body_title, sheet_label)
+
+    filename_title = _filename_title(req["pdf"], sheet_label)
+    _add_title_candidate(candidates, filename_title, "filename", "low", 300.0, filename_title, sheet_label)
+
+    if candidates:
+        return max(candidates, key=lambda candidate: candidate["score"]), index_row
+    return {
+        "title": "",
+        "source": "numeric_fallback",
+        "confidence": "low",
+        "score": 0.0,
+        "evidence": f"Only sheet label {sheet_label or '(missing)'} was resolved",
+    }, index_row
+
+
+def _optional_bool(value: object) -> bool | None:
+    if value is _CONFIG_MISSING or value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip().lower() not in {"", "0", "false", "no", "off"}
+    return bool(value)
+
+
+def _compound_suffix(config: dict, suffix: str, fallback: str) -> str:
+    normalized = _normalize_suffix(suffix)
+    if " " not in normalized:
+        return normalized
+    allowed = _config_suffix_set(config, "compound_suffixes", PRECISE_DEFAULT_COMPOUND_SUFFIXES)
+    return normalized if normalized in allowed else fallback
+
+
+def _rule_string_list(rule: dict, key: str) -> list[str]:
+    raw = _config_value(rule, key, default=[])
+    if isinstance(raw, str):
+        values = re.split(r"[;,\r\n]+", raw)
+    elif isinstance(raw, (list, tuple, set)):
+        values = raw
+    else:
+        return []
+    return [_title_rule_text(str(value)) for value in values if str(value).strip()]
+
+
+def _keyword_group_matches(evidence: str, keyword_group: str) -> bool:
+    alternatives = [_title_rule_text(item) for item in keyword_group.split("|") if item.strip()]
+    return any(alternative and alternative in evidence for alternative in alternatives)
+
+
+def _detector_flags(title: str, body_text: str) -> set[str]:
+    title_rule = _title_rule_text(title)
+    combined = _title_rule_text(f"{title} {body_text}")
+    flags: set[str] = set()
+    if _has_detail_word(title_rule):
+        flags.add("details")
+    if _has_schedule_word(title_rule):
+        flags.add("schedule")
+    if _has_shear_word(title_rule) or (_has_shear_word(combined) and "bracing" in title_rule):
+        flags.add("shear")
+    return flags
+
+
+def _suffix_rule_matches(
+    rule: dict,
+    title: str,
+    sheet_label: str | None,
+    body_text: str,
+    enable_body_evidence: bool,
+) -> tuple[bool, str | None]:
+    kind = _normalized_mode(_config_value(rule, "match_kind", "kind", default="containsany"))
+    field = _normalized_mode(_config_value(rule, "evidence_field", "field", default="sheettitle"))
+    pattern = str(_config_value(rule, "pattern", "match", default="") or "").strip()
+    title_text = _title_rule_text(title)
+    body = _title_rule_text(body_text) if enable_body_evidence else ""
+    label_text = _title_rule_text(sheet_label)
+    flags = _detector_flags(title, body_text if enable_body_evidence else "")
+    required_flags = _rule_string_list(rule, "required_flags")
+    if required_flags and not all(
+        any(flag in flags for flag in re.split(r"[|+,;\s]+", group) if flag)
+        for group in required_flags
+    ):
+        return False, None
+    def field_evidence(field_name: str) -> str:
+        if field_name == "sheetlabel":
+            return label_text
+        if field_name == "titleandbody":
+            return f"{title_text} {body}".strip()
+        if field_name == "detectorflags":
+            return " ".join(sorted(flags))
+        return title_text
+
+    evidence = field_evidence(field)
+
+    prefix = _sheet_index_key(str(_config_value(rule, "sheet_prefix", "prefix", default="") or ""))
+    label_key = _sheet_index_key(sheet_label)
+    if prefix and not label_key.startswith(prefix):
+        return False, None
+    sheet_number = _precise_sheet_number_code(sheet_label)
+    minimum = _config_value(rule, "minimum_sheet_number", "minimum", "min", default=None)
+    maximum = _config_value(rule, "maximum_sheet_number", "maximum", "max", default=None)
+    if minimum is not None and (sheet_number is None or sheet_number < int(minimum)):
+        return False, None
+    if maximum is not None and (sheet_number is None or sheet_number > int(maximum)):
+        return False, None
+
+    exclusion_field_raw = _config_value(rule, "exclusion_evidence_field", default=_CONFIG_MISSING)
+    exclusion_field = field if exclusion_field_raw in {_CONFIG_MISSING, None, ""} else _normalized_mode(exclusion_field_raw)
+    exclusion_evidence = field_evidence(exclusion_field)
+    if any(_keyword_group_matches(exclusion_evidence, item) for item in _rule_string_list(rule, "excluded_keywords")):
+        return False, None
+
+    keywords = _rule_string_list(rule, "keywords")
+    floor = _floor_suffix_from_text(title_text)
+    if kind == "prefix":
+        matched = evidence.startswith(_title_rule_text(pattern)) if pattern else bool(prefix)
+    elif kind == "exact":
+        matched = evidence == _title_rule_text(pattern)
+    elif kind == "containsall":
+        matched = bool(keywords) and all(_keyword_group_matches(evidence, item) for item in keywords)
+    elif kind in {"regex", "titleregex"}:
+        try:
+            matched = bool(pattern) and re.search(pattern, evidence, flags=re.IGNORECASE) is not None
+        except re.error:
+            matched = False
+    elif kind == "numberrange":
+        matched = sheet_number is not None
+        if pattern:
+            try:
+                matched = matched and re.search(pattern, re.match(r"[a-z]+", label_key).group(0) if re.match(r"[a-z]+", label_key) else "", flags=re.IGNORECASE) is not None
+            except re.error:
+                matched = False
+    elif kind == "sheetlabelfloor":
+        floor = _sheet_label_floor_suffix(sheet_label)
+        matched = bool(floor)
+    elif kind == "floorlevel":
+        matched = bool(floor)
+        if keywords:
+            matched = matched and any(_keyword_group_matches(evidence, item) for item in keywords)
+    elif kind == "flag":
+        required = [item for item in re.split(r"[+|,;\s]+", pattern.lower()) if item]
+        matched = bool(required) and all(item in flags for item in required)
+    else:  # ContainsAny and tolerant legacy aliases.
+        if keywords:
+            matched = any(_keyword_group_matches(evidence, item) for item in keywords)
+        else:
+            matched = bool(pattern) and _title_rule_text(pattern) in evidence
+    return matched, floor
+
+
+def _configured_suffix_decision(
+    config: dict,
+    title: str,
+    sheet_label: str | None,
+    body_text: str,
+) -> dict | None:
+    raw_rules = _config_value(config, "suffix_rules", default=[])
+    if not isinstance(raw_rules, list):
+        return None
+    indexed = [(index, rule) for index, rule in enumerate(raw_rules) if isinstance(rule, dict)]
+    indexed.sort(
+        key=lambda item: (
+            float(_config_value(item[1], "priority", default=0) or 0),
+            item[0],
+        )
+    )
+    for _, rule in indexed:
+        if not _config_bool(rule, "enabled", True):
+            continue
+        matched, floor = _suffix_rule_matches(
+            rule,
+            title,
+            sheet_label,
+            body_text,
+            _config_bool(config, "enable_body_evidence", True),
+        )
+        if not matched:
+            continue
+        output = _config_value(rule, "output_suffix", "suffix", default=_CONFIG_MISSING)
+        if output is _CONFIG_MISSING:
+            continue
+        output_text = str(output or "")
+        if floor:
+            output_text = output_text.replace("{floor}", floor)
+        pattern = str(_config_value(rule, "pattern", "match", default="") or "")
+        rule_id = str(_config_value(rule, "id", default="") or pattern or "unnamed")
+        return {
+            "suffix": _normalize_suffix(output_text),
+            "source": "configured_rule",
+            "confidence": _normalize_confidence(_config_value(rule, "confidence", default="high"), "high"),
+            "evidence": f"Configured suffix rule matched: {rule_id}",
+            "skip_scale": _optional_bool(_config_value(rule, "skip_scale", default=_CONFIG_MISSING)),
+            "explicit_no_suffix": not bool(_normalize_suffix(output_text)),
+        }
+    return None
+
+
+def _suffix_decision(
+    config: dict,
+    override: dict | None,
+    title_decision: dict,
+    sheet_label: str | None,
+    body_text: str = "",
+) -> dict:
+    override_suffix = _config_value(override, "suffix", "output_suffix", default=_CONFIG_MISSING)
+    suffix_action_present = _config_has(override, "suffix_action")
+    suffix_action = _normalized_mode(
+        _config_value(override, "suffix_action", default="")
+    ) if suffix_action_present else ""
+    use_suffix_override = False
+    if suffix_action_present:
+        if suffix_action == "clear":
+            override_suffix = ""
+            use_suffix_override = True
+        elif suffix_action == "set" and override_suffix is not _CONFIG_MISSING:
+            # Set is deliberately distinct from Clear. Invalid empty Set rows
+            # are ignored here (the settings UI also rejects them) so a bad
+            # row cannot silently erase a detected suffix.
+            use_suffix_override = bool(_normalize_suffix(override_suffix))
+        # Keep (the serialized default) is no suffix override at all, even
+        # when stale OutputSuffix text remains in the row.
+    else:
+        # Backward compatibility for pre-action exact-override JSON.
+        use_suffix_override = override_suffix is not _CONFIG_MISSING
+
+    if use_suffix_override:
+        suffix = _normalize_suffix(override_suffix)
+        return {
+            "suffix": suffix,
+            "source": "sheet_override",
+            "confidence": _normalize_confidence(_config_value(override, "confidence", default="high"), "high"),
+            "evidence": f"Exact-sheet suffix {suffix_action or 'legacy'} override for {sheet_label}",
+            # Scale policy belongs to the resolved suffix/config. A scale Set
+            # can then deterministically override that policy below.
+            "skip_scale": None,
+            "explicit_no_suffix": not bool(suffix),
+        }
+
+    title = str(title_decision.get("title") or "")
+    configured = _configured_suffix_decision(config, title, sheet_label, body_text)
+    if configured is not None:
+        return configured
+    if _config_has(config, "suffix_rules"):
+        return {
+            "suffix": "",
+            "source": "configured_rules",
+            "confidence": "low",
+            "evidence": f"No enabled configured suffix rule matched {sheet_label or '(missing)'}",
+            "skip_scale": None,
+            "explicit_no_suffix": False,
+        }
+
+    source = str(title_decision.get("source") or "numeric_fallback")
+    confidence = _normalize_confidence(title_decision.get("confidence"), "low")
+    rule_text = _title_rule_text(title)
+    label = re.sub(r"[\s-]+", "", (sheet_label or "").strip().lower())
+    is_arch = label.startswith("a")
+    is_struct = label.startswith("s")
+    sheet_num = _precise_sheet_number_code(sheet_label)
+    floor_suffix = _floor_suffix_from_text(rule_text)
+
+    def result(suffix: str, reason: str, skip_scale: bool | None = None, explicit_no_suffix: bool = False) -> dict:
+        return {
+            "suffix": _normalize_suffix(suffix),
+            "source": source,
+            "confidence": confidence,
+            "evidence": f"{reason}: {title or sheet_label or '(missing)'}",
+            "skip_scale": skip_scale,
+            "explicit_no_suffix": explicit_no_suffix,
+        }
+
+    if re.fullmatch(r"s[567]\.1(?:00)?", label):
+        return result("d", "Metro S5.1/S6.1/S7.1 detail rule", True)
+    if label.startswith("d"):
+        return result("d", "detail discipline label", True)
+    if label.startswith("t"):
+        return result("t", "title discipline label", True)
+    if label.startswith("sch"):
+        return result("sc", "schedule discipline label", True)
+    if re.search(r"\b(?:renderings?|perspectives?|omitted)\b", rule_text):
+        return result("", "presentation/omitted sheet", True, True)
+
+    if "door schedule" in rule_text and ("window type" in rule_text or "door type" in rule_text):
+        suffix = _compound_suffix(config, "w d sc", "sc")
+        return result(suffix, "window/door schedule title", True)
+    if _has_schedule_word(rule_text):
+        if "unit" in rule_text:
+            suffix = _compound_suffix(config, "u sc", "sc")
+            return result(suffix, "unit schedule title", True)
+        return result("sc", "schedule title", True)
+    if "wall type" in rule_text or "partition type" in rule_text:
+        if "plan" in rule_text:
+            return result(_compound_suffix(config, "wt pl", "wt"), "wall/partition type plan title", False)
+        return result("wt", "wall/partition type title", True)
+    if any(token in rule_text for token in ("floor type", "floor ceiling", "floor assembly")):
+        return result("ft", "floor assembly title", True)
+    if "overall floor plan" in rule_text:
+        return result(_compound_suffix(config, "fl pl", "f"), "overall floor plan title", False)
+    if "fire rating" in rule_text or "fire rated" in rule_text or "fire resistance" in rule_text:
+        return result(_compound_suffix(config, "fr n", "n"), "fire-rating notes title", True)
+    if "draft stopping" in rule_text:
+        return result(_compound_suffix(config, "df", "n"), "draft-stopping title", True)
+    if (
+        "general notes" in rule_text
+        or "drawing list" in rule_text
+        or "sheet index" in rule_text
+        or "title sheet" in rule_text
+        or "code data" in rule_text
+        or "accessibility standards" in rule_text
+        or "life safety" in rule_text
+    ):
+        return result("n", "notes/index/title evidence", True)
+
+    if "shear" in rule_text:
+        return result("shw", "shear-wall title", bool(_has_detail_word(rule_text) or _has_schedule_word(rule_text)))
+    if "elevator" in rule_text and "section" in rule_text:
+        return result(_compound_suffix(config, "elev sec", "sec"), "elevator section title", False)
+    if "stair" in rule_text and "section" in rule_text:
+        return result(_compound_suffix(config, "str sec", "sec"), "stair section title", False)
+    if "section" in rule_text:
+        if _has_detail_word(rule_text):
+            return result(_compound_suffix(config, "d sec", "sec"), "detail/section title", False)
+        return result("sec", "section title", False)
+
+    if (
+        re.search(r"\b(?:units?)\s+(?:floor\s+)?plans?\b", rule_text)
+        or "enlarged kitchen" in rule_text
+        or "enlarged bathroom" in rule_text
+        or "enlarged common area" in rule_text
+        or "kitchen plans" in rule_text
+        or "bathroom plans" in rule_text
+    ):
+        return result("u", "unit/enlarged plan title", False)
+    if "interior partitions" in rule_text or "room finish" in rule_text:
+        return result("f", "interior finish/partition title", False)
+    if "elevation" in rule_text:
+        return result("el", "elevation title", False)
+    if "reflected ceiling" in rule_text:
+        if floor_suffix:
+            suffix = _compound_suffix(config, f"{floor_suffix} rcp", floor_suffix)
+            return result(suffix, "level reflected-ceiling plan title", False)
+        if "basement" in rule_text:
+            return result("b", "basement reflected-ceiling plan title", False)
+    if "foundation plan" in rule_text:
+        return result("f", "foundation plan title", False)
+    if "roof" in rule_text and ("plan" in rule_text or "framing" in rule_text):
+        return result("rf", "roof plan/framing title", False)
+    if floor_suffix:
+        return result(floor_suffix, "floor level title", False)
+    if "basement" in rule_text and ("plan" in rule_text or "slab" in rule_text):
+        return result("b", "basement plan title", False)
+
+    if _has_detail_word(rule_text) or "exterior assemblies" in rule_text or "vertical circulation" in rule_text:
+        if "jamb" in rule_text:
+            return result(_compound_suffix(config, "jamb d", "d"), "jamb detail title", True)
+        if is_struct and any(token in rule_text for token in ("wood", "framing", "joist", "stud", "beam", "header")):
+            return result(_compound_suffix(config, "wd d", "d"), "wood structural detail title", True)
+        if is_struct and any(token in rule_text for token in ("foundation", "footing", "slab on grade")):
+            return result(_compound_suffix(config, "f d", "d"), "foundation detail title", True)
+        return result("d", "detail title", True)
+    if _has_finish_word(rule_text):
+        return result("f", "finish title", False)
+    if "site visit" in rule_text or "survey" in rule_text:
+        return result("sv", "survey/site-visit title", False)
+    if re.search(r"\bviews?\b", rule_text):
+        return result("v", "view title", False)
+
+    fallback_label = re.sub(r"\.00$", "", sheet_label or "", flags=re.IGNORECASE)
+    numeric_suffix, numeric_skip = _detect_suffix("", False, False, fallback_label, body_text="")
+    if numeric_suffix:
+        return {
+            "suffix": numeric_suffix,
+            "source": "numeric_fallback",
+            "confidence": "low",
+            "evidence": f"Discipline/number fallback for {sheet_label}",
+            "skip_scale": numeric_skip,
+            "explicit_no_suffix": False,
+        }
+    return {
+        "suffix": "",
+        "source": "numeric_fallback",
+        "confidence": "low",
+        "evidence": f"No deterministic suffix rule matched {sheet_label or '(missing)'}",
+        "skip_scale": None,
+        "explicit_no_suffix": False,
+    }
+
+
+def _suffix_scale_policy(config: dict, suffix: str) -> tuple[bool | None, str]:
+    normalized = _normalize_suffix(suffix)
+    if not normalized:
+        return None, ""
+    no_scale = _config_suffix_set(config, "no_scale_suffixes", PRECISE_DEFAULT_NO_SCALE_SUFFIXES)
+    if normalized in no_scale:
+        return True, f"no-scale suffix: {normalized}"
+    scale_capable = _config_suffix_set(config, "scale_capable_suffixes", PRECISE_DEFAULT_SCALE_SUFFIXES)
+    if normalized in scale_capable:
+        return False, f"exact scale-capable suffix: {normalized}"
+    tail = normalized.split()[-1]
+    terminal_tokens = _config_suffix_set(
+        config,
+        "no_scale_terminal_tokens",
+        {"d", "n", "sc", "t"},
+    )
+    if tail in terminal_tokens:
+        return True, f"compound suffix ends in no-scale token: {tail}"
+    return None, ""
+
+
+def _rotated_page_metadata_words(page: fitz.Page) -> tuple[str, list, float, float]:
+    text = page.get_text("text") or ""
+    words = page.get_text("words") or []
+    rect = page.rect
+    rotation = int(getattr(page, "rotation", 0) or 0)
+    if rotation % 360 != 0:
+        matrix = page.rotation_matrix
+        rotated_words = []
+        for word in words:
+            box = fitz.Rect(word[0], word[1], word[2], word[3]) * matrix
+            box.normalize()
+            rotated_words.append((box.x0, box.y0, box.x1, box.y1, *word[4:]))
+        words = rotated_words
+        return text, words, float(rect.width or 1), float(rect.height or 1)
+    max_x = float(getattr(page.mediabox, "width", 0) or getattr(page.cropbox, "width", 0) or rect.width or 1)
+    max_y = float(getattr(page.mediabox, "height", 0) or getattr(page.cropbox, "height", 0) or rect.height or 1)
+    return text, words, max_x, max_y
+
+
+def _precise_body_scales(words: list, text: str, max_x: float, max_y: float) -> list[str]:
+    if not words:
+        return _find_scales_in_text(text, allow_any=True)
+    body_words = [
+        word for word in words
+        if float(word[0]) < max_x * TITLE_BLOCK_RIGHT_X
+        and float(word[1]) < max_y * TITLE_BLOCK_BOTTOM_Y
+    ]
+    return _find_scales_in_text(_words_text(body_words), allow_any=True)
+
+
+def _add_scale_candidate(
+    candidates: list[dict],
+    scale_text: str | None,
+    raw: str | None,
+    kind: str | None,
+    source: str,
+    confidence: str,
+    score: float,
+    evidence: str,
+) -> None:
+    normalized_kind = kind or ""
+    normalized_scale = _normalize_scale_candidate(scale_text or "", allow_any=True) if scale_text else None
+    normalized_raw = re.sub(r"\s+", " ", _clean_scale_text(raw)).strip()
+    if not normalized_kind:
+        parsed = _index_scale_from_line(normalized_raw or scale_text)
+        if parsed:
+            normalized_scale, normalized_raw, normalized_kind = parsed
+    if normalized_kind not in {"scale", "nts", "as_noted", "as_shown", "keep", "clear"}:
+        return
+    if normalized_kind == "scale" and not normalized_scale:
+        return
+    candidates.append({
+        "scale_text": normalized_scale or "",
+        "raw": normalized_raw or normalized_scale or "",
+        "kind": normalized_kind,
+        "source": source,
+        "confidence": _normalize_confidence(confidence, "low"),
+        "score": score,
+        "evidence": evidence,
+    })
+
+
+def _scale_override_candidate(override: dict | None) -> dict | None:
+    if not isinstance(override, dict):
+        return None
+    action_present = _config_has(override, "scale_action")
+    action = _normalized_mode(
+        _config_value(override, "scale_action", default="")
+    ) if action_present else _normalized_mode(_config_value(override, "action", default=""))
+    confidence = _normalize_confidence(_config_value(override, "confidence", default="high"), "high")
+    if action == "keep":
+        # Keep means exactly that: leave the detector free to choose its own
+        # evidence. It must never become a high-priority empty candidate.
+        return None
+    if action == "clear":
+        return {
+            "scale_text": "",
+            "raw": action.upper(),
+            "kind": action,
+            "source": "sheet_override",
+            "confidence": confidence,
+            "score": 2000.0,
+            "evidence": f"Exact-sheet scale action: {action}",
+        }
+    if action_present and action != "set":
+        return None
+    raw = _config_value(override, "scale_text", "scale", "selected_scale_text", default=_CONFIG_MISSING)
+    if raw is _CONFIG_MISSING or raw is None or str(raw).strip() == "":
+        return None
+    parsed = _index_scale_from_line(str(raw))
+    if not parsed:
+        return None
+    scale_text, scale_raw, kind = parsed
+    return {
+        "scale_text": scale_text,
+        "raw": scale_raw,
+        "kind": kind,
+        "source": "sheet_override",
+        "confidence": confidence,
+        "score": 2000.0,
+        "evidence": f"Exact-sheet scale override: {scale_raw}",
+    }
+
+
+def _precise_scale_decision(
+    config: dict,
+    override: dict | None,
+    suffix_decision: dict,
+    title: str,
+    index_row: dict | None,
+    title_scale: str | None,
+    title_scale_raw: str,
+    bottom_scale: str | None,
+    bottom_scale_raw: str,
+    body_scales: list[str],
+) -> dict:
+    candidates: list[dict] = []
+    override_candidate = _scale_override_candidate(override)
+    if override_candidate:
+        candidates.append(override_candidate)
+    if title_scale or title_scale_raw:
+        parsed = _index_scale_from_line(title_scale_raw or title_scale)
+        if parsed:
+            scale, raw, kind = parsed
+            _add_scale_candidate(
+                candidates, scale, raw, kind, "title_block", "high", 1250.0,
+                f"Title-block scale: {raw}",
+            )
+    if index_row:
+        _add_scale_candidate(
+            candidates,
+            index_row.get("scale_text"),
+            index_row.get("scale_raw"),
+            index_row.get("scale_kind"),
+            "sheet_index",
+            "high",
+            1100.0,
+            f"Drawing list p.{index_row['page_number']}: {index_row['label']} | {index_row['scale_raw']}",
+        )
+    if bottom_scale or bottom_scale_raw:
+        parsed = _index_scale_from_line(bottom_scale_raw or bottom_scale)
+        if parsed:
+            scale, raw, kind = parsed
+            _add_scale_candidate(
+                candidates, scale, raw, kind, "prominent_title", "medium", 850.0,
+                f"Prominent view scale: {raw}",
+            )
+    if _config_bool(config, "enable_body_evidence", True) and len(body_scales) == 1:
+        _add_scale_candidate(
+            candidates, body_scales[0], body_scales[0], "scale", "body", "low", 430.0,
+            f"Only normalized scale found in body text: {body_scales[0]}",
+        )
+
+    strongest = max(candidates, key=lambda candidate: candidate["score"]) if candidates else None
+    suffix = str(suffix_decision.get("suffix") or "")
+    configured_policy, configured_reason = _suffix_scale_policy(config, suffix)
+    rule_policy = suffix_decision.get("skip_scale")
+    if suffix_decision.get("source") in {"sheet_override", "configured_rule"} and rule_policy is not None:
+        policy_skip = bool(rule_policy)
+        policy_reason = f"explicit {suffix_decision['source']} scale policy"
+    elif configured_policy is not None:
+        policy_skip = configured_policy
+        policy_reason = configured_reason
+    elif rule_policy is not None:
+        policy_skip = bool(rule_policy)
+        policy_reason = str(suffix_decision.get("evidence") or "suffix rule")
+    else:
+        policy_skip = False
+        policy_reason = ""
+
+    if strongest and strongest["kind"] == "nts":
+        return {
+            "selected_scale": "",
+            "skip_scale": True,
+            "source": strongest["source"],
+            "confidence": strongest["confidence"],
+            "evidence": strongest["evidence"],
+            "skip_reason": "not_to_scale",
+        }
+    if strongest and strongest["kind"] in {"keep", "clear"}:
+        return {
+            "selected_scale": "",
+            "skip_scale": strongest["kind"] == "clear",
+            "source": strongest["source"],
+            "confidence": strongest["confidence"],
+            "evidence": strongest["evidence"],
+            "skip_reason": f"configured_{strongest['kind']}",
+        }
+    if strongest and strongest["kind"] == "as_noted":
+        if policy_skip:
+            return {
+                "selected_scale": "",
+                "skip_scale": True,
+                "source": "suffix_policy",
+                "confidence": "high",
+                "evidence": f"{policy_reason}; ignored AS NOTED body scales",
+                "skip_reason": f"no_scale_suffix:{suffix}" if suffix else "suffix_policy",
+            }
+        if _config_bool(config, "enable_body_evidence", True) and len(body_scales) == 1:
+            return {
+                "selected_scale": body_scales[0],
+                "skip_scale": False,
+                "source": "body_as_noted",
+                "confidence": "low",
+                "evidence": f"AS NOTED with one unique normalized body scale: {body_scales[0]}",
+                "skip_reason": "",
+            }
+        return {
+            "selected_scale": "",
+            "skip_scale": False,
+            "source": strongest["source"],
+            "confidence": strongest["confidence"],
+            "evidence": strongest["evidence"],
+            "skip_reason": "as_noted",
+        }
+    if strongest and strongest["kind"] == "as_shown":
+        return {
+            "selected_scale": "",
+            "skip_scale": False,
+            "source": strongest["source"],
+            "confidence": strongest["confidence"],
+            "evidence": strongest["evidence"],
+            "skip_reason": "as_shown",
+        }
+    if policy_skip and not (strongest and strongest["source"] == "sheet_override" and strongest["kind"] == "scale"):
+        ignored = f"; ignored {strongest['raw']}" if strongest and strongest.get("raw") else ""
+        return {
+            "selected_scale": "",
+            "skip_scale": True,
+            "source": "suffix_policy",
+            "confidence": "high",
+            "evidence": f"{policy_reason}{ignored}",
+            "skip_reason": f"no_scale_suffix:{suffix}" if suffix else "suffix_policy",
+        }
+    if strongest and strongest["kind"] == "scale":
+        return {
+            "selected_scale": strongest["scale_text"],
+            "skip_scale": False,
+            "source": strongest["source"],
+            "confidence": strongest["confidence"],
+            "evidence": strongest["evidence"],
+            "skip_reason": "",
+        }
+
+    if _config_bool(config, "allow_scale_inference", False) and not policy_skip:
+        inferred = _infer_scale_from_title(title, suffix)
+        if inferred:
+            return {
+                "selected_scale": inferred,
+                "skip_scale": False,
+                "source": "inferred",
+                "confidence": "low",
+                "evidence": f"Opt-in title inference from {title}",
+                "skip_reason": "",
+            }
+    return {
+        "selected_scale": "",
+        "skip_scale": bool(policy_skip),
+        "source": "suffix_policy" if policy_reason else "none",
+        "confidence": "high" if policy_reason else "low",
+        "evidence": policy_reason or "No explicit normalized scale evidence",
+        "skip_reason": f"no_scale_suffix:{suffix}" if policy_skip and suffix else "scale_not_found",
+    }
+
+
+def _sheetmeta_data_precise_v2(req: dict) -> dict:
+    legacy_result = _sheetmeta_data_legacy(req)
+    if not legacy_result.get("ok"):
+        return legacy_result
+
+    config = req.get("sheet_metadata_config") or {}
+    metadata = dict(legacy_result["metadata"])
+    pdf_path = req["pdf"]
+    page_index = int(req.get("page", 0))
+    doc, doc_key = _get_doc(pdf_path, "discover")
+    page = doc.load_page(page_index)
+    text, words, max_x, max_y = _rotated_page_metadata_words(page)
+    title_block_enabled = _config_bool(config, "enable_title_block_evidence", True)
+    title_block_label_enabled = _config_bool(
+        config,
+        "enable_title_block_label_evidence",
+        title_block_enabled,
+    )
+    title_block_scale_enabled = _config_bool(
+        config,
+        "enable_title_block_scale_evidence",
+        title_block_enabled,
+    )
+    index_enabled = _config_bool(config, "enable_sheet_index_evidence", True)
+    if title_block_label_enabled:
+        sheet_label = str(metadata.get("sheet_label") or "")
+        _, prominent_label_word = _prominent_sheet_label_from_title_block(words, max_x, max_y)
+    else:
+        sheet_label = (
+            _extract_sheet_label_from_page_label(page)
+            or _extract_sheet_label_from_toc(doc, page_index)
+            or _extract_sheet_label_from_filename(pdf_path)
+            or ""
+        )
+        prominent_label_word = None
+    index_map = _document_sheet_index(doc, doc_key) if index_enabled else {}
+    indexed_label, indexed_label_word = _precise_sheet_label_from_index_words(
+        words,
+        max_x,
+        max_y,
+        index_map,
+        allow_unindexed=title_block_label_enabled,
+    )
+    if not sheet_label and indexed_label:
+        sheet_label = indexed_label
+        prominent_label_word = indexed_label_word
+    metadata["sheet_label"] = sheet_label
+    metadata["sheet_key"] = _sheet_display_key(sheet_label)
+    metadata["normalized_sheet_name"] = _sheet_key(sheet_label)
+    override = _sheet_override(config, sheet_label, pdf_path)
+    override_page_name = str(_config_value(override, "output_page_name", default="") or "").strip()
+    suffix_override_action = _normalized_mode(
+        _config_value(override, "suffix_action", default="")
+    ) if isinstance(override, dict) and _config_has(override, "suffix_action") else ""
+    conflicting_name_and_suffix = bool(
+        override_page_name and suffix_override_action in {"set", "clear"}
+    )
+    effective_override = override
+    if conflicting_name_and_suffix and isinstance(override, dict):
+        effective_override = dict(override)
+        replaced = False
+        for key in list(effective_override):
+            if re.sub(r"[^a-z0-9]+", "", str(key).lower()) == "suffixaction":
+                effective_override[key] = "Keep"
+                replaced = True
+        if not replaced:
+            effective_override["suffix_action"] = "Keep"
+        suffix_override_action = "keep"
+
+    title_decision, index_row = _precise_title_decision(
+        req, config, effective_override, doc, doc_key, page, text, words, sheet_label,
+        prominent_label_word, max_x, max_y,
+    )
+    suffix_decision = _suffix_decision(config, effective_override, title_decision, sheet_label, text)
+    title = str(title_decision.get("title") or "")
+    suffix = str(suffix_decision.get("suffix") or "")
+
+    if title_block_scale_enabled:
+        title_scale, title_scale_raw = _extract_title_block_scale(words, max_x, max_y)
+        _, bottom_scale, bottom_scale_raw = _extract_bottom_view_title_and_scale(words, sheet_label, max_x, max_y)
+    else:
+        title_scale, title_scale_raw = None, ""
+        bottom_scale, bottom_scale_raw = None, ""
+    body_scales = _precise_body_scales(words, text, max_x, max_y)
+    scale_decision = _precise_scale_decision(
+        config, effective_override, suffix_decision, title, index_row,
+        title_scale, title_scale_raw, bottom_scale, bottom_scale_raw, body_scales,
+    )
+    selected_scale = str(scale_decision.get("selected_scale") or "")
+    ratio = _scale_ratio(selected_scale)
+
+    all_scales: list[str] = []
+    index_scale = str((index_row or {}).get("scale_text") or "")
+    for scale in [title_scale, index_scale, bottom_scale, *body_scales]:
+        if scale and _scale_key(scale) not in {_scale_key(existing) for existing in all_scales}:
+            all_scales.append(scale)
+
+    warnings: list[str] = []
+    if not sheet_label:
+        warnings.append("sheet label not found in PDF text")
+    if not title:
+        warnings.append("sheet title not found from enabled evidence")
+    if scale_decision["skip_reason"] == "not_to_scale":
+        warnings.append("explicit NTS / NOT TO SCALE evidence")
+    elif scale_decision["source"] == "body_as_noted":
+        warnings.append("AS NOTED body scale is a low-confidence review candidate")
+    elif scale_decision["skip_reason"] in {"as_noted", "as_shown"}:
+        warnings.append(f"{scale_decision['skip_reason'].replace('_', ' ').upper()} requires review; no scale inferred")
+    elif scale_decision["skip_reason"].startswith("no_scale_suffix"):
+        warnings.append(f"scale skipped by suffix policy ({suffix})")
+    elif not selected_scale and not scale_decision["skip_scale"]:
+        warnings.append("scale not found; inference is disabled or produced no allowed scale")
+    if not words and not text.strip():
+        warnings.append("PDF page has no extractable text")
+    if conflicting_name_and_suffix:
+        warnings.append(
+            "exact override conflict: Full page name is final, so Suffix Set/Clear was ignored; "
+            "use Suffix Keep or clear Full page name"
+        )
+
+    scale_override_action = _normalized_mode(
+        _config_value(override, "scale_action", default="")
+    ) if isinstance(override, dict) and _config_has(override, "scale_action") else ""
+    explicit_suffix_policy = ""
+    if suffix_decision.get("source") in {"configured_rule", "sheet_override"} and suffix_decision.get("skip_scale") is not None:
+        explicit_suffix_policy = "skip" if suffix_decision["skip_scale"] else "allow"
+    if scale_decision.get("source") == "sheet_override" and selected_scale:
+        # An exact ScaleAction=Set is more specific than the suffix catalog.
+        # Carry that priority across the Python -> C# normalization boundary.
+        explicit_suffix_policy = "allow"
+    metadata.update({
+        "schema_version": 2,
+        "detector_version": "precise_v2",
+        "detector_preset": str(_config_value(config, "preset_name", default="Precise v2") or "Precise v2"),
+        "detector_config_fingerprint": _sheet_metadata_config_fingerprint(config),
+        "width_pt": max_x,
+        "height_pt": max_y,
+        "sheet_title": title,
+        "suffix": suffix,
+        "skip_scale": bool(scale_decision["skip_scale"]),
+        "title_scale_text": title_scale or "",
+        "title_scale_raw": title_scale_raw or "",
+        "body_scales": body_scales,
+        "all_scales": all_scales,
+        "selected_scale_text": selected_scale,
+        "scale_text": selected_scale,
+        "selected_scale_ratio": ratio or 0.0,
+        "selected_scale_m_per_pt": _PT_M * ratio if ratio else 0.0,
+        "rename_candidate": override_page_name or _rename_candidate(str(metadata.get("sheet_key") or ""), suffix),
+        "has_details": _has_detail_word(title),
+        "has_schedule": _has_schedule_word(title),
+        "confidence": title_decision["confidence"],
+        "title_source": title_decision["source"],
+        "title_confidence": title_decision["confidence"],
+        "title_evidence": title_decision["evidence"],
+        "suffix_source": suffix_decision["source"],
+        "suffix_confidence": suffix_decision["confidence"],
+        "suffix_evidence": suffix_decision["evidence"],
+        "suffix_scale_policy": explicit_suffix_policy,
+        "suffix_override_action": suffix_override_action,
+        "suffix_explicit_clear": bool(suffix_decision.get("explicit_no_suffix")),
+        "scale_source": scale_decision["source"],
+        "scale_override_action": scale_override_action,
+        "scale_confidence": scale_decision["confidence"],
+        "scale_evidence": scale_decision["evidence"],
+        "skip_reason": scale_decision["skip_reason"],
+        "rename_override_applied": bool(override_page_name),
+        "warnings": warnings,
+    })
+    return {"ok": True, "metadata": metadata}
+
+
+def sheetmeta_data(req: dict) -> dict:
+    if _uses_precise_sheet_metadata(req):
+        return _sheetmeta_data_precise_v2(req)
+    return _sheetmeta_data_legacy(req)
 
 
 def sheetmeta(input_path: str, output_path: str) -> None:

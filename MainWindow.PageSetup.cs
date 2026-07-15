@@ -291,6 +291,10 @@ public partial class MainWindow
     {
         PdfSheetMetadata metadata = OurPlanCoreJobStore.ReadSourcePdfMetadata(page.FolderPath)
             ?? CreateManualSheetMetadata(page);
+        string previousProposal = PdfSheetMetadataService.VisibleSheetDisplayName(metadata.ProposedPageName());
+        string reviewedName = PdfSheetMetadataService.VisibleSheetDisplayName(pageName);
+        bool reviewedRename = !string.IsNullOrWhiteSpace(reviewedName) &&
+                              !string.Equals(previousProposal, reviewedName, StringComparison.OrdinalIgnoreCase);
 
         metadata.GeneratedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         metadata.Source = string.IsNullOrWhiteSpace(metadata.Source) ? "manual" : metadata.Source;
@@ -299,6 +303,17 @@ public partial class MainWindow
         metadata.PageNumber = page.PdfPage + 1;
         metadata.SheetLabel = pageName;
         metadata.RenameCandidate = pageName;
+        if (reviewedRename)
+        {
+            metadata.TitleSource = "manual-review";
+            metadata.TitleConfidence = "high";
+            metadata.TitleEvidence = $"manual page name '{reviewedName}'";
+            metadata.Suffix = PdfSheetMetadataPolicy.ExtractSuffix(reviewedName, metadata.EffectiveSheetKey);
+            metadata.SuffixScalePolicy = "";
+            metadata.SuffixSource = "manual-review";
+            metadata.SuffixConfidence = "high";
+            metadata.SuffixEvidence = $"manual suffix '{metadata.Suffix}'";
+        }
 
         if (scaleMetersPerPt > 0)
         {
@@ -310,6 +325,11 @@ public partial class MainWindow
             metadata.ScaleText = scaleText;
             metadata.SelectedScaleRatio = scaleMetersPerPt / ViewportConstants.PdfPointMeters;
             metadata.SelectedScaleMetersPerPt = scaleMetersPerPt;
+            metadata.ScaleSource = "manual-review";
+            metadata.ScaleConfidence = "high";
+            metadata.ScaleEvidence = $"manual scale '{scaleText}'";
+            metadata.SuffixScalePolicy = "allow";
+            metadata.SkipReason = "";
         }
 
         OurPlanCoreJobStore.WriteSourcePdfMetadata(page.FolderPath, metadata);

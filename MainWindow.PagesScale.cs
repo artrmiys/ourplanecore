@@ -95,7 +95,29 @@ public partial class MainWindow
 
     private void ApplyScaleToPages(IReadOnlyList<PageInfo> pages, double scaleMetersPerPt)
     {
-        if (pages.Count == 0 || scaleMetersPerPt <= 0)
+        ApplyScaleToPagesCore(pages, scaleMetersPerPt, allowClear: false, updateStatus: true);
+    }
+
+    private bool ApplyMetadataScaleToPage(PageInfo page, double scaleMetersPerPt, bool clear)
+    {
+        if (string.IsNullOrWhiteSpace(page.FolderPath) ||
+            scaleMetersPerPt < 0 ||
+            (!clear && scaleMetersPerPt <= 0))
+        {
+            return false;
+        }
+
+        ApplyScaleToPagesCore([page], scaleMetersPerPt, allowClear: clear, updateStatus: false);
+        return true;
+    }
+
+    private void ApplyScaleToPagesCore(
+        IReadOnlyList<PageInfo> pages,
+        double scaleMetersPerPt,
+        bool allowClear,
+        bool updateStatus)
+    {
+        if (pages.Count == 0 || scaleMetersPerPt < 0 || (!allowClear && scaleMetersPerPt <= 0))
             return;
 
         var changedItems = new HashSet<TakeoffItem>();
@@ -112,7 +134,10 @@ public partial class MainWindow
             updatedPage.ScaleMetersPerPt = scaleMetersPerPt;
             affectedPageFolders.Add(updatedPage.FolderPath);
 
-            foreach (TakeoffItem item in ApplyScaleToPageMeasurements(updatedPage.FolderPath, scaleMetersPerPt))
+            foreach (TakeoffItem item in ApplyScaleToPageMeasurements(
+                         updatedPage.FolderPath,
+                         scaleMetersPerPt,
+                         allowClear))
                 changedItems.Add(item);
 
             if (_currentPage != null && IsSamePageFolder(_currentPage.FolderPath, updatedPage.FolderPath))
@@ -140,10 +165,13 @@ public partial class MainWindow
 
         RefreshAllTotals();
 
-        string scaleLabel = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
-        TxtStatus.Text = pages.Count == 1
-            ? $"Page scale set: {pages[0].Name}, {scaleLabel}."
-            : $"Page scale set on {affectedPageFolders.Count} selected sheet(s): {scaleLabel}.";
+        if (updateStatus)
+        {
+            string scaleLabel = PdfSheetMetadataService.FormatImperialScale(scaleMetersPerPt);
+            TxtStatus.Text = pages.Count == 1
+                ? $"Page scale set: {pages[0].Name}, {scaleLabel}."
+                : $"Page scale set on {affectedPageFolders.Count} selected sheet(s): {scaleLabel}.";
+        }
     }
 
     private static IReadOnlyList<PageInfo> DistinctScalePages(IEnumerable<PageInfo> pages) =>

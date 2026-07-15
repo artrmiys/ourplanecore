@@ -9,18 +9,29 @@ using System.Windows.Data;
 
 namespace OurPlanCore.Controls;
 
+public enum PdfMetadataScaleAction
+{
+    Keep,
+    Set,
+    Clear,
+}
+
 public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
 {
+    public static IReadOnlyList<PdfMetadataScaleAction> AvailableScaleActions { get; } =
+        System.Enum.GetValues<PdfMetadataScaleAction>();
+
     private string _proposedPageName = "";
     private string _proposedScale = "";
     private string _rasterStatus = "";
     private bool _applyRename;
-    private bool _applyScale;
+    private PdfMetadataScaleAction _scaleAction = PdfMetadataScaleAction.Keep;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public string PageFolder { get; init; } = "";
     public string CurrentPageName { get; init; } = "";
+    public string CurrentScale { get; init; } = "";
     public string SheetLabel { get; init; } = "";
     public string SheetTitle { get; init; } = "";
     public string ProposedPageName
@@ -36,6 +47,17 @@ public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
     }
     public string Source { get; init; } = "";
     public string Confidence { get; init; } = "";
+    public string TitleSource { get; init; } = "";
+    public string TitleConfidence { get; init; } = "";
+    public string TitleEvidence { get; init; } = "";
+    public string SuffixSource { get; init; } = "";
+    public string SuffixConfidence { get; init; } = "";
+    public string SuffixEvidence { get; init; } = "";
+    public string ScaleSource { get; init; } = "";
+    public string ScaleConfidence { get; init; } = "";
+    public string ScaleEvidence { get; init; } = "";
+    public bool CanSetScale { get; init; }
+    public bool ReviewScale { get; init; }
     public string RasterStatus
     {
         get => _rasterStatus;
@@ -50,8 +72,21 @@ public sealed class PdfMetadataPreviewRow : INotifyPropertyChanged
     }
     public bool ApplyScale
     {
-        get => _applyScale;
-        set => SetField(ref _applyScale, value);
+        get => ScaleAction != PdfMetadataScaleAction.Keep;
+        set => ScaleAction = value ? PdfMetadataScaleAction.Set : PdfMetadataScaleAction.Keep;
+    }
+    public PdfMetadataScaleAction ScaleAction
+    {
+        get => _scaleAction;
+        set
+        {
+            if (EqualityComparer<PdfMetadataScaleAction>.Default.Equals(_scaleAction, value))
+                return;
+
+            _scaleAction = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ScaleAction)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ApplyScale)));
+        }
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -73,8 +108,8 @@ public sealed class PdfMetadataPreviewDialog : Window
         Rows = new ObservableCollection<PdfMetadataPreviewRow>(rows);
 
         Title = title;
-        Width = 1280;
-        Height = 560;
+        Width = 1540;
+        Height = 620;
         MinWidth = 860;
         MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -121,15 +156,23 @@ public sealed class PdfMetadataPreviewDialog : Window
             SelectionUnit = DataGridSelectionUnit.FullRow,
         };
         grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Rename", Binding = new Binding(nameof(PdfMetadataPreviewRow.ApplyRename)) });
-        grid.Columns.Add(new DataGridCheckBoxColumn { Header = "Scale", Binding = new Binding(nameof(PdfMetadataPreviewRow.ApplyScale)) });
-        grid.Columns.Add(TextColumn("Current Page", nameof(PdfMetadataPreviewRow.CurrentPageName), 150));
-        grid.Columns.Add(EditableTextColumn("Proposed Name", nameof(PdfMetadataPreviewRow.ProposedPageName), 140));
-        grid.Columns.Add(EditableTextColumn("Scale", nameof(PdfMetadataPreviewRow.ProposedScale), 120));
+        grid.Columns.Add(ScaleActionColumn());
+        grid.Columns.Add(TextColumn("Current Name", nameof(PdfMetadataPreviewRow.CurrentPageName), 150));
+        grid.Columns.Add(EditableTextColumn("Proposed Name", nameof(PdfMetadataPreviewRow.ProposedPageName), 150));
+        grid.Columns.Add(TextColumn("Name Source", nameof(PdfMetadataPreviewRow.TitleSource), 110));
+        grid.Columns.Add(TextColumn("Name Confidence", nameof(PdfMetadataPreviewRow.TitleConfidence), 100));
+        grid.Columns.Add(TextColumn("Name Evidence", nameof(PdfMetadataPreviewRow.TitleEvidence), 220));
         grid.Columns.Add(TextColumn("Label", nameof(PdfMetadataPreviewRow.SheetLabel), 80));
-        grid.Columns.Add(TextColumn("Suffix", nameof(PdfMetadataPreviewRow.Suffix), 60));
+        grid.Columns.Add(TextColumn("Suffix", nameof(PdfMetadataPreviewRow.Suffix), 70));
+        grid.Columns.Add(TextColumn("Suffix Source", nameof(PdfMetadataPreviewRow.SuffixSource), 110));
+        grid.Columns.Add(TextColumn("Suffix Confidence", nameof(PdfMetadataPreviewRow.SuffixConfidence), 100));
+        grid.Columns.Add(TextColumn("Suffix Evidence", nameof(PdfMetadataPreviewRow.SuffixEvidence), 220));
         grid.Columns.Add(TextColumn("Title", nameof(PdfMetadataPreviewRow.SheetTitle), 230));
-        grid.Columns.Add(TextColumn("Source", nameof(PdfMetadataPreviewRow.Source), 90));
-        grid.Columns.Add(TextColumn("Confidence", nameof(PdfMetadataPreviewRow.Confidence), 110));
+        grid.Columns.Add(TextColumn("Current Scale", nameof(PdfMetadataPreviewRow.CurrentScale), 115));
+        grid.Columns.Add(EditableTextColumn("Scale", nameof(PdfMetadataPreviewRow.ProposedScale), 120));
+        grid.Columns.Add(TextColumn("Scale Source", nameof(PdfMetadataPreviewRow.ScaleSource), 110));
+        grid.Columns.Add(TextColumn("Scale Confidence", nameof(PdfMetadataPreviewRow.ScaleConfidence), 100));
+        grid.Columns.Add(TextColumn("Scale Evidence", nameof(PdfMetadataPreviewRow.ScaleEvidence), 220));
         grid.Columns.Add(TextColumn("Why", nameof(PdfMetadataPreviewRow.Reason), 320));
         grid.Columns.Add(TextColumn("Warnings", nameof(PdfMetadataPreviewRow.Warnings), 260));
         root.Children.Add(grid);
@@ -142,8 +185,8 @@ public sealed class PdfMetadataPreviewDialog : Window
         };
         scaleAll.Click += (_, _) =>
         {
-            foreach (PdfMetadataPreviewRow row in Rows.Where(row => row.ProposedScale.Length > 0 && row.ProposedScale != "skip"))
-                row.ApplyScale = true;
+            foreach (PdfMetadataPreviewRow row in Rows.Where(row => row.CanSetScale))
+                row.ScaleAction = PdfMetadataScaleAction.Set;
             grid.Items.Refresh();
         };
         clear.Click += (_, _) =>
@@ -151,7 +194,7 @@ public sealed class PdfMetadataPreviewDialog : Window
             foreach (PdfMetadataPreviewRow row in Rows)
             {
                 row.ApplyRename = false;
-                row.ApplyScale = false;
+                row.ScaleAction = PdfMetadataScaleAction.Keep;
             }
             grid.Items.Refresh();
         };
@@ -175,6 +218,19 @@ public sealed class PdfMetadataPreviewDialog : Window
             Binding = new Binding(property),
             Width = width,
             IsReadOnly = true,
+        };
+
+    private static DataGridComboBoxColumn ScaleActionColumn() =>
+        new()
+        {
+            Header = "Scale Action",
+            ItemsSource = System.Enum.GetValues<PdfMetadataScaleAction>(),
+            SelectedItemBinding = new Binding(nameof(PdfMetadataPreviewRow.ScaleAction))
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+            },
+            Width = 92,
         };
 
     private static DataGridTemplateColumn EditableTextColumn(string header, string property, double width) =>
@@ -224,9 +280,11 @@ public sealed class PdfMetadataPreviewDialog : Window
         }
         else if (property == nameof(PdfMetadataPreviewRow.ProposedScale))
         {
-            row.ApplyScale =
+            row.ScaleAction =
                 !string.IsNullOrWhiteSpace(row.ProposedScale) &&
-                !string.Equals(row.ProposedScale.Trim(), "skip", System.StringComparison.OrdinalIgnoreCase);
+                !string.Equals(row.ProposedScale.Trim(), "skip", System.StringComparison.OrdinalIgnoreCase)
+                    ? PdfMetadataScaleAction.Set
+                    : PdfMetadataScaleAction.Keep;
         }
     }
 }

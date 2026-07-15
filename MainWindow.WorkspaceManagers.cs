@@ -377,6 +377,8 @@ public partial class MainWindow
         TxtStatus.Text = $"Sheet Manager analyzing {pages.Count} sheet(s)...";
 
         OurPlanCoreJob job = _currentJob;
+        bool persistDuringAnalysis = SheetMetadataRulesService.Active.ImportPolicy ==
+                                     SheetMetadataImportPolicy.LegacyAutoApply;
         _sheetManagerAnalysisCts?.Cancel();
         using var analysisCts = new CancellationTokenSource();
         _sheetManagerAnalysisCts = analysisCts;
@@ -392,7 +394,10 @@ public partial class MainWindow
                     foreach (PageInfo page in pages)
                     {
                         analysisCts.Token.ThrowIfCancellationRequested();
-                        if (PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error))
+                        bool ok = persistDuringAnalysis
+                            ? PdfSheetMetadataService.TryAnalyzeAndSave(job, page, out var metadata, out string error)
+                            : PdfSheetMetadataService.TryAnalyzePage(job, page, out metadata, out error);
+                        if (ok)
                             analyzed.Add(new PdfMetadataPageResult(page, true, metadata, ""));
                         else
                             analyzed.Add(new PdfMetadataPageResult(page, false, null, error));
